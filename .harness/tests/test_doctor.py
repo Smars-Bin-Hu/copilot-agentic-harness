@@ -696,6 +696,41 @@ class SystemReachTests(unittest.TestCase):
         self.assertEqual(asked, ["mine ping"])  # a connection is not run again in the bare terminal
         self.assertIn("failed", found["down"]["why"])
 
+    def test_connections_with_no_sign_in_kept_are_one_warning_not_one_each(self) -> None:
+        """Q16: the cause is the same for all of them; a connection that has a sign-in and still fails keeps its own line."""
+        from unittest import mock
+
+        import doctor
+        from core import messages
+
+        class Report:
+            def __init__(self) -> None:
+                self.lines: list = []
+
+            ok = lambda self, text: self.lines.append(("ok", text))  # noqa: E731
+            warn = lambda self, text: self.lines.append(("warn", text))  # noqa: E731
+            error = lambda self, text: self.lines.append(("error", text))  # noqa: E731
+
+        systems = {name: {"needs": {"probes": {"dev": f"{name} whoami"}}} for name in ("ado", "sql-dev", "sql-ist", "kept", "fine")}
+        answers = {name: {"reachable": False, "why": "exit code 1", "launch": "x"} for name in ("ado", "sql-dev", "sql-ist", "kept")}
+        answers["fine"] = {"reachable": True, "why": "", "launch": ""}
+        messages.reset()
+        self.addCleanup(messages.reset)
+        with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ, {"HARNESS_LANGUAGE": "en"}), mock.patch("core.config.load_policy", return_value={"systems": systems}), mock.patch("modules.gate.external.validate", return_value=[]), \
+                mock.patch("modules.gate.external.warnings", return_value=[]), mock.patch("modules.gate.external.reach", return_value=answers), mock.patch("core.connections.listed", return_value={name: {} for name in systems}), \
+                mock.patch("core.connections.probe_all", return_value={}), mock.patch("core.connections.unsigned", return_value=["ado", "sql-dev", "sql-ist", "fine"]):
+            report = Report()
+            doctor.check_systems(report, Path(folder))
+        warned = [text for kind, text in report.lines if kind == "warn"]
+        self.assertEqual(len(warned), 2, warned)  # one for the three with no sign-in, one for the one that has a sign-in and still fails
+        self.assertTrue(any("kept" in text and "not reachable" in text for text in warned))
+        joined = next(text for text in warned if "ado" in text)
+        for name in ("ado", "sql-dev", "sql-ist"):
+            self.assertIn(name, joined)
+        self.assertIn("3 connections", joined)
+        self.assertNotIn("fine", joined)  # reachable from here: no warning about it
+        self.assertEqual([text for kind, text in report.lines if kind == "ok" and "reachable" in text], ["Outside system fine is reachable from here (its probe answered)."])
+
 
 class LayoutTests(unittest.TestCase):
     def test_engine_code_parses_as_python_39(self) -> None:

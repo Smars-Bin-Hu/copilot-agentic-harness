@@ -420,7 +420,10 @@ def kb_instruction_files(root: Path) -> List[Path]:
     """Instruction files that have text and are about the knowledge base: named after it, or naming its folder."""
     directory = root / ".github" / "instructions"
     found = []
+    others = set(company.ledger_files(root))  # the company's other instruction files (1.7.38) are about other things; only the guide to the knowledge base is judged here
     for path in sorted(directory.glob("*.instructions.md")) if directory.is_dir() else []:
+        if path.name in others:
+            continue
         text = path.read_text(encoding="utf-8")
         if body_of(text) and ("knowledge" in path.name.lower() or KB_DIR in text.lower()):
             found.append(path)
@@ -660,7 +663,11 @@ def system_reach(root: Path, systems: Dict[str, Any]) -> Dict[str, Dict[str, Any
                                    "launch": (system.get("needs") or {}).get("launch") or ""}
     rest = {name: system for name, system in systems.items() if name not in by_connection}
     answers = {**external.reach(rest, lambda command: external.run_probe(command, root)), **by_connection}
-    return {name: answers[name] for name in systems if name in answers}
+    try:
+        loose = set(connections.unsigned(root))  # a connection with no sign-in kept here: told in one line, not one for each (1.7.38)
+    except Exception:  # noqa: BLE001 - a list that cannot be read leaves the lines one by one
+        loose = set()
+    return {name: dict(answers[name], unsigned=name in loose and not answers[name]["reachable"]) for name in systems if name in answers}
 
 
 def check_systems(report: Report, root: Path) -> None:
@@ -685,11 +692,14 @@ def check_systems(report: Report, root: Path) -> None:
     report.ok(say("doctor.systems.ok", count=len(systems), names=", ".join(systems)))
     for text in found:
         report.warn(say("doctor.systems.warn", text=text))
+    loose = [name for name, line in reached.items() if line.get("unsigned")]
     for name, line in reached.items():
         if line["reachable"]:
             report.ok(say("doctor.systems.reached", name=name))
-        else:
+        elif name not in loose:
             report.warn(say("doctor.systems.unreached", name=name, why=line["why"], launch=line["launch"] or say("doctor.systems.no_launch")))
+    if loose:  # no sign-in is kept for them: the cause is the same for all, and so is the way out
+        report.warn(say("doctor.systems.unsigned.one" if len(loose) == 1 else "doctor.systems.unsigned", n=len(loose), names=", ".join(loose)))
 
 
 def check_standards(report: Report, root: Path) -> None:

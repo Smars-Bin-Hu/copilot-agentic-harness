@@ -135,22 +135,25 @@ class SyncAndPrefixTests(TaskCase):
 
 
 class InstructionsTests(TaskCase):
-    def test_instructions_are_in_place_only_with_the_file_that_is_copied_for_the_agent(self) -> None:
-        """1.7.38: only knowledgebase.instructions.md is copied (company.INSTRUCTION_FILES); the Enter screen says what the form says."""
+    def test_every_instruction_file_named_like_that_counts_and_the_others_are_told_as_not_used(self) -> None:
+        """Q7: each `<name>.instructions.md` is copied for the agent; a file with another name is not read by Copilot, and the hover says so."""
         folder = self.root / "kb-instructions"
         folder.mkdir()
+        (folder / "notes.md").write_text("x", encoding="utf-8")
+        found = readyitems.files_item("instructions", folder, True)
+        self.assertEqual((found["state"], len(found["problems"])), ("yellow", 1))  # files, but none a Copilot instruction
+        self.assertEqual(found["problems"][0]["text"], say("ready.p.instr"))
         (folder / "etl.instructions.md").write_text("x", encoding="utf-8")
         found = readyitems.files_item("instructions", folder, True)
-        self.assertEqual((found["state"], len(found["problems"])), ("yellow", 1))
+        self.assertEqual((found["state"], found["problems"]), ("ok", []))
+        self.assertEqual(found["detail"], say("ready.files.one") + " \u00b7 " + say("ready.files.skipped", n=1))
+        self.assertIn("notes.md", found["tip"])  # the one that is not copied is told on hover
         (folder / "knowledgebase.instructions.md").write_text("x", encoding="utf-8")
         found = readyitems.files_item("instructions", folder, True)
-        self.assertEqual((found["state"], found["problems"]), ("ok", []))
-        self.assertEqual(found["detail"], say("ready.files.one") + " \u00b7 " + say("ready.files.skipped", n=1))  # 1.7.38: only the file that is copied counts
-        self.assertIn("etl.instructions.md", found["tip"])  # the one that is not copied is told on hover
-        self.assertIn("knowledgebase.instructions.md", found["tip"])
-        (folder / "etl.instructions.md").unlink()
+        self.assertEqual(found["detail"], say("ready.files", n=2) + " \u00b7 " + say("ready.files.skipped", n=1))  # a second file counts: no mark for it
+        (folder / "notes.md").unlink()
         found = readyitems.files_item("instructions", folder, True)
-        self.assertEqual((found["detail"], found["tip"]), (say("ready.files.one"), ""))
+        self.assertEqual((found["detail"], found["tip"]), (say("ready.files", n=2), ""))
 
     def test_code_standards_count_the_one_file_that_is_read(self) -> None:
         folder = self.root / "kb-standards"
@@ -242,6 +245,27 @@ class ConnectionStateTests(ConnectionsCase):
         self.assertEqual([one["name"] for one in readyitems.connection_states(self.root)], ["db-dev", "db-ist"])
         with mock.patch.object(readyitems.conn_core, "types", return_value={"fakedb": {"via": "mcp", "type": "fakedb"}}):
             self.assertEqual(readyitems.connection_states(self.root), [])  # a connection VS Code runs through MCP is not here
+
+    def test_a_connection_whose_tool_pack_is_off_is_not_counted_gives_no_sign_in_problem_and_the_hover_says_how_many(self) -> None:
+        """Q22: the pack of an off type is gone from `types`, so its connection has no kind here."""
+        listed = {"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}, "db-ist": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db2", "port": "5000"}}
+        self.company({**listed, "old-a": {"type": "offtype", "env": "dev"}, "old-b": {"type": "offtype", "env": "ist"}})
+        self.assertEqual([one["name"] for one in readyitems.connection_states(self.root)], ["db-dev", "db-ist"])
+        self.assertEqual(readyitems.connections_off(self.root), ["old-a", "old-b"])
+        row = by_key(readyitems.items(self.root))["connections"]
+        self.assertEqual([one["name"] for one in row["names"]], ["db-dev", "db-ist"])
+        self.assertIn(say("ready.conn.unsigned", n=2), row["detail"])
+        self.assertEqual(row["problems"][0]["text"], say("ready.p.signin", n=2, names="db-dev, db-ist"))  # not 4, not old-a
+        self.assertEqual(row["off"], {"n": 2, "names": ["old-a", "old-b"], "text": say("ready.conn.off", n=2, names="old-a, old-b")})
+        self.assertEqual(row["tip"], row["off"]["text"])
+        self.company({**listed, "old-a": {"type": "offtype", "env": "dev"}})
+        self.assertEqual(by_key(readyitems.items(self.root))["connections"]["off"]["text"], say("ready.conn.off.one", names="old-a"))
+        self.company(listed)
+        self.assertNotIn("off", by_key(readyitems.items(self.root))["connections"])
+        self.company({"old-a": {"type": "offtype", "env": "dev"}})  # nothing else: no connection is counted at all
+        only = by_key(readyitems.items(self.root))["connections"]
+        self.assertEqual((only["state"], only["names"], only["problems"]), ("grey", [], []))
+        self.assertEqual(only["off"]["n"], 1)
 
     def test_a_vscode_started_without_the_settings_does_not_make_every_saved_sign_in_a_failure(self) -> None:
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})

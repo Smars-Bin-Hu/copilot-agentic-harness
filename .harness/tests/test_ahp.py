@@ -9,6 +9,7 @@ import struct
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -165,6 +166,14 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(ahp.parse_endpoints(json.dumps({"endpoints": []})), [])  # empty: not ready, not an error
         with self.assertRaises(ahp.NotReady):
             ahp.parse_endpoints("not json")
+
+    def test_a_connection_keeps_the_pid_and_the_instance_of_the_endpoint_it_was_made_from(self) -> None:
+        host = FakeHost({"initialize": {"protocolVersion": ahp.PROTOCOL}})
+        endpoint = ahp.Endpoint("socket", "/tmp/a.sock", 4711, "inst-1", TOKEN)
+        with mock.patch.object(ahp, "open_transport", return_value=host.transport()):
+            link = ahp.connect(endpoint)
+        self.addCleanup(link.close)
+        self.assertEqual((link.pid, link.instance), (4711, "inst-1"))
 
     def test_scrub_takes_the_token_out_of_any_text(self) -> None:
         self.assertEqual(ahp.scrub(f"GET /?tkn={TOKEN} failed", TOKEN), "GET /?tkn=*** failed")

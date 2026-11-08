@@ -119,7 +119,7 @@ const COMPANYTAB = (function () {
     const rows = [...found.standards.map((row) => ({...row, kind: "standards"})), ...found.instructions.map((row) => ({...row, kind: "instructions"}))];
     const good = (state) => state === "copied" || state === "inplace";
     return h("section", {class: "co-sec"}, head("standards", rows.length), rows.length ? rows.map((row) => hover(h("div", {class: "co-file"}, h("code", null, row.file), row.state ? h("span", {class: good(row.state) ? "co-chip" : "co-miss"}, t("dock.co.file." + row.state)) : null, h("span", {class: "co-about"}, row.first)),
-      () => [h("b", null, row.file), h("span", null, row.first), h("span", {class: "sub"}, t("dock.co." + row.kind + ".one")), row.state ? h("span", {class: "sub"}, t("dock.co.file." + row.state + ".tip")) : null])) : h("p", {class: "sub"}, t("dock.co.standards.none")));
+      () => [h("b", null, row.file), h("span", null, row.first), h("span", {class: "sub"}, t("dock.co." + row.kind + ".one")), row.state ? h("span", {class: "sub"}, t("dock.co.file." + row.state + ".tip")) : null, row.copy ? h("span", {class: "sub"}, t("dock.co.file.copy", {name: row.copy})) : null])) : h("p", {class: "sub"}, t("dock.co.standards.none")));
   }
 
   function draw(stage, found, options) {

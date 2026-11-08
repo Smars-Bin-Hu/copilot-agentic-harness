@@ -228,13 +228,15 @@ def rules_of(target: Dict[str, Any]) -> List[Dict[str, str]]:
     return [{"repo": name, "rule": rule} for name, entry in sorted((target.get("repos") or {}).items()) if isinstance(entry, dict) and isinstance(entry.get("refused_paths"), list) for rule in entry["refused_paths"] if rule != GIT_RULE]
 
 
-def _files(folder: Path, used: Tuple[str, ...], suffix: str = ".md") -> Tuple[int, List[str]]:
-    """The content files of a folder of the knowledge base (not the README or a hidden file): how many the engine uses, and the names of the others, which nothing reads (1.7.38: the Enter screen counts the same way)."""
+def _files(folder: Path, used: Tuple[str, ...], ending: str = "") -> Tuple[int, List[str]]:
+    """The content files of a folder of the knowledge base (not the README or a hidden file): how many the engine uses, and the names of the others, which nothing reads (1.7.38: the Enter screen counts the same way).
+    A file is used when its name is in `used`, or ends with `ending`."""
     try:
-        names = sorted(item.name for item in folder.iterdir() if item.is_file() and item.suffix == suffix and item.name != "README.md" and not item.name.startswith("."))
+        names = sorted(item.name for item in folder.iterdir() if item.is_file() and item.suffix == ".md" and item.name != "README.md" and not item.name.startswith("."))
     except OSError:
         return 0, []
-    return sum(1 for name in names if name in used), [name for name in names if name not in used]
+    use = [name for name in names if name in used or (ending and name.endswith(ending))]
+    return len(use), [name for name in names if name not in use]
 
 
 def company_skills(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
@@ -294,14 +296,14 @@ def company_facts(root: Path) -> Dict[str, Any]:
     try:
         folder = targets.company_folder(root)
         out["folder"] = folder is not None
-        out["instructions"] = bool(folder and (folder / "instructions" / "knowledgebase.instructions.md").is_file())
+        out["instructions"] = bool(folder and company.instruction_sources(folder))
         out["standards"] = bool(folder and (folder / standards.COMPANY_FILE).is_file())
         out["prefix"] = {"kb": skillcheck.knowledge_base_prefix(root), "effective": skillcheck.effective_prefix(root), "conflict": skillcheck.prefix_conflict(root)}
         out["packs"] = toolpacks.use_list(root)
         own = folder / toolpacks.COMPANY_PACKS if folder else None
         out["own_packs"] = sorted(item.name for item in own.iterdir() if item.is_dir() and not item.name.startswith(".")) if own is not None and own.is_dir() else []  # the company's own, besides the factory packs it turns on
         if folder:
-            out["instructions_n"], out["instructions_unused"] = _files(folder / "instructions", company.INSTRUCTION_FILES)
+            out["instructions_n"], out["instructions_unused"] = _files(folder / "instructions", (), company.INSTRUCTION_SUFFIX)
             out["standards_n"], out["standards_unused"] = _files(folder / "standards", (Path(standards.COMPANY_FILE).name,))
         out["skills"] = company_skills(root, folder)
         out["connections"] = list(conn_core.company_connections(config.policy_or_empty(root, conn_core.POLICY)))
@@ -469,7 +471,7 @@ def missing(root: Path) -> List[str]:
     except ValueError:
         pass
     declared = no_such(root)
-    company = targets.company_folder(root)
+    folder = targets.company_folder(root)
     out: List[str] = []
     try:
         kb = {name for name, _path in targets.knowledge_bases(root)}
@@ -479,11 +481,11 @@ def missing(root: Path) -> List[str]:
         out.append("repos")
     if not any(targets.knowledge_base_content(path) for _name, path in targets.knowledge_bases(root)):
         out.append("domains")
-    if not (company and (company / "instructions" / "knowledgebase.instructions.md").is_file()):
+    if not (folder and company.instruction_sources(folder)):
         out.append("instructions")
     if not str(user.get("skill_prefix") or "").strip() and "skills" not in declared:
         out.append("skills")
-    if not (company and (company / standards.COMPANY_FILE).is_file()) and "standards" not in declared:
+    if not (folder and (folder / standards.COMPANY_FILE).is_file()) and "standards" not in declared:
         out.append("standards")
     return out
 

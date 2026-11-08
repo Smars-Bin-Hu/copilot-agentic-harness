@@ -73,13 +73,18 @@ class Sections(ViewCase):
         put(self.kb, {**FILES, "company/standards/code-standards.md": "# Code\n\nNo select star", "company/standards/naming.md": "# Names", "company/instructions/pipelines.instructions.md": "# Pipelines"})
         set_prefix(self.root)
         states = lambda: {row["file"]: row["state"] for row in (lambda found: found["standards"] + found["instructions"])(companyview.company(self.root, "en"))}  # noqa: E731
-        self.assertEqual(states(), {"code-standards.md": "inplace", "naming.md": "other", "knowledgebase.instructions.md": "not-copied", "pipelines.instructions.md": "never"})
+        put(self.kb, {"company/instructions/notes.md": "# Notes"})
+        self.assertEqual(states(), {"code-standards.md": "inplace", "naming.md": "other", "knowledgebase.instructions.md": "not-copied", "pipelines.instructions.md": "not-copied", "notes.md": "never"})
         from core import company
 
         company.sync(self.root)
         self.assertEqual(states()["knowledgebase.instructions.md"], "copied")
-        self.assertEqual(states()["pipelines.instructions.md"], "never", "only knowledgebase.instructions.md is ever copied")
+        self.assertEqual(states()["pipelines.instructions.md"], "copied", "every <name>.instructions.md is copied, with the company's word in front (Q7)")
+        self.assertEqual(states()["notes.md"], "never", "a file with another name is never copied")
+        self.assertTrue((self.root / ".github/instructions/acme-pipelines.instructions.md").is_file())
         self.assertFalse((self.root / ".github/instructions/pipelines.instructions.md").exists())
+        rows = {row["file"]: row["copy"] for row in companyview.company(self.root, "en")["instructions"]}
+        self.assertEqual(rows, {"knowledgebase.instructions.md": "knowledgebase.instructions.md", "pipelines.instructions.md": "acme-pipelines.instructions.md", "notes.md": ""})
 
     def test_a_use_name_no_factory_pack_has_is_listed(self) -> None:
         shutil.copytree(support.REPO / ".harness/toolpacks/ado", self.root / ".harness/toolpacks/ado")

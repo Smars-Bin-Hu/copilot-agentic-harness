@@ -16,7 +16,8 @@ const READY = (function () {
     return new Promise((resolve) => {
       const look = () => SERVE.call("/api/ready", {}, 8).then((data) => {
         const vs = (data.checks || []).find((line) => line.id === "vscode");
-        if (!vs || vs.state !== "ok" || Date.now() > until) resolve(); else setTimeout(look, 700);
+        const up = vs && (vs.state === "ok" || vs.why === "env" || vs.why === "unseen");  // connected, though not started with this copy's settings (Q2): still there until it has gone
+        if (!up || Date.now() > until) resolve(); else setTimeout(look, 700);
       }, () => resolve());
       look();
     });

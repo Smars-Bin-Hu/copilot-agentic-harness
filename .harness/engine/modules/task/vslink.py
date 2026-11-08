@@ -150,6 +150,7 @@ class VsLink:
         self.jobs: "queue.Queue[Any]" = queue.Queue()  # "open", or a Job
         self.thread: Optional[threading.Thread] = None
         self.ready = False
+        self.host_pid: Any = None  # the editor process of the connection: its agent host (1.7.38)
         self.hurry_until = 0.0  # monotonic time until which a missing host is looked for often
         self.losses = 0  # how many times a working link went away: VS Code was closed, however soon it came back
         self.why = "off" if not enabled else "starting"
@@ -186,6 +187,11 @@ class VsLink:
     def drops(self) -> int:
         with self.lock:
             return self.losses
+
+    def host(self) -> Any:
+        """The pid of the editor process the link is connected to (`code agent endpoints`), or None when it is not connected."""
+        with self.lock:
+            return self.host_pid if self.ready else None
 
     def status(self) -> Dict[str, Any]:
         """`{ready, bound, unbound, why}`: for `/api/status` and `/api/board`. `bound` and `unbound` count the open tasks."""
@@ -522,6 +528,8 @@ class VsLink:
             self.dirty = True
 
     def _serve(self, link: ahp.Connection) -> None:
+        with self.lock:
+            self.host_pid = getattr(link, "pid", None)
         self._list(link)
         self._models(link)
         self._set(True, "ok")

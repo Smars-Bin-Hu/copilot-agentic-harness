@@ -147,6 +147,7 @@ html.lite #en-fx{display:none}
 .en-pop-in{max-height:min(46vh,360px);overflow:auto;padding:6px 10px 8px;overscroll-behavior:contain}
 .en-pop table{border-collapse:collapse;width:100%}.en-pop th{position:sticky;top:0;background:var(--card);text-align:left;font-weight:600;color:var(--soft);padding:5px 10px 4px 0;white-space:nowrap}
 .en-pop td{padding:4px 10px 4px 0;vertical-align:top}.en-pop tr.first td{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child td{border-top:0}
+.en-pop .sy-off{margin:8px 0 0;padding-top:6px;border-top:1px solid var(--line);color:var(--soft);overflow-wrap:anywhere}
 .en-pop .sy-n{font-weight:600;overflow-wrap:anywhere;max-width:200px}.en-pop .sy-e{white-space:nowrap}.en-pop .sy-s{white-space:nowrap}.en-pop .sy-s .sy-d{margin-right:6px}.en-pop .sy-r{overflow-wrap:anywhere;min-width:120px;max-width:260px}.en-pop .sy-t,.en-pop .sy-p{white-space:nowrap;color:var(--soft)}
 @media (max-width:760px){.en-pop{font-size:11.5px;width:calc(100vw - 16px)}
  .en-pop table,.en-pop tbody{display:block}.en-pop thead{display:none}  /* a block for each system: nothing is cut at the right, nothing to scroll sideways (1.7.24) */

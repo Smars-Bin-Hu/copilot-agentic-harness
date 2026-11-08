@@ -237,7 +237,8 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
                      "tool": tool,  # 1.7.38: the program whose own sign-in this connection uses; one sign-in per computer, shared
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": reached,
                      "signed": bool(saved) or (bool(tool) and reached == reach.OK),  # a program keeps its own sign-in: a check that got through says it is signed in, whether or not the account was kept here. The Enter screen counts the same (retest N4)
-                     "who": str((seen.get(f"{alias}:{server.get('env', '')}") or {}).get("who") or "")})  # 1.7.38: the name a passed test answered with: a token has no account of its own to show
+                     "who": str((seen.get(f"{alias}:{server.get('env', '')}") or {}).get("who") or ""),
+                     "untested": bool(saved) and reached == reach.UNKNOWN and (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("why") == conn_core.UNTESTED})  # 1.7.38: `who` is the name a passed test answered with (a token has no account of its own to show); `untested`: kept, and no test has reached the system since
     kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}
     return {"connections": rows, "signins": conn_core.signins(root), "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
@@ -766,6 +767,8 @@ class Board:
                 self.tested[alias] = (stamp, time.time(), found.get("who", ""))
             if data.get("saved") and not own and found["state"] != "mcp":  # a test of what is kept here says how that connection is now (1.7.38)
                 self.note_reach(alias, found)
+            if data.get("keep") and not own:  # the sign-in form of a listed connection: a test that never reached the system keeps what was typed (1.7.38)
+                found["kept"] = conn_core.keep_untested(self.root, alias, found, given)
             return found
         if step == "save":
             passed = self.tested.get(alias)
@@ -1478,7 +1481,7 @@ def handler_for(board: Board) -> type:
             if path == "/api/reopen":  # a second `harness task board`: this server opens the browser with a new code. The answer never holds the code, so no pairing is needed
                 return self.answer(200, {"opened": board.open_page()})
             if path == "/api/status":
-                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status()})
+                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status(), "root": str(board.root)})
             if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the cache of the link and of the one doctor run; it waits for nothing
                 try:
                     return self.answer(200, board.ready.answer(board.paired(self.token())))
@@ -1789,15 +1792,33 @@ def open_again(port: int) -> bool:
         return False
 
 
-def already_serving(root: Path, port: int) -> bool:
-    """The board of this same copy has this port and answers: a second double-click opens its page and leaves it running."""
-    if board_serve_port(root) != port:
-        return False
+def running_board(root: Path) -> int:
+    """The port of the board of this same copy that runs and answers, or 0 (1.7.38: one board for a copy, whatever its port). The file `board-serve.json` names the port; the answer names the folder it serves,
+    so another copy that took the port after a crash is not taken for this one. A board of an older release says no folder: the file is trusted then."""
+    port = board_serve_port(root)
+    if not port:
+        return 0
     try:
         with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=3) as answer:
-            return answer.status == 200
+            found = json.load(answer) if answer.status == 200 else None
     except (OSError, ValueError):
-        return False
+        return 0
+    if not isinstance(found, dict):
+        return 0
+    theirs = str(found.get("root") or "")
+    try:
+        return port if not theirs or Path(theirs).resolve() == root.resolve() else 0
+    except OSError:
+        return 0
+
+
+def already_running(root: Path, port: int, out: Any, opener: Callable[[str], Any]) -> Dict[str, Any]:
+    """A second start of the board of a copy that has one (any port): say where it is, open it, leave it running."""
+    address = f"http://127.0.0.1:{port}/"
+    print(say("serve.already", port=port, url=address), file=out, flush=True)
+    if not open_again(port):
+        opener(address)
+    return {"served": address, "stopped": False, "already": True, "port": port}
 
 
 def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,
@@ -1805,6 +1826,9 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     """Run until Ctrl+C. `opener`, `ready` and `link` exist for the tests: `ready` gets the server once it listens; `link`, a link made by hand (a fake host, or none)."""
     task_ops.person("task board --serve", interactive, typed=False)
     out = out or sys.stdout
+    running = running_board(root)
+    if running:  # one board for a copy: a second start, on any port, tells the port of the one that runs and opens it
+        return already_running(root, running, out, opener)
     found = settings(root)
     link = link if link is not None else vslink.VsLink(root, enabled=vslink.enabled_by_policy(root))
     board = Board(root, everything, port or found["port"], found["actions"], link, found["refresh"])
@@ -1812,11 +1836,9 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     try:
         server = board.server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:
-        if already_serving(root, board.port):
-            print(say("serve.already", url=f"http://127.0.0.1:{board.port}/"), file=out, flush=True)
-            if not open_again(board.port):
-                opener(f"http://127.0.0.1:{board.port}/")
-            return {"served": f"http://127.0.0.1:{board.port}/", "stopped": False, "already": True}
+        running = running_board(root)  # two starts at one moment: the first was not in the file yet when this one looked
+        if running:
+            return already_running(root, running, out, opener)
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
     try:

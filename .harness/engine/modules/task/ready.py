@@ -40,6 +40,7 @@ REFRESH_CLEAN = 600.0  # a clean doctor is looked at again after this long
 FOLDERS_FOR = 10.0  # seconds the optional items are kept
 RUNNING_KEEP = 8.0  # seconds the answer "a VS Code runs on this computer" is kept
 QUIT_QUIET = 180.0  # seconds after a restart began during which a failed one still holds the connection checks back (the quit is waiting for the person)
+ENV_KEEP = 10.0  # seconds the answer "was this VS Code started with the settings of this copy" is kept (reading an environment starts a process on macOS)
 BUTTON_HOLD = 12.0  # seconds a changed answer of "a VS Code runs" must stand before the button changes its words (1.7.38: helper processes that come and go made it jump between Open and Restart)
 REASON_MAX = 300
 # What the link says (`vslink.status()["why"]`) -> the state of the VS Code line. A host that is still starting, or a connection that dropped, is told as waiting: it comes back by itself.
@@ -110,6 +111,18 @@ def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
     return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company) + len(copies), "warning": clip(" ".join((warnings + company + copies)[0].split()), REASON_MAX) if warnings or company or copies else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
 
 
+def missing_words(missing: List[Any]) -> str:
+    """What a VS Code lacks, short: `tool folders runbook/bin, ado/bin; CA bundle` for the words of `launchenv.lacking` (`PATH <folder>`, the name of a trust variable)."""
+    folders = [" ".join(str(item).split(" ", 1)[1:]) for item in missing if str(item).startswith("PATH ")]
+    short_folders = ["/".join(Path(folder.replace("\\", "/")).parts[-2:]) for folder in folders]
+    parts = []
+    if short_folders:
+        parts.append(f"{messages.text('ready.vs.lacks.folders')} {', '.join(short_folders[:3])}" + (" ..." if len(short_folders) > 3 else ""))
+    if any(not str(item).startswith("PATH ") for item in missing):
+        parts.append(messages.text("ready.vs.lacks.bundle"))
+    return "; ".join(parts)
+
+
 class Running:
     """Is a VS Code running on this computer, any window or any folder? One `pgrep` or `tasklist` (about a second on a work computer), in a thread of its own and kept for a few seconds,
     so a poll never waits for it. `None` until it has run once."""
@@ -149,6 +162,7 @@ class Ready:
     REQUIRED = ("setup", "paired", "doctor", "vscode", "copilot")  # Harness & Local: every one must be ok before Enter (1.7.38)
 
     def __init__(self, root: Path, link: Any, doctor: Optional[Callable[[Path], Dict[str, Any]]] = None, clock: Callable[[], float] = time.monotonic, checker: Any = None, running: Optional[Running] = None) -> None:
+        self.env_kept: Optional[Any] = None  # (mark, at, verdict) of `env_verdict`
         self.reopen = False  # the short command is new: VS Code must be closed and opened again before its terminals have it
         self.root = root
         self.link = link
@@ -196,6 +210,37 @@ class Ready:
         if why in WAITING:
             return {"state": "wait", "why": why, "open": True}
         return {"state": "fail", "why": why, "open": why not in STUCK}  # `none`: VS Code is not running for this folder: the person may open it
+
+    def env_verdict(self) -> Optional[Dict[str, Any]]:
+        """Was the VS Code that is connected started with the settings of this copy (tool folders, CA bundle)? `launchenv.carried`, answered before any chat (1.7.38, Q2): from the environment of the editor's agent host
+        where it can be read (macOS, Linux), else from when the board started VS Code and when that process was created (Windows). None when no VS Code is connected. Kept for ENV_KEEP seconds, and read
+        again at once when the host, the settings or the records change."""
+        pid = getattr(self.link, "host", lambda: None)()
+        if not pid:
+            return None
+        want = launchenv.needs(self.root)
+        mark = (str(pid), json.dumps(want, sort_keys=True), json.dumps(launchenv.seen(self.root), sort_keys=True))
+        now = self.clock()
+        with self.lock:
+            kept = self.env_kept
+        if kept and kept[0] == mark and now - kept[1] < ENV_KEEP:
+            return kept[2]
+        verdict = launchenv.carried(self.root, pid)
+        with self.lock:
+            self.env_kept = (mark, now, verdict)
+        return verdict
+
+    def without_settings(self, vscode: Dict[str, Any]) -> None:
+        """A connected VS Code that was not started with the settings of this copy is a line that needs the person (1.7.38, Q2): red, it blocks Enter, and the VS Code button is the way out."""
+        if vscode["state"] != "ok":
+            return
+        verdict = self.env_verdict()
+        if verdict is None or verdict["state"] == launchenv.FREE:
+            return  # nothing connected, or this copy has no settings to carry: any VS Code will do
+        vscode.update(env=verdict["state"], by=verdict.get("by", ""))
+        if verdict["state"] == launchenv.CARRIED:
+            return
+        vscode.update(state="fail", why="env" if verdict["state"] == launchenv.MISSING else "unseen", detail=short(missing_words(verdict.get("missing") or [])), open=True, connected=True)  # connected: it runs, so the button restarts it
 
     def copilot(self, vscode: Dict[str, Any]) -> Dict[str, Any]:
         if vscode["state"] != "ok":
@@ -265,6 +310,8 @@ class Ready:
         """For the connections row: the table of the hover, whether the company's launch script can start VS Code with an identity (Windows), whether VS Code was started without this computer's settings."""
         systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
         raw = reach.view(self.root, systems) if systems and not outside.validate(systems) else []
+        off = set(readyitems.connections_off(self.root))  # their tool pack is off: not in the table, the row says how many more there are (1.7.38)
+        raw = [line for line in raw if line["system"] not in off]
         out: Dict[str, Any] = {"rows": self.table(systems, raw)["rows"] if raw else [], "checking": self.checker.busy(), "launch": False, "env_wrong": any(line.get("why") == "vscode-env" for line in raw)}
         out["launch"] = any(line["state"] == reach.DENIED and line.get("why") != "vscode-env" for line in raw) and reach.launch_script(self.root) is not None
         return out
@@ -360,7 +407,7 @@ class Ready:
 
     def vscode_button(self, vscode: Dict[str, Any], identities: int) -> Dict[str, Any]:
         """The VS Code button of the screen. `open`: no VS Code runs for this copy or at all; `restart`: one runs; `identities`: one runs and some connection has a sign-in saved and a test that passed. `up`: one runs."""
-        up = vscode["state"] in ("ok", "wait") or self.process_up()
+        up = vscode["state"] in ("ok", "wait") or bool(vscode.get("connected")) or self.process_up()
         kind = "identities" if up and identities else "restart" if up else "open"
         return {"kind": kind, "label": messages.text(f"ready.vs.{kind}"), "up": up, "identities": identities}
 
@@ -391,6 +438,8 @@ class Ready:
             elif key == "vscode":
                 if state == "wait":
                     text, reason = say("ready.r.vscode.wait"), say(f"board.enter.m.vscode.{why}")
+                elif why in ("env", "unseen"):  # connected, but not started with this copy's settings (Q2): the VS Code button restarts it
+                    text, reason, fix = say("ready.r.vscode.env" if why == "env" else "ready.r.vscode.unseen"), say("ready.r.vscode.env.why"), open_fix
                 elif why == "none":
                     text, reason, fix = say("ready.r.vscode.none"), say("ready.r.vscode.none.why"), open_fix
                 else:
@@ -420,14 +469,18 @@ class Ready:
         add("paired", lambda: {"state": "ok", "why": "ok"} if paired else {"state": "fail", "why": "unpaired"})
         add("doctor", self.doctor_line)
         vscode = add("vscode", self.vscode)
-        add("copilot", lambda: self.copilot(vscode))
+        add("copilot", lambda: self.copilot(vscode))  # Copilot is judged by the connection, before the settings are
+        try:
+            self.without_settings(vscode)
+        except Exception:  # noqa: BLE001 - a check of the settings that breaks leaves the line as the connection says
+            pass
         try:
             if not self.quitting():
                 self.checker.maybe()  # the board asks the connections itself: the screen need not wait for a chat
         except Exception:  # noqa: BLE001 - a check of the connections that cannot start is not a reason to fail a poll
             pass
         optional = self.optional()
-        if vscode["state"] == "ok" and any(entry.get("env_wrong") for entry in optional["items"]):
+        if vscode["state"] == "ok" and vscode.get("env") != launchenv.CARRIED and any(entry.get("env_wrong") for entry in optional["items"]):  # a hook's old word does not count against a VS Code the board saw carry the settings
             vscode["level"] = "yellow"  # opened, but without this computer's settings (1.7.24)
             vscode["env_wrong"] = True
         for line in checks:

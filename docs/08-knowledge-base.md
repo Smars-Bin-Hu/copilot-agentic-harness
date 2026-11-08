@@ -152,9 +152,10 @@ Two files of each domain hold what only people or environments know:
 | Connections, without secrets | `tools/connections.json` |
 | The recipe for each colleague's computer (CA bundle host and proxy, where a program is installed, as `{label, hint, program}`; no secret) | `tools/computer.json` |
 | SOP skills (no tool: `<prefix>-<name>`) | `skills/` |
+| Instructions for the agent, any number: `<name>.instructions.md` (a file with another name is not read by Copilot and is marked `not used`) | `instructions/` |
 | Code standards | `standards/code-standards.md` |
 
-The SOP skills of a tool pack come with the pack, as `<prefix>-<pack>-<name>`. Never put in `company/`: `.env`, accounts, passwords, tokens, certificates or a CA bundle. They stay on each computer.
+Each instructions file is copied to `.github/instructions/` as `<prefix>-<name>.instructions.md`; `knowledgebase.instructions.md` (how to read the knowledge base) keeps its name and replaces the one the harness ships. A file you take out of `instructions/` is taken back by the next sync you ask for (it goes to `.harness/runtime/company-backup/`). The SOP skills of a tool pack come with the pack, as `<prefix>-<pack>-<name>`. Never put in `company/`: `.env`, accounts, passwords, tokens, certificates or a CA bundle. They stay on each computer.
 
 ## Make it yours
 

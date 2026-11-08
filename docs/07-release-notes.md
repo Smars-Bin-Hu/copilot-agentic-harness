@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.38 (2026-11-07)
+
+### Changed
+
+- **The Tools window has two tabs, named like the setup form's sections and the Enter groups: From the company and This computer.** From the company is read only: the **Tool packs** part (name, version, source, Turn on/off for factory packs, and what is missing: a missing program or a pending sign-in is a small link that opens This computer at that row) and the **Connections** part (one row each: name, type, environment, address, the pack it belongs to, "yours" for your own, and at the end a dot for your sign-in that opens its row under Sign-ins). There is no Sign in, Test or Save there. This computer is where you act: Programs, Network, Sign-ins (each connection, the tool-level rows, orphans, **Add a connection of your own**, **Open VS Code with identities**, **Export**), MCP, and the new part **Packs added on this computer** (Install from a folder, Update, Remove).
+- Every **Open** button of Get ready opens the tab and scrolls to its part (Network and MCP have one too). `TOOLS.open` still takes the old tab names.
+- The agent-facing texts that pointed at Tools, Connections now point at Tools, This computer, Sign-ins.
+
 ## 1.7.37 (2026-11-07)
 
 ### Added

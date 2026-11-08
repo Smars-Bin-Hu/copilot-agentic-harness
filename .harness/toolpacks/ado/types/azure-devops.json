@@ -40,6 +40,7 @@
   "test": "ado --conn {conn} me --short",
   "expect": "^(\\S+)\\s*$",
   "denied": "az login|AADSTS|expired|Sign in|token",
+  "signin_lost": "^ado: (?:not signed in to Azure DevOps|az is not found|this connection signs in with a token and none is saved)",
   "down": "Max retries exceeded|Failed to establish|timed out|CERTIFICATE_VERIFY_FAILED|cannot reach",
   "verbs": [
     {

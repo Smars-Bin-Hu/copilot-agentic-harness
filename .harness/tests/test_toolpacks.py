@@ -1255,7 +1255,7 @@ class ProgramNeeds(ToolpackCase):
         row = next(item for item in toolpacks.check(self.root)["toolpacks"] if item["name"] == "tracker")
         self.assertFalse(row["ok"])
         self.assertEqual({name for name, ok in row["programs"].items() if not ok}, {"tracker", "trk-login"})
-        self.assertTrue(any("tracker" in str(line) and "trk-login" in str(line) and "Get ready" in str(line) for line in DoctorToolpacks.lines_of(self.root)))
+        self.assertTrue(any("tracker" in str(line) and "trk-login" in str(line) and ("Get ready" in str(line) or "开始设置" in str(line)) for line in DoctorToolpacks.lines_of(self.root)))
         launchenv.add_folder(self.root, "tracker", str(self.bin))
         self.assertTrue(next(item for item in toolpacks.check(self.root)["toolpacks"] if item["name"] == "tracker")["ok"])
         self.assertFalse(any("trk-login" in str(line) for line in DoctorToolpacks.lines_of(self.root)))
@@ -1360,11 +1360,13 @@ class SigninsOnTheBoard(ProgramNeeds):
     def test_the_page_strings_for_the_four_blocks(self) -> None:
         web = Path(toolpacks.__file__).resolve().parents[1] / "modules" / "task" / "web"
         machine, servers, setup, enter = [(web / name).read_text(encoding="utf-8") for name in ("machine.js", "servers.js", "setup.js", "enter.js")]
-        for word in ('"folder-add"', 'machine.prog.title', 'machine.net.title', 'machine.signins.title', '"MCP "', 'SERVERS.signinsBlock', 'machine.paths.added', 'machine.paths.remove'):
+        for word in ('"folder-add"', 'machine.prog.title', 'machine.net.title', '"MCP "', 'machine.paths.added', 'machine.paths.remove', "localPanel", "packsPanel", "machine.pack.needs.signin"):
             self.assertIn(word, machine, word)
         self.assertNotIn("machine.paths.placeholder", machine, "no Tool folders text box any more")
-        for word in ("toolRow", "orphanRow", '"forget-tool"', "machine.signins.shared", "machine.signins.orphan", "connections.own.add"):
+        self.assertNotIn("signinsBlock", machine + servers, "the sign-ins are rows of the connections, not a block of Local (1.7.41)")
+        for word in ("orphanRow", '"forget-tool"', "connections.shared.with", "machine.signins.orphan", "connections.own.add", "layersBox", "connectionsPanel"):
             self.assertIn(word, servers, word)
-        for word in ("machine.prog.title", "machine.net.title", "setup.fact.signins"):
+        self.assertNotIn("toolRow", servers, "no row for a tool: a connection whose way in is the tool's sign-in has its own Sign in (1.7.41)")
+        for word in ("machine.prog.title", "machine.net.title"):
             self.assertIn(word, setup, word)
         self.assertIn("machine.conn.notusable", enter)

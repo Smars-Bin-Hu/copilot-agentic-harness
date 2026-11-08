@@ -121,7 +121,7 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 re.compile(str(rule["pattern"]))
             except re.error as error:
                 out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
-    for key in ("expect", "denied", "down", "match"):
+    for key in ("expect", "denied", "down", "match", "signin_lost"):
         try:
             re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")
         except re.error as error:
@@ -455,28 +455,42 @@ def given_identity(kind: Dict[str, Any], server: Dict[str, Any], given: Dict[str
     return out
 
 
-def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Test the way in to a server with what the person typed (not saved yet). `{state, why, who, seconds}`; state ok, denied, down, failed, missing."""
+def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[str, Any]] = None, saved: bool = False) -> Dict[str, Any]:
+    """Test the way in to a server with what the person typed (not saved yet), or with what is saved (`saved`, nothing typed). `{state, why, who, seconds}`; state ok, denied, down,
+    failed, missing, mcp. A test that did not pass also carries `layers` (1.7.41): the first step that broke (program, sign-in, account access, address) and one sentence (`core.connlayers`)."""
     server = server or listed(root).get(alias)
     if not server:
         return {"state": "failed", "why": say("connections.unknown", alias=alias), "who": "", "seconds": 0}
     kind = types(root).get(str(server.get("type")))
     if not kind:
         return {"state": "failed", "why": say("connections.no_kind", kind=server.get("type")), "who": "", "seconds": 0}
-    from . import launchenv  # it reads this module's .env
+    from . import connlayers, launchenv, toolpacks  # launchenv reads this module's .env
 
     if kind.get("via") == "mcp":  # VS Code runs the MCP server and holds its sign-in: nothing to test from here
         return {"state": "mcp", "why": say("connections.mcp.vscode"), "who": "", "seconds": 0}
     identity = given_identity(kind, server, given)
+    if saved and not identity:
+        identity = identity_of(read_env(root), alias, kind, server)
+    how = delivery(kind, server)["identity"]
     line = command(kind, server, identity, alias)
     launch = launchenv.extra(root)
-    if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
-        return {"state": "missing", "why": say("connections.test.missing", program=shlex.split(line, posix=os.name != "nt")[0]), "who": "", "seconds": 0}
+    path = next((value for key, value in launch.items() if key.upper() == "PATH"), None)
+    lacking = ""
+    if missing_program(line, path):
+        lacking = shlex.split(line, posix=os.name != "nt")[0]
+    else:
+        lacking = next((one for one in toolpacks.signin_needs(kind, server) if not toolpacks.locate(one, path)), "")  # the program of the sign-in way (`az`) is needed too
+    if lacking:
+        return {"state": "missing", "why": say("connections.test.missing", program=lacking), "who": "", "seconds": 0, "layers": connlayers.classify(kind, server, alias, "missing", "", how, identity, program=lacking)}
+    if how == "netonly" and not (identity.get("account") and identity.get("password")):  # a Windows account is typed first: nothing to run without it
+        return {"state": "denied", "why": "no-identity", "who": "", "seconds": 0, "layers": connlayers.classify(kind, server, alias, "denied", "", how, {})}
     started = time.time()
     wait = test_seconds(kind, server)
     code, output = run_with(kind, server, identity, line, root, timeout=wait, launch=launch, alias=alias)
     timed = code is None and (output or "").startswith("no answer in ")  # the program was still running: told as a timeout with its limit, not as a failure
-    return {**judge(kind, code, output), "seconds": round(time.time() - started, 1), **({"timeout": int(wait)} if timed else {})}
+    found = {**judge(kind, code, output), "seconds": round(time.time() - started, 1), **({"timeout": int(wait)} if timed else {})}
+    found["layers"] = connlayers.passed() if found["state"] == "ok" else connlayers.classify(kind, server, alias, found["state"], output or "", how, identity, why=found["why"], timeout=int(wait) if timed else 0)
+    return found
 
 
 def probe_keys(root: Path) -> List[str]:

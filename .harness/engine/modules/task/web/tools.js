@@ -1,45 +1,30 @@
-// Tools (1.7.38): one window, two tabs named like the setup form's sections and the Enter groups. From the company: what the knowledge base brings, read only (the tool packs, the connections with a dot for your sign-in).
-// This computer: what you do here (programs, network, sign-ins, MCP, packs added from a folder). Each tab is a panel of servers.js or machine.js: `panel(ctx)` gives {body, foot}; ctx.go(tab, part, focus) switches and
-// scrolls to a part (or a row: `data-focus`), ctx.changed() repaints the dots. Get ready draws their facts in its sections (`facts()`) and opens a tab with Open.
+// Tools (1.7.41): three windows, each opened on its own: Tool packs, Connections & sign-ins, and Local. They have no tabs; a link inside one (a missing program, a step that broke) opens another in the same
+// dialog at the part that helps. Each window is a panel of machine.js (packs, local) or servers.js (connections): `panel(ctx)` gives {title, tip, sub, body, foot}; ctx.go(window, part, focus) switches and
+// scrolls to a part (or a row: `data-focus`). The setup form opens them with Open and draws their facts (`facts()`).
 // Needs common.js (h, t), serve.js (SERVE), servers.js (SERVERS), machine.js (MACHINE).
 const TOOLS = (function () {
-  const TABS = ["company", "computer"];
-  const LABEL = {company: "setup.sec.company", computer: "setup.sec.computer"};
-  const OLD = {packs: ["company", "packs"], connections: ["company", "connections"]};  // the names of the three tabs before 1.7.38
+  const WINDOWS = ["packs", "connections", "local"];
 
-  // The dot of a tab and the words of its line in Get ready: ok (green), warn (something is missing here), none (nothing set, grey).
-  function states() {
-    return Promise.all([MACHINE.toolpacksSummary(), SERVERS.summary(), MACHINE.summary()].map((promise) => promise.catch(() => null))).then(([packs, conns, pc]) => ({
-      company: packs || conns ? {dot: !packs || !packs.n ? "none" : packs.ready === packs.n ? "ok" : "warn", words: [packs ? (packs.n ? t("tools.packs.state", packs) : t("tools.packs.none")) : "", conns ? (conns.n ? t("setup.connections.state", conns) : t("setup.connections.none")) : ""].filter(Boolean).join(" \u00b7 ")} : {dot: "none", words: ""},
-      computer: pc ? {dot: pc.paths || pc.certs ? "ok" : "none", words: [pc.paths || pc.certs ? t("setup.machine.state", pc) : t("setup.machine.none"), t(pc.mcp ? "tools.mcp.on" : "tools.mcp.off")].join(" \u00b7 ")} : {dot: "none", words: ""},
-    }));
-  }
-
-  // From the company: two parts, the tool packs and the connections (both read only; a link on a row opens the row of This computer that fixes it).
-  function companyPanel(ctx) {
-    const packs = MACHINE.packsPanel(ctx), conns = SERVERS.listPanel(ctx);
-    const part = (key, title, tip, nodes) => h("section", {class: "tl-part", "data-part": key}, h("h3", {class: "mc-h"}, title, tip ? " " : null, tip ? h("span", {class: "sv-info", tabindex: "0", title: t(tip)}, "\u24d8") : null), ...nodes);
-    return {body: [h("p", {class: "sub"}, t("tools.company.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("tools.company.tip")}, "\u24d8")),
-      part("packs", t("setup.toolpacks"), "machine.conn.add", packs.body), part("connections", t("connections.title"), "", conns.body)], foot: []};
+  // The names before 1.7.41: "company" was the packs and the connections together, "computer" the programs, network, sign-ins, MCP and packs added from a folder. A part that moved goes to its new window.
+  function where(tab, part) {
+    part = part || "";
+    if (tab === "company") return part === "connections" ? ["connections", ""] : ["packs", part === "packs" ? "" : part];
+    if (tab === "computer") tab = "local";
+    if (tab === "local" && part === "signins") return ["connections", ""];
+    if (tab === "local" && part === "added") return ["packs", "added"];
+    return [WINDOWS.includes(tab) ? tab : "packs", part];
   }
 
   function open(tab, done, part) {
-    const old = OLD[tab];
-    if (old) { part = part || old[1]; tab = old[0]; }
-    let at = TABS.includes(tab) ? tab : "company";
-    const dots = {};
-    const tabs = TABS.map((name) => {
-      dots[name] = h("span", {class: "mc-dot"});
-      const button = h("button", {type: "button", class: "tl-tab", role: "tab", "data-tab": name}, dots[name], t(LABEL[name]));
-      button.addEventListener("click", () => show(name));
-      return button;
-    });
+    let at;
+    [at, part] = where(tab, part);
+    const title = h("h2");
+    const sub = h("p", {class: "sub tl-sub"});
     const body = h("div", {class: "win-body tl-body"});
     const foot = h("div", {class: "row win-foot"});
     const close = h("button", {type: "button", class: "act"}, t("connections.close"));
-    const view = SERVE.dialog([h("h2", null, t("tools.title"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("tools.model.tip")}, "ⓘ")), h("div", {class: "tl-tabs", role: "tablist"}, ...tabs), body, foot]);
+    const view = SERVE.dialog([title, sub, body, foot]);
     view.box.classList.add("wide", "sv-win", "tl-win");
-    const repaint = () => states().then((found) => TABS.forEach((name) => { dots[name].className = "mc-dot " + found[name].dot; dots[name].title = found[name].words; }));
     let want = null, until = 0;  // the part or row to scroll to: asked again as the panels fill in, for a few seconds
     const reveal = () => {
       if (!want || Date.now() > until) { want = null; return; }
@@ -49,26 +34,26 @@ const TOOLS = (function () {
       body.scrollTop = Math.max(0, node.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 4);
       if (row) { row.classList.remove("tl-flash"); void row.offsetWidth; row.classList.add("tl-flash"); want = null; }
     };
-    const ctx = {go: (name, part, focus) => show(name, part, focus), close: view.close, changed: repaint, arrived: reveal};
+    const ctx = {go: (name, part, focus) => show(name, part, focus), close: view.close, arrived: reveal};
     function show(name, part, focus) {
+      [name, part] = where(name, part);
       at = name;
       want = part || focus ? {part, focus} : null; until = Date.now() + 4000;
-      tabs.forEach((button) => { const on = button.dataset.tab === name; button.classList.toggle("on", on); button.setAttribute("aria-selected", String(on)); });
-      const made = name === "computer" ? MACHINE.panel(ctx) : companyPanel(ctx);
+      const made = name === "local" ? MACHINE.localPanel(ctx) : name === "connections" ? SERVERS.connectionsPanel(ctx) : MACHINE.packsPanel(ctx);
+      view.box.dataset.window = name;
+      title.replaceChildren(made.title, " ", h("span", {class: "sv-info", tabindex: "0", title: made.tip}, "ⓘ"));
+      sub.textContent = made.sub;
       body.replaceChildren(...made.body);
-      foot.replaceChildren(...made.foot, close);
+      foot.replaceChildren(...made.foot, h("span", {class: "tl-grow"}), close);
       body.scrollTop = 0;
       reveal();
     }
     close.addEventListener("click", view.close);
-    let tallest = 0;  // the window is centred: a tab shorter or taller than the one before made it jump. The body keeps the tallest height seen in this window (1.7.26).
-    if (typeof ResizeObserver === "function") new ResizeObserver(() => { if (body.offsetHeight > tallest) { tallest = body.offsetHeight; body.style.minHeight = Math.max(0, Math.min(tallest, innerHeight - 232)) + "px"; } }).observe(body);
     show(at, part);
-    repaint();
     if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }
   }
 
-  // Get ready (1.7.36): the three summaries in one go, each null when it cannot be read. setup.js draws them as facts of its sections.
+  // The setup form: the three summaries in one go, each null when it cannot be read. setup.js draws them as facts of its cards.
   function facts() {
     return Promise.all([MACHINE.toolpacksSummary(), SERVERS.summary(), MACHINE.summary()].map((promise) => promise.catch(() => null))).then(([packs, conns, pc]) => ({packs, conns, pc}));
   }

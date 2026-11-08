@@ -522,16 +522,22 @@ class CompanyFactsTests(unittest.TestCase):
         web = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
         source = (web / "setup.js").read_text(encoding="utf-8")
         messages = json.loads((support.REPO / ".harness" / "engine" / "core" / "messages.en.json").read_text(encoding="utf-8"))
-        for key, number, open_to in (("you", "2", '""'), ("company", "3", '"company"'), ("computer", "4", '"computer"')):
-            self.assertIn(f'card("{key}", "{number}", {open_to}', source)
+        for key, number, head in (("you", "2", "null"), ("company", "3", 'h("span", {class: "su-tag"}'), ("computer", "4", 'openTab("local")')):
+            self.assertIn(f'card("{key}", "{number}", {head}', source)
             self.assertIn(f"setup.sec.{key}", messages)
         self.assertNotIn("setup.form.title", source)
         for control in ("name", "chips", "repos", "modes", "kbPath", "prefix", "install", "refusedBox", "more", "go"):
             self.assertIn(control, source)
-        # Code repositories is the first row of card 4; the card of the company holds no Open of a row
-        self.assertLess(source.index('card("computer"'), source.index("t(\"setup.repos\")", source.index('card("computer"')))
-        self.assertNotIn("openTab(\"company\", ", source)
+        # 1.7.41: card 3 holds the knowledge base, the facts and the code repositories, in that order; card 4 is Local and holds the programs, the network and MCP, with one Open
+        card = source[source.index('card("company", "3"'):source.index('card("computer", "4"')]
+        self.assertLess(card.index("kbRow"), card.index("factsBox"))
+        self.assertLess(card.index("factsBox"), card.index("repoRow"))
+        self.assertIn("computerBox", source[source.index('card("computer", "4"'):])
+        self.assertIn('["packs", ""], ["packs", ""]', source)  # Tool packs and Connections have their own Open, which opens their own window
+        self.assertIn('["connections", ""], ["connections", ""]', source)
         self.assertIn("TOOLS.open(go[0], loadTools, go[1])", source)
+        self.assertIn("TOOLS.open(open[0], loadTools, open[1])", source)
+        self.assertIn("paintUnpaired", source, "a browser that is not paired is told so inside the first card")
         # the small print is a hover: HARNESS_LANGUAGE only when set, the override files beside Finish setup
         self.assertIn('title: t("setup.language.forced")', source)
         self.assertIn('title: t("setup.finish.note")', source)

@@ -18,6 +18,9 @@ const SETUP = (function () {
     const repos = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: t("setup.repos.ph")});
     const kbPath = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", hidden: ""});
     const kbNote = h("p", {class: "su-note"});
+    const kbDot = h("span", {class: "su-dot need"});  // the dot of the knowledge base row: in place, or the folder chosen just now reads well (1.7.41)
+    const kbInfo = h("div", {class: "su-kbinfo"});  // path, domains, domain skills, version of the knowledge base that is in place
+    const repoDot = h("span", {class: "su-dot need"});
     const kbParts = h("div", {class: "su-parts", hidden: ""});
     const kbLearn = h("button", {type: "button", class: "su-link"}, t("setup.kb.learn"));
     kbLearn.addEventListener("click", () => DOCK.allSkills("kb"));
@@ -56,6 +59,7 @@ const SETUP = (function () {
       if (st.root) parts.push(item(st.root, st.rootFound.n > 0, st.rootFound.n ? t("setup.repos.found", {n: st.rootFound.n, names: st.rootFound.names.join(", ")}) : st.rootFound.why, () => { st.root = ""; st.rootFound = null; keepRules((rule) => st.singles.some((path) => folder(path) === rule.repo)); }));
       st.singles.forEach((path) => { const ok = !st.broken.includes(path); parts.push(item(path, ok, t(ok ? "setup.repos.valid" : "setup.repos.invalid"), () => { st.singles = st.singles.filter((held) => held !== path); keepRules((rule) => rule.repo !== folder(path)); })); });
       repoList.replaceChildren(...parts);
+      repoDot.className = "su-dot " + (parts.length && parts.every((node) => !node.querySelector(".su-dot.bad")) ? "ok" : parts.length ? "bad" : "need");
     }
     function pickRepos(found) {
       const take = h("button", {type: "button", class: "act hot"}, t("setup.repos.take"));
@@ -125,6 +129,18 @@ const SETUP = (function () {
       chip.addEventListener("click", () => setMode(mode));
       return chip;
     });
+    const modeBox = h("div", {class: "chips su-modes"}, modes);
+    function paintKbInfo() {
+      kbInfo.hidden = st.mode !== "none";
+      modeBox.title = st.kb.here ? t("setup.kb.have.tip") : "";
+      if (st.mode !== "none") return;
+      const k = st.kb;
+      kbInfo.replaceChildren(...(k.here ? [h("code", {class: "su-kbpath", title: k.path}, k.path), h("span", null, t("setup.kb.info.domains", {n: k.domains})), h("span", null, t("setup.kb.info.dskills", {n: k.domain_skills || 0})), k.version ? h("span", {class: "su-soft"}, t("setup.kb.info.version", {version: k.version})) : null].filter(Boolean) : [h("span", {class: "su-off"}, t("setup.fact.notfound"))]));
+    }
+    function kbDotPaint() {
+      const ok = st.mode === "none" ? st.kb.here : Boolean(kbPath.value.trim()) && st.kbOk !== false;
+      kbDot.className = "su-dot " + (ok ? "ok" : "need");
+    }
     const setMode = (mode) => {
       st.mode = mode;
       modes.forEach((chip) => { const on = chip.dataset.mode === mode; chip.classList.toggle("on", on); chip.setAttribute("aria-pressed", on ? "true" : "false"); });
@@ -137,10 +153,12 @@ const SETUP = (function () {
       kbNote.className = "su-note";
       st.probePrefix = "";
       paintParts(null);
-      kbNote.replaceChildren(...(mode !== "none" ? [] : st.kb.here ? [t("setup.kb.have", {n: st.kb.domains})] : [t("setup.kb.none.hint"), " ", kbLearn]));
+      kbNote.replaceChildren(...(mode !== "none" || st.kb.here ? [] : [t("setup.kb.none.line"), " ", kbLearn]));
+      paintKbInfo();
       st.full = false;
       paintReplace();
       if (mode !== "none" && kbPath.value.trim()) checkKb();
+      kbDotPaint();
       gate();
     };
     function paintReplace() {
@@ -160,6 +178,7 @@ const SETUP = (function () {
         kbNote.className = "su-note" + (found.full ? "" : !found.ok ? " bad" : found.why ? "" : " good");  // a knowledge base in place is a choice to make, not a fault
         kbNote.textContent = !found.ok ? found.why : st.mode === "package" ? t("setup.kb.package.ok", {version: found.version, new: found.new, changed: found.changed, removed: found.removed}) + (found.local ? " " + t("setup.kb.package.local", {n: found.local}) : "") : found.why || t("setup.kb.folder.ok");
         st.full = Boolean(found.full);
+        st.kbOk = Boolean(found.ok);
         paintParts(st.mode === "folder" && kbPath.value.trim() ? found.parts || [] : null);
         paintReplace();
         if (found.prefix && !prefix.value) prefix.value = found.prefix;
@@ -187,67 +206,88 @@ const SETUP = (function () {
     const kbStar = star();
     kbStar.hidden = true;
     const needs = (key) => st.guide.missing.includes(key) || (key === "kb" && st.guide.missing.includes("domains"));
-    // The facts (1.7.36): one row each, a dot, a name, one short fact; the details are on hover. A row that sends the person on has Open.
+    // The facts (1.7.36): one row each, a dot, a name, one short fact; the details are on hover. `text` is a string, a node (words with parts coloured), or a list of names with a dot each.
+    // `go` = [window, part]: the name opens that window of Tools there; `open` = the same as a button at the end of the row (1.7.41: the packs and the connections).
     const NAMES = 6;  // names shown on a row; the rest is "+N", all of them on hover
     const dotOf = (kind) => h("span", {class: "su-dot " + kind});
-    const fact = (label, kind, text, tip, help, go) => {  // `go` = [tab, part]: the name opens the Tools window there; a row has no button of its own (1.7.38)
+    const fact = (label, kind, text, tip, help, go, open) => {
       let key = label;
       if (go) { key = h("button", {type: "button", class: "su-fk-btn", title: t("setup.fact.open", {where: label})}, label); key.addEventListener("click", () => TOOLS.open(go[0], loadTools, go[1])); }
-      return h("div", {class: "su-fact", title: tip || ""}, dotOf(kind), h("b", {class: "su-fk"}, key, help ? " " : null, help ? question(help) : null), h("span", {class: "su-fv" + (typeof text === "string" ? "" : " su-names")}, text));
+      let end = null;
+      if (open) { end = h("button", {type: "button", class: "act su-open su-fact-open"}, t("tools.open")); end.addEventListener("click", () => TOOLS.open(open[0], loadTools, open[1])); }
+      const shape = Array.isArray(text) ? " su-names" : typeof text === "string" ? " su-text" : " su-rich";
+      return h("div", {class: "su-fact", "data-kind": kind, title: tip || ""}, dotOf(kind), h("b", {class: "su-fk"}, key, help ? " " : null, help ? question(help) : null), h("span", {class: "su-fv" + shape}, text), end);
     };
     const names = (items) => {  // [{name, kind, tip}] -> a name with a dot each; long lists are cut with "+N"
       const shown = items.slice(0, NAMES).map((item) => h("span", {class: "su-nm", title: item.tip || ""}, dotOf(item.kind), item.name));
-      return items.length > NAMES ? [...shown, h("span", {class: "su-more-n"}, "+" + (items.length - NAMES))] : shown;
+      return items.length > NAMES ? [...shown, h("span", {class: "su-more-n", title: items.slice(NAMES).map((item) => item.name).join(", ")}, "+" + (items.length - NAMES))] : shown;
     };
+    const part = (text, kind) => h("span", {class: kind ? "su-" + kind : null}, text);  // a piece of a row's words: "off" yellow, "soft" grey
     const openTab = (tab) => {  // the one Open of a card, in its title row
       const button = h("button", {type: "button", class: "act su-open"}, t("tools.open"));
       button.addEventListener("click", () => TOOLS.open(tab, loadTools));
       return button;
     };
+    const files = (n) => t(n === 1 ? "setup.fact.file.one" : "setup.fact.files", {n});
     const factsBox = h("div", {class: "su-facts"});
     const computerBox = h("div", {class: "su-facts"});
+    const lookNote = h("span", {class: "su-note"});
     function paintFacts() {
       if (!st.guide || !st.latest) return;
       const c = st.latest.company || {};
       const has = (key) => st.parts && st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now speaks for itself, before it is copied
       const missing = (key) => (st.parts ? !has(key) : needs(key));
-      const rows = [];
+      const rows = [], mine = [];
+      let look = 0;  // rows to look at for company tasks: yellow ones, with a knowledge base in place
+      const add = (list, node, kind) => { list.push(node); if (kind === "need") look++; };
+      const inCopy = st.guide.company && !st.parts;  // counts are of the company folder that is here, not of one just chosen
       const lacking = missing("instructions");
       const partial = lacking && !st.parts && st.guide.company;  // the folder is there but lacks the one file: say that, not "not found" (1.7.34)
-      rows.push(fact(t("setup.fact.company"), lacking ? "need" : "ok", t(lacking ? (partial ? "setup.fact.noinstr" : "setup.fact.notfound") : "setup.fact.found"), t(lacking ? (partial ? "setup.company.partial" : "setup.company.need") : "setup.company.ok"), "instructions"));
+      add(rows, fact(t("setup.fact.company"), lacking ? "need" : "ok", lacking ? t(partial ? "setup.fact.noinstr" : "setup.fact.notfound") : inCopy && c.instructions_n ? files(c.instructions_n) : t("setup.fact.found"), t(lacking ? (partial ? "setup.company.partial" : "setup.company.need") : "setup.company.ok"), "instructions"), lacking ? "need" : "ok");
+      const skills = c.skills || {n: 0, off: []};
+      const noSkills = st.parts ? !has("skills") : !inCopy || !skills.n;
+      const off = inCopy ? skills.off || [] : [];
+      const skillKind = noSkills || off.length ? "need" : "ok";
+      add(rows, fact(t("setup.skills"), skillKind, noSkills ? t("setup.fact.notfound") : st.parts ? t("setup.fact.found") : h("span", null, String(skills.n), off.length ? part(" \u00b7 " + t("setup.fact.skills.off", {n: off.length, names: off.slice(0, 3).join(", ") + (off.length > 3 ? ", \u2026" : "")}), "off") : null),
+        off.length ? off.join("\n") : t(noSkills ? "setup.fact.skills.none.tip" : "setup.fact.skills.ok.tip"), "skills"), skillKind);
       const own = st.probePrefix || (c.prefix && c.prefix.kb) || "";  // the knowledge base names it: a fact, no box. It names none: the box (the override keeps working)
       const conflict = !st.probePrefix && c.prefix && c.prefix.conflict;
-      prefixRow.hidden = Boolean(own);
-      if (own) rows.push(fact(t("setup.prefix"), conflict ? "need" : "ok", own, conflict || t("setup.fact.prefix.tip"), "skills"));
-      else rows.push(prefixRow);
+      const showBox = !own && (st.kb.here || st.mode !== "none");  // no knowledge base at all: a yellow "not found" (1.7.41)
+      prefixRow.hidden = !showBox;
+      if (own) add(rows, fact(t("setup.prefix"), conflict ? "need" : "ok", own, conflict || t("setup.fact.prefix.tip"), "skills"), conflict ? "need" : "ok");
+      else if (showBox) rows.push(prefixRow);
+      else add(rows, fact(t("setup.prefix"), "need", t("setup.fact.notfound"), t("setup.fact.prefix.none.tip"), "skills"), "need");
       const standard = missing("standards");
       const said = !st.parts && st.guide.declared.includes("standards");
-      rows.push(fact(t("setup.standards"), standard ? "need" : said ? "none" : "ok", t(standard ? "setup.fact.notfound" : said ? "setup.fact.nonesaid" : "setup.fact.found"), t(standard ? "setup.standards.need" : said ? "setup.standards.none" : "setup.standards.ok"), "standards"));
+      add(rows, fact(t("setup.standards"), standard ? "need" : said ? "none" : "ok", standard ? t("setup.fact.notfound") : said ? t("setup.fact.nonesaid") : inCopy && c.standards_n ? files(c.standards_n) : t("setup.fact.found"), t(standard ? "setup.standards.need" : said ? "setup.standards.none" : "setup.standards.ok"), "standards"), standard ? "need" : "ok");
       const tools = st.tools || {};
-      const packs = c.packs || [];
+      const packs = [...(c.packs || []).map((name) => ({name, from: "harness"})), ...(c.own_packs || []).map((name) => ({name, from: "company"}))];
       const ready = new Map(((tools.packs || {}).names || []).map((item) => [item.name, item.ok]));
-      rows.push(fact(t("setup.toolpacks"), "none", packs.length ? names(packs.map((name) => ({name, kind: !ready.has(name) ? "none" : ready.get(name) ? "ok" : "need", tip: ready.has(name) ? t(ready.get(name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))) : t("setup.fact.packs.none"), packs.join(", ") || t("setup.fact.packs.tip"), "", ["company", "packs"]));
-      const conns = c.connections || [];
-      rows.push(fact(t("connections.title"), "none", conns.length ? names(conns.map((name) => ({name, kind: "none"}))) : t("setup.fact.conns.none"), conns.join(", ") || t("setup.fact.conns.tip"), "", ["company", "connections"]));
-      // the dots of the name rows carry the state themselves: the row's own dot is hidden for them
+      const packKinds = packs.map((item) => !ready.has(item.name) ? "none" : ready.get(item.name) ? "ok" : "need");
+      const packKind = !packs.length || packKinds.includes("need") ? "need" : "ok";
+      add(rows, fact(t("setup.toolpacks"), packKind, packs.length ? [...names(packs.map((item, index) => ({name: item.name, kind: packKinds[index], tip: ready.has(item.name) ? t(ready.get(item.name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))), packs.some((item) => item.from === "harness") ? part(t("setup.fact.packs.harness"), "soft") : null].filter(Boolean)
+        : h("span", null, part(t("setup.fact.packs.none"), "off"), part(" \u00b7 " + t("setup.fact.packs.picks"), "soft")), packs.map((item) => item.name).join(", ") || t("setup.fact.packs.tip"), "", ["packs", ""], ["packs", ""]), packKind);
+      const conns = tools.conns ? tools.conns.rows : (c.connections || []).map((name) => ({alias: name, saved: false, account: ""}));
+      const todo = conns.filter((row) => !row.saved).length;
+      const connKind = !conns.length || todo ? "need" : "ok";
+      add(rows, fact(t("connections.title"), connKind, conns.length ? [...names(conns.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "ring", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")}))), part(t(todo ? "setup.fact.conns.todo" : "setup.fact.conns.all", {n: todo}), todo ? "off" : "soft")]
+        : part(t("setup.fact.conns.none"), "off"), conns.map((row) => row.alias).join(", ") || t("setup.fact.conns.tip"), "", ["connections", ""], ["connections", ""]), connKind);
       factsBox.replaceChildren(...rows);
-      factsBox.querySelectorAll(".su-fact").forEach((node) => { if (node.querySelector(".su-names")) node.firstChild.classList.add("none"); });
-      // This computer
-      const pc = tools.pc, sv = tools.conns;
-      const mine = [];
-      const addTool = (list, tool) => list.concat([{name: tool.program, kind: tool.account ? "ok" : "none", tip: tool.account ? t("setup.fact.signin.saved", {account: tool.account}) : t("setup.fact.signin.not")}]);
+      // Local
+      const pc = tools.pc;
       if (pc) {
-        const lacking = pc.programs.filter((row) => !row.found).map((row) => row.program);
-        mine.push(fact(t("machine.prog.title"), "none", names(pc.programs.map((row) => ({name: row.program, kind: row.found ? "ok" : "need", tip: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}))),
-          lacking.length ? t("machine.prog.lacking", {programs: lacking.join(", ")}) : t("machine.prog.tip"), "", ["computer", "programs"]));
-        mine.push(fact(t("machine.net.title"), pc.certs ? "ok" : "none", [pc.proxy ? t("setup.fact.net.proxy", {proxy: pc.proxy}) : "", pc.certs ? t("setup.fact.ca.n", {n: pc.certs}) : t("setup.fact.ca.none")].filter(Boolean).join(" \u00b7 "),
-          pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip"), "", ["computer", "network"]));
+        const lackingProg = pc.programs.filter((row) => !row.found).map((row) => row.program);
+        const progKind = lackingProg.length ? "need" : "ok";
+        add(mine, fact(t("machine.prog.title"), progKind, [...names(pc.programs.map((row) => ({name: row.found ? row.program : row.program + " \u00b7 " + t("machine.prog.missing"), kind: row.found ? "ok" : "need", tip: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}))), pc.programs.length === 1 ? part(t("setup.fact.programs.hint"), "soft") : null].filter(Boolean),
+          lackingProg.length ? t("machine.prog.lacking", {programs: lackingProg.join(", ")}) : t("machine.prog.tip"), "", ["local", "programs"]), progKind);
+        const netKind = pc.certs ? "ok" : pc.company_proxy ? "need" : "ring";
+        add(mine, fact(t("machine.net.title"), netKind, pc.certs ? [t(pc.certs === 1 ? "setup.fact.ca.n.one" : "setup.fact.ca.n", {n: pc.certs}), pc.proxy ? t("setup.fact.net.proxy", {proxy: pc.proxy}) : ""].filter(Boolean).join(" \u00b7 ") : h("span", null, part(t("machine.ca.none.long"), pc.company_proxy ? "off" : null), part(" \u00b7 " + t(pc.company_proxy ? "setup.fact.ca.need.company" : "setup.fact.ca.need.maybe"), "soft")),
+          pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip"), "", ["local", "network"]), netKind);
+        mine.push(fact("MCP", pc.mcp ? "ok" : "ring", t(pc.mcp ? "setup.fact.mcp.on" : "setup.fact.mcp.off"), t("machine.mcp.tip"), "", ["local", "mcp"]));
       }
-      const people = sv ? sv.tools.reduce(addTool, []).concat(sv.rows.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "none", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")})), sv.orphans.map((name) => ({name, kind: "need", tip: t("machine.signins.orphan.tip", {name})}))) : [];
-      mine.push(sv && people.length ? fact(t("setup.fact.signins"), "none", names(people), people.map((row) => (row.kind === "ok" ? "\u2713 " : "\u00b7 ") + row.name).join("\n"), "", ["computer", "signins"]) : fact(t("setup.fact.signins"), "none", sv ? t("setup.fact.signins.none") : "", t("setup.fact.signins.tip")));
-      if (pc) mine.push(fact("MCP", pc.mcp ? "ok" : "none", t(pc.mcp ? "tools.mcp.on" : "tools.mcp.off"), t("machine.mcp.tip"), "", ["computer", "mcp"]));
       computerBox.replaceChildren(...mine);
-      computerBox.querySelectorAll(".su-fact").forEach((node) => { if (node.querySelector(".su-names")) node.firstChild.classList.add("none"); });
+      lookNote.textContent = st.kb.here && look ? t("setup.look.n", {n: look}) : "";
+      kbDotPaint();
     }
     const paintStates = paintFacts;
     function loadTools() { if (typeof TOOLS === "undefined") return Promise.resolve(); return TOOLS.facts().then((found) => { st.tools = found; paintFacts(); }); }
@@ -278,6 +318,12 @@ const SETUP = (function () {
       }, (error) => { button.disabled = false; testOut.replaceChildren(h("p", {class: "su-note bad"}, error.message || String(error))); });
     }
 
+    // This browser is not paired (or the board did not answer): the first card says so, instead of staying an empty box (1.7.41). The poll goes on: pairing in another tab shows the real card at once.
+    function paintUnpaired(error) {
+      st.shortKey = "";
+      const unpaired = Boolean(error && error.data && error.data.unpaired);
+      shortBox.replaceChildren(h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "1"), h("h2", null, t("setup.short.title"))), h("p", {class: "su-note bad"}, t(unpaired ? "setup.short.unpaired" : "setup.short.nolink")), h("p", {class: "su-note"}, (error && error.message) || ""));
+    }
     function paintShort(found) {
       const key = JSON.stringify([found.short, found.reopen]);
       if (key === st.shortKey) return;  // the poll must not take away the button the person is about to press
@@ -351,7 +397,7 @@ const SETUP = (function () {
     function load() {
       clearTimeout(st.timer);
       if (!app.isConnected) return Promise.resolve();
-      return ask("state").then(paint, (error) => { app.classList.remove("su-loading"); said.replaceChildren(...SERVE.reasons(error.message || error)); }).then(() => { if (!document.hidden) st.timer = setTimeout(load, st.ready ? SLOW : POLL); else st.timer = 0; });
+      return ask("state").then(paint, (error) => { app.classList.remove("su-loading"); if (!st.shortKey) paintUnpaired(error); said.replaceChildren(...SERVE.reasons(error.message || error)); }).then(() => { if (!document.hidden) st.timer = setTimeout(load, st.ready ? SLOW : POLL); else st.timer = 0; });
     }
 
     // While the work runs: a spinner, a line that says do not close, and the steps done. At the end: the result, or the reason it stopped (1.7.19).
@@ -519,15 +565,18 @@ const SETUP = (function () {
     loadGuide();
     loadTools();
     const prefixRow = row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint")));  // only when the knowledge base names none (1.7.36)
-    const card = (key, num, open, ...nodes) => h("section", {class: "su-card", "data-sec": key}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, num), h("h2", null, t("setup.sec." + key), " ", h("span", {class: "sv-info", tabindex: "0", title: t("setup.sec." + key + ".tip")}, "\u24d8")), open ? openTab(open) : null), ...nodes);  // four cards of one rank (1.7.38)
+    // The knowledge base is the first fact of card 3 and shaped like the others: a dot, its name, and what it says (1.7.41); the chips choose where a new one comes from.
+    const kbRow = h("div", {class: "su-fact su-kbrow"}, kbDot, h("b", {class: "su-fk"}, t("setup.kb"), kbStar, " ", question("kb")), h("div", {class: "su-fv su-kbv"}, modeBox, h("div", {class: "su-line"}, kbPath, kbPick), kbInfo, kbNote, kbParts, kbReplace));
+    const repoRow = h("div", {class: "su-fact su-repos"}, repoDot, h("b", {class: "su-fk"}, t("setup.repos"), " ", question("repos")), h("div", {class: "su-fv su-repov"}, h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))));
+    const card = (key, num, head, ...nodes) => h("section", {class: "su-card", "data-sec": key}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, num), h("h2", null, t("setup.sec." + key), " ", h("span", {class: "sv-info", tabindex: "0", title: t("setup.sec." + key + ".tip")}, "\u24d8")), head), ...nodes);  // four cards of one rank (1.7.38)
     const more = h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row([t("setup.install"), question("python")], install, h("p", {class: "su-note"}, t("setup.install.example"))), row([t("setup.refused"), question("repos")], h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint"))));
     app.classList.add("su-loading");  // an empty form that jumps when its data comes is worse than a moment of nothing
     const finishTip = h("span", {class: "sv-info", tabindex: "0", title: t("setup.finish.note")}, "\u24d8");
     app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t(finished ? "setup.lead.again" : "setup.lead"), " ", olderLink), shortBox, changed, broken,
-      card("you", "2", "", row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "su-line"}, h("span", {class: "chips su-modes"}, chips), langNote))),
-      card("company", "3", "company", row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote, kbParts, kbReplace), factsBox),
-      card("computer", "4", "computer", row([t("setup.repos"), question("repos")], h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))), computerBox, more),
-      h("div", {class: "su-end"}, go, finishTip, goNote), said));
+      card("you", "2", null, row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "su-line"}, h("span", {class: "chips su-modes"}, chips), langNote))),
+      card("company", "3", h("span", {class: "su-tag"}, t("setup.optional")), kbRow, factsBox, repoRow),
+      card("computer", "4", openTab("local"), computerBox, more),
+      h("div", {class: "su-end"}, go, finishTip, goNote, lookNote), said));
     gate();
     load();
     return {busy: () => st.busy, dirty: () => Boolean(st.form) && !st.saved && JSON.stringify(values()) !== st.opened};

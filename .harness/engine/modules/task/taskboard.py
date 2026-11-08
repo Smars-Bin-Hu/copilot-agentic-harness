@@ -132,6 +132,8 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
             found.append("send")
         elif row.get("waiting_why") == "stopped":
             found.append("answer")
+    if "accept" in served and row.get("waiting_why") == "accept" and not row.get("paused_since"):
+        found.append("accept")  # the agent delivered and stopped: the board closes the task on the person's word, with no message to the agent (1.7.38)
     if row.get("waiting_why") and row.get("dismiss"):
         found.append("review dismiss")  # the agent stopped after a check that did not pass: the person may say it judged wrong
     if "autorun on" in served and not row.get("autorun") and not row.get("paused_since"):
@@ -139,7 +141,7 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     found.append("resume" if row.get("paused_since") else "pause")
     if "close" in served:
         found.append("close")
-    return [{"action": action, "command": "" if action in ("send", "answer") else f"{cli_command()} approve-action" if action == "approve-action" else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
+    return [{"action": action, "command": "" if action in ("send", "answer", "accept") else f"{cli_command()} approve-action" if action == "approve-action" else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 
 def with_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], served: Tuple[str, ...] = (), root: Optional[Path] = None) -> bool:

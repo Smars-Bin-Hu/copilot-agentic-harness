@@ -38,7 +38,7 @@ A company can set these per system. What passes without asking you:
 - a write or a run on a connection you opened for this task (the button **Open <connection> for this task** on the held card). How far a connection may be opened is a word in its tool pack type, per environment: `all`, `items` or `no`. The sample SQL Server type opens DEV and IST and not QAT. Prod and a destroy are never opened;
 - a write to a ticket the task is linked to, after you opened its **linked items** (the `items` word: the same button on the card of a held write to a linked ticket). A ticket the agent links by itself still waits for you.
 
-You decide when a call is held, not before: **Approve** is for that one command, **Open** is for the connection. Both need the code the board shows, so the agent cannot open a connection for itself. A company can lower what a type says (a connection with `"open": "no"`), never raise it.
+You decide when a call is held, not before: **Approve** is for that one command, **Open** is for the connection. Both need the code the board shows, so the agent cannot open a connection for itself. **Dismiss** asks why with one click (the command is wrong, wrong connection or environment, not now, do it another way): the agent changes the call and it is held again, or it stops that path. With *not now* or no reason it does not retry and does not reach the same result another way. A company can lower what a type says (a connection with `"open": "no"`), never raise it.
 
 ## Code answers, not the model
 
@@ -50,7 +50,7 @@ The gate is code that runs in the hooks, before a call. It does not ask a model.
 
 The agent cannot change these facts: the files that hold them are guardrail files, and an approval needs the code from the board.
 
-When a call is held or refused, the agent is told to stop, tell you what the call is for, and wait: not to run it again, and not to reach the same result another way. That part is a rule the agent follows, not a lock. The next section is about the locks.
+When a call is held or refused, the agent is told to tell you what the call is for and not to reach the same result another way. A held call also tells it to run `harness wait --approval <code>`: one terminal call that reads one file, calls no model, and returns at once when you approve, open the connection or dismiss (with your reason), or ends after 9 minutes so the agent can end its turn; the board wakes it when you decide later. The wait only reads the approval state, so the gate lets it through. That part is a rule the agent follows, not a lock. The next section is about the locks.
 
 ## Two checkpoints
 

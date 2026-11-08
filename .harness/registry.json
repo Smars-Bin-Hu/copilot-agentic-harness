@@ -236,6 +236,7 @@
         ".harness/tests/test_connlayers.py",
         ".harness/tests/test_open_connection.py",
         ".harness/tests/test_approval_wake.py",
+        ".harness/tests/test_accept.py",
         ".harness/tests/test_connection_find.py",
         ".harness/tests/test_readyitems.py",
         ".harness/tests/test_vsrestart.py",

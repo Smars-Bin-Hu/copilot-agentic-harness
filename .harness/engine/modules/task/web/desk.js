@@ -1085,15 +1085,35 @@
     const told = [approvedCard(), openedCard()].filter(Boolean);  // the approved calls, and the calls whose connection was opened: the one step left is to tell the agent
     const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
     if (!needsCard()) return told.length || left.length ? [...told, ...left] : null;
-    const items = needItems().filter((item) => item.action !== "approve-action");  // the held calls have cards of their own
+    const items = needItems().filter((item) => item.action !== "approve-action" && item.action !== "accept");  // the held calls and the delivered work have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
     const cards = [...told];
     cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told.length ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
+    const finish = acceptCard();
+    if (finish) cards.push(finish);
     cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
     if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
     return [...cards, ...left];
+  }
+
+  // --- the work delivered, to accept (1.7.38, C12 Q14) -------------------------------------------------------------------------------------------------------
+  // The agent wrote a short summary and stopped. Accept and close: the board closes the task, with no message to the agent (no chat, no tokens). Not yet: the reply box opens, to say what is missing.
+  function acceptCard() {
+    const found = desk.accept;
+    if (!found || desk.waiting_why !== "accept") return null;
+    const item = desk.actions.find((entry) => entry.action === "accept");
+    const yes = item ? actionButton(actionRow(), item, "big") : null;
+    const not = h("button", {type: "button", class: "act big", "data-act": "not-yet", title: t("desk.accept.not_yet.tip"), disabled: served() && canAct() && typeof REPLY !== "undefined" ? null : "disabled"}, t("desk.accept.not_yet"));
+    not.addEventListener("click", () => { if (typeof REPLY !== "undefined") REPLY.open(); });
+    return h("section", {class: "tk-need strong tk-accept", "data-action": "accept"},
+      h("div", {class: "tk-need-h"}, tag(t("task.waiting.accept"), "hot"), waitedLine()),
+      h("p", {class: "hint"}, t("desk.accept.hint")),
+      h("div", {class: "tk-accept-sum"}, h("b", null, t("desk.accept.summary")), h("div", {class: "tk-accept-text", tabindex: "0"}, found.summary)),
+      found.skipped.length ? h("div", {class: "tk-accept-skip"}, h("b", null, t("desk.accept.skipped")), h("ul", null, found.skipped.map((line) => h("li", null, line)))) : null,
+      found.todo_open ? h("p", {class: "sub"}, t("desk.accept.open", {why: found.todo_open})) : null,
+      h("div", {class: "tk-need-go"}, yes, not));
   }
 
   // --- a call to an outside system held in the outbox (1.7.7) -------------------------------------------------------------------------------------------------

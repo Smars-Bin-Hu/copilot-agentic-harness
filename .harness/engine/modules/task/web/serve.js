@@ -6,7 +6,7 @@
 
 const SERVE = (function () {
   const serve = DATA.serve;
-  const free = (action) => action === "pause" || action === "resume";
+  const free = (action) => action === "pause" || action === "resume" || action === "accept";  // no code, no preview: accept closes the task the agent delivered (1.7.38)
   let busy = false;
   const stack = [];  // the windows open now, the top one last
   const quiet = new Set();  // the windows that only tell something: the page under them keeps refreshing (`busy` is false), but keys still wait for them (`open`)

@@ -1,6 +1,6 @@
 ---
 name: sqlserver-jobs
-description: 'How this team starts, watches and checks a SQL Server job in DEV, IST and QAT: the procedures to call, the log table to read, how long to wait, what counts as done. Use when a task needs a job run (a load, a sync, a nightly batch) or its result checked. Keywords: run the job, start the load, job status, job log, wait for the job.'
+description: 'How this team deploys a script to DEV and IST, and starts, watches and checks a SQL Server job: the procedures to call, the log table to read, how long to wait, what counts as done; QAT and PROD go to the person. Use when a task needs a script deployed, a job run (a load, a sync, a nightly batch) or its result checked. Keywords: deploy the script, run the script, sqlcmd -i, run the job, start the load, job status, job log, wait for the job.'
 type: unit
 specificTo: generic
 ---
@@ -13,10 +13,15 @@ A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the
 
 ## When to Use This Skill
 
+- A task needs a script deployed to DEV or IST (a procedure, a table change).
 - A task needs a job run in an environment and its result checked (a test step, a sync after a write-back, a sample load).
 - The user says "run the job", "start the load", "did the job finish", "check the job log".
 
 ## Step-by-Step Workflows
+
+**Deploy a script to DEV or IST yourself**, in one command, before any job step. The script is a file in the task folder (`DEV/_manual/<path>`): `sqlcmd -S <server> -E -i <file>` (the path from the repository root, no `-Q`). The gate holds it as a write and the card shows the file: the user approves it, or opens that connection for the task (the button on the card). Do as the hold says. **QAT and PROD are the user's**: do not run a script there; hand it over with `harness task handoff run --env QAT --what "<file>"` and stop. A script that fails halfway is read from the error, not run again at once.
+
+**A job:**
 
 1. **Name the job and the environment.** The job names are in the knowledge base (`environment.md` of the domain); UNKNOWN is not a name. The connection of each environment, and its command, is in `harness connections` (`call`).
 2. **Start it.** A procedure is an `exec`: the gate holds it for the user (the outbox) unless the user opened that connection for this task (the button on the card of the held call). Run exactly:
@@ -25,7 +30,7 @@ A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the
    sqlcmd -S sql-dev.example.local,1433 -E -Q "EXEC dbo.usp_job_start @name = N'<job name>'"
    ```
 
-   Held: tell the user the code, and stop until it ran.
+   Held: do as the hold says (wait for the answer, and run it again when it is approved).
 3. **Wait in one call**, not by asking again and again:
 
    ```

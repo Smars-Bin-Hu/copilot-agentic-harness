@@ -20,7 +20,7 @@ The **kind** decides "what counts as done"; the **tier** decides "which files th
 
 | Kind | Done when | Default tier |
 | --- | --- | --- |
-| `qa` Q&A | The answer has a source; opened without questions, closed when answered | light |
+| `qa` Q&A | The answer has a source; opened without questions, closed by the agent when answered | light |
 | `rca` | There is a chain of evidence: what was seen, logs, root cause, verification | medium |
 | `design` design, plan | There are options and trade-offs | medium |
 | `dev` development | The changes match the approved plan, with a record of self-testing | full |
@@ -53,9 +53,13 @@ The board gives a task one state, the first that holds:
 | closed / not started | Closed, or a folder no one has opened yet | Nothing |
 | paused | You put it aside | `task resume`, or just talk to its session |
 | working | A session holds it, made a hook call in the last 5 minutes and has not stopped (even if the plan it just wrote already waits for you) | Nothing; every button is grey until it stops |
-| waiting for you | A plan, a write-back, a decision on checks, test results or a word after a stop is yours, and the agent has stopped | Do it (the reason is on the tag) |
+| waiting for you | A plan, a write-back, a decision on checks, test results, a held call, work to accept (*to accept*) or a word after a stop is yours, and the agent has stopped or sits in its wait | Do it (the reason is on the tag) |
 | quiet | A session holds it, but 5 minutes with no call and no stop | Look at the VS Code window; if it is closed, open a session and name the task |
 | no session | Nothing waits for you and nothing holds it | Open a session and name the task, or close it |
+
+### Closing is your acceptance
+
+The agent never asks "close the task?". A **look** and a **chore on a ticket** are closed by the agent (the writes were approved on their cards). A **development task** is accepted by its promote: the board closes it when the agent has stopped and nothing else waits (the files to commit stay on the Changes tab). A **test, RCA, design or analysis** ends when the agent runs `harness task deliver` with a short summary and stops; the task shows *to accept*, and you press **Accept and close** (no chat, no tokens) or **Not yet** (the reply box opens). A test where you skipped an environment says so in the summary, on your word.
 
 ### 9.4 The requirement: the agent writes, you confirm
 
@@ -76,7 +80,7 @@ the agent makes the changes in DEV/ -> task diff (CHANGES.diff)
 (with checks on) task review start -> the reviewer checks -> n passes are reached
 task promote --dry-run (main brought up again) -> PROMOTE-PLAN.diff -> you run task approve-promote in the terminal                               <- the second approval
 task promote: for each repository git switch -c <branch> main, files written, not committed
-task close -> the report is written
+the promote was your acceptance: the board closes the task when the agent has stopped and nothing else waits -> the report is written
 ```
 
 Key points:

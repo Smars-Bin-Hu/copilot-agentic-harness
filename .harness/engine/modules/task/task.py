@@ -262,8 +262,20 @@ def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     return note + _next_step(root, task, data)
 
 
+def finish_text(task: str, data: Dict[str, Any]) -> str:
+    """How this kind of task ends, in one rule for the agent (1.7.38, C12 Q14): closing is the person's acceptance, and the agent never asks "close the task?". A look closes itself; a development task is accepted by its
+    promote; any other task is delivered with a short summary and accepted on the board. The rule is in the skill `harness-my-task`; this is its one sentence for the prompt."""
+    kind = data.get("kind")
+    if kind == "qa":
+        return say("task.finish.qa", name=name_of(task))
+    if kind in ("dev", "kb") and data.get("target_mode"):
+        return say("task.finish.dev")
+    return say("task.finish.deliver", name=name_of(task))
+
+
 def _next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     plan, dev = f"{task}/{tasks.PLAN_NAME}", f"{task}/{tasks.DEV_NAME}"
+    finish = finish_text(task, data)
     page = say("task.step.page", url=page_url(root, task)) if page_url(root, task) else ""  # where the user reads the plan
     handed = data.get("handoff") if isinstance(data.get("handoff"), dict) else {}
     if handed.get("what"):  # handed to the person: their result comes before any next step
@@ -274,7 +286,7 @@ def _next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
         mine = ", ".join(sorted(env for env, value in data["test_runner"].items() if value == "agent"))
         return say("task.step.test_agent", envs=mine, task=task)
     if not tasks.plan_digest(root, task):
-        return say("task.step.plan", plan=plan, dev=dev, task=task) + page
+        return say("task.step.plan", plan=plan, dev=dev, task=task, finish=finish) + page
     if not tasks.plan_approved(root, task, data):
         if req_state(root, task) in ("open", "changed"):  # one ask, not two that say different things: both files, one code
             return say("task.step.approve_req", plan=plan, req=f"{task}/{tasks.REQ_FILE}", dev=dev, task=task, name=name_of(task)) + page
@@ -288,7 +300,7 @@ def _next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
 
     if (data.get("promote") or {}).get("state") == "done" and commitmsg.to_commit(data):
         return say("promote.done.person").strip()  # written back and not committed: closing now would take the wait off the board
-    return text + say("task.step.close")
+    return text + say("task.step.close", finish=finish)
 
 
 def status(root: Path, raw_task: str = "") -> Dict[str, Any]:
@@ -888,7 +900,10 @@ def run_promote(root: Path, raw_task: str, dry_run: bool) -> Dict[str, Any]:
         data["promote"] = new  # a `partial` record is saved too: the lock writes it back, the error is raised after
         note(data, "promote" if not failed else "promote-partial", result["branch"])
         if not failed:
-            result["next"] = promoted_text(result, new)
+            from . import tasklife  # it imports this module
+
+            hint = tasklife.links_hint(root, data)  # the board closes the task: a ticket it names is asked about now, and written after the task is opened again
+            result["next"] = promoted_text(result, new) + (" " + hint if hint else "")
             return {"dry_run": False, **common.shown(result)}
         failure = promote_target.partial_message(new)
     raise CommandError(failure)

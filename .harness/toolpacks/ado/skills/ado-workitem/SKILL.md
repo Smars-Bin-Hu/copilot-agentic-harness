@@ -1,6 +1,6 @@
 ---
 name: ado-workitem
-description: 'Read Azure DevOps work items and write to them only with the user''s yes, with the ado program: read an item with its links, comments and history, list items, run a saved query, add a comment, change state, fields or tags, link items, attach a file, create an item. Use when the user names a work item (ado:<id>), asks what one says or what changed, or agrees to update or create one. Keywords: work item, ticket, user story, bug, comment, state, tag, link, attachment, create a ticket, iteration, area, saved query.'
+description: 'Read Azure DevOps work items and write to them, with the ado program: read an item with its links, comments and history, list items, run a saved query, add a comment, change state, fields or tags, link items, attach a file, create an item. Use when the user names a work item (ado:<id>), asks what one says or what changed, or asks to update or create one. Keywords: work item, ticket, user story, bug, comment, state, tag, link, attachment, create a ticket, iteration, area, saved query.'
 type: unit
 specificTo: generic
 ---
@@ -14,7 +14,7 @@ Find the connection first: `harness connections find <words>` (system and enviro
 ## When to Use This Skill
 
 - The user names a work item (`ado:12345`), or asks what one says, who changed it, what it is linked to.
-- The user said yes to writing one: a comment, a state, a tag, a link, a file, a new item.
+- The user asked to write one: a comment, a state, a tag, a link, a file, a new item.
 
 ## Step-by-Step Workflows
 
@@ -31,7 +31,7 @@ ado tags                  the tags in use
 
 **Before a write, ask for the allowed values** instead of guessing: `ado types`, `ado states --type "User Story"`, `ado fields --type Bug`, `ado areas`, `ado iterations --current`, `ado tags`.
 
-**Write** (only with the user's yes, with the words the user agreed to):
+**Write.** A write the user asked for in this task goes straight to the command, with the words they asked for: do not ask in the chat first. The gate holds it, and the card on the task page shows the exact words; that card is the user's yes. A write the user did not ask for (a comment you think would help, a state you would change): ask in the chat first, and write only when they say yes.
 
 1. Have a task, and link the item to it: no task yet (a small ticket job) → open a Q&A task first (skill `harness-my-task`); then `harness task link add --task <task> ado:<id>` (`--task` when several tasks are open). A write to an item the task is not linked to is refused.
 2. Run one of:
@@ -44,7 +44,7 @@ ado tags                  the tags in use
    ado create --type Bug --title "…" --area "<path>" --iteration "<path>" --parent 12345 --tag x
    ```
    When the text has a Windows path or a regular expression, write it to a file in the task's RUNS folder and pass `--file <that file>` (the path from the repository root).
-3. The gate holds the write: tell the user it waits on the task page, and run the same command again once they approve. When the user opened the linked items for the task, a write to them runs at once; a new item always waits. There is no delete.
+3. The gate holds the write: do as the hold says (tell the user what waits, wait for the answer, and run the same command again once it is approved). When the user opened the linked items for the task, a write to them runs at once; a new item always waits. There is no delete.
 
 **Test result as a comment**: write the result (what was run, what came back, the evidence ids E1, E2 of `generic-evidence-run`) into `comment.md` in the task folder, then `ado comment <id> --file .workspace/sandbox/tasks/<task>/comment.md`. `ado attach <id> --file <path>` adds a file (a log, a screenshot) when the text is too long. Before `update --state`, read `ado item <id>` and `ado states --type <type>`; a workflow may allow only some moves.
 
@@ -52,6 +52,6 @@ ado tags                  the tags in use
 
 - Read this skill instead of trying `ado --help` or other commands. `--json` works before or after the command.
 - `ado` checks a state, a type, an area, an iteration and a field name before it writes and lists the allowed ones: take one of those, never invent another.
-- An item is for people: write only what the user asked for, not the task's working notes.
+- An item is for people: write only what the user asked for, not the task's working notes. A comment the user asked for is written as it is asked; do not add to it.
 - `ado: … 401 …`: ask the user to press **Sign in** (or set the token) for the connection in Get ready, Tools, Connections. Do not run `az login` yourself.
 - `ado: cannot reach … CERTIFICATE`: VS Code was not opened from the board with the CA bundle; tell the user.

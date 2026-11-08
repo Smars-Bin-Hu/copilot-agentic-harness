@@ -21,7 +21,7 @@ Find the connection first: `harness connections find <words>` (system and enviro
 1. `ado releases <definition> --top 5`: each release with each environment's state (DEV:succeeded IST:rejected …).
 2. `ado release <id>`: each environment, who it waits for (a pending approval), and the failed tasks with their errors.
 3. Say plainly which environment, what failed, and the error line; a login or permission error on an environment is the environment's, not the code's.
-4. Deploy, only when the user asks: `ado deploy <release> --env <name>`. It is held like a write: run it, tell the user it waits for approval on the task page and say which release and environment; run the same command again once they approve. `ado` lists the environment names when yours is wrong.
+4. Deploy, only when the user asks: `ado deploy <release> --env <name>`. It is held like a write: run it, and do as the hold says (tell the user which release and environment wait, wait for the answer, and run the same command again once it is approved). `ado` lists the environment names when yours is wrong.
 
 ## Gotchas
 

@@ -141,6 +141,8 @@ def next_text(root: Path, task: str, data: Dict[str, Any], left: str) -> str:
         text += say("task.next.qa", name=task_ops.name_of(task))
     if tier == "full" or tasks.plan_digest(root, task):
         text += task_ops.next_step(root, task, data)
+    elif data.get("kind") != "qa":
+        text += task_ops.finish_text(task, data) + " "  # an RCA, a design, an analysis: no plan, so no next step names how it ends (1.7.38)
     if left:
         text += say("task.next.switched", other=left, other_name=task_ops.name_of(left))
     if not data.get("domains"):
@@ -322,6 +324,8 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     if isinstance(mark, dict) and mark.get("since"):
         if mark.get("why") in GO_MARKS:
             return {"why": str(mark["why"]), "since": str(mark["since"])}  # approved on a page or in a terminal; the agent is not told yet
+        if mark.get("why") == "accept":
+            return {"why": "accept", "since": str(mark["since"])}  # the agent delivered and stopped: the person accepts the work, or says not yet (1.7.38)
         run = data.get("autorun") if isinstance(data.get("autorun"), dict) else {}
         ended = run.get("stopped") if run.get("state") == "off" else None
         if isinstance(ended, dict) and str(ended.get("at", "")) <= str(mark["since"]) and ended.get("why") not in ("person",):
@@ -450,10 +454,14 @@ def set_waiting(root: Path, task: str, mark: Optional[Dict[str, str]]) -> None:
     path = tasks.state_file(root, task)
     with state_lock(path):
         data = tasks.read(root, task)
-        if data is None or data.get("waiting") == mark:
+        if data is None:
             return
+        changed = data.get("waiting") != mark
         data["waiting"] = mark
-        atomic_write(path, data)
+        if mark is None and data.pop("deliver", None) is not None:  # the person answered: the work they were asked to accept is not delivered any more (1.7.38)
+            changed = True
+        if changed:
+            atomic_write(path, data)
 
 
 def waiting_text(data: Dict[str, Any], why: str) -> str:
@@ -619,10 +627,11 @@ def link(root: Path, raw_task: str, ref: str, on: bool, by_person: bool = False)
             **({"warning": say("task.link.unknown", type=known["type"])} if on and not known["toolpack"] else {})}
 
 
-def links_hint(root: Path, data: Dict[str, Any]) -> str:
-    """One line for the agent when a task that names outside items is done: it may offer to update them, never update them unasked."""
+def links_hint(root: Path, data: Dict[str, Any], still_open: bool = False) -> str:
+    """One line for the agent when a task that names outside items is done: it may offer to update them, never update them unasked. `still_open`: the task is delivered and waits to be accepted (1.7.38), so it need not be opened again."""
     refs = [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
-    return say("task.link.suggest", links=", ".join(refs), name=str(data.get("name") or "")) if refs and data.get("kind") != "qa" else ""  # a look only reads: nothing to offer
+    key = "task.link.suggest.open" if still_open else "task.link.suggest"
+    return say(key, links=", ".join(refs), name=str(data.get("name") or "")) if refs and data.get("kind") != "qa" else ""  # a look only reads: nothing to offer
 
 
 def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:

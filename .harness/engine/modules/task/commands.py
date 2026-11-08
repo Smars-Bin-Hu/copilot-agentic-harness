@@ -20,10 +20,10 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict
 
-from core import approval, render, starticon, targets, tasks
+from core import approval, messages, render, starticon, targets, tasks
 from core.paths import repo_root
 
-from . import autorun, boardserve, common, intake, kbsetup, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
+from . import accept, autorun, boardserve, common, intake, kbsetup, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
 
 
 def read_text_argument(path: str) -> str:
@@ -131,6 +131,19 @@ def close_task(args: argparse.Namespace) -> Dict[str, Any]:
         if data is not None:
             tasklife.require_idle(root, data, "task close")
     return task.close(repo_root(), args.task, args.reason, getattr(args, "todo_open", ""))
+
+
+def deliver_task(args: argparse.Namespace) -> Dict[str, Any]:
+    """`task deliver`: the agent hands the work over for acceptance (C12 Q14). The summary is given in quotes or in a file of the task folder."""
+    root = repo_root()
+    text = args.summary
+    if args.summary_file:
+        folder = tasks.task_dir(root, task.resolve(root, args.task)).resolve()
+        path = (root / args.summary_file).resolve()
+        if folder not in path.parents or not path.is_file():
+            raise common.CommandError(messages.text("accept.summary.file", folder=str(folder.relative_to(root.resolve())).replace("\\", "/")))
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    return accept.deliver(root, args.task, text, args.skipped, args.todo_open)
 
 
 def cmd_report(args: argparse.Namespace) -> Dict[str, Any]:
@@ -369,6 +382,11 @@ def register_task(subparsers: Any) -> None:
     close.add_argument("--reason", default="")
     close.add_argument("--todo-open", default="", help="why steps of TODO.md stay unticked (tick the ones that are done first)")
     close.add_argument("--force", action="store_true", help="even while the agent is in the middle of a turn (a person at a terminal)")
+    deliver = add("deliver", "the agent says the work is done and stops for the person to accept it: a short summary (what was delivered, where to look); the task then shows to accept on the board, and the person closes it there or says not yet. Not for a Q&A task (it closes itself) nor a promoted development task (the promote is the acceptance)", lambda a: deliver_task(a))
+    deliver.add_argument("--summary", default="", help="the short summary, in quotes; a longer one goes in a file of the task folder (--summary-file)")
+    deliver.add_argument("--summary-file", default="", help="a file inside the task folder with the summary (the path from the repository root)")
+    deliver.add_argument("--skipped", action="append", default=[], help="a test environment the person skipped, on their word, and why (more than once)")
+    deliver.add_argument("--todo-open", default="", help="why steps of TODO.md stay unticked (tick the ones that are done first)")
     report = add("report", "write .workspace/reports/tasks/<name>/report.md (what was done) and report.html (where the time and usage went)", cmd_report)
     report.add_argument("--open", action="store_true", help="open the HTML page in the browser (a person at a terminal)")
     report.add_argument("--detail", action="store_true", help="add the slowest prompts, the tools and the checks to `insight` (more to read)")

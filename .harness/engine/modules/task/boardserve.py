@@ -71,7 +71,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import accept, autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import reachcheck, vsrestart
 from .common import CommandError
@@ -113,7 +113,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept"]}
 
 
 class Fallback(CommandError):
@@ -370,6 +370,7 @@ class Board:
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
+        self.close_promoted()
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served, rewrite=False)
         self.link.overlay(result["tasks"])
         for row in result["tasks"]:
@@ -383,6 +384,20 @@ class Board:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
         return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
+
+    SWEEP_EVERY = 5.0  # seconds between two looks for a promoted task that waits for nothing
+
+    def close_promoted(self) -> List[str]:
+        """The promote is the acceptance of a development task: when it is done, the agent has stopped and nothing else waits, the board closes the task (1.7.38, C12 Q14). At most once in a few seconds."""
+        now = time.monotonic()
+        with self.lock:
+            if now - getattr(self, "swept", -self.SWEEP_EVERY) < self.SWEEP_EVERY:
+                return []
+            self.swept = now
+        closed = accept.sweep(self.root)
+        for name in closed:
+            print(say("serve.did", action="close (promoted)", task=name), flush=True)
+        return closed
 
     def open_vscode(self) -> None:
         """Bring the VS Code window of this folder forward, started with this computer's settings; the connections are checked at once. Raises the reason when it cannot be asked (`/api/open`, and the end of a restart)."""
@@ -636,6 +651,11 @@ class Board:
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = False if action in SETTINGS else self.idle(action, task)
+        if action == "accept":  # the person accepts the delivered work (1.7.38): the board closes the task; nothing is sent to the chat
+            result = accept.accept(self.root, task)
+            noted_after = result.get("task") or task
+            print(say("serve.did", action="accept", task=task_ops.name_of(noted_after)), flush=True)
+            return result
         if action == "dismiss action":  # the person says no to a held call (1.7.7): the code names it, nothing runs. A reason (1.7.38) goes to the agent: at once by its wait, else by a message when its turn ended
             try:
                 result = outbox.dismiss_action(self.root, str(code or ""), interactive=True, reason=str(reason or ""), note=str(note or ""))

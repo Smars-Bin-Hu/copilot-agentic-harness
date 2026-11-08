@@ -207,8 +207,8 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
             tasklife.resume_on_prompt(ctx.root, data["task"])  # the person is back at a task they had put aside
         except Exception:  # noqa: BLE001 - a mark for a list; never in the way of the prompt
             pass
-    if data is not None and data.get("waiting"):
-        mark_waiting(ctx, data, False)  # the person answered
+    if data is not None and (data.get("waiting") or data.get("deliver")):
+        mark_waiting(ctx, data, False)  # the person answered (and what was delivered is not, any more)
     if data is not None:
         try:  # the restore point a rewind goes back to (1.6.109); a point that cannot be taken never holds up the message
             from . import rewind
@@ -400,7 +400,7 @@ def mark_waiting(ctx: Context, data: Dict[str, Any], stopped: bool) -> None:
     from . import tasklife
 
     try:
-        tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "stopped"} if stopped else None)
+        tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "accept" if data.get("deliver") else "stopped"} if stopped else None)  # delivered, then stopped: the person accepts (1.7.38)
     except Exception:  # noqa: BLE001 - the mark is for a list; losing it must not turn a Stop into an error
         pass
 

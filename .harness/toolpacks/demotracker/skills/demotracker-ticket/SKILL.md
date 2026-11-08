@@ -1,6 +1,6 @@
 ---
 name: demotracker-ticket
-description: 'Read a ticket of the demo tracker, and draft a comment or a state change for the user to approve. Use when the user names a demo ticket (demo:<id>), asks what a ticket says, or says yes to updating the ticket of a task. Keywords: ticket, demo tracker, comment on the ticket, close the ticket.'
+description: 'Read a ticket of the demo tracker, and write a comment or a state change the user approves on the task page. Use when the user names a demo ticket (demo:<id>), asks what a ticket says, or asks to update the ticket of a task. Keywords: ticket, demo tracker, comment on the ticket, close the ticket.'
 type: unit
 specificTo: generic
 ---
@@ -14,13 +14,13 @@ A sample skill of the sample tool pack `demotracker` (a made-up ticket board). A
 ## When to Use This Skill
 
 - The user names a ticket (`demo:2`) or asks what it says.
-- The task is linked to a ticket, the work is done, and the user said yes to updating it.
+- The task is linked to a ticket, and the user asked to update it (or said yes when you asked).
 
 ## Step-by-Step Workflows
 
 1. **Link the ticket the user names**: `harness task link add demo:<id> --task <name>`. Only an id the user gave.
 2. **Read it** (a read goes through): `demotracker --project <project> get <id>`. `<project>` is the `project` field of the server, not the server's name: `harness connections` shows the connection's fields; take the project from there.
-3. **Update it only when the user said yes**, with the words the user agreed to. Show the text first. A long comment goes in a file of the task folder (`notes.md`): run `demotracker --project <project> comment <id> --file notes.md`; a short one: `comment <id> --text "<text>"`. A state change: `set-state <id> <state>`. The gate holds the write; the user approves it on the task page.
+3. **Update it when the user asked for it**, with the words they asked for; do not ask in the chat first: the held card shows the exact words, and that is their yes. An update they did not ask for (one you think would help) is asked about in the chat first. A long comment goes in a file of the task folder (`notes.md`): run `demotracker --project <project> comment <id> --file notes.md`; a short one: `comment <id> --text "<text>"`. A state change: `set-state <id> <state>`. The gate holds the write; do as the hold says (wait for the answer, then run the same command again).
 
 ## Gotchas
 

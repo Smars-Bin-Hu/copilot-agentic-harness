@@ -1,4 +1,4 @@
-# ado: an Azure DevOps tool pack (0.4.7)
+# ado: an Azure DevOps tool pack (0.4.8)
 
 The agent works with Azure DevOps through this pack's own program, `ado` (`bin/ado`, Python's standard library only; on Windows `bin/ado.cmd`): one plain command per thing to do, so it never builds an `az rest` call. `ado` reads the server, org and project from the harness connection, signs in with the Azure CLI (`az login`, once) or a personal access token, and sends its requests with the proxy and the CA bundle VS Code was started with.
 

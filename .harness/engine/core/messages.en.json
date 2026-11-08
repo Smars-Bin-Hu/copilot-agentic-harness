@@ -3330,6 +3330,7 @@
   "setup.fact.skills.ok.tip": "The skills the company wrote (company/skills/). Each starts with the company's word.",
   "setup.fact.prefix.none.tip": "No knowledge base names a prefix yet.",
   "setup.fact.packs.harness": "from the harness",
+  "setup.fact.packs.mixed": "{harness} from the harness · {own} the company's own",
   "setup.fact.packs.picks": "the knowledge base picks them",
   "setup.fact.conns.todo": "{n} to sign in",
   "setup.fact.conns.all": "all signed in",

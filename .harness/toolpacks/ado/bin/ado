@@ -90,17 +90,17 @@ def connection(name: str, org: str = "", project: str = "") -> dict:
     found = {alias: entry for alias, entry in connections.listed(root).items() if entry.get("type") == "azure-devops"}
     if name:
         if name not in found:
-            raise Stop(f"no azure-devops connection named {name}; there are: {', '.join(found) or 'none'} (Get ready, Tools, Connections)")
+            raise Stop(f"no azure-devops connection named {name}; there are: {', '.join(found) or 'none'} (Change the setup, Connections & sign-ins)")
         found = {name: found[name]}
     if org or project:
         found = {alias: entry for alias, entry in found.items() if (not org or entry.get("org") == org) and (not project or entry.get("project") == project)}
     if not found:
-        raise Stop("no azure-devops connection here: add one in Get ready, Tools, Connections (type Azure DevOps, its organization and project)")
+        raise Stop("no azure-devops connection here: add one in Change the setup, Connections & sign-ins (type Azure DevOps, its organization and project)")
     if len(found) > 1:
         raise Stop(f"several azure-devops connections ({', '.join(found)}): say which with --conn <name>")
     alias, entry = next(iter(found.items()))
     if not entry.get("org") or not entry.get("project"):
-        raise Stop(f"the connection {alias} has no org or project: fix it in Get ready, Tools, Connections")
+        raise Stop(f"the connection {alias} has no org or project: fix it in Change the setup, Connections & sign-ins")
     return {"org": entry["org"], "project": entry["project"], "name": alias, "url": str(entry.get("url") or CLOUD).rstrip("/"),
             "auth": entry.get("auth") or "signin", "root": root}
 
@@ -143,12 +143,12 @@ class Ado:
         if self.conn.get("auth") == "token":
             pat = pat_of(self.conn)
             if not pat:
-                raise Stop("this connection signs in with a token and none is saved: ask the user to set the token for the connection in Get ready, Tools, Connections")
+                raise Stop("this connection signs in with a token and none is saved: ask the user to set the token for the connection in Change the setup, Connections & sign-ins")
             self._header = "Basic " + base64.b64encode((":" + pat).encode("utf-8")).decode("ascii")
             return self._header
         az = shutil.which("az")  # on Windows this is az.cmd; the arguments are plain words, no shell is used
         if not az:
-            raise Stop("az is not found: add its folder in Get ready, Tools, This computer, then open VS Code from the board")
+            raise Stop("az is not found: add its folder in Change the setup, Local, then open VS Code from the board")
         done = subprocess.run([az, "account", "get-access-token", "--resource", RESOURCE, "--output", "json"], capture_output=True, text=True)
         token = ""
         try:
@@ -157,15 +157,15 @@ class Ado:
             pass
         if done.returncode != 0 or not token:
             said = (done.stderr or done.stdout).strip().splitlines()
-            raise Stop("not signed in to Azure DevOps (" + (said[-1][:200] if said else "no answer") + "): ask the user to press Sign in for the connection in Get ready, Tools, Connections")
+            raise Stop("not signed in to Azure DevOps (" + (said[-1][:200] if said else "no answer") + "): ask the user to press Sign in for the connection in Change the setup, Connections & sign-ins")
         self._header = "Bearer " + token
         return self._header
 
     def unauthorized(self, code: int, said: str) -> Stop:
         if self.conn.get("auth") == "token":
-            how = "the token is wrong, expired, or lacks the scope for this: ask the user to set a new token for the connection in Get ready, Tools, Connections"
+            how = "the token is wrong, expired, or lacks the scope for this: ask the user to set a new token for the connection in Change the setup, Connections & sign-ins"
         else:
-            how = "not signed in, or the account has no access: ask the user to press Sign in for the connection in Get ready, Tools, Connections (do not run az login yourself)"
+            how = "not signed in, or the account has no access: ask the user to press Sign in for the connection in Change the setup, Connections & sign-ins (do not run az login yourself)"
         return Stop(f"Azure DevOps said {code}: {said[:200].rstrip(chr(46) + chr(32))}. {how}")
 
     def call(self, method: str, url: str, params: dict = None, body=None, kind: str = "application/json", text: bool = False, raw: bytes = None, binary: bool = False):
@@ -190,7 +190,7 @@ class Ado:
             raise Stop(f"Azure DevOps said {error.code}: {said[:400]}") from None
         except urllib.error.URLError as error:
             reason = str(error.reason)
-            hint = " (the CA bundle: Get ready, Tools, This computer; then open VS Code from the board)" if "CERTIFICATE" in reason.upper() else ""
+            hint = " (the CA bundle: Change the setup, Local; then open VS Code from the board)" if "CERTIFICATE" in reason.upper() else ""
             raise Stop(f"cannot reach {self.conn['url']}: {reason[:300]}{hint}") from None
         if binary:
             return content

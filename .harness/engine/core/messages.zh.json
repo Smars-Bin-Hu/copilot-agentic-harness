@@ -3330,6 +3330,7 @@
   "setup.fact.skills.ok.tip": "公司自己写的 skill（company/skills/）。每个都以公司的词开头。",
   "setup.fact.prefix.none.tip": "还没有知识库给出前缀。",
   "setup.fact.packs.harness": "来自 harness",
+  "setup.fact.packs.mixed": "{harness} 个来自 harness · {own} 个公司自带",
   "setup.fact.packs.picks": "由知识库来选",
   "setup.fact.conns.todo": "{n} 个待登录",
   "setup.fact.conns.all": "都已登录",

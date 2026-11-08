@@ -237,16 +237,11 @@ def _count(folder: Path, suffix: str = ".md") -> int:
 
 
 def company_skills(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
-    """The company's own skills (`company/skills/<name>/SKILL.md`): how many, and which are not by the rules: no SKILL.md, a name of the wrong form, or one that does not start
-    with the company's word (`<prefix>-`). Names only, quick: a full check is `harness skill check`."""
-    base = folder / "skills" if folder else None
-    try:
-        names = sorted(item.name for item in base.iterdir() if item.is_dir() and not item.name.startswith(".")) if base is not None and base.is_dir() else []
-    except OSError:
-        names = []
+    """The company's own skills: how many, and which are not by the rules. The same check as the Enter screen (`readyitems`), so both count the same."""
+    from . import readyitems, skillgroups  # here: readyitems reads much the form does not need at import
     prefix = skillcheck.effective_prefix(root)
-    off = [name for name in names if not (base / name / "SKILL.md").is_file() or not skillcheck.NAME.match(name) or (prefix and not name.startswith(prefix + "-"))]
-    return {"n": len(names), "off": off}
+    found = readyitems.company_skills(root, folder, prefix, skillgroups.active_packs(root))
+    return {"n": len(found), "off": [path.name for _name, path in found if readyitems.skill_trouble(path, prefix)]}
 
 
 def shown_path(root: Path, path: Path) -> str:

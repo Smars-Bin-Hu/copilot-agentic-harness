@@ -233,6 +233,8 @@
         ".harness/tests/test_reach.py",
         ".harness/tests/test_connections.py",
         ".harness/tests/test_connlayers.py",
+        ".harness/tests/test_open_connection.py",
+        ".harness/tests/test_connection_find.py",
         ".harness/tests/test_readyitems.py",
         ".harness/tests/test_vsrestart.py",
         ".harness/tests/test_launchenv.py",

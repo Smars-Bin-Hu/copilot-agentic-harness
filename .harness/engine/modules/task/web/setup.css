@@ -111,7 +111,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .tl-form{padding:8px 0 2px 0}.tl-add{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:10px}.tl-add h4{margin:0 0 8px}
 .tl-progs{border-top:1px solid var(--line)}.tl-prog{padding:8px 0;border-bottom:1px solid var(--line)}
 .tl-prow{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;font-size:13.5px}.tl-pname{min-width:76px;font:700 13.5px var(--mono)}
-.tl-pwho{flex:0 1 230px;min-width:0;color:var(--soft);font-size:12.5px;overflow-wrap:anywhere}.tl-ppath{flex:1 1 200px;min-width:0;font:12px var(--mono);color:var(--soft);overflow-wrap:anywhere}.tl-ppath.need{color:var(--hot)}
+.tl-pwho{flex:0 1 230px;min-width:0;color:var(--soft);font-size:12.5px;overflow-wrap:anywhere}.tl-ppath{flex:1 1 200px;min-width:0;font:12px var(--mono);color:var(--soft);overflow-wrap:anywhere}.tl-ppath.need{color:var(--hot);flex:0 0 auto}
 .tl-prow input{flex:0 1 230px;min-width:150px}
 .tl-sumline{display:inline-flex;align-items:center;gap:6px;font-weight:400;font-size:12.5px}.tl-sum.ok{color:var(--good)}.tl-sum.need{color:var(--hot)}
 .tl-win .sv-acts .sv-said{flex:1 1 100%;min-width:0}

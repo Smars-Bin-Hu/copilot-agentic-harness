@@ -18,7 +18,7 @@ const SETUP = (function () {
     const repos = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: t("setup.repos.ph")});
     const kbPath = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", hidden: ""});
     const kbNote = h("p", {class: "su-note"});
-    const kbDot = h("span", {class: "su-dot need"});  // the dot of the knowledge base row: in place, or the folder chosen just now reads well (1.7.41)
+    const kbDot = h("span", {class: "su-dot need"});  // the dot of the knowledge base row: in place, or the folder chosen just now reads well (1.7.38)
     const kbInfo = h("div", {class: "su-kbinfo"});  // path, domains, domain skills, version of the knowledge base that is in place
     const repoDot = h("span", {class: "su-dot need"});
     const kbParts = h("div", {class: "su-parts", hidden: ""});
@@ -208,7 +208,7 @@ const SETUP = (function () {
     kbStar.hidden = true;
     const needs = (key) => st.guide.missing.includes(key) || (key === "kb" && st.guide.missing.includes("domains"));
     // The facts (1.7.36): one row each, a dot, a name, one short fact; the details are on hover. `text` is a string, a node (words with parts coloured), or a list of names with a dot each.
-    // `go` = [window, part]: the name opens that window of Tools there; `open` = the same as a button at the end of the row (1.7.41: the packs and the connections).
+    // `go` = [window, part]: the name opens that window of Tools there; `open` = the same as a button at the end of the row (1.7.38: the packs and the connections).
     const NAMES = 6;  // names shown on a row; the rest is "+N", all of them on hover
     const dotOf = (kind) => h("span", {class: "su-dot " + kind});
     const fact = (label, kind, text, tip, help, go, open) => {
@@ -253,7 +253,7 @@ const SETUP = (function () {
         off.length ? off.join("\n") : t(noSkills ? "setup.fact.skills.none.tip" : "setup.fact.skills.ok.tip"), "skills"), skillKind);
       const own = st.probePrefix || (c.prefix && c.prefix.kb) || "";  // the knowledge base names it: a fact, no box. It names none: the box (the override keeps working)
       const conflict = !st.probePrefix && c.prefix && c.prefix.conflict;
-      const showBox = !own && (st.kb.here || st.mode !== "none");  // no knowledge base at all: a yellow "not found" (1.7.41)
+      const showBox = !own && (st.kb.here || st.mode !== "none");  // no knowledge base at all: a yellow "not found" (1.7.38)
       prefixRow.hidden = !showBox;
       if (own) add(rows, fact(t("setup.prefix"), conflict ? "need" : "ok", own, conflict || t("setup.fact.prefix.tip"), "skills"), conflict ? "need" : "ok");
       else if (showBox) rows.push(prefixRow);
@@ -320,7 +320,7 @@ const SETUP = (function () {
       }, (error) => { button.disabled = false; testOut.replaceChildren(h("p", {class: "su-note bad"}, error.message || String(error))); });
     }
 
-    // This browser is not paired (or the board did not answer): the first card says so, instead of staying an empty box (1.7.41). The poll goes on: pairing in another tab shows the real card at once.
+    // This browser is not paired (or the board did not answer): the first card says so, instead of staying an empty box (1.7.38). The poll goes on: pairing in another tab shows the real card at once.
     function paintUnpaired(error) {
       st.shortKey = "";
       const unpaired = Boolean(error && error.data && error.data.unpaired);
@@ -567,7 +567,7 @@ const SETUP = (function () {
     loadGuide();
     loadTools();
     const prefixRow = row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint")));  // only when the knowledge base names none (1.7.36)
-    // The knowledge base is the first fact of card 3 and shaped like the others: a dot, its name, and what it says (1.7.41); the chips choose where a new one comes from.
+    // The knowledge base is the first fact of card 3 and shaped like the others: a dot, its name, and what it says (1.7.38); the chips choose where a new one comes from.
     const kbRow = h("div", {class: "su-fact su-kbrow"}, kbDot, h("b", {class: "su-fk"}, t("setup.kb"), kbStar, " ", question("kb")), h("div", {class: "su-fv su-kbv"}, modeBox, h("div", {class: "su-line"}, kbPath, kbPick), kbInfo, kbNote, kbParts, kbReplace));
     const repoRow = h("div", {class: "su-fact su-repos"}, repoDot, h("b", {class: "su-fk"}, t("setup.repos"), " ", question("repos")), h("div", {class: "su-fv su-repov"}, h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))));
     const card = (key, num, head, ...nodes) => h("section", {class: "su-card", "data-sec": key}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, num), h("h2", null, t("setup.sec." + key), " ", h("span", {class: "sv-info", tabindex: "0", title: t("setup.sec." + key + ".tip")}, "\u24d8")), head), ...nodes);  // four cards of one rank (1.7.38)

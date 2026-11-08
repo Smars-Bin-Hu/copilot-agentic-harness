@@ -1,4 +1,4 @@
-"""Which step of a connection broke (1.7.41): program, sign-in, account access, address. The kind is the made-up `fakedb` of test_connections: the engine knows no kind of server."""
+"""Which step of a connection broke (1.7.38): program, sign-in, account access, address. The kind is the made-up `fakedb` of test_connections: the engine knows no kind of server."""
 
 from __future__ import annotations
 

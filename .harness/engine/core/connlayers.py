@@ -1,4 +1,4 @@
-"""Which step of a connection broke (1.7.41): program, sign-in, account access, address.
+"""Which step of a connection broke (1.7.38): program, sign-in, account access, address.
 
 A test of a connection ends in one of a few states (`core.connections.judge`). The person needs more: where to look. This module says which of four
 steps is the first that failed, from what the harness can really tell, and one sentence for it. Where it cannot tell, it says so and marks no step.

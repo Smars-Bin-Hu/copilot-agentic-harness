@@ -128,7 +128,7 @@ def recent(root: Path, keys: List[str], seconds: float = 300.0, now: Optional[fl
 
 
 def record(root: Path, key: str, state: str, why: str = "", who: str = "") -> None:
-    """What a test or a sign-in on the board found out about one connection (`<alias>:<env>`), kept where the probes keep theirs (1.7.41): the rows of the Connections window and the
+    """What a test or a sign-in on the board found out about one connection (`<alias>:<env>`), kept where the probes keep theirs (1.7.38): the rows of the Connections window and the
     Enter screen read the same place, so a connection that was signed in again does not show the old failure."""
     found = read(root)
     found[key] = {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "test"}

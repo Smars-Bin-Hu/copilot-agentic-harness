@@ -73,7 +73,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 /* 1.7.37: Programs rows (a name, who needs it, found or not, and "I installed it here" under a missing one) */
 .mc-added{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin:6px 0 8px;font-size:12px}.mc-added .mc-dir{overflow:visible;white-space:normal;overflow-wrap:anywhere}
 .mc-x{border:0;background:transparent;color:var(--soft);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}.mc-x:hover{color:var(--hot)}
-/* Tools windows (1.7.41): parts with a heading; a row that is flashed when a link opens it */
+/* Tools windows (1.7.38): parts with a heading; a row that is flashed when a link opens it */
 .tl-part{margin:0 0 6px}.tl-part+.tl-part{margin-top:18px}
 .sv-below{margin-top:12px}
 @keyframes tl-flash{0%{background:var(--hot-bg)}100%{background:transparent}}.tl-flash{animation:tl-flash 1.8s ease-out;border-radius:9px}
@@ -82,7 +82,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .su-head .su-open{margin-left:auto;flex:none}.su-head h2 .sv-info{font-weight:400}
 .su-fk-btn{all:unset;box-sizing:border-box;cursor:pointer;font-weight:600;text-decoration:underline dotted var(--soft);text-underline-offset:3px}.su-fk-btn:hover,.su-fk-btn:focus-visible{text-decoration-style:solid}
 .su-card>.su-row:first-of-type{margin-top:4px}.su-card .su-more{margin-top:10px}
-/* 1.7.41: three windows (Tool packs, Connections & sign-ins, Local), no tabs */
+/* 1.7.38: three windows (Tool packs, Connections & sign-ins, Local), no tabs */
 .dialog.tl-win h2{display:flex;align-items:center;gap:6px;margin:0}.tl-win .tl-sub{margin:6px 0 12px;color:var(--soft);font-size:13.5px}
 .tl-win .win-foot{align-items:center;gap:8px;flex-wrap:wrap}.tl-grow{flex:1 1 0}
 .tl-part h3.mc-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;margin:0 0 6px}.tl-part h3 .mute{font-weight:400;font-size:12.5px;color:var(--soft)}
@@ -116,7 +116,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .tl-sumline{display:inline-flex;align-items:center;gap:6px;font-weight:400;font-size:12.5px}.tl-sum.ok{color:var(--good)}.tl-sum.need{color:var(--hot)}
 .tl-win .sv-acts .sv-said{flex:1 1 100%;min-width:0}
 @media (max-width:600px){.tl-l2{margin-left:0}.tl-act{margin-left:0;justify-content:flex-start;flex:1 1 100%}}
-/* 1.7.41: the form's card 3 (From the company, optional) and card 4 (Local): the knowledge base and the repositories are rows like the others; yellow means "not found" and never stops Enter */
+/* 1.7.38: the form's card 3 (From the company, optional) and card 4 (Local): the knowledge base and the repositories are rows like the others; yellow means "not found" and never stops Enter */
 .su-head .su-tag{margin-left:auto;flex:none;font:11px var(--mono);letter-spacing:1px;color:var(--soft)}
 .su-off{color:var(--hot)}.su-soft{color:var(--soft)}.su-fact[data-kind=need]>.su-fv.su-text{color:var(--hot)}.su-fv.su-rich{color:var(--ink)}
 .su-fact-open{margin-left:auto;flex:none}.su-fact.su-kbrow,.su-fact.su-repos{flex-wrap:nowrap}

@@ -232,7 +232,7 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
         rows.append({"alias": alias, "label": server.get("label", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "via": kind.get("via", "cli"), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
-                     "tool": conn_core.tool_program(auth) if auth.get("identity") == "tool" else "",  # 1.7.41: the program whose own sign-in this connection uses; one sign-in per computer, shared
+                     "tool": conn_core.tool_program(auth) if auth.get("identity") == "tool" else "",  # 1.7.38: the program whose own sign-in this connection uses; one sign-in per computer, shared
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
     kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}
@@ -718,7 +718,7 @@ class Board:
             found = conn_core.test(self.root, alias, given, server=dict(own, own=True) if own else None, saved=bool(data.get("saved")))
             if found["state"] in ("ok", "mcp"):  # an MCP connection has nothing to test here: what is kept is the connection itself
                 self.tested[alias] = (stamp, time.time(), found.get("who", ""))
-            if data.get("saved") and not own and found["state"] != "mcp":  # a test of what is kept here says how that connection is now (1.7.41)
+            if data.get("saved") and not own and found["state"] != "mcp":  # a test of what is kept here says how that connection is now (1.7.38)
                 self.note_reach(alias, found)
             return found
         if step == "save":

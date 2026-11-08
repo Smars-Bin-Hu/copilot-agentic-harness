@@ -1002,7 +1002,7 @@ class FactoryPacks(ToolpackCase):
             board.machine({"step": "toolpack-use", "name": "nosuch", "on": True})
 
     def test_the_listing_says_used_by_the_company_what_a_pack_needs_even_when_off_and_how_its_skills_are_named(self) -> None:
-        """1.7.41, the Tool packs window: `used` (the company's list names it), `needs_all` (looked for on or off; a program the pack brings in its own bin is not one), `skill_label`, `company`."""
+        """1.7.38, the Tool packs window: `used` (the company's list names it), `needs_all` (looked for on or off; a program the pack brings in its own bin is not one), `skill_label`, `company`."""
         self.prefix("acme")
         (self.factory / "bin").mkdir()
         (self.factory / "bin" / "tracker").write_text("#!/bin/sh\n", encoding="utf-8")  # the pack brings it
@@ -1676,7 +1676,7 @@ class SigninsOnTheBoard(ProgramNeeds):
         self.assertEqual(found["tools"][0]["shared_by"], ["board", "board-b"])
 
     def test_a_connection_that_signs_in_with_the_tool_has_its_own_row_with_the_program_and_a_test_of_what_is_kept_says_so_where_the_probes_say_theirs(self) -> None:
-        """1.7.41: no tool row; each row of the list says its type's way (`via`) and the program whose sign-in it uses (`tool`); a Test of the saved identity and a Save write the connection's state."""
+        """1.7.38: no tool row; each row of the list says its type's way (`via`) and the program whose sign-in it uses (`tool`); a Test of the saved identity and a Save write the connection's state."""
         from core import reach
 
         board = self.board()
@@ -1704,10 +1704,10 @@ class SigninsOnTheBoard(ProgramNeeds):
         for word in ('"folder-add"', 'machine.prog.title', 'machine.net.title', '"MCP "', 'machine.paths.added', 'machine.paths.remove', "localPanel", "packsPanel", "machine.pack.needs.signin"):
             self.assertIn(word, machine, word)
         self.assertNotIn("machine.paths.placeholder", machine, "no Tool folders text box any more")
-        self.assertNotIn("signinsBlock", machine + servers, "the sign-ins are rows of the connections, not a block of Local (1.7.41)")
+        self.assertNotIn("signinsBlock", machine + servers, "the sign-ins are rows of the connections, not a block of Local (1.7.38)")
         for word in ("orphanRow", '"forget-tool"', "connections.shared.with", "machine.signins.orphan", "connections.own.add", "layersBox", "connectionsPanel"):
             self.assertIn(word, servers, word)
-        self.assertNotIn("toolRow", servers, "no row for a tool: a connection whose way in is the tool's sign-in has its own Sign in (1.7.41)")
+        self.assertNotIn("toolRow", servers, "no row for a tool: a connection whose way in is the tool's sign-in has its own Sign in (1.7.38)")
         for word in ("machine.prog.title", "machine.net.title"):
             self.assertIn(word, setup, word)
         self.assertIn("machine.conn.notusable", enter)

@@ -60,7 +60,7 @@ Three words, used the same way on the board, in commands and in files:
 | `auth.<way>.needs` | no | `["az"]` (1.7.37): programs this way in needs, checked only for a connection that uses it (ado: `signin` needs `az`, `token` needs nothing). Found or not is shown with the pack's own `needs.programs` |
 | `test` | yes for `cli` | the command that tests the way in, with `{field}` and `{auth}` (the way in's `args`); never `{password}`; `{conn}` is the name of the connection (1.7.21). Or `{"command": ..., "timeout": <seconds>}`: the test stops after `timeout` s (default 15; 60 for a type whose sign-in is a `tool` identity) |
 | `expect`, `denied`, `down` | no | patterns on the test's output: who it is (first group), not let in, no answer |
-| `signin_lost` | no | (1.7.41) a pattern on the test's output that says the program found no sign-in before it asked the system (ado: `^ado: not signed in to Azure DevOps`). The board's Test uses it to tell "the sign-in is missing" from "the account has no access"; without it, a "not let in" of a `tool` sign-in is told as "cannot tell which of the two" |
+| `signin_lost` | no | (1.7.38) a pattern on the test's output that says the program found no sign-in before it asked the system (ado: `^ado: not signed in to Azure DevOps`). The board's Test uses it to tell "the sign-in is missing" from "the account has no access"; without it, a "not let in" of a `tool` sign-in is told as "cannot tell which of the two" |
 | `cli` | for the gate | the programs (`["sqlcmd"]`); a Windows `.cmd` path is recognised |
 | `match` | for the gate | how a command names one connection, with `{field}` (`-S\\s+{host}`) |
 | `verbs` | for the gate | `[{"pattern", "verb"}]`, first match wins; a command no pattern names is a write |

@@ -201,7 +201,7 @@ def servers_test(root: Path, alias: str) -> Dict[str, Any]:
     server = connections.listed(root).get(alias) or {}
     kind = connections.types(root).get(str(server.get("type"))) or {}
     found = connections.test(root, alias, connections.identity_of(connections.read_env(root), alias, kind, server))
-    said = (found.get("layers") or {}).get("text") or ""  # 1.7.41: the first step that broke, in a sentence
+    said = (found.get("layers") or {}).get("text") or ""  # 1.7.38: the first step that broke, in a sentence
     return {**found, "alias": alias, **({"next": said} if said and found["state"] != "ok" else {}), "exit_code": 0 if found["state"] == "ok" else 1}
 
 

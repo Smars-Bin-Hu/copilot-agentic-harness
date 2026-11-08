@@ -1,11 +1,11 @@
-// Tools (1.7.41): three windows, each opened on its own: Tool packs, Connections & sign-ins, and Local. They have no tabs; a link inside one (a missing program, a step that broke) opens another in the same
+// Tools (1.7.38): three windows, each opened on its own: Tool packs, Connections & sign-ins, and Local. They have no tabs; a link inside one (a missing program, a step that broke) opens another in the same
 // dialog at the part that helps. Each window is a panel of machine.js (packs, local) or servers.js (connections): `panel(ctx)` gives {title, tip, sub, body, foot}; ctx.go(window, part, focus) switches and
 // scrolls to a part (or a row: `data-focus`). The setup form opens them with Open and draws their facts (`facts()`).
 // Needs common.js (h, t), serve.js (SERVE), servers.js (SERVERS), machine.js (MACHINE).
 const TOOLS = (function () {
   const WINDOWS = ["packs", "connections", "local"];
 
-  // The names before 1.7.41: "company" was the packs and the connections together, "computer" the programs, network, sign-ins, MCP and packs added from a folder. A part that moved goes to its new window.
+  // The names before 1.7.38: "company" was the packs and the connections together, "computer" the programs, network, sign-ins, MCP and packs added from a folder. A part that moved goes to its new window.
   function where(tab, part) {
     part = part || "";
     if (tab === "company") return part === "connections" ? ["connections", ""] : ["packs", part === "packs" ? "" : part];

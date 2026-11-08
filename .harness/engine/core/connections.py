@@ -464,7 +464,7 @@ def given_identity(kind: Dict[str, Any], server: Dict[str, Any], given: Dict[str
 
 def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[str, Any]] = None, saved: bool = False) -> Dict[str, Any]:
     """Test the way in to a server with what the person typed (not saved yet), or with what is saved (`saved`, nothing typed). `{state, why, who, seconds}`; state ok, denied, down,
-    failed, missing, mcp. A test that did not pass also carries `layers` (1.7.41): the first step that broke (program, sign-in, account access, address) and one sentence (`core.connlayers`)."""
+    failed, missing, mcp. A test that did not pass also carries `layers` (1.7.38): the first step that broke (program, sign-in, account access, address) and one sentence (`core.connlayers`)."""
     server = server or listed(root).get(alias)
     if not server:
         return {"state": "failed", "why": say("connections.unknown", alias=alias), "who": "", "seconds": 0}

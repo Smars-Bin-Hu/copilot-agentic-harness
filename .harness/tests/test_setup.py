@@ -519,7 +519,7 @@ class CompanyFactsTests(unittest.TestCase):
             self.assertIn("company", setup.status(root))
 
     def test_the_form_counts_what_the_knowledge_base_brings_and_names_the_company_skills_that_are_not_by_the_rules(self) -> None:
-        """1.7.41: card 3 says path, domains, domain skills, version, the files of instructions and standards, the company's skills and which break the naming rule."""
+        """1.7.38: card 3 says path, domains, domain skills, version, the files of instructions and standards, the company's skills and which break the naming rule."""
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / ".harness" / "policies").mkdir(parents=True)
@@ -566,7 +566,7 @@ class CompanyFactsTests(unittest.TestCase):
         self.assertNotIn("setup.form.title", source)
         for control in ("name", "chips", "repos", "modes", "kbPath", "prefix", "install", "refusedBox", "more", "go"):
             self.assertIn(control, source)
-        # 1.7.41: card 3 holds the knowledge base, the facts and the code repositories, in that order; card 4 is Local and holds the programs, the network and MCP, with one Open
+        # 1.7.38: card 3 holds the knowledge base, the facts and the code repositories, in that order; card 4 is Local and holds the programs, the network and MCP, with one Open
         card = source[source.index('card("company", "3"'):source.index('card("computer", "4"')]
         self.assertLess(card.index("kbRow"), card.index("factsBox"))
         self.assertLess(card.index("factsBox"), card.index("repoRow"))

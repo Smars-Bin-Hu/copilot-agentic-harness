@@ -146,7 +146,7 @@ const MACHINE = (function () {
       brings.length ? h("div", {class: "tl-l2"}, ...brings) : null);
   }
 
-  // The window (1.7.41): three groups. Shipped with the harness: the factory packs, marked used or not by the company's knowledge base (Turn on / Turn off write its `use` list). From the company's knowledge base:
+  // The window (1.7.38): three groups. Shipped with the harness: the factory packs, marked used or not by the company's knowledge base (Turn on / Turn off write its `use` list). From the company's knowledge base:
   // the packs the company wrote. Added on this computer: a folder tried here only, with its path field.
   function packsPanel(ctx) {
     const shipped = h("div", {class: "tl-items"}), company = h("div", {class: "tl-items"}), added = h("div", {class: "tl-items"});

@@ -1,4 +1,4 @@
-// Connections & sign-ins (1.7.10, one window since 1.7.41): the connections of the company and the person's own, in one list, each with its sign-in (the account kept here, or the one a program keeps itself)
+// Connections & sign-ins (1.7.10, one window since 1.7.38): the connections of the company and the person's own, in one list, each with its sign-in (the account kept here, or the one a program keeps itself)
 // and a Test that says which step broke. And "Open VS Code with identities", where the person picks which identities this window holds.
 // The server (`/api/connections`) never sends a password back: a saved one shows as a mark. Needs common.js (h, t), serve.js (SERVE).
 const SERVERS = (function () {
@@ -19,7 +19,7 @@ const SERVERS = (function () {
 
   const STEPS = ["program", "signin", "access", "address"];
   const STEP_MARK = {ok: "\u2713 ", bad: "\u2717 ", unknown: "? ", skip: ""};
-  // The four steps of a Test that did not pass (1.7.41): the first that broke is marked, the steps after it were not looked at; and one sentence with a link to the part of Local that helps.
+  // The four steps of a Test that did not pass (1.7.38): the first that broke is marked, the steps after it were not looked at; and one sentence with a link to the part of Local that helps.
   // `go(tab, part, focus)` opens that window.
   function layersBox(found, go) {
     const layers = found && found.layers;
@@ -135,7 +135,7 @@ const SERVERS = (function () {
     return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), field(t("connections.own.env"), env), field(t("connections.own.auth"), auth)), fields, rest);
   }
 
-  // One connection (1.7.41): name, type, where it points (the environment chip, or `org · project`), whether the company or the person added it, the sign-in (a dot and the account), Sign in and Test.
+  // One connection (1.7.38): name, type, where it points (the environment chip, or `org · project`), whether the company or the person added it, the sign-in (a dot and the account), Sign in and Test.
   // Under it: the form of a sign-in that needs typing, and the four steps of a Test that did not pass. A sign-in that a program keeps itself (`az`) is one for the whole computer: every connection that uses
   // it shows the same account, with a hover that says so.
   function place(row) {
@@ -252,7 +252,7 @@ const SERVERS = (function () {
       h("span", {class: "tl-act"}, h("span", {class: "tl-state"}, h("span", {class: "su-dot none"}), h("span", {class: "tl-who none"}, item.account || "—")), forget)), said);
   }
 
-  // The window (1.7.41): one list, a footer with "Add a connection of your own" and Export. `ctx.go(tab, part, focus)` opens another window at a part.
+  // The window (1.7.38): one list, a footer with "Add a connection of your own" and Export. `ctx.go(tab, part, focus)` opens another window at a part.
   function connectionsPanel(ctx) {
     const results = new Map();  // alias -> the answer of the last Test, kept while the window is open
     const list = h("div", {class: "tl-clist"}, h("p", {class: "sub tl-pad"}, t("connections.loading")));

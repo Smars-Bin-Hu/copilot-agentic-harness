@@ -383,7 +383,7 @@ def missing_for(root: Path, alias: str) -> List[str]:
 
 
 def declared_needs(folder: Path, manifest: Dict[str, Any], path: Optional[str]) -> List[Dict[str, Any]]:
-    """Every program a pack names, whether it is on or not (1.7.41, the Tool packs window): its own `needs.programs` (`why: "pack"`) and the `needs` of any sign-in way
+    """Every program a pack names, whether it is on or not (1.7.38, the Tool packs window): its own `needs.programs` (`why: "pack"`) and the `needs` of any sign-in way
     of its connection types (`why: "signin"`), looked for on `path`. `[{program, found, path, why}]`, each program once."""
     rows: Dict[str, Dict[str, Any]] = {}
     for program in (manifest.get("needs") or {}).get("programs") or []:
@@ -1006,7 +1006,7 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
                "skills": len(_skills(folder)), "links": sorted((found.get("links") or {}).keys()) if isinstance(found.get("links"), dict) else [],
                "mcp_rules": len((found.get("mcp") or {}).get("tools") or []) if isinstance(found.get("mcp"), dict) else 0, "commands": [str(one) for one in found.get("commands") or []],
                "put": list((book.get(name) or {}).get("skills") or []), "newer": False, "updated": _updated(book.get(name) or {}), "toggle": "" if item["source"] != HARNESS else "on" if targets.company_folder(root) else "nocompany",
-               "used": item["source"] != HARNESS or name in use_list(root), "needs_all": declared_needs(folder, found, path),  # 1.7.41: what the pack names, on or off; `used`: the company's packs.json lists it (a company or folder pack is always used)
+               "used": item["source"] != HARNESS or name in use_list(root), "needs_all": declared_needs(folder, found, path),  # 1.7.38: what the pack names, on or off; `used`: the company's packs.json lists it (a company or folder pack is always used)
                "skill_names": _final_names(root, name, folder) if item["active"] else []}
         row["skill_label"] = skill_label(row["skill_names"])
         row["ok"] = not errors and (all(programs.values()) or not item["active"])

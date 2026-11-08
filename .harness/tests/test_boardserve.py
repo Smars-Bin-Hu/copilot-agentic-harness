@@ -125,6 +125,24 @@ class CodeStampTests(unittest.TestCase):
 
 
 class ServeTests(ServeCase):
+    def test_pack_for_colleagues_checks_first_lists_what_is_not_committed_and_commits_on_a_click(self) -> None:
+        """1.7.38: the board checks the knowledge base before it asks for a folder, lists the changed files, and commits them for the person."""
+        from pathlib import Path
+
+        self.assertEqual(self.request("POST", "/api/company", {"op": "packcheck"})[0], 403)
+        self.assertEqual(self.request("POST", "/api/company", {"op": "commit"})[0], 403)
+        cookie = self.pair()
+        dirty = boardserve.company.DirtyError(Path("/kb"), [f" M file{n}.md" for n in range(15)])
+        with mock.patch.object(boardserve.company, "pack_check", side_effect=dirty):
+            status, data, _ = self.request("POST", "/api/company", {"op": "packcheck"}, cookie=cookie)
+        self.assertEqual((status, data["dirty"], len(data["files"]), data["more"]), (409, "/kb", 12, 3))
+        with mock.patch.object(boardserve.company, "commit_changes", return_value={"committed": True, "lines": [" M a.md"]}) as commit:
+            status, data, _ = self.request("POST", "/api/company", {"op": "commit"}, cookie=cookie)
+        self.assertEqual((status, data["result"]["committed"]), (200, True))
+        commit.assert_called_once()
+        with mock.patch.object(boardserve.company, "pack_check", return_value={"ok": True, "word": "acme"}):
+            self.assertEqual(self.request("POST", "/api/company", {"op": "packcheck"}, cookie=cookie)[1]["result"]["word"], "acme")
+
     def test_restart_is_for_the_paired_browser_and_gives_the_next_code(self) -> None:
         self.assertEqual(self.request("POST", "/api/restart", {})[0], 403)
         board = types.SimpleNamespace(server=mock.Mock(), next_code="")

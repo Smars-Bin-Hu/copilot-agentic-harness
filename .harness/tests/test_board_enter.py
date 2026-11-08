@@ -331,6 +331,36 @@ class ReadinessTests(TaskCase):
             self.assertEqual(button["label"], messages.text("ready.vs." + kind))
         self.assertEqual([messages.table("en")["ready.vs." + kind] for kind in ("open", "restart", "identities")], ["Open VS Code", "Restart VS Code", "Restart VS Code with identities"])
 
+    def test_the_words_of_the_vscode_button_do_not_jump_while_the_answer_of_the_probe_does(self) -> None:
+        """1.7.38: with VS Code closed the button went Open, Restart with identities, Open: a helper process came and went. A new answer counts after it stood BUTTON_HOLD seconds."""
+        down = {"ready": False, "bound": 0, "unbound": 0, "why": "none"}
+        now = [100.0]
+        seen = {"value": False}
+        running = ready.Running(probe=lambda: seen["value"], clock=lambda: now[0])
+        check = ready.Ready(self.root, StubLink(down), clean, clock=lambda: now[0], running=running)
+        kinds = []
+
+        def look(value: bool, seconds: float = 0.0) -> str:
+            now[0] += seconds
+            seen["value"] = value
+            running.forget()
+            running.look()
+            kind = check.vscode_button(check.vscode(), 3)["kind"]
+            kinds.append(kind)
+            return kind
+
+        self.assertEqual(look(False), "open")
+        self.assertEqual(look(True, 3), "open")  # a helper shows up for a moment
+        self.assertEqual(look(False, 3), "open")
+        self.assertEqual(look(True, 3), "open")
+        self.assertEqual(look(True, ready.BUTTON_HOLD - 1), "open")  # it stood, but not long enough yet
+        self.assertEqual(look(True, 2), "identities")  # it stands: a VS Code does run
+        self.assertEqual(look(False, 3), "identities")  # and one that goes away for a moment changes nothing
+        self.assertEqual(look(False, ready.BUTTON_HOLD), "open")
+        up = {"ready": True, "bound": 1, "unbound": 0, "why": "ok"}
+        check.link = StubLink(up)
+        self.assertEqual(check.vscode_button(check.vscode(), 3)["kind"], "identities")  # a VS Code that is linked is never in doubt
+
     def test_whether_any_vscode_runs_is_looked_at_in_a_thread_and_kept_for_a_few_seconds(self) -> None:
         calls, now = [], [0.0]
         gate = threading.Event()
@@ -625,7 +655,15 @@ class BlockPageTests(unittest.TestCase):
         screen, ui, serve = [(WEB / name).read_text(encoding="utf-8") for name in ("enter.js", "readyui.js", "serve.js")]
         self.assertIn("READY.vsAct(buttonKind()", screen)
         self.assertNotIn("SERVE.openVS", screen)
-        self.assertIn("SERVE.restartVS({open: !withIdentities", ui)
+        self.assertIn("SERVE.restartVS({open: true", ui)  # Open and Restart: quit, wait, open
+        self.assertIn("SERVERS.choose(", ui)
+        # with identities the person chooses first: VS Code is closed by the picker's own button, after the choice (1.7.38, T1-14b), never before the picker is up
+        self.assertIn("const quit = () => SERVE.restartVS({open: false", ui)
+        self.assertRegex(ui, r"SERVERS\.choose\(\(\) => \{[^}]*\}, quit\)")
+        picker = (WEB / "servers.js").read_text(encoding="utf-8")
+        self.assertIn("function choose(opened, before)", picker)
+        self.assertIn("(before ? before() : Promise.resolve()).then(() => ask(\"open\"", picker)  # quit, wait until it is gone, then open with the identities
+        self.assertIn("error && error.quiet", picker)  # no to the question about a working agent: nothing was touched
         self.assertIn('"/api/restart"', serve)
         self.assertIn("board.vs.restart.busy.one", serve)  # the question before it stops an agent at work
         self.assertIn("board.vs.restart.anyway", serve)

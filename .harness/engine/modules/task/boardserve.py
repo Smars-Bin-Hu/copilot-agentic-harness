@@ -233,7 +233,8 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
                      "tool": conn_core.tool_program(auth) if auth.get("identity") == "tool" else "",  # 1.7.38: the program whose own sign-in this connection uses; one sign-in per computer, shared
-                     "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
+                     "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", ""),
+                     "who": str((seen.get(f"{alias}:{server.get('env', '')}") or {}).get("who") or "")})  # 1.7.38: the name a passed test answered with: a token has no account of its own to show
     kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}
     return {"connections": rows, "signins": conn_core.signins(root), "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
@@ -1594,6 +1595,9 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     op = str(data.get("op", ""))
+                    if op == "forget":  # every kept view is old: a rebuilt map, or Refresh (1.7.38)
+                        board.kb_view.forget()
+                        return self.answer(200, {"result": {"ok": True}})
                     return self.answer(200, {"result": board.kb_view.near(data.get("query")) if op == "near" else board.kb_view.get(op, bool(data.get("fresh")))})
                 except (KeyError, ValueError) as error:
                     return self.answer(409, {"error": str(error)})
@@ -1612,6 +1616,10 @@ def handler_for(board: Board) -> type:
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
+                    if data.get("op") == "packcheck":  # before the folder is asked for (1.7.38)
+                        return self.answer(200, {"result": company.pack_check(board.root)})
+                    if data.get("op") == "commit":  # what is changed in the knowledge base, committed by the person's click
+                        return self.answer(200, {"result": company.commit_changes(board.root)})
                     if data.get("op") == "pack":
                         return self.answer(200, {"result": company.pack(board.root, str(data.get("out", "")))})
                     if data.get("op") == "prefix":  # the word of the company content goes in the person's file, then the sync it was stopping
@@ -1624,7 +1632,7 @@ def handler_for(board: Board) -> type:
                         board.ready.drop_doctor()  # the notes of doctor were about the copies as they were
                     return self.answer(200, {"result": company.diff(board.root)})
                 except company.DirtyError as error:
-                    return self.answer(409, {"error": str(error), "dirty": error.path})
+                    return self.answer(409, {"error": str(error), "dirty": error.path, "files": error.lines[:12], "more": max(0, len(error.lines) - 12)})
                 except company.BadSkills as error:
                     return self.answer(409, {"error": str(error), "skills": error.skills})
                 except (company.CompanyError, OSError) as error:

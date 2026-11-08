@@ -164,6 +164,20 @@ class Tools(ViewCase):
 
 
 class Wiring(ViewCase):
+    def test_the_window_knows_when_no_knowledge_base_is_in_place_and_forgets_its_views_on_request(self) -> None:
+        """1.7.38: every tab shows the empty state with no knowledge base; Refresh and a rebuilt map make every kept view old."""
+        shutil.rmtree(self.kb, ignore_errors=True)
+        view = kbview.View(self.root)
+        with mock.patch.object(kbview.threading, "Thread"):  # no view is worked out here: only the answer's shape is looked at
+            self.assertFalse(view.get("status")["has_kb"])
+        put(self.kb, {"README.md": "# kb\n", "domains/sales/domain.yaml": "name: sales\n"})
+        with mock.patch.object(kbview.threading, "Thread"):
+            self.assertTrue(view.get("status")["has_kb"])
+        view.kept["status"].update(at=123.0, running=False)
+        view.kept["atlas"] = {"result": {"x": 1}, "at": 456.0, "good": 456.0, "running": False, "error": ""}
+        view.forget()
+        self.assertEqual((view.kept["status"]["at"], view.kept["atlas"]["at"], view.kept["atlas"]["result"]), (0.0, 0.0, {"x": 1}))  # the old answer stays on the page until the new one comes
+
     def test_the_knowledge_base_window_asks_for_the_view_by_name(self) -> None:
         view = kbview.View(self.root)
         self.assertEqual(set(view.work("company")()), set(companyview.company(self.root)))

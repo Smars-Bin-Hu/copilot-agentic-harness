@@ -7,6 +7,7 @@ import os
 import stat
 from pathlib import Path
 from typing import List, Tuple
+from unittest import mock
 
 from support import HarnessTestCase
 
@@ -157,6 +158,36 @@ class Bundle(LaunchEnvCase):
         with self.assertRaises(ValueError):
             launchenv.make(self.root, "a b; rm", "", get_chain=self.chain([cert(9)]), verify=lambda *_: (True, ""))
 
+    def test_a_host_may_carry_its_port_and_the_chain_is_asked_for_that_port(self) -> None:
+        """1.7.38: the recipe's `host` can be `host:port`; Make used to reach port 443 only."""
+        self.assertEqual(launchenv.split_host("dev.example.org"), ("dev.example.org", 443))
+        self.assertEqual(launchenv.split_host(" dev.example.org:18443 "), ("dev.example.org", 18443))
+        for bad in ("a:0", "a:70000", "a:b", "a:1:2", ":8", "a b:9", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                launchenv.split_host(bad)
+        made = launchenv.make(self.root, "localhost:18443", "", get_chain=self.chain([cert(9), cert(5)]), verify=lambda *_: (True, ""))
+        self.assertEqual((self.asked, made["host"], launchenv.settings(self.root)["host"]), (("localhost:18443", ""), "localhost:18443", "localhost:18443"))
+        with self.assertRaises(ValueError):
+            launchenv.make(self.root, "localhost:99999", "", get_chain=self.chain([cert(9)]), verify=lambda *_: (True, ""))
+        argv: list = []
+
+        class Done:
+            stdout, stderr = "-----BEGIN CERTIFICATE-----\n" + base64.b64encode(bytes([4]) * 60).decode("ascii") + "\n-----END CERTIFICATE-----\nVerify return code: 0 (ok)\n", ""
+
+        def run(command: list, **_kw: object) -> Done:
+            argv.extend(command)
+            return Done()
+        with mock.patch.object(launchenv.shutil, "which", return_value="/usr/bin/openssl"):
+            launchenv.chain_openssl("localhost:18443", "", run)
+        self.assertEqual((argv[argv.index("-servername") + 1], argv[argv.index("-connect") + 1]), ("localhost", "localhost:18443"))
+        script: list = []
+        with self.assertRaises(ValueError):  # the made-up answer holds no TRUST line; the script it was given is what is looked at
+            launchenv.chain_windows("localhost:18443", "127.0.0.1:9000", lambda command, **_kw: script.append(command[-1]) or Done())
+        self.assertIn("$h = 'localhost'; $port = 18443;", script[0])
+        self.assertNotIn("__PORT__", script[0])
+        self.assertEqual(launchenv.recipe_errors({"ca_bundle": {"host": "localhost:18443", "proxy": "127.0.0.1:9000"}}), [])
+        self.assertTrue(launchenv.recipe_errors({"ca_bundle": {"host": "localhost:abc"}}))
+
     def test_proxy_addresses_and_pem_reading(self) -> None:
         self.assertEqual(launchenv.proxy_address("http://user@127.0.0.1:9000/"), "127.0.0.1:9000")
         self.assertEqual(launchenv.proxy_address("nonsense"), "")
@@ -176,7 +207,7 @@ class Bundle(LaunchEnvCase):
         blocks, trust = launchenv.chain_windows("h.example.org", "127.0.0.1:9000", run=lambda argv, **k: seen.append(argv) or Done())
         self.assertEqual((blocks, trust), ([cert(4)], "None"))
         script = seen[0][-1]
-        self.assertIn("$h = 'h.example.org'; $p = '127.0.0.1:9000'", script, "the values are in the script itself: -Command passes it no $args")
+        self.assertIn("$h = 'h.example.org'; $port = 443; $p = '127.0.0.1:9000'", script, "the values are in the script itself: -Command passes it no $args")
         self.assertEqual(seen[0][-2], "-Command")
 
         class Empty:

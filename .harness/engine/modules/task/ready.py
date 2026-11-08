@@ -39,6 +39,7 @@ RETRY_FAILED = 20.0  # a doctor that failed or found errors is run again no soon
 REFRESH_CLEAN = 600.0  # a clean doctor is looked at again after this long
 FOLDERS_FOR = 10.0  # seconds the optional items are kept
 RUNNING_KEEP = 8.0  # seconds the answer "a VS Code runs on this computer" is kept
+BUTTON_HOLD = 12.0  # seconds a changed answer of "a VS Code runs" must stand before the button changes its words (1.7.38: helper processes that come and go made it jump between Open and Restart)
 REASON_MAX = 300
 # What the link says (`vslink.status()["why"]`) -> the state of the VS Code line. A host that is still starting, or a connection that dropped, is told as waiting: it comes back by itself.
 WAITING = ("starting", "lost", "error")
@@ -160,6 +161,7 @@ class Ready:
         self.optional_kept: Any = None  # (what the items read, when, the answer)
         self.checker = checker or reachcheck.Checker(root)  # the board's own look at the connections (1.7.19)
         self.vs_running = running or Running(clock=clock)  # is any VS Code running on this computer
+        self.process_held: Optional[Dict[str, Any]] = None  # what the button goes by: the answer of `vs_running`, once it has stood for BUTTON_HOLD
         self.restart: Any = None  # the board sets it: what a restart of VS Code is doing (`vsrestart.Restart`)
 
     # --- doctor: once, off the request thread ----------------------------------------------------------------------
@@ -322,9 +324,27 @@ class Ready:
             self.reopen = False
         return self.reopen
 
+    def process_up(self) -> bool:
+        """Does a VS Code run on this computer, as the button should believe it: a new answer counts after it has stood for BUTTON_HOLD seconds, so a process that comes and goes
+        does not change the words of the button back and forth. Not known yet (no probe has answered): the last belief, else no."""
+        raw = self.vs_running.get()
+        now = self.clock()
+        with self.lock:
+            held = self.process_held
+            if raw is None:
+                return bool(held and held["shown"])
+            if held is None:
+                self.process_held = {"shown": raw, "raw": raw, "since": now}
+                return raw
+            if raw != held["raw"]:
+                held["raw"], held["since"] = raw, now
+            if raw != held["shown"] and now - held["since"] >= BUTTON_HOLD:
+                held["shown"] = raw
+            return bool(held["shown"])
+
     def vscode_button(self, vscode: Dict[str, Any], identities: int) -> Dict[str, Any]:
         """The VS Code button of the screen. `open`: no VS Code runs for this copy or at all; `restart`: one runs; `identities`: one runs and some connection has a sign-in saved and a test that passed. `up`: one runs."""
-        up = vscode["state"] in ("ok", "wait") or self.vs_running.get() is True
+        up = vscode["state"] in ("ok", "wait") or self.process_up()
         kind = "identities" if up and identities else "restart" if up else "open"
         return {"kind": kind, "label": messages.text(f"ready.vs.{kind}"), "up": up, "identities": identities}
 

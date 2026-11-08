@@ -312,6 +312,19 @@ class PackageCase(HarnessTestCase):
             self.pack()
         self.assertEqual(list(self.out.iterdir()), [])
 
+    def test_the_checks_run_before_a_folder_is_chosen_and_the_dirty_files_are_listed_and_committed_on_a_click(self) -> None:
+        """1.7.38: `pack_check` is the first half of `pack`; `commit_changes` is the Commit them button."""
+        self.assertEqual(company.pack_check(self.root), {"ok": True, "word": "acme"})
+        put(self.kb, {"new.md": "not committed\n", "README.md": "changed\n"})
+        with self.assertRaises(company.DirtyError) as caught:
+            company.pack_check(self.root)
+        self.assertEqual(sorted(line.split()[-1] for line in caught.exception.lines), ["README.md", "new.md"])
+        done = company.commit_changes(self.root)
+        self.assertTrue(done["committed"])
+        self.assertEqual(run_git(self.kb, "status", "--porcelain"), "")
+        self.assertEqual(company.pack_check(self.root)["word"], "acme")
+        self.assertEqual(company.commit_changes(self.root), {"committed": False, "lines": []})  # nothing to commit: no empty commit, no error
+
     def test_a_first_install_needs_no_backup_and_a_dry_run_writes_nothing(self) -> None:
         package = self.pack()["package"]
         dry = self.update(package, apply=False)

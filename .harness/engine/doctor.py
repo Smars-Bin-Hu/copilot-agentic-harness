@@ -638,6 +638,31 @@ def check_toolpacks(report: Report, root: Path) -> None:
         report.warn(say("doctor.company.failed", error=error))
 
 
+def system_reach(root: Path, systems: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Is each outside system reachable from here? A connection is probed as the board and VS Code do it (1.7.38): with the tool folders and the CA bundle VS Code gets and the identity kept here, so a connection
+    that passed its Test is not reported as not reachable (exit code 127 or 1) just because a terminal has neither. What has no kept identity, and a system written by hand, is probed in this terminal as before."""
+    from core import connections, reach as seen
+    from core import systems as outside
+    from modules.gate import external
+
+    listed = set(connections.listed(root))
+    try:
+        done = connections.probe_all(root) if listed else {}
+    except Exception:  # noqa: BLE001 - a probe that cannot run leaves the terminal's way
+        done = {}
+    kept = seen.read(root)
+    by_connection: Dict[str, Dict[str, Any]] = {}
+    for name, system in systems.items():
+        keys = [f"{name}:{env}" for env in outside.probes(system)]
+        if name in listed and keys and all(key in done for key in keys):
+            bad = [key for key in keys if done[key] != seen.OK]
+            by_connection[name] = {"reachable": not bad, "why": say("doctor.systems.why.connection", why=str((kept.get(bad[0]) or {}).get("why") or done[bad[0]]))[:200] if bad else "",
+                                   "launch": (system.get("needs") or {}).get("launch") or ""}
+    rest = {name: system for name, system in systems.items() if name not in by_connection}
+    answers = {**external.reach(rest, lambda command: external.run_probe(command, root)), **by_connection}
+    return {name: answers[name] for name in systems if name in answers}
+
+
 def check_systems(report: Report, root: Path) -> None:
     """The outside systems a company listed (M43-2): is the list well formed, and is each system that has a probe reachable from here (1.7.1)? Nothing listed is fine: the harness ships none."""
     try:
@@ -646,7 +671,7 @@ def check_systems(report: Report, root: Path) -> None:
         systems = config.load_policy(root, "tools").get("systems") or {}
         errors = external.validate(systems)
         found = external.warnings(systems) if not errors else []
-        reached = external.reach(systems, lambda command: external.run_probe(command, root)) if not errors else {}
+        reached = system_reach(root, systems) if not errors else {}
     except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
         report.warn(say("doctor.systems.unreadable", error=error))
         return

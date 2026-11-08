@@ -635,10 +635,10 @@
     return false;
   }
 
-  list.addEventListener("click", (event) => { if (list.classList.contains("folded") && !event.target.closest("button")) list.classList.toggle("unfold"); });  // a folded list opens on a click as well as on hover
+  list.addEventListener("click", (event) => { if (list.classList.contains("folded") && !event.target.closest("button, .row.has-fix .t")) list.classList.toggle("unfold"); });  // a folded list opens on a click as well as on hover
   list.addEventListener("click", (event) => {  // the name of an optional row opens the place that mends it (a window of Tools, the setup form, the knowledge base)
     const name = event.target.closest(".row.has-fix .t");
-    if (!name || list.classList.contains("folded")) return;
+    if (!name) return;  // 1.7.38: a folded list shows no row, so a name that was clicked is one of an unfolded list (hover or a click): it opens its window
     const item = itemOf(name.closest("li").dataset.id);
     const to = item && ((item.home && item.home.to) ? item.home : item.fix);  // the row's own window; a note's link leads to the fix (1.7.38)
     if (to) READY.go(to, {done: () => poll()});

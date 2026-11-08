@@ -673,6 +673,30 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
 
 
+class SystemReachTests(unittest.TestCase):
+    """1.7.38: `harness doctor` in a terminal no longer calls a connection that passed its Test "not reachable (exit code 127)"."""
+
+    def test_a_connection_is_judged_by_the_board_probe_and_a_hand_written_system_by_its_own_command(self) -> None:
+        from unittest import mock
+
+        import doctor
+
+        systems = {"board": {"needs": {"probes": {"dev": "board whoami"}, "launch": "Open VS Code."}}, "down": {"needs": {"probes": {"dev": "down whoami"}}}, "mine": {"needs": {"probes": {"none": "mine ping"}}}}
+        asked: list = []
+
+        def run(command: str, _root: Path = None) -> tuple:
+            asked.append(command)
+            return 0, "ok"
+
+        with tempfile.TemporaryDirectory() as folder, mock.patch("core.connections.listed", return_value={"board": {}, "down": {}}), \
+                mock.patch("core.connections.probe_all", return_value={"board:dev": "ok", "down:dev": "failed"}), mock.patch("modules.gate.external.run_probe", side_effect=run):
+            found = doctor.system_reach(Path(folder), systems)
+        self.assertEqual(list(found), ["board", "down", "mine"])
+        self.assertEqual((found["board"]["reachable"], found["down"]["reachable"], found["mine"]["reachable"]), (True, False, True))
+        self.assertEqual(asked, ["mine ping"])  # a connection is not run again in the bare terminal
+        self.assertIn("failed", found["down"]["why"])
+
+
 class LayoutTests(unittest.TestCase):
     def test_engine_code_parses_as_python_39(self) -> None:
         for path in sorted([*ENGINE.rglob("*.py"), *(REPO / ".harness" / "examples").rglob("*.py")]):

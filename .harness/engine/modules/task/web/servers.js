@@ -13,7 +13,7 @@ const SERVERS = (function () {
   function where(row) { const f = row.fields || {}; return [f.host, f.port].filter(Boolean).join(":") || Object.values(f).filter(Boolean).join(" · "); }
   function result(found) {  // a test's answer: a mark and a short word, the reason on hover
     const word = found.timeout ? t("connections.state.timeout", {seconds: found.timeout}) : t("connections.state." + found.state);
-    const tip = found.timeout ? t("connections.tip.timeout", {seconds: found.timeout}) : found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : found.state === "failed" && found.why && !/^exit-\d+$/.test(found.why) ? t("connections.tip.failed") + "\n" + found.why : t("connections.tip." + found.state);
+    const tip = found.timeout ? t("connections.tip.timeout", {seconds: found.timeout}) : found.state === "ok" ? t("connections.tip.ok.save", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : found.state === "failed" && found.why && !/^exit-\d+$/.test(found.why) ? t("connections.tip.failed") + "\n" + found.why : t("connections.tip." + found.state);
     return h("span", {class: "sv-result " + (found.state === "ok" || found.state === "mcp" ? "ok" : "bad"), title: tip}, h("b", null, MARK[found.state] || "?"), " ", word);
   }
 
@@ -41,13 +41,10 @@ const SERVERS = (function () {
     return h("div", {class: "tl-why"}, h("div", {class: "tl-steps"}, parts), h("p", {class: "tl-say"}, text));
   }
 
-  // Forgetting a connection of the person's own takes the connection and its identity away, and nothing brings it back: one more click, within a few seconds (1.7.22). A connection of a tool pack or the company
-  // only loses the identity: it is still listed, and one click is enough.
+  // Forgetting a connection of the person's own takes the connection and its identity away, and nothing brings it back: the browser asks first, as Remove does for a pack (1.7.38).
+  // A connection of a tool pack or the company only loses the identity: it is still listed, and one click is enough.
   function sure(button, row, run) {
-    if (!row.own || button.dataset.sure) { run(); return; }
-    const label = button.textContent;
-    button.dataset.sure = "1"; button.textContent = t("connections.forget.sure"); button.title = t("connections.forget.sure.tip", {name: row.alias});
-    setTimeout(() => { if (!button.isConnected) return; delete button.dataset.sure; button.textContent = label; button.removeAttribute("title"); }, 5000);
+    if (!row.own || window.confirm(t("connections.forget.ask", {name: row.alias}))) run();
   }
 
   // The identity of a server, tested before it is kept. `own`: the fields of a server of the person's own (kind, env, auth, host, ...), or null.
@@ -165,8 +162,13 @@ const SERVERS = (function () {
       if (via === "mcp") words = h("span", {class: "tl-who none"}, t("connections.state.mcp"));
       else if (via === "nopack") words = h("span", {class: "tl-who none"}, t("connections.state.nopack"));
       else if (!row.saved && !last) words = h("span", {class: "tl-who none"}, t("connections.none"));
-      else words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, (row.account || "") + (bad ? (row.account ? " · " : "") + (last && last.timeout ? t("connections.state.timeout", {seconds: last.timeout}) : t("connections.state.testfailed")) : ""));
-      const tip = last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || "-"}) : t("connections.none.tip");
+      else {
+        // Who it is signed in as (1.7.38): the account kept here; else the name the last test answered with; else, for a token, that a token is saved. A failed test of something not kept says it was not kept.
+        const who = row.account || (last && last.state === "ok" && last.who) || row.who || (row.saved && row.identity === "token" ? t("connections.token.saved") : "");
+        const failed = last && last.timeout ? t("connections.state.timeout", {seconds: last.timeout}) : t(row.saved ? "connections.state.testfailed" : "connections.state.notsaved");
+        words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, who + (bad ? (who ? " · " : "") + failed : ""));
+      }
+      const tip = last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || row.who || "-"}) : t("connections.none.tip");
       const share = row.tool ? h("span", {class: "sv-info", tabindex: "0", title: t(names.length ? "connections.shared.with" : "connections.shared.one", {program: row.tool, names: names.join(", ")})}, "ⓘ") : null;
       const forget = row.saved && !via ? h("button", {type: "button", class: "mc-x", title: t(row.own ? "connections.forget.own.tip" : "connections.forget.tip"), "aria-label": t("connections.forget")}, "×") : null;
       if (forget) forget.addEventListener("click", () => sure(forget, row, () => {
@@ -175,7 +177,8 @@ const SERVERS = (function () {
       }));
       stateBox.replaceChildren(...[dot, words, share, forget].filter(Boolean));
       stateBox.title = tip;
-      why.replaceChildren(...[last && layersBox(last, env.go)].filter(Boolean));
+      const note = env.notes.get(key);
+      why.replaceChildren(...[last && layersBox(last, env.go), last && bad && !row.saved ? h("p", {class: "tl-say sub"}, t("connections.notsaved")) : null, note ? h("p", {class: "tl-say" + (note.bad ? " bad" : " sub")}, note.said) : null].filter(Boolean));
       signBtn.className = "act" + (row.saved || via ? "" : " hot");
       signBtn.hidden = Boolean(via);
       testBtn.hidden = Boolean(via);
@@ -216,7 +219,7 @@ const SERVERS = (function () {
     const source = row.own ? h("span", {class: "sv-own sv-from", title: t("connections.own.tip")}, t("connections.own")) : h("span", {class: "sv-own sv-from", title: t("connections.company.tip")}, t("connections.company"));
     // A connection of one's own can go in the company pack (the place only, never the account): it was a button of the knowledge base window until 1.7.38.
     const up = row.own ? h("button", {type: "button", class: "mc-x tl-share", title: t("dock.connections.share.tip"), "aria-label": t("dock.connections.share.tip")}, "\u21ea") : null;
-    if (up) up.addEventListener("click", () => shareWindow(row, (said, bad) => { why.replaceChildren(h("p", {class: "tl-say" + (bad ? " bad" : " sub")}, said)); }));
+    if (up) up.addEventListener("click", () => shareWindow(row, (said, bad) => { env.notes.set(key, {said, bad}); env.redraw(); }));  // the list is read again: the row is the company's now, and says what was done
     const chip = envChip(row.env);
     const title = [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " · " + row.auth_label : ""), place(row), (row.fields || {}).url]).filter(Boolean).join("\n");
     paint();
@@ -281,7 +284,7 @@ const SERVERS = (function () {
     const addBox = h("div", {class: "tl-add", hidden: ""});
     const add = h("button", {type: "button", class: "act", "aria-expanded": "false"}, t("connections.own.add"));
     const out = h("button", {type: "button", class: "act", title: t("connections.export.tip")}, t("connections.export"));  // one's own connections, to put in the company pack
-    const env = {results, paints: new Map(), redraw: () => redraw(), go: (name, part, focus) => ctx.go(name, part, focus)};
+    const env = {results, notes: new Map(), paints: new Map(), redraw: () => redraw(), go: (name, part, focus) => ctx.go(name, part, focus)};
     add.addEventListener("click", () => {
       const open = addBox.hidden;
       addBox.hidden = !open; add.setAttribute("aria-expanded", String(open));
@@ -338,21 +341,24 @@ const SERVERS = (function () {
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.
-  function choose(opened) {  // `opened`: what the page does once VS Code was started with the identities (the Enter screen waits for it, 1.7.19)
+  // `before`: a function that closes the VS Code that runs (1.7.38, readyui.js `vsAct`); it runs after the person pressed the button, never before: a window that is cancelled changes nothing.
+  function choose(opened, before) {  // `opened`: what the page does once VS Code was started with the identities (the Enter screen waits for it, 1.7.19)
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const said = h("p", {class: "sub sv-plan"});
     const running = h("p", {class: "bad sv-plan", hidden: ""}, t("connections.open.running"));  // its own line: the plan does not write over it
-    const go = h("button", {type: "button", class: "act hot", disabled: ""}, t("connections.open.go"));
+    const closing = h("p", {class: "sub sv-plan", hidden: ""}, t("connections.open.restart.note"));  // with `before`: a VS Code that is open is closed first, the normal way
+    const go = h("button", {type: "button", class: "act hot", disabled: ""}, t(before ? "connections.open.restart" : "connections.open.go"));
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-    const view = SERVE.dialog([h("h2", null, t("connections.open.title")), h("p", {class: "sub"}, t("connections.open.lead")), h("div", {class: "win-body"}, list, said, running), h("div", {class: "row win-foot"}, go, close)]);
+    const view = SERVE.dialog([h("h2", null, t("connections.open.title")), h("p", {class: "sub"}, t("connections.open.lead")), h("div", {class: "win-body"}, list, said, running, closing), h("div", {class: "row win-foot"}, go, close)]);
     view.box.classList.add("wide", "sv-win");
     let rows = [], picked = kept("chosen", null), primary = kept("primary", ""), found0 = null;
     const marks = {};
     const replan = () => {
       const chosen = rows.filter((row) => picked.includes(row.alias)).map((row) => row.alias);
       keep("chosen", picked); keep("primary", primary);
-      go.disabled = !chosen.length || found0.vscode_open;
-      go.title = found0.vscode_open ? t("connections.open.running") : !chosen.length ? t("connections.open.none") : "";
+      const blocked = found0.vscode_open && !before;  // with `before` an open VS Code is closed first: not a reason to wait
+      go.disabled = !chosen.length || blocked || Boolean(go.dataset.busy);
+      go.title = blocked ? t("connections.open.running") : !chosen.length ? t("connections.open.none") : "";
       if (!chosen.length) { Object.values(marks).forEach((node) => node.replaceChildren()); said.replaceChildren(); return; }
       ask("plan", {chosen, primary}).then((plan) => {
         for (const row of rows) {
@@ -380,15 +386,18 @@ const SERVERS = (function () {
         return h("label", {class: "sv-line sv-pick", title: [row.label, row.type_label + " · " + row.auth_label, where(row)].filter(Boolean).join("\n")},
           box, envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.account), star ? h("span", {class: "sv-primary"}, star, t("connections.primary")) : null, marks[row.alias]);
       }) : [h("p", {class: "sub"}, t("connections.open.nothing"))]));
-      running.hidden = !found.vscode_open;
+      running.hidden = !found.vscode_open || Boolean(before);
+      closing.hidden = !found.vscode_open || !before;
       replan();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     go.addEventListener("click", () => {
-      go.disabled = true;
-      ask("open", {chosen: picked, primary}).then((done) => {
+      go.disabled = true; go.dataset.busy = "1";
+      if (before) close.disabled = true;  // once VS Code is on its way out there is no way back
+      const free = () => { delete go.dataset.busy; close.disabled = false; go.disabled = !picked.length; };
+      (before ? before() : Promise.resolve()).then(() => ask("open", {chosen: picked, primary})).then((done) => {
         said.replaceChildren(done.started ? t("connections.open.started", {n: done.direct.length + done.wrap.length}) : h("span", {class: "bad"}, done.why || ""));
-        if (done.started) { if (opened) opened(); setTimeout(view.close, 2500); }
-      }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); go.disabled = false; });
+        if (done.started) { if (opened) opened(); close.disabled = false; setTimeout(view.close, 2500); } else free();
+      }, (error) => { said.replaceChildren(error && error.quiet ? "" : h("span", {class: "bad"}, (error && error.message) || String(error))); free(); });  // the person said no to the question about a working agent: VS Code was not touched
     });
     close.addEventListener("click", view.close);
   }

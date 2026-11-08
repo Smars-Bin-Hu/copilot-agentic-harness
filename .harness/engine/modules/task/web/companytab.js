@@ -53,13 +53,16 @@ const COMPANYTAB = (function () {
     return h("section", {class: "co-sec"}, head("company"), h("div", {class: "co-line"}, parts));
   }
 
+  // A line with words is shown as it is. A rule the pack did not put in words is not shown as a pattern (1.7.38): "N rules", and the patterns in the small window on hover.
   function lines(rows) {
-    return h("ul", {class: "co-lines"}, rows.map((row) => h("li", null, row.text ? row.text : h("code", null, row.pattern))));
+    const said = rows.filter((row) => row.text), bare = rows.filter((row) => !row.text && row.pattern);
+    return h("ul", {class: "co-lines"}, said.map((row) => h("li", null, row.text)),
+      bare.length ? hover(h("li", {class: "co-bare"}, t(bare.length === 1 ? "dock.co.rules.one" : "dock.co.rules", {n: bare.length})), () => bare.map((row) => h("code", {class: "co-pat"}, row.pattern))) : null);
   }
 
-  function pack(item, open) {
+  function pack(item) {
     const programs = item.programs.map((program) => hover(h("span", {class: "co-prog"}, dot(program.found ? "ok" : "denied"), program.name), () => h("span", null, t(program.found ? "dock.co.program.found" : "dock.co.program.missing", {name: program.name}))));
-    const kinds = (rows, key) => rows.length ? h("details", {class: "co-verb", open: open ? "" : null}, h("summary", null, t("dock.co." + key), h("span", {class: "co-n"}, rows.length)), lines(rows)) : null;
+    const kinds = (rows, key) => rows.length ? h("details", {class: "co-verb"}, h("summary", null, t("dock.co." + key), h("span", {class: "co-n"}, rows.length)), lines(rows)) : null;
     const links = item.connections.map((link) => hover(h("span", {class: "co-conn"}, link.state === "none" ? null : dot(link.state), link.name), () => [
       h("b", null, link.name), fact(t("board.enter.sys.col.env"), link.env && link.env !== "none" ? link.env.toUpperCase() : ""), fact(t("board.enter.sys.col.status"), link.state === "none" ? t("dock.co.conn.mcp") : t("board.enter.sys.state." + (STATE[link.state] || "unknown"))),
       fact(t("dock.co.conn.who"), link.who), fact(t("board.enter.sys.col.reason"), link.why), fact(t("board.enter.sys.col.checked"), link.state === "unknown" || !link.at ? t("board.enter.sys.never") : ago(link.at)),
@@ -87,9 +90,8 @@ const COMPANYTAB = (function () {
     const change = h("button", {type: "button", class: "act kb-mini co-change", title: t("dock.co.tools.change.tip")}, t("dock.co.tools.change"));
     change.addEventListener("click", () => { if (options.goTools) options.goTools(); });
     const groups = [["company", found.tools.filter((item) => item.source === "company")], ["harness", found.tools.filter((item) => item.source === "harness")], ["added", found.tools.filter((item) => item.source !== "company" && item.source !== "harness")]];
-    const open = found.tools.length <= 3;
     return h("section", {class: "co-sec"}, head("tools", found.tools.length, change),
-      groups.map(([key, rows]) => rows.length ? h("details", {class: "co-group", open: ""}, h("summary", null, t("dock.co.tools." + key), h("span", {class: "co-n"}, rows.length)), rows.map((item) => pack(item, open))) : null),
+      groups.map(([key, rows]) => rows.length ? h("details", {class: "co-group", open: ""}, h("summary", null, t("dock.co.tools." + key), h("span", {class: "co-n"}, rows.length)), rows.map((item) => pack(item))) : null),
       unknown.map(unknownPack), found.tools.length || unknown.length ? null : h("p", {class: "sub"}, t("dock.co.tools.none")));
   }
 

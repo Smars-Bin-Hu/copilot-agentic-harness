@@ -214,7 +214,22 @@ const DOCK = (function () {
     recheck();
     const packed = h("p", {class: "su-note kb-packed", hidden: ""});
     const pack = h("button", {type: "button", class: "act", title: t("dock.pack.hint"), hidden: hasCompany ? null : ""}, t("dock.pack"));
-    function paintPackError(error) {  // changes git does not hold: they are the person's, so the way on shows them and commits them in the person's own Terminal window
+    // The order of Pack for colleagues (1.7.38): check first (nothing uncommitted, the skills, the form of the knowledge base), and only then ask where to put the file.
+    function packNow(out) {
+      pack.disabled = true;
+      packed.hidden = false;
+      packed.classList.remove("bad");
+      packed.textContent = t("dock.pack.working");
+      SERVE.post("/api/company", {op: "pack", out}).then((data) => { packed.textContent = t("dock.pack.done", {file: data.result.package, files: data.result.files}); }, (error) => { packed.classList.add("bad"); paintPackError(error); }).then(() => { pack.disabled = false; });
+    }
+    function packStart() {
+      pack.disabled = true;
+      packed.hidden = false;
+      packed.classList.remove("bad");
+      packed.textContent = t("dock.pack.checking");
+      SERVE.post("/api/company", {op: "packcheck"}).then(() => { packed.hidden = true; packed.textContent = ""; chooseOnPage("folder", "", packNow); }, (error) => { packed.classList.add("bad"); paintPackError(error); }).then(() => { pack.disabled = false; });
+    }
+    function paintPackError(error) {  // changes git does not hold: they are listed here, and one button commits them (no command to read)
       const skills = error.data && error.data.skills;
       if (skills) {  // what a skill lacks is written in the skill: that is a change in the knowledge base, so an agent makes it
         const items = skills.map(plainWords);
@@ -225,19 +240,15 @@ const DOCK = (function () {
       }
       const folder = error.data && error.data.dirty;
       if (!folder) { packed.textContent = plainWords(error.message); return; }
-      const see = h("button", {type: "button", class: "act kb-mini"}, t("dock.pack.see"));
+      const files = (error.data.files || []).map((line) => String(line).replace(/^\s*\S+\s+/, ""));  // `git status --porcelain`: the mark, then the path
       const commit = h("button", {type: "button", class: "act kb-mini"}, t("dock.pack.commit"));
-      see.addEventListener("click", () => TERM.run(`git -C "${folder}" status --short`));
-      commit.addEventListener("click", () => TERM.run(`git -C "${folder}" add -A; git -C "${folder}" commit -m "Update the knowledge base"`));
-      packed.replaceChildren(t("dock.pack.dirty"), " ", see, " ", commit);
+      commit.addEventListener("click", () => {
+        commit.disabled = true;
+        SERVE.post("/api/company", {op: "commit"}).then(() => packStart(), (problem) => { commit.disabled = false; packed.classList.add("bad"); packed.replaceChildren(plainWords(problem.message)); });
+      });
+      packed.replaceChildren(t("dock.pack.dirty"), files.length ? h("ul", {class: "kb-dirty"}, files.map((name) => h("li", null, h("code", null, name))), error.data.more ? h("li", null, t("dock.pack.more", {n: error.data.more})) : null) : null, commit);
     }
-    pack.addEventListener("click", () => chooseOnPage("folder", "", (out) => {
-      pack.disabled = true;
-      packed.hidden = false;
-      packed.classList.remove("bad");
-      packed.textContent = t("dock.pack.working");
-      SERVE.post("/api/company", {op: "pack", out}).then((data) => { packed.textContent = t("dock.pack.done", {file: data.result.package, files: data.result.files}); }, (error) => { packed.classList.add("bad"); paintPackError(error); }).then(() => { pack.disabled = false; });
-    }));
+    pack.addEventListener("click", packStart);
     const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, rebuild, again), alarm, synced, stage, packed, h("div", {class: "row"}, pack, no)]);
     view.box.classList.add("dock-window", "kb-window");
     view.holds = () => false;  // it only reads: nothing here can be lost
@@ -247,10 +258,22 @@ const DOCK = (function () {
     const post = (body) => SERVE.post("/api/kb", body).then((data) => data.result);
     const leave = (then) => () => { view.close(); then(); };
     const ago = (seconds) => (seconds < 60 ? t("dock.kb.age.now") : t("dock.kb.age", {n: Math.round(seconds / 60)}));
+    // No knowledge base in this copy (1.7.38): every tab says so once, and leads to the setup where one is imported. The steps of a build, the map and the company tab have nothing to show yet.
+    function emptyState() {
+      const go = h("button", {type: "button", class: "act hot"}, t("dock.kb.empty.go"));
+      go.addEventListener("click", () => { if (typeof READY !== "undefined") READY.go({to: "setup", sec: "company"}); else location.assign("/setup?sec=company"); });
+      stage.classList.remove("ka-stage", "co-stage");
+      view.box.classList.remove("ka-open");
+      stage.replaceChildren(h("div", {class: "kb-empty"}, h("p", null, t("dock.kb.empty")), go));
+      alarm.hidden = true;
+      rebuild.hidden = true;
+      age.textContent = "";
+    }
     function load(op, paint, fresh, wait) {
       const key = current;
       post({op, fresh}).then((found) => {
         if (!view.box.isConnected || key !== current) return;  // a late answer belongs to a tab that is gone
+        if (found.has_kb === false) { emptyState(); return; }
         age.textContent = found.running ? t("dock.kb.updating") : found.age === null ? "" : ago(found.age);
         const seen = JSON.stringify(found.result);
         if (found.result && seen !== seenView) { seenView = seen; painted = () => paint(found.result); painted(); }
@@ -263,7 +286,7 @@ const DOCK = (function () {
     }
     const mapButton = (hot) => {  // the map is a script, in the background: it costs no request, and the view comes back when it is done
       const go = h("button", {type: "button", class: "act" + (hot ? " hot" : "")}, t("dock.kb.rebuild"));
-      go.addEventListener("click", () => TERM.run("harness kb map", () => { if (view.box.isConnected) again.click(); }));
+      go.addEventListener("click", () => TERM.run("harness kb map", () => { if (view.box.isConnected) again.click(); }));  // Refresh forgets every view: Domains and Overview change with the map (1.7.38)
       return go;
     };
     const nextButton = (stageName) => {  // the first two steps are done in the setup, not in a chat
@@ -413,7 +436,11 @@ const DOCK = (function () {
       if (key === "lookup") { lookup(); return; }
       const op = ["health", "atlas", "company"].includes(key) ? key : "status";
       const paint = key === "health" ? health : key === "atlas" ? (found) => ATLAS.draw(stage, found) : key === "company" ? (found) => COMPANYTAB.draw(stage, found, {goMap: () => show("atlas"), goDomains: () => show("domains"), goTools: typeof TOOLS !== "undefined" ? () => TOOLS.open("packs", () => show("company")) : null}) : key === "overview" ? overview : domains;
-      again.onclick = () => { clearTimeout(timer); load(op, paint, true); loadDetail(true); recheck(); };
+      again.onclick = () => {  // every kept view is old, not only this one: a map rebuilt here changes Overview and Domains too
+        clearTimeout(timer);
+        post({op: "forget"}).catch(() => {}).then(() => { asked.clear(); asked.add(op); asked.add("detail"); load(op, paint, true); loadDetail(true); });
+        recheck();
+      };
       load(op, paint, !asked.has(op));
       asked.add(op);
       if (op === "status" && !asked.has("detail")) { asked.add("detail"); loadDetail(true); }

@@ -36,3 +36,12 @@ body.has-dialog .term-toggle{visibility:hidden}
 /* A narrow window has no gutter: the buttons lie in a row along the bottom edge, where the page keeps room for them (shell.css), not in a column over the content. */
 @media (max-width:900px){.dock-btn{bottom:20px}.dock-ask{right:76px}.dock-book{right:132px}.dock-setup{right:188px}.dock-home{right:244px}}
 /* The Enter screen keeps the gear (theme, wallpaper, language) under the dock column, as every page does (1.7.35). */
+
+/* 1.7.38: no knowledge base in place; the files Pack for colleagues says are not committed */
+.kb-empty{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:18px 4px;max-width:52ch}.kb-empty p{margin:0;color:var(--soft);line-height:1.5}
+.kb-dirty{margin:6px 0;padding-left:20px;max-height:140px;overflow:auto}.kb-dirty li{margin:1px 0;overflow-wrap:anywhere}.kb-dirty code{font:12px var(--mono)}
+/* 1.7.38: the Terminal window never lies over a dialog. Wide screen: the dialog moves left by the width of the window; narrow screen: the window goes under the dialog (term.js sets --term-w and html.term-open) */
+@media (min-width:1100px){html.term-open body.has-dialog .shade{padding-right:calc(var(--term-w,480px) + 28px)}}
+@media (max-width:1099px){body.has-dialog .term{z-index:165}}
+/* 1.7.38: narrow window: a domain name is never cut in the middle of a word, and the table scrolls sideways instead; the button of a row keeps its words on one line */
+.kb-table .kb-name{overflow-wrap:normal;word-break:normal;min-width:6.5em}.kb-table th{white-space:nowrap}.kb-table{width:max-content;min-width:100%}.kb-table .kb-do .act{white-space:nowrap}

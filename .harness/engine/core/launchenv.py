@@ -44,13 +44,24 @@ BUNDLE = Path(".harness") / "certs" / "ca-bundle.pem"
 RECIPE = ".harness/policies/computer.company.json"  # 1.7.31: from `company/tools/computer.json`; what every colleague's computer needs and holds no secret
 RECIPE_SCHEMA = {"type": "object", "properties": {
     "ca_bundle": {"type": "object", "properties": {
-        "host": {"type": "string", "pattern": r"^[A-Za-z0-9.\-]+$", "maxLength": 253},
+        "host": {"type": "string", "pattern": r"^[A-Za-z0-9.\-]+(:\d{1,5})?$", "maxLength": 260},
         "proxy": {"type": "string", "pattern": r"^[A-Za-z0-9.\-\[\]:]+:\d{1,5}$", "maxLength": 260}}},
     "tool_folders": {"type": "array", "maxItems": 20, "items": {"type": "object", "required": ["label"], "properties": {
         "label": {"type": "string", "minLength": 1, "maxLength": 80}, "hint": {"type": "string", "maxLength": 400},
         "program": {"type": "string", "pattern": r"^[\w.\-]+$", "maxLength": 60}}}}}}
 TRUST_VARS = ("REQUESTS_CA_BUNDLE",)  # Python tools (az, pip's requests); NODE_EXTRA_CA_CERTS and others when a tool pack asks for them
 DEFAULT_HOST = "example.com"
+HTTPS_PORT = 443
+HOST_FORM = re.compile(r"^([A-Za-z0-9.\-]+)(?::(\d{1,5}))?$")  # `host`, or `host:port` for a server that is not on 443 (1.7.38)
+
+
+def split_host(value: str) -> Tuple[str, int]:
+    """`(host, port)` of `host` or `host:port`; the port is 443 when none is written. ValueError for anything else."""
+    found = HOST_FORM.match(value.strip())
+    port = int(found.group(2)) if found and found.group(2) else HTTPS_PORT
+    if not found or not 0 < port < 65536:
+        raise ValueError(value)
+    return found.group(1), port
 SECONDS = 20
 PEM = re.compile(r"-----BEGIN CERTIFICATE-----\s+([A-Za-z0-9+/=\s]+?)\s+-----END CERTIFICATE-----")
 ROOTS_SEARCH_DEPTH = 8  # certifi/cacert.pem sits a few folders down in a tool's own Python
@@ -405,15 +416,15 @@ def _find(top: Path, name: str, depth: int, budget: int = 20000):
 
 
 WINDOWS_CHAIN = r"""
-$h = '__HOST__'; $p = '__PROXY__'
+$h = '__HOST__'; $port = __PORT__; $p = '__PROXY__'
 $global:zchain = @(); $global:zerr = ''
 $cb = [Net.Security.RemoteCertificateValidationCallback]{ param($s, $c, $ch, $e) $global:zerr = "$e"; $global:zchain = @($ch.ChainElements | ForEach-Object { $_.Certificate }); $true }
 if ($p) { $hp = $p.Split(':'); $tcp = [Net.Sockets.TcpClient]::new($hp[0], [int]$hp[1]); $ns = $tcp.GetStream()
-  $req = [Text.Encoding]::ASCII.GetBytes("CONNECT ${h}:443 HTTP/1.1`r`nHost: ${h}:443`r`n`r`n"); $ns.Write($req, 0, $req.Length)
+  $req = [Text.Encoding]::ASCII.GetBytes("CONNECT ${h}:${port} HTTP/1.1`r`nHost: ${h}:${port}`r`n`r`n"); $ns.Write($req, 0, $req.Length)
   $one = New-Object byte[] 1; $head = ''
   while (-not $head.EndsWith("`r`n`r`n")) { if ($ns.Read($one, 0, 1) -le 0) { break }; $head += [char]$one[0] }
   if ($head -notmatch '^HTTP/1\.[01] 2') { "PROXY " + ($head -split "`r`n")[0]; exit 3 } }
-else { $tcp = [Net.Sockets.TcpClient]::new($h, 443); $ns = $tcp.GetStream() }
+else { $tcp = [Net.Sockets.TcpClient]::new($h, $port); $ns = $tcp.GetStream() }
 $ssl = [Net.Security.SslStream]::new($ns, $false, $cb); $ssl.AuthenticateAsClient($h); $tcp.Close()
 "TRUST $zerr"
 $zchain | ForEach-Object { "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($_.RawData, 'InsertLineBreaks') + "`n-----END CERTIFICATE-----" }
@@ -424,7 +435,8 @@ def chain_windows(host: str, proxy: str, run: Callable[..., Any] = subprocess.ru
     """The chain Windows builds for `host`, through `proxy` when given (the root from the system's store included). `(blocks, trust)`: trust is
     "None" when Windows trusts it, else the reason (RemoteCertificateChainErrors, ...)."""
     # The values go into the script's text: `-Command <script> <args>` hands the script no $args. Both were checked to hold no quote (make, proxy_address).
-    script = WINDOWS_CHAIN.replace("__HOST__", host).replace("__PROXY__", proxy)
+    host, port = split_host(host)
+    script = WINDOWS_CHAIN.replace("__HOST__", host).replace("__PORT__", str(port)).replace("__PROXY__", proxy)
     done = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=SECONDS,
                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     out = done.stdout or ""
@@ -444,7 +456,8 @@ def chain_openssl(host: str, proxy: str, run: Callable[..., Any] = subprocess.ru
     program = shutil.which("openssl")
     if not program:
         raise ValueError(say("launch.ca.no_openssl"))
-    argv = [program, "s_client", "-showcerts", "-servername", host, "-connect", f"{host}:443"] + (["-proxy", proxy] if proxy else [])
+    host, port = split_host(host)
+    argv = [program, "s_client", "-showcerts", "-servername", host, "-connect", f"{host}:{port}"] + (["-proxy", proxy] if proxy else [])
     done = run(argv, input="", capture_output=True, text=True, timeout=SECONDS)
     blocks = pem_blocks(done.stdout or "")
     if not blocks:
@@ -461,10 +474,11 @@ def check(bundle: Path, host: str, proxy: str, timeout: float = SECONDS) -> Tupl
     """Can a tool that trusts only this bundle reach `host` (through `proxy`)? The same check as az's Python makes. `(ok, why)`."""
     context = ssl.create_default_context(cafile=str(bundle))
     try:
+        host, wanted = split_host(host)
         if proxy:
             name, port = proxy.rsplit(":", 1)
             raw = socket.create_connection((name.strip("[]"), int(port)), timeout=timeout)
-            raw.sendall(f"CONNECT {host}:443 HTTP/1.1\r\nHost: {host}:443\r\n\r\n".encode("ascii"))
+            raw.sendall(f"CONNECT {host}:{wanted} HTTP/1.1\r\nHost: {host}:{wanted}\r\n\r\n".encode("ascii"))
             head = b""
             while b"\r\n\r\n" not in head:
                 piece = raw.recv(1)
@@ -475,7 +489,7 @@ def check(bundle: Path, host: str, proxy: str, timeout: float = SECONDS) -> Tupl
                 raw.close()
                 return False, say("launch.ca.proxy.refused", said=head.split(b"\r\n")[0].decode("latin-1"))
         else:
-            raw = socket.create_connection((host, 443), timeout=timeout)
+            raw = socket.create_connection((host, wanted), timeout=timeout)
         with context.wrap_socket(raw, server_hostname=host):
             return True, ""
     except ssl.SSLCertVerificationError as error:
@@ -494,8 +508,10 @@ def make(root: Path, host: str = "", proxy: Optional[str] = None, get_chain: Cal
     """Make the bundle: the public roots, then every certificate of the chain but the first (the site's own). Kept only when the check passes with it,
     so a bundle that would not help never replaces one that does."""
     host = (host or DEFAULT_HOST).strip()
-    if not re.match(r"^[A-Za-z0-9.\-]+$", host):
-        raise ValueError(say("launch.ca.host.bad", host=host))
+    try:
+        split_host(host)
+    except ValueError:
+        raise ValueError(say("launch.ca.host.bad", host=host)) from None
     proxy = detect_proxy() if proxy is None else proxy_address(proxy) if proxy.strip() else ""
     paths = settings(root)["paths"]
     where, roots = base_roots(paths)
@@ -525,7 +541,7 @@ def make(root: Path, host: str = "", proxy: Optional[str] = None, get_chain: Cal
 # --- what Get ready shows ---------------------------------------------------------------------------------------------------------------------------------
 
 _FAULT = re.compile(r"^\$(?P<path>[^:]*): (?P<what>.*)$", re.S)
-_REASONS = {"host": "may hold letters, digits, dots and hyphens only", "proxy": "must look like `host:port`, for example `127.0.0.1:9000`"}
+_REASONS = {"host": "may hold letters, digits, dots and hyphens, and a port after a colon (`host:port`)", "proxy": "must look like `host:port`, for example `127.0.0.1:9000`"}
 
 
 def _plain_fault(item: str) -> str:

@@ -21,15 +21,18 @@ const READY = (function () {
       look();
     });
   }
-  // Restart VS Code, then, with identities, the picker of the saved sign-ins (servers.js) opens it. The picker is held until the board sees VS Code gone: it refuses to open one while a VS Code of this folder is open.
-  // hooks: {onState(view, willOpen), opened()}; `willOpen`: this restart ends with VS Code open (not with the picker). The promise ends when the restart has ended (open) or the picker is up (identities); it fails with the reason (`quiet`: the person cancelled).
+  // The VS Code button (1.7.38). Open and Restart: ask VS Code to quit the normal way if it runs, wait, open it again.
+  // With identities the person chooses first and VS Code is closed only after that choice is confirmed (T1-14b: a choice that is cancelled changes nothing, VS Code stays open): the picker (servers.js) is up at once,
+  // and its button quits VS Code (`quit` below, the same quit as Restart, with the same question when an agent works), waits until the board sees it gone, and opens it with the identities.
+  // hooks: {onState(view, willOpen), opened()}; `willOpen`: this restart ends with VS Code open (not with the picker). The promise ends when the restart has ended (open) or the picker is up (identities);
+  // it fails with the reason (`quiet`: the person cancelled).
   function vsAct(kind, hooks) {
     const given = hooks || {};
-    const withIdentities = kind === "identities" && typeof SERVERS !== "undefined";
-    return SERVE.restartVS({open: !withIdentities, onState: (view) => { if (given.onState) given.onState(view, !withIdentities); }}).then((view) => {
-      if (!withIdentities) { if (given.opened) given.opened(); return view; }
-      return waitGone().then(() => SERVERS.choose(() => { if (given.opened) given.opened(); }));
-    });
+    if (kind === "identities" && typeof SERVERS !== "undefined") {
+      const quit = () => SERVE.restartVS({open: false, onState: (view) => { if (given.onState) given.onState(view, false); }}).then(() => waitGone());
+      return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, quit));
+    }
+    return SERVE.restartVS({open: true, onState: (view) => { if (given.onState) given.onState(view, true); }}).then((view) => { if (given.opened) given.opened(); return view; });
   }
 
   function go(fix, hooks) {

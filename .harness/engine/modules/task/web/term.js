@@ -1,6 +1,8 @@
 // The Terminal window (1.6.92): a small window at the top right of a served page, with tabs. A person types a command and reads the output (`boardterm.py`). It is no real terminal.
 // A tab starts in the harness folder; a plain `cd` moves that tab, a bare `cd` brings it back. `cd x && y` goes to the shell: it holds for that line only.
 // TERM.run(line) opens a tab and runs a command: what a button on the page uses. The tabs of this browser tab live in sessionStorage, so they survive going from page to page.
+// A window a button opened (1.7.38) closes by itself 2.5 s after its command ended well, as long as the person did nothing in it; one that failed stays open to be read. The window never lies over a dialog: a wide screen
+// moves the dialog left (dock.css reads `--term-w`), a narrow one puts the window under the dialog.
 const TERM = (() => {
   const KEY = "harness.term";
   const KEEP = 20000;  // characters of a tab kept when the page changes
@@ -44,12 +46,14 @@ const TERM = (() => {
   function paint() {
     if (!ui) return;
     ui.box.hidden = !memory.open;
+    document.documentElement.classList.toggle("term-open", Boolean(memory.open));
+    if (memory.open) document.documentElement.style.setProperty("--term-w", (ui.box.offsetWidth || 480) + "px");
     ui.toggle.classList.toggle("on", memory.open);
     ui.tabs.replaceChildren(...memory.tabs.map((tab, index) => {
       const shut = h("button", {type: "button", class: "term-x", "aria-label": t("term.close"), title: t("term.close")}, "×");
       shut.addEventListener("click", (event) => { event.stopPropagation(); close(index); });
       const name = h("button", {type: "button", class: "term-tab" + (index === memory.at ? " on" : "") + (tab.job ? " busy" : "")}, tab.label || t("term.title"));
-      name.addEventListener("click", () => { memory.at = index; paint(); });
+      name.addEventListener("click", () => { memory.auto = false; memory.at = index; paint(); });
       return h("span", {class: "term-tabwrap"}, name, shut);
     }), ui.add);
     const tab = current();
@@ -83,6 +87,7 @@ const TERM = (() => {
         memory.running = Math.max(0, (memory.running || 0) - 1);
         if (then && !found.code) then();
         tab.text += found.gone ? t("term.gone") + "\n" : found.code ? t("term.failed", {code: found.code}) + "\n" : "";
+        if (!found.code && !found.gone && memory.auto && memory.open) setTimeout(() => { if (memory.auto && memory.open && !(current() && current().job)) { memory.auto = false; memory.open = false; paint(); } }, 2500);  // the button's window goes; the button of the window says how it ended
       } else setTimeout(() => follow(tab), POLL);
       paint();
       if (found.done && tab === current() && memory.open && document.activeElement === document.body) ui.input.focus();  // Stop took the focus; the next line goes here
@@ -113,6 +118,7 @@ const TERM = (() => {
     }, (error) => { tab.text += (error.message || String(error)) + "\n"; paint(); });
   }
   function run(line, done) {  // `done`: what the page does when the command ends well; it holds for this page only
+    memory.auto = !memory.open;  // opened by a button, not by the person: it may close by itself when the command is done
     memory.open = true;
     const tab = current();
     submit(tab && !tab.text && !tab.job ? tab : newTab(), line, done);
@@ -137,7 +143,7 @@ const TERM = (() => {
     const box = h("section", {class: "term", hidden: "", "aria-label": t("term.title")}, h("div", {class: "term-bar"}, tabs, hide), out, status, h("div", {class: "term-line"}, mark, input, stop));
     ui = {box, toggle, tabs, add, out, input, stop, mark, count, bar, barBox, status, said: statusWords};
     const grip = h("span", {class: "term-grip", title: t("term.resize")});
-    const sized = () => { box.style.width = memory.size ? memory.size[0] + "px" : ""; box.style.height = memory.size ? memory.size[1] + "px" : ""; };
+    const sized = () => { box.style.width = memory.size ? memory.size[0] + "px" : ""; box.style.height = memory.size ? memory.size[1] + "px" : ""; if (memory.open) document.documentElement.style.setProperty("--term-w", (box.offsetWidth || 480) + "px"); };
     // The window hangs from the top right, so it grows from its bottom left corner.
     grip.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -155,9 +161,11 @@ const TERM = (() => {
     grip.addEventListener("dblclick", () => { memory.size = null; sized(); save(); });
     const said = [];
     let back = 0;
-    toggle.addEventListener("click", () => { memory.open = !memory.open; paint(); if (memory.open) input.focus(); });
-    hide.addEventListener("click", () => { memory.open = false; paint(); });
-    add.addEventListener("click", () => { move(newTab(), ""); input.value = ""; paint(); input.focus(); });
+    toggle.addEventListener("click", () => { memory.auto = false; memory.open = !memory.open; paint(); if (memory.open) input.focus(); });
+    hide.addEventListener("click", () => { memory.auto = false; memory.open = false; paint(); });
+    add.addEventListener("click", () => { memory.auto = false; move(newTab(), ""); input.value = ""; paint(); input.focus(); });
+    box.addEventListener("pointerdown", () => { memory.auto = false; });  // the person is using it: it stays
+    input.addEventListener("focus", () => { memory.auto = false; });
     stop.addEventListener("click", () => { const tab = current(); if (tab && tab.job) post({op: "stop", id: tab.job}).catch(() => {}); });
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && input.value.trim() && !(current() && current().job)) {

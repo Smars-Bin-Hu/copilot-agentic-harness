@@ -6,7 +6,7 @@
 
 const ATLAS = (function () {
   const NS = "http://www.w3.org/2000/svg";
-  const WIDE = 176, HIGH = 62, STEP_X = 232, STEP_Y = 82, ROOMY = 136, EDGE = 18, SMALLEST = .62;
+  const WIDE = 176, HIGH = 78, STEP_X = 232, STEP_Y = 98, ROOMY = 136, EDGE = 18, SMALLEST = .62;
   const number = (value) => Number(value).toLocaleString();
   let shown = "";  // what is on the page: a poll that brings the same answer keeps the person's place
 

@@ -64,11 +64,12 @@ class BadSkills(CompanyError):
 
 
 class DirtyError(CompanyError):
-    """The knowledge base has changes git does not hold. The board offers to show and commit them."""
+    """The knowledge base has changes git does not hold. The board lists them and offers to commit them."""
 
-    def __init__(self, kb: Path) -> None:
+    def __init__(self, kb: Path, lines: Optional[List[str]] = None) -> None:
         super().__init__(say("company.pack.dirty", path=str(kb)))
         self.path = str(kb)
+        self.lines = list(lines or [])
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -482,8 +483,9 @@ def check_for_pack(root: Path, kb: Path) -> str:
     state = git(kb, "status", "--porcelain")
     if state.returncode != 0:
         raise CompanyError(say("company.git_failed", error=state.stderr.decode("utf-8", "replace").strip()))
-    if changed_lines(state.stdout):
-        raise DirtyError(kb)
+    dirty = changed_lines(state.stdout)
+    if dirty:
+        raise DirtyError(kb, dirty)
     word = skillcheck.usable(read_json(kb / targets.COMPANY_DIR / CONFIG_FILE).get("skill_prefix", ""))
     if not word:
         raise CompanyError(say("company.pack.no_word", path=f"{targets.COMPANY_DIR}/{CONFIG_FILE}"))
@@ -495,6 +497,34 @@ def check_for_pack(root: Path, kb: Path) -> str:
     if errors:
         raise CompanyError(say("company.pack.kb_errors", count=errors))
     return word
+
+
+def pack_check(root: Path) -> Dict[str, Any]:
+    """The checks a package passes before it is made, with no folder chosen yet (1.7.38: the board checks first and asks where to put the file afterwards): nothing uncommitted, the skills,
+    the form of the knowledge base. `{ok, word}`; the errors are those of `pack`."""
+    folder = targets.company_folder(root)
+    if folder is None:
+        raise CompanyError(say("company.pack.none"))
+    return {"ok": True, "word": check_for_pack(root, folder.parent)}
+
+
+def commit_changes(root: Path) -> Dict[str, Any]:
+    """Commit what is changed in the knowledge base, for the person who pressed Commit on the board (`git add -A`, one commit). `{committed, lines}`."""
+    folder = targets.company_folder(root)
+    if folder is None:
+        raise CompanyError(say("company.pack.none"))
+    kb = folder.parent
+    if not (kb / ".git").exists():
+        raise CompanyError(say("company.pack.no_git", path=str(kb)))
+    state = git(kb, "status", "--porcelain")
+    lines = changed_lines(state.stdout) if state.returncode == 0 else []
+    if not lines:
+        return {"committed": False, "lines": []}
+    for arguments in (("add", "-A"), ("commit", "-q", "-m", "Update the knowledge base")):
+        done = git(kb, *arguments)
+        if done.returncode != 0:
+            raise CompanyError(say("company.git_failed", error=(done.stderr or done.stdout).decode("utf-8", "replace").strip()[:300]))
+    return {"committed": True, "lines": lines}
 
 
 def next_version(out: Path, word: str) -> str:

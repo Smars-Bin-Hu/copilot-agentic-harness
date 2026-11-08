@@ -27,3 +27,6 @@
 .co-h .co-change{margin-left:auto;font-weight:400}
 .co-link{background:none;border:0;padding:0;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .co-domains{margin:8px 0 0}
+/* 1.7.38: a rule in no words is "N rules"; its patterns are in the small window */
+.co-lines .co-bare{color:var(--soft);cursor:default}
+.co-pat{display:block;font:11.5px var(--mono);color:var(--soft);overflow-wrap:anywhere}

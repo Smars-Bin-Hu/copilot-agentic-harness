@@ -313,8 +313,8 @@ const SETUP = (function () {
         if (found.why) parts.push(h("p", {class: "su-note bad"}, found.why));
         if (found.output) {
           const lines = found.output.split("\n");
-          const size = found.ok ? lines.findIndex((line) => !/[\u2500-\u259f]/.test(line)) : 0;  // the drawn letters come first
-          parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, size > 0 ? h("span", {class: "su-art"}, lines.slice(0, size).join("\n")) : null, lines.slice(Math.max(size, 0)).join("\n")));
+          const size = found.ok ? lines.findIndex((line) => !/[\u2500-\u259f]/.test(line)) : 0;  // the drawn letters come first; they are left out (1.7.38): they never drew well in a box, and the proof is the words under them
+          parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, lines.slice(Math.max(size, 0)).join("\n").replace(/^\n+/, "")));
         }
         if (found.python) parts.push(h("p", {class: "su-warn"}, found.python));
         testOut.replaceChildren(...parts);

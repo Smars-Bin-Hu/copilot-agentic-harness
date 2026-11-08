@@ -9,7 +9,7 @@ specificTo: generic
 
 Find the connection first: `harness connections find <words>` (system and environment). If two fit, ask the user which; never guess.
 
-A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the pack, put the team's real procedure and table names in and keep the shape. The commands are run with `sqlcmd -E`; the identity is on the process (see the pack's README), never in a command.
+A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the pack, put the team's real procedure and table names in and keep the shape. Start every command from the one the connection gives (`harness connections find` shows the connection; the details that follow show its `sqlcmd` line: server, port and the sign-in options) and add `-Q` or `-i`. The sign-in is on the process (see the pack's README), never in a command: `-E` is only for a Windows account, so add it only when the connection's own line has it. A SQL account has no `-E`.
 
 ## When to Use This Skill
 
@@ -19,22 +19,22 @@ A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the
 
 ## Step-by-Step Workflows
 
-**Deploy a script to DEV or IST yourself**, in one command, before any job step. The script is a file in the task folder (`DEV/_manual/<path>`): `sqlcmd -S <server> -E -i <file>` (the path from the repository root, no `-Q`). The gate holds it as a write and the card shows the file: the user approves it, or opens that connection for the task (the button on the card). Do as the hold says. **QAT and PROD are the user's**: do not run a script there; hand it over with `harness task handoff run --env QAT --what "<file>"` and stop. A script that fails halfway is read from the error, not run again at once.
+**Deploy a script to DEV or IST yourself**, in one command, before any job step. The script is a file in the task folder (`DEV/_manual/<path>`): `sqlcmd -S <server>,<port> -i <file>` (the connection's own options; the path from the repository root, no `-Q`). The gate holds it as a write and the card shows the file: the user approves it, or opens that connection for the task (the button on the card). Do as the hold says. **QAT and PROD are the user's**: do not run a script there; hand it over with `harness task handoff run --env QAT --what "<file>"` and stop. A script that fails halfway is read from the error, not run again at once.
 
 **A job:**
 
 1. **Name the job and the environment.** The job names are in the knowledge base (`environment.md` of the domain); UNKNOWN is not a name. The connection of each environment, and its command, is in `harness connections` (`call`).
-2. **Start it.** A procedure is an `exec`: the gate holds it for the user (the outbox) unless the user opened that connection for this task (the button on the card of the held call). Run exactly:
+2. **Start it.** A procedure is an `exec`: the gate holds it for the user (the outbox) unless the user opened that connection for this task (the button on the card of the held call). Run (with the connection's own sign-in options, as above):
 
    ```
-   sqlcmd -S sql-dev.example.local,1433 -E -Q "EXEC dbo.usp_job_start @name = N'<job name>'"
+   sqlcmd -S sql-dev.example.local,1433 -Q "EXEC dbo.usp_job_start @name = N'<job name>'"
    ```
 
    Held: do as the hold says (wait for the answer, and run it again when it is approved).
 3. **Wait in one call**, not by asking again and again:
 
    ```
-   harness wait --run "sqlcmd -S sql-dev.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT TOP 1 status FROM dbo.job_log WHERE job_name = N'<job name>' ORDER BY started_at DESC\"" --until "SUCCEEDED|FAILED" --every 30 --timeout 540 --out RUNS/DEV/wait-<job name>.txt
+   harness wait --run "sqlcmd -S sql-dev.example.local,1433 -h -1 -W -Q \"SET NOCOUNT ON; SELECT TOP 1 status FROM dbo.job_log WHERE job_name = N'<job name>' ORDER BY started_at DESC\"" --until "SUCCEEDED|FAILED" --every 30 --timeout 540 --out RUNS/DEV/wait-<job name>.txt
    ```
 
    It returns when the status is final or after 9 minutes (`matched: false`): then call it again, as long as the job is known to run (a nightly load takes an hour: about seven calls, each a model call; a look every 30 seconds would be a hundred and twenty). A read only may be the probe. VS Code hands a terminal call back after 10 minutes, so one call never asks for more.

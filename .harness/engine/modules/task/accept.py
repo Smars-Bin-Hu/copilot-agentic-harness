@@ -77,8 +77,9 @@ def view(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"summary": str(found.get("summary") or ""), "skipped": [str(line) for line in found.get("skipped") or []], "at": str(found.get("at") or ""), "todo_open": str(found.get("todo_open") or "")}
 
 
-_STATUS_LINE = re.compile(r"^(\s*- \*\*(?:Status|状态)\*\*\s*[:：]\s*).*$", re.MULTILINE)
-_UPDATED_LINE = re.compile(r"^(\s*- \*\*(?:Updated|更新)\*\*\s*[:：]\s*).*$", re.MULTILINE)
+# The labels of the template in both languages, written as escapes (the engine has no Chinese text outside the tables): Status = \u72b6\u6001, Updated = \u66f4\u65b0, the full-width colon = \uff1a
+_STATUS_LINE = re.compile(r"^(\s*- \*\*(?:Status|\u72b6\u6001)\*\*\s*[:\uff1a]\s*).*$", re.MULTILINE)
+_UPDATED_LINE = re.compile(r"^(\s*- \*\*(?:Updated|\u66f4\u65b0)\*\*\s*[:\uff1a]\s*).*$", re.MULTILINE)
 
 
 def mark_done(root: Path, task: str, key: str) -> bool:

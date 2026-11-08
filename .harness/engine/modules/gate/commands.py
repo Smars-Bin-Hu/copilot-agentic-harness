@@ -158,7 +158,16 @@ def tools_reach(root: Path, probe: bool) -> Dict[str, Any]:
     if external.validate(listed):
         return {"envs": [], "ok": False, "next": "the list of systems has errors: run `harness tools check`"}
     if probe:
-        reach.probe_all(root, listed, lambda command: external.run_probe(command, root))
+        from core import connections as conn_core
+
+        own = set(conn_core.probe_keys(root))  # 1.7.38, C12 TB-13: the connections the board can check itself (it keeps their identity) are checked the way the board checks them: with the identity, the tool folders and the CA bundle.
+        # This run is started at the first step of a chat, in VS Code's environment, which has none of the three for a connection signed in here: it answered "failed" or "denied" and put that over the board's own "ok",
+        # and the Enter screen and the lobby said a connection did not answer a few minutes after its test had passed.
+        if own:
+            conn_core.probe_all(root)
+        rest = {name: system for name, system in listed.items() if not all(f"{name}:{env}" in own for env in reach.probes(system))}
+        if rest:
+            reach.probe_all(root, rest, lambda command: external.run_probe(command, root))
     lines = reach.view(root, listed)
     return {"envs": lines, "ok": all(line["state"] == reach.OK for line in lines)}
 

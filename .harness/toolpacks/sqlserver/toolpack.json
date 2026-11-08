@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "sqlserver",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "harness": "1.7.38",
   "description": "SQL Server reached with sqlcmd: a connection type with two ways in (a Windows account or a SQL account), the gate's verbs and rules, a launch script and a skill for jobs.",
   "needs": {

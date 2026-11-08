@@ -113,7 +113,7 @@ Create `.harness/policies/target.override.json`:
 
 ## Knowledge base
 
-`knowledge-base/` is where the company's knowledge base is plugged in; in the repository it stays empty. `.github/instructions/knowledgebase.instructions.md` is a component of the knowledge base; it is an empty placeholder when shipped, and it **must be plugged in**: it teaches the agent how to read the knowledge base from the index, and without it the agent only searches at random. The steps:
+`knowledge-base/` is where the company's knowledge base is plugged in; in the repository it stays empty (it holds one empty `.gitkeep`, which no knowledge base has: unpacking a new version of the harness over your copy never replaces your `knowledge-base/README.md`). `.github/instructions/knowledgebase.instructions.md` is a component of the knowledge base; it is an empty placeholder when shipped, and it **must be plugged in**: it teaches the agent how to read the knowledge base from the index, and without it the agent only searches at random. The steps:
 
 1. Put the knowledge base into `knowledge-base/`. **The entry is `knowledge-base/README.md`**: it is the index and holds only topics and relative links; the agent reads it first and then goes further as needed, not everything at once.
 2. Put the instructions that come with the knowledge base, the ones that say how to read and write it, into `.github/instructions/knowledgebase.instructions.md` (replacing the empty placeholder), with `applyTo: '**'` in the frontmatter. `applyTo: 'knowledge-base/**'` alone is not enough: it has no effect before the agent reads a knowledge base file.

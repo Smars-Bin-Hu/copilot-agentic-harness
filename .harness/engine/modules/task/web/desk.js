@@ -1393,7 +1393,7 @@
     const chat = served() && !desk.past ? desk.chat : null;
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed", answer: (desk.outbox || []).some((item) => item.agent === "wait")});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }

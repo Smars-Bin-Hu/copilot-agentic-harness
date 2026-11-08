@@ -1,10 +1,10 @@
-# sqlserver: a sample tool pack (1.0.1)
+# sqlserver: a sample tool pack (1.0.2)
 
 A ready tool pack for SQL Server reached with `sqlcmd`: copy it, list your connections, and colleagues only type their own account in Get ready. The harness knows no connection type; SQL Server is one this pack brings.
 
 ## What is in it
 
-- `toolpack.json`: its name, version (1.0.1: `open` rules, needs harness 1.7.38), and the program it needs (`sqlcmd`).
+- `toolpack.json`: its name, version (1.0.2: the skill's examples have no `-E`; 1.0.1: `open` rules, needs harness 1.7.38), and the program it needs (`sqlcmd`).
 - `types/sqlserver.json`: the connection type. The fields of a connection (server name, port, database), two ways in (`windows`: a Windows account, held by the VS Code window the way `runas /netonly` holds it; `sql`: a SQL account, which sqlcmd reads from `SQLCMDUSER` and `SQLCMDPASSWORD`), the test of the way in (it asks the server who the session is), what sqlcmd prints when the identity is refused (`denied`) and when the server does not answer (`down`), and for the gate: the program (`cli`), how a command names one connection (`match`: the server and port after `-S`), the verbs and the rules.
 - `launch/start-vscode.cmd`: `runas /netonly` with the account the person types, then VS Code. Kept for a team that does not save identities; Get ready's **Open VS Code with identities** does the same without a prompt.
 - `skills/sqlserver-jobs/`: a sample skill (start a job, wait for it with `harness wait`, check it).

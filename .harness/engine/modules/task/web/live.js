@@ -13,7 +13,7 @@ const LIVE = (function () {
   const SLOW = 3000;  // after a failed one
   const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
 
-  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], listeners: [], needs: [], started: ""};
+  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], listeners: [], needs: [], started: "", answer: false};
 
   const svg = (paths, size, cls) => {
     const node = document.createElementNS(NS, "svg");
@@ -263,7 +263,6 @@ const LIVE = (function () {
     earlier.hidden = !(data && data.bound && data.more && items.length);
     paintCalm(data, items);
     paintLife(data);
-    root.classList.toggle("is-busy", Boolean(data && data.bound && data.state === "busy"));
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
   }
 
@@ -271,10 +270,12 @@ const LIVE = (function () {
     const bound = Boolean(data && data.bound);
     const state = bound ? data.state : "";
     life.hidden = !bound;
-    const waits = state === "input" || (state === "idle" && st.needs.length > 0);  // the chat is idle, the task is not: a card above says what it waits for
-    setClass(life, "lv-life " + (state === "busy" ? "run" : waits ? "paused" : "calm"));
-    const when = state === "busy" && data.started ? Date.parse(data.started) : NaN;
-    setText(lifeLabel, state === "busy" ? t("desk.live.working") : waits ? t("desk.live.input") : state === "error" ? t("desk.chat.error") : t("desk.live.idle"));
+    root.classList.toggle("is-busy", state === "busy" && !st.answer);  // the robot of the footer works only when the agent does
+    const asked = state === "busy" && st.answer;  // busy in the chat, but the agent waits for the person's answer on a held call: not "Working"
+    const waits = asked || state === "input" || (state === "idle" && st.needs.length > 0);  // the chat is idle, the task is not: a card above says what it waits for
+    setClass(life, "lv-life " + (state === "busy" && !asked ? "run" : waits ? "paused" : "calm"));
+    const when = state === "busy" && !asked && data.started ? Date.parse(data.started) : NaN;
+    setText(lifeLabel, asked ? t("desk.live.approval") : state === "busy" ? t("desk.live.working") : waits ? t("desk.live.input") : state === "error" ? t("desk.chat.error") : t("desk.live.idle"));
     lifeSep.hidden = lifeRun.hidden = isNaN(when);
     if (!isNaN(when)) running(lifeRun, when); else stopped(lifeRun);
   }
@@ -350,6 +351,8 @@ const LIVE = (function () {
       const approvedNow = (info.approved || []).map(flat);
       if (heldNow.join("\n") !== st.held.join("\n") || approvedNow.join("\n") !== st.approved.join("\n")) { st.held = heldNow; st.approved = approvedNow; for (const rec of st.nodes.values()) if (rec.item) paint(rec, rec.item); }  // a card that arrives later changes how its call reads
       st.off = info.off || "";
+      const answer = Boolean(info.answer);  // the agent sits in `harness wait --approval`: the chat is busy, but the agent waits for the person (1.7.38, C12 TB-15)
+      if (answer !== st.answer) { st.answer = answer; if (st.data) paintLife(st.data); }
       const nothing = st.chat && !st.chat.bound ? st.chat.why || "" : "";
       link.title = nothing === "no-cli" || nothing === "off" ? t("board.vs.why." + nothing) : t("board.vs.open");
       link.disabled = nothing === "no-cli" || nothing === "off";

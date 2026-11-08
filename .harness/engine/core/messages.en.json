@@ -3665,5 +3665,6 @@
   "connections.find.one.env": "One fits, in the environment {env} that was asked for. Use it.",
   "connections.ask": "When you ask the user to pick one, do not preselect PROD, and do not put a connection they just turned down first.",
   "accept.status.accepted": "done: accepted on the board on {date}",
-  "accept.status.promoted": "done: promoted, and closed by the board on {date}"
+  "accept.status.promoted": "done: promoted, and closed by the board on {date}",
+  "desk.live.approval": "Waits for your approval"
 }

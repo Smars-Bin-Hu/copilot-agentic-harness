@@ -16,6 +16,7 @@ from support import HarnessTestCase, pre_tool, use_packs
 from taskcase import NAME, SESSION, TASK, TaskCase
 from test_accept import SUMMARY, AcceptCase
 from test_connection_find import LISTED, FindCase
+from test_connections import ConnectionsCase
 
 from core import approvals, config, connections, messages, outbox, pinfiles, toolpacks
 from modules.gate import external
@@ -505,6 +506,124 @@ class BoardClosesByItselfTests(AcceptCase):
         self.assertEqual((self.task / "TASK.md").read_text(encoding="utf-8"), "# my own notes\n\nnothing like the template\n")
         (self.task / "TASK.md").unlink()
         self.assertFalse(accept.mark_done(self.root, TASK, "accept.status.accepted"))
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class FooterOfTheLiveTabTests(unittest.TestCase):
+    def test_a_busy_chat_whose_agent_waits_on_a_held_call_does_not_say_working(self) -> None:
+        """C12 TB-15: the header said "an outside call waits for your approval" and the foot said "Working . 54 s"."""
+        source = between((WEB / "live.js").read_text(encoding="utf-8"), "  function paintLife(data) {", "  // The calm states")
+        script = r"""
+const assert = require("assert");
+const t = (key) => key;
+const st = {needs: [], answer: false};
+const classes = new Set();
+const root = {classList: {toggle(name, on) { if (on) classes.add(name); else classes.delete(name); }}};
+const life = {hidden: false}, lifeLabel = {}, lifeSep = {hidden: false}, lifeRun = {hidden: false};
+let kind = "", label = "", clock = "";
+const setClass = (node, value) => { kind = value; }, setText = (node, value) => { label = value; };
+const running = () => { clock = "run"; }, stopped = () => { clock = "stop"; };
+""" + source + r"""
+const busy = {bound: true, state: "busy", started: "2026-11-08T10:00:00Z"};
+paintLife(busy);
+assert.strictEqual(label, "desk.live.working");
+assert.ok(kind.includes("run") && classes.has("is-busy") && clock === "run");
+st.answer = true;  // the agent sits in `harness wait --approval`
+paintLife(busy);
+assert.strictEqual(label, "desk.live.approval");
+assert.ok(kind.includes("paused") && !classes.has("is-busy") && clock === "stop" && lifeRun.hidden);
+st.answer = false;
+paintLife({bound: true, state: "idle"});
+assert.strictEqual(label, "desk.live.idle");
+st.answer = true;  // a wait without a busy chat changes nothing
+paintLife({bound: true, state: "idle"});
+assert.strictEqual(label, "desk.live.idle");
+"""
+        done = run_node(script)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_the_page_tells_the_live_tab_when_the_agent_waits_and_the_words_exist(self) -> None:
+        from core import messages
+
+        self.assertIn('answer: (desk.outbox || []).some((item) => item.agent === "wait")', (WEB / "desk.js").read_text(encoding="utf-8"))
+        for language in ("en", "zh"):
+            self.assertIn("desk.live.approval", messages.table(language))
+
+    def test_a_bar_that_would_cover_a_button_is_gone_not_faded(self) -> None:
+        """C12 TB-14: the Say something bar sat, faded, over Approve and Open."""
+        css = (WEB / "live.css").read_text(encoding="utf-8")
+        self.assertIn(".rp-bar.aside{opacity:0;pointer-events:none}", css)
+        self.assertNotIn("translateY", css[css.index(".rp-bar.aside"):css.index(".rp-bar.aside") + 120], "it stays where it is: moving it would change what lies under it")
+
+
+class TheHooksProbeDoesNotOverwriteTheBoardsAnswerTests(ConnectionsCase):
+    """C12 TB-13: a few minutes after a connection passed its test, the board said "1 connection does not answer". The probe of a chat's first step runs in VS Code's environment, which has no identity
+    for a connection signed in on the board; it wrote "denied" over the board's "ok"."""
+
+    def states(self) -> dict:
+        from core import reach
+
+        return {key: line["state"] for key, line in reach.read(self.root).items()}
+
+    def test_the_run_started_by_a_chat_checks_a_signed_in_connection_the_way_the_board_does(self) -> None:
+        from modules.gate import commands
+
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        found = commands.tools_reach(self.root, True)
+        lines = {(line["system"], line["env"]): line["state"] for line in found["envs"]}
+        self.assertEqual(lines[("db-dev", "dev")], "ok", "it has the identity kept here")
+        self.assertEqual(lines[("db-ist", "ist")], "denied", "no identity is kept for this one: the answer of VS Code's own environment, as before")
+
+    def test_a_probe_that_the_board_ran_stays_ok_when_the_hooks_run_comes_after(self) -> None:
+        from modules.gate import commands
+
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        connections.probe_all(self.root)
+        self.assertEqual(self.states()["db-dev:dev"], "ok")
+        commands.tools_reach(self.root, True)
+        self.assertEqual(self.states()["db-dev:dev"], "ok")
+
+    def test_a_warning_line_before_the_answer_is_not_another_identity(self) -> None:
+        from core import reach
+
+        needs = {"expect": r"^(\S+)\s*$"}
+        self.assertEqual(reach._judge(needs, 0, "UserWarning: something\ntest.person@acme.example\n"), (reach.OK, "", "test.person@acme.example"))  # noqa: SLF001
+        self.assertEqual(reach._judge(needs, 0, "two words\n")[0], reach.DENIED)  # noqa: SLF001
+
+
+class ShippedKnowledgeBaseTests(HarnessTestCase):
+    """C12 TB-17: an unzip over a copy replaced the imported knowledge base's `README.md` with the shipped placeholder."""
+
+    def test_the_repository_ships_nothing_in_knowledge_base_a_knowledge_base_could_have(self) -> None:
+        from core import reinstall
+
+        folder = ENGINE.parents[1] / "knowledge-base"
+        self.assertEqual(sorted(item.name for item in folder.iterdir()), [".gitkeep"])
+        self.assertEqual((folder / ".gitkeep").stat().st_size, 0)
+        self.assertTrue(reinstall.is_placeholder(folder), "an empty knowledge base for `reinstall` and `company sync`")
+
+    def test_a_copy_made_before_still_counts_as_empty_and_a_gitkeep_is_no_content(self) -> None:
+        from core import company, reinstall
+        from modules.task import setupjob
+
+        (self.root / "knowledge-base").mkdir(exist_ok=True)
+        (self.root / "knowledge-base" / ".gitkeep").write_text("", encoding="utf-8")
+        self.assertEqual(setupjob.held_in(self.root), [])
+        (self.root / "knowledge-base" / "README.md").write_text("# Knowledge Base\n", encoding="utf-8")
+        self.assertEqual(setupjob.held_in(self.root), [])
+        self.assertTrue(reinstall.is_placeholder(self.root / "knowledge-base"))
+        self.assertEqual(company.PLACEHOLDER, {"README.md", ".gitkeep"})
+
+
+class SqlServerSkillTests(unittest.TestCase):
+    def test_no_example_of_the_skill_uses_a_windows_sign_in_the_connection_may_not_have(self) -> None:
+        """C12 TB-18: the example said `sqlcmd -E`; the agent copied it, and the connection (a SQL account) did not take it."""
+        import re
+
+        text = (ENGINE.parent / "toolpacks" / "sqlserver" / "skills" / "sqlserver-jobs" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r"sqlcmd[^\n`]* -E\b", text), [], "an example with -E")
+        self.assertIn("A SQL account has no `-E`", text)
+        self.assertIn("harness connections find", text)
 
 
 if __name__ == "__main__":

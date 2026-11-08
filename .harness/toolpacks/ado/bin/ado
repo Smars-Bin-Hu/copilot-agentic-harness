@@ -10,7 +10,8 @@ Reads    me, item, items, comments, history, links, attachments, queries, query,
          pipelines, pipeline, runs, run, why, log, artifacts, tests, changes, releases, release
 Writes   comment, update, create, link, unlink, attach     (the gate holds them; a write to an item the task is not linked to is refused)
 Exec     queue, cancel, retry, deploy                       (the gate holds them like a write: the person approves each on the task page)
-There is no delete. `--json` (before or after the command) prints what Azure DevOps answered, whole (why and log: the same facts as JSON). `--conn NAME` picks a connection: the saved one, or, while the harness tests a connection not saved yet, the one in HARNESS_CONNECTION_<NAME>_* variables. Tests: ADO_URL (a server address), ADO_TOKEN (a bearer token, no az), ADO_PAT.
+There is no delete. `--json` (before or after the command) prints what Azure DevOps answered, whole (why and log: the same facts as JSON). `--conn NAME` picks a connection: the saved one, or, while the harness tests a connection not saved yet, the one in HARNESS_CONNECTION_<NAME>_* variables.
+The connection is only ever the saved one or the one the harness hands over while it tests (no environment variable can point this program elsewhere): a test or a lab uses a connection with a `url`.
 """
 
 import argparse
@@ -73,15 +74,13 @@ def from_env(name: str) -> dict:
     org, project = os.environ.get(prefix + "ORG", ""), os.environ.get(prefix + "PROJECT", "")
     if not (org and project):
         return {}
-    given = bool(os.environ.get(prefix + "TOKEN") or os.environ.get(prefix + "PASSWORD") or os.environ.get("ADO_PAT"))
-    return {"org": org, "project": project, "name": name, "url": str(os.environ.get("ADO_URL") or os.environ.get(prefix + "URL") or CLOUD).rstrip("/"),
+    given = bool(os.environ.get(prefix + "TOKEN") or os.environ.get(prefix + "PASSWORD"))
+    return {"org": org, "project": project, "name": name, "url": str(os.environ.get(prefix + "URL") or CLOUD).rstrip("/"),
             "auth": os.environ.get(prefix + "AUTH") or ("token" if given else "signin")}
 
 
 def connection(name: str, org: str = "", project: str = "") -> dict:
     """The connection to use: `url` (default https://dev.azure.com), `org`, `project`, and how to sign in (`auth`: signin or token)."""
-    if os.environ.get("ADO_ORG") and os.environ.get("ADO_PROJECT"):
-        return {"org": os.environ["ADO_ORG"], "project": os.environ["ADO_PROJECT"], "name": "env", "url": os.environ.get("ADO_URL") or CLOUD, "auth": "token" if os.environ.get("ADO_PAT") else "signin"}
     if name and from_env(name):  # a test or a probe of the harness: the connection as it is on the screen, saved or not
         return from_env(name)
     root = harness_root()
@@ -102,14 +101,12 @@ def connection(name: str, org: str = "", project: str = "") -> dict:
     alias, entry = next(iter(found.items()))
     if not entry.get("org") or not entry.get("project"):
         raise Stop(f"the connection {alias} has no org or project: fix it in Get ready, Tools, Connections")
-    return {"org": entry["org"], "project": entry["project"], "name": alias, "url": str(os.environ.get("ADO_URL") or entry.get("url") or CLOUD).rstrip("/"),
+    return {"org": entry["org"], "project": entry["project"], "name": alias, "url": str(entry.get("url") or CLOUD).rstrip("/"),
             "auth": entry.get("auth") or "signin", "root": root}
 
 
 def pat_of(conn: dict) -> str:
-    """A personal access token: ADO_PAT, else HARNESS_CONNECTION_<NAME>_TOKEN/_PASSWORD (a test), else the one Get ready saved in .harness/.env for this connection."""
-    if os.environ.get("ADO_PAT"):
-        return os.environ["ADO_PAT"]
+    """A personal access token: HARNESS_CONNECTION_<NAME>_TOKEN/_PASSWORD (given by the harness while it tests a connection), else the one Get ready saved in .harness/.env for this connection."""
     for field in ("TOKEN", "PASSWORD"):  # (_PASSWORD: the old form) given by the harness while it tests a connection
         if os.environ.get(f"HARNESS_CONNECTION_{env_name(conn['name'])}_{field}"):
             return os.environ[f"HARNESS_CONNECTION_{env_name(conn['name'])}_{field}"]
@@ -148,9 +145,6 @@ class Ado:
             if not pat:
                 raise Stop("this connection signs in with a token and none is saved: ask the user to set the token for the connection in Get ready, Tools, Connections")
             self._header = "Basic " + base64.b64encode((":" + pat).encode("utf-8")).decode("ascii")
-            return self._header
-        if os.environ.get("ADO_TOKEN"):
-            self._header = "Bearer " + os.environ["ADO_TOKEN"]
             return self._header
         az = shutil.which("az")  # on Windows this is az.cmd; the arguments are plain words, no shell is used
         if not az:

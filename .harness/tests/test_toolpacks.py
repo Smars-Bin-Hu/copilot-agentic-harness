@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -1323,6 +1324,96 @@ class ShippedFactoryPacks(ToolpackCase):
             self.assertEqual(ado.unescaped(written), expected, written)
             self.assertEqual(cmdview._unescape(written), expected, written)  # noqa: SLF001 - the two must stay the same
             self.assertEqual(ado.unescaped(written), cmdview._unescape(written), written)  # noqa: SLF001
+
+
+    def test_the_ado_program_has_no_back_door_in_the_environment_and_its_versions_agree(self) -> None:
+        """1.7.38: ADO_URL, ADO_ORG, ADO_PROJECT, ADO_PAT and ADO_TOKEN let a call go elsewhere than the connection the gate judged. The connection is the saved one, or the one the harness hands over while it tests."""
+        from support import REPO
+
+        folder = REPO / ".harness" / "toolpacks" / "ado"
+        for path in [folder / "bin" / "ado", folder / "bin" / "ado.cmd", *sorted((folder / "types").glob("*.json")), *sorted(folder.glob("*.md")), *sorted(folder.rglob("SKILL.md"))]:
+            text = path.read_text(encoding="utf-8")
+            for name in ("ADO_URL", "ADO_ORG", "ADO_PROJECT", "ADO_PAT", "ADO_TOKEN"):
+                self.assertNotIn(name, text, f"{path.name}: {name}")
+        version = json.loads((folder / "toolpack.json").read_text(encoding="utf-8"))["version"]
+        self.assertEqual(self.ado_program().PACK_VERSION, version)
+
+class AdoProgramConnection(HarnessTestCase):
+    """1.7.38: the `ado` program reaches the saved connection, or the one the harness hands over while it tests, and nothing else. A small web server on this computer stands in for Azure DevOps."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import http.server
+        import threading
+
+        from support import ENGINE, REPO
+
+        seen: list = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - the name the server calls
+                seen.append((self.path, self.headers.get("Authorization", "")))
+                body = json.dumps({"authenticatedUser": {"providerDisplayName": "Test Person", "properties": {"Account": {"$value": "test.person@acme.example"}}}}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args) -> None:  # noqa: D102 - no noise in the test output
+                return
+
+        self.seen = seen
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.url = f"http://127.0.0.1:{server.server_address[1]}"
+        # the program finds its harness copy from where it lies: a root with the engine's core and the program
+        (self.root / ".harness" / "engine").mkdir(parents=True)
+        (self.root / ".harness" / "engine" / "cli.py").write_text("", encoding="utf-8")
+        shutil.copytree(ENGINE / "core", self.root / ".harness" / "engine" / "core", ignore=shutil.ignore_patterns("__pycache__"))
+        self.program = self.root / ".harness" / "toolpacks" / "ado" / "bin" / "ado"
+        self.program.parent.mkdir(parents=True)
+        shutil.copy(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado", self.program)
+        self.decoys = {"ADO_URL": "http://127.0.0.1:9", "ADO_ORG": "evil", "ADO_PROJECT": "evil", "ADO_PAT": "evil-pat", "ADO_TOKEN": "evil-bearer"}
+
+    def ado(self, *arguments: str, env: dict = None) -> subprocess.CompletedProcess:
+        empty = self.root / "no-az"
+        empty.mkdir(exist_ok=True)
+        base = {key: value for key, value in os.environ.items() if not key.startswith(("HARNESS_CONNECTION_", "ADO_"))}
+        return subprocess.run([sys.executable, str(self.program), *arguments], cwd=str(self.root), capture_output=True, text=True, check=False,
+                              env={**base, "PATH": str(empty), "HARNESS_ROOT": str(self.root), **(env or {})})
+
+    def test_a_connection_not_saved_yet_is_the_variables_of_the_test_and_the_old_back_doors_do_nothing(self) -> None:
+        mine = {"HARNESS_CONNECTION_T1_ORG": "acme", "HARNESS_CONNECTION_T1_PROJECT": "demo", "HARNESS_CONNECTION_T1_URL": self.url, "HARNESS_CONNECTION_T1_TOKEN": "typed-token", "HARNESS_CONNECTION_T1_AUTH": "token"}
+        done = self.ado("--conn", "t1", "me", "--short", env={**mine, **self.decoys})
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "test.person@acme.example"), done.stderr)
+        self.assertEqual(self.seen, [("/acme/_apis/connectionData", "Basic " + base64.b64encode(b":typed-token").decode("ascii"))], "the connection's address and token, not ADO_URL or ADO_PAT")
+        del self.seen[:]
+        without_url = {key: value for key, value in mine.items() if not key.endswith("_URL")}
+        done = self.ado("--conn", "t1", "me", "--short", env={**without_url, **self.decoys})
+        self.assertNotEqual(done.returncode, 0, "no url: the cloud address, never ADO_URL")
+        self.assertEqual(self.seen, [])
+        self.assertNotIn("127.0.0.1:9", done.stderr)
+
+    def test_the_saved_connection_is_used_with_its_own_address_and_token_whatever_the_environment_says(self) -> None:
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "auth": "token", "org": "acme", "project": "demo", "url": self.url}}}), encoding="utf-8")
+        connections.write_env(self.root, {"HARNESS_CONNECTION_ADO_TOKEN": "saved-token"})
+        done = self.ado("me", "--short", env=self.decoys)
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "test.person@acme.example"), done.stderr)
+        self.assertEqual(self.seen, [("/acme/_apis/connectionData", "Basic " + base64.b64encode(b":saved-token").decode("ascii"))])
+        self.assertNotEqual(self.ado("--conn", "nope", "me", "--short", env=self.decoys).returncode, 0, "a name that is not saved is not made up from the environment")
+
+    def test_a_bearer_token_in_the_environment_is_not_a_sign_in(self) -> None:
+        """ADO_TOKEN let a call skip `az`; now a connection that signs in with `az` needs `az`."""
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "auth": "signin", "org": "acme", "project": "demo", "url": self.url}}}), encoding="utf-8")
+        done = self.ado("me", "--short", env=self.decoys)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("az is not found", done.stderr)
+        self.assertEqual(self.seen, [])
 
 
 TWO_WAYS = dict(KIND, auth={"signin": {"identity": "tool", "login": "trk-login --org {org}", "label": "Its own sign-in", "needs": ["trk-login"]},

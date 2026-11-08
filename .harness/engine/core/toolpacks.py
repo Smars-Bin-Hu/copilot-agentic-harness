@@ -197,7 +197,8 @@ def paths(root: Path) -> List[str]:
 
 
 def clashes(root: Path) -> List[str]:
-    """Names of packs the company wrote in `company/tools/packs/` that a factory pack in `.harness/toolpacks/` already has. The factory pack stays; the company's is not used until it is renamed."""
+    """Names of packs the company wrote in `company/tools/packs/` that a factory pack in `.harness/toolpacks/` already has. While there is one, `company sync` stops before it changes anything
+    (1.7.38): `sync_skills` and `company.sync` check this first. Reading goes on as before: the factory pack stays, the company's is not read until it is renamed."""
     company = targets.company_folder(root)
     base = company / COMPANY_PACKS if company else None
     factory = root / FOLDER
@@ -209,6 +210,19 @@ def clashes(root: Path) -> List[str]:
 
 def clash_lines(root: Path) -> List[str]:
     return [say("toolpack.clash", name=name) for name in clashes(root)]
+
+
+def clash_stop(root: Path) -> str:
+    """The one line `company sync` answers with when a company pack has the name of a factory pack (1.7.38), naming every such pack; "" when there is none."""
+    names = clashes(root)
+    return say("company.sync.clash", names=", ".join(f"`{name}`" for name in names)) if names else ""
+
+
+def refuse_on_clash(root: Path) -> None:
+    """For `add`, `remove` and the on/off switch, which all end in a sync: while a company pack has the name of a factory pack none of them changes anything (1.7.38)."""
+    line = clash_stop(root)
+    if line:
+        raise ToolpackError(line)
 
 
 def listed(root: Path) -> Dict[str, Dict[str, Any]]:
@@ -500,6 +514,7 @@ def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[s
     """`harness toolpack add <folder>`: this computer records the folder's path to try the pack (1.7.30). Nothing is copied but the skills (`sync_skills`).
     A folder with the name of one added before is taken in its place only with `replace`; a name the company's own packs have is refused."""
     path, folder, found = _folder_to_add(root, raw)
+    refuse_on_clash(root)
     problem = problems(root, folder)
     if problem:
         raise ToolpackError(say("toolpack.refused", problems="; ".join(problem)))
@@ -533,6 +548,7 @@ def _name_at(path: str) -> str:
 def remove(root: Path, name: str) -> Dict[str, Any]:
     """`harness toolpack remove <name or folder>`: forget a folder added here, and take back the skills it put. A factory pack is turned off by taking it out of `use`
     in the knowledge base (`company/tools/packs.json`); a pack the company wrote, by deleting its folder there. Neither is this command's to change."""
+    refuse_on_clash(root)
     book = ledger(root)
     name = clean_path(name)
     mine = [item for item in book["paths"] if item == name or _name_at(item) == name or Path(item).name == name]
@@ -651,7 +667,13 @@ def skill_plan(root: Path) -> Dict[str, Any]:
 
 def sync_skills(root: Path) -> Dict[str, Any]:
     """Put the skills of the active packs into `.github/skills/` and take back those of a pack no longer active (they go to the backup folder).
-    Returns `{put, removed, updated, refused, lines}` (and `renamed: [{toolpack, from, to}]` when a changed company prefix renamed skills); `lines` are the sentences the board and doctor show."""
+    Returns `{put, removed, updated, refused, lines}` (and `renamed: [{toolpack, from, to}]` when a changed company prefix renamed skills); `lines` are the sentences the board and doctor show.
+    1.7.38: when a company pack has the name of a factory pack it stops before it changes anything (no skill put, no skill taken back, no ledger written) and answers
+    `{failed: True, clashes: [names], error: <the line>, put: [], removed: [], ...}`; what the last good sync put stays as it was."""
+    stop = clash_stop(root)
+    if stop:
+        return {"put": [], "removed": [], "updated": [], "refused": [{"toolpack": name, "skill": name, "why": say("toolpack.clash", name=name)} for name in clashes(root)], "unknown_use": unknown_use(root),
+                "lines": clash_lines(root), "failed": True, "clashes": clashes(root), "error": stop}
     plan = skill_plan(root)
     book = ledger(root)
     put: List[str] = []
@@ -777,6 +799,7 @@ def set_use(root: Path, name: str, on: bool) -> Dict[str, Any]:
     here = listed(root).get(name)
     if not here or here["source"] != HARNESS:
         raise ToolpackError(say("toolpack.use.factory", name=name))
+    refuse_on_clash(root)
     folder = targets.company_folder(root)
     if folder is None:
         raise ToolpackError(say("toolpack.use.nocompany"))

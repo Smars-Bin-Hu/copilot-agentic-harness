@@ -259,6 +259,13 @@ class CarryTests(ConnectionsCase):
     def test_a_connection_of_ones_own_goes_in_the_company_pack_without_the_identity(self) -> None:
         """Knowledge base, Pack for colleagues: the connection and its tool pack go in the company content; the account and password stay in .env (1.7.10)."""
         self.company({})
+        # the pack is a folder this computer added from elsewhere, not a factory pack: a copy in the company's packs/ must not take the name of a factory pack (1.7.38: that stops the sync)
+        import shutil
+
+        added = self.root / "added-packs" / "testpack"
+        added.parent.mkdir()
+        shutil.move(str(self.root / ".harness" / "toolpacks" / "testpack"), str(added))
+        (self.root / ".harness" / "runtime" / "toolpacks.json").write_text(json.dumps({"packs": {}, "paths": [str(added)]}), encoding="utf-8")
         with self.assertRaises(ValueError):  # no company content to add to
             connections.share(self.root, ["mine"])
         kb = self.root / "knowledge-base" / "company"

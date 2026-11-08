@@ -1128,14 +1128,110 @@ class FactoryPacks(ToolpackCase):
         self.use("tracker")
         make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
         self.assertEqual(toolpacks.clashes(self.root), ["tracker"])
-        self.assertEqual(toolpacks.listed(self.root)["tracker"]["source"], "harness")
+        self.assertEqual(toolpacks.listed(self.root)["tracker"]["source"], "harness", "reading goes on: the factory pack stays")
         found = toolpacks.check(self.root)
         self.assertEqual((found["exit_code"], len(found["clashes"])), (1, 1))
         done = toolpacks.sync_skills(self.root)
         self.assertEqual([item["toolpack"] for item in done["refused"]], ["tracker"])
         self.assertFalse(any("updated" in line for line in done["lines"]))
         self.assertTrue(any("`tracker`" in line for line in done["lines"]))
-        self.assertTrue(any("factory" in line or "出厂" in line for line in DoctorToolpacks.lines_of(self.root)))
+        lines = DoctorToolpacks.lines_of(self.root)
+        self.assertTrue(any("factory" in line or "出厂" in line for line in lines))
+        self.assertTrue(any(line.startswith("[ERROR]") and "`tracker`" in line for line in lines), "doctor reports it as an error (1.7.38)")
+
+    def seed_company(self) -> None:
+        """A company with a skill of its own, a connection list and a factory pack that is on, synced once with no clash."""
+        self.prefix("acme")
+        (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
+        (self.kb / "skills" / "acme-hello").mkdir(parents=True)
+        (self.kb / "skills" / "acme-hello" / "SKILL.md").write_text(SKILL.format(name="acme-hello"), encoding="utf-8")
+        (self.kb / "tools" / "connections.json").write_text(json.dumps({"connections": {"board": {"type": "tracker", "env": "none", "org": "demo"}}}), encoding="utf-8")
+        self.use("tracker")
+        good = company.sync(self.root, remove=True)
+        self.assertEqual((good["found"], good.get("failed"), good["exit_code"]), (True, None, 0), good)
+
+    def tree(self) -> dict:
+        """Every file under .github/skills, the ledger, and the copies the sync makes, with their bytes; and the backup folders."""
+        out = {}
+        for place in (self.root / ".github", self.root / ".harness" / "policies", self.root / ".harness" / "runtime"):
+            for path in sorted(place.rglob("*")) if place.is_dir() else []:
+                if path.is_file():
+                    out[path.relative_to(self.root).as_posix()] = path.read_bytes()
+        return out
+
+    def test_a_company_pack_with_the_name_of_a_factory_pack_stops_the_whole_sync_and_changes_nothing(self) -> None:
+        """1.7.38: the factory pack stayed and the company's was skipped with a line; the rest of the sync went on. Now the sync stops before it changes anything."""
+        self.seed_company()
+        before = self.tree()
+        self.assertIn(".github/skills/acme-tracker-ticket/SKILL.md", before)
+        # everything a sync would do now: a changed company skill, a new one, a pack turned off, a new version of a pack, a skill that left the company content
+        (self.kb / "skills" / "acme-hello" / "SKILL.md").write_text(SKILL.format(name="acme-hello") + "\nChanged.\n", encoding="utf-8")
+        (self.kb / "skills" / "acme-new").mkdir()
+        (self.kb / "skills" / "acme-new" / "SKILL.md").write_text(SKILL.format(name="acme-new"), encoding="utf-8")
+        make(self.factory, version="2.0.0", skills=("tracker-ticket", "tracker-note"))
+        self.use()
+        (self.kb / "tools" / "connections.json").write_text(json.dumps({"connections": {}}), encoding="utf-8")
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        make(self.kb / "tools" / "packs" / "other", name="other", skills=())
+        before = self.tree()
+        done = company.sync(self.root, remove=True)
+        self.assertEqual((done["found"], done["failed"], done["exit_code"]), (True, True, 1))
+        self.assertEqual(done["clashes"], ["tracker"])
+        self.assertEqual(done["copied"], [])
+        self.assertIn("`tracker`", done["error"])
+        self.assertEqual(done["next"], done["error"], "one line")
+        self.assertEqual(len(done["error"].splitlines()), 1)
+        self.assertEqual(self.tree(), before, "no skill copied, none taken back, the ledger and the copies as they were")
+        self.assertFalse((self.root / ".harness" / "runtime" / "company-backup").exists())
+        self.assertFalse((self.root / ".harness" / "runtime" / "toolpack-backup").exists())
+        self.assertEqual(company.sync_after(self.root), {"error": done["error"], "clashes": ["tracker"]})
+        shown = company.diff(self.root)
+        self.assertEqual((shown["found"], shown["in_sync"], shown["problem"]), (True, False, done["error"]))
+        # the command line says it too: the line, and exit code 1
+        said = self.cli("company", "sync")
+        self.assertEqual(said.returncode, 1)
+        self.assertIn("`tracker`", said.stdout + said.stderr)
+        # once the company's pack is renamed away (the folder is gone here) the sync does all of it
+        shutil.rmtree(self.kb / "tools" / "packs" / "tracker")
+        again = company.sync(self.root, remove=True)
+        self.assertEqual((again.get("failed"), again["exit_code"]), (None, 0), again)
+        self.assertTrue((self.root / ".github/skills/acme-new/SKILL.md").is_file())
+        self.assertFalse((self.root / ".github/skills/acme-tracker-ticket").exists(), "the pack was turned off")
+
+    def test_the_stop_line_names_every_pack_and_says_to_rename_the_companys_pack_in_both_languages(self) -> None:
+        make(self.factory.parent / "second", name="second", skills=())
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        make(self.kb / "tools" / "packs" / "second", name="second", skills=())
+        self.assertEqual(toolpacks.clashes(self.root), ["second", "tracker"])
+        line = toolpacks.clash_stop(self.root)
+        self.assertIn("`second`, `tracker`", line)
+        for language, words in (("en", "Rename the company's pack"), ("zh", "改名")):
+            texts = json.loads((Path(toolpacks.__file__).parent / f"messages.{language}.json").read_text(encoding="utf-8"))
+            self.assertIn(words, texts["company.sync.clash"], language)
+            self.assertIn("{names}", texts["company.sync.clash"], language)
+
+    def test_the_board_still_opens_with_a_clash_adding_a_folder_and_the_switch_say_why_and_change_nothing(self) -> None:
+        from modules.task import boardserve
+
+        self.use()
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        done = toolpacks.sync_skills(self.root)  # what the board does when it opens: it must not raise
+        self.assertTrue(done["failed"])
+        use_before = (self.kb / "tools" / "packs.json").read_text(encoding="utf-8")
+        with self.assertRaises(toolpacks.ToolpackError) as caught:
+            toolpacks.set_use(self.root, "tracker", True)
+        self.assertIn("`tracker`", str(caught.exception))
+        self.assertEqual((self.kb / "tools" / "packs.json").read_text(encoding="utf-8"), use_before, "the choice is not written")
+        with self.assertRaises(toolpacks.ToolpackError):
+            toolpacks.add(self.root, str(self.source))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [], "nothing recorded")
+        board = boardserve.Board(self.root, False, 8799, [])
+        self.addCleanup(lambda: board.link.stop() if hasattr(board.link, "stop") else None)
+        with self.assertRaises(ValueError) as refused:
+            board.machine({"step": "toolpack-use", "name": "tracker", "on": True})
+        self.assertIn("`tracker`", str(refused.exception))
+        rows = board.machine({"step": "toolpacks"})["toolpacks"]  # the window still lists what there is
+        self.assertTrue(rows)
 
     def test_with_a_prefix_the_folder_the_name_and_the_references_between_a_packs_skills_are_renamed(self) -> None:
         self.prefix("acme")

@@ -603,8 +603,8 @@ def check_toolpacks(report: Report, root: Path) -> None:
         gone = toolpacks.unknown_use(root)
         if gone:
             report.warn(say("doctor.toolpacks.unknown", names=", ".join(gone)))
-        for line in toolpacks.clash_lines(root):
-            report.warn(line)
+        for line in toolpacks.clash_lines(root):  # `company sync` stops as a whole while this stands (1.7.38)
+            report.error(line)
         company = targets.company_folder(root)
         recipe_file = company / "tools" / "computer.json" if company else None
         if recipe_file is not None and recipe_file.is_file():

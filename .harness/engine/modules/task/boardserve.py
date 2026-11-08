@@ -799,7 +799,9 @@ class Board:
                 if step == "toolpack-remove":  # a folder added here; a factory or company pack answers with where to turn it off
                     toolpacks.remove(self.root, name)
                 else:  # nothing is copied now: the pack is read where it lies, so an update is only its skills again
-                    toolpacks.sync_skills(self.root)
+                    done = toolpacks.sync_skills(self.root)
+                    if done.get("failed"):  # a company pack has the name of a factory pack (1.7.38)
+                        raise toolpacks.ToolpackError(done["error"])
             except toolpacks.ToolpackError as error:
                 raise ValueError(str(error)) from None
             step = "toolpacks"
@@ -1567,7 +1569,9 @@ def handler_for(board: Board) -> type:
                         folder = targets.company_folder(board.root)
                         board.keep_override("skill_prefix", company.wanted_prefix(folder) if folder else "")
                     if data.get("op") in ("sync", "prefix"):
-                        company.sync(board.root, remove=True)
+                        done = company.sync(board.root, remove=True)
+                        if done.get("failed"):  # a company pack has the name of a factory pack: nothing was changed (1.7.38)
+                            return self.answer(409, {"error": done["error"], "clashes": done.get("clashes") or []})
                     return self.answer(200, {"result": company.diff(board.root)})
                 except company.DirtyError as error:
                     return self.answer(409, {"error": str(error), "dirty": error.path})

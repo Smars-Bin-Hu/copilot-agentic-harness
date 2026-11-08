@@ -144,14 +144,22 @@ def warnings(systems: Dict[str, Any]) -> List[str]:
     return found
 
 
-def environments(systems: Dict[str, Any]) -> Dict[str, List[str]]:
+def openable(system: Dict[str, Any]) -> bool:
+    """May Open to the agent let this system's held calls through (1.7.13)? A system says so with `openable`; a tool pack's system (a ticket board, a pipeline, a database) is closed unless it
+    says yes: its writes reach people or data, so the person approves each one. One place for the gate and the task page (1.7.38: the page said a tool pack's environment was open, and it was not)."""
+    if isinstance(system.get("openable"), bool):
+        return system["openable"]
+    return not system.get("toolpack")
+
+
+def environments(systems: Dict[str, Any], only_openable: bool = False) -> Dict[str, List[str]]:
     """The environments the listed systems reach, `{env: [system names]}`, from `env`, `env_from` and `default_env`; prod and none left out (nothing is opened there).
     For the task page: which environments a person may open for a task (1.7.6)."""
     found: Dict[str, List[str]] = {}
     for name, system in (systems or {}).items():
         envs = {system["env"]} if system.get("env") else {rule["env"] for rule in system.get("env_from") or []} | ({system["default_env"]} if system.get("default_env") else set())
         for env in sorted(envs):
-            if env not in (PROD, "none"):
+            if env not in (PROD, "none") and (openable(system) or not only_openable):
                 found.setdefault(env, []).append(name)
     return found
 

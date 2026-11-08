@@ -1497,6 +1497,120 @@ class ShippedFactoryPacks(ToolpackCase):
         version = json.loads((folder / "toolpack.json").read_text(encoding="utf-8"))["version"]
         self.assertEqual(self.ado_program().PACK_VERSION, version)
 
+class AdoCardWords(HarnessTestCase):
+    """1.7.38 (C11 T2-03): a held line of several writes says each write on a line of its own, with its own facts, and no `;` sticks to a value."""
+
+    def words(self, line: str) -> dict:
+        from modules.task import taskdesk
+
+        use_packs(self.root, "ado")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "org": "acme", "project": "demo"}}}), encoding="utf-8")
+        systems = config.policy_or_empty(self.root, "tools")["systems"]
+        return taskdesk.call_words(line, systems["ado"], self.root, self.root)
+
+    def test_three_writes_in_one_line_are_three_titles_with_their_own_facts(self) -> None:
+        found = self.words("ado comment 300109 --text 'Checked' ; ado update 300109 --state Active; ado link 300109 --to 300104 --type related")
+        self.assertEqual(found["writes"], 3)
+        self.assertEqual(len(found["says"]), 3)
+        self.assertEqual(len(set(found["says"])), 3, found["says"])
+        parts = found["parts"]
+        self.assertEqual(parts[0]["body"]["text"], "Checked")
+        self.assertEqual(parts[1]["facts"], {"item": "300109", "state": "Active"})
+        self.assertNotIn(";", json.dumps([part["facts"] for part in parts]))
+        self.assertEqual(found["facts"], {}, "the facts are in the parts")
+
+    def test_a_pipeline_run_and_a_retry_keep_their_facts_apart(self) -> None:
+        found = self.words("ado queue orders-ci --branch main --param loadDate=2026-11-08; ado retry 901 --stage Build")
+        first, second = found["parts"]
+        self.assertEqual((first["facts"].get("pipeline"), first["facts"].get("branch"), first["facts"].get("param")), ("orders-ci", "main", "loadDate=2026-11-08"))
+        self.assertEqual((second["facts"].get("run"), second["facts"].get("stage")), ("901", "Build"))
+        self.assertNotIn("stage", first["facts"])
+        self.assertNotIn("branch", second["facts"])
+
+    def test_one_write_beside_reads_is_one_card_with_the_facts_of_the_write_only(self) -> None:
+        found = self.words("ado item 300104; ado update 300104 --state Active; ado comments 300104")
+        self.assertEqual((found["writes"], "parts" in found), (1, False))
+        self.assertEqual(found["facts"], {"item": "300104", "state": "Active"})
+        none = self.words("ado item 300104")
+        self.assertEqual((none["say"], none["says"], none["writes"]), ("", [], 0))
+
+    def test_a_text_with_a_semicolon_is_one_write(self) -> None:
+        found = self.words("ado comment 300104 --text \"done; checked\"")
+        self.assertEqual(found["writes"], 1)
+        self.assertEqual(found["body"]["text"], "done; checked")
+
+
+class SqlCardWords(HarnessTestCase):
+    """1.7.38 (C11 T2-12): the card of a held SQL write shows the whole statement, not the first 70 characters of the command."""
+
+    def words(self, line: str) -> dict:
+        from modules.task import taskdesk
+
+        use_packs(self.root, "sqlserver")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"acmedw-dev": {
+            "type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "database": "AcmeDW", "auth": "sql"}}}), encoding="utf-8")
+        systems = config.policy_or_empty(self.root, "tools")["systems"]
+        return taskdesk.call_words(line, systems["acmedw-dev"], self.root, self.root)
+
+    def test_the_statement_of_q_is_the_body_in_both_quotes_and_a_backslash_n_stays(self) -> None:
+        statement = "UPDATE dbo.orders_stage SET warehouse_code = N'WH-01' WHERE warehouse_code IS NULL AND note = 'a\\nb'"
+        found = self.words(f'sqlcmd -S localhost,14332 -C -d AcmeDW -Q "{statement}"')
+        self.assertEqual(found["body"]["text"], statement, "the whole statement, the WHERE too, no line break made of a backslash and n")
+        self.assertTrue(found["body"]["label"])
+        single = self.words("sqlcmd -S localhost,14332 -C -Q 'SELECT 1; UPDATE t SET a = 1'")
+        self.assertEqual(single["body"]["text"], "SELECT 1; UPDATE t SET a = 1")
+        escaped = self.words('sqlcmd -S localhost,14332 -Q "EXEC p @x = \\"a\\" ; SELECT 2" -b')
+        self.assertEqual(escaped["body"]["text"], 'EXEC p @x = "a" ; SELECT 2')
+        self.assertIsNone(self.words("sqlcmd -S localhost,14332 -C -i DEV/_manual/load.sql")["body"], "a file is shown by the window, as before")
+
+
+class OpenToTheAgentSaysWhatItOpens(TaskCase):
+    """1.7.38 (C11 T2-01): a tool pack's connection always asks the person; the page said `dev` was open for it. Now only what the switch really opens is listed as open."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        use_packs(self.root, "sqlserver")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"},
+            "acmedw-ist": {"type": "sqlserver", "env": "ist", "host": "localhost", "port": "14331", "auth": "sql"}}}), encoding="utf-8")
+        (self.root / ".harness/policies/tools.override.json").write_text(json.dumps({"systems": {
+            "cloud": {"reach": {"cli": "cloudctl"}, "env": "ist", "verbs": [{"pattern": r"\brun\b", "verb": "exec"}]}}}), encoding="utf-8")
+
+    def test_a_tool_pack_environment_is_listed_as_asking_and_is_not_shown_open(self) -> None:
+        from modules.task import taskdesk
+
+        stamp = {"at": "2026-11-08T00:00:00+00:00"}
+        view = taskdesk.allow_view(self.root, {"status": "open", "allow_env": {"dev": stamp, "ist": stamp}})
+        envs = {item["env"]: item for item in view["envs"]}
+        self.assertEqual((envs["dev"]["systems"], envs["dev"]["asks"], envs["dev"]["open"]), ([], ["acmedw-dev"], False), "nothing to open: it asks, and is not drawn open")
+        self.assertEqual((envs["ist"]["systems"], envs["ist"]["asks"], envs["ist"]["open"]), (["cloud"], ["acmedw-ist"], True), "a system written by hand is opened; the tool pack's still asks")
+        self.assertEqual((envs["qat"]["systems"], envs["qat"]["asks"]), ([], []))
+
+    def test_the_gate_and_the_page_agree_on_what_can_be_opened(self) -> None:
+        from core import systems
+        from modules.gate import handler
+
+        listed = config.policy_or_empty(self.root, "tools")["systems"]
+        for name, system in listed.items():
+            self.assertEqual(handler._openable(system), systems.openable(system), name)  # noqa: SLF001
+        self.assertFalse(systems.openable(listed["acmedw-dev"]))
+        self.assertTrue(systems.openable(listed["cloud"]))
+        self.assertTrue(systems.openable({**listed["acmedw-dev"], "openable": True}))
+
+    def test_task_allow_for_such_an_environment_says_it_still_asks(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        asks = tasklife.set_allow(self.root, NAME, "dev", True, interactive=True)
+        from core import messages
+
+        self.assertEqual(asks["next"], messages.text("task.allow.on.asks", env="DEV"))
+        opens = tasklife.set_allow(self.root, NAME, "ist", True, interactive=True)
+        self.assertEqual(opens["next"], messages.text("task.allow.on", env="IST"), "a system written by hand is opened")
+        self.assertTrue(tasklife.set_allow(self.root, NAME, "dev", False, interactive=True)["next"])
+
+
 class AdoHostsOfConnections(HarnessTestCase):
     """1.7.38 (C11 T2-02): `ado-any` guards `az rest` to dev.azure.com; the address of an ado connection (`url`: an Azure DevOps Server, a lab) is guarded the same way."""
 

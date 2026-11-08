@@ -44,6 +44,22 @@ class LayoutTests(unittest.TestCase):
             self.assertIsNone(cmdview.layout("sqlcmd -i ../../etc/passwd.sql", folder)["script"])  # outside the task: not read
             self.assertIsNone(cmdview.layout("sqlcmd -i DEV/missing.sql", folder)["script"])
 
+    def test_a_line_of_several_commands_is_cut_outside_quotes_and_a_semicolon_is_not_part_of_a_value(self) -> None:
+        """1.7.38 (C11 T2-03): `--param loadDate=2026-11-08;` showed the `;` in the value; a `;` inside a quoted text cut the line."""
+        line = 'ado queue orders-ci --branch main --param loadDate=2026-11-08; ado retry 901 --stage Build'
+        self.assertEqual(cmdview.commands(line), ["ado queue orders-ci --branch main --param loadDate=2026-11-08", "ado retry 901 --stage Build"])
+        self.assertEqual(cmdview.commands('ado comment 1 --text "done; checked" && ado item 1 | head -3\nls'), ['ado comment 1 --text "done; checked"', "ado item 1", "head -3", "ls"])
+        self.assertEqual(cmdview.commands("ado comment 1 --text 'a || b'"), ["ado comment 1 --text 'a || b'"])
+        self.assertEqual(cmdview.commands("find . -exec grep x {} \\; -exec y \\;"), ["find . -exec grep x {} \\; -exec y \\;"], "an escaped semicolon is text")
+        self.assertEqual(cmdview.commands("a 2>&1 | b &> /dev/null"), ["a 2>&1", "b &> /dev/null"], "a redirection is no operator")
+        self.assertEqual(cmdview.commands(""), [])
+        lines = cmdview.layout(line)["lines"]
+        self.assertIn({"kind": "option", "text": "--param", "value": "loadDate=2026-11-08"}, lines)
+        self.assertEqual([item["kind"] for item in lines if item["kind"] in ("program", "sep")], ["program", "sep", "program"])
+        self.assertFalse(any(";" in str(item.get("value", "")) + item["text"] for item in lines if item["kind"] != "sep"))
+        text = cmdview.layout('ado comment 1 --text "done; checked"')["lines"]
+        self.assertEqual([item["kind"] for item in text], ["program", "arg", "arg", "option"], "a semicolon in a quoted text is no cut")
+
     def test_the_facts_come_from_the_packs_show_patterns(self) -> None:
         show = {"server": r"-S\s+([^\s,]+)", "port": r"-S\s+[^\s,]+,(\d+)", "bad": "(", "database": r"-d\s+(\S+)"}
         found = cmdview.facts("sqlcmd -S sql-dev.example.local,1433 -E -Q x", show)

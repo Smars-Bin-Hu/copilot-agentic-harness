@@ -67,7 +67,8 @@
   const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
   const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
   const vsBtn = h("button", {type: "button", class: "en-vs", hidden: "hidden"}, t("board.enter.open"));  // always beside Enter: Open, Restart, or Restart with identities (1.7.38)
-  const cta = h("div", {class: "en-cta"}, vsBtn, go);
+  const vsNote = h("p", {class: "en-vsnote", role: "status", hidden: "hidden"});  // beside the VS Code button: what a restart is doing, or why it did not end (1.7.38, C11 T2-07)
+  const cta = h("div", {class: "en-cta"}, vsNote, vsBtn, go);
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
     h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, cta, hint));
@@ -554,13 +555,19 @@
   }
   // The VS Code button: its words come from the server (Open, Restart, Restart with identities); it is the main button of the screen while VS Code is the line that is not ok.
   function paintButton(ready, checks) {
-    const going = chk0.restarting || Boolean(chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening"));
-    if (!chk0.last) { vsBtn.hidden = true; return; }
+    const live = Boolean(chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening"));
+    const going = chk0.restarting || live;
+    if (!chk0.last) { vsBtn.hidden = true; vsNote.hidden = true; return; }
     vsBtn.hidden = false;
-    const label = going ? t(chk0.restart && chk0.restart.state === "opening" ? "board.enter.opening" : "board.enter.vs.quitting") : buttonWords();
-    setText(vsBtn, label);
-    vsBtn.disabled = going;
     const vs = checks.find((x) => x.id === "vscode");
+    const lost = Boolean(chk0.restart && chk0.restart.state === "failed" && ((vs && vs.state !== "ok") || (chk0.restart.since || 0) < 120));  // the same two minutes as the VS Code line
+    const failed = !live && (Boolean(chk0.fail) || lost);
+    const said = live ? READY.restartNote(chk0.restart) : failed ? (chk0.fail || READY.restartNote(chk0.restart)) : "";  // the label says Quitting only once the board is quitting: a question about a working agent comes first
+    setText(vsBtn, live ? t(chk0.restart.state === "opening" ? "board.enter.opening" : "board.enter.vs.quitting") : failed && !chk0.restarting ? t("board.enter.vs.again") : buttonWords());
+    setText(vsNote, said);
+    vsNote.hidden = !said;
+    vsNote.classList.toggle("bad", failed);
+    vsBtn.disabled = going;
     vsBtn.classList.toggle("hot", !ready && !chk0.setup && Boolean(vs) && vs.state !== "ok");
     const up = chk0.last.vscode_button && chk0.last.vscode_button.up;
     vsBtn.title = going ? "" : t(up ? "board.enter.vs.restart.tip" : "board.enter.vs.open.tip");

@@ -44,6 +44,8 @@ def documents(root: Path, task: str) -> List[Dict[str, Any]]:
     for name in names:
         data = (folder / name).read_bytes()
         text = data[:MAX_DOC_BYTES].decode("utf-8", errors="replace")
+        if name == tasks.TASK_FILE:
+            text = task_ops.without_placeholders(text)  # 1.7.38: the template's `<...>` lines are not an answer
         tree = mdtree.parse(text)
         tree["blocks"] = mdtree.resolve_images(tree["blocks"], "")
         out.append({"name": name, "blocks": tree["blocks"], "cut": tree["cut"] or len(data) > MAX_DOC_BYTES})
@@ -116,17 +118,21 @@ def evidence_pictures(folder: Path, env: str) -> List[str]:
 
 
 def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optional[Path] = None) -> Dict[str, Any]:
-    """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none."""
+    """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none.
+    1.7.38: a held line of several writes has one part for each (`parts`: `{say, facts, body}`), cut where the line is cut outside quotes, so a card can say every write on a line of its own with its own facts;
+    `says` is every title; `writes` their number; `say`, `facts` and `body` are those of the first (or, for a call that says nothing, of the whole command). `parts` is there only for more than one."""
     programs = outside.clis(system)
+    rules = system.get("say")
+    parts = []
+    for text in cmdview.commands(command):
+        args = cmdview.args_of(text, programs)
+        said = cmdview.say_of(args, rules)
+        if said:
+            parts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": cmdview.body_of(args, system.get("body"), folder, root)})  # by command, not by the word `ado` (a `--conn ado` is no second write)
+    if parts:
+        return {"say": parts[0]["say"], "says": [part["say"] for part in parts], "writes": len(parts), "facts": parts[0]["facts"] if len(parts) == 1 else {}, "body": parts[0]["body"], **({"parts": parts} if len(parts) > 1 else {})}
     args = cmdview.args_of(command, programs)
-    said = cmdview.say_of(args, system.get("say"))
-    if not said:  # a line of several commands (a read, then the write): the title is that of the part that says something (1.7.27)
-        for part in cmdview.all_args(command, programs):
-            if cmdview.say_of(part, system.get("say")):
-                args, said = part, cmdview.say_of(part, system.get("say"))
-                break
-    writes = sum(1 for part in re.split(r"\n|;|&&|\|\||\|", command) if re.search(r"\S", part) and cmdview.say_of(cmdview.args_of(part, programs), system.get("say")))  # a held line of several writes: the card says how many (1.7.29); by command, not by the word `ado` (a `--conn ado` is no second write)
-    return {"say": said, "writes": writes, "body": cmdview.body_of(args, system.get("body"), folder, root)}
+    return {"say": "", "says": [], "writes": 0, "facts": cmdview.facts(command, system.get("show")), "body": cmdview.body_of(args, system.get("body"), folder, root)}
 
 
 def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
@@ -143,7 +149,7 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
             out.append({"moved_on": str(item["code"]) in gone,
                 "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
-                "facts": cmdview.facts(item["command"], system.get("show")), "layout": cmdview.layout(item["command"], folder),
+                "layout": cmdview.layout(item["command"], folder),
                 **call_words(item["command"], system, folder, root),
             })
         return out
@@ -160,7 +166,7 @@ def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
         for item in outbox.approved_for(root, task):
             said = ""
             try:
-                said = call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["say"]
+                said = " \u00b7 ".join(call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["says"])
             except Exception:  # noqa: BLE001 - a title is a help; the card has the command anyway
                 said = ""
             out.append({"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"],
@@ -175,18 +181,20 @@ def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     cannot be clicked) and whether the person opened it for this task (`task allow`). Prod is listed as never. Empty `envs` when no system is listed: the field is not drawn."""
     try:
         systems = config.policy_or_empty(root, "tools").get("systems") or {}
-        reaches = outside.environments(systems) if systems and not outside.validate(systems) else {}
-        seen = {line["env"]: line for line in reach.by_env(reach.view(root, systems))} if reaches else {}  # reached from VS Code (1.7.9), across the systems of each environment
+        valid = bool(systems) and not outside.validate(systems)
+        every = outside.environments(systems) if valid else {}
+        reaches = outside.environments(systems, only_openable=True) if valid else {}  # 1.7.38: the systems Open to the agent can let through; a tool pack's system always asks the person
+        seen = {line["env"]: line for line in reach.by_env(reach.view(root, systems))} if every else {}  # reached from VS Code (1.7.9), across the systems of each environment
     except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the field is then not drawn
-        reaches, seen = {}, {}
+        every, reaches, seen = {}, {}, {}
     opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) and data.get("status") == "open" else {}  # the switch ends with the task (hand test B90-a: a closed task said dev was open)
-    envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or ""),
-             "reach": {"state": seen[env]["state"], "parts": seen[env]["parts"]} if env in seen else None} for env in tasklife.ALLOW_ENVS] if reaches else []
+    envs = [{"env": env, "systems": reaches.get(env, []), "asks": [name for name in every.get(env, []) if name not in reaches.get(env, [])], "open": env in opened and bool(reaches.get(env)), "since": str((opened.get(env) or {}).get("at") or ""),
+             "reach": {"state": seen[env]["state"], "parts": seen[env]["parts"]} if env in seen else None} for env in tasklife.ALLOW_ENVS] if every else []
     refs = {str(item.get("ref", "")).split(":", 1)[0] for item in (data.get("links") or []) if isinstance(item, dict)}
     scoped = sorted(name for name, system in (systems or {}).items() if isinstance(system, dict) and system.get("item") and system.get("link") in refs) if refs else []
     if scoped:  # 1.7.18: the items the task is linked to, a chip of their own: the agent's writes to them only
         on = bool(data.get(tasklife.LINKS_KEY)) and data.get("status") == "open"
-        envs = envs + [{"env": tasklife.LINKS, "label": messages.text("desk.set.open.links"), "systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "reach": None}]
+        envs = envs + [{"env": tasklife.LINKS, "label": messages.text("desk.set.open.links"), "systems": scoped, "asks": [], "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "reach": None}]
     return {"envs": envs, "never": [outside.PROD]}
 
 

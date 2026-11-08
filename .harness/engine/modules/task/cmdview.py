@@ -18,8 +18,24 @@ SCRIPT_CHARS = 60_000  # how much of a file the command reads is shown
 SCRIPT_SUFFIXES = (".sql", ".ps1", ".sh", ".py", ".txt", ".csv", ".json", ".yaml", ".yml", ".cmd", ".bat")
 
 
+OPERATORS = ("&&", "||", ";", "|", "\n", "&")  # what ends a command in a line of several (outside quotes); `&&` and `||` before the single characters
+
+
+def _operator_at(command: str, index: int) -> str:
+    """The operator that stands at this place of the line, or "" (a `>&` or `&>` of a redirection is no operator; nor is a `\\;` of `find -exec`)."""
+    for operator in OPERATORS:
+        if command.startswith(operator, index):
+            if operator == "&" and ((index > 0 and command[index - 1] in "<>") or command.startswith("&>", index)):
+                return ""
+            if index > 0 and command[index - 1] == "\\":
+                return ""
+            return operator
+    return ""
+
+
 def tokens(command: str) -> List[Dict[str, Any]]:
-    """`[{text, quoted}]`, the tokens of one command line: spaces split, quotes group, `\\"` inside double quotes is a quote character of the value."""
+    """`[{text, quoted}]`, the tokens of one command line: spaces split, quotes group, `\\"` inside double quotes is a quote character of the value. Outside quotes `;`, `&&`, `||`, `|` and a line
+    break are tokens of their own, `{text, quoted: False, op: True}` (1.7.38): a `;` is not part of the value before it."""
     out: List[Dict[str, Any]] = []
     text: Optional[str] = None
     quoted = False
@@ -30,6 +46,14 @@ def tokens(command: str) -> List[Dict[str, Any]]:
         if char == "\\" and quote != "'" and index + 1 < len(command) and command[index + 1] == '"':
             text = (text or "") + '"'
             index += 2
+            continue
+        operator = "" if quote else _operator_at(command, index)
+        if operator:
+            if text is not None:
+                out.append({"text": text, "quoted": quoted})
+            text, quoted = None, False
+            out.append({"text": operator.strip() or "\\n", "quoted": False, "op": True})
+            index += len(operator)
             continue
         if quote:
             if char == quote:
@@ -52,6 +76,34 @@ def tokens(command: str) -> List[Dict[str, Any]]:
     return out
 
 
+def commands(command: str) -> List[str]:
+    """The commands of a line, as written (1.7.38): cut at `;`, `&&`, `||`, `|` and a line break that stand outside quotes. A `;` inside a quoted text (`--text "done; checked"`) cuts nothing."""
+    out: List[str] = []
+    start, quote, index = 0, "", 0
+    while index < len(command):
+        char = command[index]
+        if char == "\\" and quote != "'" and index + 1 < len(command):
+            index += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = ""
+        elif char in "\"'":
+            quote = char
+        else:
+            operator = _operator_at(command, index)
+            if operator:
+                if command[start:index].strip():
+                    out.append(command[start:index].strip())
+                index += len(operator)
+                start = index
+                continue
+        index += 1
+    if command[start:].strip():
+        out.append(command[start:].strip())
+    return out
+
+
 def layout(command: str, folder: Optional[Path] = None) -> Dict[str, Any]:
     """The lines of a command for the small window: `{program, lines: [{kind, text, value?}], script?}`. `kind`: program, option (with its value), flag (no value), block (a long quoted
     value on its own), arg (a bare value). `script`: a file the command names that is in `folder` (the task), with its text (capped) and its line count."""
@@ -64,6 +116,15 @@ def layout(command: str, folder: Optional[Path] = None) -> Dict[str, Any]:
     while index < len(found):
         item = found[index]
         nxt = found[index + 1] if index + 1 < len(found) else None
+        if item.get("op"):  # 1.7.38: the next command of the line starts again with its program
+            lines.append({"kind": "sep", "text": item["text"]})
+            if nxt is not None and not nxt.get("op"):
+                lines.append({"kind": "program", "text": nxt["text"]})
+                index += 1
+            index += 1
+            continue
+        if nxt is not None and nxt.get("op"):
+            nxt = None  # an option at the end of a command takes no value from the next one
         if item["text"].startswith("-") and not item["quoted"] and len(item["text"]) > 1:
             if nxt is not None and (nxt["quoted"] or not nxt["text"].startswith("-") or nxt["text"] == "-1"):
                 if nxt["quoted"] and (len(nxt["text"]) >= LONG or "\n" in nxt["text"]):
@@ -189,11 +250,13 @@ def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[P
         if not found or not found.groups() or found.group(1) is None:
             continue
         value = found.group(1)
+        label = _in_language(rule.get("label"))  # 1.7.38: what the block is called when "The text that will be written" is not the word (a statement that will run)
         if rule.get("from") == "text" and not value.startswith("@"):
             quote = args[found.start(1) - 1] if found.start(1) > 0 and args[found.start(1) - 1] in "\"'" else ""
-            return _shown({"text": _unescape(_shell_value(value, quote)), "from": "text"})
+            text = _shell_value(value, quote)
+            return _shown({"text": text if rule.get("raw") else _unescape(text), "from": "text", **({"label": label} if label else {})})  # `raw`: a backslash-n in it is not a line break (a statement)
         path = value[1:] if value.startswith("@") else value
-        return _from_file(folder, path.strip("\"'"), root)
+        return {**_from_file(folder, path.strip("\"'"), root), **({"label": label} if label else {})}
     return None
 
 

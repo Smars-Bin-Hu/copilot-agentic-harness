@@ -535,7 +535,17 @@ def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Option
         data[ALLOW_KEY] = held
         if before != on:
             task_ops.note(data, "allow-env", f"{env}: {'on' if on else 'off'}")
-    return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.on" if on else "task.allow.off", env=env.upper())}
+    key = "task.allow.on" if on else "task.allow.off"
+    if on:  # 1.7.38: an environment whose systems all come from tool packs lets nothing through: say so (the board does not offer it)
+        try:
+            from core import config, systems as outside
+
+            listed = config.policy_or_empty(root, "tools").get("systems") or {}
+            if outside.environments(listed) and not outside.environments(listed, only_openable=True).get(env):
+                key = "task.allow.on.asks"
+        except Exception:  # noqa: BLE001 - the note is a help; the switch is set
+            pass
+    return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say(key, env=env.upper())}
 
 
 def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:

@@ -66,6 +66,26 @@
       "verb": "read"
     }
   ],
+  "body": [
+    {
+      "pattern": "(?:^|\\s)-[Qq]\\s+\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "from": "text",
+      "raw": true,
+      "label": {
+        "en": "The statement that will run",
+        "zh": "将要执行的语句"
+      }
+    },
+    {
+      "pattern": "(?:^|\\s)-[Qq]\\s+'([^']*)'",
+      "from": "text",
+      "raw": true,
+      "label": {
+        "en": "The statement that will run",
+        "zh": "将要执行的语句"
+      }
+    }
+  ],
   "target": "\\b(?:from|into|update|join)\\s+([\\w.\\[\\]]+)",
   "show": {
     "server": "-S\\s+\"?([^\\s,\"]+)",

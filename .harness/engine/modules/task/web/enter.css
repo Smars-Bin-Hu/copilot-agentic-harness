@@ -220,3 +220,7 @@ html.has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);color:var(--en-ink);b
    and the word at the right of a required line that needs the person is red, like its dot */
 @media (min-width:1101px){.en-vs{box-sizing:border-box;width:15em;justify-content:center;text-align:center;white-space:normal;line-height:1.15;padding:0 22px}}
 .en-chk-l li.row.s-fail.blocks.l-red em{color:var(--bad)}
+/* 1.7.38 (C11 T2-07): the note beside the VS Code button: a restart that waits for a window, or did not end; the button then says Try again */
+.en-vsnote{flex:1 1 100%;order:-1;margin:0 auto 2px;max-width:34em;text-align:center;font:500 12.5px/1.45 var(--sans);color:var(--en-cap);overflow-wrap:anywhere}
+.en-vsnote[hidden]{display:none}
+.en-vsnote.bad{color:var(--bad)}

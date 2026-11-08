@@ -444,6 +444,19 @@ class DeskTests(ServeCase):
         self.assertIn("approve-plan", [item["action"] for item in desk["actions"]])
         self.assertTrue(desk["history"])
 
+    def test_the_overview_leaves_out_what_is_still_the_templates_text(self) -> None:
+        """1.7.38 (C11 T2-05): `Updated: <yyyy-mm-dd>` and the empty sections of a closed Q&A task were shown as if the agent had written them. The file is not changed."""
+        text = ("# TASK: q\n\n- **Kind**: Q&A\n- **Updated**: <yyyy-mm-dd>\n- **Status**: <in progress / done>\n- **Doing now**: <one sentence>\n- **Next step**: ship it\n\n"
+                "## Files to read\n\n<The files a new session should read>\n\n## Decided\n\n<What the user has decided>\n\n## Open questions\n\nnone\n\n## Answer\n\n1. Done <today>.\n\n```\n<kept in a code block>\n```\n")
+        (self.task / "TASK.md").write_text(text, encoding="utf-8")
+        shown = json.dumps(next(doc for doc in taskdesk.desk(self.root, "job1", ())["docs"] if doc["name"] == "TASK.md")["blocks"])
+        for gone in ("yyyy-mm-dd", "in progress / done", "one sentence", "Files to read", "Decided", "new session should read", "has decided"):
+            self.assertNotIn(gone, shown, gone)
+        for kept in ("Kind", "Next step", "ship it", "Open questions", "Answer", "Done <today>", "kept in a code block"):
+            self.assertIn(kept, shown, kept)
+        self.assertEqual((self.task / "TASK.md").read_text(encoding="utf-8"), text, "the file is as the agent left it")
+        self.assertEqual(task_ops.without_placeholders("# T\n\n## A\n\n## B\n\ntext\n"), "# T\n\n## A\n\n## B\n\ntext\n", "a section the author left empty stays")
+
     def test_autorun_on_is_offered_only_when_a_step_is_left_and_the_plan_is_approved(self) -> None:
         names = lambda: [item["action"] for item in taskdesk.desk(self.root, "job1", ("autorun on", "pause"))["actions"]]
         board = lambda: [item["action"] for row in taskboard.board_rows(self.root, False, served=("autorun on", "pause"))[0]["tasks"] for item in row["actions"]]

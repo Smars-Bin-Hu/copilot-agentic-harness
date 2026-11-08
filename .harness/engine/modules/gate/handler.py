@@ -21,6 +21,7 @@ import json
 import re
 
 from core import calls, launchenv, reach, repo_paths, connections, targets, tasks, unseen
+from core import systems as systems_mod
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
@@ -235,11 +236,8 @@ def _item_scope(call: str, system: Dict[str, Any], verb: str, data: Optional[Dic
 
 
 def _openable(system: Dict[str, Any]) -> bool:
-    """May Open to the agent let this system's held calls through (1.7.13)? A system says so with `openable`; a tool pack's system (a ticket board, a
-    pipeline) is closed unless it says yes: its writes reach people, so the person approves each one."""
-    if isinstance(system.get("openable"), bool):
-        return system["openable"]
-    return not system.get("toolpack")
+    """May Open to the agent let this system's held calls through? One rule, `core.systems.openable`."""
+    return systems_mod.openable(system)
 
 
 def _env_opened(data: Dict[str, Any], env: str) -> bool:

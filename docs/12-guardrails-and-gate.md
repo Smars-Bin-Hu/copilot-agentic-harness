@@ -35,7 +35,10 @@ A company can set these per system. What passes without asking you:
 
 - reads;
 - a command you approved, exactly as you approved it;
-- a write to a ticket the task is linked to, after you opened **linked items** (Open to the agent on the task page). A ticket the agent links by itself still waits for you.
+- a write or a run on a connection you opened for this task (the button **Open <connection> for this task** on the held card). How far a connection may be opened is a word in its tool pack type, per environment: `all`, `items` or `no`. The sample SQL Server type opens DEV and IST and not QAT. Prod and a destroy are never opened;
+- a write to a ticket the task is linked to, after you opened its **linked items** (the `items` word: the same button on the card of a held write to a linked ticket). A ticket the agent links by itself still waits for you.
+
+You decide when a call is held, not before: **Approve** is for that one command, **Open** is for the connection. Both need the code the board shows, so the agent cannot open a connection for itself. A company can lower what a type says (a connection with `"open": "no"`), never raise it.
 
 ## Code answers, not the model
 
@@ -57,7 +60,16 @@ What the line cannot show: a build or test tool, a scheduled job or a git hook c
 
 **2. When the program writes (next).** A tool pack's own program (for example `ado`) can ask the harness right before it writes: is this exact write approved, or inside the linked items you opened? If not, it does not write, and the request lands on the task page. However the agent started the program, the write goes through this check, so the gaps of checkpoint 1 close for that program.
 
-Its limits: the program cannot tell you from the agent, so a write you type by hand would ask you too; and an agent could skip the program and call the service's web address itself. The opening gets small; it does not close.
+Its limits: the program cannot tell you from the agent, so a write you type by hand would ask you too; and an agent could skip the program and call the service's web address itself. The opening gets small; it does not close. For Azure DevOps it gets smaller still at checkpoint 1: a `curl` to `dev.azure.com`, to `*.visualstudio.com` or to the address of a connection is judged like `az rest` (a read runs, a write is held, a delete is refused). A `curl` to any other address asks you as before.
+
+## The agent is told a little at a time
+
+A chat that never touches an outside system should not pay for a list of all of them. The agent gets four layers, each only when it is needed:
+
+0. At the start of a chat, one line: the kinds of connection and how many of each, and the way to look. No names.
+1. `harness connections find <words>` (a read): the few connections that fit a name, a system, an environment, or the `about`, `repos` and `domains` the company wrote for each. When more than one fits, or it is not sure which environment, the agent asks you. It never guesses.
+2. The details of one connection (fields, the tool pack's skill and program, the sign-in, whether you opened it for this task): when your prompt names it, and the first time a command of the agent that ran reaches it in a chat.
+3. When a call is held: the card says which connection and why; the agent is told the connection and that you can approve the command or open the connection.
 
 ## What comes next: record first, then check
 

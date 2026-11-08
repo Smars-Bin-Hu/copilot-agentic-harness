@@ -12,6 +12,6 @@ demotracker/
 ```
 
 1. **Add**, in your own terminal: `harness toolpack add <this folder>`. (For a team: name it in the knowledge base, `company/tools/packs.json` = `{"use": ["demotracker"]}`.)
-2. **Set up**: nothing to do for the program: a tool pack's own `bin/` is on the PATH VS Code gets. Get ready, Tools, This computer, MCP: leave it blocked to try the command line; allow it to try the MCP server too.
-3. **Sign in**: Tools, Connections, Add a connection of your own: type Demo tracker, name `demo`, project `DEMO`, no environment. **Sign in**, **Test**, **Save**.
+2. **Set up**: nothing to do for the program: a tool pack's own `bin/` is on the PATH VS Code gets. Get ready, Local, MCP: leave it blocked to try the command line; allow it to try the MCP server too.
+3. **Sign in**: Connections & sign-ins, Add a connection of your own: type Demo tracker, name `demo`, project `DEMO`, no environment. **Sign in** tests it and keeps it when the test passes.
 4. **Try**: open VS Code from the board. Ask "read demo ticket 1 and link it to this task", then "comment on it: checked". The read runs; the comment waits for your approval on the task page.

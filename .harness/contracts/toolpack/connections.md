@@ -2,7 +2,7 @@
 
 `<knowledge base>/company/tools/connections.json` lists the places the agent may reach for a team. `harness company sync` copies it to `.harness/policies/connections.company.json`. Each person then signs in once in Get ready (Tools, Connections); the sign-in stays on that computer. A sample: `.harness/examples/connections.json`.
 
-You do not have to write it by hand: set your connections up in Get ready first, then **Export** in the Connections tab writes them in this form (to the company pack, or to a file). `harness connections export` does the same in a terminal.
+You do not have to write it by hand: set your connections up in Get ready first, then **Export** in the Connections & sign-ins window writes them in this form (to the company pack, or to a file). `harness connections export` does the same in a terminal.
 
 ```json
 {

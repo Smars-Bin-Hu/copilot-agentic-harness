@@ -16,8 +16,8 @@ The gate, per environment: a `SELECT` runs; a write, a procedure, a script file 
 ## To use it
 
 1. **Turn on**: name it in `<knowledge base>/company/tools/packs.json` (`{"use": ["sqlserver"]}`), and put your connections in `company/tools/connections.json` (the form: `.harness/contracts/toolpack/connections.md`). Import the knowledge base in Get ready, or run `harness company sync`.
-2. **Set up**: Get ready, Tools, This computer: the folder of `sqlcmd` when it is not on the PATH.
-3. **Sign in**: Tools, Connections: each colleague opens a connection, types the account (`DOMAIN\id` for `windows`) and the password, **Test**, then **Save**. The identity stays in `.harness/.env` on that computer.
+2. **Set up**: Get ready, Local: the folder of `sqlcmd` when it is not on the PATH.
+3. **Sign in**: Connections & sign-ins: each colleague presses **Sign in** on a connection, types the account (`DOMAIN\id` for `windows`) and the password, and **Sign in** tests it and keeps it when the test passes. The identity stays in `.harness/.env` on that computer.
 4. **Try**: **Open VS Code with identities**, tick the connections for that window. With two different Windows accounts (one for DEV, one for IST), the window holds one; the other is reached through `harness as <name> -- sqlcmd ...`, which the agent is told at the start of each chat.
 
 Before colleagues use it, show them *What the agent can do on your connections* in `docs/03-configure.md`: the agent has their account's rights, reads run, writes wait for them, and what Open to the agent changes.

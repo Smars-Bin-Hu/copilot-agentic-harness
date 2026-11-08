@@ -556,7 +556,8 @@ class PageTests(unittest.TestCase):
 
     def test_stop_withdraw_and_try_again_are_beside_the_pill_on_every_tab(self) -> None:
         reply = source("reply.js")
-        self.assertIn('document.body.append(h("div", {class: "rp-bar"}, pill, halt, back, again), panel);', reply)
+        self.assertIn('const bar = h("div", {class: "rp-bar"}, pill, halt, back, again);', reply)
+        self.assertIn("document.body.append(bar, panel);", reply)
         self.assertIn('halt.hidden = state !== "busy"', reply)
         self.assertIn('back.hidden = !info.show || !live || !["busy", "idle", "input", "error"].includes(state)', reply)  # a message sent by mistake is taken back while the agent works too
         self.assertIn("again.hidden = !info.show || !live || !live.retry;", reply)

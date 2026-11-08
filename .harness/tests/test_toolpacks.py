@@ -1046,6 +1046,7 @@ class FactoryPacks(ToolpackCase):
         self.prefix("acme")
         (self.factory / "bin").mkdir()
         (self.factory / "bin" / "tracker").write_text("#!/bin/sh\n", encoding="utf-8")  # the pack brings it
+        (self.factory / "bin" / "tracker").chmod(0o755)  # and it can run (one that cannot is on the list: 1.7.38)
         kind = dict(KIND, auth={"own": {"identity": "env", "env": {"TRACKER_TOKEN": "password"}}, "signin": {"identity": "tool", "login": "trk-login", "needs": ["trk-login"]}})
         (self.factory / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
         self.use()

@@ -34,7 +34,7 @@ To find a root cause, follow [root-cause.md](./references/root-cause.md).
 - **A broken hook refuses everything, your own calls too.** After changing `.github/hooks/harness.json` or `hook.py`, run the tests at once. If you cannot fix it, tell the user to restore that file with git.
 - **A hook that fails must let the call through.** Do not write a hook that gets normal work refused (`docs/05-design.md`).
 - **The safety limits are not loosened unless the user clearly asks**: the core guardrail list, approvals that need a terminal and a typed code, target repositories written only through promote.
-- **Every text the engine prints goes in both message tables** (`core/messages.en.json`, `core/messages.zh.json`: the same names, the same placeholders); the code holds only the name. Shipped files are in English.
+- **Every text the engine prints goes in both message tables** (`core/messages.en.json`, `core/messages.zh.json`: the same names, the same placeholders); the code holds only the name. A text that names a button, a tab or a window of the board writes `{@name}` for it, not the English word: it becomes the text of that message in the same language. Shipped files are in English.
 - **`docs/` is yours to read here.** Other agents do not read it; what it describes is what you change. Design and reasons: `docs/05-design.md`; commands, fields, events, runtime files: `docs/04-reference.md`.
 - **No business task in an admin session.** It cannot open a task or call a subagent. When the user wants work done in a target repository, tell them to switch admin off or open another conversation.
 

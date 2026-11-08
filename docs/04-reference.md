@@ -264,7 +264,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 
 ## Messages
 
-Every text the engine prints is in `.harness/engine/core/messages.en.json` and `messages.zh.json`: the same names and the same placeholders in both. The code holds only the name of a message. A name that is missing in the language in effect is taken from the other language.
+Every text the engine prints is in `.harness/engine/core/messages.en.json` and `messages.zh.json`: the same names and the same placeholders in both. The code holds only the name of a message. A name that is missing in the language in effect is taken from the other language. A text that names a button, a tab or a window of the board writes `{@name}` for it (for example `{@connections.test}`): when the table is read it becomes the text of that message, in the same language, so the words always match the screen.
 
 ## Hook events
 

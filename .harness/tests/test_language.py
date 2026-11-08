@@ -50,6 +50,25 @@ class TableTests(unittest.TestCase):
         different = [name for name in english if holes(english[name]) != holes(chinese.get(name, ""))]
         self.assertEqual(different, [])
 
+    def test_a_message_that_names_a_button_takes_its_words_from_the_message_of_that_button(self) -> None:
+        for language in ("en", "zh"):
+            raw = json.loads((Path(messages.__file__).parent / f"messages.{language}.json").read_text(encoding="utf-8"))
+            named = {name: re.findall(r"\{@([A-Za-z0-9_.-]+)\}", text) for name, text in raw.items() if "{@" in text}
+            self.assertTrue(named, language)
+            self.assertEqual({name: [key for key in keys if key not in raw] for name, keys in named.items() if any(key not in raw for key in keys)}, {}, "a name that is not a message")
+            table = messages.table(language)
+            self.assertEqual([name for name in named if "{@" in table[name]], [], "every mark is replaced when the table is read")
+        self.assertEqual(messages.table("en")["connections.layer.signin.none"], "No account is saved for {alias}. Press " + messages.table("en")["connections.signin"] + ".")
+        self.assertEqual(messages._linked({"a": "x {@b}", "b": "y {@c}", "c": "z"}), {"a": "x y z", "b": "y z", "c": "z"})  # noqa: SLF001
+        self.assertEqual(messages._linked({"a": "x {@nope}"}), {"a": "x {@nope}"})  # noqa: SLF001
+
+    def test_the_code_a_person_types_has_one_name_in_each_language(self) -> None:
+        chinese = " ".join(messages.table("zh").values())
+        self.assertNotIn("验证码", chinese)
+        self.assertNotIn("批准码", chinese)
+        self.assertEqual(messages.table("en")["desk.outbox.code"], "code")
+        self.assertEqual(messages.table("zh")["desk.outbox.code"], "确认码")
+
     def test_the_english_table_has_no_chinese(self) -> None:
         english = messages.table("en")
         own = ("desk.send.lang.",)  # the name of a language in that language: the same in both

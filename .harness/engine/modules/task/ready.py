@@ -299,7 +299,7 @@ class Ready:
         except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the table then keeps the order of the packs
             listed, kinds = {}, {}
         try:
-            loose = set(conn_core.unsigned(self.root))  # a connection with no sign-in kept here: its row says so, as the name with its dot did (C12 N7)
+            loose = set(conn_core.unsigned(self.root)) | {one["name"] for one in readyitems.connection_states(self.root) if one["state"] == "none"}  # a connection with no sign-in kept here: its row says so, as the name with its dot did (C12 N7), and the yellow line counts the same ones (RC-1)
         except Exception:  # noqa: BLE001 - see above
             loose = set()
         label_of = lambda system: str((kinds.get(str((listed.get(system) or {}).get("type") or "")) or {}).get("label") or "").casefold()  # noqa: E731

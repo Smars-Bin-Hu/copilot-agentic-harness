@@ -3366,6 +3366,6 @@
   "tools.conn.sign.no": "还没登录",
   "tools.conn.sign.failed": "登录失败",
   "tools.conn.sign.tip": "打开“这台电脑”里的登录行。",
-  "doctor.toolpacks.guard": "Tool pack {name} 是关着的，但连接 {aliases} 用它的类型。Gate 仍按它的规则判断这些连接的调用；它的 skill 和 PATH 上的程序是关着的。",
+  "doctor.toolpacks.guard": "Tool pack {name} 是关着的，但这些连接用它的类型：{aliases}。Gate 仍按它的规则判断这些连接的调用；它的 skill 和 PATH 上的程序是关着的。",
   "company.sync.clash": "同步已停止，什么都没有改。公司在 company/tools/packs/ 里的 pack {names} 与出厂 pack 同名。请给公司的 pack 改名，再运行 `harness company sync`。"
 }

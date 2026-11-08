@@ -3366,6 +3366,6 @@
   "tools.conn.sign.no": "not signed in yet",
   "tools.conn.sign.failed": "sign-in failed",
   "tools.conn.sign.tip": "Opens the sign-in on This computer.",
-  "doctor.toolpacks.guard": "Tool pack {name} is off, but the connections {aliases} use its type. The gate still judges their calls by its rules; its skills and its program on the PATH are off.",
+  "doctor.toolpacks.guard": "Tool pack {name} is off, but these connections use its type: {aliases}. The gate still judges their calls by its rules; its skills and its program on the PATH are off.",
   "company.sync.clash": "Sync stopped and changed nothing. The company's pack {names} in company/tools/packs/ has the name of a factory pack. Rename the company's pack, then run `harness company sync` again."
 }

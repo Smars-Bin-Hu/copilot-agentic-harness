@@ -723,7 +723,9 @@ class Board:
             raise CommandError(str(error)) from None
         noted(self.root, result.get("task") or task, action)
         if stood and stood.get("task"):
-            self.after_decision(str(stood["task"]), [(str(stood["code"]), outbox.agent_place(stood))], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
+            place = outbox.agent_place(stood)
+            self.after_decision(str(stood["task"]), [(str(stood["code"]), place)], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
+            result["agent"] = place  # the page says so on the green card at once, before its next poll (1.7.38, C12 TB-02)
         return result
 
     # --- the agent, after the person decided on a held call (1.7.38) -----------------------------------------------

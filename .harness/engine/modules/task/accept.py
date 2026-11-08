@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import messages, tasks
+from core import messages, outbox, tasks
 from core.paths import cli_command, utc_now
 
 from . import task as task_ops, tasklife
@@ -63,6 +63,7 @@ def deliver(root: Path, raw_task: str = "", summary: str = "", skipped: Optional
         }
         task_ops.note(data, "deliver", one_line(text, 100))
         links = tasklife.links_hint(root, data, still_open=True)  # a ticket the task names: the agent may offer to update it in its summary
+    outbox.agent_left(root, task)  # a call it held and never waited on is left behind now: the task shows "to accept", not "waits for your approval" (1.7.38, C12 TB-03)
     return {"task": task, "delivered": True, "next": say("accept.delivered") + (" " + links if links else "")}
 
 

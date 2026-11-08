@@ -1129,14 +1129,23 @@
   const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default): past it, telling is no use
   // After an approval: a green card with the codes and one button that tells the chat to run them (a send to the chat, as an answer), in place of typing it.
   const toldCodes = new Set();  // told the agent from this page: the card stays all the same until the command has run (the server says which approvals are left, 1.7.24)
+  const seenCodes = new Set();  // approved codes the server has listed at least once: when one is gone from the list afterwards, the command has run, and its card goes at once (1.7.38, C12 TB-02)
+  // Run (the approval is used up) or run out. Before the server has listed a code once, the page keeps it for 6 seconds (the poll may be a moment behind the click). After that it goes at once:
+  // it used to stay for those 6 seconds with no word from the server and fell back to "Tell the agent to run it" while the agent was already running the command.
+  function pruneApproved(left, now) {
+    if (left) left.forEach((code) => seenCodes.add(code));
+    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000 || (left && !left.has(code) && (seenCodes.has(code) || now - found.at > 6000))) { approvedCalls.delete(code); toldCodes.delete(code); seenCodes.delete(code); }
+    for (const code of [...seenCodes]) if (left && !left.has(code)) seenCodes.delete(code);
+  }
   function approvedCard() {
     const now = Date.now();
     const left = Array.isArray(desk.approved) ? new Set(desk.approved.map((item) => item.code)) : null;  // null: a page without the list (a saved copy)
-    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000 || (left && !left.has(code) && now - found.at > 6000)) { approvedCalls.delete(code); toldCodes.delete(code); }  // run (the approval is used up) or run out
+    pruneApproved(left, now);
     const codes = [...new Set([...(left ? [...left] : []), ...approvedCalls.keys()])];
     if (!codes.length || desk.past) return null;
     const titles = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.title]));
     const heardBy = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.told || ""]));  // "wait": its wait returned; "message": the board woke it (1.7.38)
+    for (const code of codes) if (!heardBy.get(code) && (approvedCalls.get(code) || {}).heard) heardBy.set(code, approvedCalls.get(code).heard);  // the answer to the click said the agent waited: no gap before the next poll says it
     const all = codes.every((code) => toldCodes.has(code) || heardBy.get(code));
     const viaWait = codes.every((code) => heardBy.get(code) === "wait");
     const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: a message from here would answer the wrong thing (1.7.20)
@@ -1290,7 +1299,7 @@
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), title: (item.says || []).join(" \u00b7 ") || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
     };
     yes.addEventListener("click", send);
     opens.forEach((open) => open.addEventListener("click", () => {

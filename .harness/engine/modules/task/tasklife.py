@@ -303,16 +303,16 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
                 return {"why": "review", "since": last_event(data, "review") or updated}
     except Exception:  # noqa: BLE001 - a list must not fail over one task's checks
         pass
+    mark = data.get("waiting")
+    held = waited_calls(root, task)
+    if isinstance(mark, dict) and mark.get("why") == "accept" and mark.get("since") and isinstance(data.get("deliver"), dict) and data.get("status") == "open" and not held:
+        return {"why": "accept", "since": str(mark["since"])}  # delivered: the person accepts the work. An unconfirmed requirement does not cover it (1.7.38, C12 TB-01); the page can show both. A call held for an answer still comes first
     if data.get("tier") == "full" and not tasks.plan_approved(root, task, data) and task_ops.req_state(root, task) in ("open", "changed"):
         try:
             written = datetime.fromtimestamp((tasks.task_dir(root, task) / tasks.REQ_FILE).stat().st_mtime, timezone.utc).isoformat()
         except OSError:
             written = last_event(data, "confirm-req") or updated
         return {"why": "req", "since": written}  # written, not confirmed: no plan can be approved on it (1.5.30). It waits since the agent wrote it, not since the task was opened
-    held = outbox.pending_for(root, task)
-    if held:
-        gone = outbox.moved_on(root, held)  # 1.7.38: a call the agent did not wait for (it ran other commands after it) is no wait of the person's
-        held = [item for item in held if str(item.get("code")) not in gone]
     if held:
         return {"why": "outbox", "since": str(held[0].get("created_at") or updated)}  # a call to an outside system waits in the outbox (1.7.7): the agent stopped on it
     handed = data.get("handoff")
@@ -320,7 +320,6 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         return {"why": str(handed["what"]), "since": str(handed["since"])}  # the agent handed work to the person that only they can do: it stays until the agent clears it
     if state == "done" and data.get("status") == "open" and commitmsg.to_commit(data):
         return {"why": "commit", "since": last_event(data, "promote") or updated}  # written back, not committed: the person commits, then closes the task (B63)
-    mark = data.get("waiting")
     if isinstance(mark, dict) and mark.get("since"):
         if mark.get("why") in GO_MARKS:
             return {"why": str(mark["why"]), "since": str(mark["since"])}  # approved on a page or in a terminal; the agent is not told yet
@@ -335,6 +334,13 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     if cancelled:
         return {"why": "cancelled", "since": cancelled}
     return {"why": "", "since": ""}
+
+
+def waited_calls(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls to outside systems of this task that wait for the person and that the agent waits for (1.7.38): a call the agent did not wait for (it went on, or delivered) is no wait of the person's."""
+    held = outbox.pending_for(root, task)
+    gone = outbox.moved_on(root, held) if held else set()
+    return [item for item in held if str(item.get("code")) not in gone]
 
 
 LIVE_WAITS = ("confirm", "question")  # what the chat in VS Code waits for right now (1.6, B75): told by the board's link to the host, not by a file; `apply_ask` puts it on a row

@@ -156,7 +156,7 @@ def running_wait(item: Dict[str, Any], now: Optional[float] = None) -> bool:
 
 def agent_place(item: Dict[str, Any], now: Optional[float] = None) -> str:
     """Where the agent stands towards this held call (1.7.38, C11 Q21): `wait` (its `harness wait --approval` on the code is running), `ended` (its wait ran out and it was told to end its turn and say what waits
-    for this card; a call held a moment ago counts too, for the agent has had no time to start its wait), or `away` (it did neither: it went on)."""
+    for this card; a call held a moment ago counts too, for the agent has had no time to start its wait), or `away` (it did neither: it went on, or it delivered the work: `agent_left`)."""
     now = time.time() if now is None else now
     wait = item.get("wait") if isinstance(item.get("wait"), dict) else {}
     if running_wait(item, now):
@@ -167,6 +167,20 @@ def agent_place(item: Dict[str, Any], now: Optional[float] = None) -> str:
         return "ended" if not wait and now - float(item.get("at", 0)) <= START_GRACE_S else "away"
     except (TypeError, ValueError):
         return "away"
+
+
+def agent_left(root: Path, task: str) -> int:
+    """The agent delivered the work of this task and stops (1.7.38, C12 TB-03): a held call it never started a wait on is a call it went on without, at once, not after the grace of `START_GRACE_S`.
+    A call it waits on, or ended its turn on, is left as it is. How many calls were marked."""
+    count = 0
+    try:
+        minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+        for item in pending_for(root, task):
+            if not isinstance(item.get("wait"), dict) and approvals.wait_mark(root, str(item.get("code")), "left", minutes, file=approvals.ACTIONS):
+                count += 1
+    except Exception:  # noqa: BLE001 - a mark that cannot be written must not stop a delivery
+        pass
+    return count
 
 
 def agent_waits(item: Dict[str, Any], now: Optional[float] = None) -> bool:

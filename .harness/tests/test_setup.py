@@ -546,7 +546,7 @@ class CompanyFactsTests(unittest.TestCase):
             self.assertTrue(found["kb"]["path"].endswith("knowledge-base"))
             facts = found["company"]
             self.assertEqual((facts["instructions_n"], facts["standards_n"]), (2, 1))
-            self.assertEqual((facts["skills"]["n"], facts["skills"]["off"]), (3, ["acme-empty", "release-notes"]), "no SKILL.md, or not the company's word")
+            self.assertEqual((facts["skills"]["n"], facts["skills"]["off"]), (3, ["acme-empty", "acme-good", "release-notes"]), "no SKILL.md, a name that is not the folder's, or not the company's word: the check of the Enter screen")
             self.assertEqual(facts["own_packs"], [])
             (company / "tools" / "packs" / "acmejobs").mkdir(parents=True)
             self.assertEqual(setup.company_facts(root)["own_packs"], ["acmejobs"])

@@ -108,7 +108,7 @@ def company_skills(root: Path, folder: Optional[Path], prefix: str, packs: Dict[
     found = [(name, path) for name, path in have.items() if skillgroups.group(name, prefix, packs)[0] == "company"]
     source = folder / "skills" if folder is not None else None
     if source is not None and source.is_dir():
-        found += [(path.name, path) for path in sorted(source.iterdir()) if path.is_dir() and (path / "SKILL.md").is_file() and path.name not in have]
+        found += [(path.name, path) for path in sorted(source.iterdir()) if path.is_dir() and not path.name.startswith(".") and path.name not in have]  # a folder with no SKILL.md is a skill not by the rules
     return found
 
 

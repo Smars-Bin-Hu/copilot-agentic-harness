@@ -90,7 +90,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .sv-ro{cursor:default}.sv-ro:hover{background:transparent;border-color:var(--line)}.sv-ro .sv-kind{flex:none;color:var(--soft);font-size:12px;white-space:nowrap;max-width:22ch;overflow:hidden;text-overflow:ellipsis}
 .sv-sdot{margin-left:auto;flex:none;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:50%;background:transparent;cursor:pointer;padding:0}
 .sv-sdot i{width:11px;height:11px;border-radius:50%;background:var(--soft);display:block}.sv-sdot.ok i{background:var(--good)}.sv-sdot.bad i{background:#c0392b}.sv-sdot:hover,.sv-sdot:focus-visible{background:var(--hover)}
-.sv-ro .sv-where{flex:1 1 0}.sv-ro .sv-sdot{margin-left:0}
+.sv-ro{overflow:hidden}.sv-ro .sv-alias{flex:0 1 auto;min-width:6ch}.sv-ro .sv-own{max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sv-ro .sv-where{flex:1 1 0}.sv-ro .sv-sdot{margin-left:0}
 .tl-link{border-style:dashed;color:var(--hot)}.mc-acts{flex-wrap:wrap}
 .sv-below{margin-top:12px}
 @keyframes tl-flash{0%{background:var(--hot-bg)}100%{background:transparent}}.tl-flash{animation:tl-flash 1.8s ease-out;border-radius:9px}

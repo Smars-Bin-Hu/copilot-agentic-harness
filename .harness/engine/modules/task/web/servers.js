@@ -203,7 +203,7 @@ const SERVERS = (function () {
       title: [word + (row.account ? " \u00b7 " + row.account : ""), t("tools.conn.sign.tip")].join("\n")}, h("i"));
     dot.addEventListener("click", () => ctx.go("computer", "signins", "sign:" + (tool ? tool.program : row.alias)));
     return h("div", {class: "sv-line sv-ro", title: [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " \u00b7 " + row.auth_label : ""), where(row)]).filter(Boolean).join("\n")},
-      h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.type_label), envChip(row.env), h("code", {class: "sv-where"}, where(row)),
+      h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.type_label), row.env === "none" ? null : envChip(row.env), h("code", {class: "sv-where"}, where(row)),
       row.toolpack ? h("span", {class: "sv-own sv-from", title: t("connections.from.tip", {pack: row.toolpack})}, row.toolpack) : null,
       row.own ? h("span", {class: "sv-own", title: t("connections.own.tip")}, t("connections.own")) : null, dot);
   }

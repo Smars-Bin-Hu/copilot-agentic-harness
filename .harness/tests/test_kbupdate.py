@@ -76,6 +76,8 @@ class FolderUpdateTests(unittest.TestCase):
         for apply in (False, True):
             found = company.folder_update(self.root, str(self.source), apply=apply)
             self.assertEqual((found["state"], found["ahead"], found["behind"]), ("ahead", 1, 1))
+            self.assertEqual(found["pull"], "", "both moved on: a fast-forward cannot join them, so no button")
+            self.assertEqual(found["why"], messages.text("company.folder.ahead.both", here=messages.text("company.commits.one"), there=messages.text("company.commits.one")))
         self.assertEqual(self.head(self.kb), mine, "the commit of this copy is still the head")
         self.assertTrue((self.kb / "domains/sales/mine.md").is_file())
         self.assertFalse((self.kb / "domains/sales/theirs.md").exists())
@@ -83,15 +85,15 @@ class FolderUpdateTests(unittest.TestCase):
     def test_the_pull_command_of_the_button_brings_the_commits_into_the_folder_and_only_forward(self) -> None:
         commit(self.kb, {"domains/sales/mine.md": "mine\n"}, "my card")
         found = company.folder_update(self.root, str(self.source))
-        self.assertEqual(found["pull"].split()[:2], ["git", "-C"])
-        subprocess.run(found["pull"], shell=True, check=True, capture_output=True)
+        pull = found["pull"]
+        self.assertEqual(pull.split()[:2], ["git", "-C"])
+        subprocess.run(pull, shell=True, check=True, capture_output=True)
         self.assertEqual(self.head(self.source), self.head(self.kb))
         self.assertEqual(company.folder_update(self.root, str(self.source))["state"], "same")
         commit(self.kb, {"domains/sales/more.md": "more\n"}, "more")  # the folder moves on its own: a fast-forward is no longer possible, and the pull refuses instead of merging
         commit(self.source, {"domains/sales/theirs.md": "theirs\n"}, "their card")
-        found = company.folder_update(self.root, str(self.source))
         before = self.head(self.source)
-        self.assertNotEqual(subprocess.run(found["pull"], shell=True, capture_output=True).returncode, 0)
+        self.assertNotEqual(subprocess.run(pull, shell=True, capture_output=True).returncode, 0)
         self.assertEqual(self.head(self.source), before, "no merge commit appeared in the folder")
 
     def test_a_path_that_cannot_be_quoted_gives_no_command(self) -> None:

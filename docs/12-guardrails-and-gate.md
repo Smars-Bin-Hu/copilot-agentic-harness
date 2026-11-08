@@ -36,7 +36,7 @@ A company can set these per system. What passes without asking you:
 - reads;
 - a command you approved, exactly as you approved it;
 - a write or a run on a connection you opened for this task (the button **Open <connection> for this task** on the held card). How far a connection may be opened is a word in its tool pack type, per environment: `all`, `items` or `no`. The sample SQL Server type opens DEV and IST and not QAT. Prod and a destroy are never opened;
-- a write to a ticket the task is linked to, after you opened its **linked items** (the `items` word: the same button on the card of a held write to a linked ticket). A ticket the agent links by itself still waits for you.
+- a write to a ticket the task is linked to, after you opened its **linked items** (the `items` word: the button **Open linked items of <connection> for this task** on the card of a held write to a linked ticket). A ticket the agent links by itself still waits for you.
 
 You decide when a call is held, not before: **Approve** is for that one command, **Open** is for the connection. Both need the code the board shows, so the agent cannot open a connection for itself. **Dismiss** asks why with one click (the command is wrong, wrong connection or environment, not now, do it another way): the agent changes the call and it is held again, or it stops that path. With *not now* or no reason it does not retry and does not reach the same result another way. A company can lower what a type says (a connection with `"open": "no"`), never raise it.
 

@@ -3669,5 +3669,6 @@
   "desk.outbox.opened.wait": "agent 在等你的答复，现在接着做。它再运行一次这条命令之前，这张卡一直在。",
   "desk.outbox.opened.told": "已告诉 agent。它再运行一次这条命令之前，这张卡一直在。",
   "desk.outbox.opened.asking": "agent 正在等你回答它的问题。请先在 chat 里回答；之后它就能把这条命令再运行一次。",
-  "board.enter.sys.scroll": "共 {n} 个连接：往下滚动看其余的。"
+  "board.enter.sys.scroll": "共 {n} 个连接：往下滚动看其余的。",
+  "company.folder.ahead.both": "这份知识库里有 {here}是这个文件夹没有的（列在下面），而文件夹里有 {there}是这份副本没有的。什么都没改。请先在文件夹里用你的 git 工具把两边合起来，再更新一次。"
 }

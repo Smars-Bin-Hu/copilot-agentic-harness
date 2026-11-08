@@ -3669,5 +3669,6 @@
   "desk.outbox.opened.wait": "The agent was waiting for your answer and goes on now. This card stays until it has run the command again.",
   "desk.outbox.opened.told": "Told the agent. This card stays until it has run the command again.",
   "desk.outbox.opened.asking": "The agent is waiting for your answer to its question. Answer it in the chat first; after that it can run the command again.",
-  "board.enter.sys.scroll": "{n} connections in all: scroll for the rest."
+  "board.enter.sys.scroll": "{n} connections in all: scroll for the rest.",
+  "company.folder.ahead.both": "The knowledge base here has {here} that this folder does not have (listed below), and the folder has {there} that this copy does not. Nothing was changed. Join the two in the folder with your git tool first, then update again."
 }

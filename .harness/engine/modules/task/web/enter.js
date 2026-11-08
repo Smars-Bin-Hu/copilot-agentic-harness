@@ -407,14 +407,18 @@
     }
     return h("div", {class: "en-pop-in"}, h("table", null, h("thead", null, h("tr", null, ...head)), h("tbody", null, ...body)), c.off ? h("p", {class: "sy-off"}, c.off.text) : null);  // the connections whose tool pack is off are not in the table (1.7.38)
   }
+  const fillPop = (c) => { pop.replaceChildren(popTable(c)); };
+  function markScroll(c) {  // more rows than the window holds: it says so, and how many there are
+    const inner = pop.firstChild;
+    if (inner && inner.scrollHeight > inner.clientHeight + 2) inner.append(h("p", {class: "sy-scroll"}, t("board.enter.sys.scroll", {n: new Set(c.rows.map((row) => row.system)).size})));
+  }
   function popShow(li) {
     const c = itemOf("connections");
     if (!c || !c.rows || !c.rows.length) return;
     clearTimeout(popTimer); popFor = li;
-    pop.replaceChildren(popTable(c));
+    fillPop(c);
     pop.hidden = false;
-    const inner = pop.firstChild;  // more rows than the window holds: it says so, and how many there are
-    if (inner && inner.scrollHeight > inner.clientHeight + 2) { inner.append(h("p", {class: "sy-scroll"}, t("board.enter.sys.scroll", {n: new Set(c.rows.map((row) => row.system)).size}))); }
+    markScroll(c);
     const r = li.getBoundingClientRect(), w = pop.offsetWidth, ph = pop.offsetHeight;
     pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
     pop.style.top = (r.top - ph - 6 > 8 ? r.top - ph - 6 : Math.min(innerHeight - ph - 8, r.bottom + 6)) + "px";
@@ -458,7 +462,7 @@
       sy.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: title(item)}, h("i", {class: "sy-d " + (DOT[item.state] || "unknown")}), item.name)), h("span", {class: "sy-more", hidden: ""}));
     }
     fitNames(sy);
-    if (hover && popFor === li && !pop.hidden) pop.replaceChildren(popTable(c));  // an open window follows the new answer
+    if (hover && popFor === li && !pop.hidden) { fillPop(c); markScroll(c); }  // an open window follows the new answer
   }
   const noNames = (li) => { const sy = li.querySelector(".sy"); if (sy) sy.remove(); };
 

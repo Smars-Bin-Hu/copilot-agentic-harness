@@ -726,7 +726,7 @@ def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
 
       behind     the folder has commits this copy has not (`behind`), and the copy has none the folder lacks: `changes` (first UPDATE_SHOWN of `total`), `counts`; with `apply` they are merged (fast-forward only)
       same       the copy has everything the folder has
-      ahead      the copy has commits the folder lacks (`ahead`, `subjects`): stop; they are never replaced. `behind` says whether the folder has new ones too; `pull` is the command that brings them into the folder
+      ahead      the copy has commits the folder lacks (`ahead`, `subjects`): stop; they are never replaced. `behind` says whether the folder has new ones too; `pull` is the command that brings them into the folder (none when the folder moved on too: that needs a merge)
       unrelated  the two share no history: stop
       dirty      files changed here and not committed would be changed by the update (`files`): stop
       plain      the folder or this copy is no git repository: nothing to pull; the caller falls back to the old way (copy the folder, the old one to a backup)
@@ -755,6 +755,9 @@ def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
     out["uncommitted_there"] = len(changed_lines(there.stdout)) if there.returncode == 0 else 0
     if ahead:  # a commit of this copy the folder lacks: never replaced, never dropped
         out["subjects"] = _commit_subjects(kb, "FETCH_HEAD..HEAD")
+        count = lambda n: say("company.commits.one") if n == 1 else say("company.commits", n=n)  # noqa: E731
+        if behind:  # both moved on: a fast-forward cannot join them, and a merge is for the person's git tool; no button
+            return dict(out, state="ahead", why=say("company.folder.ahead.both", here=count(ahead), there=count(behind)))
         return dict(out, state="ahead", pull=_pull_line(kb, source, name), why=say("company.folder.ahead" if ahead > 1 else "company.folder.ahead.one", n=ahead))
     if not behind:
         return dict(out, state="same", text=say("company.folder.same"))

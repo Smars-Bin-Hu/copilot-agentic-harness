@@ -265,6 +265,8 @@ class Ready:
         """For the connections row: the table of the hover, whether the company's launch script can start VS Code with an identity (Windows), whether VS Code was started without this computer's settings."""
         systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
         raw = reach.view(self.root, systems) if systems and not outside.validate(systems) else []
+        off = set(readyitems.connections_off(self.root))  # their tool pack is off: not in the table, the row says how many more there are (1.7.38)
+        raw = [line for line in raw if line["system"] not in off]
         out: Dict[str, Any] = {"rows": self.table(systems, raw)["rows"] if raw else [], "checking": self.checker.busy(), "launch": False, "env_wrong": any(line.get("why") == "vscode-env" for line in raw)}
         out["launch"] = any(line["state"] == reach.DENIED and line.get("why") != "vscode-env" for line in raw) and reach.launch_script(self.root) is not None
         return out

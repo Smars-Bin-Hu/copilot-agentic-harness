@@ -402,6 +402,17 @@ class BoardChecksItself(ConnectionsCase):
         self.assertEqual([problem["key"] for problem in found["problems"]], ["signin", "down"])
         self.assertEqual(self.ready().answer(True)["optional"]["identities"], 0)
 
+    def test_the_row_of_the_enter_screen_says_how_many_more_connections_have_their_pack_off_and_they_are_not_in_the_table(self) -> None:
+        """Q22."""
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}, "old-a": {"type": "offtype", "env": "dev"}})
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        connections.probe_all(self.root)
+        found = self.line(self.ready())
+        self.assertEqual([one["name"] for one in found["names"]], ["db-dev"])
+        self.assertEqual([row["system"] for row in found["rows"]], ["db-dev"])
+        self.assertEqual(found["off"]["text"], messages.text("ready.conn.off.one", names="old-a"))
+        self.assertEqual(found["problems"], [])  # the one connection that counts is signed in
+
     def test_a_connection_without_an_environment_has_an_empty_env_cell_and_a_system_with_two_states_is_partly(self) -> None:
         from core import reach
 

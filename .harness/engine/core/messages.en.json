@@ -3536,5 +3536,9 @@
   "connections.state.nopack.tip": "The tool pack of this connection is off, so there is no sign-in or test here. The gate still judges its calls by the rules of the pack: a read runs, a write is held for you, a destroy is refused.",
   "connections.own.env.prod": "No PROD here: a prod connection comes only from the company's knowledge base, and the agent only reads there.",
   "doctor.systems.unsigned.one": "Connection {names} has no sign-in kept here, so this terminal could not reach it. Sign in to it in Connections & sign-ins on the board, then run doctor again.",
-  "doctor.systems.unsigned": "{n} connections have no sign-in kept here, so this terminal could not reach them: {names}. Sign in to them in Connections & sign-ins on the board, then run doctor again."
+  "doctor.systems.unsigned": "{n} connections have no sign-in kept here, so this terminal could not reach them: {names}. Sign in to them in Connections & sign-ins on the board, then run doctor again.",
+  "ready.conn.off.one": "1 more connection has its tool pack off: {names}. It is not counted.",
+  "ready.conn.off": "{n} more connections have their tool pack off: {names}. They are not counted.",
+  "setup.fact.conns.off.one": "1 more connection has its tool pack off: {names}. It is not counted.",
+  "setup.fact.conns.off": "{n} more connections have their tool pack off: {names}. They are not counted."
 }

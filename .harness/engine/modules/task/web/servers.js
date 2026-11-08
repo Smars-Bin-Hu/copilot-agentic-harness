@@ -335,9 +335,11 @@ const SERVERS = (function () {
   }
 
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
+  // A connection whose tool pack is off is not counted (Q22); `off` names them, for the hover.
   function summary() {
     return ask("list").then((found) => ({orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.signed).length,
-      rows: found.connections.filter((row) => row.via !== "mcp").map((row) => ({alias: row.alias, saved: Boolean(row.signed), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || "", failed: Boolean(row.saved) && (row.reach === "denied" || row.reach === "failed")}))}));
+      off: found.connections.filter((row) => row.type && !row.known).map((row) => row.alias),
+      rows: found.connections.filter((row) => row.via !== "mcp" && (!row.type || row.known)).map((row) => ({alias: row.alias, saved: Boolean(row.signed), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || "", failed: Boolean(row.saved) && (row.reach === "denied" || row.reach === "failed")}))}));
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.

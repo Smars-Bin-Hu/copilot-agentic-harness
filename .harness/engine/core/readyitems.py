@@ -11,6 +11,7 @@
   names     packs and connections: [{name, state}] (ok, need, down, none, untested), for a dot each
   problems  [{key, text, why, short, fix}]: one for each thing the person should look at; `text` and `why` for the board block, `short` for a note under the Enter row
   tip       a sentence for the hover of the row; "" when there is none
+  off       connections only: `{n, names, text}` for the connections whose tool pack is off. They are not counted, not in `names`, and give no "not signed in" problem; `text` is the hover's sentence
   found     kb only: whether a knowledge base with content is in place
 
 Nothing here blocks anything. A caller that counts "to look at" counts `problems`. MCP never appears: a connection that VS Code runs is not here.
@@ -223,8 +224,14 @@ def packs_item(root: Path) -> Dict[str, Any]:
     return item("packs", "yellow" if problems else "ok", count(len(names), "ready.packs"), problems[0]["fix"] if problems else {}, names, problems)
 
 
+def connections_off(root: Path) -> List[str]:
+    """The connections whose tool pack is off or gone (1.7.38): the company lists them, the gate still judges their calls, but there is no sign-in or test for them here. The Enter screen does not count them."""
+    known = conn_core.types(root)
+    return [alias for alias, server in conn_core.listed(root).items() if server.get("type") and not known.get(str(server.get("type")))]
+
+
 def connection_states(root: Path) -> List[Dict[str, Any]]:
-    """`[{name, state, saved}]` of every connection VS Code does not run (MCP is left out). state: ok (the last test passed), down (a sign-in is saved and the last test failed),
+    """`[{name, state, saved}]` of every connection VS Code does not run (MCP is left out) whose tool pack is on. state: ok (the last test passed), down (a sign-in is saved and the last test failed),
     none (no sign-in, and no test passed), untested (a sign-in is saved and no test has run yet)."""
     known, env = conn_core.types(root), conn_core.read_env(root)
     systems = config.policy_or_empty(root, "tools").get("systems") or {}
@@ -235,7 +242,7 @@ def connection_states(root: Path) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for alias, server in conn_core.listed(root).items():
         kind = known.get(str(server.get("type"))) or {}
-        if kind.get("via") == "mcp":
+        if kind.get("via") == "mcp" or (server.get("type") and not kind):  # no kind: its tool pack is off (counted in `connections_off`)
             continue
         saved = bool(conn_core.identity_of(env, alias, kind, server))
         states = [reach.UNKNOWN if line.get("why") == "vscode-env" else line["state"] for line in seen if line["system"] == alias]  # a VS Code started without this computer's settings says nothing of the sign-in: its own row says that
@@ -256,6 +263,15 @@ def certificate_missing(root: Path) -> bool:
 
 
 def connections_item(root: Path) -> Dict[str, Any]:
+    out = connections_counted(root)
+    off = connections_off(root)
+    if off:  # the hover says how many more there are (Q22); the screen and the problems count the others only
+        out["off"] = {"n": len(off), "names": off, "text": say("ready.conn.off.one" if len(off) == 1 else "ready.conn.off", n=len(off), names=names_text(off))}
+        out["tip"] = out["off"]["text"]
+    return out
+
+
+def connections_counted(root: Path) -> Dict[str, Any]:
     found = connection_states(root)
     problems: List[Dict[str, Any]] = []
     none = [one["name"] for one in found if one["state"] == "none"]

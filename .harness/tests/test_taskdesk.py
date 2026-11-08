@@ -644,7 +644,7 @@ class DeskTests(ServeCase):
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
         self.assertEqual(status, 200, data)
         code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
-        self.assertIn(code, data["result"]["ask"])
+        self.assertIn(code[:6].upper(), data["result"]["ask"])
         self.assertEqual(task_ops.req_state(self.root, TASK), "open")  # a look confirms nothing
         self.assertEqual(self.request("POST", "/api/act", {**body, "code": "00000000"}, cookie=cookie)[0], 409)
         self.assertEqual(self.request("POST", "/api/act", {**body, "code": code}, cookie=cookie)[0], 200)

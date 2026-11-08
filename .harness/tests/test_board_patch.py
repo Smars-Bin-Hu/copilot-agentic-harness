@@ -110,7 +110,7 @@ assert.strictEqual(under(), false, "a button far from the bar");
 buttons = [button([480, 690, 560, 720])];  // Approve, half under the bar
 assert.strictEqual(under(), true);
 buttons = [button([480, 690, 560, 720], {disabled: true})];
-assert.strictEqual(under(), false, "a disabled button takes no click: nothing to cover");
+assert.strictEqual(under(), true, "a grey button is covered too: Approve and Open are grey until the code is typed (C12 TB-14)");
 buttons = [button([480, 690, 560, 720], {closest: () => ({})})];
 assert.strictEqual(under(), false, "a hidden part of the page");
 buttons = [button([480, 690, 560, 720])];

@@ -1120,6 +1120,7 @@
   // The card shows the facts (what, where, the pack's `show` facts, the target) and the first words of the command; View opens the small window with the command laid out line by line
   // and the file it reads, whole, scrolling. The code is typed on the card, as the design says a person reads the command first: Approve wakes once the window was opened.
   // Approve is `harness approve-action` with that code (the board's act, no preview); Dismiss takes the call away without running anything.
+  const changedCalls = new Map();  // code -> what the server said when a file of the call changed after View: the card shows it until View is pressed again (a redraw would lose it)
   const viewedCalls = new Map();  // code -> the files of the call and their digests, as the card had them when View was pressed: Approve sends them back, and the server asks for a new View when a file is not the same (1.7.38, C12 RB-N5)
   const enteredCodes = new Map();  // what the person typed or clicked into a card's code box, kept when the card is drawn again
   const reasonRows = new Map();  // code -> {kind}: the "Why not?" row of a card is open, and which of the two reasons that take a line is chosen (1.7.38); the line itself is a `data-keep` field
@@ -1252,6 +1253,7 @@
   }
   function callWindow(item, onCode) {
     viewedCalls.set(item.code, item.seen || {});
+    changedCalls.delete(item.code);
     const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
     copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
@@ -1292,14 +1294,14 @@
     input.addEventListener("input", arm);
     const no = h("button", {type: "button", class: "act" + (gone ? " hot big" : ""), disabled: can ? null : "disabled", "aria-expanded": reasonRows.has(item.code) ? "true" : "false"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
-    const said = h("div", {class: "bad"});
+    const said = h("div", {class: "bad"}, !viewedCalls.has(item.code) && changedCalls.has(item.code) ? changedCalls.get(item.code) : null);
     view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; enteredCodes.set(item.code, code); arm(); yes.focus(); }); arm(); });  // the code is not filled in by opening View: the person types it, or clicks it in View (1.7.29)
     input.addEventListener("input", () => enteredCodes.set(item.code, input.value));
     input.addEventListener("focus", arm);
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })()}); SERVE.done(); }, (error) => { if (error.data && error.data.changed) viewedCalls.delete(item.code); said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });  // a file changed since View: View pulses again
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })()}); SERVE.done(); }, (error) => { if (error.data && error.data.changed) { viewedCalls.delete(item.code); changedCalls.set(item.code, error.message); } said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });  // a file changed since View: View pulses again
     };
     yes.addEventListener("click", send);
     opens.forEach((open) => open.addEventListener("click", () => {

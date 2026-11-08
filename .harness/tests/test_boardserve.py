@@ -354,7 +354,7 @@ class ServeTests(ServeCase):
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
         self.assertEqual(status, 200, data)
         code = tasks.plan_digest(self.root, TASK)[:8]
-        self.assertIn(code, data["result"]["ask"])
+        self.assertIn(code[:6].upper(), data["result"]["ask"])  # six capitals, as the code of a held call (C12 N13)
         self.assertTrue(data["result"]["screen"])
         self.assertFalse(tasks.plan_approved(self.root, TASK, self.data()))  # a preview approves nothing
         self.assertEqual(self.request("POST", "/api/act", {**body, "code": "00000000"}, cookie=cookie)[0], 409)

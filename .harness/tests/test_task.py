@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from unittest import mock
 
 import support  # noqa: F401  (puts the engine on sys.path)
-from core import targets, tasks
+from core import messages, targets, tasks
 from modules.task import promote_target, task as task_ops
 from modules.task.common import CommandError
 from support import payload, post_tool, pre_tool, run_git, subagent_start
@@ -30,7 +30,7 @@ class PickUpTests(TaskCase):
         self.assertEqual(result["branch"], self.branch())
         self.assertEqual(result["target_repos"], ["repo_a", "repo_b"])
         self.assertIn("PLAN.md", result["next"])
-        self.assertIn("task approve-plan", result["next"])
+        self.assertIn(messages.text("board.action.approve-plan"), result["next"])
         self.assertTrue((self.task / "DEV").is_dir())
         self.assertEqual(self.session_state(SESSION)["active_task"], TASK)
         self.assertEqual((self.data()["status"], self.data()["promote"]["state"]), ("open", "none"))
@@ -109,8 +109,8 @@ class PlanApprovalTests(TaskCase):
                 output = self.edit(path)
                 self.assertEqual(self.decision(output), "deny")
                 self.assertIn("要等计划经用户批准后才能写", self.reason(output))
-                self.assertLess(self.reason(output).index("task approve-plan"), 300)  # the log cuts a reason there; the scenario check reads the log
-                self.assertIn("task approve-plan", self.reason(output))
+                self.assertLess(self.reason(output).index(messages.text("board.action.approve-plan")), 300)  # the log cuts a reason there; the scenario check reads the log
+                self.assertNotIn("task approve-plan", self.reason(output), "the button of the task page, not a command (C12 RB-N8)")
                 self.assertNotIn("task fetch", self.reason(output))
         for path in ("docs/x.md", "/tmp/outside.txt", f"{TASK}/../job2/RCA.md", TASK, f"{TASK}/DEV"):
             with self.subTest(path):
@@ -290,7 +290,7 @@ class PromoteTests(TaskCase):
         self.assertEqual([(f["path"], f["action"], f["added"], f["removed"]) for f in result["files"]], [("repo_b/src/a.sql", "modify", 1, 1)])
         self.assertNotIn("source", result["files"][0])
         self.assertEqual(result["review_file"], f"{TASK}/PROMOTE-PLAN.diff")
-        self.assertIn("task approve-promote", result["next"])
+        self.assertIn(messages.text("board.action.approve-promote"), result["next"])
         review = (self.task / "PROMOTE-PLAN.diff").read_text(encoding="utf-8")
         self.assertIn("+select 1, 2;", review)
         self.assertIn("# repository repo_b: main at", review)

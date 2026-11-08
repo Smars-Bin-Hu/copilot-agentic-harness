@@ -109,7 +109,7 @@ class PlanTests(PromoteCase):
         self.assertEqual(result["repos"][0]["name"], "repo_b")
         self.assertEqual(result["repos"][0]["base_commit"], before)
         self.assertEqual((result["files"][0]["added"], result["files"][0]["removed"]), (1, 1))
-        self.assertIn("approve-promote", result["next"])
+        self.assertIn(messages.text("board.action.approve-promote"), result["next"])  # the button of the task page (C12 RB-N8)
         self.assert_untouched(self.repo_b)
         self.assert_untouched(self.repo_a)
         self.assertEqual((self.repo_b / "src" / "a.sql").read_text(encoding="utf-8"), "select 1;\n")

@@ -15,7 +15,7 @@ This is a hook test. Do these in order:
 3) Write the plan to PLAN.md (one thing only: write hello.txt under DEV/, with the content hi). Then stop, give me the link to PLAN.md, and wait for my approval.
 ```
 
-After the agent stops, open `PLAN.md` in the editor and look at it, run `harness task approve-plan` in **your own terminal**, and type the code. Then answer in **the same conversation**:
+After the agent stops, open `PLAN.md` in the editor and look at it, press **Approve plan** on the task page of the board, and type the code. Then answer in **the same conversation**:
 
 ```text
 The plan is approved. Write hello.txt under DEV/, run task diff, then task close, and tell me the path of the report.
@@ -23,7 +23,7 @@ The plan is approved. Write hello.txt under DEV/, run task diff, then task close
 
 ## Manual checks
 
-- Step 2 was refused, the agent told you the reason as written, and the reason has `task approve-plan` in it.
+- Step 2 was refused, the agent told you the reason as written, and the reason names `PLAN.md` and the **Approve plan** button of the task page.
 - The agent gave the link to `PLAN.md` and did not paste the whole plan into the conversation.
 - The approval screen in the terminal shows only the file path and the code; it does not print the plan.
 - The report has the line "the person approved the plan".

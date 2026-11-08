@@ -8,7 +8,7 @@ import unittest
 import support  # noqa: F401  (puts the engine on sys.path)
 from taskcase import TASK, TaskCase
 
-from core import tasks
+from core import messages, tasks
 from modules.task import task as task_ops
 from modules.task import taskdesk, taskreview
 
@@ -209,9 +209,9 @@ class RequirementFirst(TaskCase):
         self.write_plan()
         self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "plan", "a plan waiting comes first; its button asks for both")
         step = task_ops.next_step(self.root, TASK, self.data())
-        self.assertIn("--with-req", step)
+        self.assertIn(messages.text("board.action.approve-plan"), step)  # the button of the page, one code for both (C12 RB-N8: no command to run)
         self.assertIn("REQ.md", step)
-        self.assertNotIn("`harness task approve-plan`", step, "one ask, not the plain command that is refused")
+        self.assertNotIn("task approve-plan", step, "the person is told the button, not a command")
         self.approve_plan(with_req=True)
         self.assertNotEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "req")
 

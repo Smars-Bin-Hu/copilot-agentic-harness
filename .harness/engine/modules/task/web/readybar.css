@@ -1,0 +1,21 @@
+/* The blocks at the top of the board after Enter (readybar.js, 1.7.38, block B): red for what the agent cannot work without, yellow for what the company's tasks still miss. */
+.rd-wrap{display:flex;flex-direction:column;gap:10px;margin:14px 0 0}
+.rd-wrap[hidden]{display:none}
+.rd-bar{padding:13px 18px;border-radius:12px;font-size:13.5px;line-height:1.5}
+.rd-yellow{background:var(--hot-bg);border:1px solid var(--hot-line)}
+.rd-red{background:var(--bad-bg);border:1px solid var(--bad-line)}
+.rd-bar h3{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:14px;font-weight:650}
+.rd-bar.slim{padding:10px 18px}.rd-bar.slim h3{margin:0}
+.rd-title{min-width:0;overflow-wrap:anywhere}
+.rd-x{margin-left:auto;flex:none;padding:0;border:0;background:none;color:var(--soft);font:inherit;font-weight:450;cursor:pointer;white-space:nowrap}
+.rd-x:hover{color:var(--ink)}.rd-x:focus-visible,.rd-fix:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px}
+.rd-grp{padding-bottom:6px;font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--soft)}
+html[lang="zh"] .rd-grp{letter-spacing:.06em;text-transform:none;font-size:12px}
+.rd-li{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.rd-t{flex:1;min-width:0;overflow-wrap:anywhere}
+.rd-why{color:var(--soft)}
+.rd-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--soft)}
+.rd-dot.yellow{background:var(--hot-dot)}.rd-dot.red{background:var(--bad)}
+.rd-fix{flex:none;margin:0}
+html.rd-red .vs-banner{display:none}  /* the red block says it already */
+@media (max-width:640px){.rd-bar{padding:12px 14px}.rd-li{display:grid;grid-template-columns:8px minmax(0,1fr);align-items:start;gap:6px 12px}.rd-li .rd-dot{margin-top:7px}.rd-fix{grid-column:2;justify-self:start}}

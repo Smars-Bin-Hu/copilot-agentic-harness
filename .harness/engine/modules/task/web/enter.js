@@ -1,8 +1,10 @@
 // The Enter screen of a served page (1.6 B86): the wordmark HARNESS, the robot floating over its middle (in 3D, bot3d.js; flat when it cannot be), the pointer light, hold to charge, and the readiness list.
 // A page on disk has none (no SERVE). The search and the settings are the global ones of shell.js; this screen adds nothing to the top but the greeting.
 //
-// Readiness: POST /api/ready every 3 s (a read; the server answers from caches and waits for nothing). One line for each check; the lines light up in order. Enter is allowed only when
-// every blocking line is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page. Warn-only lines (knowledge base, target repositories, outside systems) are grey.
+// Readiness: POST /api/ready every 3 s (a read; the server answers from caches and waits for nothing). Two blocks (1.7.38). Harness & Local is required: this copy is set up, this browser is paired, harness doctor has
+// no error, VS Code is open, Copilot is connected. Enter is allowed only when every one is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page.
+// From the company is optional (knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories): never a gate, but what is missing is said here with a link to the place that
+// mends it, and again in the block of the board after Enter (readybar.js). The VS Code button is always beside Enter: Open, Restart, or Restart with identities (vsrestart.py).
 // A check that cannot run shows as failed with its reason; a board that does not answer shows a line saying so and the screen goes on asking.
 //
 // Showing it: once for each tab session (sessionStorage, in try/catch), not on a poll, a reload of the board or a way back from a task. A task page opened from a link skips it only when everything
@@ -60,14 +62,15 @@
   const head = h("div", {class: "en-chk-h h-check"}, h("i"), headText, getReady);
   const list = h("ul", {class: "en-chk-l"});
   const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
-  const noteLine = h("p", {class: "en-note", hidden: "hidden"});  // under HARNESS READY: the one grey or yellow line that matters most (1.7.36)
   const legal = h("p", {class: "en-legal"}, t("board.enter.legal", {copyright: t("board.copyright"), version: DATA.serve.version || ""}));
-  const body = h("div", {class: "en-chk-body"}, head, noteLine, list, errLine);  // the lines scroll here; the legal line below it stays in view (1.7.24)
+  const body = h("div", {class: "en-chk-body"}, head, list, errLine);  // the lines scroll here; the legal line below it stays in view (1.7.24)
   const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
   const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
+  const vsBtn = h("button", {type: "button", class: "en-vs", hidden: "hidden"}, t("board.enter.open"));  // always beside Enter: Open, Restart, or Restart with identities (1.7.38)
+  const cta = h("div", {class: "en-cta"}, vsBtn, go);
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
-    h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, go, hint));
+    h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, cta, hint));
   document.body.append(enter);
   const stage = enter.querySelector(".en-stage");
   let open = true;
@@ -325,60 +328,60 @@
   }
 
   // ---------- readiness ----------
-  // Three groups (1.7.36). Only the lines of `blocking` stop the way in (this copy is set up, this browser is paired); every other line is information with a dot (ok, grey, yellow, red).
-  const GROUPS = [["harness", ["setup", "paired", "doctor"]], ["company", ["kb", "folder", "packs"]], ["computer", ["vscode", "copilot", "repos", "systems"]]];
+  // Two blocks (1.7.38). `/api/ready` gives `checks` (Harness & Local, all blocking) and `optional.items` (From the company, never blocking).
+  const REQ = ["setup", "paired", "doctor", "vscode", "copilot"];
+  const OPT = ["kb", "instructions", "skills", "standards", "packs", "connections", "repos"];
+  const GROUPS = [["required", REQ], ["optional", OPT]];
   const ORDER = GROUPS.flatMap((group) => group[1]);
-  const NOTE_ORDER = ["doctor", "vscode", "folder", "packs", "systems", "copilot", "kb", "repos"];  // which grey or yellow line the small line under the top word names first
-  const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, opened: 0, ready: false, openError: ""};
+  const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, opened: 0, ready: false, restart: null, restarting: false, fail: ""};
   const OPENED_FOR = 120000;  // ms in which a VS Code that was just opened is waited for, not blamed
   const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
   const setClass = (node, cls) => { if (node.className !== cls) node.className = cls; };
   const slot = (i) => chk0.t0 && Date.now() - chk0.t0 >= FIRST + i * STEP;
   function build() {
     for (const [group, ids] of GROUPS) {
-      list.append(h("li", {class: "gh", "data-g": group}, h("span", {class: "gh-t"}, t("board.enter.g." + group)), h("span", {class: "gh-n"})));
+      list.append(h("li", {class: "gh", "data-g": group}, h("i", {class: "ck"}), h("span", {class: "gh-t"}, t("board.enter.g." + group)), h("span", {class: "gh-tag"}), h("span", {class: "gh-n"})));
       for (const id of ids) list.append(h("li", {class: "row", "data-id": id, "data-g": group}, h("i", {class: "ck"}), h("span", {class: "t"}), h("em"), h("p", {class: "m", hidden: "hidden"})));
     }
   }
   const rowOf = (id) => list.querySelector('li.row[data-id="' + id + '"]');
   const word = (key, vals, fallback) => (Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key, vals) : fallback || "");
-  function lineView(c) {  // one check -> {state, level, tag, message, button, tip}: a short word on the line, the long words on hover (the panel under the line only where a button or a blocking line needs it)
-    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || ""), tip: plainWords(c.tip || "")};
-    let state = c.state, level = c.level || "grey", tag = "", message = "", button = false, tip = "";
-    if (state === "fail" && id === "vscode" && c.why === "none" && chk0.opened && Date.now() - chk0.opened < OPENED_FOR) { state = "wait"; level = "grey"; }
-    if (c.state === "ok") {
-      tag = id === "kb" ? t("board.enter.d.kb.ok2", {version: c.version ? t("board.enter.d.kb.version", {v: c.version}) : "", domains: c.domains ? t("board.enter.d.kb.domains", {n: c.domains}) : ""}) : id === "vscode" && c.env_wrong ? t("board.enter.d.vscode.noenv") : word("board.enter.d." + id + ".ok", vals);
-      if (id === "vscode" && c.env_wrong) { tip = t("board.enter.m.vscode.noenv"); button = "open"; }
-    } else if (c.blocking) {
-      tag = state === "wait" ? t("board.enter.tag.wait") : id === "paired" ? t("board.enter.d.paired.unpaired") : t("board.enter.tag.fail");
-      message = word("board.enter.m." + id + "." + c.why, vals, plainWords(c.detail || ""));
-    } else if (c.why === "error") { tag = t("board.enter.d.error"); tip = t("board.enter.m.error", vals); }
-    else if (id === "doctor") {
-      tag = c.why === "errors" ? t("board.enter.d.doctor.errors", vals) : c.why === "failed" ? t("board.enter.d.doctor.failed") : "";
-      tip = word("board.enter.m.doctor." + c.why, vals, "");
-    } else if (id === "vscode") {
-      tag = state === "wait" ? t("board.enter.d.vscode.wait") : c.why === "none" ? t("board.enter.d.vscode.none") : t("board.enter.d.vscode.stuck");
-      tip = word("board.enter.m.vscode." + (state === "wait" && c.why === "none" ? "opened" : c.why), vals, "");
-      button = c.open ? "open" : false;
-    } else if (id === "copilot") {
-      tag = c.why === "vscode" ? t("board.enter.d.copilot.vscode") : t("board.enter.d.copilot.fail");
-      tip = word("board.enter.m.copilot." + c.why, vals, "");
-    } else if (id === "kb") { tag = t("board.enter.d.kb.none"); tip = t("board.enter.tip.kb.none"); }
-    else if (id === "repos") { tag = c.why === "problem" ? t("board.enter.d.repos.problem") : t("board.enter.d.repos.none"); tip = c.why === "problem" ? t("board.enter.m.repos.problem", vals) : ""; }
-    else if (id === "folder" || id === "packs") { tag = word("board.enter.d." + id + "." + c.why, vals, c.why === "need" ? t("board.enter.d.packs.need") : ""); tip = word("board.enter.m." + id + "." + c.why, vals, ""); }
-    else if (id === "systems") {
-      tag = c.state === "ok" ? tag : t("board.enter.d.systems." + c.why, vals);
-      if (c.state === "ok") tag = t("board.enter.d.systems.ok", vals);
+  const langWord = () => { try { return new Intl.DisplayNames([root.lang], {type: "language"}).of(root.lang) || root.lang; } catch (error) { return root.lang; } };  // English, or the name of the language in itself
+  const recentlyOpened = () => chk0.opened && Date.now() - chk0.opened < OPENED_FOR;
+  const buttonKind = () => (chk0.last && chk0.last.vscode_button ? chk0.last.vscode_button.kind : "open");
+  const buttonWords = () => (chk0.last && chk0.last.vscode_button ? chk0.last.vscode_button.label : t("board.enter.open"));
+  // A line of the first block -> {state, level, tag, note, soft, tip}: a short word on the line; the long words in the note under it only where the person must do something.
+  function reqView(c) {
+    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || "")};
+    let state = c.state, level = c.level || "grey", tag = "", note = "", tip = "";
+    if (state === "fail" && id === "vscode" && c.why === "none" && recentlyOpened()) { state = "wait"; level = "yellow"; }
+    if (state === "check") return {state, level: "grey", tag: "", note: "", soft: false, tip: ""};
+    if (state === "ok") {
+      tag = id === "setup" ? [String(DATA.serve.user || "").trim(), langWord()].filter(Boolean).join(" · ") : id === "vscode" && c.env_wrong ? t("board.enter.d.vscode.noenv") : t("board.enter.d." + id + ".ok", vals);
+      if (id === "vscode" && c.env_wrong) note = t("board.enter.m.vscode.noenv");
+      return {state, level, tag, note, soft: true, tip};
     }
-    if (id === "systems" && c.why === "unreached" && c.env_wrong) { message = t("board.enter.m.systems.vscodeenv"); button = "open"; }  // the real cause, in words (1.7.24): quit VS Code, open it from here; accounts are not the matter
-    else if (id === "systems" && c.why === "unreached" && c.identities && typeof SERVERS !== "undefined") { message = t("board.enter.m.systems.launch"); button = "identities"; }  // the identities kept by Servers (1.7.10)
-    else if (id === "systems" && c.launch && c.why === "unreached") { message = t("board.enter.m.systems.launch"); button = "launch"; }  // Windows: the company's launch script (1.7.9)
-    else if (id === "systems" && c.why === "unknown") { message = t(c.checking ? "board.enter.m.systems.checking" : c.check ? "board.enter.m.systems.notchecked" : "board.enter.m.systems.chat"); button = c.checking || !c.check ? false : "check"; }  // never checked: the board checks it itself (1.7.19)
-    if (id === "systems" && !(c.names && c.names.length)) tip = c.tip ? t("board.enter.tip.systems." + c.why, vals) : c.why === "unknown" ? t("board.enter.tip.systems.unknown") : c.why === "none" ? t("board.enter.tip.systems.none") : tip;
-    return {state, level, tag, message, button, tip};
+    if (state === "wait") tag = id === "copilot" ? t("board.enter.d.copilot.vscode") : t("board.enter.tag.wait");
+    else if (id === "paired") tag = t("board.enter.d.paired.unpaired");
+    else if (id === "doctor") tag = c.why === "failed" ? t("board.enter.d.doctor.failed") : t("board.enter.d.doctor.errors", vals);
+    else if (id === "vscode") tag = c.why === "none" ? t("board.enter.d.vscode.none") : t("board.enter.d.vscode.stuck");
+    else if (id === "copilot") tag = c.why === "vscode" ? t("board.enter.d.copilot.vscode") : t("board.enter.d.copilot.fail");
+    else tag = t("board.enter.tag.fail");
+    if (id === "setup") note = word("board.enter.m.setup." + c.why, vals);
+    else if (id === "paired") note = t("board.enter.m.paired.unpaired");
+    else if (id === "doctor") note = word("board.enter.m.doctor." + c.why, vals, plainWords(c.detail || ""));
+    else if (id === "vscode") note = c.why === "none" && recentlyOpened() ? t("board.enter.m.vscode.opened") : c.why === "none" ? t("board.enter.m.vscode.none", {button: buttonWords()}) : word("board.enter.m.vscode." + c.why, vals);
+    else if (id === "copilot" && c.why !== "vscode") note = word("board.enter.m.copilot." + c.why, vals);
+    return {state, level, tag, note, soft: state === "wait", tip};
   }
-  // Outside systems (1.7.19): one line of names, a dot before each (ok, down, not checked, partly), "+N" for those that do not fit; the table of environments, states,
-  // reasons and times is a window on hover. A name is never cut: the first one wraps when it alone is wider than the line.
+  // An item of the second block -> {state, level, tag, notes: [{text, fix}], tip}. The note is what the problems of the row say, with a link each to where it is mended.
+  function optView(c) {
+    const level = c.state === "ok" ? "ok" : c.state === "yellow" ? "yellow" : "grey";
+    const notes = (c.problems || []).filter((problem) => problem.short).map((problem) => ({text: problem.short, fix: problem.fix}));
+    return {state: c.state === "ok" ? "ok" : "note", level, tag: c.detail || "", notes, tip: ""};
+  }
+  // Names with a dot each (tool packs, connections): one line, "+N" for those that do not fit; the table of environments, states, reasons and times of the connections is a window on hover (1.7.19).
+  // A name is never cut: the first one wraps when it alone is wider than the line.
   const pop = h("div", {class: "en-pop", hidden: "hidden", role: "tooltip"});
   let popTimer = 0, popFor = null;
   const ago = (stamp) => {
@@ -387,6 +390,7 @@
     const seconds = Math.max(0, (Date.now() - date.getTime()) / 1000);
     return seconds < 60 ? t("board.enter.sys.now") : seconds < 3600 ? t("board.enter.sys.min", {n: Math.floor(seconds / 60)}) : seconds < 86400 ? t("board.enter.sys.hour", {n: Math.floor(seconds / 3600)}) : t("board.enter.sys.day", {n: Math.floor(seconds / 86400)});
   };
+  const itemOf = (key) => (chk0.last && chk0.last.optional ? chk0.last.optional.items.find((x) => x.key === key) : null);
   function popTable(c) {
     const head = ["system", "env", "status", "reason", "checked", "pack"].map((key) => h("th", null, t("board.enter.sys.col." + key)));
     const body = [];
@@ -401,7 +405,7 @@
     return h("div", {class: "en-pop-in"}, h("table", null, h("thead", null, h("tr", null, ...head)), h("tbody", null, ...body)));
   }
   function popShow(li) {
-    const c = chk0.last && chk0.last.checks.find((x) => x.id === "systems");
+    const c = itemOf("connections");
     if (!c || !c.rows || !c.rows.length) return;
     clearTimeout(popTimer); popFor = li;
     pop.replaceChildren(popTable(c));
@@ -414,22 +418,6 @@
   document.body.append(pop);
   pop.addEventListener("mouseenter", () => clearTimeout(popTimer));
   pop.addEventListener("mouseleave", () => popHide(true));
-  function sysNames(li, c) {
-    let sy = li.querySelector(".sy");
-    if (!sy) {
-      sy = h("div", {class: "sy", tabindex: "0", "aria-label": t("board.enter.t.systems")});
-      li.append(sy);
-      li.addEventListener("mouseenter", () => popShow(li)); li.addEventListener("mouseleave", () => popHide(true));
-      sy.addEventListener("focus", () => popShow(li)); sy.addEventListener("blur", () => popHide(false));
-    }
-    const key = JSON.stringify([c.names, root.lang]);
-    if (sy.dataset.k !== key) {
-      sy.dataset.k = key;
-      sy.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", "data-state": item.state}, h("i", {class: "sy-d " + item.state}), item.name)), h("span", {class: "sy-more", hidden: ""}));
-    }
-    fitNames(sy);
-    if (popFor === li && !pop.hidden) pop.replaceChildren(popTable(c));  // an open window follows the new answer
-  }
   function fitNames(sy) {  // show the names that fit on one line, "+N" for the rest
     const items = [...sy.querySelectorAll(".sy-i")], more = sy.querySelector(".sy-more");
     items.forEach((item) => { item.hidden = false; });
@@ -446,65 +434,75 @@
     if (keep.size < items.length) keep = place(room - 34);  // room kept for "+N"
     if (keep.size === items.length) return;
     items.forEach((item, index) => { item.hidden = !keep.has(index); });
-    const shown = keep.size;
-    more.textContent = "+" + (items.length - shown); more.hidden = false;
+    more.textContent = "+" + (items.length - keep.size); more.hidden = false;
+    more.title = items.filter((item, index) => !keep.has(index)).map((item) => item.textContent).join(", ");
   }
-  function packNames(li, c) {  // Tool packs: a name with a dot each (1.7.36); what lacks is on hover
-    let box = li.querySelector(".sy");
-    if (!box) { box = h("div", {class: "sy", tabindex: "0", "aria-label": t("board.enter.t.packs")}); li.append(box); }
+  const DOT = {ok: "ok", need: "partly", down: "partly", none: "none", untested: "unknown"};  // the state of a pack or a connection -> the class of its dot
+  function names(li, c, hover) {
+    let sy = li.querySelector(".sy");
+    if (!sy) {
+      sy = h("div", {class: "sy", tabindex: "0"});
+      li.append(sy);
+      if (hover) { li.addEventListener("mouseenter", () => popShow(li)); li.addEventListener("mouseleave", () => popHide(true)); sy.addEventListener("focus", () => popShow(li)); sy.addEventListener("blur", () => popHide(false)); }
+    }
+    sy.setAttribute("aria-label", t("board.enter.t." + c.key));
     const key = JSON.stringify([c.names, root.lang]);
-    if (box.dataset.k === key) return;
-    box.dataset.k = key;
-    box.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: item.state === "ok" ? "" : [(item.missing || []).length ? t("machine.conn.notusable", {programs: item.missing.join(", ")}) : "", ...(item.errors || [])].filter(Boolean).join("\n")}, h("i", {class: "sy-d " + (item.state === "ok" ? "ok" : "partly")}), item.name)));
+    if (sy.dataset.k !== key) {
+      sy.dataset.k = key;
+      const title = (item) => (c.key === "packs" ? (item.state === "ok" ? "" : t("machine.conn.notusable", {programs: item.missing || ""})) : t("board.enter.cs." + item.state));
+      sy.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: title(item)}, h("i", {class: "sy-d " + (DOT[item.state] || "unknown")}), item.name)), h("span", {class: "sy-more", hidden: ""}));
+    }
+    fitNames(sy);
+    if (hover && popFor === li && !pop.hidden) pop.replaceChildren(popTable(c));  // an open window follows the new answer
   }
-  const groupNames = (ids, checks) => ids.map((id) => { const c = checks.find((x) => x.id === id); return id === "packs" && c && c.names && c.names.length ? c.names.map((item) => item.name).join(", ") : t("board.enter.n." + id); }).join(" · ");
+  const noNames = (li) => { const sy = li.querySelector(".sy"); if (sy) sy.remove(); };
+
+  // The words of a restart that is going on: the VS Code line says so, and the button waits.
+  function showRestart(view, willOpen) { chk0.restart = view; if (view.state === "done" && willOpen !== false) chk0.opened = Date.now(); render(); }
+  const optionalCount = () => (chk0.last && chk0.last.optional ? chk0.last.optional.count : 0);
   function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks
     if (!list.children.length) build();
-    const checks = chk0.last ? chk0.last.checks : [];
-    let all = Boolean(chk0.last), first = "", pending = false, calm = true, anyCheck = false;
-    const worst = {level: "", id: "", word: "", tip: ""}, rank = {red: 3, yellow: 2, grey: 1};
+    const data = chk0.last, checks = data ? data.checks : [], optional = data && data.optional ? data.optional : null;
+    let all = Boolean(data), pending = false, anyCheck = false, missing = 0;
     ORDER.forEach((id, i) => {
-      const li = rowOf(id), c = checks.find((x) => x.id === id);
-      const view = c && slot(i) ? lineView(c) : {state: "check", level: "", tag: "", message: "", button: false, tip: ""};
-      if (c && c.blocking && view.state !== "ok") all = false;
-      if (view.state === "check") { anyCheck = true; if (!c || c.blocking || !slot(i)) pending = true; }  // a doctor still running is a spinner on its line, not a wait for the way in
-      else if (view.level !== "ok") calm = false;
-      if (c && view.state !== "check" && view.level !== "ok" && !c.blocking) {
-        const better = (rank[view.level] || 0) > (rank[worst.level] || 0) || ((rank[view.level] || 0) === (rank[worst.level] || 0) && NOTE_ORDER.indexOf(id) < NOTE_ORDER.indexOf(worst.id));
-        if (!worst.id || better) { worst.level = view.level; worst.id = id; worst.word = view.tag; worst.tip = view.tip; }
-      }
-      const withButton = Boolean(view.message) || view.button === "open" && id === "vscode" || Boolean(view.button);
-      setClass(li, "row s-" + view.state + (view.level ? " l-" + view.level : "") + (c && !c.blocking ? " warns" : " blocks") + (view.button === "open" && id === "vscode" ? " has-act" : ""));
+      const li = rowOf(id), req = i < REQ.length;
+      const c = req ? checks.find((x) => x.id === id) : optional && optional.items.find((x) => x.key === id);
+      const lit = c && slot(i);
+      const view = !lit ? {state: "check", level: "", tag: "", note: "", notes: [], soft: false, tip: ""} : req ? reqView(c) : optView(c);
+      if (req && view.state !== "ok") { all = false; if (lit && view.state !== "check") missing += 1; }
+      if (view.state === "check") { anyCheck = true; if (!c || req || !lit) pending = true; }
+      setClass(li, "row s-" + view.state + (view.level ? " l-" + view.level : "") + (req ? " blocks" : " warns") + (!req && c && c.fix && c.fix.to ? " has-fix" : "") + (!req && c && c.names && c.names.length ? " has-names" : ""));
       setText(li.querySelector(".t"), t("board.enter.t." + id));
       const em = li.querySelector("em");
-      li.title = view.tip || (view.tag.length > 24 ? view.tag : "");
-      em.classList.toggle("has-tip", Boolean(view.tip));
-      if (id === "packs" && c && c.names && c.names.length) { setText(em, ""); packNames(li, c); }
-      else if (id === "systems" && c && c.names && c.names.length) { setText(em, ""); em.dataset.k = ""; sysNames(li, c); }  // names with a dot each; the table is on hover (1.7.19)
-      else if (id === "systems" && /[\u2713\u2717?]/.test(view.tag)) {  // the marks of each environment in colour (1.7.9): ✓ green, ✗ orange, ? grey
-        if (em.dataset.k !== view.tag) { em.dataset.k = view.tag; em.replaceChildren(...view.tag.split(/([\u2713\u2717?])/).map((part) => part === "\u2713" ? h("b", {class: "mk ok"}, part) : part === "\u2717" ? h("b", {class: "mk bad"}, part) : part === "?" ? h("b", {class: "mk unknown"}, part) : document.createTextNode(part))); }
-      } else { em.dataset.k = ""; setText(em, view.tag); }
-      li.classList.toggle("attn", id === "systems" && c && c.why === "unreached");
-      // VS Code: Open VS Code sits at the end of its own line (1.7.36), not in a panel below
-      let act = li.querySelector(".act-end");
-      if (id === "vscode" && view.button === "open") {
-        const key = "open|" + chk0.openError + "|" + root.lang;
-        if (!act) { act = h("span", {class: "act-end"}); li.insertBefore(act, li.querySelector(".m")); }
-        if (act.dataset.k !== key) { act.dataset.k = key; act.replaceChildren(h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"))); }
-      } else if (act) act.remove();
-      const p = li.querySelector(".m"), panel = id === "vscode" ? "" : view.message || "", key = panel + "|" + view.button + "|" + chk0.openError + "|" + root.lang;
-      if (panel || (id === "vscode" && chk0.openError && view.button === "open")) {
-        if (p.dataset.k !== key) {
-          p.replaceChildren(document.createTextNode(id === "vscode" ? chk0.openError : panel));
-          if (view.button && id !== "vscode") {
-            const b = view.button === "check" ? h("button", {type: "button", class: "en-open", "data-check": "1"}, t("board.enter.check")) : view.button === "identities" ? h("button", {type: "button", class: "en-open", "data-identities": "1"}, t("board.enter.identities")) : view.button === "launch" ? h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")) : h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
-            if (view.button === "check" && view.state === "note") p.append(" ", b); else p.append(h("br"), b);
-            if (chk0.openError) p.append(h("br"), h("span", null, chk0.openError));
+      li.title = view.tip || "";
+      li.dataset.fix = !req && c && c.fix && c.fix.to ? "1" : "";
+      if (!req && c && c.names && c.names.length) { setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setText(em, view.tag || (view.state === "check" ? "" : "—")); }
+      const p = li.querySelector(".m");
+      const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), id === "vscode" ? [chk0.restart && chk0.restart.state, chk0.restart && chk0.restart.why, chk0.fail] : "", c && c.launch, root.lang]);
+      let note = view.note, soft = view.soft;
+      if (id === "vscode") {
+        const live = chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening");
+        const lost = chk0.restart && chk0.restart.state === "failed" && (view.state !== "ok" || (chk0.restart.since || 0) < 120);  // a VS Code that did not quit is still open: the failure is told for two minutes, and for as long as VS Code is not ok
+        const failed = Boolean(chk0.fail) || lost;
+        const said = failed ? (chk0.fail || READY.restartNote(chk0.restart)) : live ? READY.restartNote(chk0.restart) : "";
+        if (said) { note = said; soft = !failed; }
+      }
+      const has = Boolean(note) || Boolean((view.notes || []).length) || Boolean(!req && c && c.launch);
+      if (has) {
+        if (p.dataset.k !== keyNote) {
+          p.dataset.k = keyNote;
+          const nodes = [];
+          if (note) nodes.push(note);
+          if ((view.notes || []).length) {
+            nodes.push(view.notes.map((n) => n.text).join(" "));
+            const seen = new Set();
+            const links = view.notes.map((n) => n.fix).filter((fix) => { if (!fix || !fix.to || seen.has(fix.label)) return false; seen.add(fix.label); return true; });
+            links.forEach((fix, index) => nodes.push(index ? " · " : " ", READY.link(fix, {done: () => poll(), onState: showRestart, opened: () => { chk0.opened = Date.now(); }, fail: (error) => { chk0.fail = error.message; render(); }}, fix.short || fix.label)));
           }
-          p.title = panel.length > 120 ? panel : ""; p.dataset.k = key;
+          if (!req && c && c.launch) { const b = h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")); nodes.push(h("br"), t("board.enter.m.systems.launch"), h("br"), b); }
+          p.replaceChildren(...nodes);
         }
-        setClass(p, "m" + (view.state === "note" ? " soft" : "") + (view.state === "note" && view.button === "check" ? " inline" : "")); if (p.hidden) p.hidden = false;
-        if (!first && c && c.blocking && view.state !== "ok") first = panel;
+        setClass(p, "m" + (soft ? " soft" : "") + (req && view.state === "fail" ? " bad" : "")); if (p.hidden) p.hidden = false;
       } else if (!p.hidden) { p.hidden = true; p.dataset.k = ""; }
     });
     const down = Boolean(chk0.error);
@@ -513,29 +511,59 @@
     const ready = all && !pending && !down && slot(ORDER.length - 1);
     chk0.ready = ready;
     root.classList.toggle("en-notready", !ready && !pending);  // the reflection of the wordmark goes when the list has something to say (1.7.29)
-    setClass(head, "en-chk-h " + (pending ? "h-check" : ready ? "h-ok" : "h-wait"));
-    setText(headText, pending ? t("board.enter.checking") : ready ? t("board.enter.ready") : t("board.enter.notready"));
-    // the one small line under HARNESS READY: the most important grey or yellow line, never a gate
-    const note = ready && worst.id ? t("board.enter.note", {name: t("board.enter.t." + worst.id), word: worst.word}) : "";
-    setText(noteLine, note); noteLine.hidden = !note; noteLine.title = note && worst.tip ? t("board.enter.note.tip", {tip: worst.tip}) : "";
-    noteLine.className = "en-note" + (worst.level ? " l-" + worst.level : "");
-    // every dot green: the list folds into one line a group; hover or a click unfolds it
-    const folded = ready && calm && !anyCheck;
+    const looks = optionalCount(), noKb = Boolean(optional) && !optional.kb;
+    const mood = pending ? "h-check" : !ready ? "h-bad" : looks || noKb ? "h-warn" : "h-ok";
+    setClass(head, "en-chk-h " + mood);
+    setText(headText, pending ? t("board.enter.checking") : !ready ? t("board.enter.notready") : noKb ? t("board.enter.ready.nokb") : looks ? t("board.enter.ready.look", {n: looks}) : t("board.enter.ready"));
+    // the two block heads: the name, a tag (REQUIRED, OPTIONAL) with what is missing or to look at, and, folded, a summary
+    const reqMissing = ORDER.slice(0, REQ.length).filter((id) => { const c = checks.find((x) => x.id === id); return c && c.state !== "ok" && c.state !== "check"; }).length;
+    const tags = {required: t("board.enter.tag.required") + (reqMissing ? " · " + t("board.enter.tag.missing", {n: reqMissing}) : ""), optional: t("board.enter.tag.optional") + (looks ? " · " + t("board.enter.tag.look", {n: looks}) : "")};
+    const dots = {required: !data || pending ? "grey" : reqMissing ? "red" : "ok", optional: !data ? "grey" : looks ? "yellow" : "ok"};
+    list.querySelectorAll("li.gh").forEach((gh) => {
+      const group = gh.dataset.g;
+      setText(gh.querySelector(".gh-tag"), tags[group]);
+      setClass(gh, "gh l-" + dots[group]);
+      setText(gh.querySelector(".gh-n"), group === "required" ? t("board.enter.fold.required", {n: REQ.length - reqMissing, total: REQ.length}) : foldWords(optional));
+    });
+    // every line green: the list folds into one line a block; hover or a click unfolds it
+    const folded = ready && !looks && !noKb && !anyCheck;
     list.classList.toggle("folded", folded);
-    list.querySelectorAll("li.gh").forEach((gh) => { const ids = GROUPS.find((group) => group[0] === gh.dataset.g)[1]; setText(gh.querySelector(".gh-n"), groupNames(ids, checks)); });
     const missingSetup = checks.find((x) => x.id === "setup");
     chk0.setup = Boolean(missingSetup && missingSetup.state !== "ok" && missingSetup.state !== "wait");  // a new copy: the button goes to Get ready, whatever the other lines say
     chk0.sec = chk0.setup ? "you" : "";
     go.disabled = !(ready || chk0.setup);
     const offer = !ready && !pending && !chk0.setup && checks.some((x) => x.id === "paired" && x.state !== "ok");  // not paired: Get ready is still one click away
     if (getReady.hidden === offer) getReady.hidden = !offer;
-    const tip = ready ? "" : (first || (down ? errLine.textContent : t("board.enter.checking")));
+    const first = (REQ.map((id) => checks.find((x) => x.id === id)).find((x) => x && x.state !== "ok" && x.state !== "check") || {}).id;
+    const tip = ready ? "" : (first ? t("board.enter.t." + first) + ": " + (rowOf(first).querySelector("em").textContent || "") : down ? errLine.textContent : t("board.enter.checking"));
     if (go.title !== tip) go.title = tip.length > 400 ? tip.slice(0, 399) + "…" : tip;
     setText(go.firstChild, chk0.setup ? t("board.enter.getready") : ready ? t("board.enter.go") : pending ? t("board.enter.checking") : t("board.enter.notready"));
     const k = go.querySelector("kbd").style, kd = ready ? "" : "none"; if (k.display !== kd) k.display = kd;
     go.classList.toggle("plain", !ready);  // no key beside the word: it stands in the middle
+    paintButton(ready, checks);
     fitList();
     return ready;
+  }
+  // The folded summary of the second block: the knowledge base, the packs and the sign-ins, as far as there are any.
+  function foldWords(optional) {
+    if (!optional) return "";
+    const by = (key) => optional.items.find((x) => x.key === key) || {};
+    const kb = (by("kb").detail || "").split(" · ")[0];
+    const packs = (by("packs").names || []).length, signed = (by("connections").names || []).filter((x) => x.state === "ok").length;
+    return [kb, packs ? t(packs === 1 ? "board.enter.fold.pack" : "board.enter.fold.packs", {n: packs}) : "", signed ? t("board.enter.fold.signed", {n: signed}) : ""].filter(Boolean).join(" · ");
+  }
+  // The VS Code button: its words come from the server (Open, Restart, Restart with identities); it is the main button of the screen while VS Code is the line that is not ok.
+  function paintButton(ready, checks) {
+    const going = chk0.restarting || Boolean(chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening"));
+    if (!chk0.last) { vsBtn.hidden = true; return; }
+    vsBtn.hidden = false;
+    const label = going ? t(chk0.restart && chk0.restart.state === "opening" ? "board.enter.opening" : "board.enter.vs.quitting") : buttonWords();
+    setText(vsBtn, label);
+    vsBtn.disabled = going;
+    const vs = checks.find((x) => x.id === "vscode");
+    vsBtn.classList.toggle("hot", !ready && !chk0.setup && Boolean(vs) && vs.state !== "ok");
+    const up = chk0.last.vscode_button && chk0.last.vscode_button.up;
+    vsBtn.title = going ? "" : t(up ? "board.enter.vs.restart.tip" : "board.enter.vs.open.tip");
   }
   function fitList() {  // a short window: the list scrolls inside the room under the wordmark instead of running into it
     const wr = svg.getBoundingClientRect();
@@ -556,7 +584,7 @@
   function poll() {
     if (!open || chk0.inflight || document.hidden) return;
     chk0.inflight = true;
-    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.error = ""; } else chk0.error = "bad answer"; },
+    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.error = ""; if (data.restart && !chk0.restarting) chk0.restart = data.restart; } else chk0.error = "bad answer"; },
       (error) => { chk0.error = String(error.message || error).slice(0, 200); })
       .then(() => {
         chk0.inflight = false; settle();
@@ -608,15 +636,11 @@
   }
 
   list.addEventListener("click", (event) => { if (list.classList.contains("folded") && !event.target.closest("button")) list.classList.toggle("unfold"); });  // a folded list opens on a click as well as on hover
-  // Open VS Code: the person-only call that brings the window of this folder forward (the board's own `/api/open`). The line then says it is waiting.
-  list.addEventListener("click", (event) => {  // the identities kept by Servers: pick them, then VS Code opens with them (1.7.10)
-    if (event.target.closest("[data-identities]")) SERVERS.choose(() => { chk0.opened = Date.now(); setTimeout(poll, 1500); });  // VS Code opened with them: it is waited for, not blamed (1.7.19)
-  });
-  list.addEventListener("click", (event) => {  // Check: the board looks at the connections now (1.7.19)
-    const button = event.target.closest("[data-check]");
-    if (!button || button.disabled) return;
-    button.disabled = true;
-    ask("/api/reach", {}).then(() => { setTimeout(poll, 800); setTimeout(poll, 2500); }, () => {}).then(() => { setTimeout(() => { button.disabled = false; }, 2500); });
+  list.addEventListener("click", (event) => {  // the name of an optional row opens the place that mends it (a window of Tools, the setup form, the knowledge base)
+    const name = event.target.closest(".row.has-fix .t");
+    if (!name || list.classList.contains("folded")) return;
+    const item = itemOf(name.closest("li").dataset.id);
+    if (item && item.fix) READY.go(item.fix, {done: () => poll()});
   });
   list.addEventListener("click", (event) => {  // Windows: the company's launch script asks for the identity in a window of its own and starts VS Code with it (1.7.9)
     const button = event.target.closest("[data-launch]");
@@ -624,12 +648,13 @@
     button.disabled = true;
     ask("/api/launch", {}).then(() => { button.textContent = t("board.enter.launched"); }, (error) => { button.disabled = false; button.textContent = error.message; });
   });
-  list.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-open]");
-    if (!button || button.disabled) return;
-    button.disabled = true; button.textContent = t("board.enter.opening"); chk0.openError = "";
-    SERVE.openVS(ask).then(() => { chk0.opened = Date.now(); setTimeout(() => { poll(); }, 1500); }, (error) => { chk0.openError = error.quiet ? "" : t("board.enter.open.failed", {error: error.message}); chk0.opened = 0; })
-      .then(() => { setTimeout(() => { button.disabled = false; render(); }, 3000); render(); });
+  // The VS Code button (1.7.38): Open when none runs, Restart when one does, Restart with identities when a sign-in is saved and its test passed. The board asks VS Code to quit the normal way and waits; it never kills it.
+  vsBtn.addEventListener("click", () => {
+    if (vsBtn.disabled) return;
+    chk0.fail = ""; chk0.restarting = true; render();
+    READY.vsAct(buttonKind(), {onState: showRestart, opened: () => { chk0.opened = Date.now(); setTimeout(poll, 1500); }})
+      .catch((error) => { if (!error.quiet) chk0.fail = error.message || String(error); })
+      .then(() => { chk0.restarting = false; poll(); render(); });
   });
   go.addEventListener("click", () => { tryEnter(); });
   document.addEventListener("keydown", (event) => {
@@ -638,7 +663,7 @@
     if (document.body.classList.contains("has-dialog")) return;  // a window opened from the dock over this screen owns the keys (1.7.32)
     if (["Shift", "Control", "Alt", "Meta", "Tab", "Escape", "CapsLock", "Dead", "Process"].includes(event.key) || /^F\d+$/.test(event.key)) return;
     const target = event.target;
-    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch],[data-identities]")) return;
+    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],.en-vs,.en-link,[data-launch]")) return;
     if (document.querySelector(".dock-panel:not([hidden])")) return;  // the ? panel is open: its words are read, its text is typed in (1.7.34)
     if (target && target.closest && target.closest(".dock-btn") && (event.key === "Enter" || event.key === " ")) return;  // a dock button keeps its own Enter and Space; after its window closed, any other key goes in
     if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready

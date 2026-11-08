@@ -23,7 +23,6 @@ html.has-wall .en-chk{padding:12px 14px;border-radius:14px;background:rgba(8,9,1
 html.has-wall .en-chk-l .m{background:rgba(8,9,10,.5)}
 html[data-theme="light"]:not(.has-wall) .en-chk-l .m:not(.soft){background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
 html[data-theme="light"]:not(.has-wall) .en-chk-l .m.soft{background:rgba(255,255,255,.6)}  /* a note is calm: not the amber of a line that needs you (1.7.29) */
-.en-chk-l .m.inline{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px}.en-chk-l .m.inline .en-open{margin-top:0}  /* "not checked yet" and its Check button on one line */
 .en-ref{transition:opacity .4s ease}html.en-notready .en-ref{opacity:0 !important}  /* the intro animation holds its last value, so it must be forced */  /* the list grows up into the reflection when something needs you: no reflection then (1.7.29) */
 
 /* top right: only the greeting (the search is the fixed one of shell.css, which keeps the room at the right) */
@@ -92,8 +91,7 @@ html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5
 .en-chk-l .s-ok .ck{background:var(--good-dot);opacity:1}
 .en-chk-l .s-wait .ck{background:var(--hot-dot);opacity:1;animation:enbeat 1.2s ease-in-out infinite}
 .en-chk-l .s-fail .ck{background:var(--hot-dot);opacity:1;box-shadow:0 0 0 3px var(--hot-line)}
-.en-chk-l .attn .ck{background:var(--hot-dot);opacity:1}.en-chk-l em .mk{font-weight:600}.en-chk-l em .mk.ok{color:var(--good-dot)}.en-chk-l em .mk.bad{color:var(--hot-dot)}.en-chk-l em .mk.unknown{color:var(--soft)}
-.en-chk-l [data-id="systems"] em{white-space:nowrap}.en-chk-l em.has-tip{cursor:help;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--soft)}
+.en-chk-l em.has-tip{cursor:help;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--soft)}
 .en-chk-l .s-wait em,.en-chk-l .s-fail em{color:var(--hot);opacity:1}
 .en-chk-l .s-note .t,.en-chk-l .warns .t{opacity:.82}
 .en-chk-l .m{grid-column:2/4;margin:2px 0 6px;padding:7px 10px;border-radius:8px;background:var(--hot-bg);border:1px solid var(--hot-line);color:var(--hot);font:12px/1.5 var(--sans);overflow-wrap:anywhere;word-break:break-word}
@@ -118,7 +116,7 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 /* a short window: the wordmark rises and the list takes the room under it (enter.js sets --chk-max from where the wordmark ends) */
 @media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:38px}}
 @media (max-height:600px){.en-stage{padding-bottom:27vh}}
-@media (max-width:1100px){.en-ref{visibility:hidden}.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
+@media (max-width:1100px){.en-ref{visibility:hidden}.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
 
 /* the intro, under 1.5 s: the letters rise one by one, the light comes in, the list lights up */
 #enter.intro .en-word .lg{animation:enrise .75s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i)*70ms + 60ms)}
@@ -161,12 +159,56 @@ html.lite #en-fx{display:none}
 .en-chk-l li.gh{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px;font:600 10.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--en-cap);min-width:0}
 .en-chk-l li.gh:first-child{margin-top:0}.en-chk-l .gh-t{flex:none}.en-chk-l .gh-n{display:none;min-width:0;font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--en-ink);overflow-wrap:anywhere;opacity:.85}
 html[lang="zh"] .en-chk-l li.gh{letter-spacing:.06em;text-transform:none;font-size:11.5px}
-.en-chk-l li.row{grid-template-columns:14px minmax(0,1fr) auto auto}.en-chk-l li.row em{grid-column:3/-1}.en-chk-l li.row.has-act em{grid-column:3}.en-chk-l .act-end{grid-column:4}.en-chk-l .act-end .en-open{margin-top:0;height:24px;font-size:12px}
+
 .en-chk-l li.row .m,.en-chk-l li.row .sy{grid-column:2/-1}
 .en-chk-l .l-grey .ck{background:var(--soft);opacity:.7;box-shadow:none;animation:none}.en-chk-l .l-ok .ck{background:var(--good-dot);opacity:1;box-shadow:none;animation:none}
 .en-chk-l .l-yellow .ck{background:var(--hot-dot);opacity:1;box-shadow:none;animation:none}.en-chk-l .l-red .ck{background:var(--bad);opacity:1;box-shadow:0 0 0 3px var(--bad-line);animation:none}
 .en-chk-l .l-grey em,.en-chk-l .l-ok em{color:var(--en-cap)}.en-chk-l .l-yellow em{color:var(--hot)}.en-chk-l .l-red em{color:var(--bad)}.en-chk-l li.row.s-fail.blocks em,.en-chk-l li.row.s-wait.blocks em{color:var(--hot)}
 .en-chk-l li.row[title]:not([title=""]){cursor:help}
-.en-note{margin:-3px 0 8px 16px;font:12px/1.45 var(--sans);color:var(--en-cap);overflow-wrap:anywhere}.en-note.l-yellow{color:var(--hot)}.en-note.l-red{color:var(--bad)}.en-note[hidden]{display:none}
-.en-chk-l.folded:not(.unfold):not(:hover) li.row{display:none}.en-chk-l.folded:not(.unfold):not(:hover) .gh-n{display:inline}.en-chk-l.folded{cursor:pointer}.en-chk-l.folded li.gh{margin:4px 0}
 .en-chk-l .sy-d.partly{background:var(--hot-dot)}
+
+/* 1.7.38, block B: two blocks (Harness & Local: required; From the company: optional), a tag on each head, the VS Code button beside Enter */
+.en-chk-l li.gh{align-items:center}
+.en-chk-l li.gh .ck{display:none;flex:none;width:7px;height:7px;border-radius:50%;align-self:center}
+.en-chk-l .gh-tag{margin-left:auto;flex:none;padding:1px 7px;border-radius:4px;font:600 10px var(--mono);letter-spacing:.1em;white-space:nowrap}
+.en-chk-l li.gh[data-g="required"] .gh-tag{background:var(--en-btn);color:var(--en-btn-ink)}
+.en-chk-l li.gh[data-g="optional"] .gh-tag{border:1px solid var(--line2);color:var(--en-cap)}
+html[lang="zh"] .en-chk-l .gh-tag{letter-spacing:.04em;font-size:11px}
+.en-chk-l li.gh[data-g="optional"]{margin-top:12px}
+.en-chk-l li.row{grid-template-columns:14px fit-content(46%) minmax(0,1fr)}
+.en-chk-l li.row em{grid-column:3;max-width:none;text-align:right;overflow-wrap:anywhere}
+.en-chk-l .l-grey .t{opacity:.82}
+.en-chk-l li.row.has-fix:not(.s-check) .t:hover{text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.en-chk-l .m.bad{background:var(--bad-bg);border-color:var(--bad-line);color:var(--bad)}
+html[data-theme="light"]:not(.has-wall) .en-chk-l .m.bad{background:linear-gradient(var(--bad-bg),var(--bad-bg)),rgba(255,255,255,.9)}
+.en-link{display:inline;padding:0;border:0;background:none;font:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.en-link:hover{opacity:.75}.en-link:focus-visible{outline:2px solid var(--en-ink);outline-offset:2px;border-radius:3px}
+.sy-d.none{background:transparent;border:1.5px solid var(--soft);opacity:.85}
+.en-chk-h.h-bad i{background:var(--bad)}
+.en-chk-h.h-warn i{background:var(--hot-dot)}
+/* folded: one line for each block, name and summary, a mark that it opens */
+.en-chk-l.folded{cursor:pointer}
+.en-chk-l.folded:not(.unfold):not(:hover) li.row{display:none}
+.en-chk-l.folded:not(.unfold):not(:hover) li.gh{margin:5px 0 0;font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--en-ink);gap:9px}
+.en-chk-l.folded:not(.unfold):not(:hover) li.gh .ck{display:block}
+.en-chk-l.folded:not(.unfold):not(:hover) .gh-tag{display:none}
+.en-chk-l.folded:not(.unfold):not(:hover) .gh-n{display:inline;margin-left:auto;text-align:right;color:var(--en-cap);max-width:70%}
+.en-chk-l.folded:not(.unfold):not(:hover) .gh-n::after{content:" \25b8"}
+html[lang="zh"] .en-chk-l.folded:not(.unfold):not(:hover) li.gh{font-size:12.5px}
+/* the buttons beside the pill: Open / Restart VS Code and Enter */
+.en-cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center}
+.en-vs{font:600 15px var(--sans);display:inline-flex;align-items:center;height:54px;padding:0 26px;border-radius:999px;cursor:pointer;color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);box-shadow:0 8px 22px rgba(0,0,0,.14);transition:transform .2s,box-shadow .2s;white-space:nowrap;max-width:100%}
+.en-vs[hidden]{display:none}
+.en-vs:hover:not(:disabled){transform:translateY(-2px)}
+.en-vs.hot{background:var(--en-btn);color:var(--en-btn-ink);border-color:transparent;box-shadow:0 14px 34px rgba(0,0,0,.3)}
+.en-vs:disabled{opacity:.6;cursor:default;box-shadow:none}
+.en-vs:focus-visible{outline:2px solid var(--en-ink);outline-offset:3px}
+html.has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);color:var(--en-ink);border-color:rgba(255,255,255,.3)}
+.en-foot{grid-template-columns:minmax(min(420px,100%),1fr) auto minmax(0,1fr)}
+@media (max-width:1279px){.en-hint{display:none}}
+@media (max-width:1100px){.en-cta{order:-1}.en-foot{grid-template-columns:minmax(0,1fr)}}
+.en-chk-l li.row>.ck,.en-chk-l li.row>.t,.en-chk-l li.row>em,.en-chk-l li.row>.sy{grid-row:1}.en-chk-l li.row>.m{grid-row:2}
+.en-chk-l li.row.has-names>em{display:none}
+.en-chk-l li.row .sy{grid-column:3;justify-content:flex-end;min-width:0}
+.en-chk-l li.row .sy-i:first-child{white-space:normal;overflow-wrap:anywhere}
+@media (max-width:640px){.en-chk-l li.row .sy{grid-column:2/-1;grid-row:2;justify-content:flex-start}.en-chk-l li.row.has-names>.m{grid-row:3}}

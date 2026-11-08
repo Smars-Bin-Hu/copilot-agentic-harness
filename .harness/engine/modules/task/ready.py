@@ -1,13 +1,18 @@
 """What the Enter screen of the board asks (`/api/ready`, 1.6 B86): is everything the board needs in place? One line for each check, as data; the page says it in words.
 
-Blocking (1.7.36): only two, this copy is set up (Get ready) and this browser is paired. Everything else is information, in three groups: Harness (set up, paired, `harness doctor`; an error of doctor is red but does not
-block), From the company (knowledge base, company folder, tool packs) and This computer (VS Code, Copilot, target repositories, outside systems). Each line carries its `group` and a `level` for its dot: ok, grey, yellow, red.
+Two blocks (1.7.38, block B).
+- REQUIRED, Harness & Local: this copy is set up, this browser is paired, `harness doctor` has no error, VS Code is open for this copy, Copilot is connected. Every line must be ok before Enter is on:
+  without one the harness cannot work here. They are `checks`, each with `group: "required"` and `blocking: true`, and a `level` for its dot: ok, grey, yellow, red.
+- OPTIONAL, from the company: knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories (`core/readyitems.py`). They never block. `optional` holds the items and the
+  `problems` to look at; each problem has the place that mends it.
+`problems.required` is what is not ok in the first block (the red block of the board after Enter), `vscode_button` says what the VS Code button of the screen is called (open, restart, identities), and `restart`
+what a restart that was asked for is doing (`vsrestart.py`).
 
 Nothing here waits on the outside world, so the server never hangs on it:
-- VS Code and Copilot are read from the cache of the link thread (`vslink`), which owns every `code` command and its timeout.
+- VS Code and Copilot are read from the cache of the link thread (`vslink`), which owns every `code` command and its timeout. Whether any VS Code runs on this computer is one `pgrep` or `tasklist`, in a thread of its own.
 - `harness doctor` takes about a second (a minute and more on a slow work computer): it runs once in a thread of its own, in a child process with a deadline (`board.doctor_seconds`), and its result is kept. A board started from a terminal starts it at once, before a page asks (1.6.104). It is run again only
   when it failed or found an error (and not sooner than RETRY_FAILED), or very late when it was clean. A poll only reads the kept result.
-- The knowledge base and the repositories are two folder listings, kept for a few seconds.
+- The optional items are file listings, kept for a few seconds, and again at once when a policy, the sign-ins or the packs change.
 A check that goes wrong itself is a line that failed with its reason, never an error of the request.
 """
 
@@ -22,8 +27,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import config, messages, shortcmd, targets, tasks
-from core import connections as conn_core, reach, systems as outside, toolpacks
+from core import config, launchenv, messages, readyitems, shortcmd, targets, tasks
+from core import reach, systems as outside
 
 from . import reachcheck
 
@@ -32,7 +37,8 @@ DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_sec
 DOCTOR_LIMITS = (30.0, 1800.0)
 RETRY_FAILED = 20.0  # a doctor that failed or found errors is run again no sooner than this
 REFRESH_CLEAN = 600.0  # a clean doctor is looked at again after this long
-FOLDERS_FOR = 10.0  # seconds the two folder checks are kept
+FOLDERS_FOR = 10.0  # seconds the optional items are kept
+RUNNING_KEEP = 8.0  # seconds the answer "a VS Code runs on this computer" is kept
 REASON_MAX = 300
 # What the link says (`vslink.status()["why"]`) -> the state of the VS Code line. A host that is still starting, or a connection that dropped, is told as waiting: it comes back by itself.
 WAITING = ("starting", "lost", "error")
@@ -42,6 +48,11 @@ STUCK = ("off", "no-cli", "cli-failed", "many")  # nothing the person can do by 
 def short(text: Any) -> str:
     one = " ".join(str(text).split())
     return one if len(one) <= REASON_MAX else one[: REASON_MAX - 1] + "…"
+
+
+def plain(text: Any) -> str:
+    """Words of the engine for a person at a page: the marks that are for a terminal are left out."""
+    return str(text).replace("`", "")
 
 
 def setup_done(root: Path) -> bool:
@@ -68,7 +79,7 @@ def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
     timeout = doctor_seconds(root) if timeout is None else timeout
     command = [sys.executable, str(root / ".harness" / "engine" / "cli.py"), "doctor"]
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", PATH=shortcmd.fresh_path())  # what a new terminal sees: the person may have added the short command after the board started
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PATH=shortcmd.fresh_path(), HARNESS_DOCTOR_TOPICS="1")  # what a new terminal sees: the person may have added the short command after the board started
     try:
         done = subprocess.run(command, cwd=str(root), capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
@@ -78,14 +89,52 @@ def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
     text = done.stdout.decode("utf-8", errors="replace")
     errors = [line[len("[ERROR]"):].strip() for line in text.splitlines() if line.startswith("[ERROR]")]
     warnings = [line[len("[WARN]"):].strip() for line in text.splitlines() if line.startswith("[WARN]")]
+    company = [line[len("[WARN:company]"):].strip() for line in text.splitlines() if line.startswith("[WARN:company]")]  # about the company's content: they go with the Optional block
     if not errors and done.returncode != 0 and '"errors"' not in text:  # it did not get as far as its summary line
         tail = done.stderr.decode("utf-8", errors="replace").strip().splitlines()
         return {"errors": 0, "first": "", "failed": short(tail[-1] if tail else f"exit code {done.returncode}")}
-    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings), "warning": short(warnings[0]) if warnings else ""}
+    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company), "warning": short((warnings + company)[0]) if warnings or company else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
+
+
+class Running:
+    """Is a VS Code running on this computer, any window or any folder? One `pgrep` or `tasklist` (about a second on a work computer), in a thread of its own and kept for a few seconds,
+    so a poll never waits for it. `None` until it has run once."""
+
+    def __init__(self, probe: Optional[Callable[[], bool]] = None, clock: Callable[[], float] = time.monotonic) -> None:
+        self.probe = probe or launchenv.vscode_running
+        self.clock = clock
+        self.lock = threading.Lock()
+        self.value: Optional[bool] = None
+        self.at = -1e9
+        self.busy = False
+
+    def get(self) -> Optional[bool]:
+        with self.lock:
+            if self.busy or self.clock() - self.at < RUNNING_KEEP:
+                return self.value
+            self.busy = True
+        threading.Thread(target=self.look, name="ready-running", daemon=True).start()
+        with self.lock:
+            return self.value
+
+    def look(self) -> None:
+        try:
+            found: Optional[bool] = bool(self.probe())
+        except Exception:  # noqa: BLE001 - a probe that breaks says nothing
+            found = None
+        with self.lock:
+            self.value, self.at, self.busy = found, self.clock(), False
+
+    def forget(self) -> None:
+        """A restart just ended or began: the next `get` looks again."""
+        with self.lock:
+            self.at = -1e9
 
 
 class Ready:
-    def __init__(self, root: Path, link: Any, doctor: Optional[Callable[[Path], Dict[str, Any]]] = None, clock: Callable[[], float] = time.monotonic, checker: Any = None) -> None:
+    REQUIRED = ("setup", "paired", "doctor", "vscode", "copilot")  # Harness & Local: every one must be ok before Enter (1.7.38)
+
+    def __init__(self, root: Path, link: Any, doctor: Optional[Callable[[Path], Dict[str, Any]]] = None, clock: Callable[[], float] = time.monotonic, checker: Any = None, running: Optional[Running] = None) -> None:
         self.reopen = False  # the short command is new: VS Code must be closed and opened again before its terminals have it
         self.root = root
         self.link = link
@@ -96,9 +145,10 @@ class Ready:
         self.found: Optional[Dict[str, Any]] = None  # the kept result of doctor
         self.at = 0.0
         self.running = False
-        self.folders: Dict[str, Any] = {"at": -1e9}
-        self.systems_kept: Any = None  # (what the line read, when, the line)
+        self.optional_kept: Any = None  # (what the items read, when, the answer)
         self.checker = checker or reachcheck.Checker(root)  # the board's own look at the connections (1.7.19)
+        self.vs_running = running or Running(clock=clock)  # is any VS Code running on this computer
+        self.restart: Any = None  # the board sets it: what a restart of VS Code is doing (`vsrestart.Restart`)
 
     # --- doctor: once, off the request thread ----------------------------------------------------------------------
 
@@ -121,7 +171,7 @@ class Ready:
         with self.lock:
             self.found, self.at, self.running = found, self.clock(), False
 
-    # --- the checks ------------------------------------------------------------------------------------------------
+    # --- the required checks ---------------------------------------------------------------------------------------
 
     def vscode(self) -> Dict[str, Any]:
         status = self.link.status()
@@ -154,122 +204,16 @@ class Ready:
             return {"state": "fail", "why": "errors", "n": found["errors"], "detail": found["first"]}
         return {"state": "ok", "why": "ok", "n": 0}
 
-    def folder_lines(self) -> Dict[str, Dict[str, Any]]:
-        now = self.clock()
+    def doctor_notes(self) -> Dict[str, Any]:
+        """What `harness doctor` warned of about the company's content, from the kept result: `{n, first}`."""
         with self.lock:
-            if now - self.folders["at"] < FOLDERS_FOR:
-                return self.folders["lines"]
-        lines: Dict[str, Dict[str, Any]] = {}
-        try:
-            count = sum(len(targets.knowledge_base_content(path)) for _name, path in targets.knowledge_bases(self.root))
-            lines["kb"] = {"state": "ok", "why": "ok", "n": count} if count else {"state": "note", "why": "none"}
-            if count:
-                lines["kb"].update(self.kb_facts())
-        except Exception as error:  # noqa: BLE001
-            lines["kb"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
-        lines["folder"] = self.folder_line(lines["kb"]["state"] == "ok")
-        lines["packs"] = self.packs_line()
-        try:
-            found = targets.load(self.root)
-            if found.problems:
-                lines["repos"] = {"state": "note", "why": "problem", "n": len(found.problems), "detail": short(found.problems[0])}
-            elif found.repos:
-                lines["repos"] = {"state": "ok", "why": "ok", "n": len(found.repos)}
-            else:
-                lines["repos"] = {"state": "note", "why": "none"}
-        except Exception as error:  # noqa: BLE001 - a broken policy is doctor's to report; here it is a grey line
-            lines["repos"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
-        with self.lock:
-            self.folders = {"at": now, "lines": lines}
-        return lines
+            found = self.found or {}
+        return {"n": int(found.get("company_n") or 0), "first": (found.get("company") or [""])[0]}
 
-    def kb_facts(self) -> Dict[str, Any]:
-        """For the Knowledge base line (1.7.36): the version `company.json` names and the number of domains of the first knowledge base with content."""
-        out: Dict[str, Any] = {"domains": 0, "version": ""}
-        for _name, path in targets.knowledge_bases(self.root):
-            if targets.knowledge_base_content(path):
-                try:
-                    out["domains"] = sum(1 for item in (path / "domains").iterdir() if item.is_dir())
-                except OSError:
-                    pass
-                break
-        folder = targets.company_folder(self.root)
-        try:
-            found = json.loads((folder / "company.json").read_text(encoding="utf-8-sig")) if folder else None
-        except (OSError, ValueError):
-            found = None
-        if isinstance(found, dict) and found.get("version") not in (None, ""):
-            out["version"] = short(found["version"])[:20]
-        return out
-
-    def folder_line(self, has_kb: bool) -> Dict[str, Any]:
-        """The company folder: found with its instructions (ok); found without them (yellow); none while there is a knowledge base (yellow); no knowledge base (grey)."""
-        folder = targets.company_folder(self.root)
-        if folder is None:
-            return {"state": "note", "why": "missing" if has_kb else "none", "level": "yellow" if has_kb else "grey"}
-        if not (folder / "instructions" / "knowledgebase.instructions.md").is_file():
-            return {"state": "note", "why": "noinstr", "level": "yellow"}
-        return {"state": "ok", "why": "ok", "level": "ok"}
-
-    def packs_line(self) -> Dict[str, Any]:
-        """The tool packs that are on, one name each with `ok` (their programs are found); a pack whose program is missing makes the line yellow."""
-        rows = [row for row in toolpacks.check(self.root)["toolpacks"] if row["active"]]
-        names = [{"name": row["name"], "state": "ok" if row["ok"] else "need", "missing": [program for program, found in row["programs"].items() if not found], "errors": row["errors"][:2]} for row in rows]
-        if not names:
-            return {"state": "note", "why": "none", "names": [], "level": "grey"}
-        bad = any(item["state"] != "ok" for item in names)
-        return {"state": "note" if bad else "ok", "why": "need" if bad else "ok", "n": len(names), "names": names, "level": "yellow" if bad else "ok"}
-
-    def systems_line(self) -> Dict[str, Any]:
-        """The outside systems line: what the connections reached (1.7.9), and since 1.7.19 the names with a state each and a table for the hover."""
-        out: Dict[str, Any] = {}
-        systems: Dict[str, Any] = {}
-        raw: List[Dict[str, Any]] = []
-        try:
-            systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
-            raw = reach.view(self.root, systems) if systems and not outside.validate(systems) else []  # what VS Code reached (1.7.9), per server and environment
-            saved = len([alias for alias in conn_core.listed(self.root) if any(key.startswith(conn_core.env_key(alias, "")) and key.endswith(("_ACCOUNT", "_PASSWORD", "_KEYFILE")) for key in conn_core.read_env(self.root))])  # identities kept by Servers (1.7.10)
-            marks = {reach.OK: "\u2713", reach.DENIED: "\u2717", reach.FAILED: "\u2717", reach.UNKNOWN: "?"}
-            servers = list(dict.fromkeys(line["system"] for line in raw))
-            worst = lambda states: reach.DENIED if reach.DENIED in states else reach.FAILED if reach.FAILED in states else reach.UNKNOWN if reach.UNKNOWN in states else reach.OK  # noqa: E731
-            reason = lambda line: (line["launch"] or messages.text("desk.reach.why.identity")) if line["state"] == reach.DENIED else messages.text("desk.reach.why.no-answer") if line["why"] == "no-answer" else messages.text("desk.reach.why.exit", why=line["why"])  # noqa: E731
-            env_marks = lambda lines: " ".join(f"{line['env'].upper() if line['env'] != 'any' else ''}{marks[line['state']]}".strip() for line in lines)  # noqa: E731
-            if len(servers) > 1:  # several servers: one mark per server (the worst of its environments); the hover lists each server's environments
-                units = [(name, worst([line["state"] for line in raw if line["system"] == name]), [line for line in raw if line["system"] == name]) for name in servers]
-            else:  # one server: one mark per environment
-                units = [(line["env"].upper() if line["env"] != "any" else line["system"], line["state"], [line]) for line in raw]
-            detail = " \u00b7 ".join(f"{label} {marks[state]}" for label, state, _lines in units)
-            if len(servers) > 2:  # three servers or more: a count per mark keeps the line on one line; the hover names each server
-                counts = [(sum(1 for _l, state, _x in units if marks[state] == mark), mark) for mark in ("\u2713", "\u2717", "?")]
-                detail = messages.text("board.enter.d.systems.count", n=len(servers), marks=" ".join(f"{count} {mark}" for count, mark in counts if count))
-            bad = [line for line in raw if line["state"] in (reach.DENIED, reach.FAILED)]
-            name = lambda line: f"{line['system']} {line['env'].upper()}" if len(servers) > 1 else line["env"].upper()  # noqa: E731
-            if not systems:
-                out = {"state": "note", "why": "none", "tip": "none"}  # not set up yet: the hover says how
-            elif not raw:
-                out = {"state": "ok", "why": "listed", "n": len(systems)}  # listed, with no probe: nothing to look at
-            elif bad:
-                grouped: Dict[str, List[str]] = {}  # one reason, the places it holds for: "finance IST, hr DEV: <sentence>"
-                for line in bad:
-                    grouped.setdefault(reason(line), []).append(name(line))
-                overview = "\n".join(f"{label}: {env_marks(lines_)}" for label, _state, lines_ in units) if len(servers) > 1 else ""
-                out = {"state": "note", "why": "unreached", "detail": detail, "tip": "\n".join(([overview] if overview else []) + [short(f"{', '.join(names)}: {text}") for text, names in grouped.items()]),
-                                    "launch": any(line["state"] == reach.DENIED for line in bad) and reach.launch_script(self.root) is not None, "identities": saved,
-                                    "env_wrong": any(line.get("why") == "vscode-env" for line in bad)}  # VS Code was started without the settings of this computer (1.7.24): the line says so in words, not a button for accounts  # only a refused identity is helped by starting VS Code again
-            elif any(line["state"] == reach.UNKNOWN for line in raw):
-                out = {"state": "note", "why": "unknown", "detail": detail, "check": bool(conn_core.probe_keys(self.root))}  # never checked: a Check button when the board can check it itself; no word on an account (1.7.19)
-            else:
-                last = max((line.get("at", "") for line in raw), default="")
-                accounts = " \u00b7 ".join(f"{name(line)} {line['who']}" for line in raw if line["who"])
-                out = {"state": "ok", "why": "ok", "detail": detail, "tip": short(messages.text("desk.reach.ok.tip", accounts=accounts or "-", at=last[11:16]))}
-        except Exception as error:  # noqa: BLE001
-            out = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
-        if out.get("why") != "error" and raw:
-            out.update(self.table(systems, raw))
-        return out
+    # --- the optional items ----------------------------------------------------------------------------------------
 
     def table(self, systems: Dict[str, Any], raw: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """For the Enter screen (1.7.19): `names`, a state for each system (ok, down, unknown, partly), and `rows` for the hover table, one per system and environment.
+        """For the hover of the connections row (1.7.19): `names`, a state for each system (ok, down, unknown, partly), and `rows` for the table, one per system and environment.
         The environment of a system that has none (`none`, `any`) is empty."""
         kind = lambda state: "ok" if state == reach.OK else "unknown" if state == reach.UNKNOWN else "down"  # noqa: E731
         names, rows = [], []
@@ -289,25 +233,67 @@ class Ready:
                              "pack": str((systems.get(system) or {}).get("toolpack") or "")})
         return {"names": names, "rows": rows, "checking": self.checker.busy()}
 
-    def systems_cached(self) -> Dict[str, Any]:
-        """The line again only when what it reads changed (a connection added, a pack installed, an answer written) or after FOLDERS_FOR: adding a connection shows at once."""
-        mark = []
-        for path in [*sorted((self.root / ".harness" / "policies").glob("*.json")), self.root / ".harness" / ".env", reach.path(self.root), self.root / ".harness" / "runtime" / "toolpacks.json", self.root / ".harness" / "toolpacks"]:
+    def connection_facts(self) -> Dict[str, Any]:
+        """For the connections row: the table of the hover, whether the company's launch script can start VS Code with an identity (Windows), whether VS Code was started without this computer's settings."""
+        systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
+        raw = reach.view(self.root, systems) if systems and not outside.validate(systems) else []
+        out: Dict[str, Any] = {"rows": self.table(systems, raw)["rows"] if raw else [], "checking": self.checker.busy(), "launch": False, "env_wrong": any(line.get("why") == "vscode-env" for line in raw)}
+        out["launch"] = any(line["state"] == reach.DENIED and line.get("why") != "vscode-env" for line in raw) and reach.launch_script(self.root) is not None
+        return out
+
+    def optional_mark(self) -> List[Any]:
+        """What the items read: the policies, the sign-ins, the answers of the connections, the packs, the skills, the knowledge base. A change shows at once, not after the cache."""
+        mark: List[Any] = []
+        for path in [*sorted((self.root / ".harness" / "policies").glob("*.json")), self.root / ".harness" / ".env", reach.path(self.root), self.root / ".harness" / "runtime" / "toolpacks.json", self.root / ".harness" / "toolpacks",
+                     self.root / ".github" / "skills", self.root / targets.KB_DIR, self.root / ".harness" / "certs"]:
             try:
                 mark.append((path.name, path.stat().st_mtime_ns))
             except OSError:
                 mark.append((path.name, 0))
         mark.append(("busy", self.checker.busy()))
+        return mark
+
+    def optional_made(self) -> Dict[str, Any]:
+        listed = readyitems.items(self.root)
+        for entry in listed:
+            if entry["key"] == "connections":
+                try:
+                    entry.update(self.connection_facts())
+                except Exception:  # noqa: BLE001 - the hover table is a detail
+                    entry.update({"rows": [], "checking": False, "launch": False, "env_wrong": False})
+        identities = len([one for entry in listed if entry["key"] == "connections" for one in entry["names"] if one.get("saved") and one["state"] == "ok"])
+        return {"items": listed, "identities": identities}
+
+    def optional(self) -> Dict[str, Any]:
+        """The optional block: `{items, problems, count, kb, identities}`. The items are kept for FOLDERS_FOR and read again at once when what they read changes. The notes of doctor go with the knowledge base."""
+        mark = self.optional_mark()
         now = self.clock()
         with self.lock:
-            kept = self.systems_kept
+            kept = self.optional_kept
             if kept and kept[0] == mark and now - kept[1] < FOLDERS_FOR:
-                return kept[2]
-        line = self.systems_line()
-        with self.lock:
-            self.systems_kept = (mark, now, line)
-        return line
+                base = kept[2]
+            else:
+                base = None
+        if base is None:
+            try:
+                base = self.optional_made()
+            except Exception as error:  # noqa: BLE001 - never an error of the request
+                base = {"items": [], "identities": 0, "error": short(f"{type(error).__name__}: {error}")}
+            with self.lock:
+                self.optional_kept = (mark, now, base)
+        notes = self.doctor_notes()
+        listed = [dict(entry) for entry in base["items"]]
+        if notes["n"]:
+            for entry in listed:
+                if entry["key"] == "kb":
+                    problem = {"key": "doctor", "text": messages.text("ready.p.doctor.one" if notes["n"] == 1 else "ready.p.doctor", n=notes["n"]), "why": plain(notes["first"])[:180], "short": messages.text("ready.p.doctor.short.one" if notes["n"] == 1 else "ready.p.doctor.short", n=notes["n"]),
+                               "fix": {"to": "term", "run": "harness doctor", "label": messages.text("ready.fix.doctor")}}
+                    entry["problems"] = [*entry["problems"], problem]
+                    entry["state"] = "yellow"
+        problems = readyitems.problems(listed)
+        return {"items": listed, "problems": problems, "count": len(problems), "kb": any(entry["key"] == "kb" and entry.get("found") for entry in listed), "identities": base["identities"]}
 
+    # --- VS Code: the button --------------------------------------------------------------------------------------
 
     def wait_reopen(self) -> None:
         self.drops_then = self.link.drops()
@@ -319,58 +305,82 @@ class Ready:
             self.reopen = False
         return self.reopen
 
-    GROUPS = {"setup": "harness", "paired": "harness", "doctor": "harness", "kb": "company", "folder": "company", "packs": "company", "vscode": "computer", "copilot": "computer", "repos": "computer", "systems": "computer"}
-    BLOCKING = ("setup", "paired")  # the only two that stop the way in (1.7.36): VS Code is an optional power, the rest is information
+    def vscode_button(self, vscode: Dict[str, Any], identities: int) -> Dict[str, Any]:
+        """The VS Code button of the screen. `open`: no VS Code runs for this copy or at all; `restart`: one runs; `identities`: one runs and some connection has a sign-in saved and a test that passed. `up`: one runs."""
+        up = vscode["state"] in ("ok", "wait") or self.vs_running.get() is True
+        kind = "identities" if up and identities else "restart" if up else "open"
+        return {"kind": kind, "label": messages.text(f"ready.vs.{kind}"), "up": up, "identities": identities}
+
+    # --- the answer -----------------------------------------------------------------------------------------------
 
     def level(self, line: Dict[str, Any]) -> str:
-        """The dot of a line: ok (green), grey (not there or not known, nothing to do now), yellow (there, and something is off), red (broken, or a blocking line that is not ok)."""
+        """The dot of a required line: ok (green), grey (not known yet), yellow (it comes by itself), red (needs the person)."""
         if line.get("level"):
             return str(line["level"])
-        state, name = line["state"], line["id"]
-        if state == "ok":
-            return "ok"
-        if name in self.BLOCKING or name == "doctor":
-            return "grey" if state == "check" else "red" if state == "fail" else "yellow"
-        if name == "systems":
-            return "yellow" if line.get("why") == "unreached" else "grey"
-        return "grey"
+        return "ok" if line["state"] == "ok" else "grey" if line["state"] == "check" else "yellow" if line["state"] == "wait" else "red"
+
+    def required_problems(self, checks: List[Dict[str, Any]], button: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """What is not ok in the first block, as words for the red block of the board: `{key, level, text, why, fix}`. Copilot waiting for VS Code is not a problem of its own."""
+        out: List[Dict[str, Any]] = []
+        say = messages.text
+        open_fix = {"to": "vscode", "kind": button["kind"], "label": button["label"]}
+        for line in checks:
+            state, why, key = line["state"], line.get("why", ""), line["id"]
+            if state in ("ok", "check"):
+                continue
+            text, reason, fix = "", "", {}
+            if key == "setup":
+                text, reason, fix = (say("ready.r.setup.reopen"), say("ready.r.setup.reopen.why"), open_fix) if why == "reopen" else (say("ready.r.setup.new"), say("ready.r.setup.new.why"), {"to": "setup", "sec": "you", "label": say("board.enter.getready")})
+            elif key == "paired":
+                text, reason = say("ready.r.paired"), say("ready.r.paired.why")
+            elif key == "doctor":
+                text, reason = (say("ready.r.doctor.failed"), line.get("detail", "")) if why == "failed" else (say("ready.r.doctor.errors.one" if line.get("n") == 1 else "ready.r.doctor.errors", n=line.get("n", "")), line.get("detail", ""))
+            elif key == "vscode":
+                if state == "wait":
+                    text, reason = say("ready.r.vscode.wait"), say(f"board.enter.m.vscode.{why}")
+                elif why == "none":
+                    text, reason, fix = say("ready.r.vscode.none"), say("ready.r.vscode.none.why"), open_fix
+                else:
+                    text, reason = say("ready.r.vscode.stuck"), say(f"board.enter.m.vscode.{why}")
+            elif key == "copilot":
+                if why == "vscode":
+                    continue
+                text, reason = say("ready.r.copilot"), say(f"board.enter.m.copilot.{why}")
+            out.append({"key": key, "level": "red" if state == "fail" else "yellow", "text": plain(text), "why": plain(short(reason)), "fix": fix})
+        return out
 
     def answer(self, paired: bool) -> Dict[str, Any]:
-        """`{ready, checks: [{id, group, blocking, level, state, why, ...}]}`. `state`: ok, wait (it comes by itself), fail (needs the person), check (not known yet), note (grey, never blocks).
-        `ready`: this copy is set up and this browser is paired, nothing else."""
+        """`{ready, checks, optional, problems, vscode_button, restart}`. `checks`: the five required lines `{id, group, blocking, level, state, why, ...}`. `state`: ok, wait (it comes by itself), fail (needs the person), check
+        (not known yet). `ready`: every required line is ok, and only then Enter is on (1.7.38)."""
         checks: List[Dict[str, Any]] = []
 
         def add(name: str, make: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
-            blocking = name in self.BLOCKING
             try:
                 line = make()
             except Exception as error:  # noqa: BLE001 - a check that breaks is told as failed, with its reason
-                line = {"state": "fail" if blocking else "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
-            line = dict(line, id=name, blocking=blocking, group=self.GROUPS[name])
+                line = {"state": "fail", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
+            line = dict(line, id=name, blocking=True, group="required")
             checks.append(line)
             return line
 
         add("setup", lambda: {"state": "fail", "why": "new"} if not setup_done(self.root) else {"state": "wait", "why": "reopen"} if self.still_reopen() else {"state": "ok", "why": "ok"})
         add("paired", lambda: {"state": "ok", "why": "ok"} if paired else {"state": "fail", "why": "unpaired"})
         add("doctor", self.doctor_line)
-        try:
-            more = self.folder_lines()
-        except Exception as error:  # noqa: BLE001
-            more = {name: {"state": "note", "why": "error", "detail": short(error)} for name in ("kb", "folder", "packs", "repos")}
-        for name in ("kb", "folder", "packs"):
-            checks.append(dict(more[name], id=name, blocking=False, group=self.GROUPS[name]))
         vscode = add("vscode", self.vscode)
         add("copilot", lambda: self.copilot(vscode))
-        checks.append(dict(more["repos"], id="repos", blocking=False, group="computer"))
         try:
             self.checker.maybe()  # the board asks the connections itself: the screen need not wait for a chat
-            systems = dict(self.systems_cached(), id="systems", blocking=False, group="computer")
-        except Exception as error:  # noqa: BLE001
-            systems = {"state": "note", "why": "error", "detail": short(error), "id": "systems", "blocking": False, "group": "computer"}
-        checks.append(systems)
-        if vscode["state"] == "ok" and systems.get("env_wrong"):
+        except Exception:  # noqa: BLE001 - a check of the connections that cannot start is not a reason to fail a poll
+            pass
+        optional = self.optional()
+        if vscode["state"] == "ok" and any(entry.get("env_wrong") for entry in optional["items"]):
             vscode["level"] = "yellow"  # opened, but without this computer's settings (1.7.24)
             vscode["env_wrong"] = True
         for line in checks:
             line["level"] = self.level(line)
-        return {"ready": all(line["state"] == "ok" for line in checks if line["blocking"]), "checks": checks}
+        button = self.vscode_button(vscode, optional["identities"])
+        required = self.required_problems(checks, button)
+        out = {"ready": all(line["state"] == "ok" for line in checks), "checks": checks, "optional": optional, "problems": {"required": required, "optional": optional["problems"]}, "vscode_button": button}
+        if self.restart is not None:
+            out["restart"] = self.restart.view()
+        return out

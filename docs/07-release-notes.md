@@ -12,12 +12,39 @@ To see which version you have: `harness --version`.
 
 ## 1.7.38 (2026-11-07)
 
+### Added
+
+- **The Enter screen has two blocks.** **Harness & Local** is required: this copy is set up, the browser is paired, `harness doctor` has no error, VS Code is open, Copilot is connected. Enter works only when all five pass. **From the company** is optional (knowledge base, instructions, company skills and their prefix, code standards, tool packs, connections & sign-ins, code repositories) and never stops Enter. A problem there is a short yellow note with a link to the fix. The name of a row opens its own window.
+- **A VS Code button always stands beside Enter:** **Open VS Code**, **Restart VS Code** or **Restart VS Code with identities**. A restart asks VS Code to quit the normal way, waits until it has gone, then opens it with this computer's settings. It never forces VS Code to quit. It asks first when a chat in VS Code runs or waits for you (it names the chat). With identities, you pick them first and VS Code closes only after you confirm. When VS Code does not quit, a note says it may be asking about a chat or a file to save, and the button reads **Try again**.
+- **A block at the top of the board** after Enter. Yellow: "Not fully ready for your company's tasks", one button for each problem, **Hide** until the list changes. Red: a required line failed later (VS Code closed); it cannot be hidden. It replaces the old setup bar.
+- **Company items not synced** show as "N company items are not synced" with **Sync now**, and a button such as **Use acmeco and sync** when the company's skill prefix is not the one in your settings. A sync takes back copies it put under an older prefix.
+- **Tools is three windows.** **Tool packs**: the packs the harness ships (used or not by the company, Turn on / Turn off), the company's own, and those added on this computer (Install from a folder, Update, Remove). **Connections & sign-ins**: one list with name, type, environment, `company` or `yours`, sign-in, Sign in and Test; below it **Add a connection of your own** (never PROD) and **Export**. A connection that uses a program's own sign-in (`az login`) has its own Sign in, which runs in the Terminal window, tests, and keeps the account when the test passes. **Local**: Programs, Network (the host may carry a port, `host:port`) and MCP.
+- **Test shows four steps:** Program, Sign-in, Account access, Address. The first that broke is marked, with one sentence on what to do and a link to the part of Local that helps. When the answer cannot tell a lost sign-in from a refused account, no step is marked and the sentence says so. `harness servers test` prints the sentence.
+- **Pack for colleagues** checks first (it lists the files not committed; **Commit them**), then asks for the folder. The package name has the minute. When a skill breaks the rules, the message says the package was not made, which skill and why. The zip keeps the run permission of a company pack's programs; a program that is there but cannot run is told in words (`chmod +x`).
+- **The knowledge base window** says so on every tab when there is no knowledge base, with **Import a knowledge base**. Its Company tab lists **Selected tools** grouped as the skills are, with **Change**, and links the skills to the domain skills. It no longer lists connections; their share button is in Connections & sign-ins.
+- **Held cards say more.** A line of several writes shows each write on its own line, and a held SQL statement shows whole. A held call the agent went on from says *The agent went on*, and the task no longer says it waits for you. **Open to the agent** says what it opens: the connections of a tool pack always ask. Approving a plan on an unconfirmed requirement is one window.
+- **Gate.** A pack that is off still guards its connections (turning it off takes back only its skills and `bin/`). `az rest` to the address of an Azure DevOps connection is judged like `dev.azure.com`: delete refused, write held. A company pack with the name of a factory pack stops `harness company sync` as a whole, and `harness doctor` and the Enter screen show it red.
+- **ado 0.4.8** (needs harness 1.7.38). In `--text`, only `\n` (a line break) and `\\` (one backslash) are turned, so `C:\temp\data` and `\d+` arrive whole; use `--file` for such text. The program no longer reads `ADO_URL`, `ADO_ORG`, `ADO_PROJECT`, `ADO_PAT` or `ADO_TOKEN`.
+
 ### Changed
 
-- **The Tools window has two tabs, named like the setup form's sections and the Enter groups: From the company and This computer.** From the company is read only: the **Tool packs** part (name, version, source, Turn on/off for factory packs, and what is missing: a missing program or a pending sign-in is a small link that opens This computer at that row) and the **Connections** part (one row each: name, type, environment, address, the pack it belongs to, "yours" for your own, and at the end a dot for your sign-in that opens its row under Sign-ins). There is no Sign in, Test or Save there. This computer is where you act: Programs, Network, Sign-ins (each connection, the tool-level rows, orphans, **Add a connection of your own**, **Open VS Code with identities**, **Export**), MCP, and the new part **Packs added on this computer** (Install from a folder, Update, Remove).
-- **Change the setup is four numbered cards of one rank:** 1 The short command, 2 You (name, language), 3 From the company (the knowledge base chooser, then the read-only facts), 4 This computer (**Code repositories** moved here, first; then Programs, Network, Sign-ins, MCP and the More fold). The "Your setup" box is gone; **Finish setup** is below card 4. Cards 3 and 4 have **one Open** in the title row; the rows are facts, and a fact's name opens the Tools window at its part. The small print is a hover: what Finish setup writes (an ⓘ beside the button), and "HARNESS_LANGUAGE sets the language" (an ⓘ by the language chips, only when the variable is set).
-- Every **Open** of Get ready opens the tab and scrolls to its part (Network and MCP have one too). `TOOLS.open` still takes the old tab names.
-- The agent-facing texts that pointed at Tools, Connections now point at Tools, This computer, Sign-ins.
+- **Required lines stop Enter.** VS Code not open, Copilot not connected and a `harness doctor` error stop Enter now (1.7.36 let them through).
+- **Change the setup is four cards.** 1 The short command (an unpaired browser says so). 2 You. 3 From the company (optional): the knowledge base with its path, domains and version, instructions, company skills, skill prefix, code standards, tool packs, connections, and **Code repositories** (moved here). 4 Local: Programs, Network, MCP. **Finish setup** is below. The Instructions and Code standards rows count only the file the engine uses (`1 file · 1 not used`), as the Enter screen does. Finish with Chinese chosen no longer loses the page.
+- A program that keeps its own sign-in counts as signed in when its last check got through, in the Connections window too. A terminal `harness doctor` judges a connection as the board does.
+- The Terminal window that a button opened closes by itself 2.5 seconds after the command ended well.
+- Chinese: "Get ready" is "开始设置"; Programs, Network, Company, Tool packs, Instructions, Local, Turn on and Turn off have Chinese words.
+- `TOOLS.open` takes `packs`, `connections` and `local`; the old tab names still work.
+
+### Fixed
+
+- The Say something bar fades while a button lies under it. A task closed a moment ago gets its Credits when Copilot writes them. The Overview leaves out the template's `<...>` lines. The number on the book button says what it counts. The knowledge base table keeps its last column at 560 px.
+
+### Retired
+
+- **The Tools window with two tabs.** Programs, network and MCP are in Local, sign-ins in the connection rows, folder packs in Tool packs.
+- **The tool rows of Sign-ins** (`az`, `demotracker`): each connection has its own Sign in.
+- **Open VS Code with identities** in the Connections window, and the Check and *Open VS Code with my identities* buttons of the Enter screen: the VS Code button replaces them.
+- The old setup bar of the board (the yellow block replaces it) and the Outside systems row.
 
 ## 1.7.37 (2026-11-07)
 

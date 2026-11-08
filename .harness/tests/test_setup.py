@@ -518,13 +518,24 @@ class CompanyFactsTests(unittest.TestCase):
             self.assertEqual(setup.company_facts(root)["prefix"]["kb"], "acme")
             self.assertIn("company", setup.status(root))
 
-    def test_the_page_draws_three_sections_and_keeps_every_control(self) -> None:
-        source = (support.REPO / ".harness" / "engine" / "modules" / "task" / "web" / "setup.js").read_text(encoding="utf-8")
-        for key in ("you", "company", "computer"):
-            self.assertIn(f'section("{key}"', source)
-            self.assertIn(f"setup.sec.{key}", json.loads((support.REPO / ".harness" / "engine" / "core" / "messages.en.json").read_text(encoding="utf-8")))
+    def test_the_page_draws_four_cards_and_keeps_every_control(self) -> None:
+        web = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
+        source = (web / "setup.js").read_text(encoding="utf-8")
+        messages = json.loads((support.REPO / ".harness" / "engine" / "core" / "messages.en.json").read_text(encoding="utf-8"))
+        for key, number, open_to in (("you", "2", '""'), ("company", "3", '"company"'), ("computer", "4", '"computer"')):
+            self.assertIn(f'card("{key}", "{number}", {open_to}', source)
+            self.assertIn(f"setup.sec.{key}", messages)
+        self.assertNotIn("setup.form.title", source)
         for control in ("name", "chips", "repos", "modes", "kbPath", "prefix", "install", "refusedBox", "more", "go"):
             self.assertIn(control, source)
+        # Code repositories is the first row of card 4; the card of the company holds no Open of a row
+        self.assertLess(source.index('card("computer"'), source.index("t(\"setup.repos\")", source.index('card("computer"')))
+        self.assertNotIn("openTab(\"company\", ", source)
+        self.assertIn("TOOLS.open(go[0], loadTools, go[1])", source)
+        # the small print is a hover: HARNESS_LANGUAGE only when set, the override files beside Finish setup
+        self.assertIn('title: t("setup.language.forced")', source)
+        self.assertIn('title: t("setup.finish.note")', source)
+        self.assertIn("sec=", (web / "enter.js").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

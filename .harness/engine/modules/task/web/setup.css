@@ -72,11 +72,10 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 /* The board page has no desk.css: the Tools window keeps its own rule for the long tab. The body scrolls inside the window and the buttons stay in view, so the three tabs have one height (1.7.28). */
 .dialog.tl-win{overflow:hidden}.dialog.tl-win .win-body.tl-body{flex:0 1 auto;height:min(600px,calc(100vh - 232px));overflow:auto;overscroll-behavior:contain;margin:0 -4px;padding:0 4px}.dialog.tl-win .win-foot{flex:none;margin-top:12px}
 /* 1.7.36: three sections; the read-only facts: dot, name, one short fact, Open at the end */
-.su-sec{border-top:1px solid var(--line);margin-top:14px;padding-top:6px}.su-sec-h{margin:6px 0 4px;font-size:14px;letter-spacing:.02em;display:flex;align-items:center;gap:6px}
 .su-facts{display:flex;flex-direction:column;gap:2px;margin:4px 0}.su-fact{display:flex;align-items:center;gap:8px;min-width:0;padding:4px 0;font-size:13px;flex-wrap:wrap}.su-fk{flex:none;width:150px;box-sizing:border-box;font-weight:600}.su-fv{flex:1 1 120px;min-width:0;overflow-wrap:anywhere;color:var(--soft)}.su-fv.su-names{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--ink)}.su-nm{display:inline-flex;align-items:center;gap:5px;max-width:100%;overflow-wrap:anywhere}.su-more-n{color:var(--soft)}
-.su-fact .su-open{margin-left:auto;flex:none}.su-fact-open{justify-content:space-between}.su-fact .su-row{width:100%}.su-facts>.su-row{margin:6px 0}
+.su-fact .su-row{width:100%}.su-facts>.su-row{margin:6px 0}
 .su-dot.none{background:var(--line2)}
-@media(max-width:600px){.su-fk{width:auto;flex:1 1 0;min-width:0}.su-fv{flex:1 1 100%;padding-left:16px;order:3}.su-fact .su-open{order:2}}
+@media(max-width:600px){.su-fk{width:auto;flex:1 1 0;min-width:0}.su-fv{flex:1 1 100%;padding-left:16px;order:3}}
 /* 1.7.37: Programs rows (a name, who needs it, found or not, and "I installed it here" under a missing one) */
 .mc-prog{margin:0 0 8px}.mc-prow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px}.mc-pname{font-family:var(--mono)}.mc-pwho{color:var(--soft);flex:1;min-width:0;overflow-wrap:anywhere}
 .mc-pstate{white-space:nowrap}.mc-pstate.ok{color:var(--good)}.mc-pstate.bad{color:var(--hot)}
@@ -95,3 +94,8 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .sv-below{margin-top:12px}
 @keyframes tl-flash{0%{background:var(--hot-bg)}100%{background:transparent}}.tl-flash{animation:tl-flash 1.8s ease-out;border-radius:9px}
 @media (max-width:600px){.sv-ro{flex-wrap:wrap}.sv-ro .sv-where{display:block;flex:1 0 100%;order:9}.sv-ro .sv-sdot{margin-left:auto}}
+
+/* 1.7.38: four cards of one rank; one Open in a card's title row; a fact's name opens the window at its part */
+.su-head .su-open{margin-left:auto;flex:none}.su-head h2 .sv-info{font-weight:400}
+.su-fk-btn{all:unset;box-sizing:border-box;cursor:pointer;font-weight:600;text-decoration:underline dotted var(--soft);text-underline-offset:3px}.su-fk-btn:hover,.su-fk-btn:focus-visible{text-decoration-style:solid}
+.su-card>.su-row:first-of-type{margin-top:4px}.su-card .su-more{margin-top:10px}

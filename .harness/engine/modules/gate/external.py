@@ -46,7 +46,7 @@ class Action:
     text: str  # the command it came from, one command of the line
     named: bool = True  # False: no verbs rule matched, the verb is the write floor (a query in a shell variable or a file the gate cannot read)
     call: str = ""  # this one command from the program on (the program as its plain name): what a system's `item` pattern is matched against (1.7.21)
-    why: str = ""  # an unseen call that is not an unreadable program name: "file" (a script the gate cannot read), "encoded" (an encoded PowerShell command)
+    why: str = ""  # an unseen call that is not an unreadable program name: "file" (a script the gate cannot read), "encoded" (an encoded PowerShell command); "command" (1.7.38): a word the system's own program does not have, its `target`
     unseen: bool = False  # a segment the gate cannot read (a program in a variable it cannot expand): held, never guessed (1.7.21)
 
     def facts(self) -> Dict[str, Any]:
@@ -75,6 +75,20 @@ def verb_named(system: Dict[str, Any], text: str) -> Optional[str]:
 
 def verb_of(system: Dict[str, Any], text: str) -> str:
     return verb_named(system, text) or WRITE
+
+
+def unknown_command(system: Dict[str, Any], args: str) -> str:
+    """The subcommand a call names when the system lists the subcommands of its own program (`commands`) and this is none of them; else "" (1.7.38, C12 TB-03). A program that has no such word
+    (`ado --help`, `ado --version`) is left to the verbs. An agent that makes a command up (`ado workitem 5`) gets a line and nothing runs, where it used to get a held card for a write that is no command."""
+    commands = system.get("commands")
+    if not commands:
+        return ""
+    try:
+        found = re.search(str(system.get("command") or r"^([A-Za-z][\w-]*)"), args, re.IGNORECASE)
+    except re.error:
+        return ""
+    word = found.group(1) if found and found.groups() and found.group(1) else ""
+    return word if word and word.lower() not in {str(one).lower() for one in commands} else ""
 
 
 def decide(system: Dict[str, Any], env: str, verb: str) -> str:
@@ -604,6 +618,10 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             if system.get("target"):
                 match = re.search(system["target"], line, re.IGNORECASE)
                 target = (match.group(1) if match and match.groups() else match.group(0) if match else "")[:120]
+            word = unknown_command(system, " ".join(tokens[start + 1:]))
+            if word:  # the pack's own program has no such command: refused, with a line (the gate's `unknown` answer)
+                found.append(Action(name, environment(system, line), WRITE, word[:120], " ".join(tokens), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), why="command"))
+                continue
             verb = verb_named(system, " ".join(tokens[start + 1:]))
             found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None, call=" ".join([_program(tokens[start])] + tokens[start + 1:])))
             continue
@@ -756,7 +774,7 @@ def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: 
     context = _Ctx(root, cwd, hold=unseen)
     context.quiet = quiet
     _scan(command, systems, programs, 0, found, ctx=context)
-    return [(action, HUMAN if action.unseen else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
+    return [(action, HUMAN if action.unseen else DENY if action.why == "command" else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
 
 
 def strictest(judged: List[Tuple[Action, str]]) -> Optional[Tuple[Action, str]]:

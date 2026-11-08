@@ -145,6 +145,23 @@
             "zh": "用 curl 修改 Azure DevOps"
           }
         }
+      ],
+      "body": [
+        {
+          "pattern": "(?:^|\\s)(?:-d|-F|--data(?:-raw|-binary|-ascii|-urlencode)?|--form(?:-string)?|--json)[\\s=]*'([^']*)'",
+          "from": "text",
+          "raw": true
+        },
+        {
+          "pattern": "(?:^|\\s)(?:-d|-F|--data(?:-raw|-binary|-ascii|-urlencode)?|--form(?:-string)?|--json)[\\s=]*\"((?:[^\"\\\\]|\\\\.)*)\"",
+          "from": "text",
+          "raw": true
+        },
+        {
+          "pattern": "(?:^|\\s)(?:-d|-F|--data(?:-raw|-binary|-ascii|-urlencode)?|--form(?:-string)?|--json)[\\s=]*(@?[^\\s'\"]+)",
+          "from": "text",
+          "raw": true
+        }
       ]
     }
   }

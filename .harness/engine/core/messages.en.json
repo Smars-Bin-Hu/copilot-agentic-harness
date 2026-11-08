@@ -3657,5 +3657,7 @@
   "setup.kb.update.pull": "Send to the folder",
   "setup.kb.update.pull.tip": "The folder takes these commits from this knowledge base. Nothing in the folder is replaced. The Terminal window runs it.",
   "company.part.none": "no changes",
-  "setup.kb.synced.back": "taken back, as they left the knowledge base: {names} (kept in .harness/runtime/company-backup/)"
+  "setup.kb.synced.back": "taken back, as they left the knowledge base: {names} (kept in .harness/runtime/company-backup/)",
+  "gate.external.unknown_command": "`{program}` has no command `{word}`, so nothing was run and nothing waits for the user. Run `{program} --help` to see its commands, then use one of them.",
+  "gate.external.changed_file": "The file {files} changed after the user approved this command, so that approval is not used. This is a new call: it waits for a new approval."
 }

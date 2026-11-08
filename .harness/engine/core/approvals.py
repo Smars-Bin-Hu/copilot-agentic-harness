@@ -137,14 +137,17 @@ def approved_all(root: Path, limit_minutes: int, now: Optional[float] = None, fi
     return [item for item in _read(root, file) if item["state"] == "approved" and _alive(item, limit_minutes * 60.0, now)]
 
 
-def approve(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
-    """Mark the pending entry with this code as approved. The approval clock starts now. None when no pending entry has the code."""
+def approve(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE, files: Optional[Dict[str, str]] = None) -> Optional[Dict[str, Any]]:
+    """Mark the pending entry with this code as approved. The approval clock starts now. None when no pending entry has the code. `files` (1.7.38): the files the command names and what they held when the
+    person approved (`core.pinfiles`); the command runs on this approval only while they hold the same."""
     now = time.time() if now is None else now
     with state_lock(path(root, file)):
         entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
         for item in entries:
             if item["state"] == "pending" and item["code"] == code.strip().upper():
                 item.update(state="approved", at=now, approved_at=utc_now())
+                if files is not None:
+                    item["files"] = files
                 _write(root, entries, file)
                 return dict(item)
         _write(root, entries, file)

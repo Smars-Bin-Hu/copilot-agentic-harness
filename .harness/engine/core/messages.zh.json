@@ -3657,5 +3657,7 @@
   "setup.kb.update.pull": "送到文件夹",
   "setup.kb.update.pull.tip": "文件夹从这份知识库拉取这些提交，文件夹里已有的内容不会被替换。由 Terminal 窗口运行。",
   "company.part.none": "没有改动",
-  "setup.kb.synced.back": "已收回，它们已不在知识库里：{names}（留在 .harness/runtime/company-backup/）"
+  "setup.kb.synced.back": "已收回，它们已不在知识库里：{names}（留在 .harness/runtime/company-backup/）",
+  "gate.external.unknown_command": "`{program}` 没有 `{word}` 这个命令，所以什么都没有运行，也没有东西在等用户。运行 `{program} --help` 查看它的命令，再用其中一个。",
+  "gate.external.changed_file": "文件 {files} 在用户批准这条命令之后被改过，所以那次批准没有用。这是一次新的调用，要重新批准。"
 }

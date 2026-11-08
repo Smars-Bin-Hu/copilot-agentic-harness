@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 import re
 
-from core import calls, launchenv, reach, repo_paths, connections, targets, tasks, unseen
+from core import calls, launchenv, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
 from core import systems as systems_mod
 from core.paths import board_serve_port
 from core.context import Context
@@ -198,6 +198,8 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     how = "allow" if passes else ""  # what let it through (core.calls): the evidence says it (1.7.9)
     if action.unseen:  # a command whose program the gate cannot read: it may be a listed one, so it is held, whatever the task allows
         return {"action": action, "decision": decision, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unseen": True}
+    if action.why == "command":  # the pack's own program has no such command (1.7.38): nothing to approve, nothing runs
+        return {"action": action, "decision": external.DENY, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unknown": action.target}
     if event.agent_type.strip():  # a subagent (the reviewer, the mapper) reads only: the person's leave (a plan, a grant, an open connection, an approval) is the main agent's, never its own (1.7.9)
         return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": False, "how": how, "code": "", "subagent": not passes}
     opened = False
@@ -332,24 +334,42 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         return Decision(permission="deny", reason=rules.external_autorun(action, command), facts=facts)  # nobody is there to approve
     if decision == external.OUTBOX:
         minutes = approvals.minutes(policy)
+        changed = _changed_files(ctx, event, minutes)  # the person approved the command with the files it names as they were then (1.7.38, C12 TB-05)
         used = approvals.consume(ctx.root, event.session_id, event.command, minutes, file=approvals.ACTIONS)
-        if used:
+        if used and not changed:
             judged["approved"], judged["how"], judged["code"] = True, "approved", str(used.get("code", ""))
             outbox.mark(ctx.root, outbox.draft_of(used), "sent")
             return None  # the person read this command and approved it: it runs once
         task = data["task"] if data else None
         offers = (judged.get("offers") or []) if task else []  # an opening is for a task: with no task open, the card offers none
-        code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes, offers) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task, offers))
+        cwd = event.cwd or ""
+        code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes, offers, cwd) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task, offers, cwd))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
-        return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft, offers), facts=dict(facts, kind="external-outbox"))
+        return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft, offers, changed), facts=dict(facts, kind="external-outbox", **({"changed": changed} if changed else {})))
     if judged.get("unseen"):
         named = action.target if action.unseen else ""
         key = {"file": "gate.external.unreadable_file", "encoded": "gate.external.encoded"}.get(action.why) or ("gate.external.unreadable" if named else "gate.external.unseen")
         return Decision(permission="deny", reason=rules.say(key, call=command, program=named, path=named), facts=dict(facts, kind="external-unseen"))
+    if judged.get("unknown"):
+        program = (action.call.split(" ", 1)[0] if action.call else "") or action.system
+        return Decision(permission="deny", reason=rules.say("gate.external.unknown_command", program=program, word=judged["unknown"], call=command), facts=dict(facts, kind="external-unknown"))
     if judged.get("unlinked"):
         return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
     return Decision(permission="deny", reason=reason, facts=facts)
+
+
+def _changed_files(ctx: Context, event: HookEvent, minutes: int) -> List[str]:
+    """The files this command names, inside its task, that are not as they were when the person approved it: changed, gone, or new (`core.pinfiles`). Empty when no approval is waiting for the command,
+    when it was approved with no files kept (before 1.7.38), or when all are the same. Never raises: a read that fails says nothing changed, as before."""
+    try:
+        text = approvals.collapse(event.command)
+        entry = next((item for item in approvals.approved(ctx.root, event.session_id, minutes, file=approvals.ACTIONS) if item.get("command") == text), None)
+        if entry is None or entry.get("files") is None:
+            return []
+        return pinfiles.changed(entry["files"], pinfiles.pins(event.command, ctx.root, str(entry.get("task") or ""), event.cwd or str(entry.get("cwd") or "")))
+    except Exception:  # noqa: BLE001 - see above
+        return []
 
 
 def settle_opened(ctx: Context, command: str) -> None:

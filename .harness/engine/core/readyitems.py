@@ -150,6 +150,9 @@ def skills_item(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
 
 def files_item(key: str, folder: Optional[Path], has_kb: bool) -> Dict[str, Any]:
     n = files_in(folder)
+    if key == "instructions" and n and folder is not None and not (folder / "knowledgebase.instructions.md").is_file():  # only that file is copied for the agent (company.INSTRUCTION_FILES): the form says the same
+        fix = fix_kb("company", say("ready.fix.show"))
+        return item(key, "yellow", say("ready.instr.main"), fix, problems=[{"key": key, "text": say("ready.p.instr"), "why": say("ready.p.instr.why"), "short": "", "fix": fix}])
     if n:
         return item(key, "ok", count(n, "ready.files"))
     return item(key, "grey", say("ready.none") if has_kb else DASH)

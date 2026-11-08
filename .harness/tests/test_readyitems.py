@@ -95,6 +95,20 @@ class KnowledgeBaseTests(TaskCase):
         self.assertEqual(list(found), list(readyitems.KEYS))
 
 
+class InstructionsTests(TaskCase):
+    def test_instructions_are_in_place_only_with_the_file_that_is_copied_for_the_agent(self) -> None:
+        """1.7.38: only knowledgebase.instructions.md is copied (company.INSTRUCTION_FILES); the Enter screen says what the form says."""
+        folder = self.root / "kb-instructions"
+        folder.mkdir()
+        (folder / "etl.instructions.md").write_text("x", encoding="utf-8")
+        found = readyitems.files_item("instructions", folder, True)
+        self.assertEqual((found["state"], len(found["problems"])), ("yellow", 1))
+        (folder / "knowledgebase.instructions.md").write_text("x", encoding="utf-8")
+        found = readyitems.files_item("instructions", folder, True)
+        self.assertEqual((found["state"], found["problems"]), ("ok", []))
+        self.assertIn("2", found["detail"])
+
+
 class CertificateAndRepositoriesTests(TaskCase):
     def test_a_recipe_that_asks_for_a_proxy_and_no_bundle_is_a_problem_of_the_connections_row(self) -> None:
         recipe = self.root / ".harness" / "policies" / "computer.company.json"

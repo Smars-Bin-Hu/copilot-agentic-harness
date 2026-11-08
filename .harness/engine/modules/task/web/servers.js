@@ -129,7 +129,7 @@ const SERVERS = (function () {
     kind.addEventListener("change", draw);
     auth.addEventListener("change", drawIdentity);
     draw();
-    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), field(t("connections.own.env"), h("div", null, env, h("p", {class: "sub", title: t("connections.own.env.prod")}, t("connections.own.env.prod")))), field(t("connections.own.auth"), auth)), fields, rest);
+    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), field(t("connections.own.env"), env), field(t("connections.own.auth"), auth)), h("p", {class: "sub"}, t("connections.own.env.prod")), fields, rest);  // why there is no PROD (1.7.38)
   }
 
   // One connection (1.7.38): name, type, where it points (the environment chip, or `org · project`), whether the company or the person added it, the sign-in (a dot and the account), Sign in and Test.

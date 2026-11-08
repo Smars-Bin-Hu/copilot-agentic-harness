@@ -154,6 +154,7 @@ class VsLink:
         self.losses = 0  # how many times a working link went away: VS Code was closed, however soon it came back
         self.why = "off" if not enabled else "starting"
         self.sessions: Dict[str, Dict[str, Any]] = {}  # the chats of this folder, by resource
+        self.everywhere: Dict[str, Dict[str, Any]] = {}  # every chat the host lists, of any folder: resource -> {title, status}. VS Code asks before it quits for one that runs or waits (`veto.chat`)
         self.sdk: Dict[str, Set[str]] = {}
         self.scanned: Dict[str, str] = {}  # resource -> modifiedAt when it was read for its Copilot id
         self.read_at: Dict[str, float] = {}  # resource -> when it was read with no error (monotonic)
@@ -295,6 +296,20 @@ class VsLink:
     def model_list(self) -> List[Dict[str, Any]]:
         with self.lock:
             return [dict(item) for item in self.models] if self.ready else []
+
+    def running_chats(self) -> List[Dict[str, str]]:
+        """The chats VS Code would ask about when it quits (`veto.chat`): the host lists them as running or as waiting for the person, in any folder, not only the chats of tasks. From the cache; empty when the link is not up.
+        `{title, state (busy | input), task}`: `task` is the folder of the open task the chat is bound to, else empty."""
+        with self.lock:
+            if not self.ready:
+                return []
+            owner = {binding["session"]: task for task, binding in self.bound.items()}
+            out = []
+            for resource, summary in self.everywhere.items():
+                state = ahp.status_name(summary.get("status"))
+                if state in ("busy", "input"):
+                    out.append({"title": str(summary.get("title") or ""), "state": state, "task": owner.get(resource, "")})
+            return out
 
     def waiting_names(self) -> List[str]:
         """The names of the tasks the board made a chat for and whose task is not there yet."""
@@ -492,8 +507,10 @@ class VsLink:
             self.models, self.limits = found, limits
 
     def _list(self, link: ahp.Connection) -> None:
-        mine = {item["resource"]: item for item in link.sessions() if ahp.is_ours(item) and ahp.session_in(item, str(self.root)) and item.get("resource")}
+        items = link.sessions()
+        mine = {item["resource"]: item for item in items if ahp.is_ours(item) and ahp.session_in(item, str(self.root)) and item.get("resource")}
         with self.lock:
+            self.everywhere = {str(item["resource"]): {key: item.get(key) for key in ("title", "status")} for item in items if item.get("resource")}
             tails = {resource.rsplit("/", 1)[-1] for resource in mine}
             for resource, wait in list(self.expect.items()):
                 if resource.rsplit("/", 1)[-1] in tails or time.monotonic() > wait["until"]:
@@ -534,15 +551,21 @@ class VsLink:
         with self.lock:
             if method == "root/sessionAdded":
                 item = params.get("summary") or {}
+                if item.get("resource"):
+                    self.everywhere[str(item["resource"])] = {key: item.get(key) for key in ("title", "status")}
                 if ahp.is_ours(item) and ahp.session_in(item, str(self.root)) and item.get("resource"):
                     self.sessions[item["resource"]] = item
                     self.dirty = True
             elif method == "root/sessionSummaryChanged":
+                seen = self.everywhere.get(str(params.get("session") or ""))
+                if seen is not None and isinstance(params.get("changes"), dict):
+                    seen.update({key: value for key, value in params["changes"].items() if key in ("title", "status")})
                 known = self.sessions.get(str(params.get("session") or ""))
                 if known is not None and isinstance(params.get("changes"), dict):
                     known.update(params["changes"])
                     self.dirty = True
             elif method == "root/sessionRemoved":
+                self.everywhere.pop(str(params.get("session") or ""), None)
                 self.sessions.pop(str(params.get("session") or ""), None)
                 self.dirty = True
             elif method == "action":

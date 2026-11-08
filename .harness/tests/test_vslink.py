@@ -301,6 +301,29 @@ class LinkTests(LinkCase):
         self.assertEqual((row["chat"]["state"], row["sub"]["kind"]), ("idle", "reply"))
         self.assertNotIn("started_at", row["chat"])  # idle: no run time
 
+    def test_every_chat_that_runs_or_waits_is_known_whatever_its_folder_provider_or_task(self) -> None:
+        """Retest N2: VS Code asks "a chat is still running, quit anyway?" (`veto.chat`) for any chat of any window, not only the chat of a task. A restart names them first."""
+        def change(session: str, status: int) -> None:
+            self.host.push({"jsonrpc": "2.0", "method": "root/sessionSummaryChanged", "params": {"session": session, "changes": {"status": status}}})
+
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1))
+        self.assertEqual(self.link.running_chats(), [])  # all three are idle
+        change("ahp-session:/elsewhere", 9)  # another folder, running
+        change("claude:/zzz", 56)  # another provider, waits for the person
+        change(self.resource, 9)  # the chat of the task, running
+        self.assertTrue(until(lambda: len(self.link.running_chats()) == 3), self.link.running_chats())
+        found = {chat["title"] + ":" + chat["state"] + ":" + chat["task"] for chat in self.link.running_chats()}
+        self.assertEqual(found, {"A chat:busy:", "A chat:input:", f"A chat:busy:{TASK}"})
+        change("ahp-session:/elsewhere", 33)  # finished
+        self.host.push({"jsonrpc": "2.0", "method": "root/sessionRemoved", "params": {"session": "claude:/zzz"}})
+        self.assertTrue(until(lambda: len(self.link.running_chats()) == 1), self.link.running_chats())
+        self.assertEqual(self.link.running_chats()[0]["task"], TASK)
+
+    def test_a_link_that_is_not_up_knows_no_running_chat(self) -> None:
+        self.link.everywhere = {"ahp-session:/x": {"title": "t", "status": 9}}
+        self.assertEqual(self.link.running_chats(), [])  # an old answer is not a word about a VS Code that may be gone
+
     def test_a_session_added_later_is_found_and_a_removed_one_is_forgotten(self) -> None:
         self.items.clear()
         self.link.start()

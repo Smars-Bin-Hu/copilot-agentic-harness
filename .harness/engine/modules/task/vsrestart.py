@@ -1,7 +1,7 @@
 """Restart VS Code from the board (1.7.38, block B): ask it to quit the normal way, wait until it has gone, open it again the way the board opens it (with this computer's settings).
 
 Never a kill. macOS: AppleScript `quit`, which VS Code answers like Cmd+Q (a file that is not saved is asked about by VS Code itself). Windows: `taskkill` without `/F`, which asks each window to close. Elsewhere: SIGTERM to `code`.
-A VS Code that does not go in QUIT_WAIT seconds (a window is asking to save a file, say) is not opened again and not forced: the board says so and the person answers the window, then presses the button again.
+A VS Code that does not go in QUIT_WAIT seconds (it asks whether to stop a chat that still runs, or to save a file) is not opened again and not forced: the board says so, naming the running chats it knows, and the person answers VS Code, then presses the button again.
 
 One restart at a time, in a thread of its own. `view()` is what `/api/ready` carries: `{state, why, since}`, state one of idle, quitting, opening, done, failed. `Restart` takes the commands as functions, so a test never touches a real VS Code.
 """
@@ -18,6 +18,7 @@ QUIT_WAIT = 30.0  # seconds a VS Code is given to quit (a window may ask about a
 POLL = 0.5
 SETTLE = 1.0  # a pause between "it has gone" and "open it": the host's socket and the window state are let go
 ASK_SECONDS = 15  # the quit command itself
+NAMES = 3  # chats named in the note of a quit that did not end
 
 
 def quit_command(platform: str = sys.platform) -> List[str]:
@@ -41,29 +42,32 @@ def ask_to_quit(run: Callable[..., Any] = subprocess.run, platform: str = sys.pl
 
 class Restart:
     def __init__(self, running: Callable[[], bool], opener: Callable[[], Any], ask: Optional[Callable[[], bool]] = None, clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], Any] = time.sleep, wait: Optional[float] = None, settle: Optional[float] = None, gone: Optional[Callable[[], Any]] = None) -> None:
+                 sleep: Callable[[float], Any] = time.sleep, wait: Optional[float] = None, settle: Optional[float] = None, gone: Optional[Callable[[], Any]] = None,
+                 chats: Optional[Callable[[], List[str]]] = None) -> None:
         self.running = running  # is any VS Code running on this computer
         self.opener = opener  # opens this folder the way the board does (`/api/open`)
         self.gone = gone or (lambda: None)  # VS Code has quit: the link looks for it again at once
+        self.chats = chats or (lambda: [])  # the chats VS Code lists as running or waiting for the person: the usual reason it does not quit
         self.ask = ask or ask_to_quit
         self.clock, self.sleep = clock, sleep
         self.wait = QUIT_WAIT if wait is None else wait
         self.settle = SETTLE if settle is None else settle
         self.lock = threading.Lock()
         self.state, self.why, self.since = "idle", "", 0.0
+        self.names: List[str] = []
         self.thread: Optional[threading.Thread] = None  # for a test to join
 
     def view(self) -> Dict[str, Any]:
         with self.lock:
-            return {"state": self.state, "why": self.why, "since": round(self.clock() - self.since, 1) if self.since else 0}
+            return {"state": self.state, "why": self.why, "names": list(self.names), "since": round(self.clock() - self.since, 1) if self.since else 0}
 
     def busy(self) -> bool:
         with self.lock:
             return self.state in ("quitting", "opening")
 
-    def set(self, state: str, why: str = "") -> None:
+    def set(self, state: str, why: str = "", names: Optional[List[str]] = None) -> None:
         with self.lock:
-            self.state, self.why = state, why
+            self.state, self.why, self.names = state, why, list(names or [])
 
     def start(self, then_open: bool = True) -> bool:
         """Begin a restart. False when one is going on already. `then_open` False: only quit (the caller opens VS Code itself, with identities)."""
@@ -75,6 +79,12 @@ class Restart:
         self.thread.start()
         return True
 
+    def listed(self) -> List[str]:
+        try:
+            return list(self.chats())[:NAMES]
+        except Exception:  # noqa: BLE001 - a guess at the reason must not hide that VS Code did not quit
+            return []
+
     def work(self, then_open: bool) -> None:
         try:
             if self.running():
@@ -84,7 +94,9 @@ class Restart:
                 deadline = self.clock() + self.wait
                 while self.running():
                     if self.clock() >= deadline:
-                        self.set("failed", "still-open")  # not forced, not opened: a window is waiting for the person
+                        # not forced, not opened: VS Code is waiting for the person. Usually it asks "a chat is still running, quit anyway?" (`veto.chat`) or whether to save a file: the chats the host lists as running are named
+                        names = self.listed()
+                        self.set("failed", "still-chat" if names else "still-open", names)
                         return
                     self.sleep(POLL)
                 self.sleep(self.settle)

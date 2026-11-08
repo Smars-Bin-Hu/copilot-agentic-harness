@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
 import types
 import unittest
+from pathlib import Path
 from typing import Any, Dict, List
 from unittest import mock
 
@@ -111,6 +116,22 @@ class RestartTests(unittest.TestCase):
         self.assertGreaterEqual(clock.now, vsrestart.QUIT_WAIT)
         self.assertTrue(restart.start())  # the person answered the window and presses the button again
 
+    def test_a_quit_that_does_not_end_names_the_chats_that_run_when_it_knows_them(self) -> None:
+        """Retest N2: VS Code held its own "a chat is still running, quit anyway?" and every later press was ignored; the note must say what to look for."""
+        clock, events = Clock(), []
+        restart = make([True], clock, events, chats=lambda: ["task-a", "A chat", "b", "c"])
+        restart.start()
+        view = self.finish(restart)
+        self.assertEqual((view["state"], view["why"]), ("failed", "still-chat"))
+        self.assertEqual(view["names"], ["task-a", "A chat", "b"])  # a few, not a list
+        self.assertEqual([event for event in events if event != "look"], ["ask"])  # still never forced or opened
+        again = make([False], clock, [])
+        again.start()
+        self.assertEqual(self.finish(again)["names"], [])
+        broken = make([True], Clock(), [], chats=lambda: 1 / 0)  # a guess at the reason never hides that it did not quit
+        broken.start()
+        self.assertEqual((self.finish(broken)["state"], broken.view()["why"]), ("failed", "still-open"))
+
     def test_only_quit_leaves_the_opening_to_the_caller_the_identities_picker(self) -> None:
         clock, events = Clock(), []
         restart = make([True, False], clock, events)
@@ -189,6 +210,22 @@ class RestartServedTests(ServeCase):
             self.assertEqual((status, data["result"]), (200, {"started": True}))
         self.assertEqual(self.started, [True])
 
+    def test_a_chat_of_vscode_that_runs_or_waits_is_told_first_by_its_task_or_its_title(self) -> None:
+        """Retest N2: not only the chats of tasks. A chat that belongs to an open task is named by the task, any other by its title; a task already named as at work is not named twice."""
+        cookie = self.pair()
+        running = [{"title": "Fix the build", "state": "busy", "task": ""}, {"title": "x", "state": "input", "task": "/w/tasks/qa-open"}, {"title": " ", "state": "busy", "task": ""}, {"title": "y", "state": "busy", "task": "/w/tasks/job1"}]
+        self.board.link = types.SimpleNamespace(running_chats=lambda: running)
+        with mock.patch.object(boardserve.Board, "working_tasks", return_value=["job1"]):
+            status, data, _ = self.request("POST", "/api/restart", {}, cookie=cookie)
+            self.assertEqual((status, data["busy"], data["chats"]), (409, ["job1"], ["Fix the build", "qa-open", boardserve.messages.text("restart.chat.untitled")]))
+            self.assertIn("Fix the build", data["error"])
+            self.assertEqual(self.started, [])
+            status, data, _ = self.request("POST", "/api/restart", {"anyway": True}, cookie=cookie)
+            self.assertEqual((status, data["result"]), (200, {"started": True}))
+        with mock.patch.object(boardserve.Board, "working_tasks", return_value=[]):
+            self.board.link = types.SimpleNamespace(running_chats=lambda: [])
+            self.assertEqual(self.request("POST", "/api/restart", {}, cookie=cookie)[0], 200)  # no chat runs: no question
+
     def test_nothing_at_work_starts_at_once_and_open_false_only_quits_and_the_state_is_read(self) -> None:
         cookie = self.pair()
         with mock.patch.object(boardserve.Board, "working_tasks", return_value=[]):
@@ -212,6 +249,50 @@ class RestartServedTests(ServeCase):
         self.assertEqual(data["restart"]["state"], "quitting")
         self.assertIn(data["vscode_button"]["kind"], ("open", "restart", "identities"))
         self.assertEqual(data["vscode_button"]["label"], boardserve.messages.text("ready.vs." + data["vscode_button"]["kind"]))
+
+
+DIALOG_SCRIPT = r"""
+const assert = require("assert"), fs = require("fs");
+const source = fs.readFileSync(process.argv[2], "utf8");
+const part = source.slice(source.indexOf("  const restartWhy"), source.indexOf("  function vsButton"));
+const TEXT = JSON.parse(process.argv[3]);
+const t = (key, values) => (TEXT[key] === undefined ? key : TEXT[key]).replace(/\{(\w+)\}/g, (whole, name) => (values && name in values ? values[name] : whole));
+const h = (tag, attrs, ...kids) => ({tag, attrs, kids: kids.flat(Infinity).filter((kid) => kid !== null && kid !== undefined && kid !== false), addEventListener() {}});
+const shown = [];
+const dialog = (children) => { shown.push(children); return {box: {isConnected: true}, close() {}}; };
+global.setInterval = () => 0; global.clearInterval = () => {};
+eval(part + "; global.restartVS = restartVS; global.restartWhy = restartWhy;");
+const words = (node) => (typeof node === "string" ? node : node.kids ? node.kids.map(words).join("") : "");
+(async () => {
+  assert.strictEqual(restartWhy("still-chat", ["a", "b"]), "NAMES a, b");
+  assert.strictEqual(restartWhy("still-open", []), "OPEN");
+  assert.strictEqual(restartWhy("some words of the engine"), "some words of the engine");
+  const busy = (data) => (path) => Promise.reject(Object.assign(new Error("x"), {data}));
+  restartVS({sender: busy({busy: [], chats: ["Fix the build"]})}).catch(() => {});
+  restartVS({sender: busy({busy: ["job1"], chats: ["Fix the build", "qa"]})}).catch(() => {});
+  restartVS({sender: busy({busy: ["job1"]})}).catch(() => {});
+  await new Promise((done) => setTimeout(done, 10));
+  const [chatOnly, both, tasksOnly] = shown.map((children) => children.map(words));
+  assert.deepStrictEqual(chatOnly.slice(0, 3), ["board.vs.restart.chat.title", "CHAT Fix the build", "THEN"], "a chat of VS Code that is no task's: its title is the dialog's, and VS Code's own question is announced");
+  assert.deepStrictEqual(both.slice(0, 4), ["board.vs.restart.busy.title", "TASK job1", "CHATS Fix the build, qa", "THEN"]);
+  assert.deepStrictEqual(tasksOnly.slice(0, 3), ["board.vs.restart.busy.title", "TASK job1", "THEN"]);
+})().catch((error) => { console.error(error); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class RestartDialogTests(unittest.TestCase):
+    """The question before a restart, in the page (serve.js): tasks at work and other chats of VS Code, and the note when VS Code did not quit."""
+
+    def test_the_dialog_names_tasks_and_chats_and_the_note_names_the_chats(self) -> None:
+        text = {"board.vs.restart.why.still-chat": "NAMES {names}", "board.vs.restart.why.still-open": "OPEN", "board.vs.restart.busy.one": "TASK {name}", "board.vs.restart.chat.one": "CHAT {name}",
+                "board.vs.restart.chats": "CHATS {names}", "board.vs.restart.busy.then": "THEN", "board.vs.restart.chat.title": "board.vs.restart.chat.title"}
+        web = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "dialog.js"
+            file.write_text(DIALOG_SCRIPT, encoding="utf-8")
+            done = subprocess.run([shutil.which("node"), str(file), str(web / "serve.js"), json.dumps(text)], capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
 
 
 class WorkingTasksTests(ServeCase):

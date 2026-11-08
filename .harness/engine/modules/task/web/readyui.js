@@ -73,7 +73,7 @@ const READY = (function () {
     if (!view) return "";
     if (view.state === "quitting") return t("board.vs.restart.quitting");
     if (view.state === "opening") return t("board.vs.restart.opening");
-    if (view.state === "failed") return SERVE.restartWhy(view.why);
+    if (view.state === "failed") return SERVE.restartWhy(view.why, view.names);
     return "";
   }
 

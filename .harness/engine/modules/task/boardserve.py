@@ -273,7 +273,7 @@ class Board:
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
         self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
-        self.restarter = vsrestart.Restart(launchenv.vscode_running, self.open_vscode, gone=self.link.hurry)  # the VS Code button of the screen (1.7.38): quit, wait, open
+        self.restarter = vsrestart.Restart(launchenv.vscode_running, self.open_vscode, gone=self.link.hurry, chats=lambda: self.other_chats([]))  # the VS Code button of the screen (1.7.38): quit, wait, open
         self.ready.restart = self.restarter
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
@@ -400,6 +400,16 @@ class Board:
             busy = chat.get("bound") and chat.get("state") == "busy"
             if busy or (tasklife.at_work(self.root, data) and not (chat.get("bound") and chat.get("state") in CHAT_STILL)):
                 found.append(Path(task).name)
+        return found
+
+    def other_chats(self, working: List[str]) -> List[str]:
+        """The names of the chats VS Code lists as running or waiting for the person that `working_tasks` did not name: VS Code asks about each of them before it quits (`veto.chat`), a chat of a task or not, in any folder.
+        A chat of an open task is named by the task; any other by its title. Said before the restart, so the person is not first met by VS Code's own question."""
+        found: List[str] = []
+        for chat in self.link.running_chats():
+            name = Path(chat["task"]).name if chat["task"] else chat["title"].strip() or say("restart.chat.untitled")
+            if name not in working and name not in found:
+                found.append(name)
         return found
 
     def page(self) -> str:
@@ -1483,8 +1493,9 @@ def handler_for(board: Board) -> type:
                 if os.environ.get("TERM_PROGRAM") == "vscode" or os.environ.get("VSCODE_IPC_HOOK_CLI"):  # this board runs in a terminal of VS Code: quitting VS Code would stop it
                     return self.answer(409, {"error": say("restart.inside"), "inside": True})
                 names = [] if data.get("anyway") else board.working_tasks()
-                if names:
-                    return self.answer(409, {"error": say("restart.busy", names=", ".join(names)), "busy": names})
+                chats = [] if data.get("anyway") else board.other_chats(names)
+                if names or chats:
+                    return self.answer(409, {"error": say("restart.busy", names=", ".join(names + chats)), "busy": names, "chats": chats})
                 return self.answer(200, {"result": {"started": board.restarter.start(bool(data.get("open", True)))}})
             if path == "/api/reach":  # the Check button of the outside systems line: the board checks the connections now (the paired browser only)
                 if not board.paired(self.token()):

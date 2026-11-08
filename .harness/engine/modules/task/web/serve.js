@@ -299,7 +299,8 @@ const SERVE = (function () {
   // Restart VS Code (1.7.38): the board asks VS Code to quit the normal way (a file that is not saved is asked about by VS Code itself), waits until it has gone, and opens it again the way `openVS` does. Never a kill.
   // The server says first, with 409 and `busy`, when the agent of a task is at work: the person chooses Restart anyway or Cancel. `open: false` only quits (the identities picker opens it then).
   // `onState(view)`: the state of the restart as it goes (quitting, opening, done, failed). The promise ends with `done`; `failed` is an error whose `why` is a code (`still-open`, `no-command`) or the engine's words.
-  const restartWhy = (why) => (Object.prototype.hasOwnProperty.call(TEXT, "board.vs.restart.why." + why) ? t("board.vs.restart.why." + why) : String(why || ""));
+  // `names`: the chats VS Code lists as running when it did not quit (`still-chat`).
+  const restartWhy = (why, names) => (Object.prototype.hasOwnProperty.call(TEXT, "board.vs.restart.why." + why) ? t("board.vs.restart.why." + why, {names: (names || []).join(", ")}) : String(why || ""));
   function restartVS(options) {
     const opts = options || {};
     const go = opts.sender || post;
@@ -309,7 +310,7 @@ const SERVE = (function () {
         const view = data.result || {};
         if (opts.onState) opts.onState(view);
         if (view.state === "done") resolve(view);
-        else if (view.state === "failed") reject(Object.assign(new Error(restartWhy(view.why)), {why: view.why, quiet: false}));
+        else if (view.state === "failed") reject(Object.assign(new Error(restartWhy(view.why, view.names)), {why: view.why, quiet: false}));
         else setTimeout(look, 700);
       }, reject);
       look();
@@ -317,10 +318,12 @@ const SERVE = (function () {
     return ask(false).catch((error) => {
       if (!(error && error.data && error.data.busy)) throw error;
       return new Promise((resolve, reject) => {
-        const names = error.data.busy;
+        const names = error.data.busy || [], chats = error.data.chats || [];  // tasks whose agent is at work; other chats of VS Code that run or wait for the person (VS Code asks about them itself when it quits)
         const yes = h("button", {type: "button", class: "act hot live"}, t("board.vs.restart.anyway"));
         const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-        const view = dialog([h("h2", null, t("board.vs.restart.busy.title")), h("p", null, names.length === 1 ? t("board.vs.restart.busy.one", {name: names[0]}) : t("board.vs.restart.busy", {names: names.join(", ")})), h("div", {class: "row win-foot"}, yes, no)]);
+        const says = [names.length ? h("p", null, names.length === 1 ? t("board.vs.restart.busy.one", {name: names[0]}) : t("board.vs.restart.busy", {names: names.join(", ")})) : null,
+          chats.length ? h("p", null, chats.length === 1 ? t("board.vs.restart.chat.one", {name: chats[0]}) : t("board.vs.restart.chats", {names: chats.join(", ")})) : null, h("p", {class: "sub"}, t("board.vs.restart.busy.then"))].filter(Boolean);
+        const view = dialog([h("h2", null, t(names.length ? "board.vs.restart.busy.title" : "board.vs.restart.chat.title")), ...says, h("div", {class: "row win-foot"}, yes, no)]);
         let done = false;
         const end = (then) => { if (done) return; done = true; clearInterval(watch); view.close(); then(); };
         const cancelled = () => reject(Object.assign(error, {quiet: true}));  // the person chose: nothing is said

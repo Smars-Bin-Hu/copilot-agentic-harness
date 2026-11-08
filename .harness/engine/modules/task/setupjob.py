@@ -117,14 +117,16 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
         return say("setup.kb.git", branch=found["branch"])
 
     def synced() -> str:
-        found = company.sync_after(root)
+        found = company.sync_after(root, remove=True)  # Save asks for the same sync as Sync now: what left the knowledge base is taken back too (into the backup), not left for a second press
         if found is None:
             return say("setup.kb.nosync")
         if found.get("error"):
             raise ValueError(found["error"])
         left = [item["skill"] for item in found.get("refused") or []]
         lines = list((found.get("toolpacks") or {}).get("lines") or [])  # "ado 0.4.5 -> 0.5.0 updated" (1.7.30)
-        return " ".join([say("setup.kb.synced.some", names=", ".join(left)) if left else say("setup.kb.synced"), *lines])
+        back = list(found.get("taken_back") or [])
+        first = say("setup.kb.synced.some", names=", ".join(left)) if left else say("setup.kb.synced")
+        return " ".join([first + ("; " + say("setup.kb.synced.back", names=", ".join(back)) if back else ""), *lines])
 
     def doctor() -> str:
         found = ready.run_doctor(root)
@@ -265,9 +267,9 @@ def probe_folder(root: Path, raw: Any) -> Dict[str, Any]:
         return {"ok": False, "why": say("setup.kb.nothing")}
     if held_in(root):
         update = company.folder_update(root, str(path))
-        if update["state"] == "plain":  # no git on one side: the old way, a replace the person ticks (the old one moves to a backup)
-            return {"ok": False, "full": True, "why": say("setup.kb.full.here"), "parts": company.layout(path)}
-        view = {key: update[key] for key in ("state", "behind", "ahead", "changes", "total", "counts", "subjects", "uncommitted_there", "branch")}
+        if update["state"] == "plain":  # no git on one side: the old way, a replace the person ticks (the old one moves to a backup); the words say which side has no history
+            return {"ok": False, "full": True, "why": say("setup.kb.full.here" if not (path / ".git").exists() else "setup.kb.full.here.copy"), "parts": company.layout(path)}
+        view = {key: update[key] for key in ("state", "behind", "ahead", "changes", "total", "counts", "subjects", "uncommitted_there", "branch", "pull")}
         if update["state"] == "same":
             return {"ok": True, "why": update["text"], "update": view, "parts": company.layout(path)}
         if update["state"] == "behind":  # listed, and the person ticks to say yes: `full` asks for the tick

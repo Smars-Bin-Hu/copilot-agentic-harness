@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,7 +50,8 @@ class FolderUpdateTests(unittest.TestCase):
         self.assertEqual((found["state"], found["behind"], found["ahead"], found["total"]), ("behind", 2, 0, 3))
         self.assertEqual(found["counts"], {"add": 1, "change": 1, "remove": 1})
         self.assertEqual({row["path"]: row["change"] for row in found["changes"]}, {"domains/sales/new.md": "add", "domains/sales/domain.yaml": "change", "domains/sales/old.md": "remove"})
-        self.assertEqual(found["text"], messages.text("company.folder.behind", n=2, new=1, changed=1, removed=1))
+        self.assertEqual(found["text"], messages.text("company.folder.behind", n=2, what=messages.joined(messages.text(f"company.part.{word}", n=1) for word in ("new", "changed", "removed"))))
+        self.assertEqual([row["change"] for row in found["changes"]], ["add", "change", "remove"], "the list goes in the order of the sentence")
         self.assertEqual(self.head(self.kb), before)  # a look only
         self.assertTrue((self.kb / "domains/sales/old.md").is_file())
         self.assertFalse((self.kb / "domains/sales/new.md").exists())
@@ -66,8 +68,10 @@ class FolderUpdateTests(unittest.TestCase):
         mine = self.head(self.kb)
         found = company.folder_update(self.root, str(self.source))
         self.assertEqual((found["state"], found["ahead"], found["subjects"]), ("ahead", 1, ["my card"]))
-        self.assertIn("my card", found["why"])
-        self.assertIn(str(self.source), found["why"])  # the way out names the folder
+        self.assertNotIn("my card", found["why"], "the title is listed once, by the page, under the sentence")
+        self.assertNotIn("git", found["why"], "no command in the words: the board has a button for it")
+        self.assertIn(str(self.source), found["pull"])  # the button's command names the folder it runs in
+        self.assertIn("--ff-only", found["pull"])
         commit(self.source, {"domains/sales/theirs.md": "theirs\n"}, "their card")  # and the folder moved on too: still stopped
         for apply in (False, True):
             found = company.folder_update(self.root, str(self.source), apply=apply)
@@ -75,6 +79,31 @@ class FolderUpdateTests(unittest.TestCase):
         self.assertEqual(self.head(self.kb), mine, "the commit of this copy is still the head")
         self.assertTrue((self.kb / "domains/sales/mine.md").is_file())
         self.assertFalse((self.kb / "domains/sales/theirs.md").exists())
+
+    def test_the_pull_command_of_the_button_brings_the_commits_into_the_folder_and_only_forward(self) -> None:
+        commit(self.kb, {"domains/sales/mine.md": "mine\n"}, "my card")
+        found = company.folder_update(self.root, str(self.source))
+        self.assertEqual(found["pull"].split()[:2], ["git", "-C"])
+        subprocess.run(found["pull"], shell=True, check=True, capture_output=True)
+        self.assertEqual(self.head(self.source), self.head(self.kb))
+        self.assertEqual(company.folder_update(self.root, str(self.source))["state"], "same")
+        commit(self.kb, {"domains/sales/more.md": "more\n"}, "more")  # the folder moves on its own: a fast-forward is no longer possible, and the pull refuses instead of merging
+        commit(self.source, {"domains/sales/theirs.md": "theirs\n"}, "their card")
+        found = company.folder_update(self.root, str(self.source))
+        before = self.head(self.source)
+        self.assertNotEqual(subprocess.run(found["pull"], shell=True, capture_output=True).returncode, 0)
+        self.assertEqual(self.head(self.source), before, "no merge commit appeared in the folder")
+
+    def test_a_path_that_cannot_be_quoted_gives_no_command(self) -> None:
+        self.assertEqual(company._pull_line(self.kb, Path('/odd"name'), "main"), "")
+        self.assertEqual(company._pull_line(self.kb, self.source, "main"), f'git -C "{self.source}" pull --ff-only "{self.kb}" main')
+
+    def test_the_sentence_leaves_out_the_parts_of_nothing_and_counts_one_in_the_singular(self) -> None:
+        commit(self.source, {"domains/sales/domain.yaml": "name: sales\nowner: ann\n"}, "owner")
+        found = company.folder_update(self.root, str(self.source))
+        self.assertEqual(found["text"], messages.text("company.folder.behind.one", what=messages.text("company.part.changed", n=1)))
+        done = company.folder_update(self.root, str(self.source), apply=True)
+        self.assertEqual(done["text"], messages.text("company.folder.done", commits=messages.text("company.commits.one"), files=messages.text("ready.files.one")))
 
     def test_two_histories_with_nothing_in_common_are_not_joined(self) -> None:
         other = make_repo(Path(self.temp.name) / "other", {"README.md": "# other\n", "domains/x/domain.yaml": "name: x\n"})
@@ -149,7 +178,7 @@ class FinishAndProbeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.content()  # Finish without the tick
         self.assertFalse((self.kb / "domains/sales/new.md").exists())
-        self.assertEqual(self.content(kb_replace=True), messages.text("company.folder.done", n=1, total=1))
+        self.assertEqual(self.content(kb_replace=True), messages.text("company.folder.done", commits=messages.text("company.commits.one"), files=messages.text("ready.files.one")))
         self.assertTrue((self.kb / "domains/sales/new.md").is_file())
         self.assertFalse((self.root / ".harness" / "runtime" / "kb-backup").exists())
 
@@ -162,10 +191,11 @@ class FinishAndProbeTests(unittest.TestCase):
         commit(self.kb, {"domains/sales/mine.md": "mine\n"}, "my card")
         found = setupjob.probe_folder(self.root, self.source)
         self.assertEqual((found["ok"], "full" in found, found["update"]["state"], found["update"]["subjects"]), (False, False, "ahead", ["my card"]))
+        self.assertIn("--ff-only", found["update"]["pull"])  # the page's button runs it
         for tick in (False, True):
             with self.assertRaises(ValueError) as caught:
                 setupjob.ahead(self.root, {"kb_mode": "folder", "kb_path": str(self.source), "kb_replace": tick})
-            self.assertIn("my card", str(caught.exception))
+            self.assertEqual(str(caught.exception), found["why"])
             with self.assertRaises(ValueError):
                 self.content(kb_replace=tick)
         self.assertTrue((self.kb / "domains/sales/mine.md").is_file())
@@ -182,6 +212,12 @@ class FinishAndProbeTests(unittest.TestCase):
             dict(setupjob.steps(self.root, {"kb_mode": "folder", "kb_path": str(plain)}))["kb"]()
         dict(setupjob.steps(self.root, {"kb_mode": "folder", "kb_path": str(plain), "kb_replace": True}))["kb"]()
         self.assertTrue((self.root / ".harness" / "runtime" / "kb-backup").is_dir())
+
+    def test_the_words_of_a_whole_replace_say_which_side_has_no_history(self) -> None:
+        shutil.rmtree(self.kb / ".git")  # this copy has none; the folder has
+        found = setupjob.probe_folder(self.root, self.source)
+        self.assertEqual((found["full"], found["why"]), (True, messages.text("setup.kb.full.here.copy")))
+        self.assertNotEqual(messages.text("setup.kb.full.here.copy"), messages.text("setup.kb.full.here"))
 
 
 if __name__ == "__main__":

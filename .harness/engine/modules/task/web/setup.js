@@ -176,9 +176,12 @@ const SETUP = (function () {
     function paintChanges() {
       const u = st.update, rows = u && u.state === "behind" ? u.changes || [] : [];
       const subjects = u && u.state === "ahead" ? u.subjects || [] : [];
-      kbChanges.hidden = !rows.length && !subjects.length;
+      // The commits of this copy that the folder lacks (they stay): each title once, and a button that sends them to the folder in the Terminal window (the command is the engine's, never shown here).
+      const send = u && u.state === "ahead" && u.pull && typeof TERM !== "undefined" ? h("button", {type: "button", class: "act su-send", title: t("setup.kb.update.pull.tip")}, t("setup.kb.update.pull")) : null;
+      if (send) send.addEventListener("click", () => { send.disabled = true; TERM.run(u.pull, checkKb); });
+      kbChanges.hidden = !rows.length && !subjects.length && !send;
       kbChanges.replaceChildren(...(rows.length ? [h("ul", {class: "su-chg"}, rows.map((row) => h("li", {class: row.change}, h("b", null, MARK[row.change] || "~"), " ", h("code", null, row.path))), u.total > rows.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.total - rows.length})) : null)] : []),
-        ...(subjects.length ? [h("ul", {class: "su-chg"}, subjects.map((line) => h("li", null, line)))] : []));
+        ...(subjects.length ? [h("ul", {class: "su-chg"}, subjects.map((line) => h("li", null, line)), u.ahead > subjects.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.ahead - subjects.length})) : null)] : []), send);
     }
     // The check of a chosen folder (`company.layout`): green for what is right, a warning with the place for the rest. It stops nothing, and it says what the states below will say.
     function paintParts(parts) {

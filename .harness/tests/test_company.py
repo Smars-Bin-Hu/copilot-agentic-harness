@@ -179,6 +179,18 @@ class SyncTests(CompanyCase):
         self.assertTrue(company.diff(self.root)["in_sync"])
         self.assertEqual(json.loads((self.root / ".harness" / "runtime" / "company-copies.json").read_text(encoding="utf-8"))["instructions"], [])
 
+    def test_the_save_of_get_ready_takes_back_what_left_the_content_as_sync_now_does_and_says_so(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})
+        company.sync(self.root)
+        copy = self.root / ".github" / "instructions" / "acme-sql.instructions.md"
+        (self.kb / "company" / "instructions" / "sql.instructions.md").unlink()
+        line = dict(setupjob.steps(self.root, {"kb_mode": "none"}))["sync"]()
+        self.assertFalse(copy.exists(), "the person pressed Save: the copy that left is not left for a second press")
+        self.assertIn("acme-sql.instructions.md", line)
+        self.assertIn("company-backup", line)
+        self.assertTrue(company.diff(self.root)["in_sync"])
+
     def test_the_main_instruction_file_is_never_taken_back_and_a_new_word_takes_the_old_copies_back(self) -> None:
         set_prefix(self.root)
         put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})

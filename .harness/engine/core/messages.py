@@ -95,6 +95,11 @@ def pick(value: Any) -> str:
     return str(value.get(spoken) or value.get(DEFAULT_LANGUAGE) or next(iter(value.values()), ""))
 
 
+def gap() -> str:
+    """What stands between two sentences in one text for the agent (1.7.38, C12 RC-5): a space in English, nothing in Chinese, where the full stop already ends one."""
+    return text("list.gap")
+
+
 def joined(items: Any) -> str:
     """A list of names in one line, with the comma of the language."""
     return text("list.comma").join(str(item) for item in items)

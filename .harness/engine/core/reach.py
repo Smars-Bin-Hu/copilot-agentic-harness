@@ -30,6 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from . import clip
 from . import systems as outside
 from .paths import utc_now
 
@@ -76,7 +77,7 @@ def first_line(output: str, limit: int = 160) -> str:
     """The first line of a program's answer that says something."""
     for line in (output or "").splitlines():
         if line.strip():
-            return line.strip()[:limit]
+            return clip.words(line, limit)  # between words, with an ellipsis (1.7.38)
     return ""
 
 

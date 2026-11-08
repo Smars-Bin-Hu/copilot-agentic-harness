@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import ahp, company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
+from core import ahp, clip, company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -671,7 +671,7 @@ def system_reach(root: Path, systems: Dict[str, Any]) -> Dict[str, Dict[str, Any
             bad = [key for key in keys if done[key]["state"] != seen.OK]
             code = str(done[bad[0]].get("why") or done[bad[0]]["state"]) if bad else ""
             said = str(done[bad[0]].get("said") or "") if bad else ""
-            by_connection[name] = {"reachable": not bad, "why": say("doctor.systems.why.connection", why=reach_words(code, said))[:260] if bad else "",
+            by_connection[name] = {"reachable": not bad, "why": clip.words(say("doctor.systems.why.connection", why=reach_words(code, said)), 260) if bad else "",
                                    "launch": say("doctor.systems.launch.noanswer") if code == "no-answer" else (system.get("needs") or {}).get("launch") or ""}  # a new identity does not help when nothing answered
     rest = {name: system for name, system in systems.items() if name not in by_connection}
     answers = {**external.reach(rest, lambda command: external.run_probe(command, root)), **by_connection}

@@ -230,7 +230,7 @@ def servers_find(root: Path, words: List[str]) -> Dict[str, Any]:
     lines = _find_lines(found)
     if found["total"] > len(found["matches"]):
         lines.append(say("connections.find.more", n=found["total"] - len(found["matches"])))
-    lines.append(say("connections.find.many", n=found["total"]) + " " + say("connections.ask") if found["total"] > 1 else say("connections.find.one"))
+    lines.append(say("connections.find.many", n=found["total"]) + messages.gap() + say("connections.ask") if found["total"] > 1 else say("connections.find.one"))
     return {"_text": "\n".join(lines)}
 
 

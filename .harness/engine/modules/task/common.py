@@ -350,6 +350,14 @@ def child_sessions(root: Path, surface: str, session_id: str, since: str) -> Lis
     return found
 
 
+HELD_DECISIONS = ("outbox", "human")  # what the gate decides for a call that waits for the person: approve it on the board, or run it yourself
+
+
+def is_held(row: Dict[str, Any]) -> bool:
+    """A hook-log line of a call that waits for the person (the gate said no for now), not one that was refused (C12 RB-N6, RC-4). The report, the Gate blocks and the Agent actions tab count the two apart."""
+    return row.get("decision") == "deny" and isinstance(row.get("external"), dict) and row["external"].get("decision") in HELD_DECISIONS
+
+
 def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
     session_id, surface = data.get("session_id", ""), data.get("surface", "vscode")
     rows = read_session(root, surface, session_id)
@@ -362,7 +370,8 @@ def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
     window = [row for row in every if row.get("at", "") >= since]
     counted = {
         "calls": len(window),
-        "deny": sum(1 for row in window if row.get("decision") == "deny"),
+        "deny": sum(1 for row in window if row.get("decision") == "deny" and not is_held(row)),
+        "held": sum(1 for row in window if is_held(row)),
         "ask": sum(1 for row in window if row.get("decision") == "ask"),
         "block": sum(1 for row in window if row.get("decision") == "block"),
         "subagent": sum(1 for row in window if row.get("event") == "SubagentStart"),
@@ -379,7 +388,7 @@ def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
         target = row.get("target") or {}
         about = messages.joined(target.get("paths", [])) or target.get("command", "")
         lines.append(
-            f"| {row.get('at', '')[11:19]} | {row.get('event', '')} | {row.get('tool_name', '') or '-'} | {row.get('decision', '')}"
+            f"| {row.get('at', '')[11:19]} | {row.get('event', '')} | {row.get('tool_name', '') or '-'} | {'held' if is_held(row) else row.get('decision', '')}"
             f" | {row.get('judge', '')}:{','.join(row.get('by') or [])} | {cell(row.get('reason', ''))} | {cell(about) or '-'} |"
         )
     if len(refusals) > LOG_ROWS:

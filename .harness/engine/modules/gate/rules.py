@@ -141,12 +141,13 @@ def external_task(action: Any, command: str) -> str:
 def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None, changed: Any = None) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
     key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
-    note = say(key, file=action.file) + " " if key else ""
-    text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + " " if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
+    gap = messages.gap()
+    note = say(key, file=action.file) + gap if key else ""
+    text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + gap if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
     if offers:  # 1.7.38: the card can also open the connection for the task; the agent says so, and runs the same command again if the user does
         buttons = messages.joined(say("gate.external.outbox.button", text=say("desk.outbox.open.items" if item.get("scope") == "items" else "desk.outbox.open", name=str(item["system"]))) for item in offers)  # the buttons as the card names them (C12 N12): a connection that opens only the linked items has its own words
-        text += " " + say("gate.external.outbox.opens", buttons=buttons)
-    return text + " " + say("gate.external.outbox.code", code=code)  # 1.7.38, C12 TB-10: the agent wrote the code in the chat: the person may then approve without reading the card first
+        text += gap + say("gate.external.outbox.opens", buttons=buttons)
+    return text + gap + say("gate.external.outbox.code", code=code)  # 1.7.38, C12 TB-10: the agent wrote the code in the chat: the person may then approve without reading the card first
 
 
 def external_autorun(action: Any, command: str) -> str:

@@ -288,7 +288,8 @@
     if (!gate) return null;
     const can = served();
     const title = t("report.gate", {n: gate.count});
-    if (!gate.count) return card(title, h("p", {class: "sub"}, t("report.gate.none")));
+    const heldNote = gate.held ? h("p", {class: "sub"}, t("report.gate.held", {n: gate.held})) : null;  // held for you is not a block (RC-4)
+    if (!gate.count) return card(title, [h("p", {class: "sub"}, t("report.gate.none")), heldNote]);
     const head = [th(t("report.col.at")), th(t("report.gate.col.what")), th(t("report.gate.col.rule")), th(t("report.gate.col.reason")), th(t("report.gate.col.verdict"))];
     const rows = gate.items.map((item) => h("tr", null,
       h("td", {class: "when"}, when(item.at, 11, 16)),
@@ -303,7 +304,7 @@
     if (can) {  // the buttons get their click here: `h` sets attributes only
       rows.forEach((row, order) => row.querySelectorAll("button").forEach((button, index) => button.addEventListener("click", () => judge(gate.items[order], VERDICTS[index]))));
     }
-    const nodes = [h("p", {class: "hint top"}, t(can ? "report.gate.hint" : "report.gate.hint.static")), table(head, rows)];
+    const nodes = [h("p", {class: "hint top"}, t(can ? "report.gate.hint" : "report.gate.hint.static")), heldNote, table(head, rows)];
     if (gate.count > gate.shown) nodes.push(h("p", {class: "sub"}, t("report.gate.more", {shown: gate.shown, total: gate.count})));
     if (can) {
       const button = h("button", {type: "button", class: "act", disabled: gate.wrong_open && !gateBusy ? null : "disabled"}, t("report.gate.export", {n: gate.wrong_open}));

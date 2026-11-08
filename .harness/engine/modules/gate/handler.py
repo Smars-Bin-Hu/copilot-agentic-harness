@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 import re
 
-from core import calls, launchenv, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
+from core import calls, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
 from core import systems as systems_mod
 from core.paths import board_serve_port
 from core.context import Context
@@ -415,8 +415,8 @@ def named_line(ctx: Context, one: Dict[str, str]) -> str:
     fields = ", ".join(f"{key}={value}" for key, value in info["fields"].items())
     head = f"- {info['alias']}{env}" + (f": {info['label']}" if info["label"] else "") + (f" [{fields}]" if fields else "") + (rules.say("connections.named.about", about=info["about"]) if info.get("about") else "")
     wrap = rules.say("connections.named.wrap", alias=info["alias"]) if one["call"].startswith(f"harness as {info['alias']} --") else ""
-    lacks = "".join(" " + rules.say("connections.named.missing", program=program) for program in info["missing"])  # 1.7.37: a program the pack needs is not on this computer
-    lacks += " " + rules.say("connections.named.signin", alias=info["alias"]) if info["signin"] else ""
+    lacks = "".join(messages.gap() + rules.say("connections.named.missing", program=program) for program in info["missing"])  # 1.7.37: a program the pack needs is not on this computer
+    lacks += messages.gap() + rules.say("connections.named.signin", alias=info["alias"]) if info["signin"] else ""
     lacks += open_text(ctx, info["alias"], info["env"])
     if info["skills"]:
         return head + rules.say("connections.named.pack", toolpack=info["toolpack"], skills=", ".join(info["skills"]), program=info["program"] or "-") + wrap + lacks

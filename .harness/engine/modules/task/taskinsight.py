@@ -444,7 +444,7 @@ def split(prompt: Dict[str, Any]) -> Dict[str, Optional[float]]:
     return {"active_s": active, "model_s": model, "tool_s": turns - model - approval - subagent, "approval_s": approval, "subagent_s": subagent, "other_s": active - turns}
 
 
-HELD_DECISIONS = ("outbox", "human")  # what the gate decides for a call that waits for the person: approve it on the board, or run it yourself
+HELD_DECISIONS = common.HELD_DECISIONS
 
 
 def count_rows(rows: List[Dict[str, Any]], start: float, end: float) -> Dict[str, int]:
@@ -454,7 +454,7 @@ def count_rows(rows: List[Dict[str, Any]], start: float, end: float) -> Dict[str
         if at is None or not start <= at < end:
             continue
         decision = row.get("decision")
-        held = decision == "deny" and isinstance(row.get("external"), dict) and row["external"].get("decision") in HELD_DECISIONS  # a call that waits for the person is held, not refused (C12 RB-N6)
+        held = common.is_held(row)  # a call that waits for the person is held, not refused (C12 RB-N6)
         if row.get("external") and row.get("event") == "PreToolUse":  # a call to an outside system the company listed (M43-3)
             found["external_calls"] += 1
             found["external_denied"] += 1 if decision == "deny" and not held else 0

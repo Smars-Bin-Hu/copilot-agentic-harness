@@ -405,7 +405,7 @@
         h("td", {class: "sy-s " + row.state}, h("i", {class: "sy-d " + row.state}), t("board.enter.sys.state." + row.state)), h("td", {class: "sy-r"}, row.reason || ""),
         h("td", {class: "sy-t"}, row.state === "unknown" ? t("board.enter.sys.never") : ago(row.at)), h("td", {class: "sy-p"}, first ? row.pack || "" : "")));
     }
-    return h("div", {class: "en-pop-in"}, h("table", null, h("thead", null, h("tr", null, ...head)), h("tbody", null, ...body)), c.off ? h("p", {class: "sy-off"}, c.off.text) : null);  // the connections whose tool pack is off are not in the table (1.7.38)
+    return h("div", {class: "en-pop-in"}, h("table", null, h("thead", null, h("tr", null, ...head)), h("tbody", null, ...body)), c.env_wrong ? h("p", {class: "sy-off"}, t("board.enter.m.vscode.noenv")) : null, c.off ? h("p", {class: "sy-off"}, c.off.text) : null);  // VS Code without the settings of this copy: said once here, not in every row (RC-1); the connections whose tool pack is off are not in the table (1.7.38)
   }
   const fillPop = (c) => { pop.replaceChildren(popTable(c)); };
   function markScroll(c) {  // more rows than the window holds: it says so, and how many there are

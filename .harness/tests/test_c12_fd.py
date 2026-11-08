@@ -12,9 +12,12 @@ import support  # noqa: F401 - the engine on sys.path
 from support import pre_tool, use_packs
 from taskcase import NAME, SESSION, TASK, TaskCase
 
-from core import approvals, connections, messages, pinfiles, systems
-from modules.gate import external, inputfiles
-from modules.task import boardserve, taskdesk
+from test_gatereview import GateCase, deny
+
+from core import approvals, clip, connections, logs, messages, pinfiles, reach, systems
+from core.paths import utc_now
+from modules.gate import external, inputfiles, rules
+from modules.task import boardserve, common, gatereview, ready, taskdesk, taskinsight, tasktrace
 
 SERVER = "sqlcmd -S localhost,14332 -C -d AcmeDW"
 SCRIPT = f"{TASK}/DEV/_manual/x.sql"
@@ -248,6 +251,133 @@ class InputDeclarationTests(unittest.TestCase):
             self.assertIsNone(pinfiles.find("outside.sql", root, root / "task"))
             self.assertEqual(pinfiles.find("in.sql", root, root / "task"), root / "task" / "in.sql")
             self.assertIsNone(pinfiles.locate("none.sql", root, None))
+
+
+class WordsTests(unittest.TestCase):
+    """RC-2, RC-3, RC-5: one line, cut between words, and no space after a full stop in Chinese."""
+
+    def test_one_line_is_not_lines(self) -> None:
+        for language in ("en", "zh"):
+            table = messages.table(language)
+            self.assertIn("1", table["desk.outbox.lines.one"], language)
+            self.assertNotIn("{n}", table["desk.outbox.lines.one"], language)
+            self.assertNotIn("{n}", table["desk.outbox.script.note.one"], language)
+        self.assertEqual(messages.table("en")["desk.outbox.lines.one"], "(1 line)")
+        self.assertIn("1 line,", messages.table("en")["desk.outbox.script.note.one"])
+        js = (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('lines === 1 ? "desk.outbox.lines.one"', js)
+        self.assertIn('lines === 1 ? "desk.outbox.script.note.one"', js)
+
+    def test_a_probe_answer_is_cut_between_words_with_a_mark(self) -> None:
+        said = "ado: cannot reach https://localhost:18443: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: CA cert does not allow certificate signing (_ssl.c:1006) and then some more words after it"
+        cut = reach.first_line(said + "\nsecond line")
+        self.assertLessEqual(len(cut), 160)
+        self.assertTrue(cut.endswith("…"))
+        self.assertNotIn("\n", cut)
+        self.assertTrue(said.startswith(cut[:-1].rstrip()), "what is left is the start of the answer")
+        self.assertIn(said[len(cut[:-1].rstrip())], " ", "the cut falls on a space, not inside a word")
+        self.assertEqual(reach.first_line("short answer"), "short answer")
+        self.assertEqual(clip.words("a" * 30, 10), "a" * 9 + "…", "a text with no space is cut at the limit")
+        self.assertEqual(clip.words("one two three four", 12), "one two…")
+        self.assertEqual(clip.words("one two", 7), "one two")
+        line = reach.judged({}, lambda: (None, said))
+        self.assertTrue(line["said"].endswith("…"))
+
+    def test_the_agent_text_of_a_held_call_has_no_space_after_a_chinese_full_stop(self) -> None:
+        import re
+
+        class Action:
+            system, env, verb, file, file_why = "acmedw-dev", "dev", "write", "", ""
+
+        for language, gap in (("zh", ""), ("en", " ")):
+            with mock.patch.object(messages, "language", return_value=language):
+                self.assertEqual(messages.gap(), gap)
+                text = rules.external_outbox(Action(), "sqlcmd -Q x", "ABC123", 10, "", [{"system": "acmedw-dev", "scope": "all"}], ["x.sql"])
+                if language == "zh":
+                    self.assertIsNone(re.search(r"[。！？；：，、）”」] [^\s]", text), text)
+                    self.assertIsNone(re.search(r"[\u4e00-\u9fff] [“「]", text), text)
+                else:
+                    self.assertIn(". The user can also press", text)
+                    self.assertIn(". The code ABC123", text)
+
+    def test_no_zh_message_has_a_space_after_a_full_width_mark(self) -> None:
+        import re
+
+        for key, text in messages.table("zh").items():
+            self.assertIsNone(re.search(r"[。！？；，、）」”] +[\u4e00-\u9fff“「`]", text), key)
+
+    def test_the_zh_pieces_that_are_put_after_a_sentence_start_with_no_space(self) -> None:
+        zh = messages.table("zh")
+        for key in ("task.step.page", "promote.done.close", "promote.done.person", "domain.next.name", "promote.done.commit_message", "promote.nothing.manual", "task.step.allow_conn", "connections.named.opened", "connections.named.items"):
+            self.assertFalse(zh[key].startswith(" "), key)
+            self.assertTrue(messages.table("en")[key].startswith(" "), key + ": English keeps its space")
+
+
+class HeldIsNotRefusedTests(GateCase):
+    """RC-4: the report.md counts, the Gate blocks of the page and the Agent actions tab keep a held call and a refused call apart."""
+
+    def held(self, command: str = "sqlcmd -S h -Q \"UPDATE t SET a = 1\"", decision: str = "outbox") -> None:
+        record = {"surface": "vscode", "session_id": SESSION, "event": "PreToolUse", "tool_name": "run_in_terminal", "decision": "deny", "judge": "rule", "by": ["gate"], "reason": "waits",
+                  "external": {"system": "s", "env": "dev", "verb": "write", "target": "", "decision": decision}, "target": {"paths": [], "command": command}, "at": utc_now()}
+        logs.log_call(self.root, record)
+
+    def test_a_held_call_is_no_gate_block_and_the_page_says_how_many_were_held(self) -> None:
+        self.held()
+        self.held(decision="human")
+        section = gatereview.section(self.root, self.data())
+        self.assertEqual((section["count"], section["held"]), (3, 2), "the three refusals of the setup, and the two held calls beside them")
+        self.assertEqual(len(self.blocks()), 3)
+        self.assertEqual(len(gatereview.denies(self.root, self.data(), held=True)), 2)
+        text = messages.text("report.gate.held", n=2)
+        self.assertIn("2", text)
+        js = (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "task.js").read_text(encoding="utf-8")
+        self.assertIn('t("report.gate.held", {n: gate.held})', js)
+
+    def test_the_report_counts_and_lists_a_held_call_as_held(self) -> None:
+        self.held()
+        lines = common.log_section(self.root, self.data())
+        counts = next(line for line in lines if messages.text("log.count.held") in line)
+        self.assertIn(f"{messages.text('log.count.deny')} 3", counts)
+        self.assertIn(f"{messages.text('log.count.held')} 1", counts)
+        rows = [line for line in lines if line.startswith("|") and "UPDATE t SET" in line]
+        self.assertEqual(len(rows), 1)
+        self.assertIn("| held |", rows[0])
+        self.assertEqual(sum(1 for line in lines if line.startswith("|") and "| deny |" in line), 3)
+
+    def test_the_agent_actions_tab_marks_it_held_and_is_not_a_problem(self) -> None:
+        self.held()
+        rows = logs.read_session(self.root, "vscode", SESSION)
+        entries = tasktrace.build(rows, 50)["entries"]
+        gate = [item for item in entries if item["kind"] == "gate"]
+        self.assertEqual(sorted(item["decision"] for item in gate), ["ask", "deny", "deny", "deny", "held"])
+        self.assertEqual([tasktrace.problem(item) for item in gate if item["decision"] == "held"], [False])
+        self.assertEqual(sum(1 for item in gate if tasktrace.problem(item)), 3)
+        found = taskinsight.count_rows(rows, 0, float("inf"))
+        self.assertEqual((found["denied"], found["held"], found["asked"]), (3, 1, 1))
+        self.assertEqual(taskinsight.HELD_DECISIONS, common.HELD_DECISIONS)
+
+
+class HoverTableTests(unittest.TestCase):
+    """RC-1: when VS Code lacks the settings of this copy every row says it was not checked, the reason is said once under the table, and a connection with no sign-in says so."""
+
+    def test_each_row_says_its_own_state_and_none_repeats_the_reason(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            check = ready.Ready(root, mock.Mock(), mock.Mock())
+            long = "VS Code does not have what this copy sets for the tools: PATH x. Commands of the tools may fail here. Quit VS Code completely, then open it again with the identities."
+            lines = [{"system": name, "env": env, "state": reach.DENIED, "why": "vscode-env", "at": "", "launch": long} for name, env in (("acme-dev", "dev"), ("acme-ist", "ist"), ("ado", "none"))]
+            systems_in = {name: {"toolpack": "sqlserver"} for name in ("acme-dev", "acme-ist", "ado")}
+            with mock.patch.object(ready.conn_core, "unsigned", return_value=["acme-ist"]), mock.patch.object(ready.conn_core, "listed", return_value={}), mock.patch.object(ready.conn_core, "types", return_value={}):
+                got = check.table(systems_in, lines)
+            rows = {row["system"]: row for row in got["rows"]}
+            self.assertEqual((rows["acme-dev"]["state"], rows["acme-dev"]["reason"]), ("down", ""))
+            self.assertEqual((rows["acme-ist"]["state"], rows["acme-ist"]["reason"]), ("unknown", messages.text("board.enter.cs.none")))
+            self.assertFalse(any("VS Code" in row["reason"] for row in got["rows"]), "the sentence is not in a row")
+            self.assertEqual({item["name"]: item["state"] for item in got["names"]}, {"acme-dev": "down", "acme-ist": "unknown", "ado": "down"})
+        js = (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "enter.js").read_text(encoding="utf-8")
+        self.assertIn('c.env_wrong ? h("p", {class: "sy-off"}, t("board.enter.m.vscode.noenv"))', js, "said once, under the table")
 
 
 if __name__ == "__main__":

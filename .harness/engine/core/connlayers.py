@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
-from . import messages
+from . import clip, messages
 
 STEPS = ("program", "signin", "access", "address")
 OK, BAD, UNKNOWN, SKIP = "ok", "bad", "unknown", "skip"
@@ -84,7 +84,7 @@ def classify(kind: Dict[str, Any], server: Dict[str, Any], alias: str, state: st
         if PROXY.search(output or ""):
             return _out(_layers(program=OK, signin=OK if have_credential else UNKNOWN, access=UNKNOWN, address=BAD), "address", "address.proxy", {"address": address}, {"part": "network", "focus": ""})
         return _out(_layers(program=OK, signin=OK if have_credential else UNKNOWN, access=UNKNOWN, address=BAD), "address", "address", {"address": address}, None)
-    first = next((line.strip() for line in (output or "").splitlines() if line.strip()), "")[:160]
+    first = clip.words(next((line.strip() for line in (output or "").splitlines() if line.strip()), ""), 160)
     return _out(_layers(program=OK, signin=UNKNOWN, access=UNKNOWN, address=UNKNOWN), "", "error", {"first": first or say("connections.layer.nothing")}, None)
 
 

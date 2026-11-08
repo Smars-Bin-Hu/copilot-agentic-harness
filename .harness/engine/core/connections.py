@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import messages, netonly
+from . import clip, messages, netonly
 from . import systems as outside
 from .paths import utc_now
 
@@ -563,7 +563,7 @@ def judge(kind: Dict[str, Any], code: Optional[int], output: str) -> Dict[str, s
     if kind.get("denied") and re.search(kind["denied"], output or "", re.IGNORECASE):
         return {"state": "denied", "why": "identity", "who": ""}
     if code is None or (kind.get("down") and re.search(kind["down"], output or "", re.IGNORECASE)):
-        return {"state": "down", "why": "no-answer" if code is not None or "no answer" in (output or "") else (output or "")[:160], "who": ""}
+        return {"state": "down", "why": "no-answer" if code is not None or "no answer" in (output or "") else clip.words(output, 160), "who": ""}
     if code != 0:
         from .reach import first_line
 

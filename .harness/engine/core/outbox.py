@@ -354,7 +354,7 @@ def decided(entry: Dict[str, Any], minutes: int = approvals.DEFAULT_MINUTES) -> 
 def follow_text(reason: str) -> str:
     """What the agent is to do after a call was not approved, by the reason (the rules for the agent: one source, here)."""
     text = say(f"wait.approval.follow.{reason}") if reason in REASONS else say("wait.approval.follow.none")
-    return text + " " + say("connections.ask") if reason == "connection" else text  # 1.7.38, C12 TB-08: the agent asked "which connection?" with PROD or the one just turned down as the default
+    return text + messages.gap() + say("connections.ask") if reason == "connection" else text  # 1.7.38, C12 TB-08: the agent asked "which connection?" with PROD or the one just turned down as the default
 
 
 def wake_dismissed(entry: Dict[str, Any]) -> str:

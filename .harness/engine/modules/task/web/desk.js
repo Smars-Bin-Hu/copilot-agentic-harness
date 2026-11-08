@@ -1222,7 +1222,7 @@
       factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
       ...(many ? [] : factList(item.facts)),
       many ? null : factSpan(t("desk.outbox.target"), item.target),
-      item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t("desk.outbox.lines", {n: item.layout.script.lines}))) : null);
+      item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t(item.layout.script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: item.layout.script.lines}))) : null);
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
   // The raw command is folded: ids, headers and long addresses are not on the face of the card. A line of several writes (1.7.38) says each on a line of its own, with its own facts and text.
@@ -1264,7 +1264,7 @@
       h("div", {class: "win-body"},  // one scrolling body (both ways); the blocks in it scroll sideways only; the buttons stay in view
         manyWrites(item) ? null : bodyBlock(item),
         h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)),
-        script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
+        script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.script.note.one" : "desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
         h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command))),
       h("div", {class: "row win-foot"}, copy, close)]);
     view.box.classList.add("wide");
@@ -2377,7 +2377,7 @@
     if (item.kind === "think") return h("li", {class: "tr-think"}, stamp, h("div", {class: "what sub"}, t("desk.trace.think"), " \u00b7 " + spent(item.seconds)));
     if (item.kind === "subagent") return h("li", {class: "tr-agent"}, stamp, h("div", {class: "what"}, h("b", null, item.agent), " ", tag(t("desk.trace.subagent")), h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds) + " \u00b7 " + t("desk.trace.calls", {n: item.tool_calls || 0}) + (item.model ? " \u00b7 " + item.model : ""))));
     const gate = item.kind === "gate";
-    return h("li", {class: (gate ? "tr-gate" : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "")}, stamp,
+    return h("li", {class: (gate ? (item.decision === "held" ? "tr-held" : "tr-gate") : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "")}, stamp,
       h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
         gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub"}, " \u00b7 " + item.rule) : null] : null,
         !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,

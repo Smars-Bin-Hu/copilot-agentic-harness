@@ -68,7 +68,7 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
         elif event == "PreToolUse" and row.get("decision") in ("deny", "ask"):
             target = row.get("target") if isinstance(row.get("target"), dict) else {}
             entries.append({
-                "at": at, "kind": "gate", "tool": name, "tool_kind": str(row.get("tool_kind") or ""), "decision": row["decision"],
+                "at": at, "kind": "gate", "tool": name, "tool_kind": str(row.get("tool_kind") or ""), "decision": "held" if common.is_held(row) else row["decision"],  # a call that waits for the person is held, not blocked (C12 RC-4)
                 "rule": str(row.get("kind") or "") or ".".join(str(item) for item in (row.get("by") or [])), "reason": _clip(row.get("reason")),
                 "paths": [_path(item) for item in target.get("paths") or []], "command": _clip(target.get("command")),
             })

@@ -307,11 +307,12 @@ class Ready:
         raw = sorted(raw, key=lambda item: (not label_of(item["system"]), label_of(item["system"]), not pack_of(item["system"]), pack_of(item["system"]), first_env(item["system"]), item["system"], order.get(item["env"], -1)))
         for system in dict.fromkeys(item["system"] for item in raw):
             mine = [item for item in raw if item["system"] == system]
-            states = {kind(item["state"]) for item in mine}
-            names.append({"name": system, "state": "partly" if len(states) > 1 else next(iter(states))})
             for item in mine:
                 why = ""
-                if item["state"] == reach.DENIED:
+                if item.get("why") == "vscode-env":  # VS Code was started without the settings of this copy: its answer says nothing of this connection. The row keeps its own state, and the table says why once, at its foot (RC-1)
+                    item = dict(item, state=reach.UNKNOWN if system in loose else reach.FAILED)
+                    why = messages.text("board.enter.cs.none") if system in loose else ""
+                elif item["state"] == reach.DENIED:
                     why = item.get("launch") or messages.text("desk.reach.why.identity")
                 elif item["state"] == reach.FAILED:
                     why = reach.failed_words(item)
@@ -321,6 +322,8 @@ class Ready:
                     why = messages.text("board.enter.cs.none")
                 rows.append({"system": system, "env": "" if item["env"] in ("none", "any") else item["env"], "state": kind(item["state"]), "reason": short(why), "at": item.get("at", ""),
                              "pack": str((systems.get(system) or {}).get("toolpack") or "")})
+            states = {row["state"] for row in rows if row["system"] == system}
+            names.append({"name": system, "state": "partly" if len(states) > 1 else next(iter(states))})
         return {"names": names, "rows": rows, "checking": self.checker.busy()}
 
     def connection_facts(self) -> Dict[str, Any]:

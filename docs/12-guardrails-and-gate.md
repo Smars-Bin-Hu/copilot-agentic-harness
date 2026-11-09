@@ -18,7 +18,21 @@ For stronger isolation (an agent you do not trust at all), use the operating sys
 
 ## Say what may pass, do not chase what to stop
 
-Listing every way to do a harmful thing never ends: there is always one more spelling. So the harness turns it around: it says what may pass, and everything else goes to you.
+Listing every way to do a harmful thing never ends: there is always one more spelling. So the harness turns it around: it says what may pass, it refuses what an agent has no good reason to do, and only the rest goes to you.
+
+### Three answers: pass, refuse, ask
+
+Every call to an outside system gets one of three answers:
+
+| Zone | What happens | What is in it | What it promises |
+|---|---|---|---|
+| **Pass list** | runs, you are not asked | what can be shown to be a read: every statement of the call (and of the script it runs) matches the tool pack type's read list. On a connection you opened for the task, also the type's write list | a guarantee: nothing outside the list passes unasked |
+| **Refuse list** | refused at once; the agent is told the right way to do it | what an agent has no good reason to do: a delete (`DROP`, `TRUNCATE`), a script line that hides what it does (sqlcmd's `!!` runs a shell command, `:connect` switches the server, `$(…)` fills words in at run time), a string run as SQL (`EXEC('…')`, `sp_executesql`), a system extension such as `xp_cmdshell` | best effort: it catches the plain spellings, not every one |
+| **Ask** | held: you approve or dismiss on the task page | everything else: a real change that needs your judgment, and whatever slipped past the refuse list | the safety net |
+
+Why three and not two: a pass list alone would send every other call to you. You have only so much attention; a person who approves forty cards a day stops reading them, and then the gate guards nothing. So the refuse list takes away what never needs your judgment, and the agent, told the right way, changes its call by itself. What reaches you is small enough to read.
+
+The two lists are honest about what they are. The pass list is a guarantee because it names what is allowed. The refuse list names what is forbidden, and such a list is never complete; a spelling it misses is not passed, it lands in **Ask**. The final guarantee for a database is the account's rights: an account for DEV that cannot drop tables cannot drop them, whatever the agent writes.
 
 - **Work inside the task** is free: reading the repository, running tests, writing in the task folder.
 - **An outside system** (a database, a ticket board, a pipeline service) is judged by what the call does:

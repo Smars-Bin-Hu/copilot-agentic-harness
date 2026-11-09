@@ -41,7 +41,7 @@ class Links(TaskCase):
         self.new()
 
     def test_the_link_types_come_from_the_installed_tool_packs(self) -> None:
-        self.assertEqual(toolpacks.link_types(self.root), [{"type": "trk", "label": "Ticket", "toolpack": "tracker"}])
+        self.assertEqual(toolpacks.link_types(self.root), [{"type": "trk", "label": "Ticket", "toolpack": "tracker", "id": "", "example": ""}])  # (1.7.38, F1 L6) a pack that gives no `id` or `example` leaves them empty
 
     def test_the_new_task_window_takes_several_tickets_and_checks_each(self) -> None:
         self.assertEqual(chatnew.links_of({"links": "trk:42, ado:300100  trk:42"}), ["trk:42", "ado:300100"])

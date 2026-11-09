@@ -592,12 +592,12 @@ def _short(text: str) -> str:
     return text if len(text) <= NOTE_CHARS else text[: NOTE_CHARS - 1].rstrip() + "\u2026"
 
 
-def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: str, call: str, args: List[str], ctx: "_Ctx") -> Action:
+def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: str, call: str, args: List[str], ctx: "_Ctx", lead: List[str]) -> Action:
     """A call of a type with lists (1.7.38, C12: pass, refuse, ask). The statements of the text and of the files it reads are cut (`statements.py`) and judged by `reads`, `writes` and `refuse`:
     refuse list first (whatever else is wrong with the call), then a call that gave the gate nothing to read, a text with a shell variable in it or a file the gate could not read (asks), then the lists.
     `verbs` do not decide the zone: they say what kind of call the card shows (write, exec), and a destroy rule that matches a statement is one more refusal."""
     read = inputfiles.read(system, args, ctx.root, ctx.folder, ctx.cwd, ctx.line or text)
-    rest = verb_named(system, read.rest if read else " ".join(args))
+    rest = inputfiles.verb_of_text(system, " ".join(lead + ([read.rest] if read else args)))  # the words that are no statement: the settings before the program (`SQLCMDINI=file`) and its options (`-o file`, `-q`)
     if read is None or not read.sources:  # the program reads what it is given on its input: nothing the gate sees
         return Action(name, env, strict([rest, WRITE]), target, text, named=rest is not None, call=call, zone=statements.ASK)
     joined = " ; ".join(item.text for item in read.items)
@@ -672,7 +672,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 continue
             call = " ".join([_program(tokens[start])] + tokens[start + 1:])
             if system.get("reads"):  # 1.7.38: a type with lists: the statements are cut and judged by the lists, `verbs` only label the call
-                found.append(_by_lists(system, name, environment(system, line), target, " ".join(tokens), call, tokens[start + 1:], ctx))
+                found.append(_by_lists(system, name, environment(system, line), target, " ".join(tokens), call, tokens[start + 1:], ctx, tokens[:start] + [f"{key}={value}" for key, value in variables.items()]))  # a variable the line set before (`export SQLCMDINI=...;`) is a setting of this call too
                 continue
             verb = verb_named(system, " ".join(tokens[start + 1:]))
             file, file_why = "", ""

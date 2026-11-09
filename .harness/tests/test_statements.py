@@ -77,6 +77,30 @@ class CutTests(unittest.TestCase):
         self.assertEqual(texts("SELECT 1\rGO\rSELECT 2\r\nGO\r\nSELECT 3"), ["SELECT 1", "SELECT 2", "SELECT 3"])
 
 
+class LookAlikeTests(unittest.TestCase):
+    """A character that looks like the end of a hidden span marks the statement odd: the gate sees the text as hidden, a program that folds such characters would not."""
+
+    def odd(self, text: str):
+        return [item.odd for item in statements.split(text)]
+
+    def test_a_look_alike_of_the_end_of_a_string_a_name_or_a_comment_marks_it(self) -> None:
+        self.assertEqual(self.odd("SELECT 'a\u02bc; DROP TABLE t'"), [True])  # a modifier apostrophe in a string
+        self.assertEqual(self.odd("SELECT 'a\u2019; DROP TABLE t'"), [True])
+        self.assertEqual(self.odd("SELECT [a\uff3d; DROP TABLE t"), [True])  # a fullwidth bracket in a name
+        self.assertEqual(self.odd("SELECT 1 /* \uff0a/ DROP TABLE t */"), [True])  # a fullwidth star in a block comment
+        self.assertEqual(self.odd('SELECT "a\u201c b"'), [True])
+
+    def test_other_text_is_not_odd(self) -> None:
+        self.assertEqual(self.odd("SELECT 'N\u201c\u6d4b\u8bd5\u201d'"), [False], "a double curly quote ends no single-quoted string")
+        self.assertEqual(self.odd("SELECT 1 -- \u8bf4\u660e\uff1a\u66f4\u65b0\uff08\u542b\u7a0e\uff09"), [False])
+        self.assertEqual(self.odd("SELECT \uff07 x"), [False], "outside a hidden span it is only a character the gate sees")
+        self.assertEqual(self.odd("SELECT 'a'; SELECT 'b\u2019'"), [False, True], "marked for the statement it is in")
+
+    def test_an_odd_statement_is_on_no_list(self) -> None:
+        found = statements.judge({"reads": ["SELECT.*"]}, statements.split("SELECT 'a\u02bc; DROP TABLE t'"))
+        self.assertEqual((found.zone, found.statement), ("ask", "SELECT ''"))
+
+
 LISTS = {
     "reads": [r"SELECT\b(?!.*\bINTO\b).*", r"USE \w+", r"SET NOCOUNT (?:ON|OFF)"],
     "writes": [r"INSERT INTO \w+.*", r"UPDATE \w+ SET .+ WHERE .+"],

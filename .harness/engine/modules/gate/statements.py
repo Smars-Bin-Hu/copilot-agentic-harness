@@ -10,12 +10,14 @@ Prepare, in one pass over a batch:
   - `EXEC(` and every `$(` stay visible: a `$(` inside a comment or a string is marked with ` $( `, because sqlcmd fills a variable in there too.
 Cut: at `;` (outside strings and comments), at a line that is only `GO` (an optional count) and at a sqlcmd line (`:` and a letter, or `!!`), which is its own item and marked as a directive.
 These lines are found first, on the raw lines, before any string or comment is read: sqlcmd looks at them whatever surrounds them, so a `GO` inside a string still ends the batch for it.
-White space inside a statement becomes one space. Stdlib only.
+White space inside a statement becomes one space. A character that looks like the end of what hides text (a curly quote inside a string, a fullwidth `]` inside a name, a fullwidth `*` or `/` inside a
+block comment) marks the statement `odd`: the gate sees the text as hidden, and a program that folds such characters to plain ones would not. An odd statement is on no list: it asks. Stdlib only.
 """
 
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +34,19 @@ _VARIABLE = " $( "
 class Statement:
     text: str  # prepared: no comments, strings are `''`, one space between words
     directive: bool = False  # a sqlcmd line (`:r file`, `!! command`): its text is the line as written, trimmed
+    odd: bool = False  # a look-alike of the end of a string, a name or a block comment is inside one: see the top of this file
+
+
+# What may be folded into the character that ends a hidden span, besides the fullwidth forms that NFKC folds (`＇` is `'`): the curly and modifier quotes, the fullwidth bracket.
+_ALIKE = {"'": "\u2018\u2019\u201a\u201b\u02b9\u02bc\u02c8\u2032", '"': "\u201c\u201d\u201e\u201f\u02ba\u2033", "]": "", "*": "\u2217\u204e", "/": "\u2044\u2215"}
+
+
+def _alike(text: str, ends: str) -> bool:
+    """Does the text hold a character that is not one of `ends` but could be folded into one of them?"""
+    for char in text:
+        if ord(char) > 127 and any(char in _ALIKE[end] or unicodedata.normalize("NFKC", char) == end for end in ends):
+            return True
+    return False
 
 
 def _closing(text: str, start: int, quote: str) -> int:
@@ -47,17 +62,20 @@ def _closing(text: str, start: int, quote: str) -> int:
     return len(text)
 
 
-def _batch(text: str) -> List[str]:
+def _batch(text: str) -> List[Statement]:
     """The statements of one batch (no `GO` and no sqlcmd line in it): prepared, cut at `;`."""
-    out: List[str] = []
+    out: List[Statement] = []
     current: List[str] = []
+    odd = False
     index = 0
 
     def flush() -> None:
+        nonlocal odd
         statement = _SPACE.sub(" ", "".join(current)).strip()
         current.clear()
         if statement:
-            out.append(statement)
+            out.append(Statement(statement, odd=odd))
+        odd = False
 
     while index < len(text):
         char = text[index]
@@ -76,17 +94,20 @@ def _batch(text: str) -> List[str]:
                     depth, end = depth - 1, end + 2
                 else:
                     end += 1
+            odd = odd or _alike(text[index + 2:end], "*/")
             current.append(" " + (_VARIABLE if "$(" in text[index:end] else ""))
             index = end
             continue
         if char == "'":
             end = _closing(text, index, "'")
+            odd = odd or _alike(text[index + 1:end], "'")
             current.append(PLACEHOLDER + (_VARIABLE if "$(" in text[index:end] else ""))
             index = end
             continue
         if char in '"[':
             end = _closing(text, index, '"' if char == '"' else "]")
             inner = text[index + 1: end - 1] if end - index >= 2 else ""
+            odd = odd or _alike(inner, '"' if char == '"' else "]")
             current.append(_NOT_WORD.sub("_", inner.replace('""' if char == '"' else "]]", "_")) + (_VARIABLE if "$(" in inner else ""))
             index = end
             continue
@@ -105,7 +126,7 @@ def split(text: str) -> List[Statement]:
     lines: List[str] = []
 
     def batch() -> None:
-        items.extend(Statement(one) for one in _batch("\n".join(lines)))
+        items.extend(_batch("\n".join(lines)))
         lines.clear()
 
     for line in _LINES.split(text):
@@ -168,7 +189,7 @@ def judge(system: Dict[str, Any], items: List[Statement]) -> Verdict:
     all_reads = all_listed = bool(items)
     wrote = False
     for item in items:
-        if item.directive:
+        if item.directive or item.odd:
             all_reads = all_listed = False
             first_unlisted = first_unlisted or item.text
             continue

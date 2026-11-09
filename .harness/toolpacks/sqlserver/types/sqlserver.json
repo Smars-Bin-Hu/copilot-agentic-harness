@@ -58,7 +58,7 @@
       "verb": "exec"
     },
     {
-      "pattern": "(?:^|\\s)-q(?:\\s|$)",
+      "pattern": "(?:^|\\s)-(?:q|o)(?:\\s|$)|(?:^|\\s)-o\\S|\\bSQLCMDINI\\b",
       "verb": "write"
     },
     {

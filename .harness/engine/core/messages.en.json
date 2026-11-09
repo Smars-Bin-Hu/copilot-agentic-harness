@@ -3782,7 +3782,7 @@
   "connections.reach.other": "The last check answered as another account than the one saved here. Press {@connections.signin} to check what is saved.",
   "connections.reach.failed": "The last check ended with an error: {why}",
   "desk.window.close": "Close",
-  "task.link.id": "`{ref}` is not the form of a {type} ticket. Write it like {example}.",
+  "task.link.id": "`{ref}` is not the form of a ticket of type {type}. Write it like {example}.",
   "connections.kept.noanswer": "The sign-in is saved. The test did not reach the system, so it does not say the sign-in is wrong.",
   "connections.forget.signin.ask": "Forget the sign-in of {name} on this computer? You will have to type it again.",
   "connections.forget.tool.ask": "Forget the sign-in of {program} on this computer? Every connection that uses {program} loses it, and you will have to sign in again.",

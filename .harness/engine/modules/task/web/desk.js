@@ -512,6 +512,8 @@
     menuOpen = true;
     fill(ui.menu, menuItems());
     ui.menu.hidden = false;
+    ui.menu.style.right = ui.menu.style.left = "";
+    if (ui.menu.getBoundingClientRect().left < 8) { ui.menu.style.right = "auto"; ui.menu.style.left = "0"; }  // a narrow window puts the button at the left of the head: the menu opens to the right, not off the screen (F1)
     ui.moreBtn.setAttribute("aria-expanded", "true");
     const first = ui.menu.querySelector("a,button:not([disabled])");
     if (first) first.focus();

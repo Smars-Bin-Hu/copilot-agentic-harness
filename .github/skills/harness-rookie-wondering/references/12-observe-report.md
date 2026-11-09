@@ -56,7 +56,7 @@ Under `copilot -p` hooks do not run, so batch evaluation does not work for now. 
 
 ### 12.7 The hook's own errors
 
-When the hook fails it lets the call through and writes to `.harness/runtime/logs/hook-errors.jsonl`. `doctor` reminds you.
+When the hook fails, local work goes on and the error goes to `.harness/runtime/logs/hook-errors.jsonl`; a call to a program of a tool pack is refused (`AGENTS.md`, Core limits). `doctor` reminds you.
 
 ## Hands on
 

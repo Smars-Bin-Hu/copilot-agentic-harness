@@ -54,6 +54,42 @@ A company can set these per system. What passes without asking you:
 
 You decide when a call is held, not before: **Approve** is for that one command and for the files it names (1.7.38: a script in the task folder, as you read it on the card; if the file changes after you pressed **View** and before you approve, nothing is approved and you press **View** again; if it changes after you approve, the approval is not used and the call is held again, with a new code), **Open** is for the connection. Both need the code the board shows, so the agent cannot open a connection for itself. **Dismiss** asks why with one click (the command is wrong, wrong connection or environment, not now, do it another way): the agent changes the call and it is held again, or it stops that path. With *not now* or no reason it does not retry and does not reach the same result another way. A company can lower what a type says (a connection with `"open": "no"`), never raise it.
 
+## What the gate cannot judge, it does not pass
+
+A pass is a strict order. A call to an outside system passes only when the gate can show two things: the call is on the pass list, **and** it reaches one connection the gate knows. When the gate cannot tell, the call does not pass. This holds for the gate's own failures too. (The rule is in [AGENTS.md](../AGENTS.md), Core limits. Before 1.7.38 the gate read "cannot tell" as "not mine" and let the call through: `sqlcmd -S 127.1,14332 -Q "DROP TABLE t"` ran, because the server was spelled a way the gate did not match.)
+
+**The target must be one connection.** A tool pack type that takes its server on the command line says how (`pin` in its type file: the options, the spellings that are certainly the same place, the options the gate cannot read, the options that only print help). A call of that program is judged only when exactly one option names a server, its value can be read, and, after the safe folding, it is the address of a connection. Folded: any case, `tcp:` in front, `host:port` for `host,port`, a dot at the end of the host, zeros in front of the port, no port for the default one. Nothing else is folded and **nothing is looked up in a name server**: `127.0.0.1` is not `localhost`, an IP number written in hex or decimal is not the name, `(local)`, `.`, `::1` and `host.docker.internal` match nothing. Refused, with the way (`harness connections find <words>`, then the server as that connection gives it; a server no connection has: ask the user to add one):
+
+- no server on the line (`SQLCMDSERVER`, the default server, a data source name `-D`), or one the line does not show (`$(...)`, an array, a loop variable, a quoted variable, `"$@"`);
+- more than one server (`-S a -S b`: the program takes the last, the gate would have taken the first);
+- a subcommand of the program that runs on a server the line does not show (go-sqlcmd's `sqlcmd query "..."`, `create`, `config`);
+- a server that is no connection's address in any of the folded spellings.
+
+A call that only asks for help or the version (`sqlcmd -?`, `--help`, `--version`; the type says which options) reaches nothing and passes. The refuse list is read first: a `DROP` in the call is refused with its own reason whatever server the call names, and the text then also says what is wrong with the server. The same holds for a script file the call reads.
+
+**A script that is changed on the same line is not read.** The gate reads `sqlcmd -i x.sql` as the file is when it looks. When another command of the line can write a file (`cp`, `mv`, `ln`, `sed -i`, `tee`, a redirection, `python3 -c`, `curl -o`, `Set-Content`, any program that is not known to only read), the file may be another when sqlcmd runs. The call is refused: run the file change and the sqlcmd as two calls.
+
+**Text the line does not show is not judged, so it is refused.** `Invoke-Expression` and `iex`, text piped into a shell or an interpreter (`base64 -d | sh`, `source <(...)`), `-EncodedCommand` and `Start-Process` of a program the gate judges are refused with "run the command itself, written out in the line". `echo '...' | sh` and a here-document are read, as before. A command string given to a shell (`bash -c`, `pwsh -Command`) is judged as the same text written alone, rules of the terminal included, and a PowerShell script block (`% { ... }`) is read as its command.
+
+**Other ways to the same system are listed by the tool pack and refused.** The SQL Server pack lists `bcp`, `Invoke-Sqlcmd`, `isql`, `usql`, `mssql-cli` and the words `pyodbc`, `pymssql`, `mssql`, `tedious` in a one-line `python -c` or `node -e`. The gate cannot judge them (they bring no connection and no lists), so they are refused and the agent is told to use `sqlcmd` with a connection. A script **file** that imports such a library is still a blind spot, like any program a script starts: the account's rights are the limit there.
+
+**When the gate itself cannot tell.** A decision that fails is not a pass:
+
+| What failed | What happens |
+|---|---|
+| the gate raises while it judges a line that names a program a tool pack governs | refused, with what failed; the line is not passed as "no opinion" |
+| the whole hook fails (a payload, the registry or the session state cannot be read) | the same for such a line and for an MCP tool of a tool pack; everything else is passed as before |
+| the list of outside systems is not valid | the same for a line that names a program in any tool pack or in the tools policy files; the files are read as plain text, valid or not |
+| a connection list cannot be read (not JSON, wrong shape, a connection with no type or a wrong environment) | every program of the tool packs that bring a connection type is held, the card and `harness doctor` (ERROR) say which file and what is wrong |
+| a tool pack file cannot be read | as before: every program of the pack is held |
+| a reminder, a log line, what the board shows | the work goes on |
+
+**Local work stays free.** Reading, writing in the task folder, running tests and every line that names no governed program pass as before, also when the gate fails. A line that only talks about a program (`which sqlcmd`, `grep -rn sqlcmd .`, `echo sqlcmd`) names none.
+
+**The harness commands only a person may run** (`task close`, `approve-plan`, `approve-action`, `admin on`...) are read as the shell reads them: `harness task 'close'`, `cl''ose`, `C=close; harness task $C`, `python3 -m cli task close` are `harness task close`. A harness command whose words the gate cannot read (a variable it did not see set, `xargs`, `python3 -c` that starts it) is refused: write it out.
+
+**What is still not covered.** A script file that a program runs (`python3 query.py`), a build or test tool that starts one (`make deploy`), a program the gate does not know is governed, and the rights of the account. How Copilot treats a hook that times out or errors is measured only for the SDK session of 2026-10-10 (see [05 Design](05-design.md#when-the-hook-fails-itself)); on a slow work computer and in the VS Code agent it has to be confirmed there. `UPDATE` and `DELETE` need a `WHERE` on the pass list, and a condition that is true whatever the row holds (`1=1`, `(1=1)`, `1<2`, `NOT 1=0`, `'a'='a'`, `col=col`) does not count; this is a guard against a slip, **not a boundary**: `WHERE id > 0` still passes on a connection you opened, and so does a body of a procedure you deploy. The account's rights are the limit.
+
 ## Code answers, not the model
 
 The gate is code that runs in the hooks, before a call. It does not ask a model. It checks facts:
@@ -72,7 +108,7 @@ When a call is held or refused, the agent is told to tell you what the call is f
 
 ## Two checkpoints
 
-**1. Before a command runs (now).** The gate reads the command line. One rule covers the many ways to write a line: every outside program the line names must be accounted for. Either it is the program of a call the gate judged, or it is only an argument of a program that reads or copies files (`grep`, `cat`, `cp`, ...). Anything else is held, with the reason. A script the line runs is read too. A rule file that is faulty does not open the gate: when a tool pack's type file or `rules.json` cannot be read or is not valid, every call of that pack's programs is held, and the card, `harness doctor` and the Tool packs row of the Enter screen say which file is wrong.
+**1. Before a command runs (now).** The gate reads the command line. One rule covers the many ways to write a line: every outside program the line names must be accounted for. Either it is the program of a call the gate judged, or it is only an argument of a program that reads or copies files (`grep`, `cat`, `cp`, ...). Anything else is held, with the reason. A script the line runs is read too. A rule file that is faulty does not open the gate: when a tool pack's type file or `rules.json` cannot be read or is not valid, every call of that pack's programs is held, and the card, `harness doctor` and the Tool packs row of the Enter screen say which file is wrong. A connection list that cannot be read does the same for the programs of the connection types (see above).
 
 What the line cannot show: a build or test tool, a scheduled job or a git hook can start a script that writes, and the line never names the program. The list is in the [tool pack protocol](../.harness/contracts/toolpack/README.md#what-the-gate-reads-and-what-it-cannot-1725).
 

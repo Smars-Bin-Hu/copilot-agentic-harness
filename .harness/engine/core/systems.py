@@ -78,11 +78,16 @@ SYSTEMS_SCHEMA = {
                 "type": "array",
                 "items": {"type": "object", "required": ["pattern", "from"], "properties": {"pattern": {"type": "string", "minLength": 1}, "from": {"type": "string", "enum": ["file", "text"]}}},
             },
-            "input": {  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from (`["-i"]`), and a pattern for the files such a file names itself (`:r file`): the gate reads them and judges their text with `verbs`
+            "input": {  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from (`["-i"]`), the options whose next word is statement text (`["-Q"]`), and a pattern for the files such a file names itself (`:r file`): the gate reads them and judges their statements by the lists of the type
                 "type": "object",
-                "required": ["options"],
-                "properties": {"options": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "include": {"type": "string", "minLength": 1}, "unjudged": {"type": "string", "minLength": 1}},
+                "properties": {"options": {"type": "array", "items": {"type": "string", "minLength": 1}}, "include": {"type": "string", "minLength": 1}, "unjudged": {"type": "string", "minLength": 1}, "text": {"type": "array", "items": {"type": "string", "minLength": 1}}},  # `unjudged` is the key of the first 1.7.38 build: read, no effect (the `refuse` list does its work)
                 "additionalProperties": False,
+            },
+            "reads": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the pass list of a type whose program takes statements as text: a pattern each statement must match whole (modules/gate/statements.py)
+            "writes": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the statements an opened connection passes (the same patterns)
+            "refuse": {  # 1.7.38: what is refused at once, with the reason that tells the agent the right way (a string, or {"en": ..., "zh": ...}); a pattern found anywhere in a statement or a sqlcmd line
+                "type": "array",
+                "items": {"type": "object", "required": ["pattern", "reason"], "properties": {"pattern": {"type": "string", "minLength": 1}, "reason": {"type": ["string", "object"], "minLength": 1}}},
             },
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
             "openable": {"type": "boolean"},

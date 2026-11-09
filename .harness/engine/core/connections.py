@@ -131,9 +131,32 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 re.compile(str(rule["pattern"]))
             except re.error as error:
                 out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
-    given = kind.get("input")  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from, and how such a file names more files
-    if given is not None and not (isinstance(given, dict) and set(given) <= {"options", "include", "unjudged"} and isinstance(given.get("options"), list) and given["options"] and all(isinstance(one, str) and one for one in given["options"]) and isinstance(given.get("include", ""), str) and isinstance(given.get("unjudged", ""), str)):
-        out.append(f"types.{name}.input: {{\"options\": [\"-i\"], \"include\": <a pattern whose group is a file>}}: `options` are the options that name a file; `include` is optional")
+    given = kind.get("input")  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from, the options whose next word is statement text, and how such a file names more files
+    if given is not None:
+        words = isinstance(given, dict) and all(isinstance(given.get(part, []), list) and all(isinstance(one, str) and one for one in given.get(part, [])) for part in ("options", "text"))
+        if not (isinstance(given, dict) and set(given) <= {"options", "include", "unjudged", "text"} and words and (given.get("options") or given.get("text")) and isinstance(given.get("include", ""), str) and isinstance(given.get("unjudged", ""), str)):
+            out.append(f"types.{name}.input: {{\"options\": [\"-i\"], \"text\": [\"-Q\"], \"include\": <a pattern whose group is a file>}}: `options` are the options that name a file, `text` the options whose next word is statement text (give one of the two); `include` is optional")
+    for key in ("reads", "writes"):  # 1.7.38: the pass lists of a type whose program takes statements as text
+        if kind.get(key) is not None and not (isinstance(kind[key], list) and all(isinstance(one, str) and one for one in kind[key])):
+            out.append(f"types.{name}.{key}: a list of patterns, each matched against a whole statement")
+            continue
+        for index, pattern in enumerate(kind.get(key) or []):
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
+    if kind.get("refuse") is not None and not isinstance(kind["refuse"], list):
+        out.append(f"types.{name}.refuse: a list of {{\"pattern\", \"reason\"}}")
+    for index, entry in enumerate(kind.get("refuse") or []):
+        if not isinstance(entry, dict) or not entry.get("pattern") or not _say_text_ok(entry.get("reason")):
+            out.append(f"types.{name}.refuse[{index}]: `pattern` and `reason` (a string, or an object with `en` and `zh` strings)")
+            continue
+        try:
+            re.compile(str(entry["pattern"]))
+        except re.error as error:
+            out.append(f"types.{name}.refuse[{index}]: bad pattern: {error}")
+    if kind.get("writes") and not kind.get("reads"):
+        out.append(f"types.{name}.writes: needs `reads` (the lists work together)")
     for key in ("expect", "denied", "down", "match", "signin_lost", "command"):
         try:
             re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")
@@ -387,7 +410,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
             chosen = (server.get(key) or kind.get(key)) if key == "rules" else kind.get(key)  # the connection's own rules win, else the type's (1.7.21)
             if chosen:
                 system[key] = chosen
-        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input"):
+        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
         system["open"] = connection_scope(kind, server)

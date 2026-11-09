@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List, Optional
 
 PLACEHOLDER = "''"  # what a string literal becomes
 _LINES = re.compile(r"\r\n|\r|\n")
@@ -118,3 +118,70 @@ def split(text: str) -> List[Statement]:
             lines.append(line)
     batch()
     return items
+
+
+# --- the answer ---------------------------------------------------------------------------------------------------------------------------------------
+
+REFUSE, READ, WRITE, ASK = "refuse", "read", "write", "ask"  # the zones of a call (docs/12): refuse list, pass list, pass list of an opened connection, the rest asks the person
+
+
+@dataclass
+class Verdict:
+    zone: str  # REFUSE, READ, WRITE (every statement is on the read or the write list, one at least on the write list), ASK
+    statement: str = ""  # REFUSE: the statement (or line) the refuse list caught; ASK: the first that is on no list (empty: there was nothing to read)
+    reason: str = ""  # REFUSE: the reason of the entry that caught it, as the type wrote it (a string, or {"en": ..., "zh": ...})
+
+
+def _compiled(patterns: Any) -> List[Any]:
+    """The patterns of a list that compile (a broken one matches nothing: the call then asks, which is the safe side)."""
+    out = []
+    for item in patterns or []:
+        try:
+            out.append(re.compile(str(item), re.IGNORECASE | re.DOTALL))
+        except re.error:
+            continue
+    return out
+
+
+def refuse_entry(system: Dict[str, Any], text: str) -> Optional[Dict[str, Any]]:
+    """The first entry of the type's `refuse` list that has its pattern anywhere in the text (best effort: it names what is forbidden, it is not complete)."""
+    for entry in system.get("refuse") or []:
+        try:
+            if isinstance(entry, dict) and re.search(str(entry.get("pattern") or "(?!)"), text, re.IGNORECASE | re.DOTALL):
+                return entry
+        except re.error:
+            continue
+    return None
+
+
+def judge(system: Dict[str, Any], items: List[Statement]) -> Verdict:
+    """Which zone these statements are in, by the lists of the type (`refuse`, `reads`, `writes`). Order: any statement or line on the refuse list refuses; every statement
+    whole on the read list (and no sqlcmd line left) is a read; every statement on the read or write list is what an opened connection passes; else the person is asked. Reads
+    and writes are matched on the whole statement, so a word after the first words cannot slip by: the patterns say what may follow."""
+    for item in items:
+        entry = refuse_entry(system, item.text)
+        if entry:
+            return Verdict(REFUSE, item.text, entry.get("reason") or "")
+    reads = _compiled(system.get("reads"))
+    writes = _compiled(system.get("writes"))
+    first_unlisted = ""
+    all_reads = all_listed = bool(items)
+    wrote = False
+    for item in items:
+        if item.directive:
+            all_reads = all_listed = False
+            first_unlisted = first_unlisted or item.text
+            continue
+        if any(rule.fullmatch(item.text) for rule in reads):
+            continue
+        all_reads = False
+        if any(rule.fullmatch(item.text) for rule in writes):
+            wrote = True
+            continue
+        all_listed = False
+        first_unlisted = first_unlisted or item.text
+    if all_reads:
+        return Verdict(READ)
+    if all_listed and wrote:
+        return Verdict(WRITE)
+    return Verdict(ASK, first_unlisted)

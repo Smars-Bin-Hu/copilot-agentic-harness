@@ -1596,8 +1596,9 @@ class MergedWithF1Tests(SqlCase):
     def test_an_unreadable_toolpack_json_and_an_unreadable_connection_list_hold_the_programs_too(self) -> None:
         self.spoil()
         self.spoil("connections.json")
-        for call in (f"sqlcmd -S localhost,14332 {READ}", f"sqlcmd -S evil,1 {DROP}", "sqlcmd -?"):
+        for call in (f"sqlcmd -S localhost,14332 {READ}", f"sqlcmd -S evil,1 {READ}", "sqlcmd -?"):
             self.assertIn("faulty", self.held(call), call)
+        self.refused(f"sqlcmd -S evil,1 {DROP}")  # 1.7.38, C13 FR 2: the type file can still be read: its refuse list is read first, the drop is refused and has no card
         self.runs("ls")
 
     def test_doctor_names_both_faults(self) -> None:

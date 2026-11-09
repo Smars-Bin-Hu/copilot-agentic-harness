@@ -520,6 +520,7 @@ class _Ctx:
         self.quiet: set = set()  # programs a system lists `by_address`: not among the names that must be accounted for
         self.direct: set = set()  # programs only a `direct_only` system lists (a pack that is off and that no connection uses, 1.7.38, C13 F2c): a direct call is refused, their name in a script or a word of a line is no call
         self.reasons: Dict[str, str] = {}  # system -> its `blocked` text, in the language of the session
+        self.type_lists: Optional[Dict[str, Dict[str, Any]]] = None  # (1.7.38, C13 FR 2) the lists of the types that can be read, for a call of a faulty pack: read when the first such call comes
         self.code: List[Tuple[Any, str]] = []  # (pattern of the words, system) of the systems that name `reach.code`: words a one-liner interpreter must not run (1.7.38, C13 F2)
 
 
@@ -791,6 +792,24 @@ def _caught(first: Dict[str, Any], name: str, tokens: List[str], start: int, ctx
     return caught
 
 
+def _broken_refusal(system: Dict[str, Any], name: str, tokens: List[str], start: int, ctx: "_Ctx", variables: Dict[str, str]) -> Optional[Action]:
+    """(1.7.38, C13 FR 2) A call of a program of a pack whose file is faulty is held, because the gate cannot judge it. But when the type of the program can still be read as JSON, the refuse list of the type is read first: a
+    `DROP` is refused with the type's reason, as it is when the pack is good, and does not go to a card that someone may approve. None when there is no type to read, or nothing on the list catches the call."""
+    if ctx.root is None:
+        return None
+    try:
+        from pathlib import Path
+
+        from core import govern
+
+        if ctx.type_lists is None:
+            ctx.type_lists = govern.type_lists(Path(str(ctx.root)))
+        found = ctx.type_lists.get(_program(tokens[start]))
+        return _caught(dict(system, **found), str(system.get("toolpack") or name), tokens, start, ctx, variables) if found else None  # named by its pack: "sqlserver", not "broken-sqlserver"
+    except Exception:  # noqa: BLE001 - the call is held anyway: a list that cannot be read is no reason to let it through
+        return None
+
+
 def _unpinned(systems: Dict[str, Any], pinned: List[str], seen: pin.Pinned, tokens: List[str], start: int, ctx: "_Ctx", variables: Dict[str, str]) -> Optional[Action]:
     """The refusal of a call of a pinned program that reaches no connection the gate can name (1.7.38, C13 F2). The refuse list of the type is read first, so a `DROP` is never decided by the server: the refusal then says
     both. A call that only asks for help (`sqlcmd -?`) reaches nothing: None, it passes when the refuse list has nothing."""
@@ -919,6 +938,10 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 match = re.search(system["target"], line, re.IGNORECASE)
                 target = (match.group(1) if match and match.groups() else match.group(0) if match else "")[:120]
             if system.get("broken"):  # 1.7.38 (G-1): the pack's file is faulty, so the gate cannot judge this program: held, and the card says why
+                caught = _broken_refusal(system, name, tokens, start, ctx, variables)
+                if caught is not None:  # 1.7.38 (C13 FR 2): its type file can still be read, and a statement on the refuse list is refused, as it is when the pack is good
+                    found.append(caught)
+                    continue
                 found.append(Action(name, "none", WRITE, "", " ".join(tokens), named=True, call=" ".join([_program(tokens[start])] + tokens[start + 1:]), zone="broken", note=str(system["broken"])))
                 continue
             word = unknown_command(system, " ".join(tokens[start + 1:]))

@@ -185,6 +185,33 @@ def programs(root: Path) -> Set[str]:
     return names
 
 
+LIST_KEYS = ("verbs", "reads", "writes", "refuse", "input")  # what a type holds that the statements of a call are read with
+
+
+def type_lists(root: Path) -> Dict[str, Dict[str, Any]]:
+    """(1.7.38, C13 FR 2) `{program: the lists of its type}` of every type file in every pack folder that can be read as JSON: `verbs`, `reads`, `writes`, `refuse`, `input`. For the gate when a pack is faulty
+    (`broken` system): a call is still read by the refuse list of its type, as it is when the pack is good, and a statement on it is refused with its reason, not held for the person. A type with neither `reads` nor
+    `refuse` has nothing to read with and is left out. A file that cannot be read, or is no object, is left out. The first type that names a program wins. Never raises."""
+    found: Dict[str, Dict[str, Any]] = {}
+    try:
+        for folder in folders(root):
+            for path in sorted((folder / "types").glob("*.json")) if (folder / "types").is_dir() else []:
+                try:
+                    kind = json.loads(_text(path))
+                except ValueError:
+                    continue
+                if not isinstance(kind, dict) or not (kind.get("reads") or kind.get("refuse")):
+                    continue
+                cli = kind.get("cli")
+                lists = {key: kind[key] for key in LIST_KEYS if key in kind}
+                for one in [cli] if isinstance(cli, str) else cli if isinstance(cli, list) else []:
+                    if isinstance(one, str) and one.strip():
+                        found.setdefault(one.strip().lower(), lists)
+    except Exception:  # noqa: BLE001 - the last net: what cannot be read is not read
+        pass
+    return found
+
+
 _MENTION_ONLY = frozenset("echo printf which type whereis whatis man apropos grep egrep fgrep rg cat head tail wc ls dir command git get-command gcm get-help test [ [[".split())  # a line that starts so only talks about a program
 
 

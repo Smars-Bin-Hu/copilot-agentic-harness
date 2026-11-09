@@ -15,7 +15,7 @@ from core import approvals, messages, outbox
 from modules.task import boardserve, taskdesk
 from modules.task.common import CommandError
 from taskcase import NAME, SESSION, TASK
-from test_gate_lists import SERVER, ListedCase
+from test_gate_lists import LISTS, SERVER, ListedCase
 
 WEB = REPO / ".harness" / "engine" / "modules" / "task" / "web"
 DROP = '-Q "DROP TABLE dbo.t"'
@@ -102,6 +102,64 @@ class BatchBoxTests(ListedCase):
 
     def test_the_words_exist_in_both_languages(self) -> None:
         both_languages(self, "gate.batch.never", "desk.batch.hint", "desk.batch.view_first.tip")
+
+
+class BrokenRefuseListFirstTests(ListedCase):
+    """Item 2: a call held because a file is faulty is still read by the refuse list of its type when that file can be read: a drop is refused, as it is when the pack is good, and is not on a card."""
+
+    def pack(self) -> Path:
+        return self.root / ".harness" / "toolpacks" / "sqlserver"
+
+    def type_file(self) -> Path:
+        return self.pack() / "types" / "sqlserver.json"
+
+    def rewrite_type(self, change: Any) -> None:
+        kind = json.loads(self.type_file().read_text(encoding="utf-8"))
+        change(kind)
+        self.type_file().write_text(json.dumps(kind), encoding="utf-8")
+
+    def check(self, fault_in: str) -> None:
+        """The pack is faulty (`fault_in` is told in the card): a drop is refused with the reason of the type, any other call waits on a card that names the file."""
+        reason = self.refused(f"{SERVER} {DROP}")
+        self.assertIn("DROP", reason.upper())
+        self.assertIn(LISTS["refuse"][3]["reason"], reason, "the reason of the type: the way to go")
+        self.assertNotIn("broken-sqlserver", reason, "the call is named by its pack")
+        for call in (f"{SERVER} {WRITE}", f'{SERVER} -Q "SELECT 1"', f"{SERVER} {ASK}"):
+            self.assertIn(fault_in, self.held(call), call)
+
+    def test_a_manifest_that_cannot_be_read(self) -> None:
+        (self.pack() / "toolpack.json").write_text("{ broken", encoding="utf-8")
+        self.check("toolpack.json")
+
+    def test_a_type_with_a_key_nobody_knows(self) -> None:
+        self.rewrite_type(lambda kind: kind.update(bogus=1))
+        self.check("sqlserver.json")
+
+    def test_a_type_with_a_pattern_that_does_not_compile_in_its_read_list(self) -> None:
+        self.rewrite_type(lambda kind: kind["reads"].append("SELECT ("))
+        self.check("sqlserver.json")
+
+    def test_a_connection_list_that_cannot_be_read(self) -> None:
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text("{ broken", encoding="utf-8")
+        self.check("connections.company.json")
+
+    def test_a_script_that_holds_the_drop_is_refused_too_and_a_script_without_one_waits(self) -> None:
+        (self.pack() / "toolpack.json").write_text("{ broken", encoding="utf-8")
+        bad = self.script("SELECT 1;\nDROP TABLE dbo.t;\n", "bad.sql")
+        self.assertIn("DROP", self.refused(f"{SERVER} -i {bad}").upper())
+        good = self.script("SELECT 1;\n", "good.sql")
+        self.held(f"{SERVER} -i {good}")
+
+    def test_a_type_that_cannot_be_read_at_all_has_no_list_to_read_so_the_drop_waits_on_a_card_that_never_goes_in_a_batch(self) -> None:
+        self.type_file().write_text("{ not json", encoding="utf-8")
+        self.held(f"{SERVER} {DROP}")
+        code = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]["code"]
+        self.assertEqual(outbox.batch_class(approvals.find(self.root, code, 10, file=approvals.ACTIONS)), outbox.BATCH_NEVER)
+
+    def test_a_pack_with_a_good_file_is_judged_as_before(self) -> None:
+        self.assertIn("A drop is never run here", self.refused(f"{SERVER} {DROP}"))
+        self.runs(f'{SERVER} -Q "SELECT 1"')
+        self.held(f"{SERVER} {WRITE}")
 
 
 if __name__ == "__main__":

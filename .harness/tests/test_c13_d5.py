@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
 import support  # noqa: F401 - the engine on sys.path
 from support import HarnessTestCase, pre_tool, use_packs
-from taskcase import SESSION, TASK, TaskCase
+from taskcase import NAME, SESSION, TASK, TaskCase
 from test_c12_fb import SYSTEMS
 
 from test_connection_find import FindCase
@@ -15,7 +16,7 @@ from test_connections import KIND, ConnectionsCase
 
 from core import approval, connections, messages, systems
 from modules.gate import rules
-from modules.task import boardserve, cmdview, taskdesk
+from modules.task import boardserve, cmdview, taskboard, taskdesk
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
 WEB = ENGINE / "modules" / "task" / "web"
@@ -168,6 +169,8 @@ class HeldCardTests(HarnessTestCase):
         self.assertIn("scriptsOf(item).map((script)", source)
         self.assertIn('files.map((script) => script.text).join("\\n")', source)
         self.assertIn("scripts.map((script) =>", source)
+        self.assertIn('body.system ? [" ", h("b", null, body.system)', source)
+        self.assertIn("part.system ? systemFact(part.system, part.env)", source)
 
     def words(self, line: str) -> dict:
         import json
@@ -188,6 +191,13 @@ class HeldCardTests(HarnessTestCase):
         self.assertEqual([(part["system"], part["env"]) for part in found["parts"]], [("acmedw-dev", "dev"), ("acmedw-ist", "ist")])
         self.assertNotIn("at", found["parts"][0], "the cut of the line is not sent to the page")
         self.assertEqual([(one["system"], one["env"]) for one in taskdesk.reached(line, self.systems)], [("acmedw-dev", "dev"), ("acmedw-ist", "ist")])
+
+    def test_the_one_statement_of_a_line_on_two_systems_says_whose_it_is(self) -> None:
+        found = self.words('sqlcmd -S localhost,14332 -C -i DEV/a.sql && sqlcmd -S localhost,14331 -C -Q "UPDATE dbo.orders SET status = 2 WHERE id = 2"')
+        self.assertNotIn("parts", found, "one text only: the script is no statement of the line")
+        self.assertEqual((found["body"]["system"], found["body"]["env"]), ("acmedw-ist", "ist"))
+        same = self.words('sqlcmd -S localhost,14332 -C -i DEV/a.sql && sqlcmd -S localhost,14332 -C -Q "UPDATE dbo.orders SET status = 2 WHERE id = 2"')
+        self.assertNotIn("system", same["body"])
 
     def test_two_statements_on_one_system_say_nothing_more_and_one_statement_is_as_before(self) -> None:
         first, second = "UPDATE dbo.orders SET status = 1 WHERE id = 1", "UPDATE dbo.orders SET status = 2 WHERE id = 2"
@@ -220,6 +230,46 @@ class HeldLineOnTwoSystemsTests(TaskCase):
         self.assertEqual([one["system"] for one in card["reaches"]], ["sqlsys", "adosys"])
         self.assertEqual([one["path"] for one in card["layout"]["scripts"]], [f"{TASK}/DEV/_manual/a.sql", f"{TASK}/DEV/_manual/b.sql"])
         self.assertEqual(len(card["seen"]), 2, "both files are pinned, and both are shown")
+
+
+class TaskLinkIconTests(TaskCase):
+    """C12 new need: the list and the card of the lobby show a small link icon when the task is linked to tickets; the tip lists them."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        use_packs(self.root, "ado")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "url": "https://dev.azure.com"}}}), encoding="utf-8")
+        taskboard._link_views.clear()
+        self.new()
+        self.prompt("start", session="sess-plain")
+        self.new(name="plain", session="sess-plain")
+
+    def test_a_row_carries_the_views_of_its_links_and_a_task_with_none_carries_none(self) -> None:
+        self.run_cli("task", "link", "add", "ado:300100", "--task", NAME)
+        self.run_cli("task", "link", "add", "zzz:9", "--task", NAME)
+        result, _problems = taskboard.board_rows(self.root, False, served=())
+        rows = {row["name"]: row for row in result["tasks"]}
+        self.assertEqual([(one["ref"], one["url"]) for one in rows[NAME]["links"]], [("ado:300100", "https://dev.azure.com/acme/demo/_workitems/edit/300100"), ("zzz:9", "")])
+        self.assertEqual(rows["plain"]["links"], [])
+
+    def test_the_views_are_kept_for_a_moment_and_a_task_with_no_link_costs_nothing(self) -> None:
+        data = {"links": [{"ref": "ado:1"}]}
+        first = taskboard.link_marks(self.root, data)
+        self.assertIs(taskboard.link_marks(self.root, data), first)
+        self.assertEqual(taskboard.link_marks(self.root, {"links": []}), [])
+        self.assertEqual(taskboard.link_marks(self.root, {}), [])
+
+    def test_both_pages_draw_the_icon_and_the_tip_is_the_card_of_status_js(self) -> None:
+        for name in ("board.js", "lobby.js"):
+            self.assertIn("Status.links(row.links)", (WEB / name).read_text(encoding="utf-8"), name)
+        status = (WEB / "status.js").read_text(encoding="utf-8")
+        self.assertIn("return {row: build, links: linkMark, stages,", status)
+        self.assertIn('card(chip, () => ({sig: JSON.stringify(links), build: () => linkCard(links)}), words)', status)
+        self.assertIn('target: "_blank", rel: "noopener noreferrer"', status)
+        css = (WEB / "status.css").read_text(encoding="utf-8")
+        self.assertIn(".st-card{position:fixed;", css, "the card is drawn by the board and the task page: its look is in the shared file")
+        self.assertNotIn(".st-card{position:fixed;", (WEB / "desk.css").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

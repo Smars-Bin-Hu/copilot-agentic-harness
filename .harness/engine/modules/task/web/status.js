@@ -137,6 +137,29 @@ const Status = (function () {
     return marked(h("span", {class: "st-chip st-open"}, names.length === 1 ? names[0] + " " + t("board.status.open.word") : names.length + " " + t("board.status.open.word")), key, () => words, words, focusable);
   }
 
+  // The tickets the task is linked to (1.7.38): a small link icon after the task name (the list and the card of the lobby), and the number when there are more than one. The card lists them as `type:id`;
+  // each opens its address in a new tab, as the chips of the task page do. `linkMark` is nothing for a task with no link.
+  const LINK_PATH = "M6.6 9.4a3 3 0 0 0 4.2 0l2.2-2.2a3 3 0 0 0-4.2-4.2l-.9.9M9.4 6.6a3 3 0 0 0-4.2 0L3 8.8a3 3 0 0 0 4.2 4.2l.9-.9";
+  function linkIcon() {
+    const icon = svg("svg", {viewBox: "0 0 16 16", class: "st-lk", "aria-hidden": "true", fill: "none", stroke: "currentColor", "stroke-width": 1.6, "stroke-linecap": "round", "stroke-linejoin": "round"});
+    icon.append(svg("path", {d: LINK_PATH}));
+    return icon;
+  }
+  function linkCard(links) {
+    const lines = [h("div", {class: "st-head"}, t("board.status.links", {n: links.length}))];
+    for (const item of links) {
+      const tip = [item.label ? item.label + " " + item.id : item.ref, item.url || t("desk.link.nourl")].join("\n");
+      lines.push(h("div", {class: "st-ln"}, item.url ? h("a", {class: "st-nm st-lka", href: item.url, target: "_blank", rel: "noopener noreferrer", title: tip}, "\u2197 " + item.ref) : h("span", {class: "st-nm", title: tip}, item.ref)));
+    }
+    return h("div", {class: "st-list st-links"}, lines);
+  }
+  function linkMark(links) {
+    if (!links || !links.length) return null;
+    const words = t("board.status.links", {n: links.length});
+    const chip = h("span", {class: "st-link"}, linkIcon(), links.length > 1 ? h("span", {class: "st-n"}, String(links.length)) : null);
+    return card(chip, () => ({sig: JSON.stringify(links), build: () => linkCard(links)}), words);
+  }
+
   const finite = (value) => typeof value === "number" && isFinite(value);
 
   function contextMark(chat, key, focusable) {
@@ -396,5 +419,5 @@ const Status = (function () {
     return box;
   }
 
-  return {row: build, stages, ribbon, stageList, stageCard, checks, card, refresh, dot, place, phase, shortModel, tick, clock: ensureTimer};
+  return {row: build, links: linkMark, stages, ribbon, stageList, stageCard, checks, card, refresh, dot, place, phase, shortModel, tick, clock: ensureTimer};
 })();

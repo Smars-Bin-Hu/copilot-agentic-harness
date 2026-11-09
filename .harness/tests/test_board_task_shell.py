@@ -209,7 +209,7 @@ class PageFileTests(unittest.TestCase):
         self.assertNotIn("innerHTML", status + source("desk.js"))
         for name in ("function card(", "function stageCard(", "function checks(", "function refresh()"):
             self.assertIn(name, status)
-        self.assertIn("return {row: build, stages, ribbon, stageList, stageCard, checks, card, refresh,", status)
+        self.assertIn("return {row: build, links: linkMark, stages, ribbon, stageList, stageCard, checks, card, refresh,", status)
         self.assertIn('fail: "fail"', status)  # a failed check is red with a cross, not the amber of a flag
         self.assertIn('if (again) lines.push(h("div", {class: "sub"}, t("stage.again")));', status)  # a plan asked for a second time says why
         self.assertIn('step.id === "plan" && step.state === "now") && desk.history.some((event) => event.what === "approve-plan")', source("desk.js"))

@@ -706,18 +706,16 @@ def _without_task_outputs(system: Dict[str, Any], args: List[str], ctx: "_Ctx") 
 def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: str, call: str, args: List[str], ctx: "_Ctx", lead: List[str]) -> Action:
     """A call of a type with lists (1.7.38, C12: pass, refuse, ask). The statements of the text and of the files it reads are cut (`statements.py`) and judged by `reads`, `writes` and `refuse`:
     refuse list first (whatever else is wrong with the call), then a call that gave the gate nothing to read, a text with a shell variable in it or a file the gate could not read (asks), then the lists.
-    `verbs` do not decide the zone: they say what kind of call the card shows (write, exec), and a destroy rule that matches a statement is one more refusal."""
+    `verbs` do not decide the zone: they say what kind of call it is (write, exec, destroy), and the type's `rules` for the environment decide what that kind gets (1.7.38, C13 SQL: before, a destroy of a type
+    with lists was always refused; now the sample type asks for it on DEV and IST, and refuses it elsewhere)."""
     args = _without_task_outputs(system, args, ctx)  # 1.7.38 (C13 FR 22): `-o file` into the task folder is a local write: the call is judged by its statements as without it
     read = inputfiles.read(system, args, ctx.root, ctx.folder, ctx.cwd, ctx.line or text)
     rest = inputfiles.verb_of_text(system, " ".join(lead + ([read.rest] if read else args)))  # the words that are no statement: the settings before the program (`SQLCMDINI=file`) and its options (`-o file`, `-q`)
     if read is None or not read.sources:  # the program reads what it is given on its input: nothing the gate sees
         return Action(name, env, strict([rest, WRITE]), target, text, named=rest is not None, call=call, zone=statements.ASK)
-    joined = " ; ".join(item.text for item in read.items)
+    joined = " ; ".join(_kind_text(item) for item in read.items)
     label = inputfiles.strictest([inputfiles.verb_of_text(system, joined), rest])
     verdict = statements.judge(system, read.items)
-    if verdict.zone != statements.REFUSE and label == DESTROY:  # a rule of `verbs` that names a destroy: refused as before, with the line of a destroy
-        gone = next((item for item in read.items if inputfiles.verb_of_text(system, item.text) == DESTROY), None)
-        verdict = statements.Verdict(statements.REFUSE, gone.text if gone else joined, "", quote=(gone.raw or gone.text) if gone else joined)
     file = read.files.get(verdict.statement, "") if verdict.zone == statements.REFUSE else read.file
     if verdict.zone == statements.REFUSE:
         return Action(name, env, DESTROY, target, text, call=call, file=file, file_why="refuse" if file else "", zone=statements.REFUSE, note=_short(verdict.quote or verdict.statement), reason=messages.pick(verdict.reason) if verdict.reason else "")
@@ -732,6 +730,14 @@ def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: st
     if verdict.zone == statements.WRITE:
         return Action(name, env, strict([label, WRITE]), target, text, named=True, call=call, zone=statements.WRITE)
     return Action(name, env, READ, target, text, call=call, zone=statements.READ)
+
+
+def _kind_text(item: "statements.Statement") -> str:
+    """The text a statement's kind is read from: a definition by its head (`CREATE PROCEDURE dbo.p`), since deploying it runs nothing of its body (1.7.38, C13 SQL); any other statement whole.
+    Before, a `DROP` in the body made the deploy a destroy, refused."""
+    if statements.definition(item):
+        return " ".join(item.text.split(" ")[:4])
+    return item.text
 
 
 def _pin_owner(systems: Dict[str, Any], pinned: List[str], args: List[str]) -> Tuple[Optional[str], pin.Pinned]:
@@ -749,10 +755,11 @@ def _caught(first: Dict[str, Any], name: str, tokens: List[str], start: int, ctx
     text = " ".join(tokens)
     call = " ".join([_program(tokens[start])] + args)
     caught: Optional[Action] = None
+    zoned = None
     if first.get("reads"):
         zoned = _by_lists(first, name, "none", "", text, call, args, ctx, tokens[:start] + [f"{key}={value}" for key, value in variables.items()])
         caught = zoned if zoned.zone == statements.REFUSE else None
-    if caught is None and (first.get("refuse") or first.get("reads")):  # a statement the gate does not cut (`sqlcmd query "DROP TABLE t"`): its words are read as one text
+    if caught is None and (first.get("refuse") or first.get("reads")) and (zoned is None or (zoned.zone == statements.ASK and not zoned.note and not zoned.file)):  # only a call whose statements the gate did not cut (1.7.38, C13 SQL: a body or a string is not read again as plain words)  # a statement the gate does not cut (`sqlcmd query "DROP TABLE t"`): its words are read as one text
         entry = statements.refuse_entry(first, " ".join(args))
         if entry:
             caught = Action(name, "none", DESTROY, "", text, zone=statements.REFUSE, note=_short(" ".join(args)), reason=messages.pick(entry.get("reason") or ""))

@@ -278,14 +278,15 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
         scoped = ("linked", scoped[1])
     held = decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes
     unjudged = getattr(action, "zone", "") in ("ask", "broken")  # a call of a type with lists that is in no list (a script the gate could not read, a statement off the write list): opening the connection does not let it through, each run waits for the person
-    if held and scope == systems_mod.ALL and action.verb != external.DESTROY and not unjudged:  # the person opened this connection for this task (`task allow --conn`, 1.7.38): no further approval. A destroy never passes
+    listed_write = getattr(action, "zone", "") == "write"  # every statement is on the type's read or write list (1.7.38, C13 SQL): a destroy that the write list names (`DROP TABLE`, `TRUNCATE TABLE` on DEV) passes an opened connection too
+    if held and scope == systems_mod.ALL and (action.verb != external.DESTROY or listed_write) and not unjudged:  # the person opened this connection for this task (`task allow --conn`, 1.7.38): no further approval. A destroy of a type with no lists never passes
         data = _open_task(ctx)
         opened = bool(data and _conn_opened(data, action.system, action.env))
         passes = opened
         how = "opened" if opened else ""
     result = {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
     if decision == external.OUTBOX and not passes:  # what the card can offer: open this connection (or its linked items) for the task. A line with writes to two connections has one offer for each
-        if scope == systems_mod.ALL and action.verb != external.DESTROY and not unjudged:
+        if scope == systems_mod.ALL and (action.verb != external.DESTROY or listed_write) and not unjudged:
             result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ALL}
         elif scope == systems_mod.ITEMS and scoped and scoped[0] == "linked":
             result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ITEMS, "refs": [scoped[1]]}

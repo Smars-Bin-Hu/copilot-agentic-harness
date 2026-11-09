@@ -219,7 +219,7 @@ class HookMirrorTests(lists.ListedCase):
         ("SELECT 1; DELETE FROM dbo.orders", "held"),
         ("SELECT a INTO b FROM c", "held"),
         ("SELECT 1; DROP TABLE dbo.t", "refused"),
-        ("SELECT 1; TRUNCATE TABLE dbo.t", "refused"),
+        ("SELECT 1; TRUNCATE TABLE dbo.t", "held"),  # C13 SQL: a destroy on DEV waits for the person
         ("SELECT 1; EXEC('x')", "refused"),
         ("SELECT 1\nDROP TABLE dbo.t", "refused"),
         ("DROP TABLE dbo.t", "refused"),

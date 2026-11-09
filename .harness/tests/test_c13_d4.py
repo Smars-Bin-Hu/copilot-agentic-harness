@@ -719,13 +719,13 @@ class SqlcmdLongOptionsGateTests(ListedCase):
     def test_a_long_server_names_the_connection_and_a_long_query_is_judged_as_a_text(self) -> None:
         self.runs(f'{self.long} --query "SELECT 1"')
         self.runs(f'{self.long} --query="SELECT 1"')
-        self.refused(f'{self.long} --query "DROP TABLE t"')
-        self.refused(f'{self.long} --query="DROP TABLE t"')
+        self.refused(f'{self.long} --query "KILL 52"')  # the refuse list (C13 SQL: a DROP on DEV is held now)
+        self.refused(f'{self.long} --query="KILL 52"')
         reason = self.held(f'{self.long} --query "SELECT 1; UPDATE t SET a = 1"')
         self.assertIn("UPDATE", reason)
 
     def test_a_long_input_file_is_read_like_dash_i(self) -> None:
-        self.refused(f"{self.long} --input-file {self.script('drop table t;')}")
+        self.refused(f"{self.long} --input-file {self.script('kill 52;')}")
         self.runs(f"{self.long} --input-file {self.script('select 1;')}")
         self.runs(f"{self.long} --input-file={self.script('select 2;', 'y.sql')}")
 

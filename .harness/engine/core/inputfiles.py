@@ -73,6 +73,26 @@ def split(args: List[str], options: List[str], text: bool = False) -> Tuple[List
     return files, rest
 
 
+def variables(args: List[str], options: List[str]) -> Tuple[Dict[str, str], List[str]]:
+    """`(the values the call gives its script variables, the other words)` (1.7.38, C13 SQL): an option of `options` (`sqlcmd -v a=1 b="x y"`) takes the words after it that are `name=value`, until one that is not.
+    The names are lower case; a value keeps what the shell left of it."""
+    found: Dict[str, str] = {}
+    rest: List[str] = []
+    index = 0
+    while index < len(args):
+        word = args[index]
+        if word in options:
+            index += 1
+            while index < len(args) and not args[index].startswith("-") and re.match(r"^[A-Za-z_][\w-]*=", args[index]):
+                name, _, value = args[index].partition("=")
+                found[name.lower()] = value
+                index += 1
+            continue
+        rest.append(word)
+        index += 1
+    return found, rest
+
+
 def verb_of_text(system: Dict[str, Any], text: str) -> Optional[str]:
     """The strictest verb of the `verbs` rules that match anywhere in the text; None when none does."""
     found: List[Optional[str]] = []
@@ -123,6 +143,7 @@ def read(system: Dict[str, Any], args: List[str], root: Optional[Path], folder: 
         return None
     named, rest = split(args, file_options) if file_options else ([], list(args))
     texts, rest = split(rest, text_options, text=True) if text_options else ([], rest)
+    known, rest = variables(rest, [str(item) for item in given.get("variables") or []]) if listed else ({}, rest)
     if not named and not texts and not listed:
         return None
     found = Found(rest=" ".join(rest), sources=len(named) + len(texts))
@@ -158,7 +179,7 @@ def read(system: Dict[str, Any], args: List[str], root: Optional[Path], folder: 
             unread(name, "twice")
         followed = [hit for hit in (include.finditer(text) if include is not None else [])]
         if listed:
-            add([item for item in statements.split(text) if not (item.directive and include is not None and include.search(item.text))], name)  # a `:r` line is followed below, so its file is judged in its place
+            add([item for item in statements.split(text, known) if not (item.directive and include is not None and include.search(item.text))], name)  # a `:r` line is followed below, so its file is judged in its place
         else:
             verb = verb_of_text(system, text)
             verbs.append(verb)
@@ -175,6 +196,6 @@ def read(system: Dict[str, Any], args: List[str], root: Optional[Path], folder: 
     for text in texts:
         if _SHELL.search(text):
             found.unsure = found.unsure or text
-        add(statements.split(text), "")
+        add(statements.split(text, known), "")
     found.verb = strictest(verbs)
     return found

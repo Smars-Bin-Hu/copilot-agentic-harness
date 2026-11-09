@@ -98,7 +98,7 @@ SYSTEMS_SCHEMA = {
             },
             "input": {  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from (`["-i"]`), the options whose next word is statement text (`["-Q"]`), and a pattern for the files such a file names itself (`:r file`): the gate reads them and judges their statements by the lists of the type
                 "type": "object",
-                "properties": {"options": {"type": "array", "items": {"type": "string", "minLength": 1}}, "include": {"type": "string", "minLength": 1}, "unjudged": {"type": "string", "minLength": 1}, "text": {"type": "array", "items": {"type": "string", "minLength": 1}}},  # `unjudged` is the key of the first 1.7.38 build: read, no effect (the `refuse` list does its work)
+                "properties": {"options": {"type": "array", "items": {"type": "string", "minLength": 1}}, "include": {"type": "string", "minLength": 1}, "unjudged": {"type": "string", "minLength": 1}, "text": {"type": "array", "items": {"type": "string", "minLength": 1}}, "variables": {"type": "array", "items": {"type": "string", "minLength": 1}}},  # `variables`: the options that give script variables (`sqlcmd -v name=value`, 1.7.38, C13 SQL). `unjudged` is the key of the first 1.7.38 build: read, no effect (the `refuse` list does its work)
                 "additionalProperties": False,
             },
             "reads": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the pass list of a type whose program takes statements as text: a pattern each statement must match whole (modules/gate/statements.py)

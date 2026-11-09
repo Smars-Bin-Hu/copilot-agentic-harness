@@ -734,12 +734,12 @@ class NoConnectionTests(NoConnectionCase):
         self.assertIn("`demotracker`", self.refused_how("demotracker --project DEMO get T-1"))
 
     def test_the_refuse_list_is_read_first_and_its_reason_comes_with_the_refusal(self) -> None:
-        reason = self.refused_how('sqlcmd -S localhost,14332 -C -Q "DROP TABLE t"')
-        self.assertIn("`DROP TABLE t`", reason)
-        self.assertIn(messages.text("gate.external.noconn.also", statement="DROP TABLE t", reason="").strip().split("`")[0].strip(), reason)
-        out = self.call('sqlcmd --help -Q "DROP TABLE t"')  # help needs no connection; the DROP still has its refusal, and nothing is said about a connection
+        reason = self.refused_how('sqlcmd -S localhost,14332 -C -Q "KILL 52"')  # C13 SQL: a statement the refuse list still names
+        self.assertIn("`KILL 52`", reason)
+        self.assertIn(messages.text("gate.external.noconn.also", statement="KILL 52", reason="").strip().split("`")[0].strip(), reason)
+        out = self.call('sqlcmd --help -Q "KILL 52"')  # help needs no connection; the KILL still has its refusal, and nothing is said about a connection
         self.assertEqual(out.get("permissionDecision"), "deny")
-        self.assertIn("`DROP TABLE t`", out["permissionDecisionReason"])
+        self.assertIn("`KILL 52`", out["permissionDecisionReason"])
         self.assertNotIn(HOW, out["permissionDecisionReason"])
 
     def test_a_call_that_only_prints_help_or_the_version_needs_no_connection(self) -> None:
@@ -916,9 +916,9 @@ class DefaultFreeTests(NoConnectionCase):
 
     def test_a_refuse_list_is_still_read_for_a_default_help_call(self) -> None:
         self.declare_none()
-        out = self.call('sqlcmd --help -Q "DROP TABLE t"')
+        out = self.call('sqlcmd --help -Q "KILL 52"')
         self.assertEqual(out.get("permissionDecision"), "deny")
-        self.assertIn("`DROP TABLE t`", out["permissionDecisionReason"])
+        self.assertIn("`KILL 52`", out["permissionDecisionReason"])
 
     def test_with_a_connection_a_pin_that_declares_none_lets_the_default_words_through(self) -> None:
         self.declare_none()

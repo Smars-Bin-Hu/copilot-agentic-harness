@@ -1650,10 +1650,11 @@ class OpenRulesOfTheTypes(TaskCase):
         self.assertEqual(self.term(ist)["permissionDecision"], "deny", "another connection of the same type stays closed")
         self.assertEqual(self.term(qat)["permissionDecision"], "deny")
         self.assertEqual(self.term(f"sqlcmd -S localhost,14332 -C -Q \"EXEC dbo.usp_job_start @name = N'x'\""), {}, "a run passes too")
-        self.assertEqual(self.term("sqlcmd -S localhost,14332 -C -Q \"DROP TABLE t\"")["permissionDecision"], "deny", "a destroy never passes")
+        self.assertEqual(self.term("sqlcmd -S localhost,14332 -C -Q \"DROP TABLE t\""), {}, "C13 SQL: a drop of the write list passes a DEV connection the person opened")
+        self.assertEqual(self.term("sqlcmd -S localhost,14332 -C -Q \"KILL 52\"")["permissionDecision"], "deny", "the refuse list: never")
         rows = [row["external"] for row in self.session_log("sess-main") if row.get("external")]
         self.assertEqual([(row["system"], row["verb"], row.get("opened")) for row in rows],
-                         [("acmedw-dev", "write", None), ("acmedw-dev", "write", True), ("acmedw-ist", "write", None), ("acmedw-qat", "write", None), ("acmedw-dev", "exec", True), ("acmedw-dev", "destroy", None)])
+                         [("acmedw-dev", "write", None), ("acmedw-dev", "write", True), ("acmedw-ist", "write", None), ("acmedw-qat", "write", None), ("acmedw-dev", "exec", True), ("acmedw-dev", "destroy", True), ("acmedw-dev", "destroy", None)])
 
     def test_a_line_that_writes_two_connections_passes_only_when_both_are_open(self) -> None:
         from modules.task import tasklife
@@ -1683,7 +1684,7 @@ class OpenRulesOfTheTypes(TaskCase):
         self.write_connections({"acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql", "rules": {"dev": {"destroy": "outbox"}}}})
         self.new()
         tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
-        self.assertEqual(self.term('sqlcmd -S localhost,14332 -C -Q "DROP TABLE t"')["permissionDecision"], "deny")
+        self.assertEqual(self.term('sqlcmd -S localhost,14332 -C -Q "KILL 52"')["permissionDecision"], "deny")
         self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [], "refused, not held: nothing to approve, no Open button")
 
     def test_a_subagent_gets_nothing_from_an_opened_connection(self) -> None:

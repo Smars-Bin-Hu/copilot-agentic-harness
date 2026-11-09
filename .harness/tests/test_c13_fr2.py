@@ -120,7 +120,7 @@ class AsRcaTests(lists.ListedCase):
 
     def test_a_statement_after_a_semicolon_is_judged_with_the_prefix_as_without(self) -> None:
         self.same("SELECT 1; DROP TABLE dbo.t", "refused")
-        self.same("SELECT 1; TRUNCATE TABLE dbo.t", "refused")  # the verbs of the type call it a destroy
+        self.same("SELECT 1; TRUNCATE TABLE dbo.t", "held")  # the verbs of the type call it a destroy: on DEV the rules hold it for the person (C13 SQL; it was refused by the verb alone)
         self.same("SELECT 1; EXEC('x')", "refused")
         self.same("SELECT 1; DELETE FROM dbo.orders", "held")
         self.same("SELECT 1; UPDATE dbo.orders SET status = 1", "held")
@@ -136,8 +136,8 @@ class AsRcaTests(lists.ListedCase):
         self.assertEqual(self.answer(f'{self.AS}env X=1 {self.DEV} -Q "{single}"'), "refused")
         self.assertEqual(self.answer(f"{self.AS}bash -c '{self.DEV} -Q \"{single}\"'"), "refused")
         self.assertEqual(self.answer(f"{self.AS}sh -c \"{self.DEV} -Q 'SELECT 1; DELETE FROM dbo.orders'\""), "held")
-        self.assertEqual(self.answer(f'{self.DEV} -q "{single}"'), "refused")
-        self.assertEqual(self.answer(f'{self.AS}{self.DEV} -q "{single}"'), "refused")
+        self.assertEqual(self.answer(f'{self.DEV} -q "{single}"'), "held")  # C13 SQL: `-q` text is not cut; a destroy on DEV waits for the person, and an opened connection never passes it
+        self.assertEqual(self.answer(f'{self.AS}{self.DEV} -q "{single}"'), "held")  # C13 SQL: `-q` text is not cut; a destroy on DEV waits for the person, and an opened connection never passes it
         self.assertEqual(self.answer(f'{self.AS}{self.DEV} -Q "DROP TABLE dbo.t"'), "refused")
         self.assertEqual(self.answer(f'{self.AS}{self.DEV} -Q "SELECT 1" -Q "DROP TABLE dbo.t"'), "refused")
         self.assertEqual(self.answer(f'{self.AS}{self.DEV} -Q "{single}" | cat'), "refused")

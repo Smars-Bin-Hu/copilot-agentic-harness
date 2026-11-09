@@ -144,8 +144,8 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
     given = kind.get("input")  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from, the options whose next word is statement text, and how such a file names more files
     if given is not None:
-        words = isinstance(given, dict) and all(isinstance(given.get(part, []), list) and all(isinstance(one, str) and one for one in given.get(part, [])) for part in ("options", "text"))
-        if not (isinstance(given, dict) and set(given) <= {"options", "include", "unjudged", "text"} and words and (given.get("options") or given.get("text")) and isinstance(given.get("include", ""), str) and isinstance(given.get("unjudged", ""), str)):
+        words = isinstance(given, dict) and all(isinstance(given.get(part, []), list) and all(isinstance(one, str) and one for one in given.get(part, [])) for part in ("options", "text", "variables"))
+        if not (isinstance(given, dict) and set(given) <= {"options", "include", "unjudged", "text", "variables"} and words and (given.get("options") or given.get("text")) and isinstance(given.get("include", ""), str) and isinstance(given.get("unjudged", ""), str)):
             out.append(f"types.{name}.input: {{\"options\": [\"-i\"], \"text\": [\"-Q\"], \"include\": <a pattern whose group is a file>}}: `options` are the options that name a file, `text` the options whose next word is statement text (give one of the two); `include` is optional")
     for key in ("reads", "writes"):  # 1.7.38: the pass lists of a type whose program takes statements as text
         if kind.get(key) is not None and not (isinstance(kind[key], list) and all(isinstance(one, str) and one for one in kind[key])):

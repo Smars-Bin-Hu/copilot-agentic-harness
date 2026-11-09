@@ -814,7 +814,8 @@ class CallLineAndAsTests(ListedCase):
 
     def test_a_refusal_through_the_real_hook_is_the_new_words(self) -> None:
         reason = self.refused(f'{SERVER} -Q "EXEC(\'SELECT 1\')"')
-        self.assertIn("允许", reason)
+        self.assertIn("在这里停下", reason)  # C13 M3: a refusal of the refuse list says stop, tell the user, wait
+        self.assertIn("等用户", reason)
         self.assertNotIn("同样的结果", reason)
 
 

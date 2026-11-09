@@ -14,7 +14,7 @@ from taskcase import NAME, SESSION, TASK, TaskCase
 
 from test_gatereview import GateCase, deny
 
-from core import approvals, clip, connections, inputfiles, logs, messages, pinfiles, reach, systems
+from core import config, approvals, clip, connections, inputfiles, logs, messages, pinfiles, reach, systems
 from core.paths import utc_now
 from modules.gate import external, rules
 from modules.task import boardserve, common, gatereview, ready, taskdesk, taskinsight, tasktrace
@@ -74,31 +74,34 @@ class ScriptFileTests(TaskCase):
         with mock.patch.object(boardserve.Board, "idle", return_value=False):
             self.board.act("task allow", NAME, "act", code=code, env_name="acmedw-dev", who="on")
 
-    # the hole: a drop in a file was held as a write, approved, and dropped the table
+    # the hole: a drop in a file was held as a write, approved, and dropped the table. C13 SQL: on DEV a drop is a destroy that waits for the person (it names the file); on QAT it is refused
 
-    def test_a_drop_or_a_truncate_in_a_script_file_is_refused_with_a_line_that_names_the_file(self) -> None:
-        for text in ("DROP TABLE dbo.orders;\n", "truncate table dbo.orders\ngo\n", "USE AcmeDW;\nGO\nDROP PROCEDURE dbo.usp_x;\n"):
-            path = self.script(text)
-            reason = self.refused(f"{SERVER} -i {path}", path)
-            self.assertIn("DROP", reason.upper())
-            self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [])
+    def test_a_drop_or_a_truncate_in_a_script_file_is_a_destroy_held_on_dev_and_refused_on_qat(self) -> None:
+        for number, text in enumerate(("DROP TABLE dbo.orders;\n", "truncate table dbo.orders\ngo\n")):
+            path = self.script(text, f"d{number}.sql")
+            self.held(f"{SERVER} -i {path}")
+            action = external.classify(f"{SERVER} -i {path}", config.load_policy(self.root, "tools")["systems"], unseen=True, root=self.root, cwd=str(self.root))[0][0]
+            self.assertEqual(action.verb, "destroy", text)
+            self.refused(f"sqlcmd -S localhost,14330 -C -d AcmeDW -i {path}")
+        self.held(f"{SERVER} -i {self.script('USE AcmeDW;' + chr(10) + 'GO' + chr(10) + 'DROP PROCEDURE dbo.usp_x;' + chr(10))}")  # a code object: an ordinary write
 
-    def test_the_same_words_are_refused_in_the_text_of_q_and_after_a_write_in_it(self) -> None:
+    def test_the_same_words_in_the_text_of_q_and_after_a_write_in_it(self) -> None:
         for text in ("DROP TABLE dbo.orders", "UPDATE dbo.orders SET a = 1; DROP TABLE dbo.orders"):
-            self.assertEqual(self.term(f'{SERVER} -Q "{text}"')["permissionDecision"], "deny", text)
-            self.assertEqual(self.pending(), 0, text)
+            self.held(f'{SERVER} -Q "{text}"')
+            self.refused(f'sqlcmd -S localhost,14330 -C -d AcmeDW -Q "{text}"')
 
     def test_a_drop_after_a_write_in_the_same_file_is_still_a_drop(self) -> None:
         path = self.script("UPDATE dbo.orders SET status = 1;\nINSERT INTO dbo.log SELECT 1;\nDROP TABLE dbo.orders;\n")
-        self.refused(f"{SERVER} -i {path}", path)
+        self.refused(f"sqlcmd -S localhost,14330 -C -d AcmeDW -i {path}")
 
-    def test_an_opened_connection_never_lets_a_destroy_through_and_still_lets_a_write_through(self) -> None:
+    def test_an_opened_connection_lets_a_drop_of_its_write_list_through_and_never_a_refused_line(self) -> None:
         self.open_connection()
         write = self.script("UPDATE dbo.orders SET status = 1 WHERE id = 3;\n", "w.sql")
         self.assertEqual(self.term(f"{SERVER} -i {write}"), {}, "a write on the opened connection runs")
         drop = self.script("DROP TABLE dbo.orders;\n", "d.sql")
-        self.refused(f"{SERVER} -i {drop}", drop)
-        self.refused(f"{SERVER} -i {write} -i {drop}", drop)
+        self.assertEqual(self.term(f"{SERVER} -i {drop}"), {}, "C13 SQL: the person opened DEV for the task")
+        kill = self.script("KILL 52;\n", "k.sql")
+        self.refused(f"{SERVER} -i {write} -i {kill}", kill)
 
     # a write is held, reads pass, what cannot be read is held
 
@@ -109,8 +112,8 @@ class ScriptFileTests(TaskCase):
         self.assertEqual(self.term(f"{SERVER} -i {read}"), {})
 
     def test_a_file_with_a_line_the_gate_cannot_judge_is_refused_with_the_right_way(self) -> None:
-        """A shell command (`!!`), another server (`:connect`), a file written (`:out`) or words made at run time (`:setvar`, `$(...)`) are not in the text: the refuse list refuses them and says what to do instead. An opened connection does not change that."""
-        for name, text, word in (("shell.sql", "SELECT 1;\n!! rm -rf /tmp/x\n", "`!!`"), ("other.sql", ":connect prod-server\nSELECT 1;\n", "`:connect`"), ("var.sql", ":setvar what orders\nSELECT * FROM dbo.$(what);\n", "`:setvar`"), ("out.sql", ":out /tmp/x.txt\nSELECT 1;\n", "`:out`")):
+        """A shell command (`!!`), another server (`:connect`) or a file written (`:out`) are not in the text: the refuse list refuses them and says what to do instead. An opened connection does not change that. A `:setvar` is filled in (C13 SQL)."""
+        for name, text, word in (("shell.sql", "SELECT 1;\n!! rm -rf /tmp/x\n", "`!!`"), ("other.sql", ":connect prod-server\nSELECT 1;\n", "`:connect`"), ("out.sql", ":out /tmp/x.txt\nSELECT 1;\n", "`:out`")):
             path = self.script(text, name)
             reason = self.refused(f"{SERVER} -i {path}", path)
             self.assertIn(word, reason, name)
@@ -118,6 +121,7 @@ class ScriptFileTests(TaskCase):
         self.refused(f"{SERVER} -i {self.script('SELECT 1;' + chr(10) + '!! whoami' + chr(10), 'shell2.sql')}", f"{TASK}/DEV/_manual/shell2.sql")
         self.held(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql")  # a file it cannot read still waits for the person, opened or not
         self.held(f"{SERVER} -i {self.script(':listvar' + chr(10) + 'SELECT 1;' + chr(10), 'onerr.sql')}")  # a sqlcmd line no list names: asks
+        self.assertEqual(self.term(f"{SERVER} -i {self.script(':setvar what orders' + chr(10) + 'SELECT * FROM dbo.$(what);' + chr(10), 'var.sql')}"), {}, "C13 SQL: the variable is filled in, and the read runs")
 
     def test_a_script_that_calls_a_procedure_is_an_exec_and_waits_in_dev(self) -> None:
         path = self.script("EXEC dbo.usp_load;\n", "e.sql")
@@ -139,12 +143,12 @@ class ScriptFileTests(TaskCase):
             self.assertIn("200 KB", reason)  # the line of the note
 
     def test_the_text_of_a_file_of_exactly_the_limit_is_read(self) -> None:
-        path = self.script("DROP TABLE t;" + " " * (inputfiles.MAX_BYTES - 13), "limit.sql")
+        path = self.script("KILL 52;" + " " * (inputfiles.MAX_BYTES - 8), "limit.sql")
         self.assertEqual((self.root / path).stat().st_size, inputfiles.MAX_BYTES)
         self.refused(f"{SERVER} -i {path}", path)
 
     def test_a_unicode_file_with_its_mark_is_read_as_text(self) -> None:
-        path = self.script("DROP TABLE dbo.orders;\r\n", "wide.sql", encoding="utf-16")  # Python writes the mark
+        path = self.script("KILL 52;\r\n", "wide.sql", encoding="utf-16")  # Python writes the mark
         self.assertEqual((self.root / path).read_bytes()[:2], b"\xff\xfe")
         self.refused(f"{SERVER} -i {path}", path)
 
@@ -153,14 +157,14 @@ class ScriptFileTests(TaskCase):
         long = f"{TASK}/DEV/acme_dw/AcmeDW/dbo/{folder}/dbo.usp_load_orders_into_the_warehouse_with_a_very_long_name_x.sql"
         path = self.root / long
         path.parent.mkdir(parents=True)
-        path.write_text("DROP TABLE dbo.orders;\n", encoding="utf-8")
+        path.write_text("KILL 52;\n", encoding="utf-8")
         self.assertGreater(len(long), 100)
         self.refused(f'{SERVER} -i "{long}"', long)
         path.write_text("UPDATE dbo.orders SET a = 1;\n", encoding="utf-8")
         self.held(f"cd {self.root} && {SERVER} -i '{long}'")
 
     def test_the_other_ways_to_write_the_option_and_the_places_a_path_is_looked_for(self) -> None:
-        drop = self.script("DROP TABLE dbo.orders;\n", "d.sql")
+        drop = self.script("KILL 52;\n", "d.sql")
         self.refused(f"{SERVER} -i{drop}", drop)
         self.refused(f"cd {self.root}/{TASK}/DEV/_manual && {SERVER} -i d.sql", "d.sql")  # after a cd of the line
         self.refused(f"{SERVER} -i DEV/_manual/d.sql", "DEV/_manual/d.sql")  # from the task folder
@@ -171,7 +175,7 @@ class ScriptFileTests(TaskCase):
 
     def test_several_files_in_one_option_and_a_file_a_file_includes_are_all_read(self) -> None:
         self.script("select 1;\n", "a.sql")
-        self.script("DROP TABLE dbo.orders;\n", "b.sql")
+        self.script("KILL 52;\n", "b.sql")
         self.refused(f"{SERVER} -i {TASK}/DEV/_manual/a.sql,{TASK}/DEV/_manual/b.sql", f"{TASK}/DEV/_manual/b.sql")
         wrapper = self.script(f"select 1;\n:r {TASK}/DEV/_manual/b.sql\n", "w.sql")
         self.refused(f"{SERVER} -i {wrapper}", f"{TASK}/DEV/_manual/b.sql")  # a file that includes a file with a drop
@@ -189,13 +193,13 @@ class ScriptFileTests(TaskCase):
 
     def test_a_script_outside_the_task_is_read_too(self) -> None:
         outside = self.root / "outside.sql"
-        outside.write_text("DROP TABLE dbo.orders;\n", encoding="utf-8")
+        outside.write_text("KILL 52;\n", encoding="utf-8")
         self.refused(f"{SERVER} -i outside.sql", "outside.sql")
         outside.write_text("select 1;\n", encoding="utf-8")
         self.assertEqual(self.term(f"{SERVER} -i outside.sql"), {})
 
     def test_the_log_says_which_file_decided(self) -> None:
-        path = self.script("DROP TABLE dbo.orders;\n")
+        path = self.script("KILL 52;\n")
         action = external.classify(f"{SERVER} -i {path}", self.systems(), unseen=True, root=self.root, cwd=str(self.root))[0][0]
         self.assertEqual((action.verb, action.file, action.file_why), ("destroy", path, "refuse"))
         self.assertEqual(action.facts()["file"], path)
@@ -210,7 +214,7 @@ class ScriptFileTests(TaskCase):
 
     def test_a_type_with_no_input_is_judged_as_before(self) -> None:
         plain = {"sqlsys": {"reach": {"cli": ["sqlctl"]}, "env": "dev", "verbs": [{"pattern": r"\b-i\b", "verb": "write"}, {"pattern": r"\bselect\b", "verb": "read"}]}}
-        path = self.script("DROP TABLE t;\n")
+        path = self.script("KILL 52;\n")
         found = external.classify(f"sqlctl -i {path}", plain, unseen=True, root=self.root)
         self.assertEqual([(item.verb, item.file_why) for item, _ in found], [("write", "")])
 

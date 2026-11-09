@@ -37,15 +37,15 @@ CASES = [
  ("DELETE FROM t WHERE (a = 1)", "write"), ("DELETE FROM t WHERE 1=1", "ask"), ("DELETE FROM t WHERE a = 1 DELETE FROM u", "ask"), ("DELETE FROM t OUTPUT deleted.* WHERE a = 1", "write"),
  ("DELETE FROM t WHERE a IN (SELECT b FROM (SELECT c b FROM u WHERE d = 1) x)", "write"), ("DELETE FROM t WHERE a = (((SELECT 1 WHERE 1=1)))", "write"), ("UPDATE t SET a = (((SELECT 1 WHERE 1=1)))", "ask"),
  ("MERGE t USING u ON t.id = u.id WHEN MATCHED THEN UPDATE SET a = 1", "write"),
- ("CREATE PROCEDURE dbo.p AS SELECT 1", "write"), ("ALTER VIEW v AS SELECT 1", "write"), ("CREATE OR ALTER FUNCTION dbo.f() RETURNS INT AS BEGIN RETURN 1 END", "write"), ("CREATE TABLE t (a int)", "ask"),
- ("EXEC dbo.usp_load", "write"), ("EXEC dbo.usp_load @a = 1, @b = 'x'", "write"), ("EXECUTE dbo.usp_load 1, 'x', NULL", "write"), ("EXEC usp_load", "ask"), ("EXEC dbo.sp_foo", "ask"),
- ("EXEC master.dbo.xp_cmdshell 'dir'", "refuse"), ("EXEC [master]..[xp_cmdshell] 'dir'", "refuse"), ("EXEC dbo.usp_x @a = 1; EXEC (@s)", "refuse"),
- ("EXEC('DR' + 'OP TABLE t')", "refuse"), ("EXECUTE ('x')", "refuse"), ("EXEC sp_executesql N'x'", "refuse"), ("EXEC   sp_executesql   @s", "refuse"),
- ("DROP TABLE t", "refuse"), ("drop/**/table t", "refuse"), ("DR/**/OP TABLE t", "ask"), ("TRUNCATE TABLE t", "refuse"), ("KILL 55", "refuse"), ("SHUTDOWN", "refuse"), ("RESTORE DATABASE x FROM DISK = 'y'", "refuse"),
- ("SELECT 1\n!! whoami", "refuse"), ("SELECT 1\n:connect prod", "refuse"), (":out x.txt\nSELECT 1", "refuse"), (":setvar a b", "refuse"), ("SELECT * FROM dbo.$(t)", "refuse"), ("SELECT '$(SQLCMDPASSWORD)'", "refuse"),
+ ("CREATE PROCEDURE dbo.p AS SELECT 1", "write"), ("ALTER VIEW v AS SELECT 1", "write"), ("CREATE OR ALTER FUNCTION dbo.f() RETURNS INT AS BEGIN RETURN 1 END", "write"), ("CREATE TABLE t (a int)", "write"),
+ ("EXEC dbo.usp_load", "write"), ("EXEC dbo.usp_load @a = 1, @b = 'x'", "write"), ("EXECUTE dbo.usp_load 1, 'x', NULL", "write"), ("EXEC usp_load", "write"), ("EXEC dbo.sp_foo", "ask"),
+ ("EXEC master.dbo.xp_cmdshell 'dir'", "refuse"), ("EXEC [master]..[xp_cmdshell] 'dir'", "refuse"), ("EXEC dbo.usp_x @a = 1; EXEC (@s)", "ask"),
+ ("EXEC('DR' + 'OP TABLE t')", "ask"), ("EXECUTE ('x')", "ask"), ("EXEC sp_executesql N'x'", "ask"), ("EXEC   sp_executesql   @s", "ask"),
+ ("DROP TABLE t", "write"), ("drop/**/table t", "write"), ("DR/**/OP TABLE t", "ask"), ("TRUNCATE TABLE t", "write"), ("KILL 55", "refuse"), ("SHUTDOWN", "refuse"), ("RESTORE DATABASE x FROM DISK = 'y'", "refuse"),
+ ("SELECT 1\n!! whoami", "refuse"), ("SELECT 1\n:connect prod", "refuse"), (":out x.txt\nSELECT 1", "refuse"), (":setvar a b", "read"), ("SELECT * FROM dbo.$(t)", "ask"), ("SELECT '$(SQLCMDPASSWORD)'", "ask"),
  (":listvar\nSELECT 1", "ask"), (":on error exit\nSELECT 1", "read"), (":ON ERROR IGNORE\nSELECT 1", "read"), (":r other.sql", "ask"),
- ("BEGIN TRAN", "ask"), ("GRANT SELECT ON t TO u", "ask"), ("WAITFOR DELAY '00:00:10'", "ask"), ("ALTER TABLE t ADD c int", "ask"), ("ALTER TABLE t DROP COLUMN c", "refuse"),
- ("IF 1 = 1 DROP TABLE t", "refuse"), ("IF 1 = 1 UPDATE t SET a = 1 WHERE b = 2", "ask"),
+ ("BEGIN TRAN", "write"), ("GRANT SELECT ON t TO u", "ask"), ("WAITFOR DELAY '00:00:10'", "ask"), ("ALTER TABLE t ADD c int", "write"), ("ALTER TABLE t DROP COLUMN c", "ask"),
+ ("IF 1 = 1 DROP TABLE t", "ask"), ("IF 1 = 1 UPDATE t SET a = 1 WHERE b = 2", "ask"),
  # 1.7.38 (C13 F2, M1): a condition that is true whatever the row holds is no WHERE. A guard against a slip, not a wall: `WHERE id > 0` still passes (docs/12)
  ("UPDATE t SET a = 1 WHERE (1=1)", "ask"), ("UPDATE t SET a = 1 WHERE 1<2", "ask"), ("UPDATE t SET a = 1 WHERE 2>1", "ask"), ("UPDATE t SET a = 1 WHERE NOT 1=0", "ask"), ("UPDATE t SET a = 1 WHERE NOT(1=0)", "ask"),
  ("UPDATE t SET a = 1 WHERE 'a'='a'", "ask"), ("UPDATE t SET a = 1 WHERE col=col", "ask"), ("UPDATE t SET a = 1 WHERE t.col = t.col", "ask"), ("UPDATE t SET a = 1 WHERE ((1 = 1))", "ask"),
@@ -54,8 +54,8 @@ CASES = [
  # 1.7.38 (C13 F2, D1): a CREATE or ALTER of a procedure, function or view is one statement to the end of its batch; the body is read by the refuse list, and a trigger asks
  ("CREATE PROCEDURE dbo.p AS BEGIN SET NOCOUNT ON; IF 1=1 BEGIN DECLARE @a int, @b int; SET @a = @@ROWCOUNT; SELECT @b = count(*) FROM t; CREATE TABLE #x (a int); END END", "write"),
  ("CREATE OR ALTER PROCEDURE dbo.p AS\nBEGIN\n  UPDATE t SET a = 1;\n  DELETE FROM u;\nEND", "write"), ("ALTER FUNCTION dbo.f() RETURNS int AS BEGIN RETURN 1; END", "write"), ("CREATE VIEW v AS SELECT 1 a;", "write"),
- ("CREATE PROCEDURE dbo.p AS BEGIN TRUNCATE TABLE t; END", "refuse"), ("CREATE PROCEDURE dbo.p AS BEGIN DROP TABLE t; END", "refuse"), ("CREATE PROCEDURE dbo.p AS BEGIN EXEC(@s); END", "refuse"),
- ("CREATE PROCEDURE dbo.p AS SELECT 1;\nGO\nDROP TABLE t", "refuse"), ("CREATE TRIGGER tr ON t AFTER INSERT AS BEGIN SELECT 1; END", "ask"),
+ ("CREATE PROCEDURE dbo.p AS BEGIN TRUNCATE TABLE t; END", "write"), ("CREATE PROCEDURE dbo.p AS BEGIN DROP TABLE t; END", "write"), ("CREATE PROCEDURE dbo.p AS BEGIN EXEC(@s); END", "write"),
+ ("CREATE PROCEDURE dbo.p AS SELECT 1;\nGO\nDROP TABLE t", "write"), ("CREATE TRIGGER tr ON t AFTER INSERT AS BEGIN SELECT 1; END", "ask"),
 ]
 
 

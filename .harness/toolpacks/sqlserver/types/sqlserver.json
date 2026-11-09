@@ -85,7 +85,7 @@
   "down": "TCP Provider|Named Pipes Provider|Login timeout expired|Cannot open server|network-related or instance-specific error|unable to open tcp connection|connection refused|i/o timeout",
   "verbs": [
     {
-      "pattern": "\\b(?:drop|truncate|kill|shutdown|restore)\\b",
+      "pattern": "\\btruncate\\s+table\\s+(?!#\\w)|\\bdrop\\s+(?!(?:procedure|proc|view|function|trigger|synonym)\\b)(?!table\\s+(?:if\\s+exists\\s+)?#\\w+\\s*(?:;|$))\\w+|\\b(?:kill|shutdown|restore)\\b",
       "verb": "destroy"
     },
     {
@@ -124,18 +124,19 @@
     "UPDATE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? [\\w.#@]+ SET (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
     "DELETE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? FROM [\\w.#@]+ (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
     "MERGE\\b(?!.*\\b(?:drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|merge .*merge)\\b).*",
-    "(?:CREATE OR ALTER|CREATE|ALTER) (?:PROCEDURE|PROC|VIEW|FUNCTION) [\\w.]+.*",
-    "EXEC(?:UTE)? (?!(?:\\w+\\.)*(?:sp|xp)_)(?:\\w+\\.)+\\w+(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?",
-    "(?:BEGIN|END|BEGIN TRY|END TRY|BEGIN CATCH|END CATCH|RETURN)"
+    "(?:CREATE OR ALTER|CREATE|ALTER) (?:PROCEDURE|PROC|VIEW|FUNCTION) [\\w.]+(?!.*\\b(?:xp_\\w+|kill|shutdown|restore|reconfigure|openrowset|opendatasource|openquery|bulk)\\b).*",
+    "EXEC(?:UTE)? (?!(?:\\w+\\.)*(?:sp|xp)_)(?:\\w+\\.)*\\w+(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?",
+    "(?:BEGIN|END|BEGIN TRY|END TRY|BEGIN CATCH|END CATCH|RETURN)",
+    "(?:DROP TABLE|TRUNCATE TABLE)(?: IF EXISTS)? [\\w.#]+(?: ?, ?[\\w.#]+)*",
+    "DROP (?:PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER|SYNONYM)(?: IF EXISTS)? [\\w.]+(?: ?, ?[\\w.]+)*",
+    "IF OBJECT_ID ?\\( ?N?'' ?(?:, ?N?'' ?)?\\) IS NOT NULL DROP (?:TABLE|PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER|SYNONYM) [\\w.#]+",
+    "CREATE TABLE [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*\\)",
+    "CREATE (?:UNIQUE )?(?:CLUSTERED |NONCLUSTERED )?INDEX \\w+ ON [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*",
+    "ALTER TABLE [\\w.#]+ ADD (?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*",
+    "(?:BEGIN TRAN(?:SACTION)?|COMMIT(?: TRAN(?:SACTION)?)?|ROLLBACK(?: TRAN(?:SACTION)?)?)(?: \\w+)?",
+    "SELECT\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?!.*\\binto (?!#\\w))(?=.*\\binto #\\w+\\b).*"
   ],
   "refuse": [
-    {
-      "pattern": "\\b(?:drop|truncate)\\b",
-      "reason": {
-        "en": "DROP and TRUNCATE are never run by the agent. Tell the user which object or table, and why: the user runs it with their own account.",
-        "zh": "agent 不执行 DROP 和 TRUNCATE。告诉用户是哪个对象或哪张表、为什么：由用户用自己的账号执行。"
-      }
-    },
     {
       "pattern": "\\b(?:kill|shutdown|restore)\\b",
       "reason": {
@@ -165,29 +166,16 @@
       }
     },
     {
-      "pattern": "^:setvar\\b|\\$\\(",
-      "reason": {
-        "en": "A `:setvar` or `$(name)` is filled in by sqlcmd when the script runs, so the gate cannot see the statement. Write the value into the statement.",
-        "zh": "`:setvar` 和 `$(名字)` 由 sqlcmd 在运行时填入，gate 看不到真正的语句。把值直接写进语句。"
-      }
-    },
-    {
-      "pattern": "\\bexec(?:ute)?\\s*\\(|\\bsp_executesql\\b",
-      "reason": {
-        "en": "`EXEC('...')` and `sp_executesql` run a string as SQL, so the gate cannot see what it does. Write the statement itself, one at a time.",
-        "zh": "`EXEC('...')` 和 `sp_executesql` 把字符串当 SQL 执行，gate 看不到它做什么。直接写出语句本身，一次一条。"
-      }
-    },
-    {
       "pattern": "\\bxp_\\w+",
       "reason": {
-        "en": "Extended procedures such as `xp_cmdshell` run outside the database. Do the work in the terminal, where the gate judges it, or tell the user.",
-        "zh": "`xp_cmdshell` 这类扩展过程在数据库之外执行。在终端里做（由 gate 判断），或告诉用户。"
+        "en": "Extended procedures such as `xp_cmdshell` run outside the database. Do the work in the terminal, where the gate judges it, or tell the user. (In the body of a procedure you deploy, it is not refused: the deploy waits for the user.)",
+        "zh": "`xp_cmdshell` 这类扩展过程在数据库之外执行。在终端里做（由 gate 判断），或告诉用户。（写在要部署的过程正文里不拒绝：部署等用户批准。）"
       }
     }
   ],
   "directives": [
-    "^:on\\s+error\\s+(?:exit|ignore)$"
+    "^:on\\s+error\\s+(?:exit|ignore)$",
+    "^:setvar\\s+[A-Za-z_][\\w-]*(?:\\s+.*)?$"
   ],
   "outputs": {
     "options": [
@@ -204,6 +192,10 @@
     "text": [
       "-Q",
       "--query"
+    ],
+    "variables": [
+      "-v",
+      "--variables"
     ]
   },
   "body": [
@@ -267,13 +259,13 @@
       "read": "allow",
       "write": "outbox",
       "exec": "outbox",
-      "destroy": "deny"
+      "destroy": "outbox"
     },
     "ist": {
       "read": "allow",
       "write": "outbox",
       "exec": "outbox",
-      "destroy": "deny"
+      "destroy": "outbox"
     },
     "qat": {
       "read": "allow",

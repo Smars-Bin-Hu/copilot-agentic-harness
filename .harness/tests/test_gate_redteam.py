@@ -34,14 +34,14 @@ FILES = {
 # (command, answer, why it is that answer)
 ROWS: List[Tuple[str, str, str]] = [
     # case, comments, brackets
-    (f'{S} -Q "dRoP TaBlE t"', "refuse", "case"),
-    (f'{S} -Q "DROP/**/TABLE t"', "refuse", "a comment is a space, the word is still there"),
+    (f'{S} -Q "dRoP TaBlE t"', "ask", "case"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q "DROP/**/TABLE t"', "ask", "a comment is a space, the word is still there"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q "DR/**/OP TABLE t"', "ask", "two words, no statement of any list: the server fails it, the gate does not pass it"),
-    (f'{S} -Q "[DROP] TABLE t"', "refuse", "a bracketed name is read as the name"),
-    (f'{S} -Q "SELECT 1 --\nDROP TABLE t"', "refuse", "a line comment ends at the new line"),
+    (f'{S} -Q "[DROP] TABLE t"', "ask", "a bracketed name is read as the name"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q "SELECT 1 --\nDROP TABLE t"', "ask", "a line comment ends at the new line"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q "SELECT 1 /* ; DROP TABLE t"', "pass", "a comment never closed: the server fails the whole batch, nothing runs"),
-    (f'{S} -Q "SELECT 1 /*\nGO\nDROP TABLE t"', "refuse", "GO ends the batch for sqlcmd, comment or not"),
-    (f"{S} -Q \"SELECT\t1;\tDROP\tTABLE\tt\"", "refuse", "tabs"),
+    (f'{S} -Q "SELECT 1 /*\nGO\nDROP TABLE t"', "ask", "GO ends the batch for sqlcmd, comment or not"),  # C13 SQL: held for the person, not refused
+    (f"{S} -Q \"SELECT\t1;\tDROP\tTABLE\tt\"", "ask", "tabs"),  # C13 SQL: held for the person, not refused
     # look-alikes
     (f'{S} -Q "ＤＲＯＰ TABLE t"', "ask", "fullwidth letters are no keyword: on no list"),
     (f'{S} -Q "DRОP TABLE t"', "ask", "a Cyrillic letter: on no list"),
@@ -51,27 +51,27 @@ ROWS: List[Tuple[str, str, str]] = [
     (f"{S} -Q \"SELECT 'N“测试”'\"", "pass", "curly double quotes inside a single-quoted string end nothing"),
     (f"{S} -Q \"USE db; SELECT 1 FROM t WHERE a = 'x' -- 说明：更新（含税）\"", "pass", "a Chinese comment with fullwidth marks"),
     # GO and semicolons
-    (f'{S} -Q "SELECT 1\nGO\nDROP TABLE t"', "refuse", "GO"),
-    (f"{S} -Q \"SELECT 'a\nGO\nDROP TABLE t\n'\"", "refuse", "GO inside a string still ends the batch for sqlcmd"),
-    (f"{S} -i {M}/go.sql", "refuse", "the same in a file"),
+    (f'{S} -Q "SELECT 1\nGO\nDROP TABLE t"', "ask", "GO"),  # C13 SQL: held for the person, not refused
+    (f"{S} -Q \"SELECT 'a\nGO\nDROP TABLE t\n'\"", "ask", "GO inside a string still ends the batch for sqlcmd"),  # C13 SQL: held for the person, not refused
+    (f"{S} -i {M}/go.sql", "ask", "the same in a file"),  # C13 SQL: held for the person, not refused
     (f"{S} -Q \"SELECT 'a;DROP TABLE t'\"", "pass", "a semicolon inside a string"),
     (f"{S} -Q \"SELECT 'a'';DROP TABLE t;--'\"", "pass", "a doubled quote inside a string"),
     (f'{S} -Q "SELECT 1\nGO 100"', "pass", "a count after GO"),
     (f'{S} -Q "USE [db]; SELECT 1 GO"', "pass", "GO in the line is a word of the statement, not a separator"),
     # no semicolon between statements
-    (f'{S} -Q "SELECT 1 DROP TABLE t"', "refuse", "the server reads two statements"),
+    (f'{S} -Q "SELECT 1 DROP TABLE t"', "ask", "the server reads two statements"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q "SELECT 1 UPDATE t SET a = 1"', "ask", "the tail of a read may not hold a write"),
     (f'{S} -Q "SELECT 1; DELETE FROM t"', "ask", "a delete with no WHERE"),
     (f'{S} -Q "WITH c AS (SELECT 1 a) UPDATE c SET a = 1 WHERE a = 1"', "ask", "a write behind a CTE"),
     (f'{S} -Q "SELECT a /* x */ INTO b FROM c"', "ask", "INTO, a comment between"),
-    (f'{S} -Q "SELECT 1; RETURN; DROP TABLE t"', "refuse", "after a RETURN"),
+    (f'{S} -Q "SELECT 1; RETURN; DROP TABLE t"', "ask", "after a RETURN"),  # C13 SQL: held for the person, not refused
     # strings run as SQL
-    (f'{S} -Q "EXEC (@s)"', "refuse", "EXEC with a space"),
-    (f"{S} -Q \"EXECUTE('DROP TABLE t')\"", "refuse", "EXECUTE of a string"),
-    (f"{S} -Q \"EXEC  ( 'x' )\"", "refuse", "spaces inside"),
-    (f'{S} -Q "EXEC   sp_executesql   @s"', "refuse", "sp_executesql with spaces"),
-    (f'{S} -Q "EXEC [sp_executesql] @s"', "refuse", "bracketed"),
-    (f'{S} -Q "EXEC sys.sp_executesql @s"', "refuse", "with a schema"),
+    (f'{S} -Q "EXEC (@s)"', "ask", "EXEC with a space"),  # C13 SQL: held for the person, not refused
+    (f"{S} -Q \"EXECUTE('DROP TABLE t')\"", "ask", "EXECUTE of a string"),  # C13 SQL: held for the person, not refused
+    (f"{S} -Q \"EXEC  ( 'x' )\"", "ask", "spaces inside"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q "EXEC   sp_executesql   @s"', "ask", "sp_executesql with spaces"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q "EXEC [sp_executesql] @s"', "ask", "bracketed"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q "EXEC sys.sp_executesql @s"', "ask", "with a schema"),  # C13 SQL: held for the person, not refused
     (f"{S} -Q \"SELECT 1;EXEC master..xp_cmdshell 'dir'\"", "refuse", "an extended procedure"),
     (f"{S} -Q \"EXEC [master]..[xp_cmdshell] 'dir'\"", "refuse", "brackets"),
     (f"{S} -Q \"SELECT 1; EXEC dbo.sp_OACreate 'x', @o OUT\"", "ask", "a system procedure that is on no list"),
@@ -83,28 +83,28 @@ ROWS: List[Tuple[str, str, str]] = [
     (f'{S} -Q ":on error exit\nSELECT 1"', "pass", "FR 23: a line that only changes how sqlcmd reacts to an error is free"),
     (f'{S} -Q ":ON ERROR IGNORE\nSELECT 1"', "pass", "FR 23: the same, in capitals"),
     (f'{S} -Q ":on error exit now\nSELECT 1"', "ask", "FR 23: only the two exact lines are free"),
-    (f'{S} -Q ":on error exit\nSELECT 1; DROP TABLE t"', "refuse", "FR 23: the refuse list is read whatever the free line says"),
-    (f'{S} -Q "SELECT * FROM dbo.$(t)"', "refuse", "a sqlcmd variable"),
-    (f"{S} -Q \"SELECT '$(SQLCMDPASSWORD)'\"", "refuse", "sqlcmd fills a variable in inside a string too: the password would come back as a result"),
-    (f'{S} -Q "SELECT 1 -- $(x)"', "refuse", "and inside a comment"),
-    (f'{S} -Q "SELECT 1; $(echo DROP TABLE t)"', "refuse", "a command substitution of the shell"),
+    (f'{S} -Q ":on error exit\nSELECT 1; DROP TABLE t"', "ask", "FR 23: the refuse list is read whatever the free line says"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q "SELECT * FROM dbo.$(t)"', "ask", "a sqlcmd variable"),  # C13 SQL: held for the person, not refused
+    (f"{S} -Q \"SELECT '$(SQLCMDPASSWORD)'\"", "ask", "sqlcmd fills a variable in inside a string too: the password would come back as a result"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q "SELECT 1 -- $(x)"', "ask", "and inside a comment"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q "SELECT 1; $(echo DROP TABLE t)"', "ask", "a command substitution of the shell"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q "$QQ"', "ask", "a shell variable the gate cannot read"),
     (f'{S} -Q "SELECT 1 $QQ"', "ask", "the tail of a read that the shell fills in"),
-    (f"{S} -Q $'DROP TABLE t'", "refuse", "ANSI-C quoting"),
-    (f'Q="DROP TABLE t"; {S} -Q "$Q"', "refuse", "a variable set in the same line is put in"),
+    (f"{S} -Q $'DROP TABLE t'", "ask", "ANSI-C quoting"),  # C13 SQL: held for the person, not refused
+    (f'Q="DROP TABLE t"; {S} -Q "$Q"', "ask", "a variable set in the same line is put in"),  # C13 SQL: held for the person, not refused
     (f'Q="SELECT 1"; {S} -Q "$Q"', "pass", "and a read in it is a read"),
     # files and includes
     (f"{S} -i {M}/inc1.sql", "refuse", "a line two files down"),
     (f"{S} -i {M}/d1.sql", "ask", "five files down: more than the gate follows, so it does not know"),
-    (f"{S} -i {M}/loop.sql", "refuse", "a file that includes itself, with a drop"),
+    (f"{S} -i {M}/loop.sql", "ask", "a file that includes itself, with a drop"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q ":r {M}/ok.sql"', "ask", "an include in the text of -Q is not followed, so it is on no list"),
-    (f'{S} -Q "SELECT 1" -i {M}/drop.sql', "refuse", "-Q and -i together: both are judged"),
-    (f"{S} -i {M}/drop.sql -Q \"SELECT 1\"", "refuse", "the other way round"),
+    (f'{S} -Q "SELECT 1" -i {M}/drop.sql', "ask", "-Q and -i together: both are judged"),  # C13 SQL: held for the person, not refused
+    (f"{S} -i {M}/drop.sql -Q \"SELECT 1\"", "ask", "the other way round"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q "SELECT 1" -i {M}/ok.sql', "pass", "both are reads"),
-    (f'{S} -Q "SELECT 1" -Q "DROP TABLE t"', "refuse", "the option twice"),
-    (f'{S} -Q"DROP TABLE t"', "refuse", "the value joined to the option"),
+    (f'{S} -Q "SELECT 1" -Q "DROP TABLE t"', "ask", "the option twice"),  # C13 SQL: held for the person, not refused
+    (f'{S} -Q"DROP TABLE t"', "ask", "the value joined to the option"),  # C13 SQL: held for the person, not refused
     # other options and settings
-    (f'{S} -q "DROP TABLE t"', "refuse", "-q keeps reading its input: not a text the gate trusts, and the word is a destroy"),
+    (f'{S} -q "DROP TABLE t"', "ask", "-q keeps reading its input: not a text the gate trusts, and the word is a destroy"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q "SELECT 1" -q "UPDATE t SET a = 1 WHERE b = 2"', "ask", "-q is a write of the type"),
     (f'{S} -Q "SELECT 1" -o /tmp/out.txt', "ask", "-o writes a file the gate does not see"),
     (f'{S} -Q "SELECT 1" -ofile.txt', "ask", "-o with the file joined"),
@@ -115,14 +115,14 @@ ROWS: List[Tuple[str, str, str]] = [
     (f"echo 'DROP TABLE t' | {S}", "ask", "the same through a pipe"),
     (f"{S} -E", "ask", "nothing to read"),
     # more than one program, another way in
-    (f"{S} -Q \"SELECT 1\" ; sqlcmd -S localhost,14332 -Q \"DROP TABLE t\"", "refuse", "a second call after a read"),
-    (f"{S} -Q \"SELECT 1\" & {S} -Q \"DROP TABLE t\"", "refuse", "& of a Windows shell"),
-    (f'echo x && {S} -Q "DROP TABLE t"', "refuse", "after another command"),
-    (f"bash -c '{S} -Q \"DROP TABLE t\"'", "refuse", "inside a shell"),
-    (f'cmd /c {S} -Q "DROP TABLE t"', "refuse", "inside cmd"),
-    (f"harness wait --run \"{S} -Q 'DROP TABLE t'\" --approval X", "refuse", "inside the wait of the harness"),
-    (f'/opt/mssql-tools/bin/{S} -Q "DROP TABLE t"', "refuse", "the program with a path"),
-    (f'sqlcmd.exe -S localhost,14332 -Q "DROP TABLE t"', "refuse", "the Windows name"),
+    (f"{S} -Q \"SELECT 1\" ; sqlcmd -S localhost,14332 -Q \"DROP TABLE t\"", "ask", "a second call after a read"),  # C13 SQL: held for the person, not refused
+    (f"{S} -Q \"SELECT 1\" & {S} -Q \"DROP TABLE t\"", "ask", "& of a Windows shell"),  # C13 SQL: held for the person, not refused
+    (f'echo x && {S} -Q "DROP TABLE t"', "ask", "after another command"),  # C13 SQL: held for the person, not refused
+    (f"bash -c '{S} -Q \"DROP TABLE t\"'", "ask", "inside a shell"),  # C13 SQL: held for the person, not refused
+    (f'cmd /c {S} -Q "DROP TABLE t"', "ask", "inside cmd"),  # C13 SQL: held for the person, not refused
+    (f"harness wait --run \"{S} -Q 'DROP TABLE t'\" --approval X", "ask", "inside the wait of the harness"),  # C13 SQL: held for the person, not refused
+    (f'/opt/mssql-tools/bin/{S} -Q "DROP TABLE t"', "ask", "the program with a path"),  # C13 SQL: held for the person, not refused
+    (f'sqlcmd.exe -S localhost,14332 -Q "DROP TABLE t"', "ask", "the Windows name"),  # C13 SQL: held for the person, not refused
     # what only an opened connection may pass, and what the lists leave to the person
     (f'{S} -Q "UPDATE t SET a = 1 WHERE b = 2"', "ask", "a write on the list: it waits unless the connection is open"),
     (f'{S} -Q "UPDATE t SET a = 1"', "ask", "no WHERE"),
@@ -133,10 +133,10 @@ ROWS: List[Tuple[str, str, str]] = [
     (f"{S} -Q \"SELECT * FROM OPENROWSET(BULK 'C:\\x.txt', SINGLE_CLOB) a\"", "ask", "a file of the server"),
     (f"{S} -Q \"SELECT 1; GRANT ALL ON t TO u\"", "ask", "a grant"),
     (f"{S} -Q \"BACKUP DATABASE x TO DISK = 'y'\"", "ask", "a backup"),
-    (f'{S} -Q "ALTER TABLE t DROP COLUMN c"', "refuse", "a drop inside an alter"),
+    (f'{S} -Q "ALTER TABLE t DROP COLUMN c"', "ask", "a drop inside an alter"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q "SELECT 1;SHUTDOWN"', "refuse", "SHUTDOWN"),
     (f'{S} -Q "SELECT 1; KILL 52"', "refuse", "KILL"),
-    (f'{S} -Q "USE master; DROP DATABASE x"', "refuse", "after a USE"),
+    (f'{S} -Q "USE master; DROP DATABASE x"', "ask", "after a USE"),  # C13 SQL: held for the person, not refused
     (f'{S} -Q "SELECT @@version; SELECT SUSER_SNAME(); SELECT * FROM sys.dm_exec_requests"', "pass", "reads"),
     (f"{S} -Q \"SET NOCOUNT ON; SELECT TOP (10) * FROM dbo.orders WITH (NOLOCK) ORDER BY id DESC OPTION (RECOMPILE)\"", "pass", "reads with hints"),
 ]

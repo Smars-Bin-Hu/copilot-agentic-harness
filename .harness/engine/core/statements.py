@@ -90,7 +90,7 @@ def _cut(text: str, at_semicolon: bool) -> List[Statement]:
         current.clear()
         shown.clear()
         if statement:
-            out.append(Statement(statement, odd=odd, raw=written if written != statement else ""))
+            out.append(Statement(statement, odd=odd or "$(" in statement, raw=written if written != statement else ""))  # a `$(name)` no `:setvar` or `-v` of the call fills: the gate cannot see the statement, so it asks (1.7.38, C13 SQL)
         odd = False
 
     while index < len(text):
@@ -141,16 +141,39 @@ def _cut(text: str, at_semicolon: bool) -> List[Statement]:
     return out
 
 
-def split(text: str) -> List[Statement]:
-    """The statements and the sqlcmd lines of a text, in order."""
+_SETVAR = re.compile(r'^[ \t]*:setvar[ \t]+([A-Za-z_][\w-]*)(?:[ \t]+(?:"((?:[^"]|"")*)"|(\S+)))?[ \t]*$', re.IGNORECASE)
+_USE = re.compile(r"\$\(([A-Za-z_][\w-]*)\)")
+
+
+def fill(line: str, variables: Dict[str, str]) -> str:
+    """A line with each `$(name)` that `variables` knows put in, as sqlcmd does before it reads the line (1.7.38, C13 SQL: an SSDT publish script). Names are matched in any case; a name not known stays."""
+    return _USE.sub(lambda hit: variables.get(hit.group(1).lower(), hit.group(0)), line) if "$(" in line else line
+
+
+def split(text: str, variables: Optional[Dict[str, str]] = None) -> List[Statement]:
+    """The statements and the sqlcmd lines of a text, in order. `variables` (lower-case names): the values the call gives (`sqlcmd -v name=value`); a `:setvar` line of the text adds one (or, with no value, takes it
+    away) for the lines after it, and the dict is changed in place, so a file the text includes sees them. Each `$(name)` is filled in before the line is read, as sqlcmd does: the statements judged are the ones
+    that run. One that is not known stays, and its statement asks (`odd`)."""
     items: List[Statement] = []
     lines: List[str] = []
+    known = variables if variables is not None else {}
 
     def batch() -> None:
         items.extend(_batch("\n".join(lines)))
         lines.clear()
 
-    for line in _LINES.split(text):
+    for raw in _LINES.split(text):
+        setvar = _SETVAR.match(raw)
+        if setvar:
+            batch()
+            value = setvar.group(2).replace('""', '"') if setvar.group(2) is not None else setvar.group(3)
+            if value is None:
+                known.pop(setvar.group(1).lower(), None)
+            else:
+                known[setvar.group(1).lower()] = fill(value, known)
+            items.append(Statement(raw.strip(), True))
+            continue
+        line = fill(raw, known)
         if _GO.match(line):
             batch()
         elif _DIRECTIVE.match(line):
@@ -160,6 +183,11 @@ def split(text: str) -> List[Statement]:
             lines.append(line)
     batch()
     return items
+
+
+def definition(item: Statement) -> bool:
+    """A batch that is one `CREATE [OR ALTER] | ALTER` `PROCEDURE`, `FUNCTION` or `VIEW`: deploying it runs nothing of its body (1.7.38, C13 SQL)."""
+    return not item.directive and bool(_DEFINITION.match(item.text))
 
 
 # --- the answer ---------------------------------------------------------------------------------------------------------------------------------------
@@ -198,10 +226,12 @@ def refuse_entry(system: Dict[str, Any], text: str) -> Optional[Dict[str, Any]]:
 
 
 def judge(system: Dict[str, Any], items: List[Statement]) -> Verdict:
-    """Which zone these statements are in, by the lists of the type (`refuse`, `reads`, `writes`). Order: any statement or line on the refuse list refuses; every statement
+    """Which zone these statements are in, by the lists of the type (`refuse`, `reads`, `writes`). Order: any statement or line on the refuse list refuses (not the body of a definition); every statement
     whole on the read list (and no sqlcmd line left) is a read; every statement on the read or write list is what an opened connection passes; else the person is asked. Reads
     and writes are matched on the whole statement, so a word after the first words cannot slip by: the patterns say what may follow."""
     for item in items:
+        if definition(item):
+            continue  # 1.7.38 (C13 SQL): the body of a procedure, function or view runs when it is called, not when it is deployed; the write list says which bodies an opened connection passes (the rest asks)
         entry = refuse_entry(system, item.text)
         if entry:
             return Verdict(REFUSE, item.text, entry.get("reason") or "", quote=item.raw or item.text)

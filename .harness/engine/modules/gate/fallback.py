@@ -163,6 +163,8 @@ def refine(event: Any, ctx: Any, decided: Optional[Decision], file: str, problem
     (not in an admin session)."""
     try:
         if decided is not None and decided.permission == "deny":
+            if str((decided.facts or {}).get("kind") or "").startswith(("external", "wrap", "secret")):
+                return decided  # a refusal about an outside system or an identity says its own reason: the policy has nothing to do with it
             return replace(decided, reason=f"{decided.reason}\n{messages.text('gate.policy.unreadable.note', file=file, problem=problem)}")
         if ctx.admin:
             return decided

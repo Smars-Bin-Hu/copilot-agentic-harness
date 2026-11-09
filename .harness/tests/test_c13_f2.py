@@ -1243,6 +1243,7 @@ class BrokenGatePolicyTests(TaskCase):
         self.break_it()
         out = self.term("sqlcmd -S localhost,14332 -Q 'SELECT 1'")
         self.assertEqual(out.get("permissionDecision"), "deny")  # no connection: the F2b answer, not the policy one
+        self.assertNotIn("gate.json", out["permissionDecisionReason"])
 
     def test_other_tools_are_left_alone(self) -> None:
         self.break_it()

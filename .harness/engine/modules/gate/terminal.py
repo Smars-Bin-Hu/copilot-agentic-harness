@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Callable, List, Optional, Pattern, Tuple
 
+from . import shellwords
 from .policy import Compiled
 
 # (permission, why)
@@ -109,12 +110,18 @@ def after_cd(text: str) -> Optional[str]:
 
 
 def _texts(command: str) -> List[str]:
-    text = normalize(command)
-    try:
-        moved = after_cd(text)
-    except Exception:  # noqa: BLE001 - the plain text is still checked
-        moved = None
-    return [text, moved] if moved and moved != text else [text]
+    """The texts the write rules are matched against: the line, and the line with the paths after a `cd` written out. A line with a PowerShell escape in it (`` r`m ``, `` .harness/eng`ine ``) is also read with the escape
+    taken away: that is what PowerShell runs (1.7.38, C13 FR3)."""
+    out: List[str] = []
+    plain = shellwords.dialect(command, "power")
+    for source in [command] + ([plain] if plain else []):
+        text = normalize(source)
+        try:
+            moved = after_cd(text)
+        except Exception:  # noqa: BLE001 - the plain text is still checked
+            moved = None
+        out += [text, moved] if moved and moved != text else [text]
+    return out
 
 
 def _first(command: str, rules: List[Tuple[Pattern[str], str]]) -> Optional[str]:
@@ -167,6 +174,17 @@ def cut_short(segment: str) -> bool:
 
 
 def check(command: str, compiled: Compiled, judged: Optional[Callable[[str], bool]] = None) -> Optional[Verdict]:
+    """`("deny", why)`, `("ask", why)` or None; the line, and the line read as PowerShell reads it when it has a backtick in it (1.7.38, C13 FR3): a deny of either stands."""
+    verdict = _check(command, compiled, judged)
+    plain = shellwords.dialect(command, "power")
+    if plain:
+        other = _check(plain, compiled, judged)
+        if other is not None and (verdict is None or (other[0] == "deny" and verdict[0] != "deny")):
+            return other
+    return verdict
+
+
+def _check(command: str, compiled: Compiled, judged: Optional[Callable[[str], bool]] = None) -> Optional[Verdict]:
     """`("deny", why)`, `("ask", why)` or None. Deny rules come first.
 
     `judged` (1.7.38): says of one command of the line whether a system the gate knows has judged it. The `ask` rule of the network does not ask again for a web call that was judged (`curl`, `wget`,

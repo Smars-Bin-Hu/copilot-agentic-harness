@@ -27,7 +27,7 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, scriptcheck, targetfault, terminal
+from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, scriptcheck, shellwords, targetfault, terminal
 from . import policy as gate_policy
 from .policy import POLICY_NAME, Compiled, validate_policy
 
@@ -620,10 +620,11 @@ def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
         if target == secret:
             return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
     if event.tool_kind == "terminal" and event.command:
-        text = event.command
-        named = {name for name in secret_names(ctx) if re.search(r"(?<![\w])" + re.escape(name), text)}
-        if SECRET_FILE.search(text) or DUMP_ALL.search(text) or (named and not named <= owned_names(event, ctx)):
-            return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
+        plain = shellwords.dialect(event.command, "power")  # 1.7.38 (C13 FR3): a PowerShell escape (`` cat .harness/.e`nv ``) hides the name from the text: the line is read with it taken away too
+        for text in [event.command] + ([plain] if plain else []):
+            named = {name for name in secret_names(ctx) if re.search(r"(?<![\w])" + re.escape(name), text)}
+            if SECRET_FILE.search(text) or DUMP_ALL.search(text) or (named and not named <= owned_names(event, ctx)):
+                return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
     return None
 
 

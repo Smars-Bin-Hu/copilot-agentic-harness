@@ -14,7 +14,7 @@ from typing import Any, List, Optional, Tuple
 
 from core import messages
 
-from . import external
+from . import external, shellwords
 from .gitcmd import _name, join_lines, split_segments
 
 _CODE_RUNS = re.compile(r"subprocess|os\.system|popen|\bexec|spawn|\bsystem\s*\(|check_output|check_call|runpy|cli\.main|import cli\b|from cli\b|require\(['\"]child_process|`", re.IGNORECASE)
@@ -23,8 +23,11 @@ JSON_FLAG = "--json"  # the one option the command line takes anywhere (cli.py)
 
 
 def _texts(command: str) -> List[str]:
-    """The line, the command strings a shell is given inside it, and the bodies of here-documents."""
-    every = [command] + external.nested(command)
+    """The line, the command strings a shell is given inside it, and the bodies of here-documents. A line with a PowerShell escape in it (`` harness task cl`ose ``) is also read with the escape taken away: that is the command
+    PowerShell runs (1.7.38, C13 FR3)."""
+    plain = shellwords.dialect(command, "power")
+    lines = [command] + ([plain] if plain else [])
+    every = [text for line in lines for text in [line] + external.nested(line)]
     found = list(every)
     for text in every:
         _plain, bodies = external._heredocs(join_lines(text))

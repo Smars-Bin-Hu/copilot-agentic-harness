@@ -35,8 +35,9 @@ from core.systems import (  # noqa: F401 - the names the handler, doctor and the
     ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, by_address, clis, reach, run_probe, validate, warnings,
 )
 
-from . import buildtools, pin
-from .gitcmd import LEADING_KEYWORDS, MAX_DEPTH, READ_ONLY as READ_ONLY_GIT, SEPARATORS, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
+from . import buildtools, pin, shellwords
+from .gitcmd import LEADING_KEYWORDS, MAX_DEPTH, READ_ONLY as READ_ONLY_GIT, SEPARATORS, SHELLS, WRAPPERS, _is_environment, _name, head_index as _head_index, join_lines, shell_code, split_segments
+from .shellwords import quote as shlex_quote
 
 
 @dataclass(frozen=True)
@@ -172,7 +173,7 @@ def _owner(systems: Dict[str, Any], names: List[str], args: str) -> Optional[str
     return best or fallback
 
 
-INTERPRETERS = frozenset("python python3 py node bash sh zsh dash pwsh powershell ruby perl".split())
+INTERPRETERS = shellwords.INTERPRETERS  # one list, in shellwords.py: where the gate reads the words of a shell
 _SCRIPT_EXTENSIONS = (".py", ".js", ".mjs", ".ps1", ".sh", ".rb", ".pl", ".cmd", ".bat")
 MAX_SCRIPT_BYTES = 200 * 1024
 _REDIRECT = re.compile(r"^\d*(?:>>?|<<-?|<)$")  # a redirection operator alone: its file (or here-document tag) is the next word
@@ -207,82 +208,9 @@ def _plain_name(token: str) -> str:
     return name
 
 
-def _is_interpreter(token: str) -> bool:
-    name = _name(token)
-    return name in INTERPRETERS or bool(re.fullmatch(r"python\d(?:\.\d+)?", name))
-
-
-def _family(token: str) -> str:
-    name = _name(token)
-    if name in ("bash", "sh", "zsh", "dash", "fish"):
-        return "shell"
-    if name in ("pwsh", "powershell"):
-        return "power"
-    if name in ("node",):
-        return "node"
-    if name in ("ruby", "perl"):
-        return "ruby"
-    return "python"
-
-
-def _interp(tokens: List[str], at: int) -> Tuple[str, Optional[int]]:
-    """What the interpreter at `tokens[at]` is given (1.7.25): `("script", i)` a file, `("module", i)` a module (`-m`), `("code", i)` code in the line (`-c`, `-e`, `-Command`,
-    `-EncodedCommand`), or `("stdin", None)` nothing: it reads its code from the pipe or the terminal."""
-    family = _family(tokens[at])
-    index = at + 1
-    while index < len(tokens):
-        word = tokens[index]
-        low = word.lower()
-        if word in ("-", "<<<"):
-            return "stdin", None
-        if family == "shell":
-            if word in ("-o", "+o"):
-                index += 2
-                continue
-            if word == "-s":
-                return "stdin", None
-            if re.fullmatch(r"-[A-Za-z]*c", word):
-                return "code", index
-            if word.startswith("-") or word.startswith("+"):
-                index += 1
-                continue
-        elif family == "power":
-            flag = low.lstrip("-/") if word[:1] in "-/" else ""
-            if flag:
-                if "command".startswith(flag) or _ENCODED.startswith(flag) or flag == "ec":
-                    return "code", index
-                if "file".startswith(flag):
-                    return ("script", index + 1) if index + 1 < len(tokens) else ("stdin", None)
-                index += 2 if flag in ("executionpolicy", "ep", "windowstyle", "w", "workingdirectory", "wd", "inputformat", "outputformat", "version", "v", "configurationname", "settingsfile") else 1
-                continue
-        elif family == "node":
-            if low in ("-e", "-p", "--eval", "--print"):
-                return "code", index
-            if low in ("-r", "--require"):
-                index += 2
-                continue
-            if word.startswith("-"):
-                index += 1
-                continue
-        elif family == "ruby":
-            if low == "-e" or re.fullmatch(r"-[0-9A-DF-HJ-Za-hj-z]*[eE]", word):  # `-ne`, `-pe`, `-lane` (not `-i`: it takes the rest of the word as a suffix)
-                return "code", index
-            if word.startswith("-"):
-                index += 1
-                continue
-        else:
-            if word == "-c":
-                return "code", index
-            if word == "-m":
-                return ("module", index + 1) if index + 1 < len(tokens) else ("stdin", None)
-            if word in ("-X", "-W", "-Q") or low in ("-w",):
-                index += 2
-                continue
-            if word.startswith("-"):
-                index += 1
-                continue
-        return "script", index
-    return "stdin", None
+_is_interpreter = shellwords.is_interpreter
+_family = shellwords.family
+_interp = shellwords.interp
 
 
 def _script_index(tokens: List[str], at: int) -> Optional[int]:
@@ -358,13 +286,6 @@ def _mentioned(text: str, names: List[str]) -> str:
         if plain in names:
             return plain
     return ""
-
-
-def _head_index(tokens: List[str]) -> Optional[int]:
-    for index, token in enumerate(tokens):
-        if not (_name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit()):
-            return index
-    return None
 
 
 def _is_harness(tokens: List[str], at: int) -> bool:
@@ -624,10 +545,6 @@ def _substitutions(token: str) -> List[str]:
     return found
 
 
-def shlex_quote(token: str) -> str:
-    return "'" + token.replace("'", "'\"'\"'") + "'" if re.search(r"[\s;&|()$`<>\"'\\]", token) or not token else token
-
-
 NOTE_CHARS = 100
 
 
@@ -716,8 +633,8 @@ def _line_writer(line: str, inputs: List[str], ctx: "_Ctx", allowed: set, depth:
         if name in allowed:
             continue
         if name in SHELLS or name == "eval":
-            inner = _evaluated(args) if name == "eval" else next((" ".join(rest[i + 1:]) if len(rest) > i + 2 else rest[i + 1] for i, item in enumerate(rest) if item.lower() in SHELL_FLAGS and i + 1 < len(rest)), None)
-            if inner is None or depth >= MAX_DEPTH or _line_writer(inner, inputs, ctx, allowed, depth + 1):
+            inners = (_evaluated(args) or []) if name == "eval" else (shell_code(args) or (0, []))[1]  # the command lines the shell is given, as `shellwords.readings` reads them (1.7.38, C13 FR3)
+            if not inners or depth >= MAX_DEPTH or any(_line_writer(inner, inputs, ctx, allowed, depth + 1) for inner in inners):
                 return shown
             continue
         if _starts_cli(args, at):
@@ -1022,8 +939,10 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             continue
         if start is not None:
             continue  # the program of a listed system, none of whose systems owns this call: judged, and nothing to hold
-        if _evaluated(tokens) is not None and depth < MAX_DEPTH:  # `eval "<command>"`: the string is the call
-            _scan(_evaluated(tokens) or "", systems, programs, depth + 1, found, variables, ctx)
+        evaluated = _evaluated(tokens)
+        if evaluated and depth < MAX_DEPTH:  # `eval "<command>"`: the string is the call; the words are read as they were given and as eval joins them
+            for inner in evaluated:
+                _scan(inner, systems, programs, depth + 1, found, variables, ctx)
             continue
         head = _head(tokens)
         if head is not None and head.startswith("$"):  # a program the gate cannot read the name of: it may be a listed one
@@ -1044,7 +963,8 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
         checked = len(tokens)
         shelled = _shell_string(tokens) if depth < MAX_DEPTH else None
         if shelled is not None:
-            _scan(shelled[1], systems, programs, depth + 1, found, variables, ctx)
+            for inner in shelled[1]:  # the words after `-c` as they were given, as the shell that gets them joins them, and without its escape (`shellwords.readings`): every reading is scanned, the strictest answer stands
+                _scan(inner, systems, programs, depth + 1, found, variables, ctx)
             checked = shelled[0] + 1  # the command string was read as a command line
         if ctx.hold:
             _account(tokens[:checked], raw, names, feeds, ctx, found)
@@ -1253,9 +1173,7 @@ def _head_is_interpreter(tokens: List[str]) -> bool:
 def _encoded(tokens: List[str]) -> bool:
     """PowerShell given an encoded command (`-EncodedCommand`, `-enc`, `-e`: any start of the word)."""
     at = _head_index(tokens)
-    if at is None or _name(tokens[at]) not in ("pwsh", "powershell"):
-        return False
-    return any(item[:1] in "-/" and len(item) > 1 and (_ENCODED.startswith(item[1:].lower()) or item[1:].lower() == "ec") for item in tokens[at + 1:])
+    return at is not None and shellwords.encoded(tokens, at)
 
 
 def _account(tokens: List[str], raw: List[str], names: List[str], feeds: bool, ctx: _Ctx, found: List[Action]) -> None:
@@ -1329,45 +1247,54 @@ def _code_files(code: str) -> List[str]:
     return [name for name in dict.fromkeys(_CODE_FILE.findall(code or "")) if "/" in name or "\\" in name or "." in name]  # a bare name (`require('fs')`) is a module, not a file
 
 
-def _evaluated(tokens: List[str]) -> Optional[str]:
+def _evaluated(tokens: List[str]) -> Optional[List[str]]:
+    """The command lines `eval` is given, or None: its words as they were given and as `eval` joins them with spaces (a `;` inside one word stays inside it in the first reading, and splits in the second)."""
     head = _head(tokens)
     if head is None or _name(head) != "eval":
         return None
-    return " ".join(tokens[tokens.index(head) + 1:])
+    return shellwords.readings(tokens[tokens.index(head) + 1:], "eval")
 
 
-def _shell_string(tokens: List[str]) -> Optional[Tuple[int, str]]:
-    """`(index of the flag, the command string)` when this segment gives a shell a command line (`bash -c '...'`, `pwsh -Command '...'`, `pwsh -com '...'`, `cmd /c ...`); else None."""
-    at = _head_index(tokens)
-    if at is not None and _is_interpreter(tokens[at]) and _family(tokens[at]) in ("shell", "power") and not _encoded(tokens):
-        kind, index = _interp(tokens, at)
-        if kind == "code" and index is not None and index + 1 < len(tokens):
-            return index, (" ".join(tokens[index + 1:]) if len(tokens) > index + 2 else tokens[index + 1])
-    shell_at = next((i for i, item in enumerate(tokens) if _name(item) in SHELLS), None)
-    if shell_at is not None:
-        for i in range(shell_at + 1, len(tokens)):
-            if tokens[i].lower() in SHELL_FLAGS and i + 1 < len(tokens):
-                return i, (" ".join(tokens[i + 1:]) if len(tokens) > i + 2 else tokens[i + 1])
-    return None
+def _shell_string(tokens: List[str]) -> Optional[Tuple[int, List[str]]]:
+    """`(index of the flag, the command lines the shell is given)` when this segment gives a shell a command line (`bash -c '...'`, `pwsh -Command '...'`, `pwsh -com '...'`, `cmd /c ...`, `ksh -c`); else None. See `gitcmd.shell_code`."""
+    return shell_code(tokens)
+
+
+def _wrapped(tokens: List[str]) -> List[str]:
+    """The command lines this segment gives to a shell, to `eval`, to `harness as` or to `harness wait --run`: what the gate reads as a line of its own (`nested`)."""
+    shelled = shell_code(tokens)
+    if shelled:
+        return shelled[1]
+    evaluated = _evaluated(tokens)
+    if evaluated:
+        return evaluated
+    wrapped = as_run(tokens)
+    if wrapped:
+        return [wrapped[1]] if wrapped[1].strip() else []
+    waited = _wait_run(tokens)
+    return [waited] if waited else []
+
+
+def _too_deep(tokens: List[str], names: List[str]) -> Optional[Action]:
+    """A wrapper (a shell with a command line, `eval`, `harness as`, `harness wait --run`) nested deeper than the gate reads, whose command line names a governed program: refused, never passed (1.7.38, C13 FR3). The command
+    cannot be judged, and a program the gate cannot judge is not let through by being hidden under one more wrapper. A command line that names none is no call."""
+    inner = "\n".join(_wrapped(tokens))
+    hit = _mentioned(inner, names) if inner else ""
+    return _hidden("deep", " ".join(tokens), program=hit) if hit else None
 
 
 def nested(command: str, depth: int = 0) -> List[str]:
     """The command strings a shell is given inside a line (1.7.38, C13 F2): `bash -c '...'`, `pwsh -Command '...'`, `eval '...'`, `harness as x -- ...`, `harness wait --run '...'`, and the ones inside those. The gate
-    judges each of them as it judges a bare line (the rules of the terminal too), so a call wrapped in `pwsh -Command` is no freer than the same call written alone."""
+    judges each of them as it judges a bare line (the rules of the terminal too), so a call wrapped in `pwsh -Command` is no freer than the same call written alone. A shell given several words gives each reading of them (`shellwords.readings`)."""
     found: List[str] = []
     if depth >= MAX_DEPTH or not command.strip():
         return found
     text, _bodies = _heredocs(join_lines(command))
     for tokens in split_segments(text):
-        shelled = _shell_string(tokens)
-        inner = shelled[1] if shelled else _evaluated(tokens)
-        if inner is None:
-            wrapped = as_run(tokens)
-            inner = wrapped[1] if wrapped else _wait_run(tokens)
-        if inner:
+        for inner in _wrapped(tokens):
             found.append(inner)
             found.extend(nested(inner, depth + 1))
-    return found
+    return list(dict.fromkeys(found))
 
 
 # Commands whose output is text the gate can read in the line (what they print is what stands in the line, or a file it reads): a shell that runs what they print is not a hidden call.
@@ -1533,6 +1460,11 @@ def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: 
             context.code.append((re.compile(r"(?<![\w.])(?:" + "|".join(re.escape(one) for one in words) + r")(?![\w])", re.IGNORECASE), name))
             context.reasons[name] = messages.pick(system["blocked"])
     _scan(command, systems, programs, 0, found, ctx=context)
+    plain = shellwords.dialect(command, "power")  # 1.7.38 (C13 FR3): a line with a PowerShell escape in it (`` s`qlcmd ``) is also read with the escape taken away: that is what PowerShell runs. The strictest answer stands
+    if plain:
+        again = _Ctx(root, cwd, hold=unseen, folder=folder, line=plain)
+        again.quiet, again.direct, again.code, again.reasons = context.quiet, context.direct, context.code, context.reasons
+        _scan(plain, systems, programs, 0, found, ctx=again)
     return [(action, HUMAN if action.unseen else DENY if action.why == "command" or action.zone in ("refuse", "unpinned", "blocked") else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
 
 

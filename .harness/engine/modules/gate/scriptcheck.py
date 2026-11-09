@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import guardrails, messages
 
 from . import external
+from . import shellwords
 from .gitcmd import join_lines, split_segments
 
 MAX_BYTES = 200 * 1024
@@ -402,7 +403,8 @@ def refusal(command: str, root: Any, cwd: str, folder: Any, policy: Dict[str, An
         names = names_of(policy, admin)
         ctx = external._Ctx(root, cwd, hold=True, folder=folder, line=command)  # noqa: SLF001
         in_guard = False
-        for text in [command] + external.nested(command):
+        plain = shellwords.dialect(command, "power")  # a PowerShell escape in the line (`` .harness/eng`ine ``): the line is read with it taken away too (1.7.38, C13 FR3)
+        for text in [command] + external.nested(command) + ([plain] + external.nested(plain) if plain else []):
             plain, bodies = external._heredocs(join_lines(text))  # noqa: SLF001
             for tokens in split_segments(plain):
                 tokens = external._without_redirects(external._setting_words(tokens))  # noqa: SLF001

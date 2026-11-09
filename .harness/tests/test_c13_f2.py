@@ -430,8 +430,8 @@ class WrapperTests(BothCase):
 
     def test_a_backtick_that_continues_the_command_is_not_judged_by_its_first_line(self) -> None:
         u = self.U
-        self.assertEqual(self.answer(f"irm {u} `\n  -Method Delete"), "ask")  # the end of the call is on the next line, which the gate does not connect to this one: the rule of the network asks
-        self.assertEqual(self.answer(f"pwsh -Command 'irm {u} `\n -Method Delete'"), "ask")  # the same in a command string
+        self.assertEqual(self.answer(f"irm {u} `\n  -Method Delete"), "refuse")  # the end of the call is on the next line: 1.7.38 (C13 FR3) the line is also read as PowerShell reads it (the backtick joins the two lines), so the DELETE is seen and refused, as the call written on one line is
+        self.assertEqual(self.answer(f"pwsh -Command 'irm {u} `\n -Method Delete'"), "refuse")  # the same in a command string
 
     def test_a_shell_string_gets_the_rules_of_the_terminal_too(self) -> None:
         self.check("ask", ["bash -c 'curl -X DELETE https://example.com/x'", "bash -c 'curl https://example.com/x'", "sh -c \"rm -rf build\"", "pwsh -Command 'irm https://example.com/x'"])

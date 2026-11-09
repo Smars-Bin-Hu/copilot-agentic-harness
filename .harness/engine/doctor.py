@@ -276,7 +276,13 @@ def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -
             report.ok(say("doctor.policy.ok", name=policy_name))
         except Exception as error:
             diagnose = getattr(module, "diagnose", None)
-            if policy_name == "gate" and callable(diagnose):  # 1.7.38 (C13 F2c): which file, what is wrong, and what the gate does meanwhile
+            readable = True
+            if policy_name == "gate" and callable(diagnose):  # 1.7.38 (C13 F2c): a policy the gate cannot read (it runs on its built-in copy then): which file, what is wrong, and what the gate does meanwhile
+                try:
+                    module.validate_policy(config.load_policy(root, policy_name), floor=False)
+                except Exception:  # noqa: BLE001
+                    readable = False
+            if not readable:
                 file, problem = diagnose(root, error)
                 report.error(say("doctor.gate.policy_bad", file=file, error=problem))
             else:

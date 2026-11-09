@@ -540,11 +540,15 @@ class GateHookTests(HarnessTestCase):
 
     # --- fail-open, override, log -------------------------------------------------------------
 
-    def test_a_broken_gate_policy_fails_open_and_is_logged(self) -> None:
+    def test_a_broken_gate_policy_does_not_fail_open(self) -> None:
+        """1.7.38 (C13 F2c): turned over. It asserted `{}` (the handler raised, the hook counted that as no opinion, a guardrail file was written) and a `module:gate` line in the error log. The gate runs on its built-in copy now: it answers, and
+        nothing is logged as a failure of the module. `test_c13_f2.BrokenGatePolicyTests` has the rest."""
         path = self.root / ".harness" / "policies" / "gate.json"
         path.write_text("{ not json", encoding="utf-8")
-        self.assertEqual(self.pre("create_file", {"filePath": self.path(GUARD), "content": ""}), {})
-        self.assertTrue(any("module:gate" in item["where"] for item in self.log_lines("hook-errors.jsonl")))
+        output = self.pre("create_file", {"filePath": self.path(GUARD), "content": ""})
+        self.assertEqual(self.decision(output), "deny")
+        self.assertIn("gate.json", output["permissionDecisionReason"])
+        self.assertFalse(any("module:gate" in item["where"] for item in self.log_lines("hook-errors.jsonl")))
 
     def test_an_override_can_add_a_guardrail_path(self) -> None:
         override = self.root / ".harness" / "policies" / "gate.override.json"

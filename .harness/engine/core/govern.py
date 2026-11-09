@@ -76,10 +76,50 @@ def kb_pack_folders(root: Path) -> List[Path]:
         return []
 
 
+LEDGER = "kb-programs.json"  # in `.harness/runtime/`: `{pack: [programs]}` of the company tool packs the gate saw in a knowledge base registered somewhere else, the last time the list of knowledge bases could be read
+
+
+def _ledger(root: Path) -> Dict[str, List[str]]:
+    try:
+        from core.paths import runtime_dir
+
+        found = json.loads((runtime_dir(root) / LEDGER).read_text(encoding="utf-8"))
+        return {str(pack): [str(one) for one in names if isinstance(one, str) and one] for pack, names in found.items() if isinstance(names, list)} if isinstance(found, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def remember(root: Path) -> None:
+    """(1.7.38, C13 F2c) While the list of knowledge bases can be read: keep the programs of the company packs in a knowledge base registered somewhere else (not `knowledge-base/` of this folder, which is always seen) in
+    `.harness/runtime/kb-programs.json`, and drop the file when there are none. When the list cannot be read later, even a file with nothing left in it, the programs are still known (`kb_systems`). Written only when it changes.
+    Called by the gate; never raises, never changes what the gate decides."""
+    try:
+        from core import targets, toolpacks
+        from core.paths import runtime_dir
+
+        if targets.kb_fault(root) is not None:
+            return
+        folder = targets.company_folder(root)
+        default = root / targets.KB_DIR / targets.COMPANY_DIR
+        base = folder / toolpacks.COMPANY_PACKS if folder is not None and folder.resolve() != default.resolve() else None
+        known = {pack.name: sorted(_pack_programs(pack)) for pack in sorted(base.iterdir()) if pack.is_dir()} if base is not None and base.is_dir() else {}
+        known = {pack: names for pack, names in known.items() if names}
+        if known == _ledger(root):
+            return
+        path = runtime_dir(root) / LEDGER
+        if not known:
+            path.unlink(missing_ok=True)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(known, indent=1) + "\n", encoding="utf-8")
+    except Exception:  # noqa: BLE001 - a note for later must not get in the way of a call
+        pass
+
+
 def kb_systems(root: Path) -> Dict[str, Any]:
     """(1.7.38, C13 F2c) For the gate: when the list of knowledge bases cannot be read, one system `broken-kb-<pack>` for each company tool pack found in the text of the target policy files (`kb_pack_folders`) that owns every
-    program of the pack, so a call of one waits for the user and the card names the file and the fault. The gate cannot place those programs otherwise: the packs are in a knowledge base it does not see. `{}` when the list is fine or no
-    pack was found (the fault is then `harness doctor`'s). Never raises."""
+    program of the pack, so a call of one waits for the user and the card names the file and the fault. The gate cannot place those programs otherwise: the packs are in a knowledge base it does not see. A pack the gate saw while the list could
+    be read (`remember`) is held too, even when no file names its folder any more. `{}` when the list is fine or no pack was found or remembered (the fault is then `harness doctor`'s). Never raises."""
     try:
         from core import targets
 
@@ -87,10 +127,14 @@ def kb_systems(root: Path) -> Dict[str, Any]:
         if fault is None:
             return {}
         out: Dict[str, Any] = {}
+        said = f"{fault[0]}: {fault[1]} (the list of knowledge bases: the tool pack %s cannot be placed)"
         for folder in kb_pack_folders(root):
             names = sorted(_pack_programs(folder))
             if names:
-                out[f"broken-kb-{folder.name}"] = {"reach": {"cli": names}, "env": "none", "toolpack": folder.name, "broken": f"{fault[0]}: {fault[1]} (the list of knowledge bases: the tool pack {folder.name} cannot be placed)"[:400]}
+                out[f"broken-kb-{folder.name}"] = {"reach": {"cli": names}, "env": "none", "toolpack": folder.name, "broken": (said % folder.name)[:400]}
+        for pack, names in _ledger(root).items():  # the packs the gate saw before the list could not be read, wherever they were
+            if f"broken-kb-{pack}" not in out and names:
+                out[f"broken-kb-{pack}"] = {"reach": {"cli": sorted(set(names))}, "env": "none", "toolpack": pack, "broken": (said % pack)[:400]}
         return out
     except Exception:  # noqa: BLE001
         return {}

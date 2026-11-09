@@ -1321,8 +1321,8 @@ class KbListCase(AdoCase):
         (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": self.CONNECTIONS}), encoding="utf-8")
         self.register()
 
-    def register(self, text: str = "") -> None:
-        (self.root / ".harness/policies/target.override.json").write_text(text or json.dumps({"repos": {"kb": {"path": str(self.kb), "knowledge_base": True}}}), encoding="utf-8")
+    def register(self, text: Any = None) -> None:
+        (self.root / ".harness/policies/target.override.json").write_text(json.dumps({"repos": {"kb": {"path": str(self.kb), "knowledge_base": True}}}) if text is None else text, encoding="utf-8")
 
     def mend(self) -> None:
         self.register()
@@ -1374,11 +1374,43 @@ class KbListTests(KbListCase):
         self.assertTrue(targets.kb_fault(self.root))
         self.held(self.READ)
 
+    LEDGER = ".harness/runtime/kb-programs.json"
+
+    def test_a_pack_the_gate_saw_is_held_even_when_the_file_names_no_folder_any_more(self) -> None:
+        self.check("allow", [self.READ])  # the list is fine: the gate notes the programs of the pack in the knowledge base registered elsewhere
+        self.assertEqual(json.loads((self.root / self.LEDGER).read_text(encoding="utf-8")), {"demotracker": ["demotracker", "demotracker-mcp"]})
+        for wiped in ("{ <<<< all gone", "", "[]", '{"repos": 5}'):
+            self.register(wiped)
+            self.assertTrue(targets.kb_fault(self.root), wiped)
+            self.held(self.READ)
+            self.held(self.DELETE)
+        report = doctor.Report()
+        doctor.check_targets(report, self.root)
+        self.assertTrue([line for line in report.lines if line.startswith("[ERROR]") and "demotracker" in line])  # doctor names the program it holds
+        self.mend()
+        self.check("allow", [self.READ])
+        self.check("allow", ["ls", "git status"])
+
+    def test_the_note_is_kept_up_to_date_and_dropped_when_nothing_is_registered_elsewhere(self) -> None:
+        self.check("allow", [self.READ])
+        self.assertTrue((self.root / self.LEDGER).is_file())
+        self.register(json.dumps({"repos": {}}))  # the knowledge base is not registered any more
+        self.check("allow", ["ls"])
+        self.assertFalse((self.root / self.LEDGER).exists())
+        self.register("{ <<<< all gone")  # nothing is known now: the blind spot of a gate that never saw the pack
+        self.check("allow", [self.READ])
+
+    def test_nothing_is_written_when_the_only_knowledge_base_is_the_folders_own(self) -> None:
+        shutil.rmtree(self.kb)
+        self.register(json.dumps({"repos": {}}))
+        self.check("allow", ["ls", "git status"])
+        self.assertFalse((self.root / self.LEDGER).exists())
+
     def test_a_list_that_names_no_folder_leaves_nothing_to_hold_and_doctor_says_so(self) -> None:
         self.register("{ <<<< all gone")
         self.assertTrue(targets.kb_fault(self.root))
         self.assertEqual(govern.kb_systems(self.root), {})
-        self.check("allow", [self.READ])  # the blind spot that stays (docs/12): the pack is in a folder no file names any more
+        self.check("allow", [self.READ])  # the blind spot that stays (docs/12): the gate never saw the pack and no file names its folder any more
         report = doctor.Report()
         doctor.check_targets(report, self.root)
         errors = [line for line in report.lines if line.startswith("[ERROR]")]

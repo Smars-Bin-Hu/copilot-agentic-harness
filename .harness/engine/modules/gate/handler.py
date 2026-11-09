@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 import re
 
-from core import calls, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
+from core import calls, govern, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
 from core import systems as systems_mod
 from core.paths import board_serve_port
 from core.context import Context
@@ -193,6 +193,7 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
         invalid = external.validate(systems) if systems else []
         if invalid:  # 1.7.38 (C13 F2): a list the gate cannot trust judges nothing, so a line that names a program a tool pack governs is refused (the old way passed every call)
             return failclosed.refusal(ctx.root, event.command, invalid[0], "invalid")
+        govern.remember(ctx.root)  # 1.7.38 (C13 F2c): a note for the day the list of knowledge bases cannot be read
         bare = connections.unconnected(ctx.root, systems)  # 1.7.38 (C13 F2b): the programs a tool pack declares that no connection lists: a call of one is refused, it names no place to be judged for
         if not systems and not bare:
             return None

@@ -11,8 +11,8 @@ Monday morning. The nightly orders load failed on a duplicate id. You open the C
 What happens next, and what you do:
 
 1. **The agent opens a task.** A task is one folder for this job. It asks you two or three short questions (what kind of job, which repository). You answer in the chat.
-2. **It writes down what it understood.** The requirement goes into a file. You read it on a web page and press **confirm requirement**. Nothing else happens until you agree it is what you meant.
-3. **It reads your knowledge base and the code,** and writes a plan: which files change, how, and how to check. It stops there. You read the plan on the page and press **approve plan**, then type a short code. Until you do, the agent cannot write a single line in the repository.
+2. **It writes down what it understood.** The requirement goes into a file. You read it on a web page and press **Confirm requirement**. Nothing else happens until you agree it is what you meant.
+3. **It reads your knowledge base and the code,** and writes a plan: which files change, how, and how to check. It stops there. You read the plan on the page and press **Approve plan**, then type a short code. Until you do, the agent cannot write a single line in the repository.
 4. **It works in a safe copy.** The changes go into the task's own folder, not into the real repository.
 5. **A second agent checks the work.** You asked for it with `[review]=1`. The checker has not seen how the first agent thought; it reads only the requirement and the result. It finds one problem. The first agent fixes it, and the check is run again.
 6. **It prepares the write-back.** You see the whole diff before anything moves. You press **approve write-back** and type the code. The changes land on a new branch in the repository, uncommitted. You look at the branch and commit it yourself.

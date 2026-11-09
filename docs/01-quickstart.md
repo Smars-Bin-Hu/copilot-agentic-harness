@@ -118,14 +118,14 @@ One agent; you confirm the requirement, you approve the plan, and you approve th
 
 1. In Copilot Chat, with the default agent, say clearly what you want done and which target repository changes. Add `[review]=1` for an independent check.
 2. The agent asks you a few questions, then makes a new task, writes the requirement as it understands it into `REQ.md`, and gives you the address of the task's page. If the requirement came as documents (Word, Excel, PDF), drop them on the **Intake** tab of the page: they are turned into small Markdown and CSV files with no AI, you trim them, and the agent reads those (see [Preparing an intake](09-intake.md)). Reference code goes in `REF/`.
-3. On the page, open the **Requirement** tab and read it. If it says what you meant, press **confirm requirement** at the top of the page and type the code the page shows. If not, tell the agent what is wrong.
+3. On the page, open the **Requirement** tab and read it. If it says what you meant, press **Confirm requirement** at the top of the page and type the code the page shows. If not, tell the agent what is wrong.
 4. The agent reads the knowledge base, writes the plan, then stops. The page shows it in the **Plan** tab.
-5. You read the plan. If you agree, press **approve plan** and type the code. To change the plan, tell the agent, and approve after the change. After the approval, tell the agent in the chat ("approved"): the approval itself does not tell it, and the page reminds you.
+5. You read the plan. If you agree, press **Approve plan** and type the code. To change the plan, tell the agent, and approve after the change. After the approval, tell the agent in the chat ("approved"): the approval itself does not tell it, and the page reminds you.
 6. The agent fetches the files to change into `DEV/<repository>/<path>` with `task fetch` and changes them there. It can write the task folder only. The **Changes** tab shows what differs.
 7. With independent checks on, the agent runs `task review start`, then calls the reviewer. When it does not pass, the agent fixes things itself and checks again; it can go on only with enough passes. The verdicts are under `REVIEW/`.
 8. The agent runs `task promote --dry-run`. The **Changes** tab shows the whole diff of the write-back. If you agree, press **approve write-back** and type the code, then tell the agent.
 9. The agent runs `task promote`: in every target repository it makes a new branch `feature/<task name>` from main and writes the files into it, **without committing**.
-10. You read the diff, commit and open the PR yourself. The promote was your acceptance: when the agent has stopped and nothing else waits, the board closes the task by itself. A task that changes no repository (an RCA, a design, a test) ends with a short summary from the agent; its page shows **to accept** and you press **Accept and close** (or **Not yet**, and say what is missing). A question or a chore on a ticket is closed by the agent. You can also press **close** on the task's page any time. After the task is closed, the report is at `.workspace/reports/tasks/<task name>/report.md`, and the **Time and usage** page of the task shows where the time went.
+10. You read the diff, commit and open the PR yourself. The promote was your acceptance: when the agent has stopped and nothing else waits, the board closes the task by itself. A task that changes no repository (an RCA, a design, a test) ends with a short summary from the agent; its page shows **to accept** and you press **Accept and close** (or **Not yet**, and say what is missing). A question or a chore on a ticket is closed by the agent. You can also press **Close** on the task's page any time. After the task is closed, the report is at `.workspace/reports/tasks/<task name>/report.md`, and the **Time and usage** page of the task shows where the time went.
 
 Without the board, the same decisions are commands you run in **your own terminal**: `harness task confirm-req`, `harness task approve-plan` and `harness task approve-promote`, each with the code shown on the screen.
 
@@ -137,7 +137,7 @@ Open the board. One line per task: the kind, what it waits for from you, and for
 
 - **Filter and search**: buttons for all, waiting for you, working, quiet, no session, paused and closed (each with its count), a menu of kinds, and a search box.
 - **Sort**: click a column head; again to reverse; a third time to go back.
-- **Closed tasks** stay on the board (the newest 50), so you can look back. An **archive** button on each closed one moves it out of the repository, after you check where it goes; tick several to archive them together.
+- **Closed tasks** stay on the board (the newest 50), so you can look back. An **Archive** button on each closed one moves it out of the repository, after you check where it goes; tick several to archive them together.
 
 In a terminal, `harness task list` lists the tasks that are not closed (`--all` adds the closed ones).
 
@@ -192,8 +192,8 @@ The harness speaks English by default, and can speak Chinese. The setting covers
 - **A tool call is refused**: the reason says why and what to do next. The agent does it, or stops and tells you.
 - **The agent wants to run a git write command**: it is refused, and the reason has the whole command and a code. You run `harness approve-command` in your own terminal and type the code, and the agent runs the same command again (let through once only).
 - **The agent wants to change a file of a target repository directly**: refused. Only promote writes a target repository.
-- **An independent check keeps failing**: there are at most n + 2 checks; when they are used up, the agent stops. On the task's page you press **more checks** for more, or **waive checks** to let this version through (each with a code); in a terminal they are `harness task review extend` and `harness task review waive`.
-- **A promote fails partway**: it goes to `partial`, and the message lists the repositories that are written, failed and untouched. On the task's page you press **recover the repository** (with a code; in a terminal, `harness task recover`), then let the agent run `--dry-run` again.
+- **An independent check keeps failing**: there are at most n + 2 checks; when they are used up, the agent stops. On the task's page you press **More checks** for more, or **Waive checks** to let this version through (each with a code); in a terminal they are `harness task review extend` and `harness task review waive`.
+- **A promote fails partway**: it goes to `partial`, and the message lists the repositories that are written, failed and untouched. On the task's page you press **Recover the repository** (with a code; in a terminal, `harness task recover`), then let the agent run `--dry-run` again.
 - **A task is very big and takes many days**: type `/generic-goal-driven` to set up a goal, and after that `/generic-goal-driven continue` in every new session. Do not use it for everyday tasks.
 - **Seeing usage and the number of refusals**: `harness stats`.
 - **Changing the harness itself, or finding out why the harness went wrong**: ask the default agent (or type `/harness-admin`) and run `harness admin on` in the terminal as it tells you. When done, run `harness admin off`. See the admin part of [02-features.md](02-features.md).

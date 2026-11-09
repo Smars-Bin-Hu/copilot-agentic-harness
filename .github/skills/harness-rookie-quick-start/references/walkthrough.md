@@ -24,7 +24,7 @@ Afterwards give the user the address of the task's page, from the output of that
 
 Write what you understood from the user's sentence into `REQ.md`. Ask the user to open the **Requirement** tab of the task's page (the **Overview** tab holds the progress book, `TASK.md`). Say in one sentence each what they are for.
 
-Ask: "Did I get it right?" If the user says yes, ask them to press **confirm requirement** on the page and type the code. Only the user can do that: the harness fills the confirmation line, and you never do. If the user says no, fix `REQ.md` on the spot and ask again.
+Ask: "Did I get it right?" If the user says yes, ask them to press **Confirm requirement** on the page and type the code. Only the user can do that: the harness fills the confirmation line, and you never do. If the user says no, fix `REQ.md` on the spot and ask again.
 
 If the board is not running, the same is `harness task confirm-req` in a terminal.
 
@@ -67,7 +67,7 @@ You say what to change
   -> the changes are written to a new branch, not committed. Committing is yours to do
 ```
 
-Say it in three sentences: the agent never changes the real repository directly; before the changes you approve the plan; before the write-back you approve once more. After each approval the agent is not told by the approval itself. With the board linked to VS Code, press **send to agent** on the page; without it, the page gives a message to paste into the chat.
+Say it in three sentences: the agent never changes the real repository directly; before the changes you approve the plan; before the write-back you approve once more. After each approval the agent is not told by the approval itself. With the board linked to VS Code, press **Send to agent** on the page; without it, the page gives a message to paste into the chat.
 
 ### 9. Wrapping up
 

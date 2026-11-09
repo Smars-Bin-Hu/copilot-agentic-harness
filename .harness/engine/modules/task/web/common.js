@@ -193,7 +193,7 @@ function actionTitle(key) {
 }
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
-  const shown = extra && /(^|\s)big(\s|$)/.test(extra) ? label.charAt(0).toUpperCase() + label.slice(1) : label;  // the main buttons of a card start with a capital as Accept and close and Not yet do; the small ones of a list stay as they are (C12 N13)
+  const shown = label;  // every label of the board starts with a capital, big or small (the texts are written so: `board.action.*`)
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
   const hot = isHot(row, item);
   // While the agent is in the middle of a turn nothing is pressed on the page: a question about the result is a doubt, and the person decides when the answer is in

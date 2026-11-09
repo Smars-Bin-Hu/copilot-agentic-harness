@@ -527,7 +527,7 @@ class PromoteTermTests(unittest.TestCase):
     def test_the_names_of_the_chat_templates_and_the_button(self) -> None:
         self.assertEqual(chatsend.TEMPLATES["go-promote"], "Promote (write-back repo) approved. Go on with the promote, then stop and report.")
         self.assertIn("promote (write-back repo)", chatsend.PLAIN["go-recover"])
-        self.assertEqual(self.table("en")["board.action.approve-promote"], "approve promote")  # a button: plain
+        self.assertEqual(self.table("en")["board.action.approve-promote"], "Approve promote")  # a button: plain words, a capital first letter
         self.assertEqual(self.table("en")["desk.go.recover"], chatsend.PLAIN["go-recover"])
 
 

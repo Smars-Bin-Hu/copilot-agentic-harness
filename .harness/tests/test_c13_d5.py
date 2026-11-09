@@ -120,5 +120,21 @@ class OldCodeTests(unittest.TestCase):
         self.assertFalse(hasattr(approval, "LEGACY_LENGTH"))
 
 
+class ButtonLabelTests(unittest.TestCase):
+    """C12 FC-8: every English label of a button of the board starts with a capital, big or small."""
+
+    def test_every_action_label_and_the_two_words_a_button_shows_start_with_a_capital(self) -> None:
+        import json
+
+        table = json.loads((ENGINE / "core" / "messages.en.json").read_text(encoding="utf-8"))
+        keys = [key for key in table if key.startswith("board.action.") and key != "board.action.busy"] + ["board.copied", "board.serve.working"]
+        self.assertGreaterEqual(len(keys), 25)
+        self.assertEqual([key for key in keys if not table[key][:1].isupper()], [])
+
+    def test_the_page_no_longer_changes_a_label_by_the_size_of_the_button(self) -> None:
+        source = (WEB / "common.js").read_text(encoding="utf-8")
+        self.assertNotIn("charAt(0).toUpperCase() + label.slice(1)", source)
+
+
 if __name__ == "__main__":
     unittest.main()

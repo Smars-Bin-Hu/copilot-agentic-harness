@@ -242,6 +242,7 @@
         ".harness/tests/test_c12_fd.py",
         ".harness/tests/test_connection_find.py",
         ".harness/tests/test_readyitems.py",
+        ".harness/tests/test_c13_d5.py",
         ".harness/tests/test_vsrestart.py",
         ".harness/tests/test_launchenv.py",
         ".harness/tests/test_ticketflow.py",

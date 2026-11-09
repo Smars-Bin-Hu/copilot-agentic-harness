@@ -3700,5 +3700,6 @@
   "accept.status.accepted": "done: accepted on the board on {date}",
   "accept.status.promoted": "done: promoted, and closed by the board on {date}",
   "accept.status.delivered": "delivered on {date}: waiting for the user to accept it on the board",
-  "desk.live.approval": "Waits for your approval"
+  "desk.live.approval": "Waits for your approval",
+  "connections.own.kind.first": "Choose the kind of connection first."
 }

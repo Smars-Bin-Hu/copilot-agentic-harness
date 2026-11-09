@@ -8,8 +8,11 @@ from pathlib import Path
 import support  # noqa: F401 - the engine on sys.path
 from support import HarnessTestCase
 
-from core import messages, systems
+from test_connections import KIND, ConnectionsCase
+
+from core import connections, messages, systems
 from modules.gate import rules
+from modules.task import boardserve
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
 WEB = ENGINE / "modules" / "task" / "web"
@@ -39,6 +42,35 @@ class VerbInChineseOnlyTests(HarnessTestCase):
     def test_the_card_hover_has_the_protocol_word(self) -> None:
         source = (WEB / "desk.js").read_text(encoding="utf-8")
         self.assertIn("item.named === false ? null : item.verb", source)
+
+
+class OwnConnectionFormTests(ConnectionsCase):
+    """The form of a connection of one's own: no kind is chosen for the person, and a type that says it has no environment hides the Environment field."""
+
+    def test_a_type_may_say_it_has_no_environment_and_nothing_else_about_it(self) -> None:
+        self.assertEqual(connections.type_problems(dict(KIND, env="none")), [])
+        self.assertTrue(any("env" in problem for problem in connections.type_problems(dict(KIND, env="dev"))))
+
+    def test_the_board_hands_the_page_the_environment_word_of_each_type(self) -> None:
+        from support import put_type
+
+        put_type(self.root, dict(KIND, type="tracker2", label="Tracker", env="none"))
+        kinds = boardserve.servers_view(self.root, False)["types"]
+        self.assertEqual((kinds["fakedb"]["env"], kinds["tracker2"]["env"]), ("", "none"))
+
+    def test_the_tickets_packs_of_the_harness_say_they_have_no_environment(self) -> None:
+        import json
+
+        for pack, name in (("ado", "azure-devops"), ("demotracker", "demotracker")):
+            kind = json.loads((ENGINE.parent / "toolpacks" / pack / "types" / f"{name}.json").read_text(encoding="utf-8"))
+            self.assertEqual((kind["env"], connections.type_problems(kind)), ("none", []))
+
+    def test_the_form_has_no_kind_chosen_and_hides_the_environment_for_a_type_without_one(self) -> None:
+        source = (WEB / "servers.js").read_text(encoding="utf-8")
+        self.assertIn('h("option", {value: ""}, t("connections.own.env.pick")), names.map(', source)  # a first, empty kind
+        self.assertIn('envField.hidden = noEnv', source)
+        self.assertIn('spec.env === "none"', source)
+        self.assertIn(".sv-field[hidden]{display:none}", (WEB / "setup.css").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

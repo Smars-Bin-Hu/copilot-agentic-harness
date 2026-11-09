@@ -3700,5 +3700,6 @@
   "accept.status.accepted": "做完：{date} 在看板上验收",
   "accept.status.promoted": "做完：已 promote，{date} 由看板关闭",
   "accept.status.delivered": "{date} 已交付：等用户在看板上验收",
-  "desk.live.approval": "等你批准"
+  "desk.live.approval": "等你批准",
+  "connections.own.kind.first": "先选连接的种类。"
 }

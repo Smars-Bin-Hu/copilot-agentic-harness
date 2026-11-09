@@ -55,6 +55,7 @@ Three words, used the same way on the board, in commands and in files:
 | `type` | yes | the type's name, used by connections (`"type": "azure-devops"`) |
 | `label` | yes | words for people |
 | `via` | no | `cli` (default: a program in the terminal) or `mcp` (an MCP server VS Code runs: no test, no `auth`; offered only where MCP is allowed) |
+| `env` | no | (1.7.38) `"none"`: the type has no environments (a ticket board). The form of a connection of one's own then does not ask for an environment and saves `none`; left out, the person must choose one |
 | `fields` | yes for `cli` | `{field: {"label", "placeholder", "default", "optional"}}`: what one connection of this type is (`host`, `port`; `org`, `project`) |
 | `auth` | yes for `cli` | `{way in: {"identity", "label", ...}}`; `identity` is `env` (variables, `"env": {VAR: field}`), `netonly` (a Windows account held by the VS Code window), `keyfile`, `tool` (the program keeps its own sign-in; `"login"`: the command that signs in; one sign-in per program, shared by every connection of the type, kept as `HARNESS_TOOL_<PROGRAM>_USER` in `.env`), or `token` (1.7.21: one secret, such as a personal access token; the form asks for it under the `label` of the auth entry, it is kept as `..._TOKEN`, and `"env": {VAR: "token"}` gives it to the program) |
 | `auth.<way>.needs` | no | `["az"]` (1.7.37): programs this way in needs, checked only for a connection that uses it (ado: `signin` needs `az`, `token` needs nothing). Found or not is shown with the pack's own `needs.programs` |

@@ -91,6 +91,8 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
     out = []
     if kind.get("via", "cli") not in VIAS:
         out.append(f"types.{name}: `via` is one of {', '.join(VIAS)}")
+    if kind.get("env") not in (None, "none"):  # 1.7.38: `"env": "none"` says the type has no environments (a ticket board)
+        out.append(f"types.{name}: `env` is `none` (a type with no environments), or left out")
     if not isinstance(kind.get("fields", {}), dict) or (kind.get("via") != "mcp" and not kind.get("fields")):
         out.append(f"types.{name}: `fields` names what a connection of this type needs (host, port, org, ...)")
     if kind.get("via") == "mcp":

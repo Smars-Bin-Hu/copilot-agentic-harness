@@ -393,12 +393,12 @@ def _heredocs(text: str) -> Tuple[str, List[Tuple[str, bool]]]:
     out: List[str] = []
     bodies: List[Tuple[str, bool]] = []
     index = 0
+    quote = ""  # 1.7.38 (C13 FR3): a quote that was opened on an earlier line is still open on this one (`-Q 'SELECT 1` + new line + `x <<EOF`): the `<<` inside it is text, and the lines after it are not a here-document that hides them
     while index < len(lines):
         line = lines[index]
         out.append(line)
         index += 1
         tags: List[Tuple[str, bool, bool]] = []
-        quote = ""
         at = 0
         while at < len(line):
             char = line[at]
@@ -945,7 +945,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 _scan(inner, systems, programs, depth + 1, found, variables, ctx)
             continue
         head = _head(tokens)
-        if head is not None and head.startswith("$"):  # a program the gate cannot read the name of: it may be a listed one
+        if head is not None and (head.startswith("$") or re.match(r"%\w+%", head)):  # a program the gate cannot read the name of: it may be a listed one (`%P%cmd` is `cmd`'s variable)
             found.append(Action("", "none", WRITE, "", " ".join(tokens), named=False, call=" ".join(tokens), unseen=True))
             continue
         waited = _wait_run(tokens)
@@ -966,6 +966,10 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             for inner in shelled[1]:  # the words after `-c` as they were given, as the shell that gets them joins them, and without its escape (`shellwords.readings`): every reading is scanned, the strictest answer stands
                 _scan(inner, systems, programs, depth + 1, found, variables, ctx)
             checked = shelled[0] + 1  # the command string was read as a command line
+        elif depth >= MAX_DEPTH and ctx.hold:
+            deep = _too_deep(tokens, names)
+            if deep is not None:
+                found.append(deep)
         if ctx.hold:
             _account(tokens[:checked], raw, names, feeds, ctx, found)
         if tokens and _name(tokens[0]) == "cd" and len(tokens) > 1:

@@ -69,10 +69,12 @@ def interp(tokens: List[str], at: int) -> Tuple[str, Optional[int]]:
             flag = low.lstrip("-/") if word[:1] in "-/" else ""
             if flag:
                 if "command".startswith(flag) or ENCODED.startswith(flag) or flag == "ec":
+                    if "command".startswith(flag) and index + 1 < len(tokens) and tokens[index + 1] == "-":
+                        return "stdin", None  # `pwsh -Command -`: the code comes on the input
                     return "code", index
                 if "file".startswith(flag):
-                    return ("script", index + 1) if index + 1 < len(tokens) else ("stdin", None)
-                index += 2 if flag in ("executionpolicy", "ep", "windowstyle", "w", "workingdirectory", "wd", "inputformat", "outputformat", "version", "v", "configurationname", "settingsfile") else 1
+                    return ("script", index + 1) if index + 1 < len(tokens) and tokens[index + 1] != "-" else ("stdin", None)
+                index += 2 if flag in ("executionpolicy", "ep", "windowstyle", "w", "workingdirectory", "wd", "inputformat", "outputformat", "version", "v", "configurationname", "settingsfile", "custompipename") else 1
                 continue
         elif kind == "node":
             if low in ("-e", "-p", "--eval", "--print"):

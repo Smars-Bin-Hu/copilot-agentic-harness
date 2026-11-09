@@ -319,6 +319,8 @@ def _scan(text: str, depth: int, found: List[Tuple[str, str, str]]) -> None:
             if depth < MAX_DEPTH:
                 for inner in shelled[1]:
                     _scan(inner, depth + 1, found)
+            elif re.search(r"\b(?:git|gh)\b", " ".join(shelled[1])):
+                found.append((APPROVE, _why("deep"), line))  # nested deeper than the gate reads, and git is named: it asks, it does not pass (1.7.38, C13 FR3)
         elif any(_name(item) in SHELLS for item in tokens):
             continue
         elif program in SCRIPT_RUNNERS and any(item in SCRIPT_FLAGS for item in tokens) and re.search(r"\bgit\b", line):

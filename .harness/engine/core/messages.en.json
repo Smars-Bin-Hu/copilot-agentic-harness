@@ -3700,5 +3700,7 @@
   "accept.status.accepted": "done: accepted on the board on {date}",
   "accept.status.promoted": "done: promoted, and closed by the board on {date}",
   "accept.status.delivered": "delivered on {date}: waiting for the user to accept it on the board",
-  "desk.live.approval": "Waits for your approval"
+  "desk.live.approval": "Waits for your approval",
+  "gate.external.refused": "This call to {place} is refused: it holds `{statement}`. {reason}\nCommand: {call}\nDo not look for another way to the same result. Use the way above, or stop and tell the user why: the user decides.",
+  "gate.external.refused_file": "This call to {place} is refused: the file `{file}` that it reads holds `{statement}`. {reason}\nCommand: {call}\nDo not look for another way to the same result (another file, a smaller statement, another program). Use the way above, or stop and tell the user why: the user decides."
 }

@@ -131,6 +131,11 @@ def validate(systems: Any) -> List[str]:
             errors.append(f"systems.{name}: a name is lower case letters, digits, - and _, and starts with a letter")
         if not clis(system) and not by_address(system):
             errors.append(f"systems.{name}.reach: give at least one program in `cli`")
+        given = system.get("input")
+        if isinstance(given, dict) and not (given.get("options") or given.get("text")):
+            errors.append(f"systems.{name}.input: give `options` (the options that name a file) or `text` (the options whose next word is statement text)")
+        if (system.get("writes") or system.get("refuse")) and not system.get("reads"):
+            errors.append(f"systems.{name}: `writes` and `refuse` work with `reads`, the pass list: give it")
         when = (system.get("reach") or {}).get("when")
         if by_address(system) and not when:
             errors.append(f"systems.{name}.reach: `by_address` needs a `when` that names the address")

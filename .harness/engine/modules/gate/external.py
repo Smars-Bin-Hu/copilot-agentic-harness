@@ -30,11 +30,12 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from core import messages
 from core.systems import (  # noqa: F401 - the names the handler, doctor and the tests use from here
     ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, by_address, clis, reach, run_probe, validate, warnings,
 )
 
-from . import inputfiles
+from . import inputfiles, statements
 from .gitcmd import MAX_DEPTH, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
 
 
@@ -50,7 +51,10 @@ class Action:
     why: str = ""  # an unseen call that is not an unreadable program name: "file" (a script the gate cannot read), "encoded" (an encoded PowerShell command); "command" (1.7.38): a word the system's own program does not have, its `target`
     unseen: bool = False  # a segment the gate cannot read (a program in a variable it cannot expand): held, never guessed (1.7.21)
     file: str = ""  # (1.7.38, C12 RC-G1) a file the call names as its input (`sqlcmd -i`): the one whose text made the call a destroy, or the first one the gate could not judge
-    file_why: str = ""  # "destroy" (the file holds one: refused), "unread" (missing, too big, not text: held as a write), "twice" (the line names the file again and may change it: held as a write), "directive" (a line the gate cannot judge, such as `!!` or `:connect`: held as a write)
+    file_why: str = ""  # "destroy" (the file holds a destroy of the `verbs`, a type with no lists: refused), "refuse" (the file holds a statement of the refuse list), "unread" (missing, too big, not text: asks the person), "twice" (the line names the file again and may change it: asks the person)
+    zone: str = ""  # (1.7.38) a type with lists (`reads`): "refuse" (a statement is on the refuse list), "read" (every statement is on the read list), "write" (every statement is on the read or write list: an opened connection passes it), "ask" (the rest); "" for a type with no lists
+    note: str = ""  # the statement that decided: the one the refuse list caught, or the first that is on no list (cut short)
+    reason: str = ""  # zone "refuse": the type's reason for it, in the language of the session: tells the agent the right way
 
     def facts(self) -> Dict[str, Any]:
         facts: Dict[str, Any] = {"system": self.system, "env": self.env, "verb": self.verb, "target": self.target}
@@ -58,6 +62,8 @@ class Action:
             facts["named"] = False  # said only when it matters: the log and the draft stay as they were for a named verb
         if self.file_why:
             facts["file"], facts["file_why"] = self.file, self.file_why  # said only when it matters
+        if self.zone in ("refuse", "ask"):
+            facts["zone"] = self.zone
         return facts
 
 
@@ -579,6 +585,42 @@ def shlex_quote(token: str) -> str:
     return "'" + token.replace("'", "'\"'\"'") + "'" if re.search(r"[\s;&|()$`<>\"'\\]", token) or not token else token
 
 
+NOTE_CHARS = 100
+
+
+def _short(text: str) -> str:
+    return text if len(text) <= NOTE_CHARS else text[: NOTE_CHARS - 1].rstrip() + "\u2026"
+
+
+def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: str, call: str, args: List[str], ctx: "_Ctx") -> Action:
+    """A call of a type with lists (1.7.38, C12: pass, refuse, ask). The statements of the text and of the files it reads are cut (`statements.py`) and judged by `reads`, `writes` and `refuse`:
+    refuse list first (whatever else is wrong with the call), then a call that gave the gate nothing to read, a text with a shell variable in it or a file the gate could not read (asks), then the lists.
+    `verbs` do not decide the zone: they say what kind of call the card shows (write, exec), and a destroy rule that matches a statement is one more refusal."""
+    read = inputfiles.read(system, args, ctx.root, ctx.folder, ctx.cwd, ctx.line or text)
+    rest = verb_named(system, read.rest if read else " ".join(args))
+    if read is None or not read.sources:  # the program reads what it is given on its input: nothing the gate sees
+        return Action(name, env, strict([rest, WRITE]), target, text, named=rest is not None, call=call, zone=statements.ASK)
+    joined = " ; ".join(item.text for item in read.items)
+    label = inputfiles.strictest([inputfiles.verb_of_text(system, joined), rest])
+    verdict = statements.judge(system, read.items)
+    if verdict.zone != statements.REFUSE and label == DESTROY:  # a rule of `verbs` that names a destroy: refused as before, with the line of a destroy
+        verdict = statements.Verdict(statements.REFUSE, next((item.text for item in read.items if inputfiles.verb_of_text(system, item.text) == DESTROY), joined), "")
+    file = read.files.get(verdict.statement, "") if verdict.zone == statements.REFUSE else read.file
+    if verdict.zone == statements.REFUSE:
+        return Action(name, env, DESTROY, target, text, call=call, file=file, file_why="refuse" if file else "", zone=statements.REFUSE, note=_short(verdict.statement), reason=messages.pick(verdict.reason) if verdict.reason else "")
+    why = read.state  # "unread", "twice": a file the gate could not read, or may change before it runs
+    if why or read.unsure or verdict.zone == statements.ASK or rest in (WRITE, EXEC):
+        about = read.file if why else read.unsure or (verdict.statement if verdict.zone == statements.ASK else read.rest)
+        return Action(name, env, strict([label, WRITE]), target, text, named=label is not None and not why, call=call, file=read.file if why else "", file_why=why, zone=statements.ASK, note=_short(about))
+    if verdict.zone == statements.WRITE:
+        return Action(name, env, strict([label, WRITE]), target, text, named=True, call=call, zone=statements.WRITE)
+    return Action(name, env, READ, target, text, call=call, zone=statements.READ)
+
+
+def strict(verbs: List[Optional[str]]) -> str:
+    return inputfiles.strictest(verbs) or WRITE
+
+
 def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], depth: int, found: List[Action], variables: Optional[Dict[str, str]] = None, ctx: Optional[_Ctx] = None) -> None:
     variables = {} if variables is None else variables
     ctx = ctx or _Ctx()
@@ -628,6 +670,10 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             if word:  # the pack's own program has no such command: refused, with a line (the gate's `unknown` answer)
                 found.append(Action(name, environment(system, line), WRITE, word[:120], " ".join(tokens), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), why="command"))
                 continue
+            call = " ".join([_program(tokens[start])] + tokens[start + 1:])
+            if system.get("reads"):  # 1.7.38: a type with lists: the statements are cut and judged by the lists, `verbs` only label the call
+                found.append(_by_lists(system, name, environment(system, line), target, " ".join(tokens), call, tokens[start + 1:], ctx))
+                continue
             verb = verb_named(system, " ".join(tokens[start + 1:]))
             file, file_why = "", ""
             if ctx.root is not None and system.get("input"):  # 1.7.38, C12 RC-G1: the statements of `sqlcmd -i file` are in the file: judged as the same words in the line are
@@ -639,7 +685,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                     elif read.state:  # a file the gate cannot judge: the call is at least a write
                         verb = inputfiles.strictest([verb, WRITE])
                         file, file_why = (read.file, read.state) if verb == WRITE else ("", "")
-            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None and file_why not in ("unread", "twice", "directive"), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), file=file, file_why=file_why))
+            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None and file_why not in ("unread", "twice"), call=call, file=file, file_why=file_why))
             continue
         if start is not None:
             continue  # the program of a listed system, none of whose systems owns this call: judged, and nothing to hold
@@ -791,7 +837,7 @@ def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: 
     context = _Ctx(root, cwd, hold=unseen, folder=folder, line=command)
     context.quiet = quiet
     _scan(command, systems, programs, 0, found, ctx=context)
-    return [(action, HUMAN if action.unseen else DENY if action.why == "command" else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
+    return [(action, HUMAN if action.unseen else DENY if action.why == "command" or action.zone == "refuse" else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
 
 
 def strictest(judged: List[Tuple[Action, str]]) -> Optional[Tuple[Action, str]]:

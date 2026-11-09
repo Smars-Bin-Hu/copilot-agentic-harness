@@ -3700,5 +3700,7 @@
   "accept.status.accepted": "做完：{date} 在看板上验收",
   "accept.status.promoted": "做完：已 promote，{date} 由看板关闭",
   "accept.status.delivered": "{date} 已交付：等用户在看板上验收",
-  "desk.live.approval": "等你批准"
+  "desk.live.approval": "等你批准",
+  "gate.external.refused": "这条对 {place} 的调用被拒绝：它含有 `{statement}`。{reason}\n命令：{call}\n不要换一种写法去达到同样的结果。按上面说的正路做，或者停下来告诉用户原因：由用户决定。",
+  "gate.external.refused_file": "这条对 {place} 的调用被拒绝：它读取的文件 `{file}` 含有 `{statement}`。{reason}\n命令：{call}\n不要换一种写法去达到同样的结果（换文件、拆短语句、换程序）。按上面说的正路做，或者停下来告诉用户原因：由用户决定。"
 }

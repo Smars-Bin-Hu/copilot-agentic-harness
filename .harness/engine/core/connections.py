@@ -155,8 +155,8 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
             re.compile(str(entry["pattern"]))
         except re.error as error:
             out.append(f"types.{name}.refuse[{index}]: bad pattern: {error}")
-    if kind.get("writes") and not kind.get("reads"):
-        out.append(f"types.{name}.writes: needs `reads` (the lists work together)")
+    if (kind.get("writes") or kind.get("refuse")) and not kind.get("reads"):
+        out.append(f"types.{name}: `writes` and `refuse` work with `reads`, the pass list: give it")
     for key in ("expect", "denied", "down", "match", "signin_lost", "command"):
         try:
             re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")

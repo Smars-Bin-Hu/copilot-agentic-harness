@@ -220,7 +220,7 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     if scoped and scoped[0] == "opened":  # the person opened the linked items, but this connection's type does not let them through (a company lowered it to `no`): held as before
         scoped = ("linked", scoped[1])
     held = decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes
-    unjudged = getattr(action, "file_why", "") in UNJUDGED_FILE  # a script whose content the gate could not judge: opening the connection does not let it through (C12 RC-G1)
+    unjudged = getattr(action, "zone", "") == "ask"  # a call of a type with lists that is in no list (a script the gate could not read, a statement off the write list): opening the connection does not let it through, each run waits for the person
     if held and scope == systems_mod.ALL and action.verb != external.DESTROY and not unjudged:  # the person opened this connection for this task (`task allow --conn`, 1.7.38): no further approval. A destroy never passes
         data = _open_task(ctx)
         opened = bool(data and _conn_opened(data, action.system, action.env))
@@ -286,9 +286,6 @@ def _item_scope(call: str, system: Dict[str, Any], verb: str, data: Optional[Dic
     refs = {toolpacks.normal_ref(str(item)) for item in ((opened or {}).get("refs") or [])} if isinstance(opened, dict) else set()
     shut = [ref for ref in refs_named if ref not in refs]
     return ("linked", shut[0]) if shut else ("opened", refs_named[0])
-
-
-UNJUDGED_FILE = ("unread", "twice", "directive")  # a call whose script file the gate could not judge: each run waits for the person, an opened connection or not
 
 
 def _conn_opened(data: Dict[str, Any], name: str, env: str = "") -> bool:
@@ -360,7 +357,7 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         return Decision(permission="deny", reason=rules.say("gate.external.unknown_command", program=program, word=judged["unknown"], call=command), facts=dict(facts, kind="external-unknown"))
     if judged.get("unlinked"):
         return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
-    reason = {external.DENY: rules.external_denied_file if action.file_why == "destroy" else rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
+    reason = {external.DENY: rules.external_refused if action.zone == "refuse" else rules.external_denied_file if action.file_why == "destroy" else rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
     return Decision(permission="deny", reason=reason, facts=facts)
 
 

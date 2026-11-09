@@ -128,6 +128,12 @@ def external_denied_file(action: Any, command: str) -> str:
     return say("gate.external.denied_file", place=place(action.system, action.env), verb=word(action.verb), file=action.file, call=command)
 
 
+def external_refused(action: Any, command: str) -> str:
+    """1.7.38, C12: a statement is on the refuse list of the type. The line says which one (and the file that holds it) and gives the reason the type wrote, which tells the agent the right way."""
+    key = "gate.external.refused_file" if action.file_why == "refuse" and action.file else "gate.external.refused"
+    return say(key, place=place(action.system, action.env), statement=action.note, file=action.file, reason=action.reason, call=command)
+
+
 def external_human(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
     return say("gate.external.human", place=place(action.system, action.env), verb=word(action.verb), call=command, handoff_env="" if action.env in ("", "none") else f" --env {action.env.upper()}")
@@ -140,7 +146,7 @@ def external_task(action: Any, command: str) -> str:
 
 def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None, changed: Any = None) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
-    key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice", "directive": "gate.external.input_directive"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
+    key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
     gap = messages.gap()
     note = say(key, file=action.file) + gap if key else ""
     text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + gap if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)

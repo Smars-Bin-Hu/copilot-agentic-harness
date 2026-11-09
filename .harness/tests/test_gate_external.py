@@ -269,11 +269,12 @@ class GateExternalTests(HarnessTestCase):
         self.configure(SYSTEMS)
         self.assertEqual(self.term("cloudctl --sub dev list && cloudctl delete x")["permissionDecision"], "deny")
 
-    def test_a_list_that_does_not_validate_is_ignored_and_tools_check_says_why(self) -> None:
+    def test_a_list_that_does_not_validate_refuses_its_programs_and_tools_check_says_why(self) -> None:
         broken = copy.deepcopy(SYSTEMS)
         broken["cloud"]["verbs"].append({"pattern": "(", "verb": "read"})
         self.configure(broken)
-        self.assertEqual(self.term("cloudctl delete x"), {})  # a hook that fails itself must not hurt normal work
+        self.assertEqual(self.term("cloudctl delete x")["permissionDecision"], "deny")  # 1.7.38 (C13 F2): turned over: the list was ignored and the call passed; a gate that cannot judge a call of a listed program does not pass it
+        self.assertEqual(self.term("ls"), {})  # a command that names no listed program is as free as before
         completed = self.cli("tools", "check")
         self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
         self.assertIn("bad pattern", completed.stdout)

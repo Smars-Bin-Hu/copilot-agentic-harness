@@ -64,7 +64,7 @@ SYSTEMS_SCHEMA = {
                     "cli": {"type": ["string", "array"], "items": {"type": "string", "minLength": 1}},
                     "by_address": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: programs (`curl`) that are a call of this system only when their arguments match `when`; any other use of the program is not the system's, and its name alone holds nothing
                     "when": {"type": "string", "minLength": 1},
-                    "code": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38 (C13 F2): words that name this system in the code a one-liner interpreter runs (`python3 -c`, `node -e`): `["pyodbc"]`; with `blocked`
+                    "code": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38 (C13 F2): words that name this system in the code a one-liner interpreter runs (`python3 -c`, `node -e`); needs `blocked`
                     "also": {"type": "object", "required": ["type", "field"], "properties": {"type": {"type": "string", "minLength": 1}, "field": {"type": "string", "minLength": 1}}, "additionalProperties": False},  # 1.7.38: the hosts that the connections of this type have in this field are part of `when`
                 },
                 "additionalProperties": False,

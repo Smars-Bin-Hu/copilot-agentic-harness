@@ -299,6 +299,77 @@ def listed(root: Path, policy: Optional[Dict[str, Any]] = None) -> Dict[str, Dic
     return found
 
 
+def faults(root: Path) -> List[Dict[str, str]]:
+    """(1.7.38, C13 F2) What is wrong with the connection list: `[{file, problem}]`, empty when it can be read. The three files that make it (`connections.json`, the company's `connections.company.json`, the person's
+    `connections.override.json`) are read one by one: a file that is not JSON, or not an object, a `connections` that is not an object, a connection that is not an object or has no `type`, a `type` that is not text, an `env`
+    that is not one of `ENVS`, and the layers that cannot be merged. It used to be swallowed (`config.policy_or_empty`): a list that could not be read had no connections, so none of their programs were judged. Now the gate holds
+    every program of the tool packs that bring a connection type (`broken_systems`) and `harness doctor` says which file is wrong."""
+    from . import config
+    from .paths import policies_dir
+
+    found: List[Dict[str, str]] = []
+    for name in [f"{POLICY}.json"] + [f"{POLICY}{suffix}" for suffix in config.LAYERS]:
+        path = policies_dir(root) / name
+        if not path.exists():
+            if name == f"{POLICY}.json":
+                found.append({"file": name, "problem": "the file is missing"})
+            continue
+        try:
+            data = config.read_json(path)
+        except (OSError, ValueError) as error:
+            found.append({"file": name, "problem": str(error)})
+            continue
+        if not isinstance(data, dict):
+            found.append({"file": name, "problem": "the file is an object"})
+            continue
+        listed_here = data.get("connections")
+        if listed_here is None:
+            continue
+        if not isinstance(listed_here, dict):
+            found.append({"file": name, "problem": "`connections` is an object"})
+            continue
+        for alias, item in listed_here.items():
+            if not isinstance(item, dict):
+                found.append({"file": name, "problem": f"connection {alias}: an object is needed"})
+            elif not isinstance(item.get("type"), str) or not item.get("type"):
+                found.append({"file": name, "problem": f"connection {alias}: `type` is the name of a connection type"})
+            elif item.get("env") not in ENVS:
+                found.append({"file": name, "problem": f"connection {alias}: `env` is one of {', '.join(ENVS)}"})
+    if not found:
+        try:
+            config.load_policy(root, POLICY)  # the layers must merge too
+        except Exception as error:  # noqa: BLE001 - a fault is a fault, whatever it raises
+            found.append({"file": f"{POLICY}*.json", "problem": f"{type(error).__name__}: {error}"})
+    return found
+
+
+def broken_systems(root: Path) -> Dict[str, Any]:
+    """(1.7.38, C13 F2) For the gate: when the connection list cannot be read (`faults`), one system for each tool pack that brings a connection type, named `broken-<pack>`, that owns every program of those types.
+    Every call of them is held for the person, and the card says which file is wrong and how. Which pack a connection used cannot be known when the list is unreadable, so every pack with a type counts, on or off.
+    The packs whose files are right do not matter: the list is what names the connection a call reaches. `{}` when the list is fine."""
+    problems = faults(root)
+    if not problems:
+        return {}
+    from . import toolpacks
+
+    first = problems[0]
+    more = f" (+{len(problems) - 1})" if len(problems) > 1 else ""
+    out: Dict[str, Any] = {}
+    for name, item in toolpacks.listed(root).items():
+        programs: List[str] = []
+        folder = item["folder"] / toolpacks.TYPES
+        for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+            try:
+                found = json.loads(path.read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                continue
+            cli = found.get("cli") if isinstance(found, dict) else None
+            programs += [str(one).lower() for one in ([cli] if isinstance(cli, str) else cli if isinstance(cli, list) else []) if isinstance(one, str) and one]
+        if programs:
+            out[f"broken-{name}"] = {"reach": {"cli": sorted(set(programs))}, "env": "none", "toolpack": name, "broken": f"{name}: {first['file']}: {first['problem']}{more}"[:400]}
+    return out
+
+
 def unset_fields(root: Path) -> List[Dict[str, Any]]:
     """The company's connections whose type has a field it needs (no `default`, not `optional`) that the connection leaves empty (1.7.30): `[{alias, type, fields}]`.
     A connection of a type no active pack brings is not asked about here."""

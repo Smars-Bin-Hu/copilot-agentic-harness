@@ -120,12 +120,15 @@ def _program(token: str) -> str:
     return name
 
 
+_BLOCK_HEADS = frozenset(["%", "?", "foreach-object", "where-object", "{"])  # the head of a PowerShell script block (`1..3 | % { irm ... }`): the block's command is the call (1.7.38, C13 F2)
+
+
 def _start(tokens: List[str], programs: Dict[str, List[str]]) -> Optional[int]:
-    """Index of the program of a listed system, when only wrappers, environment settings, options and numbers stand before it."""
+    """Index of the program of a listed system, when only wrappers, environment settings, options, numbers and the head of a script block stand before it."""
     for index, token in enumerate(tokens):
         if _program(token) in programs:
             return index
-        if not (_name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit()):
+        if not (_name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit() or token.lower() in _BLOCK_HEADS):
             return None
     return None
 
@@ -179,7 +182,7 @@ _REDIRECT_WITH_FILE = re.compile(r"^\d*(?:>>?|<<-?|<)[^\s<]")  # `>f`, `2>/dev/n
 # among its arguments makes the line held: the gate cannot tell what the program does with it.
 READ_ONLY_PROGRAMS = frozenset(
     "grep egrep fgrep rg cat tac echo printf head tail less more wc sort uniq cut nl ls dir tree stat file du diff cmp which whereis type pwd cd test [ [[ true false basename dirname "
-    "realpath readlink jq column fold rev md5sum sha1sum sha256sum shasum od xxd strings date man apropos whatis sed find git gh harness "
+    "realpath readlink jq column fold rev md5sum sha1sum sha256sum shasum od xxd strings date man apropos whatis sed find git gh harness where get-command gcm get-help "
     "get-content gc select-string sls get-childitem gci write-output write-host get-item test-path set-location sl resolve-path measure-object".split()
 )
 # Programs that manage files (1.7.27): they do not run their arguments, so a program name among them is only a name (`cp .../ado /tmp`, `chmod +x .../ado`, `mkdir out/ado`). The program that was
@@ -561,6 +564,25 @@ _VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
 _DECLARE = frozenset(["export", "declare", "typeset", "local", "readonly"])
 
 
+def _setting_words(tokens: List[str]) -> List[str]:
+    """A command that sets an environment variable, as the plain `NAME=value` words the rest of the gate reads (1.7.38, C13 F2): `export A=1`, `declare -x A=1`, `typeset -x A=1`, `export -n A=1`, `$env:A=1`, `$env:A = 1`,
+    `$env:A='1'`. Any other command is returned as it was."""
+    if not tokens:
+        return tokens
+    if tokens[0] in _DECLARE:
+        rest = tokens[1:]
+        while rest and rest[0].startswith("-") and rest[0] != "--":
+            rest = rest[1:]  # `declare -x`, `typeset -gx`
+        return rest
+    found = re.match(r"^\$env:([A-Za-z_]\w*)(=.*)?$", tokens[0], re.IGNORECASE)
+    if found:
+        if found.group(2) is not None:
+            return [found.group(1) + found.group(2)] + tokens[1:]
+        if len(tokens) >= 2 and tokens[1].startswith("="):
+            return [found.group(1) + "=" + (tokens[1][1:] if len(tokens[1]) > 1 else (tokens[2] if len(tokens) > 2 else ""))] + tokens[3 if len(tokens[1]) == 1 else 2:]
+    return tokens
+
+
 def _expand(tokens: List[str], variables: Dict[str, str]) -> List[str]:
     """The simple shell variables of this command line that were set in it (`A=ado; $A item 1`, `export X=...`), put in. What is not known stays as it is."""
     out: List[str] = []
@@ -669,8 +691,7 @@ def _line_writer(line: str, inputs: List[str], ctx: "_Ctx", allowed: set, depth:
     """The first command of the line (other than a call of `allowed`, the program of the call itself) that may write a file the call reads, as it stands in the line (cut short); "" when none can. See `LINE_READERS`."""
     text, _bodies = _heredocs(join_lines(line))
     for tokens in split_segments(text):
-        if tokens and tokens[0] in _DECLARE:
-            tokens = tokens[1:]
+        tokens = _setting_words(tokens)
         if not tokens or all(_is_environment(item) for item in tokens):
             continue
         shown = _short(" ".join(tokens))
@@ -774,7 +795,7 @@ def _unpinned(systems: Dict[str, Any], pinned: List[str], seen: pin.Pinned, toke
 
 
 def _code_blocked(tokens: List[str], ctx: "_Ctx") -> Optional[Action]:
-    """The code a one-liner interpreter is given (`python3 -c`, `node -e`), when it names a word a system lists in `reach.code` (`pyodbc`): a program the gate cannot judge talks to the database from inside it (1.7.38, C13 F2)."""
+    """The code a one-liner interpreter is given (`python3 -c`, `node -e`), when it names a word a system lists in `reach.code`: a program the gate cannot judge talks to the outside system from inside it (1.7.38, C13 F2)."""
     if not ctx.code:
         return None
     at = _head_index(tokens)
@@ -801,6 +822,8 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
     segments = split_segments(text)
     names = [program for program in programs if program not in ctx.quiet]
     feeds = ctx.hold and (any(_feeds_code(_without_redirects(tokens)) for tokens in segments) or ("<(" in text and any(_head_name(tokens) in ("source", ".") or _head_is_interpreter(tokens) for tokens in segments)))
+    if ctx.hold:
+        _hidden_in_line(segments, text, programs, feeds, found)
     for body, expands in bodies:
         if depth < MAX_DEPTH and expands:  # an unquoted here-document: the shell runs what is in `$( )` and backticks
             for inner in _substitutions(join_lines(body)):
@@ -809,8 +832,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
         if hit:  # the body goes to an interpreter as its code
             found.append(Action("", "none", WRITE, hit, body[:200], named=False, call=body[:200], unseen=True))
     for tokens in segments:
-        if tokens and tokens[0] in _DECLARE:
-            tokens = tokens[1:]
+        tokens = _setting_words(tokens)
         if tokens and all(_is_environment(item) for item in tokens):  # `A=ado`, `export A=ado`: remembered, not a call
             for item in tokens:
                 key, _, value = item.partition("=")
@@ -841,7 +863,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 if held is not None:
                     found.append(held)
                 continue
-        blocked = _code_blocked(tokens, ctx)  # `python3 -c "import pyodbc ..."`: code the gate cannot judge
+        blocked = _code_blocked(tokens, ctx)  # `python3 -c "..."` that names a word of `reach.code`: code the gate cannot judge
         if blocked is not None:
             found.append(blocked)
         if name is not None and _program(tokens[start]) in ctx.quiet and (not addresses_fit(systems[name], " ".join(tokens[start + 1:])) or _cut_short(tokens[start + 1:], ctx.line)):
@@ -900,13 +922,10 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             _scan(wrapped[1], systems, programs, depth + 1, found, variables, ctx)
             continue
         checked = len(tokens)
-        shell_at = next((i for i, item in enumerate(tokens) if _name(item) in SHELLS), None)
-        if shell_at is not None and depth < MAX_DEPTH:
-            for i in range(shell_at + 1, len(tokens)):
-                if tokens[i].lower() in SHELL_FLAGS and i + 1 < len(tokens):
-                    _scan(" ".join(tokens[i + 1:]) if len(tokens) > i + 2 else tokens[i + 1], systems, programs, depth + 1, found, variables, ctx)
-                    checked = i + 1  # the command string was read as a command line
-                    break
+        shelled = _shell_string(tokens) if depth < MAX_DEPTH else None
+        if shelled is not None:
+            _scan(shelled[1], systems, programs, depth + 1, found, variables, ctx)
+            checked = shelled[0] + 1  # the command string was read as a command line
         if ctx.hold:
             _account(tokens[:checked], raw, names, feeds, ctx, found)
         if tokens and _name(tokens[0]) == "cd" and len(tokens) > 1:
@@ -990,6 +1009,82 @@ def _evaluated(tokens: List[str]) -> Optional[str]:
     if head is None or _name(head) != "eval":
         return None
     return " ".join(tokens[tokens.index(head) + 1:])
+
+
+def _shell_string(tokens: List[str]) -> Optional[Tuple[int, str]]:
+    """`(index of the flag, the command string)` when this segment gives a shell a command line (`bash -c '...'`, `pwsh -Command '...'`, `pwsh -com '...'`, `cmd /c ...`); else None."""
+    at = _head_index(tokens)
+    if at is not None and _is_interpreter(tokens[at]) and _family(tokens[at]) in ("shell", "power") and not _encoded(tokens):
+        kind, index = _interp(tokens, at)
+        if kind == "code" and index is not None and index + 1 < len(tokens):
+            return index, (" ".join(tokens[index + 1:]) if len(tokens) > index + 2 else tokens[index + 1])
+    shell_at = next((i for i, item in enumerate(tokens) if _name(item) in SHELLS), None)
+    if shell_at is not None:
+        for i in range(shell_at + 1, len(tokens)):
+            if tokens[i].lower() in SHELL_FLAGS and i + 1 < len(tokens):
+                return i, (" ".join(tokens[i + 1:]) if len(tokens) > i + 2 else tokens[i + 1])
+    return None
+
+
+def nested(command: str, depth: int = 0) -> List[str]:
+    """The command strings a shell is given inside a line (1.7.38, C13 F2): `bash -c '...'`, `pwsh -Command '...'`, `eval '...'`, `harness as x -- ...`, `harness wait --run '...'`, and the ones inside those. The gate
+    judges each of them as it judges a bare line (the rules of the terminal too), so a call wrapped in `pwsh -Command` is no freer than the same call written alone."""
+    found: List[str] = []
+    if depth >= MAX_DEPTH or not command.strip():
+        return found
+    text, _bodies = _heredocs(join_lines(command))
+    for tokens in split_segments(text):
+        shelled = _shell_string(tokens)
+        inner = shelled[1] if shelled else _evaluated(tokens)
+        if inner is None:
+            wrapped = as_run(tokens)
+            inner = wrapped[1] if wrapped else _wait_run(tokens)
+        if inner:
+            found.append(inner)
+            found.extend(nested(inner, depth + 1))
+    return found
+
+
+# Commands whose output is text the gate can read in the line (what they print is what stands in the line, or a file it reads): a shell that runs what they print is not a hidden call.
+VISIBLE = frozenset(
+    "echo printf cat type get-content gc tac head tail write-output write-host cd pushd popd export set unset true false : test [ [[ sleep wait pwd read local declare typeset readonly".split()
+)
+_IEX = frozenset(["iex", "invoke-expression"])
+_START = frozenset(["start-process", "saps", "start"])
+
+
+def _hidden(kind: str, call: str, **values: Any) -> Action:
+    """A call of text the gate cannot read (1.7.38, C13 F2): refused with the way (write the command out in the line)."""
+    return Action("", "none", DESTROY, "", call, call=call, zone="blocked", reason=messages.text(f"gate.external.hidden.{kind}", **values))
+
+
+def _hidden_in_line(segments: List[List[str]], text: str, programs: Dict[str, List[str]], feeds: bool, found: List[Action]) -> None:
+    """The text of a line that runs what it is not shown (1.7.38, C13 F2): `iex`, text piped into a shell or an interpreter (`base64 -d | sh`), `source <(...)`, `Start-Process` of a program a system governs.
+    `echo '...' | sh` and a here-document are read as before (their text is a word of the line). Each is refused: the way is to run the command itself."""
+    for tokens in segments:
+        at = _head_index(tokens)
+        if at is None:
+            continue
+        name = _program(tokens[at])
+        call = " ".join(tokens)
+        if name in _IEX:
+            found.append(_hidden("iex", call))
+            return
+        if name in _START:
+            named = _mentioned(" ".join(tokens[at + 1:]), list(programs))
+            if named:
+                found.append(_hidden("start", call, program=named))
+                return
+    shells = [tokens for tokens in segments if _head_index(tokens) is not None and _is_interpreter(tokens[_head_index(tokens)]) and _family(tokens[_head_index(tokens)]) in ("shell", "power")]  # a shell, not python or node: what a program prints and a python reads is data to a person's eyes (K5)
+    if feeds and any(_interp(tokens, _head_index(tokens))[0] == "stdin" for tokens in shells):
+        for tokens in segments:
+            at = _head_index(tokens)
+            if at is None or _feeds_code(_without_redirects(tokens)) or _program(tokens[at]) in VISIBLE or all(_is_environment(item) for item in tokens):
+                continue
+            found.append(_hidden("pipe", " ".join(tokens)))
+            return
+    if feeds and "<(" in text and (shells or any(_head_name(tokens) in ("source", ".") for tokens in segments)):
+        found.append(_hidden("pipe", text[:200]))
 
 
 def as_run(tokens: List[str]) -> Optional[Tuple[str, str]]:

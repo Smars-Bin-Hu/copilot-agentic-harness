@@ -625,6 +625,9 @@ def check_toolpacks(report: Report, root: Path) -> None:
         for one in toolpacks.faults(root):  # 1.7.38 (G-1): a faulty file makes the gate hold every call of the pack's programs; it is an error, not a quiet gap
             for fault in one["faults"]:
                 report.error(say("doctor.toolpacks.broken", pack=one["pack"], file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(one["programs"]) or "-"))
+        held = connections.broken_systems(root)  # 1.7.38 (C13 F2): a connection list that cannot be read holds every program of the connection types: an error, not a quiet gap
+        for fault in connections.faults(root):
+            report.error(say("doctor.connections.broken", file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(sorted({one for system in held.values() for one in system["reach"]["cli"]})) or "-"))
         names = sorted(toolpacks.active(root))
         if names:
             report.ok(say("doctor.toolpacks.on", names=", ".join(names)))

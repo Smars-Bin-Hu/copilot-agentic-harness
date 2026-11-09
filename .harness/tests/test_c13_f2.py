@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Tuple
 from unittest import mock
 
 import support  # noqa: F401 - the engine on sys.path
+import doctor  # noqa: E402
 from support import HarnessTestCase, pre_tool, use_packs
 from taskcase import SESSION, TASK
 
@@ -148,7 +149,7 @@ class NormalUseTests(ListedCase):
     def test_normal_use_unchanged(self) -> None:
         x = self.script("select 1;\n", "x.sql")
         for command in ("sqlcmd -?", "sqlcmd --help", "sqlcmd --version", f"{SERVER} {READ}", "sqlcmd -S localhost,14339 -C -Q 'select 1'", "which sqlcmd", "command -v sqlcmd", "command -V sqlcmd", "type sqlcmd", "whereis sqlcmd",
-                        "man sqlcmd", "echo sqlcmd", "grep -rn sqlcmd .", "git log -S sqlcmd", "git diff -- sqlcmd.sql", f"cat {x}", f"ls {TASK}", f"echo 'sqlcmd -S x -Q \"DROP TABLE t\"' > {TASK}/notes.md",
+                        "man sqlcmd", "where sqlcmd", "Get-Command sqlcmd", "gcm sqlcmd", "echo sqlcmd", "grep -rn sqlcmd .", "git log -S sqlcmd", "git diff -- sqlcmd.sql", f"cat {x}", f"ls {TASK}", f"echo 'sqlcmd -S x -Q \"DROP TABLE t\"' > {TASK}/notes.md",
                         "ado --help", "ado --version", "ado items", "az --version", "az login", "az account show", "az group list", "harness connections find dev", "python3 -m unittest", "ls", "git status",
                         "az rest --method get --url https://dev.azure.com/acme/_apis/projects"):
             self.runs(command)
@@ -357,6 +358,307 @@ class WrapNameTests(HarnessTestCase):
             "ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "url": "https://localhost:18443"}}}), encoding="utf-8")
         reason = self.call("harness as other -- wget -qO- https://localhost:18443/x")
         self.assertNotIn("ado-web", reason)
+
+
+class BothCase(AdoCase):
+    """The SQL Server pack and the Azure DevOps pack with a connection each: lines through the hook, answered allow / ask / refuse (`AdoCase.answer`)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        use_packs(self.root, "sqlserver", "ado")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"},
+            "acmedw-prod": {"type": "sqlserver", "env": "prod", "host": "localhost", "port": "14339", "auth": "sql"},
+            "ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "url": "https://localhost:18443"}}}), encoding="utf-8")
+
+    def refused_with(self, line: str, text: str) -> None:
+        out = self.call(line)
+        self.assertEqual(out.get("permissionDecision"), "deny", line)
+        self.assertIn(text, out["permissionDecisionReason"], line)
+
+
+class WrapperTests(BothCase):
+    """Item 5 (S8, M3, M4): the text a shell is given is judged like the same text written alone; text the line does not show is refused."""
+
+    U = "https://dev.azure.com/acme/_apis/wit/workitems/1"
+
+    def test_a_pwsh_command_text_is_judged_like_the_bare_line(self) -> None:
+        u = self.U
+        pairs = [(f"Invoke-RestMethod -Uri {u} -Headers @{{a=1; b=2}} -Method Delete", "ask"), (f"irm {u} -Method Delete", "refuse"), (f"irm {u}", "allow"), (f"1..3 | % {{ irm {u} -Method Delete }}", "refuse"),
+                 (f"1..3 | ForEach-Object {{ irm {u} -Method Delete }}", "refuse"), ("irm localhost:18443/acme/x -Method Delete", "ask"), ("irm https://example.com/x -Method Delete", "ask"),
+                 (f"irm {u}; irm {u} -Method Delete", "refuse"), (f"Get-ChildItem | Where-Object {{ $_.Name -eq 'x' }}", "allow")]
+        for line, want in pairs:
+            self.assertEqual(self.answer(line), want, line)
+            for wrap in ("pwsh -NoProfile -Command '%s'", 'pwsh -NoProfile -Command "%s"', "pwsh -c '%s'", "pwsh -com '%s'", "powershell -NoProfile -NonInteractive -Command '%s'", "pwsh -Command %s"):
+                if "'" in line and "'%s'" in wrap:
+                    continue
+                if '"' in line and '"%s"' in wrap:
+                    continue
+                self.assertEqual(self.answer(wrap % line), want, wrap % line)
+
+    def test_a_backtick_that_continues_the_command_is_not_judged_by_its_first_line(self) -> None:
+        u = self.U
+        self.assertEqual(self.answer(f"irm {u} `\n  -Method Delete"), "ask")  # the end of the call is on the next line, which the gate does not connect to this one: the rule of the network asks
+        self.assertEqual(self.answer(f"pwsh -Command 'irm {u} `\n -Method Delete'"), "ask")  # the same in a command string
+
+    def test_a_shell_string_gets_the_rules_of_the_terminal_too(self) -> None:
+        self.check("ask", ["bash -c 'curl -X DELETE https://example.com/x'", "bash -c 'curl https://example.com/x'", "sh -c \"rm -rf build\"", "pwsh -Command 'irm https://example.com/x'"])
+        self.check("allow", ["bash -c 'ls -la'", "pwsh -Command 'Get-ChildItem'", 'pwsh -Command "ls; Get-Date"', "bash -c 'python3 -m unittest'"])
+
+    def test_encoded_command_is_refused(self) -> None:
+        for line in ("pwsh -EncodedCommand ZQBjAGgAbwA=", "powershell -enc ZQBjAGgAbwA=", "pwsh -NoProfile -e ZQBjAGgAbwA="):
+            out = self.call(line)
+            self.assertEqual(out.get("permissionDecision"), "deny", line)
+            self.assertIn(messages.text("gate.external.encoded", call=line), out["permissionDecisionReason"])
+
+    def test_text_the_line_does_not_show_is_refused_with_the_way(self) -> None:
+        u = self.U
+        iex, pipe = messages.text("gate.external.hidden.iex"), messages.text("gate.external.hidden.pipe")
+        for line, word in ((f"pwsh -Command 'iex (iwr {u}).Content'", iex), (f"Invoke-Expression (irm {u})", iex), ("iex $x", iex), ("pwsh -c 'iex $x'", iex),
+                           ("echo ZWNobyBoaQ== | base64 -d | sh", pipe), ("base64 -d x | bash", pipe), ("xxd -r -p x | zsh", pipe), ("echo x | base64 -d | pwsh", pipe),
+                           ("source <(echo ls)", pipe), ("bash <(curl x)", pipe), (". <(echo ls)", pipe),
+                           (f"Start-Process curl -ArgumentList '-X','DELETE',{u}", messages.text("gate.external.hidden.start", program="curl")), ("Start-Process sqlcmd -ArgumentList '-S x'", messages.text("gate.external.hidden.start", program="sqlcmd")),
+                           ("saps ado", messages.text("gate.external.hidden.start", program="ado")), ("pwsh -c \"Start-Process irm\"", messages.text("gate.external.hidden.start", program="irm"))):
+            self.refused_with(line, word)
+        self.assertEqual(self.waiting(), 0, "nothing waits for the user: the way is to write the command out")
+
+    def test_the_visible_ways_are_read_as_before(self) -> None:
+        self.check("allow", ["echo hi | sh", "echo ls | bash", "cat x.sh | bash", "bash <<'EOF'\nls\nEOF", "eval \"ls\"", "Start-Process notepad", "start notepad"])
+        self.assertEqual(self.answer("echo 'sqlcmd -S localhost,14332 -Q \"DROP TABLE t\"' | sh"), "refuse")  # a pipe into a shell that names a governed program: it runs the call, which the gate judges
+
+    def test_the_header_that_sets_the_method(self) -> None:
+        self.assertEqual(self.answer(f"pwsh -Command \"irm {self.U} -Headers @{{'X-HTTP-Method-Override'='DELETE'}}\""), "refuse")
+
+
+class OtherProgramTests(BothCase):
+    """Item 6 (M5): another way to a SQL Server is refused, with the way: sqlcmd and a connection. The words are the sqlserver pack's (rules.json), not the engine's."""
+
+    @property
+    def blocked_text(self) -> Any:
+        return json.loads((support.REPO / ".harness" / "toolpacks" / "sqlserver" / "rules.json").read_text(encoding="utf-8"))["systems"]["sqlserver-other"]["blocked"]
+
+    def test_the_other_programs_are_refused(self) -> None:
+        for line in ("bcp dbo.t out f.csv -S localhost,14332 -T", "bcp x in y", "isql -v dsn", "usql mssql://x", "mssql-cli -S x", "Invoke-Sqlcmd -Query 'select 1'", "pwsh -c \"Invoke-Sqlcmd -Query 'DROP TABLE t'\"",
+                     "invoke-sqlcmd -Q x", "/usr/bin/bcp a b", "env FOO=1 isql dsn", "time bcp a b"):
+            self.refused_with(line, messages.pick(self.blocked_text))
+        for line in ("python3 -c \"import pyodbc; pyodbc.connect('x').execute('DROP TABLE t')\"", "python -c 'import pymssql'", "node -e \"require('mssql').connect('x')\"", "node -e \"const t=require('tedious')\"",
+                     "python3 -c \"import PYODBC\"", "bash -c \"python3 -c 'import pyodbc'\""):
+            self.refused_with(line, messages.pick(self.blocked_text))
+
+    def test_the_words_are_the_packs_and_a_script_file_stays_a_blind_spot(self) -> None:
+        rules = json.loads((support.REPO / ".harness" / "toolpacks" / "sqlserver" / "rules.json").read_text(encoding="utf-8"))
+        self.assertIn("pyodbc", rules["systems"]["sqlserver-other"]["reach"]["code"])
+        engine = (support.ENGINE / "modules" / "gate" / "external.py").read_text(encoding="utf-8")
+        for word in ("pyodbc", "pymssql", "bcp", "isql", "mssql-cli"):
+            self.assertNotIn(word, engine, "the engine writes no program of a pack")
+        (self.root / "query.py").write_text("print(1)\n", encoding="utf-8")
+        self.assertEqual(self.answer("python3 query.py"), "allow")  # a script file is judged by what the gate can read of it: a stated blind spot
+
+    def test_ordinary_python_and_node_are_free(self) -> None:
+        self.check("allow", ["python3 -c \"print(1)\"", "python3 -m unittest", "node -e \"console.log(1)\"", "which bcp", "grep -rn pyodbc .", "echo pyodbc", "pip list"])
+
+
+class BrokenListTests(SqlCase):
+    """Item 7b (S5, my probe): a connection list that cannot be read holds the programs of the connection types, with the file and the fault; `harness doctor` says ERROR. It used to be read as no connections at all."""
+
+    FILE = "connections.company.json"
+    BAD = ("{ not json", "[]", '"x"', '{"connections": []}', '{"connections": "a"}', '{"connections": {"a": 3}}', '{"connections": {"a": {"env": "dev"}}}', '{"connections": {"a": {"type": "sqlserver"}}}',
+           '{"connections": {"a": {"type": "sqlserver", "env": "Dev"}}}', '{"connections": {"a": {"type": 5, "env": "dev"}}}', "")
+
+    def put(self, text: str, name: str = FILE) -> None:
+        (self.root / ".harness" / "policies" / name).write_text(text, encoding="utf-8")
+
+    def test_every_unreadable_shape_holds_sqlcmd_and_names_the_file(self) -> None:
+        for text in self.BAD:
+            self.put(text)
+            out = self.term(f"{SERVER} {READ}")
+            self.assertEqual(out.get("permissionDecision"), "deny", text)
+            self.assertIn(self.FILE, out["permissionDecisionReason"], text)
+            for line in ("ls", "python3 -m unittest", "git status", "echo sqlcmd", "which sqlcmd"):
+                self.runs(line)
+
+    def test_layers_that_cannot_be_merged_are_a_fault_too(self) -> None:
+        self.put('{"connections+": 1}')
+        self.assertIn("connections", self.term(f"{SERVER} {READ}")["permissionDecisionReason"])
+        self.assertTrue(connections.faults(self.root))
+
+    def test_the_override_file_of_the_person_counts_too(self) -> None:
+        self.put("{ nope", "connections.override.json")
+        self.assertIn("connections.override.json", self.term(f"{SERVER} {READ}")["permissionDecisionReason"])
+        self.put(json.dumps({"connections": {"x": {"type": "sqlserver", "env": "dev", "host": "h", "port": "1"}}}), "connections.override.json")
+        self.runs(f"{SERVER} {READ}")
+
+    def test_the_hold_is_for_the_programs_of_the_types_only(self) -> None:
+        self.put("{ not json")
+        for line in ("node --version", "ls -la", "cat notes.txt", "az --version"):
+            self.runs(line)
+
+    def test_a_good_list_holds_nothing(self) -> None:
+        self.assertEqual(connections.faults(self.root), [])
+        self.runs(f"{SERVER} {READ}")
+
+    def test_doctor_names_the_file_as_an_error(self) -> None:
+        self.put("{ not json")
+        report = doctor.Report()
+        doctor.check_toolpacks(report, self.root)
+        errors = [line for line in report.lines if line.startswith("[ERROR]")]
+        self.assertEqual(report.errors, 1, report.lines)
+        self.assertIn(self.FILE, errors[0])
+        self.assertIn("sqlcmd", errors[0])
+        self.put(json.dumps({"connections": {}}))
+        report = doctor.Report()
+        doctor.check_toolpacks(report, self.root)
+        self.assertEqual(report.errors, 0, report.lines)
+
+
+class SettingTests(SqlCase):
+    """Item 7c (M6): an environment variable set in any of the shell's ways is a setting of the call that follows: SQLCMDINI runs a script at start, so a call with it waits for the person."""
+
+    def test_every_way_to_set_sqlcmdini_holds_the_call(self) -> None:
+        for setting in ("SQLCMDINI=/tmp/x.sql;", "export SQLCMDINI=/tmp/x.sql;", "declare -x SQLCMDINI=/tmp/x.sql;", "typeset -x SQLCMDINI=/tmp/x.sql;", "declare -gx SQLCMDINI=/tmp/x.sql;", "export -n SQLCMDINI=/tmp/x.sql;",
+                        "$env:SQLCMDINI='/tmp/x.sql';", "$env:SQLCMDINI = '/tmp/x.sql';", "$env:SQLCMDINI=/tmp/x.sql;", "env SQLCMDINI=/tmp/x.sql", "SQLCMDINI=/tmp/x.sql"):
+            self.held(f"{setting} {SERVER} {READ}")
+        self.held(f"pwsh -c \"$env:SQLCMDINI='x.sql'; {SERVER} -Q 'select 1'\"")
+        self.held(f"bash -c 'declare -x SQLCMDINI=x.sql; {SERVER} {READ}'")
+
+    def test_another_variable_changes_nothing(self) -> None:
+        for setting in ("declare -x FOO=1;", "export FOO=1;", "typeset -x FOO=1;", "$env:FOO='1';", "FOO=1"):
+            self.runs(f"{setting} {SERVER} {READ}")
+
+    def test_a_server_set_in_the_environment_is_no_server(self) -> None:
+        for setting in ("declare -x SQLCMDSERVER=localhost,14332;", "$env:SQLCMDSERVER='localhost,14332';", "typeset -x SQLCMDSERVER=localhost,14332;"):
+            self.refused_how(f"{setting} sqlcmd -C {READ}")
+
+
+class FaultInjectionTests(SqlCase):
+    """Items 7a, 13, 14: every catch-all on the decision path is made to fail, and a call of a governed program does not pass; a plain local command does (`ls`, `python3 -m unittest`). The hook runs in this process,
+    so a function can be made to raise (`mock.patch`); a file made unreadable is tested through the real hook elsewhere (BrokenListTests, test_c13_d4)."""
+
+    GOVERNED = f"{SERVER} {READ}"
+    LOCAL = ("ls", "python3 -m unittest", "git status", "cat notes.txt", "echo sqlcmd", "which sqlcmd", "python3 -c \"print(1)\"")
+    FAULT = RuntimeError("injected fault")
+
+    def event(self, command: str, tool: str = "run_in_terminal", given: Any = None) -> str:
+        data = pre_tool(SESSION, tool, given or {"command": command, "explanation": "t", "isBackground": False})
+        data["cwd"] = str(self.root)
+        return json.dumps(data)
+
+    def inject(self, target: str, raw: str) -> Dict[str, Any]:
+        """What hook.py prints for the payload when `target` raises."""
+        import hook
+
+        with mock.patch(target, side_effect=self.FAULT):
+            try:
+                out, _record = hook.process(raw, self.root)
+            except BaseException as error:  # noqa: BLE001 - what main() does
+                out = hook.fail_closed(self.root, raw, error)
+        return out
+
+    def closed(self, out: Dict[str, Any], label: str) -> None:
+        self.assertEqual(out.get("permissionDecision"), "deny", label)
+        self.assertIn("injected fault", out.get("permissionDecisionReason", ""), label)  # it says what failed
+
+    def test_a_failure_in_the_handler_refuses_a_governed_call_and_leaves_local_work(self) -> None:
+        for target in ("modules.gate.external.classify", "modules.gate.handler._judge_one", "modules.gate.handler.check_external", "modules.gate.handler.check_wrapped", "modules.gate.handler.check_terminal",
+                       "modules.gate.handler.judge_external", "modules.gate.handler.settle_opened", "modules.gate.handler.external_facts", "modules.gate.handler.asks_board", "modules.gate.handler.check_secrets",
+                       "core.config.load_policy", "core.connections.listed"):
+            self.closed(self.inject(target, self.event(self.GOVERNED)), target)
+            for line in self.LOCAL:
+                self.assertEqual(self.inject(target, self.event(line)), {}, (target, line))
+
+    def test_a_list_of_systems_that_cannot_be_made_holds_the_programs_not_the_other_work(self) -> None:
+        for target in ("core.toolpacks.rules_layer", "core.connections.derived", "core.connections.broken_systems", "core.toolpacks.broken_systems", "core.connections.widen"):
+            out = self.inject(target, self.event(self.GOVERNED))
+            self.assertEqual(out.get("permissionDecision"), "deny", target)
+            self.assertIn("injected fault", out["permissionDecisionReason"], target)
+            for line in self.LOCAL:
+                self.assertEqual(self.inject(target, self.event(line)), {}, (target, line))
+
+    def test_a_failure_of_the_whole_hook_refuses_a_governed_call_and_leaves_local_work(self) -> None:
+        for target in ("hook.registry_module.load_registry", "hook.state_module.session", "hook.adapters.detect"):
+            self.closed(self.inject(target, self.event(self.GOVERNED)), target)
+            for line in self.LOCAL:
+                self.assertEqual(self.inject(target, self.event(line)), {}, (target, line))
+
+    def test_what_hook_prints_when_it_cannot_read_the_payload(self) -> None:
+        import hook
+
+        for raw in ("", "not json", "[]", "{}", json.dumps({"hook_event_name": "PreToolUse"}), json.dumps({"hook_event_name": "PreToolUse", "tool_input": {"command": 5}})):
+            self.assertEqual(hook.fail_closed(self.root, raw, RuntimeError("x")), {}, raw)  # it cannot tell what the call is: no opinion, as before
+        again = json.dumps({"hook_event_name": "PostToolUse", "tool_input": {"command": self.GOVERNED}})
+        self.assertEqual(hook.fail_closed(self.root, again, RuntimeError("x")), {})  # only a call to come is refused
+
+    def test_a_list_of_systems_that_is_not_valid_refuses_a_governed_call(self) -> None:
+        (self.root / ".harness/policies/tools.override.json").write_text(json.dumps({"systems": {"extra": {"reach": {"cli": ["extratool"], "when": "("}}}}), encoding="utf-8")
+        out = self.term(self.GOVERNED)
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn(messages.text("gate.external.invalid", program="sqlcmd", error="x").split("x")[0][:12], out["permissionDecisionReason"])
+        for line in self.LOCAL:
+            self.runs(line)
+        self.assertEqual(self.term("extratool run").get("permissionDecision"), "deny")  # the program the faulty file names is refused too: the plain-text scan finds it
+
+    def test_a_tools_policy_that_is_not_json_refuses_a_governed_call(self) -> None:
+        (self.root / ".harness/policies/tools.override.json").write_text("{ nope", encoding="utf-8")
+        out = self.term(self.GOVERNED)
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        for line in self.LOCAL:
+            self.runs(line)
+
+    def test_a_pack_file_that_is_not_json_still_names_the_programs(self) -> None:
+        from core import govern
+
+        self.assertIn("sqlcmd", govern.programs(self.root))
+        (self.root / ".harness/toolpacks/sqlserver/types/sqlserver.json").write_text("{ not json \"cli\": [\"sqlcmd\", \"othertool\"]", encoding="utf-8")
+        (self.root / ".harness/toolpacks/sqlserver/toolpack.json").write_text("{ nope", encoding="utf-8")
+        have = govern.programs(self.root)
+        self.assertIn("othertool", have)
+        self.assertNotIn("curl", have)
+        self.assertEqual(govern.named(self.root, "/usr/bin/SQLCMD.exe -S x"), "sqlcmd")
+        self.assertEqual(govern.named(self.root, "ls -la"), "")
+
+    def test_an_mcp_tool_of_a_pack_is_refused_when_the_packs_cannot_be_read(self) -> None:
+        use_packs(self.root, "sqlserver", "demotracker")
+        raw = self.event("", tool="mcp_tracker_comment_ticket", given={"id": 1})
+        self.closed(self.inject("core.toolpacks.mcp_verb", raw), "mcp")
+        other = self.event("", tool="mcp_other_tool", given={"id": 1})
+        self.assertEqual(self.inject("core.toolpacks.mcp_verb", other), {})  # a tool no pack names: left as it was
+
+
+class HarnessCloseTests(BothCase):
+    """Item 9 (M2): the harness commands only a person may run are refused as the shell reads them: a quote, a variable that the line set, `xargs`, `python -m cli`, a one-line interpreter change nothing; a call whose words the gate cannot read is refused with the way."""
+
+    CLOSE = ("harness task close --task x", "harness task 'close' --task x", 'harness task "close"', "harness task cl''ose --task x", 'harness "task" "close"', "harness 't'ask close", "C=close; harness task $C --task x", "C=lose; harness task c$C --task x",
+             "export C=close; harness task ${C}", "declare -x C=close; harness task $C", "harness --json task close --task x", "harness task close --json", ".harness/bin/harness task close", "/Users/x/repo/.harness/bin/harness.cmd task \"close\"",
+             "python3 -m cli task close --task x", "python3 .harness/engine/cli.py task close", "python3 .harness/engine/cli.py task 'close'", "bash -c \"harness task 'close'\"", "sh -c 'harness task cl\"\"ose'", "pwsh -Command \"harness task close\"",
+             "eval \"harness task cl''ose\"", "cd x && harness task 'close'", "ls; harness task 'close' --task a", "HARNESS_X=1 harness task 'close'", "env HARNESS_X=1 harness task 'close'", "bash <<'EOF'\nharness task 'close'\nEOF",
+             "bash -c \"C=close; harness task \\$C\"", "bash -c 'harness as x -- harness task \"close\"'")
+    HIDDEN = ("echo close | xargs harness task", "echo task close | xargs harness", "xargs -I{} harness task {} < list", "find . -name x -exec harness task close \\;", "harness task $X", "harness $(echo task) close", "harness task `echo close`",
+              "python3 -c \"import subprocess; subprocess.run(['harness','task','close','--task','x'])\"", "PYTHONPATH=.harness/engine python3 -c \"import cli; cli.main(['task','close'])\"", "node -e \"require('child_process').execSync('harness task close')\"",
+              "perl -e 'system(\"harness\", \"task\", \"close\")'", "python3 -c \"import os; os.system('harness task close')\"", "ruby -e 'system(\"harness task close\")'")
+    OTHER = ("harness task approve-plan --task x", "harness 'task' 'approve-plan'", "harness task confirm-req", "harness task approve-promote --task x", "harness approve-action 123", "harness 'approve-action' 123", "harness admin on", "harness 'admin' 'on'",
+             "harness task review set --task x", "harness task autorun on", "harness task allow --env dev", "harness task board")
+
+    def test_every_spelling_of_close_is_refused_with_the_way(self) -> None:
+        for line in self.CLOSE:
+            out = self.call(line)
+            self.assertEqual(out.get("permissionDecision"), "deny", line)
+            self.assertIn("harness task deliver", out["permissionDecisionReason"], line)
+        self.assertEqual(self.waiting(), 0)
+
+    def test_a_harness_command_the_gate_cannot_read_is_refused_with_the_way(self) -> None:
+        for line in self.HIDDEN:
+            out = self.call(line)
+            self.assertEqual(out.get("permissionDecision"), "deny", line)
+            self.assertIn(messages.text("gate.harness.unreadable", call="x").split("x")[0][:20], out["permissionDecisionReason"], line)
+
+    def test_the_other_commands_only_a_person_may_run_are_read_the_same_way(self) -> None:
+        for line in self.OTHER:
+            self.assertEqual(self.call(line).get("permissionDecision"), "deny", line)
+
+    def test_the_harness_commands_an_agent_runs_stay_free(self) -> None:
+        self.check("allow", ["harness task deliver --summary done", "harness task new x", "harness task list", "harness connections find dev", "harness doctor", "harness task close-everything", "harness --version", "python3 .harness/engine/cli.py task list",
+                             "python3 -m cli task list", "harness task 'deliver' --summary 'x'", "C=deliver; harness task $C --summary x", "echo harness | xargs echo", "python3 -c \"print('harness')\"", "python3 -m unittest",
+                             "grep -rn 'task close' docs", "xargs echo < list", "ls | xargs wc -l", "node -e \"console.log('harness')\"", "cat README.md | head"])
 
 
 if __name__ == "__main__":

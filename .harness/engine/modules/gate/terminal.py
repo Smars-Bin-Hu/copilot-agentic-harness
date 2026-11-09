@@ -145,11 +145,16 @@ def tree_write(command: str, compiled: Compiled) -> Optional[str]:
     return _first(command, compiled.tree_writes)
 
 
-def _segment(text: str, at: int) -> str:
-    """The one command of the line (cut at `;`, `&`, `|`, `(` and a new line) that the character at `at` is in."""
+def _span(text: str, at: int) -> Tuple[int, int]:
+    """Where the one command of the line (cut at `;`, `&`, `|`, `(` and a new line) that the character at `at` is in begins and ends."""
     left = max((text.rfind(char, 0, at) for char in _SEPARATORS), default=-1) + 1
     rights = [index for index in (text.find(char, at) for char in _SEPARATORS) if index != -1]
-    return text[left: min(rights) if rights else len(text)]
+    return left, min(rights) if rights else len(text)
+
+
+def _segment(text: str, at: int) -> str:
+    left, right = _span(text, at)
+    return text[left:right]
 
 
 _NET_PROGRAM = re.compile(r"[\w.-]+$")
@@ -175,7 +180,8 @@ def check(command: str, compiled: Compiled, judged: Optional[Callable[[str], boo
     for regex, why in compiled.ask:
         for found in regex.finditer(text):
             program = _NET_PROGRAM.search(found.group(0).strip())
-            if judged is not None and program and program.group(0).lower() in JUDGEABLE and not cut_short(_segment(text, found.start())) and judged(_segment(text, found.start())):
+            left, right = _span(text, found.start())
+            if judged is not None and program and program.group(0).lower() in JUDGEABLE and not cut_short(text[left:right]) and judged(command[left:right]):  # 1.7.38 (C13 F2): the system judges the line as it was written, not with the separators inside quotes blanked: a `pwsh -Command '...'` is read like a bare line
                 continue
             return "ask", why
     return None

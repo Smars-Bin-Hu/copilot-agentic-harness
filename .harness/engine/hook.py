@@ -8,7 +8,7 @@
   stdout <- adapter (Decision -> runtime output JSON)
   log    -> observe module: one line per call in the log of the session
 
-Any error: log it, print {} and exit 0. A broken hook must not block normal work.
+Any error: log it and exit 0. A broken hook must not block normal work: it prints {} (no opinion), except for a call to a program or an MCP tool of a tool pack, which it refuses (1.7.38, C13 F2; modules/gate/failclosed.py).
 """
 
 from __future__ import annotations
@@ -116,6 +116,16 @@ def observe(root: Path, record: Dict[str, Any], raw: str, output: Dict[str, Any]
         log_error(root, "observe", error)
 
 
+def fail_closed(root: Path, raw: str, error: BaseException) -> Dict[str, Any]:
+    """The output when the whole hook failed: nothing (no opinion) for any call, except a PreToolUse call that names a program or an MCP tool of a tool pack, which is refused (1.7.38, C13 F2)."""
+    try:
+        from modules.gate import failclosed
+
+        return failclosed.on_hook_error(root, raw, error)
+    except BaseException:  # noqa: BLE001 - the last net: it must not raise
+        return {}
+
+
 def main() -> int:
     started = time.monotonic()
     root = repo_root()
@@ -128,7 +138,7 @@ def main() -> int:
     except BaseException as error:  # noqa: BLE001 - fail-open on everything, including SystemExit
         log_error(root, "hook", error, sample=raw)
         record = {"error": f"{type(error).__name__}: {error}"}
-        output = {}
+        output = fail_closed(root, raw, error)
     record["ms"] = round((time.monotonic() - started) * 1000, 1)
     record["pid"] = os.getpid()
     observe(root, record, raw, output)

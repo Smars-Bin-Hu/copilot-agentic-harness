@@ -26,7 +26,7 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, external, gitcmd, outbox, rules, terminal
+from . import approvals, external, failclosed, gitcmd, harnesscmd, outbox, rules, terminal
 from .policy import POLICY_NAME, Compiled, validate_policy
 
 NAME = "gate"
@@ -103,7 +103,15 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     git = gitcmd.classify(event.command) if guard_git else gitcmd.Verdict()
     if git.kind == gitcmd.NEVER:
         return Decision(permission="deny", reason=rules.git_never(git.why, gitcmd.collapse(event.command)))
+    said = harnesscmd.check(event.command, compiled)  # 1.7.38 (C13 F2): the harness commands only a person may run, read as the shell reads them (a quote, a variable, `xargs`, `python -m cli` hide nothing)
+    if said:
+        return Decision(permission="deny", reason=said)
     verdict = terminal.check(event.command, compiled, network_judged(ctx))
+    if verdict is None or verdict[0] != "deny":  # 1.7.38 (C13 F2): a command string a shell is given (`pwsh -Command '...'`, `bash -c '...'`) goes through the same rules as a bare line; the strictest answer stands
+        for inner in external.nested(event.command):
+            found = terminal.check(inner, compiled, network_judged(ctx))
+            if found is not None and (verdict is None or (found[0] == "deny" and verdict[0] != "deny")):
+                verdict = found
     if verdict is not None and verdict[0] == "deny":
         return Decision(permission="deny", reason=rules.terminal_denied(verdict[1]))
     port = asks_board(ctx, event.command)
@@ -181,13 +189,16 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     """
     try:
         systems = ctx.policy("tools").get("systems") or {}
-        if not systems or external.validate(systems):
+        if not systems:
             return None
+        invalid = external.validate(systems)
+        if invalid:  # 1.7.38 (C13 F2): a list the gate cannot trust judges nothing, so a line that names a program a tool pack governs is refused (the old way passed every call)
+            return failclosed.refusal(ctx.root, event.command, invalid[0], "invalid")
         task = ctx.state.get("active_task")
         every = external.classify(event.command, systems, unseen=True, root=ctx.root, cwd=event.cwd or "", folder=(ctx.root / str(task)) if task else None)
         results = [_judge_one(event, ctx, systems, action, decision) for action, decision in every]
-    except Exception:  # noqa: BLE001 - see above
-        return None
+    except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2): the gate failed on this line: refused when the line names a program a tool pack governs, as before (no opinion) when it names none
+        return failclosed.refusal(ctx.root, event.command, error)
     if not results:
         return None
     stopped = [item for item in results if not item["passes"]]
@@ -260,8 +271,8 @@ def check_mcp(event: HookEvent, ctx: Context) -> Optional[Decision]:
         from core import toolpacks
 
         found = toolpacks.mcp_verb(ctx.root, event.tool_name)
-    except Exception:  # noqa: BLE001 - a broken tool pack must not stop a tool call
-        return None
+    except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2): a tool pack that cannot be read must not let its own MCP tool through: refused when the tool is one the packs' files name, left as it was when none does
+        return failclosed.decision(ctx.root, event, error)
     if not found:
         return None
     facts = {"external": {"system": found["toolpack"], "env": "none", "verb": found["verb"], "target": event.tool_name, "mcp": True}}
@@ -389,15 +400,19 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
 
 def _changed_files(ctx: Context, event: HookEvent, minutes: int) -> List[str]:
     """The files this command names, inside its task, that are not as they were when the person approved it: changed, gone, or new (`core.pinfiles`). Empty when no approval is waiting for the command,
-    when it was approved with no files kept (before 1.7.38), or when all are the same. Never raises: a read that fails says nothing changed, as before."""
+    when it was approved with no files kept (before 1.7.38), or when all are the same. Never raises. A read of the files that fails (1.7.38, C13 F2) says they changed: the approval is for the files as the person saw them,
+    and a gate that cannot tell does not let the call through on it; the card is asked again."""
     try:
         text = approvals.collapse(event.command)
         entry = next((item for item in approvals.approved(ctx.root, event.session_id, minutes, file=approvals.ACTIONS) if item.get("command") == text), None)
         if entry is None or entry.get("files") is None:
             return []
+    except Exception:  # noqa: BLE001 - nothing approved can be found: there is nothing to compare, and the approval is not used either
+        return []
+    try:
         return pinfiles.changed(entry["files"], pinfiles.pins(event.command, ctx.root, str(entry.get("task") or ""), event.cwd or str(entry.get("cwd") or "")))
     except Exception:  # noqa: BLE001 - see above
-        return []
+        return ["?"]
 
 
 def settle_opened(ctx: Context, command: str) -> None:
@@ -638,6 +653,17 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
 
 
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """The gate. When the whole handler raises (hook.py then counts the gate as having no opinion, and the call goes through), a call to a program or an MCP tool of a tool pack is refused instead (1.7.38, C13 F2)."""
+    try:
+        return _handle(event, ctx)
+    except Exception as error:  # noqa: BLE001 - see above; everything else is left as it was: the error is raised again
+        refused = failclosed.decision(ctx.root, event, error)
+        if refused is not None:
+            return refused
+        raise
+
+
+def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.event == "SessionStart" or (event.event in ("PostToolUse", "PostToolUseFailure") and event.tool_kind == "terminal"):
         watch_reach(event, ctx)
         return wrapped_context(ctx) if event.event == "SessionStart" else first_reach(event, ctx)

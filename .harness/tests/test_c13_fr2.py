@@ -924,6 +924,12 @@ class IntegrityWordsTests(unittest.TestCase):
             self.assertEqual(row["event"], "PreToolUse")
             self.assertIn("core/paths.py", row["reason"])
             self.assertTrue(row["target"]["command"] or row["target"]["paths"])
+        from modules.task import tasktrace
+
+        built = tasktrace.build(rows)  # the Agent actions list of the task page: a refused call with the rule `integrity`, which the page says in words
+        shown = [item for item in built["entries"] if item["kind"] == "gate"]
+        self.assertEqual([(item["decision"], item["rule"]) for item in shown], [("deny", "integrity")] * 2)
+        self.assertIn("core/paths.py", shown[0]["reason"])
         from core import messages
 
         self.assertTrue(messages.table("en")["desk.trace.rule.integrity"])

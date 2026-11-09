@@ -95,6 +95,9 @@ def crash_words(stderr: str, root: Path) -> str:
     lines = stderr.strip().splitlines()
     if not lines:
         return ""
+    for line in lines:  # `cli.py` already says it in one sentence when the engine cannot load (the file, the line and the fault)
+        if line.startswith("harness: the engine cannot load: "):
+            return line[len("harness: the engine cannot load: "):]
     found = [re.match(r'\s*File "(.+?)", line (\d+)', line) for line in lines]
     frame = next((item for item in reversed(found) if item), None)
     if frame is None:

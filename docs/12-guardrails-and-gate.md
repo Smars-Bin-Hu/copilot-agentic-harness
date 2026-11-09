@@ -49,7 +49,7 @@ A company can set these per system. What passes without asking you:
 
 - reads;
 - a command you approved, exactly as you approved it;
-- a write or a run on a connection you opened for this task (the button **Open <connection> for this task** on the held card). How far a connection may be opened is a word in its tool pack type, per environment: `all`, `items` or `no`. The sample SQL Server type opens DEV and IST and not QAT. Prod and a destroy are never opened;
+- a write or a run on a connection you opened for this task (the button **Open <connection> for this task** on the held card). For a type with lists, only what its write list names: a call with a statement on no list still waits, and its card has no Open button and says why (**Why held**). How far a connection may be opened is a word in its tool pack type, per environment: `all`, `items` or `no`. The sample SQL Server type opens DEV and IST and not QAT. Prod and a destroy are never opened;
 - a write to a ticket the task is linked to, after you opened its **linked items** (the `items` word: the button **Open linked items of <connection> for this task** on the card of a held write to a linked ticket). A ticket the agent links by itself still waits for you.
 
 You decide when a call is held, not before: **Approve** is for that one command and for the files it names (1.7.38: a script in the task folder, as you read it on the card; if the file changes after you pressed **View** and before you approve, nothing is approved and you press **View** again; if it changes after you approve, the approval is not used and the call is held again, with a new code), **Open** is for the connection. Both need the code the board shows, so the agent cannot open a connection for itself. **Dismiss** asks why with one click (the command is wrong, wrong connection or environment, not now, do it another way): the agent changes the call and it is held again, or it stops that path. With *not now* or no reason it does not retry and does not reach the same result another way. A company can lower what a type says (a connection with `"open": "no"`), never raise it.
@@ -64,7 +64,7 @@ The gate is code that runs in the hooks, before a call. It does not ask a model.
 
 The agent cannot change these facts: the files that hold them are guardrail files, and an approval needs the code from the board.
 
-A script file counts like the same words in the command line: a type says which option names one (`sqlcmd -i file`), and the gate reads the file (at most 200 KB) and judges its statements with the same rules. A drop or a truncate in it is refused, even when the connection is opened; a file of reads only runs; any other waits for you, and so does a file it cannot read.
+A script file counts like the same words in the command line: a type says which option names one (`sqlcmd -i file`), and the gate reads the file (at most 200 KB) and judges its statements with the same rules. A statement on the refuse list in it (a drop, a truncate, `!!`, `:connect`) refuses the call, even when the connection is opened, and a company's rules do not turn that into a card; a file of reads only runs; any other waits for you, and so does a file it cannot read.
 
 A made-up subcommand of a tool pack's own program (`ado workitem`, when `ado` has no such command) is refused with one line and shows no card: there is nothing to approve.
 

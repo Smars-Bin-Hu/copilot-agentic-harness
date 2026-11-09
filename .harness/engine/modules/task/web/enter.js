@@ -512,7 +512,7 @@
           if (!req && c && c.launch) { const b = h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")); nodes.push(h("br"), t("board.enter.m.systems.launch"), h("br"), b); }
           p.replaceChildren(...nodes);
         }
-        setClass(p, "m" + (soft ? " soft" : "") + (req && view.state === "fail" ? " bad" : "")); if (p.hidden) p.hidden = false;
+        setClass(p, "m" + (soft ? " soft" : "") + ((req && view.state === "fail") || (!req && view.level === "red") ? " bad" : ""));  // a red row has a red note, not an amber one (F1 U1) if (p.hidden) p.hidden = false;
       } else if (!p.hidden) { p.hidden = true; p.dataset.k = ""; }
     });
     const down = Boolean(chk0.error);

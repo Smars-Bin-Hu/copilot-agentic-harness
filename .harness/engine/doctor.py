@@ -624,7 +624,7 @@ def check_toolpacks(report: Report, root: Path) -> None:
                 report.warn(say("doctor.toolpacks.recipe", faults="; ".join(faults)))
         for one in toolpacks.faults(root):  # 1.7.38 (G-1): a faulty file makes the gate hold every call of the pack's programs; it is an error, not a quiet gap
             for fault in one["faults"]:
-                report.error(say("doctor.toolpacks.broken", pack=one["pack"], file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(one["programs"]) or "-"))
+                report.error(say("doctor.toolpacks.unreadable" if fault.get("unreadable") else "doctor.toolpacks.broken", pack=one["pack"], file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(one["programs"]) or "-"))
         names = sorted(toolpacks.active(root))
         if names:
             report.ok(say("doctor.toolpacks.on", names=", ".join(names)))
@@ -691,6 +691,7 @@ def system_reach(root: Path, systems: Dict[str, Any]) -> Dict[str, Dict[str, Any
         if name in listed and keys and all(key in done for key in keys):
             bad = [key for key in keys if done[key]["state"] != seen.OK]
             code = str(done[bad[0]].get("why") or done[bad[0]]["state"]) if bad else ""
+            code = "no-answer" if code == connections.UNTESTED_SLOW else code  # (F1 M9) the board keeps "no answer" as "saved, not tested yet: no answer"; doctor says it in its own words
             said = str(done[bad[0]].get("said") or "") if bad else ""
             by_connection[name] = {"reachable": not bad, "why": clip.words(say("doctor.systems.why.connection", why=reach_words(code, said)), 260) if bad else "",
                                    "launch": say("doctor.systems.launch.noanswer") if code == "no-answer" else (system.get("needs") or {}).get("launch") or ""}  # a new identity does not help when nothing answered

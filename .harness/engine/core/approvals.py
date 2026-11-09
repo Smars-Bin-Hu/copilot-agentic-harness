@@ -18,8 +18,13 @@ from .state import atomic_write, state_lock
 
 FILE = "git-approvals.json"
 ACTIONS = "action-approvals.json"
-MAX_ENTRIES = 50
+MAX_ENTRIES = 50  # the file keeps this many entries, when it can: it drops only what no longer waits (below)
+MAX_PENDING = 200  # (1.7.38, C13 M1) calls that wait for the person, all tasks together: the next one is refused, never an older one dropped
 DEFAULT_MINUTES = 10
+
+
+class TooManyWaiting(Exception):
+    """MAX_PENDING calls already wait for the person: a new one is not held (1.7.38, C13 M1)."""
 
 
 def path(root: Path, file: str = FILE) -> Path:
@@ -49,8 +54,24 @@ def _alive(item: Dict[str, Any], limit: float, now: float) -> bool:
     return now - float(item.get("at", 0)) <= (PENDING_HOURS * 3600.0 if item.get("state") == "pending" else limit)
 
 
+def trimmed(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The entries to keep (1.7.38, C13 M1): at most MAX_ENTRIES, but an entry that still waits for the person (`pending`) is never dropped, whatever task it is of. What goes is what is decided, void or run:
+    the stubs of a dismissed or void call first, then the other decided ones (approved, opened); the oldest of each first."""
+    over = len(entries) - MAX_ENTRIES
+    if over <= 0:
+        return entries
+    gone: set = set()
+    for rank in (("dismissed",), ("approved", "opened")):
+        for index, item in enumerate(entries):
+            if len(gone) >= over:
+                break
+            if item.get("state") in rank:
+                gone.add(index)
+    return [item for index, item in enumerate(entries) if index not in gone]
+
+
 def _write(root: Path, entries: List[Dict[str, Any]], name: str = FILE) -> None:
-    atomic_write(path(root, name), {"entries": entries[-MAX_ENTRIES:]})
+    atomic_write(path(root, name), {"entries": trimmed(entries)})
 
 
 def collapse(command: str) -> str:
@@ -68,7 +89,7 @@ def request(
 ) -> str:
     """Record the command as waiting for a person and return its code. The same command in the same session keeps its code.
 
-    `extra`: what the person should see besides the command (for an outside call: system, environment, verb, task, draft)."""
+    `extra`: what the person should see besides the command (for an outside call: system, environment, verb, task, draft). Raises TooManyWaiting when MAX_PENDING calls wait already."""
     now = time.time() if now is None else now
     text, limit = collapse(command), limit_minutes * 60.0
     with state_lock(path(root, file)):
@@ -80,6 +101,8 @@ def request(
                     item.update(missing)
                     _write(root, entries, file)
                 return item["code"]
+        if sum(1 for item in entries if item.get("state") == "pending") >= MAX_PENDING:
+            raise TooManyWaiting(str(MAX_PENDING))
         taken = {item["code"] for item in entries}
         code = _code(session_id, text, now)
         while code in taken:

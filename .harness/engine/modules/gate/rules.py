@@ -143,6 +143,21 @@ def external_task(action: Any, command: str) -> str:
     return say("gate.external.task", place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
+def _what(action: Any, key: str) -> str:
+    """The first sentence of a held call's text: what kind of call it is. A call of a pack whose file is faulty (G-1) has no kind: the gate could not judge it (1.7.38, M5), and it must not be told as a write."""
+    place_ = place(action.system, action.env)
+    if getattr(action, "zone", "") == "broken":
+        return say(f"{key}.what.unknown", place=place_)
+    return say(f"{key}.what", place=place_, verb=_verb(action.verb))
+
+
+def too_many_waiting() -> str:
+    """(1.7.38, C13 M1) A new call is not held because too many wait for the person already: one line that tells the agent to stop and the user to handle them first."""
+    from core import approvals
+
+    return say("gate.approvals.too_many", n=approvals.MAX_PENDING)
+
+
 def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None, changed: Any = None) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
     key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
@@ -152,7 +167,7 @@ def external_outbox(action: Any, command: str, code: str, minutes: int, draft: s
         note = say("gate.external.broken", note=action.note) + gap
     elif not key and getattr(action, "zone", "") == "ask" and action.note:  # 1.7.38: a call of a type with lists that is on no list: it waits, and opening the connection will not pass it
         note = say("gate.external.zone_ask", statement=action.note, place=place(action.system, action.env)) + gap
-    text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + gap if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
+    text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + gap if changed else "") + say("gate.external.outbox", what=_what(action, "gate.external.outbox"), call=command, code=code, minutes=minutes, where=where)
     if offers:  # 1.7.38: the card can also open the connection for the task; the agent says so, and runs the same command again if the user does
         buttons = messages.joined(say("gate.external.outbox.button", text=say("desk.outbox.open.items" if item.get("scope") == "items" else "desk.outbox.open", name=str(item["system"]))) for item in offers)  # the buttons as the card names them (C12 N12): a connection that opens only the linked items has its own words
         text += gap + say("gate.external.outbox.opens", buttons=buttons)
@@ -160,7 +175,7 @@ def external_outbox(action: Any, command: str, code: str, minutes: int, draft: s
 
 
 def external_autorun(action: Any, command: str) -> str:
-    return say("gate.external.autorun", place=place(action.system, action.env), verb=_verb(action.verb), call=command)
+    return say("gate.external.autorun", what=_what(action, "gate.external.autorun"), call=command)
 
 
 def external_approved(commands: Any) -> str:

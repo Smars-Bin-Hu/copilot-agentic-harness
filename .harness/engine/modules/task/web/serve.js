@@ -209,14 +209,40 @@ const SERVE = (function () {
           (error) => { said.replaceChildren(...reasons(error.message)); tell.disabled = false; });
       });
     }
-    go.addEventListener("click", () => {
+    const shut = (void_) => post("/api/close", {task: row.name, reason: words ? words.value.trim() : "", ...(void_ ? {void: true} : {})});
+    go.addEventListener("click", () => {  // calls of the task that still wait are listed first, as Accept and close does (1.7.38, F1 M2)
       go.disabled = true;
-      post("/api/close", {task: row.name, reason: words ? words.value.trim() : ""}).then(() => { view.close(); done(); },
-        (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
+      post("/api/close", {task: row.name, step: "preview"}).then((data) => {
+        const calls = (data.result && data.result.held) || [];
+        if (!calls.length) return shut(false).then(() => { view.close(); done(); });
+        view.close();
+        askVoid(calls, shut);
+      }).catch((error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
     });
   }
 
-  // Accept and close (1.7.38, C13 FB-4): when calls of the task still wait for the person, the page lists them first ("N calls still wait for you; closing voids them") and closes on the second yes.
+  // The question both ways of closing ask when calls of the task still wait for the person (Accept and close, C13 FB-4; Close, F1 M2): the calls are listed, closing voids them, and the task closes on the second yes.
+  // `run(true)` closes with the person's yes (the server asks for it too); it gives a promise. A list that scrolls says so under it (1.7.38, F1 L4).
+  function askVoid(calls, run, back) {
+    const one = calls.length === 1;
+    const go = h("button", {class: "act hot", type: "button"}, t("board.accept.held.go"));
+    const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+    const said = h("div", {class: "bad"});
+    const list = h("ul", {class: "held-list"}, calls.map((call) => h("li", null, h("b", null, call.system + (call.env && call.env !== "none" ? " " + call.env.toUpperCase() : "")), " ", h("span", {class: "held-title"}, call.title))));
+    const more = h("p", {class: "sub held-more", hidden: ""}, t("board.accept.held.more"));
+    const mark = () => { more.hidden = !(list.scrollHeight > list.clientHeight + 1 && list.scrollTop + list.clientHeight < list.scrollHeight - 1); };
+    list.addEventListener("scroll", mark);
+    const view = dialog([h("h2", null, t(one ? "board.accept.held.title.one" : "board.accept.held.title", {n: calls.length})), h("p", null, t(one ? "board.accept.held.warn.one" : "board.accept.held.warn")), list, more, h("div", {class: "row"}, go, no), said]);
+    requestAnimationFrame(mark);
+    no.addEventListener("click", view.close);
+    go.addEventListener("click", () => {
+      go.disabled = true;
+      run(true).then(() => { view.close(); done(); }, (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; if (back) back(); });
+    });
+    return view;
+  }
+
+  // Accept and close (1.7.38, C13 FB-4): when calls of the task still wait for the person, the page lists them first and closes on the second yes.
   // The server asks for that yes too: an acceptance that does not carry it is refused while a call waits.
   function accept(button, row, body) {
     const work = () => { button.textContent = t("board.serve.working"); };
@@ -227,18 +253,7 @@ const SERVE = (function () {
       const calls = (data.result && data.result.held) || [];
       if (!calls.length) return close(false).then(done);
       back();
-      const go = h("button", {class: "act hot", type: "button"}, t("board.accept.held.go"));
-      const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-      const said = h("div", {class: "bad"});
-      const view = dialog([h("h2", null, t(calls.length === 1 ? "board.accept.held.title.one" : "board.accept.held.title", {n: calls.length})), h("p", null, t("board.accept.held.warn")),
-        h("ul", {class: "held-list"}, calls.map((call) => h("li", null, h("b", null, call.system + (call.env && call.env !== "none" ? " " + call.env.toUpperCase() : "")), " ", h("span", {class: "held-title"}, call.title)))),
-        h("div", {class: "row"}, go, no), said]);
-      no.addEventListener("click", view.close);
-      go.addEventListener("click", () => {
-        go.disabled = true;
-        work();
-        close(true).then(() => { view.close(); done(); }, (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; back(); });
-      });
+      askVoid(calls, (void_) => { work(); return close(void_); }, back);
     }).catch((error) => { back(); failed(error); });
   }
 

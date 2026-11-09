@@ -596,10 +596,14 @@ def check_link_type(root: Path, ref: str) -> None:
     """The board takes a ticket of a type an installed tool pack gives, and says which types there are when it is another (1.7.22). With no type installed, any `<type>:<id>` is kept as text."""
     from core import toolpacks
 
-    types = [item["type"] for item in toolpacks.link_types(root)]
-    kind = str(ref or "").split(":", 1)[0]
+    found = toolpacks.link_types(root)
+    types = [item["type"] for item in found]
+    kind, _, ident = str(ref or "").partition(":")
     if types and kind not in types:
         raise CommandError(say("task.link.type", type=kind, types=", ".join(types)))
+    spec = next((item for item in found if item["type"] == kind), None)
+    if spec and spec.get("id") and not re.fullmatch(spec["id"], ident):  # (1.7.38, F1 L6) the type says what an id looks like: `ado:bad` is not a work item
+        raise CommandError(say("task.link.id", type=kind, ref=str(ref)[:64], example=f"{kind}:{spec['example']}" if spec.get("example") else kind + ":<id>"))
 
 
 def link(root: Path, raw_task: str, ref: str, on: bool, by_person: bool = False) -> Dict[str, Any]:

@@ -14,7 +14,9 @@
     "demo": {
       "label": "Ticket",
       "type": "demotracker",
-      "url": "https://tracker.example.org/{project}/ticket/{id}"
+      "url": "https://tracker.example.org/{project}/ticket/{id}",
+      "id": "T-\\d+",
+      "example": "T-7"
     }
   },
   "mcp": {

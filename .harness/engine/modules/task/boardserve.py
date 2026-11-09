@@ -219,6 +219,17 @@ def relaunch(code: str) -> None:
 
 
 
+def reach_words(line: Dict[str, Any]) -> str:
+    """Why the last check of a connection with a sign-in kept here did not pass, in a sentence, for the hover of its row (1.7.38, F1 M9): a refusal says it turned the account down; any other failure says what the program said.
+    Nothing when the check passed, or never answered (that is the row's own "not tested yet")."""
+    state, why = str(line.get("state") or ""), str(line.get("why") or "")
+    if state == reach.DENIED:
+        return say("connections.reach.other" if why == "other-identity" else "connections.reach.denied")
+    if state == reach.FAILED:
+        return say("connections.reach.failed", why=why or "-")
+    return ""
+
+
 def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
     """What the Servers window shows (1.7.10): each server with its kind, environment, fields and whether an identity is saved (the account, never the password),
     what VS Code reached last, the kinds a person may add a server of, and whether VS Code is open now."""
@@ -226,18 +237,20 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
     env = conn_core.read_env(root)
     seen = reach.read(root)
     rows = []
-    for alias, server in conn_core.listed(root).items():
+    listed = conn_core.listed(root)
+    faulty = toolpacks.faults(root) if any(server.get("type") and not known.get(str(server.get("type"))) for server in listed.values()) else []  # read once, and only when a connection's type is not known (S1)
+    for alias, server in listed.items():
         kind = known.get(str(server.get("type"))) or {}
         auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
         saved = conn_core.identity_of(env, alias, kind, server)
         reached = (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")
         tool = conn_core.tool_program(auth) if auth.get("identity") == "tool" else ""
-        rows.append({"alias": alias, "label": server.get("label", ""), "about": str(server.get("about") or ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "via": kind.get("via", "cli"), "login": auth.get("login", ""),
+        rows.append({"alias": alias, "label": server.get("label", ""), "about": str(server.get("about") or ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "guard": toolpacks.guard_of(root, str(server.get("type")), faulty) if server.get("type") and not kind else None, "via": kind.get("via", "cli"), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
                      "tool": tool,  # 1.7.38: the program whose own sign-in this connection uses; one sign-in per computer, shared
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": reached,
-                     "signed": bool(saved) or (bool(tool) and reached == reach.OK),  # a program keeps its own sign-in: a check that got through says it is signed in, whether or not the account was kept here. The Enter screen counts the same (retest N4)
+                     "signed": conn_core.signed_in(saved, tool, reached), "reach_tip": reach_words(seen.get(f"{alias}:{server.get('env', '')}") or {}) if saved else "",  # a program keeps its own sign-in: a check that got through says it is signed in, whether or not the account was kept here. The Enter screen counts the same (retest N4)
                      "who": str((seen.get(f"{alias}:{server.get('env', '')}") or {}).get("who") or ""),
                      "untested": bool(saved) and reached == reach.UNKNOWN and (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("why") in (conn_core.UNTESTED, conn_core.UNTESTED_SLOW),
                      "untested_why": "no-answer" if bool(saved) and reached == reach.UNKNOWN and (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("why") == conn_core.UNTESTED_SLOW else ""})  # 1.7.38: `who` is the name a passed test answered with (a token has no account of its own to show); `untested`: kept, and no test has reached the system since
@@ -644,12 +657,17 @@ class Board:
             return True
         raise CommandError(say("serve.busy"))
 
-    def close(self, name: str, reason: str = "") -> Dict[str, Any]:
+    def close(self, name: str, reason: str = "", void: bool = False) -> Dict[str, Any]:
         """Close a task (`task close`): the report is written, the session lets go. The folder stays; `task open` opens it again.
-        The browser must be paired; no code is typed, for it undoes nothing that cannot be undone. `reason`: what the person typed in the dialog (like `task close --reason`); else the page's own words."""
+        The browser must be paired; no code is typed, for it undoes nothing that cannot be undone. `reason`: what the person typed in the dialog (like `task close --reason`); else the page's own words.
+        Calls of the task that still wait for the person are void when it closes (1.7.38, C13 M2): the page lists them and asks first, as Accept and close does, and `void` says the person said yes; without it the close
+        is refused and the answer says how many wait."""
         if "close" not in self.actions:
             raise CommandError(say("serve.action.off", action="close"))
         self.idle("close", name)
+        waiting = accept.held(self.root, name)
+        if waiting and not void:
+            raise CommandError(say("serve.close.held", count=len(waiting)))
         words = reason.strip()[:500]
         result = task_ops.close(self.root, name, words or say("serve.close.reason"), check_todo=False, todo_note=words or say("serve.close.reason"))
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
@@ -1830,7 +1848,9 @@ def handler_for(board: Board) -> type:
                 try:
                     if data.get("step") == "steps":  # the steps of TODO.md the close dialog lists
                         return self.answer(200, {"result": {"left": [text[:200] for text in task_ops.todo_left(board.root, task_ops.resolve(board.root, str(data.get("task", ""))))[:30]]}})
-                    return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")))})
+                    if data.get("step") == "preview":  # the calls of the task that still wait for the person: the page lists them and asks before it closes the task (1.7.38, C13 M2)
+                        return self.answer(200, {"result": {"held": accept.held(board.root, str(data.get("task", "")))}})
+                    return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")), data.get("void") is True)})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                     return self.answer(409, {"error": str(error)})
             if path == "/api/archive":

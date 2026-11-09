@@ -230,7 +230,7 @@ def company(root: Path, lang: str = "") -> Dict[str, Any]:
     packs = skillgroups.active_packs(root)
     prefix = skillcheck.company_prefix(root)
     out: Dict[str, Any] = {"found": folder is not None, "prefix": prefix, "name": "", "version": "", "made": "", "stale": 0, "domains": [], "standards": [], "instructions": [], "tools": tools(root, lang),
-                           "unknown_use": toolpacks.unknown_use(root), "skills": skills(root, folder, prefix, packs)}
+                           "unknown_use": toolpacks.unknown_use(root), "unreadable": [{"name": one["name"], "problem": one["problem"]} for one in toolpacks.unreadable(root)], "skills": skills(root, folder, prefix, packs)}
     if folder is None:
         return out
     config_file = _json(folder / "company.json")

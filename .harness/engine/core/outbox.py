@@ -66,7 +66,7 @@ def write_draft(root: Path, task: str, code: str, action: Any, command: str, ses
 _SEPARATORS = re.compile(r"\n|;|&&|\|\||\|")
 
 
-def merge_into_waiting(root: Path, task: str, session_id: str, command: str, action: Any, minutes: int, offers: Optional[List[Dict[str, Any]]] = None, cwd: str = "") -> str:
+def merge_into_waiting(root: Path, task: str, session_id: str, command: str, action: Any, minutes: int, offers: Optional[List[Dict[str, Any]]] = None, cwd: str = "", holds: Optional[List[Dict[str, Any]]] = None) -> str:
     """The code of a waiting card this command takes over, or "" (1.7.27). The agent sent a line of several commands (a read, then a write); it was held whole. It then sends the write alone:
     the same write, the same task, not yet approved. That is the same card, not a second one: the waiting entry gets the short command, keeps its code, and its draft is written again."""
     text = approvals.collapse(command)
@@ -80,7 +80,7 @@ def merge_into_waiting(root: Path, task: str, session_id: str, command: str, act
         parts = [approvals.collapse(part) for part in _SEPARATORS.split(old)]
         if old == text or len(parts) < 2 or text not in parts or item.get("system", "") != action.system:
             continue
-        if approvals.rewrite(root, str(item["code"]), session_id, text, minutes, extra=entry_extra(action, task, offers, cwd), file=approvals.ACTIONS):
+        if approvals.rewrite(root, str(item["code"]), session_id, text, minutes, extra=entry_extra(action, task, offers, cwd, holds), file=approvals.ACTIONS):
             try:
                 (root / draft_path(task, item["code"], action.system)).unlink()
             except OSError:
@@ -105,9 +105,10 @@ def mark(root: Path, relative: Optional[str], state: str, reason: str = "") -> N
     path.write_text(_STATE_LINE.sub(lambda _match: line, text, count=1), encoding="utf-8")
 
 
-def entry_extra(action: Any, task: Optional[str], offers: Optional[List[Dict[str, Any]]] = None, cwd: str = "") -> Dict[str, Any]:
+def entry_extra(action: Any, task: Optional[str], offers: Optional[List[Dict[str, Any]]] = None, cwd: str = "", holds: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """What the person sees in `approve-action` besides the command. The draft is `draft_of(entry)`. `offers` (1.7.38): the connections of the line that the card may open for the task
-    (`{system, env, scope: all|items, refs?}`); a request to open one is accepted only for a connection named here. `cwd` (1.7.38): where the agent's terminal was, to find the files the line names."""
+    (`{system, env, scope: all|items, refs?}`); a request to open one is accepted only for a connection named here. `cwd` (1.7.38): where the agent's terminal was, to find the files the line names.
+    `holds` (1.7.38, F1 M6): for a line whose parts are on more than one system, why each part is held (`{system, env, zone, note, opens}`); `opens`: opening that connection would pass the part."""
     extra = {"system": action.system, "env": action.env, "verb": action.verb, "target": action.target, "task": task or "", "cwd": cwd or ""}
     if not getattr(action, "named", True):
         extra["named"] = False  # no verbs rule matched: the card and the draft say so
@@ -117,6 +118,7 @@ def entry_extra(action: Any, task: Optional[str], offers: Optional[List[Dict[str
             extra["zone_note"] = action.note
     if offers:
         extra["offers"] = offers
+    extra["holds"] = list(holds or [])  # always given: a card rewritten for a shorter line does not keep the parts of the longer one
     return extra
 
 

@@ -91,6 +91,21 @@ def manifest(folder: Path) -> Dict[str, Any]:
     return found
 
 
+def _id_form_ok(spec: Dict[str, Any]) -> bool:
+    """The optional `id` (a pattern the id of a link must match as a whole) and `example` (a sample id) of a link type (1.7.38, F1 L6): `id` compiles, `example` is a text, and fits `id` when both are given."""
+    form, example = spec.get("id"), spec.get("example")
+    if form is None and example is None:
+        return True
+    try:
+        if form is not None and (not isinstance(form, str) or not re.compile(form).pattern):
+            return False
+        if example is not None and (not isinstance(example, str) or not LINK.match(f"a:{example}") or (isinstance(form, str) and not re.fullmatch(form, example))):
+            return False
+    except re.error:
+        return False
+    return True
+
+
 def problems(root: Path, folder: Path) -> List[str]:
     """What keeps this folder from being installed here; empty when it may be."""
     from . import connections, systems  # they read this module's installed kinds and systems
@@ -125,7 +140,7 @@ def problems(root: Path, folder: Path) -> List[str]:
         except (OSError, ValueError, AttributeError) as error:
             out.append(f"{MCP_FILE}: {error}")
     links = found.get("links") or {}
-    if not isinstance(links, dict) or any(not re.match(r"^[a-z][a-z0-9]{0,15}$", str(key)) or not isinstance(spec, dict) or not str(spec.get("url") or "").startswith(("https://", "{url}")) for key, spec in links.items()):
+    if not isinstance(links, dict) or any(not re.match(r"^[a-z][a-z0-9]{0,15}$", str(key)) or not isinstance(spec, dict) or not str(spec.get("url") or "").startswith(("https://", "{url}")) or not _id_form_ok(spec) for key, spec in links.items()):
         out.append(say("toolpack.links.bad"))
     for index, rule in enumerate((mcp.get("tools") or []) if isinstance(mcp, dict) else []):
         try:
@@ -225,12 +240,9 @@ def refuse_on_clash(root: Path) -> None:
         raise ToolpackError(line)
 
 
-def listed(root: Path) -> Dict[str, Dict[str, Any]]:
-    """Every pack this computer knows, `{name: {folder, manifest, source, active}}`: the company's own, the folders added here, the factory packs. `source` is
-    `company`, `harness` or the folder's path. A name found twice is kept once: the company's first, then a folder added here, then the factory's. A folder
-    whose manifest cannot be read is left out (`check` says why)."""
+def _candidates(root: Path) -> List[tuple]:
+    """`(folder, source, active)` of every folder that may be a pack, in the order `listed` reads them; `active` is None for a factory pack (the company's `packs.json` decides)."""
     company = targets.company_folder(root)
-    turned_on = set(use_list(root))
     found: List[tuple] = []
     base = company / COMPANY_PACKS if company else None
     clash = set(clashes(root))
@@ -238,8 +250,16 @@ def listed(root: Path) -> Dict[str, Dict[str, Any]]:
     found += [(Path(raw), raw, True) for raw in paths(root)]
     factory = root / FOLDER
     found += [(item, HARNESS, None) for item in (sorted(factory.iterdir()) if factory.is_dir() else []) if item.is_dir()]
+    return found
+
+
+def listed(root: Path) -> Dict[str, Dict[str, Any]]:
+    """Every pack this computer knows, `{name: {folder, manifest, source, active}}`: the company's own, the folders added here, the factory packs. `source` is
+    `company`, `harness` or the folder's path. A name found twice is kept once: the company's first, then a folder added here, then the factory's. A folder
+    whose manifest cannot be read is left out (`unreadable` and `faults` say why: the gate holds the programs of such a pack, 1.7.38 S1)."""
+    turned_on = set(use_list(root))
     out: Dict[str, Dict[str, Any]] = {}
-    for folder, source, active in found:
+    for folder, source, active in _candidates(root):
         try:
             data = manifest(folder)
         except ToolpackError:
@@ -248,6 +268,27 @@ def listed(root: Path) -> Dict[str, Dict[str, Any]]:
         if not NAME.match(name) or name in out or (source != str(folder) and name != folder.name):
             continue
         out[name] = {"folder": folder, "manifest": data, "source": source, "active": name in turned_on if active is None else active}
+    return out
+
+
+def unreadable(root: Path) -> List[Dict[str, Any]]:
+    """(1.7.38, S1) The pack folders whose `toolpack.json` cannot be read (not JSON, not an object, or missing from a folder that has `types/`, `bin/` or `rules.json`): `[{name, folder, source, active, problem}]`, `name` being the
+    folder's name (the manifest that would name it is lost). A folder with nothing of a pack in it is not one. `active` is as for `listed`: a company pack or a folder added here is on; a factory pack is on when `packs.json` names the folder."""
+    turned_on = set(use_list(root))
+    seen = set(listed(root))
+    out: List[Dict[str, Any]] = []
+    for folder, source, active in _candidates(root):
+        if folder.name in seen:
+            continue
+        try:
+            found = json.loads((folder / MANIFEST).read_text(encoding="utf-8-sig"))
+            problem = "" if isinstance(found, dict) else say("toolpack.manifest.object")
+        except FileNotFoundError:
+            problem = say("toolpack.manifest.missing") if any((folder / part).exists() for part in (TYPES, "bin", RULES)) else ""
+        except (OSError, ValueError) as error:
+            problem = str(error)
+        if problem:
+            out.append({"name": folder.name, "folder": folder, "source": source, "active": folder.name in turned_on if active is None else active, "problem": problem})
     return out
 
 
@@ -264,8 +305,7 @@ def type_names(folder: Path) -> List[str]:
     out: List[str] = []
     for path in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
         found = _json(path)
-        if isinstance(found, dict):
-            out.append(str(found.get("type") or path.stem))
+        out.append(str(found.get("type") or path.stem) if isinstance(found, dict) else path.stem)  # a file that cannot be read is known by its name: a connection of that type still names this pack (1.7.38, S1)
     return out
 
 
@@ -296,8 +336,8 @@ def guard_only(root: Path) -> Dict[str, List[str]]:
 
 
 def unknown_use(root: Path) -> List[str]:
-    """Names in `use` that no factory pack has."""
-    have = listed(root)
+    """Names in `use` that no factory pack has. A pack whose `toolpack.json` cannot be read is there: `faults` says so (S1), it is not missing."""
+    have = set(listed(root)) | {entry["name"] for entry in unreadable(root)}
     return [name for name in use_list(root) if name not in have]
 
 
@@ -476,17 +516,31 @@ def _program_names(value: Any) -> List[str]:
     return [str(one).lower() for one in ([value] if isinstance(value, str) else value if isinstance(value, list) else []) if isinstance(one, str) and one]
 
 
+def _read_by_gate(root: Path) -> List[tuple]:
+    """`(name, item, first faults)` of the packs the gate reads: those of `guarded`, then the ones whose `toolpack.json` cannot be read (1.7.38, S1) that are on or that a connection's type names. The `item` of such a pack has an empty
+    manifest and the one fault `toolpack.json`; its programs are found from its `types/` and `bin/`."""
+    out: List[tuple] = [(name, item, []) for name, item in guarded(root).items()]
+    lost = unreadable(root)
+    if lost:
+        used = {str(server.get("type")) for server in connections_listed(root).values()} - {one for item in active(root).values() for one in type_names(item["folder"])}
+        for entry in lost:
+            if entry["active"] or used & set(type_names(entry["folder"])):
+                item = {"folder": entry["folder"], "manifest": {}, "source": entry["source"], "active": entry["active"], "unreadable": True}
+                out.append((entry["name"], item, [{"file": MANIFEST, "problem": entry["problem"], "unreadable": True}]))
+    return out
+
+
 def faults(root: Path) -> List[Dict[str, Any]]:
     """(1.7.38, G-1) The packs the gate reads (`guarded`) that have a faulty file: a type file that cannot be read or is not valid (an unknown key, a pattern that does not compile, a list of the wrong shape),
-    or a `rules.json` that is not valid. `[{pack, source, faults: [{file, problem}], programs}]`; `programs` are the programs the pack declares, in lower case: the `cli` of its types, `needs.programs` of its
-    manifest, the files of its `bin/`, and the programs its `rules.json` lists. A type that is not valid used to be left out, so the programs of its pack were not judged at all; now every call of them is held
+    or a `rules.json` that is not valid; and (S1) a pack whose `toolpack.json` cannot be read (`unreadable: True`, the first fault is `toolpack.json`). `[{pack, source, faults: [{file, problem}], programs, unreadable}]`;
+    `programs` are the programs the pack declares, in lower case: the `cli` of its types, `needs.programs` of its manifest (none when it cannot be read), the files of its `bin/`, and the programs its `rules.json` lists. A type that is not valid used to be left out, so the programs of its pack were not judged at all; now every call of them is held
     (`broken_systems`). A fault `doctor` and the Enter screen show, with the file and what is wrong."""
     from . import connections
 
     out: List[Dict[str, Any]] = []
-    for name, item in guarded(root).items():
+    for name, item, first in _read_by_gate(root):
         folder, found, programs = item["folder"], item["manifest"], set()
-        bad: List[Dict[str, str]] = []
+        bad: List[Dict[str, str]] = list(first)
         needs = found.get("needs") if isinstance(found.get("needs"), dict) else {}
         programs.update(_program_names(needs.get("programs")))
         bin_folder = folder / "bin"
@@ -520,8 +574,21 @@ def faults(root: Path) -> List[Dict[str, Any]]:
         for system in listed.values():
             programs.update(_program_names((system.get("reach") or {}).get("cli")))
         if bad:
-            out.append({"pack": name, "source": item["source"], "faults": bad, "programs": sorted(programs)})
+            out.append({"pack": name, "source": item["source"], "faults": bad, "programs": sorted(programs), "unreadable": bool(item.get("unreadable")), "types": type_names(folder)})
     return out
+
+
+def guard_of(root: Path, type_name: str, found: Optional[List[Dict[str, Any]]] = None) -> Dict[str, str]:
+    """(1.7.38, S1) How the gate stands to a connection whose type no pack that is on brings, for the Connections window: `{state, file, problem}`. `faulty`: a file of the pack that brings it is faulty, so the gate holds every
+    call of the pack's programs (`file` and `problem` say which); `off`: the pack is off and the gate reads its rules all the same; `gone`: no pack of this computer brings the type, so the gate has nothing to judge its calls by.
+    `found` is `faults(root)` when the caller has it already."""
+    for one in (faults(root) if found is None else found):
+        if type_name in one["types"] or (one["unreadable"] and not one["types"] and one["pack"] == type_name):
+            first = one["faults"][0]
+            return {"state": "faulty", "file": first["file"], "problem": str(first["problem"])[:240]}
+    if any(type_name in type_names(item["folder"]) for item in listed(root).values()):
+        return {"state": "off", "file": "", "problem": ""}
+    return {"state": "gone", "file": "", "problem": ""}
 
 
 def broken_systems(root: Path) -> Dict[str, Any]:
@@ -559,14 +626,14 @@ def normal_ref(ref: str) -> str:
 
 
 def link_types(root: Path) -> List[Dict[str, str]]:
-    """The kinds of item a task may be linked to, from the installed tool packs (1.7.20): `{type, label, toolpack}`, one per link type, in the order of the packs. A link type is named by a pack's `links`
+    """The kinds of item a task may be linked to, from the installed tool packs (1.7.20): `{type, label, toolpack, id, example}`, one per link type, in the order of the packs; `id` is the pattern an id of the type must match (1.7.38, F1 L6), `example` a sample id; both empty when the pack gives none. A link type is named by a pack's `links`
     and by the connection types that declare `link`; a type that only a connection declares has no label of its own, and takes the type's."""
     found: Dict[str, Dict[str, str]] = {}
     for name, item in installed(root).items():
         links = item["manifest"].get("links") if isinstance(item["manifest"].get("links"), dict) else {}
         for key, spec in links.items():
             if LINK.match(f"{key}:0") and isinstance(spec, dict):
-                found.setdefault(key, {"type": key, "label": str(spec.get("label") or ""), "toolpack": name})
+                found.setdefault(key, {"type": key, "label": str(spec.get("label") or ""), "toolpack": name, "id": str(spec.get("id") or "") if _id_form_ok(spec) else "", "example": str(spec.get("example") or "") if _id_form_ok(spec) else ""})
         for path in sorted((item["folder"] / "types").glob("*.json")) if isinstance(item.get("folder"), Path) and (item["folder"] / "types").is_dir() else []:
             try:
                 kind = json.loads(path.read_text(encoding="utf-8"))
@@ -574,7 +641,7 @@ def link_types(root: Path) -> List[Dict[str, str]]:
                 continue
             key = kind.get("link") if isinstance(kind, dict) else None
             if isinstance(key, str) and LINK.match(f"{key}:0"):
-                found.setdefault(key, {"type": key, "label": str(kind.get("label") or ""), "toolpack": name})
+                found.setdefault(key, {"type": key, "label": str(kind.get("label") or ""), "toolpack": name, "id": "", "example": ""})
     return list(found.values())
 
 

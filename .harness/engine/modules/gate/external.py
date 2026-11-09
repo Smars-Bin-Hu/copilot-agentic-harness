@@ -616,13 +616,14 @@ def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: st
     label = inputfiles.strictest([inputfiles.verb_of_text(system, joined), rest])
     verdict = statements.judge(system, read.items)
     if verdict.zone != statements.REFUSE and label == DESTROY:  # a rule of `verbs` that names a destroy: refused as before, with the line of a destroy
-        verdict = statements.Verdict(statements.REFUSE, next((item.text for item in read.items if inputfiles.verb_of_text(system, item.text) == DESTROY), joined), "")
+        gone = next((item for item in read.items if inputfiles.verb_of_text(system, item.text) == DESTROY), None)
+        verdict = statements.Verdict(statements.REFUSE, gone.text if gone else joined, "", quote=(gone.raw or gone.text) if gone else joined)
     file = read.files.get(verdict.statement, "") if verdict.zone == statements.REFUSE else read.file
     if verdict.zone == statements.REFUSE:
-        return Action(name, env, DESTROY, target, text, call=call, file=file, file_why="refuse" if file else "", zone=statements.REFUSE, note=_short(verdict.statement), reason=messages.pick(verdict.reason) if verdict.reason else "")
+        return Action(name, env, DESTROY, target, text, call=call, file=file, file_why="refuse" if file else "", zone=statements.REFUSE, note=_short(verdict.quote or verdict.statement), reason=messages.pick(verdict.reason) if verdict.reason else "")
     why = read.state  # "unread", "twice": a file the gate could not read, or may change before it runs
     if why or read.unsure or verdict.zone == statements.ASK or rest in (WRITE, EXEC):
-        about = read.file if why else read.unsure or (verdict.statement if verdict.zone == statements.ASK else read.rest)
+        about = read.file if why else read.unsure or ((verdict.quote or verdict.statement) if verdict.zone == statements.ASK else read.rest)
         return Action(name, env, strict([label, WRITE]), target, text, named=label is not None and not why, call=call, file=read.file if why else "", file_why=why, zone=statements.ASK, note=_short(about))
     if verdict.zone == statements.WRITE:
         return Action(name, env, strict([label, WRITE]), target, text, named=True, call=call, zone=statements.WRITE)

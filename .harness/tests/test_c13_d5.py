@@ -169,7 +169,7 @@ class HeldCardTests(HarnessTestCase):
         self.assertIn("scriptsOf(item).map((script)", source)
         self.assertIn('files.map((script) => script.text).join("\\n")', source)
         self.assertIn("scripts.map((script) =>", source)
-        self.assertIn('body.system ? [" ", h("b", null, body.system)', source)
+        self.assertIn('t("desk.outbox.body.on"', source)
         self.assertIn("part.system ? systemFact(part.system, part.env)", source)
 
     def words(self, line: str) -> dict:

@@ -460,7 +460,7 @@ class AcceptWithHeldCallsTests(AcceptCase):
         self.new(kind="rca")
         code = self.hold()
         self.stop()
-        closed = self.board().close(NAME)
+        closed = self.board().close(NAME, void=True)  # the board asks first (F1 M2); the person said yes
         self.assertEqual(closed["voided"], 1)
         self.assertEqual(approvals.find(self.root, code, 10, file=approvals.ACTIONS)["reason"], "closed")
         self.assertIn(messages.text("task.close.void"), approvals.find(self.root, code, 10, file=approvals.ACTIONS)["note"])

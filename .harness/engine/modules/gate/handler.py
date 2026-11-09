@@ -116,7 +116,10 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
         minutes = approvals.minutes(policy)
         if approvals.consume(ctx.root, event.session_id, event.command, minutes):
             return None  # the person read this command and approved it
-        code = approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes)
+        try:
+            code = approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes)
+        except approvals.TooManyWaiting:
+            return Decision(permission="deny", reason=rules.too_many_waiting(), facts={"kind": "git-too-many"})
         return Decision(permission="deny", reason=rules.git_needs_approval(git.why, gitcmd.collapse(event.command), code, minutes), facts={"kind": "git-approval"})
     if verdict is None:
         return None
@@ -194,10 +197,21 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     pool = stopped or results
     best = pool[0]
     for item in pool:
-        if external.DECISIONS.index(item["decision"]) > external.DECISIONS.index(best["decision"]):
+        rank = (external.DECISIONS.index(item["decision"]), _worst_zone(item["action"]))  # the strictest decision; of equal ones the part that opening a connection cannot pass (a statement on no list, a faulty file) speaks for the line (1.7.38, F1 M6)
+        if rank > (external.DECISIONS.index(best["decision"]), _worst_zone(best["action"])):
             best = item
-    best["offers"] = _offers([item["offer"] for item in stopped if item.get("offer")])
+    offers = [item["offer"] for item in stopped if item.get("offer")]
+    if len(stopped) > 1 and len(offers) < len(stopped):  # a line is let through only when every part is: opening what can be opened would still leave a part held, so the card offers nothing and says which part still needs the person
+        offers = []
+    best["offers"] = _offers(offers)
+    if len(stopped) > 1:  # why each part of the line is held (the card names each system and says why)
+        best["holds"] = [{"system": item["action"].system, "env": item["action"].env, "zone": getattr(item["action"], "zone", ""), "note": getattr(item["action"], "note", ""), "opens": bool(item.get("offer"))} for item in stopped]
     return best
+
+
+def _worst_zone(action: Any) -> int:
+    """How far a part of a held line is from passing: a statement on no list or a faulty file (3, 2: never opened), the write list of a connection that is not open (1), the rest (0)."""
+    return {"broken": 3, "ask": 2, "write": 1}.get(getattr(action, "zone", ""), 0)
 
 
 def _offers(found: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -360,8 +374,12 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
             return None  # the person read this command and approved it: it runs once
         task = data["task"] if data else None
         offers = (judged.get("offers") or []) if task else []  # an opening is for a task: with no task open, the card offers none
+        holds = judged.get("holds") or []
         cwd = event.cwd or ""
-        code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes, offers, cwd) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task, offers, cwd))
+        try:
+            code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes, offers, cwd, holds) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task, offers, cwd, holds))
+        except approvals.TooManyWaiting:  # 1.7.38, C13 M1: no older card is dropped to make room; this call is not held, and the agent is told why
+            return Decision(permission="deny", reason=rules.too_many_waiting(), facts=dict(facts, kind="external-too-many"))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft, offers, changed), facts=dict(facts, kind="external-outbox", **({"changed": changed} if changed else {})))
     if judged.get("unseen"):
@@ -613,6 +631,9 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
     away = [one for one in found if one.get("away")]
     if away:
         parts.append(rules.say("connections.away.context", n=len(away)))
+    unsure = [one for one in found if one.get("unknown")]
+    if unsure:  # no record of a start from the board: it is not known what the window carries (F1 M8)
+        parts.append(rules.say("connections.unknown.context", n=len(unsure)))
     if wrapped:
         parts.append(rules.say("connections.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
     try:

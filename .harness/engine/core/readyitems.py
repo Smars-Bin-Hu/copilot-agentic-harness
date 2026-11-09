@@ -228,8 +228,9 @@ def packs_item(root: Path) -> Dict[str, Any]:
         mark["state"] = "bad"
         first = one["faults"][0]
         mark["fault"] = f"{first['file']}: {first['problem']}"[:300]
-        problems.insert(0, {"key": "packs", "text": say("ready.p.broken", pack=one["pack"], file=first["file"]), "why": first["problem"][:240],
-                            "short": say("ready.p.broken.short", pack=one["pack"], file=first["file"], problem=first["problem"][:240]), "fix": fix_tools("packs", say("board.enter.t.packs"))})
+        key = "ready.p.unreadable" if one.get("unreadable") else "ready.p.broken"  # S1: a `toolpack.json` that cannot be read is told as that
+        problems.insert(0, {"key": "packs", "text": say(key, pack=one["pack"], file=first["file"]), "why": first["problem"][:240],
+                            "short": say(key + ".short", pack=one["pack"], file=first["file"], problem=first["problem"][:240]), "fix": fix_tools("packs", say("board.enter.t.packs"))})
     if not names:
         return item("packs", "grey", say("ready.none"))
     if broken:
@@ -252,16 +253,20 @@ def connection_states(root: Path) -> List[Dict[str, Any]]:
         seen = reach.view(root, systems) if systems else []
     except Exception:  # noqa: BLE001 - a broken list of systems is doctor's to report: the sign-ins are still told
         seen = []
+    raw = reach.read(root)  # what the last check of each connection found: the Connections window reads this too
     out: List[Dict[str, Any]] = []
     for alias, server in conn_core.listed(root).items():
         kind = known.get(str(server.get("type"))) or {}
         if kind.get("via") == "mcp" or (server.get("type") and not kind):  # no kind: its tool pack is off (counted in `connections_off`)
             continue
         saved = bool(conn_core.identity_of(env, alias, kind, server))
+        way = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
+        tool = conn_core.tool_program(way) if way.get("identity") == "tool" else ""
+        signed = conn_core.signed_in(saved, tool, str((raw.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")))  # the same answer as the Connections window: a program that keeps its own sign-in counts as signed when its last check got through (F1 M7)
         states = [reach.UNKNOWN if line.get("why") == "vscode-env" else line["state"] for line in seen if line["system"] == alias]  # a VS Code started without this computer's settings says nothing of the sign-in: its own row says that
-        passed = bool(states) and all(state == reach.OK for state in states) or (not states and saved)
+        passed = bool(states) and all(state == reach.OK for state in states) or (not states and signed)
         failed = any(state in (reach.DENIED, reach.FAILED) for state in states)
-        state = "ok" if passed else "none" if not saved else "down" if failed else "untested"
+        state = "ok" if passed else "none" if not signed else "down" if failed else "untested"
         out.append({"name": alias, "state": state, "saved": saved})
     return out
 
@@ -284,11 +289,14 @@ def connections_item(root: Path) -> Dict[str, Any]:
     return out
 
 
-def identity_problem(lacks: List[str]) -> Dict[str, Any]:
-    """(1.7.38, C13 D3-3) The yellow note of the connections row: VS Code runs and was not started with the identity of these connections. Not a line of Required. The agent reaches them with `harness as`, and
-    Restart VS Code with identities carries them. The board adds it (`ready.Ready.optional`) only while a VS Code is connected: with none, the VS Code line says what to do."""
-    return {"key": "identity", "text": say("ready.p.identity.one" if len(lacks) == 1 else "ready.p.identity", n=len(lacks), names=names_text(lacks)), "why": say("ready.p.identity.why"),
-            "short": say("ready.p.identity.short.one" if len(lacks) == 1 else "ready.p.identity.short", n=len(lacks), names=names_text(lacks)), "fix": {}, "names": lacks}
+def identity_problem(lacks: List[str], known: bool = True) -> Dict[str, Any]:
+    """(1.7.38, C13 D3-3) The yellow note of the connections row: VS Code runs and was not started with the identity of these connections. Not a line of Required. The agent runs their calls with the saved identity,
+    and Restart VS Code with identities carries them. The board adds it (`ready.Ready.optional`) only while a VS Code is connected: with none, the VS Code line says what to do.
+    `known` False (F1 M8): there is no record of a start from the board, so it is not known whether VS Code carries them; the note says so instead of "lacks"."""
+    key = "ready.p.identity" if known else "ready.p.identity.unknown"
+    one = len(lacks) == 1
+    return {"key": "identity", "text": say(key + (".one" if one else ""), n=len(lacks), names=names_text(lacks)), "why": say("ready.p.identity.why" if known else "ready.p.identity.unknown.why"),
+            "short": say(key + ".short" + (".one" if one else ""), n=len(lacks), names=names_text(lacks)), "fix": {}, "names": lacks}
 
 
 def connections_counted(root: Path) -> Dict[str, Any]:

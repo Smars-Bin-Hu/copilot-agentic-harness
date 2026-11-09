@@ -132,13 +132,14 @@ class OpenFromTheCard(TaskCase):
         self.assertEqual([item["names"] for item in taskdesk.opened_view(self.root, TASK)], [["acmedw-dev", "acmedw-ist"]])
         self.assertEqual(self.term(line), {})
 
-    def test_a_line_with_an_open_and_a_closed_connection_still_waits_and_offers_the_open_one_no_more(self) -> None:
+    def test_a_line_with_an_openable_and_a_never_openable_connection_offers_no_open_and_says_which_part_waits(self) -> None:
+        """1.7.38, F1 M6: opening DEV would still leave the QAT part held, so the card offers nothing (it used to offer DEV, which could never pass the line) and names the part that needs the person."""
         line = DEV + " && " + QAT
         self.term(line)
         card = taskdesk.outbox_view(self.root, TASK)[-1]
-        self.assertEqual([offer["system"] for offer in card["offers"]], ["acmedw-dev"])
-        self.open("acmedw-dev", card["code"])
-        self.assertEqual(self.term(line)["permissionDecision"], "deny", "qat cannot be opened: the line is held for the person")
+        self.assertEqual(card["offers"], [])
+        self.assertEqual([(one["system"], one["opens"]) for one in card["holds"]], [("acmedw-dev", True), ("acmedw-qat", False)])
+        self.assertEqual(self.term(line)["permissionDecision"], "deny", "the line is held for the person")
 
     def test_the_linked_items_of_ado_are_opened_from_the_card_by_the_connection_name(self) -> None:
         tasklife.link(self.root, NAME, "ado:123", True)

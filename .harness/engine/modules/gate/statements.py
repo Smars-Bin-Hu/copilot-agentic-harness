@@ -35,6 +35,7 @@ class Statement:
     text: str  # prepared: no comments, strings are `''`, one space between words
     directive: bool = False  # a sqlcmd line (`:r file`, `!! command`): its text is the line as written, trimmed
     odd: bool = False  # a look-alike of the end of a string, a name or a block comment is inside one: see the top of this file
+    raw: str = ""  # (1.7.38, F1 L3) the statement as it was written, for a text to the agent or the person: comments gone, strings and names as they were (`text` is the form that is judged). Empty: the same as `text`
 
 
 # What may be folded into the character that ends a hidden span, besides the fullwidth forms that NFKC folds (`＇` is `'`): the curly and modifier quotes, the fullwidth bracket.
@@ -66,15 +67,18 @@ def _batch(text: str) -> List[Statement]:
     """The statements of one batch (no `GO` and no sqlcmd line in it): prepared, cut at `;`."""
     out: List[Statement] = []
     current: List[str] = []
+    shown: List[str] = []  # the same text with the strings and the names as they were written
     odd = False
     index = 0
 
     def flush() -> None:
         nonlocal odd
         statement = _SPACE.sub(" ", "".join(current)).strip()
+        written = _SPACE.sub(" ", "".join(shown)).strip()
         current.clear()
+        shown.clear()
         if statement:
-            out.append(Statement(statement, odd=odd))
+            out.append(Statement(statement, odd=odd, raw=written if written != statement else ""))
         odd = False
 
     while index < len(text):
@@ -83,6 +87,7 @@ def _batch(text: str) -> List[Statement]:
             end = text.find("\n", index)
             end = len(text) if end == -1 else end
             current.append(" " + (_VARIABLE if "$(" in text[index:end] else ""))
+            shown.append(" ")
             index = end
             continue
         if char == "/" and text.startswith("/*", index):
@@ -96,12 +101,14 @@ def _batch(text: str) -> List[Statement]:
                     end += 1
             odd = odd or _alike(text[index + 2:end], "*/")
             current.append(" " + (_VARIABLE if "$(" in text[index:end] else ""))
+            shown.append(" ")
             index = end
             continue
         if char == "'":
             end = _closing(text, index, "'")
             odd = odd or _alike(text[index + 1:end], "'")
             current.append(PLACEHOLDER + (_VARIABLE if "$(" in text[index:end] else ""))
+            shown.append(text[index:end])
             index = end
             continue
         if char in '"[':
@@ -109,12 +116,14 @@ def _batch(text: str) -> List[Statement]:
             inner = text[index + 1: end - 1] if end - index >= 2 else ""
             odd = odd or _alike(inner, '"' if char == '"' else "]")
             current.append(_NOT_WORD.sub("_", inner.replace('""' if char == '"' else "]]", "_")) + (_VARIABLE if "$(" in inner else ""))
+            shown.append(text[index:end])
             index = end
             continue
         if char == ";":
             flush()
         else:
             current.append(char)
+            shown.append(char)
         index += 1
     flush()
     return out
@@ -151,6 +160,7 @@ class Verdict:
     zone: str  # REFUSE, READ, WRITE (every statement is on the read or the write list, one at least on the write list), ASK
     statement: str = ""  # REFUSE: the statement (or line) the refuse list caught; ASK: the first that is on no list (empty: there was nothing to read)
     reason: str = ""  # REFUSE: the reason of the entry that caught it, as the type wrote it (a string, or {"en": ..., "zh": ...})
+    quote: str = ""  # that statement as it was written (strings and names not blanked), for a text to the agent; `statement` stays the form that is judged and looked up
 
 
 def _compiled(patterns: Any) -> List[Any]:
@@ -182,16 +192,17 @@ def judge(system: Dict[str, Any], items: List[Statement]) -> Verdict:
     for item in items:
         entry = refuse_entry(system, item.text)
         if entry:
-            return Verdict(REFUSE, item.text, entry.get("reason") or "")
+            return Verdict(REFUSE, item.text, entry.get("reason") or "", quote=item.raw or item.text)
     reads = _compiled(system.get("reads"))
     writes = _compiled(system.get("writes"))
-    first_unlisted = ""
+    first_unlisted = quote = ""
     all_reads = all_listed = bool(items)
     wrote = False
     for item in items:
         if item.directive or item.odd:
             all_reads = all_listed = False
-            first_unlisted = first_unlisted or item.text
+            if not first_unlisted:
+                first_unlisted, quote = item.text, item.raw or item.text
             continue
         if any(rule.fullmatch(item.text) for rule in reads):
             continue
@@ -200,9 +211,10 @@ def judge(system: Dict[str, Any], items: List[Statement]) -> Verdict:
             wrote = True
             continue
         all_listed = False
-        first_unlisted = first_unlisted or item.text
+        if not first_unlisted:
+            first_unlisted, quote = item.text, item.raw or item.text
     if all_reads:
         return Verdict(READ)
     if all_listed and wrote:
         return Verdict(WRITE)
-    return Verdict(ASK, first_unlisted)
+    return Verdict(ASK, first_unlisted, quote=quote)

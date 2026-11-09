@@ -148,7 +148,7 @@
     const copy = h("button", {type: "button", class: "act", disabled: item.command ? null : "disabled"}, t("desk.outbox.copy"));
     copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });  // the query, as in a held call
     const open = h("button", {type: "button", class: "act hot"}, t("desk.evidence.open"));
-    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const close = h("button", {type: "button", class: "act"}, t("desk.window.close"));  // a window that only shows something has nothing to cancel (F1 L5)
     const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { view.close(); fileOpen = name; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
     const fact = (label, value) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), typeof value === "string" ? h("code", null, value) : value);
     const view = SERVE.dialog([h("h2", null, item.id + " · " + item.env + " · " + (item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run}))),
@@ -1216,19 +1216,23 @@
   const factList = (facts) => Object.entries(facts || {}).map(([name, value]) => factSpan(known("desk.outbox.fact." + name, name), value));
   const manyWrites = (item) => Array.isArray(item.parts) && item.parts.length > 1;  // a held line of several writes: each has its own words, facts and text (1.7.38)
   const ZONE_WORDS = {ask: ["desk.outbox.zone.ask", "desk.outbox.zone.ask.tip"], write: ["desk.outbox.zone.write", "desk.outbox.zone.write.tip"], broken: ["desk.outbox.zone.broken", "desk.outbox.zone.broken.tip"]};  // why a held call waits: word and hover
+  const tailPath = (path, max) => (path.length <= max ? path : "\u2026" + path.slice(1 - max));  // a long path keeps its end, where the file name is; the whole path is on hover
   const scriptsOf = (item) => (item.layout ? item.layout.scripts || (item.layout.script ? [item.layout.script] : []) : []);  // every file the line names and the task holds (1.7.38: two `-i` files show both)
+  const zoneFact = (zone, note, system, env) => (ZONE_WORDS[zone] ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.zone")), system ? [h("b", null, system), env && env !== "none" ? [" ", tag(env, "hot")] : null, " "] : null,
+    h("span", {class: "unnamed", title: t(ZONE_WORDS[zone][1], {what: note || "-"})}, t(ZONE_WORDS[zone][0]), " ", h("span", {class: "why"}, "?"))) : null);
   const systemFact = (system, env) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, system), env && env !== "none" ? [" ", tag(env, "hot")] : null);
   function callFacts(item) {
     const verb = known("desk.outbox.verb." + item.verb, item.verb);
     const many = manyWrites(item);
     const reaches = item.reaches && item.reaches.length > 1 ? item.reaches : null;  // a line on more than one system names each of them (1.7.38)
+    const holds = item.holds && item.holds.length > 1 ? item.holds : null;  // and why each part is held
     return h("div", {class: "tk-call-facts"},
-      factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb, false, item.named === false ? null : item.verb),
+      factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb, false, item.named === false ? null : item.verb === "unknown" ? t("desk.outbox.verb.unknown.tip") : item.verb),  // a call of a pack with a faulty file has no kind: the gate could not judge it (1.7.38, M5)
       reaches ? h("span", {class: "tk-fact tk-systems"}, h("span", {class: "k"}, t("desk.outbox.systems")), reaches.map((one, index) => [index ? " " : "", h("b", null, one.system), one.env && one.env !== "none" ? [" ", tag(one.env, "hot")] : null])) : systemFact(item.system, item.env),
       ...(many ? [] : factList(item.facts)),
       many ? null : factSpan(t("desk.outbox.target"), item.target),
-      ZONE_WORDS[item.zone] ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.zone")), h("span", {class: "unnamed", title: t(ZONE_WORDS[item.zone][1], {what: item.zone_note || "-"})}, t(ZONE_WORDS[item.zone][0]), " ", h("span", {class: "why"}, "?"))) : null,  // 1.7.38: why a call of a type with lists waits
-      ...scriptsOf(item).map((script) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, script.path), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: script.lines})))));
+      ...(holds ? holds.map((hold) => zoneFact(hold.zone, hold.note, hold.system, hold.env)) : [zoneFact(item.zone, item.zone_note)]),  // 1.7.38: why a call of a type with lists waits; a line on more than one system says why for each part (F1 M6)
+      ...scriptsOf(item).map((script) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", {title: script.path}, tailPath(script.path, 44)), " ",  // the end of the path: two scripts of one folder differ there (F1 M3) h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: script.lines})))));
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
   // The raw command is folded: ids, headers and long addresses are not on the face of the card. A line of several writes (1.7.38) says each on a line of its own, with its own facts and text.
@@ -1244,7 +1248,7 @@
     if (!body) return null;
     if (body.missing) return h("div", {class: "tk-call-body missing"}, h("p", {class: "bad"}, t("desk.outbox.body.missing", {path: body.path, dismiss: t("desk.outbox.dismiss")})));
     return h("div", {class: "tk-call-body"},
-      h("div", {class: "tk-body-h"}, h("b", null, body.label || t("desk.outbox.body")), body.system ? [" ", h("b", null, body.system), body.env && body.env !== "none" ? [" ", tag(body.env, "hot")] : null] : null, " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
+      h("div", {class: "tk-body-h"}, h("b", null, body.system ? t("desk.outbox.body.on", {label: body.label || t("desk.outbox.body"), where: body.system + (body.env && body.env !== "none" ? " (" + body.env + ")" : "")}) : body.label || t("desk.outbox.body")), " ",  // "The statement that will run on acmedw-dev (dev)" when the line reaches more than one system (F1 M4) h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
       h("pre", {class: "tk-body-text", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null);
   }
   const rawFold = (item) => h("details", {class: "tk-raw"}, h("summary", null, t("desk.outbox.raw")), h("pre", {class: "cmd-script one"}, item.command));
@@ -1262,7 +1266,7 @@
     changedCalls.delete(item.code);
     const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
     copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
-    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const close = h("button", {type: "button", class: "act"}, t("desk.window.close"));  // View only shows: nothing to cancel (F1 L5)
     const scripts = scriptsOf(item);
     // The code, as a chip: a click copies it, puts it in the card's box and closes the window, so Approve is the next press.
     const codeChip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, item.code);
@@ -1276,6 +1280,13 @@
     view.box.classList.add("wide");
     close.addEventListener("click", () => { view.close(); draw(true); });
     codeChip.addEventListener("click", () => { navigator.clipboard.writeText(item.code).then(() => {}, () => {}); view.close(); if (onCode) onCode(item.code); });
+  }
+  // A line that reaches more than one connection passes only when every part does: when opening cannot pass all of them the card offers no Open and says which parts still need the person (1.7.38, F1 M6).
+  function stuckNote(item) {
+    const holds = item.holds || [];
+    if (holds.length < 2 || (item.offers || []).length || item.moved_on || !holds.some((hold) => hold.zone === "write")) return null;
+    const names = holds.filter((hold) => !hold.opens).map((hold) => hold.system + (hold.env && hold.env !== "none" ? " (" + hold.env + ")" : ""));
+    return h("p", {class: "sub tk-open-note"}, t("desk.outbox.open.stuck", {parts: names.join(", ")}));
   }
   function outboxCard(item, notes) {
     const can = served() && canAct() && SERVE.runs("approve-action");
@@ -1370,6 +1381,7 @@
       manyWrites(item) ? null : bodyBlock(item),
       words ? rawFold(item) : h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
       gone ? h("p", {class: "hint"}, t("desk.outbox.moved.note")) : item.agent === "wait" || item.agent === "ended" ? h("p", {class: "sub tk-agent", "data-agent": item.agent}, t("desk.outbox.agent." + item.agent)) : null,  // 1.7.38: where the agent stands: it waits here, or it stopped on this call
+      stuckNote(item),
       notes,
       h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), ...opens, no, h("span", {class: "sub"}, t("desk.outbox.same_as")), reasonBox, said));  // View first in the row: the eye goes View, code, Approve
   }

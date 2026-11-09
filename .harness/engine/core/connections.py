@@ -18,6 +18,7 @@ In this module a connection type is held in a variable called `kind` (`type` is 
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -84,11 +85,19 @@ def _say_text_ok(text: Any) -> bool:
     return isinstance(text, dict) and isinstance(text.get("en"), str) and bool(text["en"]) and all(isinstance(value, str) and value for value in text.values())
 
 
+TYPE_KEYS = ("type", "label", "description", "via", "env", "fields", "auth", "test", "expect", "denied", "down", "signin_lost", "cli", "match", "command", "commands", "verbs", "target", "rules", "show", "say", "body",
+             "open", "openable", "item", "link", "input", "reads", "writes", "refuse", "toolpack")  # every top-level key of a type file (the protocol's list; `toolpack` is put in by `types` when it loads one); a key not here is a typo (1.7.38, L8)
+
+
 def type_problems(kind: Dict[str, Any]) -> List[str]:
     """What is wrong with a connection type; empty when it is fine. A type `via: "mcp"` is reached through an MCP server VS Code runs: it needs no test
-    command and no way in of its own (the sign-in is VS Code's)."""
+    command and no way in of its own (the sign-in is VS Code's). A key the protocol does not know is a fault (L8): a typo such as `refuses` would be ignored, and the list it was meant to be would be gone."""
     name = kind.get("type", "?")
     out = []
+    for key in kind:
+        if key not in TYPE_KEYS:
+            near = difflib.get_close_matches(str(key), TYPE_KEYS, n=1)
+            out.append(f"types.{name}: `{key}` is not a key of a type" + (f" (did you mean `{near[0]}`?)" if near else ""))
     if kind.get("via", "cli") not in VIAS:
         out.append(f"types.{name}: `via` is one of {', '.join(VIAS)}")
     if kind.get("env") not in (None, "none"):  # 1.7.38: `"env": "none"` says the type has no environments (a ticket board)
@@ -324,6 +333,12 @@ def tool_program(auth: Dict[str, Any]) -> str:
     return re.sub(r"\.(exe|cmd|bat)$", "", words[0].strip("\"'"), flags=re.IGNORECASE).lower() if words else ""
 
 
+def signed_in(saved: Any, tool: str, reached: str) -> bool:
+    """Is this connection signed in? (1.7.38, F1 M7) A sign-in is kept here; or a program keeps its own (`tool`: runbook, az) and the last check of the connection got through. The Connections window and the
+    Enter screen both ask this, so they never say two things: before, Enter said "not signed in" for a program whose sign-in is in its own file while the window showed it signed in."""
+    return bool(saved) or (bool(tool) and reached == "ok")
+
+
 def tool_key(program: str) -> str:
     return TOOL_PREFIX + re.sub(r"[^A-Za-z0-9]", "_", program).upper() + "_USER"
 
@@ -488,10 +503,26 @@ def widen(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _carried(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str]) -> bool:
+    """Must the identity of this connection be in the environment of the VS Code window (variables, or a Windows account the window holds)? A program that reads its own sign-in or token (`ado`: a `tool`
+    identity) needs nothing from the window, and neither does a connection with no identity saved. (1.7.38, C13 D3-3; one answer for `identity_lacks` and `calls`.)"""
+    how = delivery(kind, server)["identity"]
+    if how == "tool" or not identity:
+        return False
+    return how == "netonly" or bool(variables(kind, server, identity))
+
+
+def window_known(root: Path) -> bool:
+    """Is there a record of the last VS Code the board started (`state`)? Without it nobody knows what the window carries: a VS Code the person started by hand, or before the board's first start (1.7.38, F1 M8)."""
+    return bool(state(root))
+
+
 def calls(root: Path, every: bool = False) -> List[Dict[str, Any]]:
     """How the agent reaches each server: `[{alias, env, call}]`, `call` being the server's test command (no password in it), with `harness as <alias> --`
     before it when this window reaches the server through the prefix. Only the servers the window was opened with, when it was opened from the board. With `every` (1.7.38) the others
-    too, each with `away: True` and the prefix: `harness as` runs any connection that has a saved identity, whether or not the window was opened with it."""
+    too, each with `away: True` and the prefix: `harness as` runs any connection that has a saved identity, whether or not the window was opened with it.
+    With no record of a start from the board (F1 M8) it is not known what the window carries: a connection whose identity must be in the window has `unknown: True` and the prefix too (it works either way),
+    and is never left out."""
     known, env, opened = types(root), read_env(root), state(root)
     wrapped, held = set(opened.get("wrap") or []), set(opened.get("direct") or []) | set(opened.get("wrap") or [])
     out = []
@@ -502,8 +533,10 @@ def calls(root: Path, every: bool = False) -> List[Dict[str, Any]]:
         away = bool(held) and alias not in held
         if away and not every:
             continue
-        call = command(kind, server, identity_of(env, alias, kind, server), alias)
-        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped or away else call, **({"away": True} if away else {})})
+        identity = identity_of(env, alias, kind, server)
+        unsure = not opened and _carried(kind, server, identity)
+        call = command(kind, server, identity, alias)
+        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped or away or unsure else call, **({"away": True} if away else {}), **({"unknown": True} if unsure else {})})
     return out
 
 
@@ -575,6 +608,11 @@ def window_aliases(root: Path) -> List[str]:
     """Every connection the agent may reach (1.7.38, C12 FB-3): the ones this window was opened with and the others, which work through `harness as`. Layer 0 (the kinds and counts at the start of
     a chat) and layer 1 (`find`) both read this list, so they agree (C12 TB-07); `away_aliases` says which are not in the window."""
     return [one["alias"] for one in calls(root, every=True)]
+
+
+def unknown_aliases(root: Path) -> List[str]:
+    """The connections whose identity must be in the VS Code window when it is not known what the window carries (no record of a start from the board, F1 M8): they are reached with `harness as <alias> -- <command>`, which works either way."""
+    return [one["alias"] for one in calls(root, every=True) if one.get("unknown")]
 
 
 def away_aliases(root: Path) -> List[str]:
@@ -755,6 +793,8 @@ def probe_lines(root: Path, workers: int = 4) -> Dict[str, Dict[str, Any]]:
             answer = {"state": reach.FAILED, "why": "exit-127", "who": ""}
         else:
             answer = reach.judged(needs, lambda: run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch, alias=alias))
+            if answer["state"] == reach.FAILED and answer["why"] == "no-answer" and delivery(kind, server)["identity"] != "tool":
+                answer = {"state": reach.UNKNOWN, "why": UNTESTED_SLOW, "who": ""}  # (1.7.38, F1 M9) no answer is not a refusal: the sign-in is kept here, and the row says "saved, not tested yet: no answer" (amber), as after a Test that got none
         return f"{alias}:{server['env']}", {**answer, "at": utc_now(), "source": "probe"}
 
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(jobs) or 1))) as pool:
@@ -855,13 +895,8 @@ def identity_lacks(root: Path) -> List[str]:
         kind = known.get(str(server.get("type")))
         if not kind or alias in held or kind.get("via") == "mcp" or not kind.get("cli") or type_problems(kind):
             continue
-        how = delivery(kind, server)["identity"]
-        identity = identity_of(env, alias, kind, server)
-        if how == "tool" or not identity:
-            continue
-        if how != "netonly" and not variables(kind, server, identity):
-            continue
-        out.append(alias)
+        if _carried(kind, server, identity_of(env, alias, kind, server)):
+            out.append(alias)
     return out
 
 

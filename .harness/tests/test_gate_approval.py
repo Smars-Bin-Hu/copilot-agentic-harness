@@ -114,10 +114,17 @@ class StoreTests(HarnessTestCase):
         self.assertEqual(approvals.pending(self.root, 10), [])
         self.assertEqual(len(approvals.request(self.root, "vscode", "s1", "git add .", 10)), 6)
 
-    def test_the_file_stays_small(self) -> None:
+    def test_the_file_stays_small_by_dropping_what_is_decided_never_what_waits(self) -> None:
+        """1.7.38, C13 M1: 80 requests, each approved or dismissed at once, leave at most MAX_ENTRIES; the 80 that wait (next test) are all kept."""
+        for number in range(80):
+            code = approvals.request(self.root, "vscode", f"s{number}", "git add .", 10, now=1000 + number)
+            (approvals.approve if number % 2 else approvals.dismiss)(self.root, code, 10, now=1000 + number)
+        self.assertLessEqual(len(json.loads(approvals.path(self.root).read_text(encoding="utf-8"))["entries"]), approvals.MAX_ENTRIES)
+
+    def test_every_call_that_waits_is_kept_even_over_the_size_of_the_file(self) -> None:
         for number in range(80):
             approvals.request(self.root, "vscode", f"s{number}", "git add .", 10, now=1000 + number)
-        self.assertLessEqual(len(json.loads(approvals.path(self.root).read_text(encoding="utf-8"))["entries"]), approvals.MAX_ENTRIES)
+        self.assertEqual(len(approvals.pending(self.root, 10, now=1100)), 80)
 
 
 class GateGitCommandTests(HarnessTestCase):

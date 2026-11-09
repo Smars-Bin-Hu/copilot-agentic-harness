@@ -53,7 +53,9 @@
     "ado": {
       "label": "Work item",
       "type": "azure-devops",
-      "url": "{url}/{org}/{project}/_workitems/edit/{id}"
+      "url": "{url}/{org}/{project}/_workitems/edit/{id}",
+      "id": "\\d+",
+      "example": "300100"
     }
   }
 }

@@ -329,7 +329,7 @@ class Ready:
                 elif system in loose:
                     why = messages.text("board.enter.cs.none")
                 rows.append({"system": system, "env": "" if item["env"] in ("none", "any") else item["env"], "state": kind(item["state"]), "reason": short(why), "at": item.get("at", ""),
-                             "pack": str((systems.get(system) or {}).get("toolpack") or ""), **({"note": messages.text("board.enter.sys.identity")} if system in lacks else {})})
+                             "pack": str((systems.get(system) or {}).get("toolpack") or ""), **({"note": messages.text("board.enter.sys.identity" if conn_core.window_known(self.root) else "board.enter.sys.identity.unknown")} if system in lacks else {})})
             states = {row["state"] for row in rows if row["system"] == system}
             names.append({"name": system, "state": "partly" if len(states) > 1 else next(iter(states))})
         return {"names": names, "rows": rows, "checking": self.checker.busy()}
@@ -397,7 +397,7 @@ class Ready:
         if lacks:  # not in Required: a yellow note on the connections row (1.7.38, C13 D3-3)
             for entry in listed:
                 if entry["key"] == "connections":
-                    entry["problems"] = [*entry["problems"], readyitems.identity_problem(lacks)]
+                    entry["problems"] = [*entry["problems"], readyitems.identity_problem(lacks, conn_core.window_known(self.root))]
                     entry["state"] = "yellow" if entry.get("state") != "red" else "red"
         problems = readyitems.problems(listed)
         return {"items": listed, "problems": problems, "count": len(problems), "kb": any(entry["key"] == "kb" and entry.get("found") for entry in listed), "identities": base["identities"]}

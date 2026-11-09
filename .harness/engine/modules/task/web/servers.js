@@ -42,9 +42,11 @@ const SERVERS = (function () {
   }
 
   // Forgetting a connection of the person's own takes the connection and its identity away, and nothing brings it back: the browser asks first, as Remove does for a pack (1.7.38).
-  // A connection of a tool pack or the company only loses the identity: it is still listed, and one click is enough.
+  // A connection of a tool pack or the company only loses the identity (a program that keeps its own sign-in loses it for every connection that uses it): it is still listed, but the password has to be typed
+  // again, so it asks once too (F1 L9).
   function sure(button, row, run) {
-    if (!row.own || window.confirm(t("connections.forget.ask", {name: row.alias}))) run();
+    const key = row.own ? "connections.forget.ask" : row.tool ? "connections.forget.tool.ask" : "connections.forget.signin.ask";
+    if (window.confirm(t(key, {name: row.alias, program: row.tool || ""}))) run();
   }
 
   // The identity of a server, tested before it is kept. `own`: the fields of a server of the person's own (kind, env, auth, host, ...), or null.
@@ -158,6 +160,7 @@ const SERVERS = (function () {
     const form = h("div", {class: "tl-form", hidden: ""});
     const signBtn = h("button", {type: "button", class: "act"}, t("connections.signin"));
     const testBtn = h("button", {type: "button", class: "act"}, t("connections.test"));
+    const guard = row.guard || null;  // a type no pack that is on brings (1.7.38, S1): off (the gate still judges), faulty (the gate holds every call of the pack's programs), gone (nothing to judge by)
     const via = row.type && !row.known ? "nopack" : row.via === "mcp" ? "mcp" : "";
     const fail = () => {
       const last = env.results.get(key);
@@ -173,7 +176,7 @@ const SERVERS = (function () {
       const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : wait ? "ring" : row.signed ? "ok" : "ring")});  // `signed`: kept here, or a program's own sign-in that the last check got through (the Enter screen counts the same)
       let words;
       if (via === "mcp") words = h("span", {class: "tl-who none"}, t("connections.state.mcp"));
-      else if (via === "nopack") words = h("span", {class: "tl-who none", title: t("connections.state.nopack.tip")}, t("connections.state.nopack"));  // the gate still judges its calls (1.7.38)
+      else if (via === "nopack") { const mode = guard && ["faulty", "gone"].includes(guard.state) ? guard.state : "off"; words = h("span", {class: "tl-who none", title: t(mode === "off" ? "connections.state.nopack.tip" : "connections.state." + mode + ".tip", {file: guard ? guard.file : "", problem: guard ? guard.problem : ""})}, t(mode === "off" ? "connections.state.nopack" : "connections.state." + mode)); }  // what the gate does with its calls is told as it is (1.7.38, S1)
       else if (!row.signed && !last) words = h("span", {class: "tl-who none"}, t("connections.none"));
       else {
         // Who it is signed in as (1.7.38): the account kept here; else the name the last test answered with; else, for a token, that a token is saved. A failed test of something not kept says it was not kept.
@@ -182,7 +185,7 @@ const SERVERS = (function () {
         const note = wait ? t(slow ? (who ? "connections.state.untested.noanswer" : "connections.state.untested.noanswer.alone") : who ? "connections.state.untested" : "connections.state.untested.alone") : bad ? failed : "";  // "token saved · not tested yet": the name of the row already says saved
         words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, who + (note ? (who ? " · " : "") + note : ""));
       }
-      const tip = wait ? t(slow ? "connections.untested.noanswer.tip" : "connections.untested.tip") : last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || row.who || "-"}) : row.signed ? t("connections.signed.tip") : t("connections.none.tip");
+      const tip = wait ? t(slow ? "connections.untested.noanswer.tip" : "connections.untested.tip") : last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? (bad && row.reach_tip ? row.reach_tip : t("connections.saved.tip", {account: row.account || row.who || "-"})) : row.signed ? t("connections.signed.tip") : t("connections.none.tip");
       const share = row.tool ? h("span", {class: "sv-info", tabindex: "0", title: t(names.length ? "connections.shared.with" : "connections.shared.one", {program: row.tool, names: names.join(", ")})}, "ⓘ") : null;
       const forget = row.saved && !via ? h("button", {type: "button", class: "mc-x", title: t(row.own ? "connections.forget.own.tip" : "connections.forget.tip"), "aria-label": t("connections.forget")}, "×") : null;
       if (forget) forget.addEventListener("click", () => sure(forget, row, () => {
@@ -192,7 +195,7 @@ const SERVERS = (function () {
       stateBox.replaceChildren(...[dot, words, share, forget].filter(Boolean));
       stateBox.title = tip;
       const note = env.notes.get(key);
-      why.replaceChildren(...[last && layersBox(last, env.go), last && wait ? h("p", {class: "tl-say sub"}, t("connections.kept")) : null, last && bad && !row.saved ? h("p", {class: "tl-say sub"}, t("connections.notsaved")) : null, note ? h("p", {class: "tl-say" + (note.bad ? " bad" : " sub")}, note.said) : null].filter(Boolean));
+      why.replaceChildren(...[last && layersBox(last, env.go), last && wait ? h("p", {class: "tl-say sub"}, t(slow ? "connections.kept.noanswer" : "connections.kept")) : null, last && bad && !row.saved ? h("p", {class: "tl-say sub"}, t("connections.notsaved")) : null, note ? h("p", {class: "tl-say" + (note.bad ? " bad" : " sub")}, note.said) : null].filter(Boolean));
       signBtn.className = "act" + (row.signed || via ? "" : " hot");
       testBtn.className = "act" + (wait ? " hot" : "");  // saved, not tested yet: the next thing to press
       signBtn.hidden = Boolean(via);
@@ -288,7 +291,7 @@ const SERVERS = (function () {
   function orphanRow(item, redraw) {  // an identity kept for a connection the company no longer lists: only the person forgets it
     const forget = h("button", {type: "button", class: "act danger"}, t("connections.forget"));
     const said = h("span", {class: "sv-said"});
-    forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: item.name}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
+    forget.addEventListener("click", () => { if (!window.confirm(t("connections.forget.signin.ask", {name: item.name}))) return; forget.disabled = true; ask("forget", {alias: item.name}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });  // asks once like every other forget (F1 L9)
     return h("div", {class: "tl-crow", "data-focus": "sign:" + item.name}, h("div", {class: "tl-c1 orphan", title: t("machine.signins.orphan.tip", {name: item.name})}, h("span", {class: "tl-id"}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-kind"}, t("machine.signins.orphan"))),
       h("span", {class: "tl-act"}, h("span", {class: "tl-state"}, h("span", {class: "su-dot none"}), h("span", {class: "tl-who none"}, item.account || "—")), forget)), said);
   }
@@ -298,7 +301,7 @@ const SERVERS = (function () {
     const results = new Map();  // alias -> the answer of the last Test, kept while the window is open
     const list = h("div", {class: "tl-clist"}, h("p", {class: "sub tl-pad"}, t("connections.loading")));
     const addBox = h("div", {class: "tl-add", hidden: ""});
-    const add = h("button", {type: "button", class: "act", "aria-expanded": "false"}, t("connections.own.add"));
+    const add = h("button", {type: "button", class: "act", "aria-expanded": "false"}, t("connections.own.add.go"));  // the action; the form it opens has the longer name as its title (F1 U3)
     const out = h("button", {type: "button", class: "act", title: t("connections.export.tip")}, t("connections.export"));  // one's own connections, to put in the company pack
     const env = {results, notes: new Map(), paints: new Map(), redraw: () => redraw(), go: (name, part, focus) => ctx.go(name, part, focus)};
     add.addEventListener("click", () => {

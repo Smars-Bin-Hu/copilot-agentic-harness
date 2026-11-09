@@ -374,7 +374,7 @@ def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "",
     held = len(voided)
     if held:
         with locked(root, task) as again:
-            note(again, "void", f"{held}: {void_note or say('task.close.void')}")
+            note(again, "void", say("task.close.void.record" if held != 1 else "task.close.void.record.one", count=held, note=void_note or say("task.close.void")))  # "3 calls voided: task closed", not "3: task closed" (1.7.38, F1 L4)
         result["voided"] = held
         hint = say("task.close.held", count=held, name=name_of(task)) + hint
     if hint:

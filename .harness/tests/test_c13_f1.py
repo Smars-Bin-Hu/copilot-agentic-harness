@@ -246,15 +246,37 @@ class WaitingCallsAreKeptTests(HarnessTestCase):
         self.assertEqual(len(left), 70)
         self.assertTrue(set(mine) <= left, "the calls of the other task are all still there")
 
-    def test_what_is_decided_goes_first_the_stubs_before_the_approved_and_the_oldest_first(self) -> None:
+    def test_only_stubs_and_spent_entries_go_the_oldest_first_and_a_live_approval_stays(self) -> None:
         entries = [{"code": f"A{n}", "state": "dismissed"} for n in range(3)] + [{"code": f"V{n}", "state": "approved"} for n in range(2)] + [{"code": f"P{n}", "state": "pending"} for n in range(60)]
-        kept = approvals.trimmed(entries)  # 65 entries, 15 over: only the 5 decided ones may go, so 60 stay, every one pending
-        self.assertEqual([item["code"] for item in kept], [f"P{n}" for n in range(60)])
+        kept = approvals.trimmed(entries)  # 65 entries, 15 over: only the 3 stubs may go; a pending and an approved call stay (the file is longer than the cap rather than drop one)
+        self.assertEqual([item["code"] for item in kept], ["V0", "V1"] + [f"P{n}" for n in range(60)])
         small = [{"code": f"D{n}", "state": "dismissed"} for n in range(30)] + [{"code": f"V{n}", "state": "approved"} for n in range(25)]
         names = [item["code"] for item in approvals.trimmed(small)]
         self.assertEqual(len(names), approvals.MAX_ENTRIES)
         self.assertEqual(names[0], "D5", "the oldest stub goes first")
-        self.assertIn("V0", names, "an approval that was not used yet stays while a stub can go instead")
+        self.assertEqual([name for name in names if name.startswith("V")], [f"V{n}" for n in range(25)], "an approval that was not used yet stays while a stub can go instead")
+        mixed = [{"code": f"V{n}", "state": "approved", "at": 1000.0} for n in range(40)] + [{"code": f"O{n}", "state": "opened", "at": 1000.0} for n in range(20)]
+        self.assertEqual(len(approvals.trimmed(mixed)), 60, "approved and opened are alive until they run out, so nothing goes")
+
+    def test_an_approval_that_ran_out_goes_but_one_that_did_not_never_does(self) -> None:
+        old = [{"code": f"X{n}", "state": "approved", "at": 1000.0} for n in range(3)]  # approved at t=1000
+        fresh = [{"code": f"V{n}", "state": "approved", "at": 5000.0} for n in range(48)]
+        kept = approvals.trimmed(old + fresh, 10, now=5100.0)  # 51 entries, one over: of the three that ran out (600 s) the oldest goes
+        self.assertEqual([item["code"] for item in kept][:3], ["X1", "X2", "V0"])
+        self.assertEqual(len(kept), approvals.MAX_ENTRIES)
+        alive = fresh + [{"code": f"N{n}", "state": "approved", "at": 5050.0} for n in range(4)]
+        self.assertEqual(len(approvals.trimmed(alive, 10, now=5100.0)), 52, "all alive: none is dropped to meet the cap")
+
+    def test_the_file_written_by_the_board_keeps_what_waits_and_what_was_approved(self) -> None:
+        mine = [self.ask(number, "other") for number in range(3)]
+        for number in range(3, 60):
+            self.ask(number, "busy")
+        for code in mine[:2]:
+            approvals.approve(self.root, code, 10, now=1070, file=approvals.ACTIONS)
+        for number in range(60, 70):
+            self.ask(number, "busy", now=1075)
+        alive = approvals.approved_all(self.root, 10, now=1080, file=approvals.ACTIONS)
+        self.assertEqual({item["code"] for item in alive}, set(mine[:2]), "approved and not run out: still there after more calls came")
 
     def test_a_new_call_is_refused_past_the_cap_and_the_same_call_asked_again_is_not(self) -> None:
         codes = [self.ask(number) for number in range(approvals.MAX_PENDING)]
@@ -334,10 +356,66 @@ class CloseAsksAboutWaitingCallsTests(AcceptCase):
 
     def test_the_page_has_one_piece_for_both_questions(self) -> None:
         text = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "serve.js").read_text(encoding="utf-8")
-        self.assertEqual(text.count("function askVoid("), 1)
-        self.assertGreaterEqual(text.count("askVoid("), 3, "defined once, used by Accept and by Close")
-        self.assertIn('step: "preview"', text[text.index("const shut ="):])
+        self.assertEqual(text.count("function heldBlock("), 1)
+        self.assertEqual(text.count("heldBlock("), 3, "defined once, used by the window of Accept and close and by the window of Close")
+        self.assertIn('step: "preview"', text[text.index("function close(row)"):text.index("function heldBlock(")], "the Close window asks the board what waits when it opens (F3 M2: one window)")
+        self.assertNotIn("const shut =", text, "no second window after the first yes")
         both_languages(self, "serve.close.held")
+
+    def test_a_call_that_came_after_the_list_was_drawn_is_not_void_by_that_yes(self) -> None:
+        self.new(kind="rca")
+        first = self.hold()
+        self.stop()
+        board = self.board()
+        with self.assertRaises(CommandError):
+            board.close(NAME, void=True, seen=[])  # the page listed nothing, a call waits: refused
+        self.assertEqual(approvals.find(self.root, first, 10, file=approvals.ACTIONS)["state"], "pending")
+        self.assertEqual(board.close(NAME, void=True, seen=[first])["voided"], 1)
+
+    def test_an_older_page_that_sends_no_list_is_held_to_the_yes_only(self) -> None:
+        accept = __import__("modules.task.accept", fromlist=["unseen"])
+        waiting = [{"code": "AAAAAA"}]
+        self.assertTrue(accept.unseen(waiting, False, None))
+        self.assertFalse(accept.unseen(waiting, True, None))
+        self.assertFalse(accept.unseen(waiting, True, ["AAAAAA"]))
+        self.assertTrue(accept.unseen(waiting, True, ["BBBBBB"]))
+        self.assertFalse(accept.unseen([], False, None))
+
+
+class WaitingCallsTellApartTests(AcceptCase):
+    """U3: in the list of calls that a close voids, two calls with the same system, environment and words get the part of the command that tells them apart."""
+
+    def hold(self, command: str, system: str = "ado", env: str = "none") -> str:
+        action = SimpleNamespace(system=system, env=env, verb="write", target="", named=True, zone="", note="")
+        return approvals.request(self.root, "vscode", SESSION, command, 10, file=approvals.ACTIONS, extra=outbox.entry_extra(action, TASK))
+
+    def test_twins_get_the_part_that_differs_and_others_get_none(self) -> None:
+        accept = __import__("modules.task.accept", fromlist=["held"])
+        self.new(kind="rca")
+        lead = "ado comment 300104 --area " + "load-balancer-readiness " * 5  # the same start, longer than what the title shows: the two titles are the same
+        self.hold(lead + '--text "first note"')
+        self.hold(lead + '--text "second note"')
+        self.hold('sqlcmd -S acmedw -Q "UPDATE t SET a = 1 WHERE id = 3"', "acmedw-dev", "dev")
+        calls = accept.held(self.root, NAME)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[0]["title"], calls[1]["title"])
+        details = [call["detail"] for call in calls]
+        self.assertIn("first", details[0])
+        self.assertIn("second", details[1])
+        self.assertNotEqual(details[0], details[1])
+        self.assertEqual(details[2], "", "a call that has no twin says nothing more")
+        self.assertTrue(all(len(detail) <= accept.DETAIL_CHARS + 2 for detail in details))
+
+    def test_the_part_has_a_mark_when_it_is_cut_and_a_command_that_is_the_start_of_another_keeps_its_end(self) -> None:
+        accept = __import__("modules.task.accept", fromlist=["telling_apart"])
+        long = "program " + "x" * 50 + " first " + "y" * 80
+        other = "program " + "x" * 50 + " second " + "y" * 80
+        one, two = accept.telling_apart([long, other])
+        self.assertTrue(one.startswith("\u2026") and one.endswith("\u2026"), one)
+        self.assertIn("first", one)
+        self.assertIn("second", two)
+        self.assertEqual(accept.telling_apart(["abc", "abc def"]), ["abc", "abc def"])
+        self.assertEqual(accept.telling_apart(["same", "same"]), ["same", "same"])
 
 
 class VoidWordsTests(AcceptCase):
@@ -774,3 +852,77 @@ class WordsOfTheBoardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HeldConnectionDotsTests(English, ListedCase):
+    """F3 (F1 'to decide' 4): when the tool pack that brings a connection's type has a faulty file, the gate holds the connection's calls, so its dot on the Enter screen is never green: it is yellow, and the hover says why."""
+
+    def pack_file(self) -> Path:
+        return self.root / ".harness" / "toolpacks" / "sqlserver" / "toolpack.json"
+
+    def sign_in(self) -> None:
+        """A saved sign-in and a passed last test for every connection: without a fault they are ok (green)."""
+        listed = connections.listed(self.root)
+        env_path = self.root / ".harness" / ".env"
+        lines = []
+        for alias, server in listed.items():
+            lines += [f"{connections.env_key(alias, field)}=x" for field in connections.IDENTITY_FIELDS]
+        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_a_sound_pack_with_a_saved_sign_in_is_not_held(self) -> None:
+        self.sign_in()
+        self.assertEqual(readyitems.held_by_fault(self.root), {})
+        self.assertNotIn("held", {one["state"] for one in readyitems.connection_states(self.root)})
+
+    def test_an_unreadable_pack_file_makes_its_connections_held_and_not_off(self) -> None:
+        self.sign_in()
+        self.pack_file().write_text("{ broken", encoding="utf-8")
+        found = readyitems.connection_states(self.root)
+        self.assertTrue(found)
+        for one in found:
+            self.assertEqual(one["state"], "held", one)
+            self.assertIn("toolpack.json", one["fault"])
+        self.assertEqual(readyitems.connections_off(self.root), [], "the pack is on and faulty, not off")
+
+    def test_a_typo_in_a_type_file_makes_them_held_while_the_type_is_still_known(self) -> None:
+        self.sign_in()
+        path = self.root / ".harness" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
+        kind = json.loads(path.read_text(encoding="utf-8"))
+        kind["refuses"] = kind.pop("refuse")
+        path.write_text(json.dumps(kind), encoding="utf-8")
+        for one in readyitems.connection_states(self.root):
+            self.assertEqual(one["state"], "held", one)
+            self.assertIn("refuses", one["fault"])
+
+    def test_the_row_carries_the_state_the_fault_a_yellow_note_and_a_part_in_its_line(self) -> None:
+        self.sign_in()
+        self.pack_file().write_text("{ broken", encoding="utf-8")
+        row = readyitems.connections_item(self.root)
+        self.assertEqual(row["state"], "yellow")
+        self.assertEqual({one["state"] for one in row["names"]}, {"held"})
+        self.assertTrue(all("toolpack.json" in one["fault"] for one in row["names"]))
+        self.assertIn(messages.text("ready.conn.held", n=len(row["names"])), row["detail"])
+        self.assertEqual(row["problems"][0]["key"], "held")
+        self.assertNotIn("signed in", row["detail"])
+
+    def test_the_table_of_the_hover_says_held_with_the_file(self) -> None:
+        self.sign_in()
+        self.pack_file().write_text("{ broken", encoding="utf-8")
+        from modules.task import ready
+
+        board = ready.Ready.__new__(ready.Ready)
+        board.root = self.root
+        board.checker = SimpleNamespace(busy=lambda: False)
+        board.identity_lacks = lambda: []
+        rows = board.table({}, [])["rows"]
+        self.assertTrue(rows)
+        self.assertEqual({row["state"] for row in rows}, {"held"})
+        self.assertIn("toolpack.json", rows[0]["reason"])
+
+    def test_the_page_draws_a_held_dot_in_the_yellow_of_a_partly_one_and_the_words_exist_in_both_languages(self) -> None:
+        web = Path(boardserve.__file__).parent / "web"
+        self.assertIn("held: \"partly\"", (web / "enter.js").read_text(encoding="utf-8"))
+        css = (web / "enter.css").read_text(encoding="utf-8")
+        self.assertIn(".sy-d.held", css)
+        self.assertIn(".en-chk-l .sy-d.held", css)
+        both_languages(self, "ready.conn.held", "ready.p.held", "ready.p.held.one", "ready.p.held.why", "ready.p.held.short", "ready.p.held.short.one", "board.enter.cs.held", "board.enter.sys.state.held", "board.enter.sys.held.reason")

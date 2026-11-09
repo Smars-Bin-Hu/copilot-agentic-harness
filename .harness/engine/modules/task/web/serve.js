@@ -194,9 +194,22 @@ const SERVE = (function () {
     const tell = row.todo_left ? h("button", {class: "act hot", type: "button", disabled: "disabled", title: canTalk ? "" : t("board.close.notalk")}, t("board.close.tell")) : null;
     if (tell) go.classList.remove("hot");
     const pick = tell && row.chat && row.chat.bound && typeof CHAT !== "undefined" ? CHAT.modelPick(row.name) : null;  // the model of the message to the agent (1.6.101); a chat still to make has its own dialog
+    const held = h("div", {class: "held-block", hidden: ""});  // the calls of the task that still wait, listed in this window when the board has said so (1.7.38, F3 M2): the one yes closes the task and voids them
     const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), row.state === "quiet" ? h("p", {class: "bad"}, t("board.close.quiet")) : null, row.result_missing ? h("p", {class: "bad"}, t("board.close.result", {file: row.result_missing})) : null,
-      row.todo_left ? [h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})), steps, h("label", {class: "sub"}, t("board.close.reason")), words, pick ? pick.node : null] : null,
+      held, row.todo_left ? [h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})), steps, h("label", {class: "sub"}, t("board.close.reason")), words, pick ? pick.node : null] : null,
       h("div", {class: "row"}, tell, go, no), said]);
+    let listed = [];  // the codes the person was shown
+    go.disabled = true;  // until the board has said whether calls wait: the yes is for the list the person sees
+    post("/api/close", {task: row.name, step: "preview"}).then((data) => {
+      go.disabled = false;
+      listed = ((data.result && data.result.held) || []).map((call) => call.code);
+      if (!listed.length) return;
+      const found = heldBlock(data.result.held);
+      held.replaceChildren(h("p", {class: "bad"}, found.title), ...found.nodes);
+      held.hidden = false;
+      if (!row.todo_left) go.textContent = t("board.accept.held.go");
+      requestAnimationFrame(found.mark);
+    }, () => { go.disabled = false; });  // when the list cannot be had, the server still refuses to close while a call waits, and the button says so
     no.addEventListener("click", view.close);
     if (row.todo_left) {
       post("/api/close", {task: row.name, step: "steps"}).then((data) => steps.replaceChildren(...data.result.left.map((text) => h("li", null, text))), () => {});
@@ -209,35 +222,38 @@ const SERVE = (function () {
           (error) => { said.replaceChildren(...reasons(error.message)); tell.disabled = false; });
       });
     }
-    const shut = (void_) => post("/api/close", {task: row.name, reason: words ? words.value.trim() : "", ...(void_ ? {void: true} : {})});
-    go.addEventListener("click", () => {  // calls of the task that still wait are listed first, as Accept and close does (1.7.38, F1 M2)
+    go.addEventListener("click", () => {
       go.disabled = true;
-      post("/api/close", {task: row.name, step: "preview"}).then((data) => {
-        const calls = (data.result && data.result.held) || [];
-        if (!calls.length) return shut(false).then(() => { view.close(); done(); });
-        view.close();
-        askVoid(calls, shut);
-      }).catch((error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
+      post("/api/close", {task: row.name, reason: words ? words.value.trim() : "", ...(listed.length ? {void: true, voids: listed} : {})}).then(() => { view.close(); done(); },
+        (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
     });
   }
 
-  // The question both ways of closing ask when calls of the task still wait for the person (Accept and close, C13 FB-4; Close, F1 M2): the calls are listed, closing voids them, and the task closes on the second yes.
-  // `run(true)` closes with the person's yes (the server asks for it too); it gives a promise. A list that scrolls says so under it (1.7.38, F1 L4).
-  function askVoid(calls, run, back) {
+  // The part of the question Close and Accept and close share when calls of the task still wait for the person (C13 FB-4, F1 M2, F3 M2): what to say, the calls listed (each with the part of its command that tells it apart
+  // from a twin, F3 U3), and a mark that tells a list that scrolls. `title` and `nodes` go in a window; call `mark` once it is on the page.
+  function heldBlock(calls) {
     const one = calls.length === 1;
-    const go = h("button", {class: "act hot", type: "button"}, t("board.accept.held.go"));
-    const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-    const said = h("div", {class: "bad"});
-    const list = h("ul", {class: "held-list"}, calls.map((call) => h("li", null, h("b", null, call.system + (call.env && call.env !== "none" ? " " + call.env.toUpperCase() : "")), " ", h("span", {class: "held-title"}, call.title))));
+    const list = h("ul", {class: "held-list"}, calls.map((call) => h("li", null, h("b", null, call.system + (call.env && call.env !== "none" ? " " + call.env.toUpperCase() : "")), " ", h("span", {class: "held-title"}, call.title),
+      call.detail ? h("span", {class: "held-detail", title: call.detail}, call.detail) : null)));
     const more = h("p", {class: "sub held-more", hidden: ""}, t("board.accept.held.more"));
     const mark = () => { more.hidden = !(list.scrollHeight > list.clientHeight + 1 && list.scrollTop + list.clientHeight < list.scrollHeight - 1); };
     list.addEventListener("scroll", mark);
-    const view = dialog([h("h2", null, t(one ? "board.accept.held.title.one" : "board.accept.held.title", {n: calls.length})), h("p", null, t(one ? "board.accept.held.warn.one" : "board.accept.held.warn")), list, more, h("div", {class: "row"}, go, no), said]);
-    requestAnimationFrame(mark);
+    return {title: t(one ? "board.accept.held.title.one" : "board.accept.held.title", {n: calls.length}), nodes: [h("p", null, t(one ? "board.accept.held.warn.one" : "board.accept.held.warn")), list, more], mark};
+  }
+
+  // The window Accept and close asks when calls of the task still wait: the calls are listed, closing voids them, and the task closes on the second yes.
+  // `run(true, codes)` closes with the person's yes and the codes it was shown (the server asks for both); it gives a promise.
+  function askVoid(calls, run, back) {
+    const found = heldBlock(calls);
+    const go = h("button", {class: "act hot", type: "button"}, t("board.accept.held.go"));
+    const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+    const said = h("div", {class: "bad"});
+    const view = dialog([h("h2", null, found.title), ...found.nodes, h("div", {class: "row"}, go, no), said]);
+    requestAnimationFrame(found.mark);
     no.addEventListener("click", view.close);
     go.addEventListener("click", () => {
       go.disabled = true;
-      run(true).then(() => { view.close(); done(); }, (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; if (back) back(); });
+      run(true, calls.map((call) => call.code)).then(() => { view.close(); done(); }, (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; if (back) back(); });
     });
     return view;
   }
@@ -247,13 +263,13 @@ const SERVE = (function () {
   function accept(button, row, body) {
     const work = () => { button.textContent = t("board.serve.working"); };
     const back = () => { button.textContent = button.dataset.label; };
-    const close = (void_) => post("/api/act", {...body, step: "act", ...(void_ ? {void: true} : {})});
+    const close = (void_, codes) => post("/api/act", {...body, step: "act", ...(void_ ? {void: true, voids: codes || []} : {})});
     work();
     post("/api/act", {...body, step: "preview"}).then((data) => {
       const calls = (data.result && data.result.held) || [];
       if (!calls.length) return close(false).then(done);
       back();
-      askVoid(calls, (void_) => { work(); return close(void_); }, back);
+      askVoid(calls, (void_, codes) => { work(); return close(void_, codes); }, back);
     }).catch((error) => { back(); failed(error); });
   }
 

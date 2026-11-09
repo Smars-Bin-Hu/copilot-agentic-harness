@@ -446,7 +446,7 @@
     more.textContent = "+" + (items.length - keep.size); more.hidden = false;
     more.title = items.filter((item, index) => !keep.has(index)).map((item) => item.textContent).join(", ");
   }
-  const DOT = {ok: "ok", need: "partly", down: "partly", none: "none", untested: "unknown", bad: "down"};  // the state of a pack or a connection -> the class of its dot
+  const DOT = {ok: "ok", need: "partly", down: "partly", held: "partly", none: "none", untested: "unknown", bad: "down"};  // the state of a pack or a connection -> the class of its dot
   function names(li, c, hover) {
     let sy = li.querySelector(".sy");
     if (!sy) {

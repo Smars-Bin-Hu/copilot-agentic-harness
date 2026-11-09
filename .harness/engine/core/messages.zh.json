@@ -3786,5 +3786,14 @@
   "connections.kept.noanswer": "登录已保存。测试没连到系统，所以不能说明登录有错。",
   "connections.forget.signin.ask": "在这台电脑上忘掉 {name} 的登录？以后要重新输入。",
   "connections.forget.tool.ask": "在这台电脑上忘掉 {program} 的登录？用 {program} 的每个连接都会失去它，以后要重新登录。",
-  "connections.own.add.go": "添加连接"
+  "connections.own.add.go": "添加连接",
+  "ready.conn.held": "{n} 个被扣下",
+  "ready.p.held": "{n} 个连接被扣下：{names}。",
+  "ready.p.held.one": "1 个连接被扣下：{names}。",
+  "ready.p.held.why": "它们的工具包有文件出错，所以 gate 扣下它们的调用。",
+  "ready.p.held.short": "{n} 个被扣下：工具包有错。",
+  "ready.p.held.short.one": "1 个被扣下：工具包有错。",
+  "board.enter.cs.held": "它的工具包有文件出错。gate 扣下它的调用。",
+  "board.enter.sys.state.held": "被扣下",
+  "board.enter.sys.held.reason": "它的工具包有文件出错：{fault} gate 扣下它的调用。"
 }

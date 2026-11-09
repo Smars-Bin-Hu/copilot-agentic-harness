@@ -54,18 +54,28 @@ def _alive(item: Dict[str, Any], limit: float, now: float) -> bool:
     return now - float(item.get("at", 0)) <= (PENDING_HOURS * 3600.0 if item.get("state") == "pending" else limit)
 
 
-def trimmed(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """The entries to keep (1.7.38, C13 M1): at most MAX_ENTRIES, but an entry that still waits for the person (`pending`) is never dropped, whatever task it is of. What goes is what is decided, void or run:
-    the stubs of a dismissed or void call first, then the other decided ones (approved, opened); the oldest of each first."""
+KEPT_STATES = ("pending", "approved", "opened")  # a call that waits, an approval not used yet, a card whose connections were opened and that the agent has not run again
+
+
+def trimmed(entries: List[Dict[str, Any]], limit_minutes: Optional[int] = None, now: Optional[float] = None) -> List[Dict[str, Any]]:
+    """The entries to keep (1.7.38, C13 M1): at most MAX_ENTRIES, but an entry that still waits for the person (`pending`), an approval that is not used and not run out (`approved`) and a card that was opened and
+    waits for the agent's second run (`opened`) are never dropped, whatever task they are of. What goes is what is over: the stubs of a dismissed or void call (the person said no, or the task closed), and what has run out
+    (when `limit_minutes` is given) or is in no live state; the oldest of each first."""
     over = len(entries) - MAX_ENTRIES
     if over <= 0:
         return entries
+    seconds = None if limit_minutes is None else limit_minutes * 60.0
+    stamp = time.time() if now is None else now
+
+    def spent(item: Dict[str, Any]) -> bool:
+        return seconds is not None and not _alive(item, seconds, stamp)
+
     gone: set = set()
-    for rank in (("dismissed",), ("approved", "opened")):
+    for rank in (lambda item: item.get("state") == "dismissed", lambda item: spent(item) or item.get("state") not in KEPT_STATES):
         for index, item in enumerate(entries):
             if len(gone) >= over:
                 break
-            if item.get("state") in rank:
+            if index not in gone and rank(item):
                 gone.add(index)
     return [item for index, item in enumerate(entries) if index not in gone]
 

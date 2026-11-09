@@ -309,6 +309,10 @@ class Ready:
             loose = set(conn_core.unsigned(self.root)) | {one["name"] for one in readyitems.connection_states(self.root) if one["state"] == "none"}  # a connection with no sign-in kept here: its row says so, as the name with its dot did (C12 N7), and the yellow line counts the same ones (RC-1)
         except Exception:  # noqa: BLE001 - see above
             loose = set()
+        try:
+            held = readyitems.held_by_fault(self.root)  # 1.7.38 (F3): the pack that brings their type has a faulty file, so the gate holds their calls: a yellow row with the file, whatever the sign-in or the last test says
+        except Exception:  # noqa: BLE001 - see above
+            held = {}
         lacks = set(self.identity_lacks())  # 1.7.38 (C13 D3-3): VS Code was not started with the identity of these: a yellow note on the row of the connection
         label_of = lambda system: str((kinds.get(str((listed.get(system) or {}).get("type") or "")) or {}).get("label") or "").casefold()  # noqa: E731
         # The order of the Connections window: by the label of the kind, then environment, then name (`servers.js`); the table was ordered by the name of the pack, so the two lists differed (C12 N6)
@@ -317,6 +321,9 @@ class Ready:
             mine = [item for item in raw if item["system"] == system]
             for item in mine:
                 why = ""
+                if system in held:
+                    rows.append({"system": system, "env": "" if item["env"] in ("none", "any") else item["env"], "state": "held", "reason": short(messages.text("board.enter.sys.held.reason", fault=held[system])), "at": "", "pack": pack_of(system)})
+                    continue
                 if item.get("why") == "vscode-env":  # VS Code was started without the settings of this copy: its answer says nothing of this connection. The row keeps its own state, and the table says why once, at its foot (RC-1)
                     item = dict(item, state=reach.UNKNOWN if system in loose else reach.FAILED)
                     why = messages.text("board.enter.cs.none") if system in loose else ""
@@ -332,6 +339,11 @@ class Ready:
                              "pack": str((systems.get(system) or {}).get("toolpack") or ""), **({"note": messages.text("board.enter.sys.identity" if conn_core.window_known(self.root) else "board.enter.sys.identity.unknown")} if system in lacks else {})})
             states = {row["state"] for row in rows if row["system"] == system}
             names.append({"name": system, "state": "partly" if len(states) > 1 else next(iter(states))})
+        for system in held:  # a held connection that has no line of its own in the checks (its pack's rules are not read) still has its row
+            if not any(row["system"] == system for row in rows):
+                rows.append({"system": system, "env": "" if str((listed.get(system) or {}).get("env") or "") in ("none", "any") else str((listed.get(system) or {}).get("env") or ""), "state": "held",
+                             "reason": short(messages.text("board.enter.sys.held.reason", fault=held[system])), "at": "", "pack": ""})
+                names.append({"name": system, "state": "held"})
         return {"names": names, "rows": rows, "checking": self.checker.busy()}
 
     def connection_facts(self) -> Dict[str, Any]:

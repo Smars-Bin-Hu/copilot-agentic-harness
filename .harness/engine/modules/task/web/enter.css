@@ -141,7 +141,7 @@ html.lite #en-fx{display:none}
 .en-chk-l .sy:focus-visible{outline:2px solid var(--en-ink);outline-offset:2px;border-radius:4px}
 .en-chk-l .sy-i{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.en-chk-l .sy-i:first-child{white-space:normal;overflow-wrap:anywhere}.en-chk-l .sy-i[hidden]{display:none}
 .en-chk-l .sy-more{font-weight:600;color:var(--en-cap)}.en-chk-l .sy-more[hidden]{display:none}
-.sy-d{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--soft)}.sy-d.ok{background:var(--good-dot)}.sy-d.down{background:var(--bad)}.sy-d.partly{background:var(--hot-dot)}.sy-d.unknown{background:var(--soft);opacity:.7}
+.sy-d{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--soft)}.sy-d.ok{background:var(--good-dot)}.sy-d.down{background:var(--bad)}.sy-d.partly,.sy-d.held{background:var(--hot-dot)}.sy-d.unknown{background:var(--soft);opacity:.7}
 .en-chk-l .m[hidden]+.sy{margin-top:0}
 .en-pop{position:fixed;z-index:400;max-width:min(720px,calc(100vw - 16px));border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--ink);box-shadow:0 14px 40px rgba(0,0,0,.28);font:12px/1.45 var(--sans)}
 .en-pop[hidden]{display:none}
@@ -168,7 +168,7 @@ html[lang="zh"] .en-chk-l li.gh{letter-spacing:.06em;text-transform:none;font-si
 .en-chk-l .l-yellow .ck{background:var(--hot-dot);opacity:1;box-shadow:none;animation:none}.en-chk-l .l-red .ck{background:var(--bad);opacity:1;box-shadow:0 0 0 3px var(--bad-line);animation:none}
 .en-chk-l .l-grey em,.en-chk-l .l-ok em{color:var(--en-cap)}.en-chk-l .l-yellow em{color:var(--hot)}.en-chk-l .l-red em{color:var(--bad)}.en-chk-l li.row.s-fail.blocks em,.en-chk-l li.row.s-wait.blocks em{color:var(--hot)}
 .en-chk-l li.row[title]:not([title=""]){cursor:help}
-.en-chk-l .sy-d.partly{background:var(--hot-dot)}
+.en-chk-l .sy-d.partly,.en-chk-l .sy-d.held{background:var(--hot-dot)}
 
 /* 1.7.38, block B: two blocks (Harness & Local: required; From the company: optional), a tag on each head, the VS Code button beside Enter */
 .en-chk-l li.gh{align-items:center}

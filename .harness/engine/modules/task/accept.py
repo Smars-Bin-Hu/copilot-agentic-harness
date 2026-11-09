@@ -104,22 +104,67 @@ def mark_done(root: Path, task: str, key: str) -> bool:
 TITLE_CHARS = 90
 
 
+DETAIL_CHARS = 60  # the part of a command that tells two calls apart (1.7.38, F3 U3)
+
+
+def telling_apart(commands: List[str]) -> List[str]:
+    """For each command, the part where it first differs from the others in the list, with a few words before it (1.7.38, F3 U3): what a person needs to tell two calls with the same words apart (the start of the
+    body of a comment, the statement after the same program and server). The same list gives the same parts. A command that is the start of another gets its own end."""
+    lines = [" ".join(str(command).split()) for command in commands]
+    out: List[str] = []
+    for index, line in enumerate(lines):
+        where = 0
+        for other, rest in enumerate(lines):
+            if other == index:
+                continue
+            same = 0
+            for left, right in zip(line, rest):
+                if left != right:
+                    break
+                same += 1
+            where = max(where, same)
+        start = max(0, min(where, len(line) - 1) - 12) if where < len(line) else max(0, len(line) - DETAIL_CHARS)
+        start = line.rfind(" ", 0, start) + 1 if start else 0  # not in the middle of a word
+        piece = line[start : start + DETAIL_CHARS]
+        out.append(("\u2026" if start else "") + piece.rstrip() + ("\u2026" if start + DETAIL_CHARS < len(line) else ""))
+    return out
+
+
 def held(root: Path, raw_task: str) -> List[Dict[str, str]]:
-    """The calls of this task that still wait for the person, for the question the board asks before it closes the task (1.7.38, C13 FB-4): `[{code, system, env, title}]`, oldest first. `title` is what the call says in
-    words, else the start of the command."""
+    """The calls of this task that still wait for the person, for the question the board asks before it closes the task (1.7.38, C13 FB-4): `[{code, system, env, title, detail}]`, oldest first. `title` is what the call
+    says in words, else the start of the command. `detail` (F3 U3) is empty, unless another call has the same system, environment and title: then it is the part of the command that tells it apart."""
     task = task_ops.resolve(root, raw_task)
     from . import taskdesk  # it reads this module
 
     said = {str(item.get("code")): item for item in taskdesk.outbox_view(root, task)}
     out: List[Dict[str, str]] = []
+    commands: List[str] = []
     for entry in outbox.pending_for(root, task):  # the entries decide what waits; the page's view only gives the words
         item = said.get(str(entry.get("code"))) or {}
         words = " \u00b7 ".join(str(line) for line in item.get("says") or [] if line) or taskdesk.cut_command(entry.get("command") or "", TITLE_CHARS)
-        out.append({"code": str(entry.get("code") or ""), "system": str(entry.get("system") or ""), "env": str(entry.get("env") or ""), "title": words[:200]})
+        out.append({"code": str(entry.get("code") or ""), "system": str(entry.get("system") or ""), "env": str(entry.get("env") or ""), "title": words[:200], "detail": ""})
+        commands.append(str(entry.get("command") or ""))
+    for index, call in enumerate(out):
+        twins = [other for other, one in enumerate(out) if (one["system"], one["env"], one["title"]) == (call["system"], call["env"], call["title"])]
+        if len(twins) > 1:
+            call["detail"] = telling_apart([commands[other] for other in twins])[twins.index(index)]
     return out
 
 
-def accept(root: Path, raw_task: str, void: bool = False) -> Dict[str, Any]:
+def unseen(waiting: List[Dict[str, str]], void: bool, seen: Any) -> bool:
+    """Do calls wait that the person has not said yes to void (1.7.38, F3 M2)? No `void`: any waiting call. With `void` and the codes the page listed (`seen`): a call that came after the list was drawn. A page that
+    sends no list (older) is held to `void` only."""
+    if not waiting:
+        return False
+    if not void:
+        return True
+    if not isinstance(seen, (list, tuple)):
+        return False
+    listed = {str(code) for code in seen}
+    return any(call["code"] not in listed for call in waiting)
+
+
+def accept(root: Path, raw_task: str, void: bool = False, seen: Any = None) -> Dict[str, Any]:
     """The person accepts the delivered work on the board: the task closes (the report is written, the session lets go). Nothing is sent to the chat. Refused unless the task waits for acceptance.
     Calls of the task that still wait for the person are void when it closes (1.7.38, C13 FB-4): the board lists them and asks first, and `void` says the person said yes; without it the acceptance is refused
     and the answer says how many wait, so a page that was not told cannot void a call the person never saw."""
@@ -128,7 +173,7 @@ def accept(root: Path, raw_task: str, void: bool = False) -> Dict[str, Any]:
     if tasklife.waiting(root, task, data)["why"] != "accept":
         raise CommandError(say("accept.not_waiting", name=task_ops.name_of(task)))
     waiting = held(root, task)
-    if waiting and not void:
+    if unseen(waiting, void, seen):
         raise CommandError(say("accept.held", count=len(waiting)))
     left = (data.get("deliver") or {}).get("todo_open") or ""
     result = task_ops.close(root, task, say("accept.reason"), check_todo=False, todo_note=left or say("accept.reason"), void_note=say("accept.void"))

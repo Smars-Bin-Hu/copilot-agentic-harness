@@ -65,7 +65,7 @@ noscript{display:block;margin-top:16px;color:var(--bad)}
 .dialog .code{font:inherit;font-family:ui-monospace,monospace;font-size:16px;width:100%;box-sizing:border-box;padding:6px 8px;margin:8px 0;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
 .dialog .row{display:flex;gap:8px}
 /* 1.7.38 (C13 FB-4): the calls that still wait, listed in the window that asks before Accept and close: one per line, a long title wraps, a long list scrolls */
-.dialog .held-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow:auto;overscroll-behavior:contain}.dialog .held-list li{min-width:0;overflow-wrap:anywhere}.dialog .held-list .held-title{color:var(--soft)}.dialog .held-more{margin:0 0 6px;text-align:center;font-size:12px}
+.dialog .held-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow:auto;overscroll-behavior:contain}.dialog .held-list li{min-width:0;overflow-wrap:anywhere}.dialog .held-list .held-title{color:var(--soft)}.dialog .held-list .held-detail{display:block;margin-top:1px;font-family:var(--mono,ui-monospace,monospace);font-size:12px;color:var(--soft);opacity:.85;overflow-wrap:anywhere}.dialog .held-more{margin:0 0 6px;text-align:center;font-size:12px}
 /* The task page (desk.js): a header, what waits for the person, then the documents in tabs. */
 .crumbs{margin-bottom:10px}
 .title-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.title-row h1{margin:0}

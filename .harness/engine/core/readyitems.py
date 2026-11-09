@@ -238,16 +238,36 @@ def packs_item(root: Path) -> Dict[str, Any]:
     return item("packs", "yellow" if problems else "ok", count(len(names), "ready.packs"), problems[0]["fix"] if problems else {}, names, problems)
 
 
+def held_by_fault(root: Path) -> Dict[str, str]:
+    """`{alias: "file: problem"}` of the connections whose type a tool pack with a faulty file brings (1.7.38, F3): the gate holds every call of the pack's programs, so the connection is not "ok" whatever its sign-in says.
+    Empty when no pack is faulty, and when the packs cannot be read at all (doctor says that)."""
+    try:
+        found = toolpacks.faults(root)
+        if not found:
+            return {}
+        out: Dict[str, str] = {}
+        for alias, server in conn_core.listed(root).items():
+            guard = toolpacks.guard_of(root, str(server.get("type") or ""), found) if server.get("type") else {}
+            if guard.get("state") == "faulty":
+                out[alias] = f"{guard['file']}: {guard['problem']}"[:300]
+        return out
+    except Exception:  # noqa: BLE001 - a note must not break the screen
+        return {}
+
+
 def connections_off(root: Path) -> List[str]:
-    """The connections whose tool pack is off or gone (1.7.38): the company lists them, the gate still judges their calls, but there is no sign-in or test for them here. The Enter screen does not count them."""
-    known = conn_core.types(root)
-    return [alias for alias, server in conn_core.listed(root).items() if server.get("type") and not known.get(str(server.get("type")))]
+    """The connections whose tool pack is off or gone (1.7.38): the company lists them, the gate still judges their calls, but there is no sign-in or test for them here. The Enter screen does not count them.
+    A connection whose pack is faulty is not off: the pack is on and the gate holds its calls (`held_by_fault`)."""
+    known, held = conn_core.types(root), held_by_fault(root)
+    return [alias for alias, server in conn_core.listed(root).items() if server.get("type") and not known.get(str(server.get("type"))) and alias not in held]
 
 
 def connection_states(root: Path) -> List[Dict[str, Any]]:
     """`[{name, state, saved}]` of every connection VS Code does not run (MCP is left out) whose tool pack is on. state: ok (the last test passed), down (a sign-in is saved and the last test failed),
-    none (no sign-in, and no test passed), untested (a sign-in is saved and no test has run yet)."""
+    none (no sign-in, and no test passed), untested (a sign-in is saved and no test has run yet), held (1.7.38, F3: the pack that brings its type has a faulty file, so the gate holds its calls; `fault` says which file;
+    it is never ok and never green)."""
     known, env = conn_core.types(root), conn_core.read_env(root)
+    held = held_by_fault(root)
     systems = config.policy_or_empty(root, "tools").get("systems") or {}
     try:
         seen = reach.view(root, systems) if systems else []
@@ -257,6 +277,9 @@ def connection_states(root: Path) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for alias, server in conn_core.listed(root).items():
         kind = known.get(str(server.get("type"))) or {}
+        if alias in held:  # F3: the gate holds its calls, whatever the sign-in or the last test says
+            out.append({"name": alias, "state": "held", "saved": bool(conn_core.identity_of(env, alias, kind, server)) if kind else False, "fault": held[alias]})
+            continue
         if kind.get("via") == "mcp" or (server.get("type") and not kind):  # no kind: its tool pack is off (counted in `connections_off`)
             continue
         saved = bool(conn_core.identity_of(env, alias, kind, server))
@@ -314,14 +337,18 @@ def connections_counted(root: Path) -> Dict[str, Any]:
         problems.append({"key": "cert", "text": say("ready.p.cert"), "why": say("ready.p.cert.why"), "short": say("ready.p.cert.short"), "fix": fix_tools("local", say("ready.fix.local"), "network")})
     if not found:
         return item("connections", "yellow" if problems else "grey", say("ready.none"), problems[0]["fix"] if problems else {}, problems=problems)
+    held = [one["name"] for one in found if one["state"] == "held"]
+    if held:  # F3: the tool pack of these has a faulty file (its own row above is red): the dot is yellow, the gate holds their calls
+        problems.append({"key": "held", "text": say("ready.p.held.one" if len(held) == 1 else "ready.p.held", n=len(held), names=names_text(held)), "why": say("ready.p.held.why"),
+                         "short": say("ready.p.held.short.one" if len(held) == 1 else "ready.p.held.short", n=len(held)), "fix": fix_tools("packs", say("board.enter.t.packs"))})
     ok = len([one for one in found if one["state"] == "ok"])
     parts = [say("ready.conn.signed", n=ok)] if ok else []
-    for state, key, single in (("none", "ready.conn.unsigned", "ready.conn.unsigned"), ("down", "ready.conn.down", "ready.conn.down.one"), ("untested", "ready.conn.untested", "ready.conn.untested")):
+    for state, key, single in (("held", "ready.conn.held", "ready.conn.held"), ("none", "ready.conn.unsigned", "ready.conn.unsigned"), ("down", "ready.conn.down", "ready.conn.down.one"), ("untested", "ready.conn.untested", "ready.conn.untested")):
         n = len([one for one in found if one["state"] == state])
         if n:
             parts.append(say(single if n == 1 else key, n=n))
     detail = " \u00b7 ".join(parts)
-    return item("connections", "yellow" if problems else "ok" if ok == len(found) else "grey", detail, problems[0]["fix"] if problems else {}, [{"name": one["name"], "state": one["state"], "saved": one["saved"]} for one in found], problems)
+    return item("connections", "yellow" if problems else "ok" if ok == len(found) else "grey", detail, problems[0]["fix"] if problems else {}, [{"name": one["name"], "state": one["state"], "saved": one["saved"], **({"fault": one["fault"]} if one.get("fault") else {})} for one in found], problems)
 
 
 # --- code repositories -------------------------------------------------------------------------------------------------------------------------------------------

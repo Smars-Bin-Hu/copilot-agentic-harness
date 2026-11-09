@@ -657,23 +657,23 @@ class Board:
             return True
         raise CommandError(say("serve.busy"))
 
-    def close(self, name: str, reason: str = "", void: bool = False) -> Dict[str, Any]:
+    def close(self, name: str, reason: str = "", void: bool = False, seen: Any = None) -> Dict[str, Any]:
         """Close a task (`task close`): the report is written, the session lets go. The folder stays; `task open` opens it again.
         The browser must be paired; no code is typed, for it undoes nothing that cannot be undone. `reason`: what the person typed in the dialog (like `task close --reason`); else the page's own words.
         Calls of the task that still wait for the person are void when it closes (1.7.38, C13 M2): the page lists them and asks first, as Accept and close does, and `void` says the person said yes; without it the close
-        is refused and the answer says how many wait."""
+        is refused and the answer says how many wait. `seen` (F3): the codes the page listed; a call that came after the list is not void by that yes."""
         if "close" not in self.actions:
             raise CommandError(say("serve.action.off", action="close"))
         self.idle("close", name)
         waiting = accept.held(self.root, name)
-        if waiting and not void:
+        if accept.unseen(waiting, void, seen):
             raise CommandError(say("serve.close.held", count=len(waiting)))
         words = reason.strip()[:500]
         result = task_ops.close(self.root, name, words or say("serve.close.reason"), check_todo=False, todo_note=words or say("serve.close.reason"))
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False) -> Dict[str, Any]:
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False, voids: Any = None) -> Dict[str, Any]:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`;
         `seen` for `approve-action` only: what the person saw when they pressed View (`outbox.approve_action`)."""
         if action in ALL_AT_ONCE:
@@ -689,7 +689,7 @@ class Board:
         if action == "accept" and step == "preview":  # the calls of the task that still wait for the person: the page lists them and asks before it closes the task (1.7.38, C13 FB-4)
             return {"held": accept.held(self.root, task)}
         if action == "accept":  # the person accepts the delivered work (1.7.38): the board closes the task; nothing is sent to the chat. `void`: the person said yes to the calls that still wait: they are void now
-            result = accept.accept(self.root, task, void=bool(void))
+            result = accept.accept(self.root, task, void=bool(void), seen=voids)
             noted_after = result.get("task") or task
             print(say("serve.did", action="accept", task=task_ops.name_of(noted_after)), flush=True)
             return result
@@ -1850,7 +1850,7 @@ def handler_for(board: Board) -> type:
                         return self.answer(200, {"result": {"left": [text[:200] for text in task_ops.todo_left(board.root, task_ops.resolve(board.root, str(data.get("task", ""))))[:30]]}})
                     if data.get("step") == "preview":  # the calls of the task that still wait for the person: the page lists them and asks before it closes the task (1.7.38, C13 M2)
                         return self.answer(200, {"result": {"held": accept.held(board.root, str(data.get("task", "")))}})
-                    return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")), data.get("void") is True)})
+                    return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")), data.get("void") is True, data.get("voids"))})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                     return self.answer(409, {"error": str(error)})
             if path == "/api/archive":
@@ -1921,7 +1921,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"), bool(data.get("void")))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"), bool(data.get("void")), data.get("voids"))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

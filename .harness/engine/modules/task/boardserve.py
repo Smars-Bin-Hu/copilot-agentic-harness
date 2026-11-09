@@ -2032,6 +2032,12 @@ def sync_on_start(root: Path) -> None:
         company.sync_after(root)
     except Exception:  # noqa: BLE001 - a broken pack or file must not keep the board from starting
         pass
+    try:  # 1.7.38 (C13 FR 17a): the first start of the board, or the first after an upgrade, accepts the guardrail files as they are; a change that nobody accepted within this version is not accepted here (doctor says which files)
+        import integrity
+
+        integrity.accept_on_start(root)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,

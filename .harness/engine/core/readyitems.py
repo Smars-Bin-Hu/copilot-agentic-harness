@@ -231,6 +231,11 @@ def packs_item(root: Path) -> Dict[str, Any]:
         key = "ready.p.unreadable" if one.get("unreadable") else "ready.p.broken"  # S1: a `toolpack.json` that cannot be read is told as that
         problems.insert(0, {"key": "packs", "text": say(key, pack=one["pack"], file=first["file"]), "why": first["problem"][:240],
                             "short": say(key + ".short", pack=one["pack"], file=first["file"], problem=first["problem"][:240]), "fix": fix_tools("packs", say("board.enter.t.packs"))})
+    listfault = toolpacks.use_fault(root)  # 1.7.38 (C13 FR 4): the company's list of packs cannot be read: red, with the file; the packs it turns on are not known to be on, and the gate guards all factory packs
+    if listfault:
+        fix = fix_tools("packs", say("board.enter.t.packs"))
+        problems.insert(0, {"key": "packs", "text": say("ready.p.packsfile", file=listfault["file"]), "why": listfault["problem"], "short": say("ready.p.packsfile.short", file=listfault["file"], problem=listfault["problem"]), "fix": fix})
+        return item("packs", "red", say("ready.packs.listfault"), fix, names, problems)
     if not names:
         return item("packs", "grey", say("ready.none"))
     if broken:

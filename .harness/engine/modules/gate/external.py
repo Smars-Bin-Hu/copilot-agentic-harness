@@ -36,7 +36,7 @@ from core.systems import (  # noqa: F401 - the names the handler, doctor and the
 )
 
 from . import pin
-from .gitcmd import MAX_DEPTH, READ_ONLY as READ_ONLY_GIT, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
+from .gitcmd import LEADING_KEYWORDS, MAX_DEPTH, READ_ONLY as READ_ONLY_GIT, SEPARATORS, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
 
 
 @dataclass(frozen=True)
@@ -352,7 +352,7 @@ _WORD = re.compile(r"[^\s;&|(){}<>`'\"=,:$]+")
 
 def _mentioned(text: str, names: List[str]) -> str:
     """The first program of a listed system that this text names as a word (1.7.25): a word equal to the name, with `.exe`, `.cmd`, `.bat` or a path in front of it (`/x/bin/ado`)."""
-    for word in _WORD.findall(text):
+    for word in _WORD.findall(re.sub(r"\\[nrt]", " ", text)):  # `printf 'sqlcmd\n'`: a backslash and a letter that a program turns into a line break is a space
         plain = _program(word.strip(".!?*#@%+"))
         if plain in names:
             return plain
@@ -406,6 +406,8 @@ def _data_only(tokens: List[str], at: int) -> bool:
         return not (words and words[0].lower() in ("difftool", "mergetool", "bisect", "filter-branch", "submodule", "rebase", "instaweb", "daemon", "credential", "config", "gc"))
     if name == "man":
         return not any(item in ("-P", "--pager", "-H", "--html") or item.startswith(("--pager=", "-P")) for item in args)
+    if name in ("less", "more"):  # `less +'!command'` runs a command (1.7.38, C13 FR 20)
+        return not any(item.startswith("+") for item in args)
     if name == "rg":
         return not any(item == "--pre" or item.startswith("--pre=") for item in args)
     if name == "sort":
@@ -876,6 +878,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
     feeds = ctx.hold and (any(_feeds_code(_without_redirects(tokens)) for tokens in segments) or ("<(" in text and any(_head_name(tokens) in ("source", ".") or _head_is_interpreter(tokens) for tokens in segments)))
     if ctx.hold:
         _hidden_in_line(segments, text, programs, feeds, found)
+        _text_runners(text, bodies, names, ctx, found)  # 1.7.38 (C13 FR 20): a runner of text (make, tclsh, m4, crontab, at...) whose text names a governed program
     elif ctx.direct:
         _launched(segments, programs, found)
     for body, expands in bodies:
@@ -995,6 +998,128 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             ctx.dirs.append(tokens[1])
 
 
+# Programs that run the text they are given (1.7.38, C13 FR 20): on their input (a here-document, a here-string, a pipe, `-f -`), in a file (`make -f x`, the Makefile they find themselves, `at -f x`) or in their own
+# words (`less +'!cmd'`, `awk 'BEGIN{system(...)}'`). They are no shell and no interpreter the gate has a reading for (`_is_interpreter`), and a governed program named in what they run was a call nobody judged: `make -f -
+# <<EOF ... sqlcmd ... DROP ... EOF` dropped a table. The line is refused when the text of such a runner names a governed program: the way is to run the program itself. THIS LIST GROWS: put a runner here when one is found;
+# the value is how it finds a file when it is given none (the names it looks for in the folder it runs in).
+TEXT_RUNNERS = {
+    "make": ("Makefile", "makefile", "GNUmakefile"), "gmake": ("Makefile", "makefile", "GNUmakefile"), "bmake": ("Makefile", "makefile"), "just": ("justfile", "Justfile", ".justfile"), "rake": ("Rakefile", "rakefile"),
+    "ninja": ("build.ninja",), "tclsh": (), "wish": (), "expect": (), "m4": (), "awk": (), "gawk": (), "mawk": (), "nawk": (), "lua": (), "luajit": (), "php": (), "r": (), "rscript": (), "julia": (), "crontab": (), "at": (), "batch": (),
+    "ed": (), "ex": (), "vi": (), "vim": (), "nvim": (), "emacs": (), "osascript": (), "cscript": (), "wscript": (), "mshta": (), "sqlite3": (), "psql": (), "gdb": (), "lldb": (), "ftp": (), "sftp": (), "telnet": (), "nc": (), "ncat": (),
+    "cmake": (), "scons": (), "gradle": (), "mvn": (), "ant": (), "npm": (), "npx": (), "yarn": (), "pnpm": (), "swift": (), "go": (), "dotnet": (), "groovy": (), "scala": (), "kotlin": (), "deno": (), "bun": (), "tsx": (), "ts-node": (),
+}
+POSITIONAL_PROGRAM = frozenset("tclsh wish expect m4 lua luajit php julia rscript r crontab osascript cscript wscript mshta".split())  # a file word given to these is the text they run (to `awk`, `vim` and the build tools it is data or a target)
+_FILE_OPTIONS = ("-f", "--file", "--makefile", "--justfile", "-file", "-c")  # the option that names the file to run (`make -f x`, `at -f x`)
+
+
+def _segments_with_operators(text: str) -> List[Tuple[str, List[str]]]:
+    """`split_segments` that also says how each command is joined to the one before: `|` (a pipe: it gets the output), or another operator (`;`, `&&`, `||`, a new line). `("", tokens)` for the first."""
+    text = join_lines(text)
+    out: List[Tuple[str, List[str]]] = []
+    tokens: List[str] = []
+    token: Optional[str] = None
+    quote = ""
+    current = ""  # the operator in front of the command being read
+    run = ""  # the operator characters seen since the last command ended
+    index = 0
+
+    def end_token() -> None:
+        nonlocal token, current, run
+        if token is not None:
+            if not tokens:
+                current, run = run, ""
+            tokens.append(token)
+            token = None
+
+    def end_segment() -> None:
+        nonlocal tokens
+        end_token()
+        if tokens:
+            out.append((current, tokens))
+            tokens = []
+
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and quote != "'" and index + 1 < len(text) and text[index + 1] == '"':
+            token = (token or "") + '"'
+            index += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = ""
+            else:
+                token = (token or "") + char
+        elif char in "\"'":
+            quote = char
+            token = token or ""
+        elif char in SEPARATORS:
+            end_segment()
+            run += char if char in "|&;\n" else ""
+        elif char.isspace():
+            end_token()
+        else:
+            token = (token or "") + char
+        index += 1
+    end_segment()
+    cleaned: List[Tuple[str, List[str]]] = []
+    for how, item in out:
+        while item and item[0] in LEADING_KEYWORDS:
+            item = item[1:]
+        if item:
+            cleaned.append(("|" if how in ("|", "|&") else how, item))
+    return cleaned
+
+
+def _runner_files(name: str, args: List[str]) -> List[str]:
+    """The files a runner is told to run in its words: the value of its file option, a file it is given on its input (`< x`), and a plain word that may be a file; and, when it names none, the files it looks for itself."""
+    files: List[str] = []
+    for index, item in enumerate(args):
+        if item in _FILE_OPTIONS and index + 1 < len(args):
+            files.append(args[index + 1])
+        elif item.startswith(("--file=", "--makefile=", "--justfile=")):
+            files.append(item.split("=", 1)[1])
+        elif item == "<" and index + 1 < len(args):
+            files.append(args[index + 1])
+        elif item.startswith("<") and not item.startswith("<<") and len(item) > 1:
+            files.append(item[1:])
+        elif name in POSITIONAL_PROGRAM and not item.startswith(("-", "+", "<", "$")) and ("/" in item or "." in item):
+            files.append(item)
+    return [item for item in files if item not in ("-", "/dev/stdin", "")] or (list(TEXT_RUNNERS.get(name, ())) if not any(item in _FILE_OPTIONS for item in args) else [])
+
+
+def _text_runners(text: str, bodies: List[Tuple[str, bool]], names: List[str], ctx: "_Ctx", found: List[Action]) -> None:
+    """The rule for a runner (`TEXT_RUNNERS`): what it is given to run (its own words, the text piped into it and the here-documents of that, the file it is told to run or finds itself) is read, and a governed program named
+    in it makes the line refused, with the way (run the program itself). One refusal for the line."""
+    pairs = _segments_with_operators(text)
+    owner: List[List[str]] = []  # the here-documents of each command, in the order the shell takes them
+    queue = list(bodies)
+    for _how, tokens in pairs:
+        count = sum(1 for item in tokens if item.startswith("<<") and not item.startswith("<<<"))
+        owner.append([queue.pop(0)[0] for _ in range(min(count, len(queue)))])
+    for index, (_how, tokens) in enumerate(pairs):
+        at = _head_index(tokens)
+        if at is None:
+            continue
+        runner = _program(tokens[at])
+        if runner not in TEXT_RUNNERS:
+            continue
+        given = [" ".join(tokens[at + 1:])] + owner[index]
+        back = index
+        while back > 0 and pairs[back][0] == "|":  # what is piped in, and the here-documents of the commands that pipe it
+            back -= 1
+            given += [" ".join(pairs[back][1])] + owner[back]
+        hit = _mentioned("\n".join(given), names)
+        if not hit:
+            for path in _runner_files(runner, tokens[at + 1:]):
+                state, program = _file_state(path, names, ctx)
+                if state == "names":
+                    hit = program
+                    break
+        if hit:
+            found.append(_hidden("runner", " ".join(tokens), program=hit, runner=runner))
+            return
+
+
 def _head_name(tokens: List[str]) -> str:
     at = _head_index(tokens)
     return _program(tokens[at]) if at is not None else ""
@@ -1054,6 +1179,8 @@ def _runs_files(tokens: List[str], at: int, raw: List[str], feeds: bool) -> List
         kind, index = _interp(tokens, at)
         if kind == "script" and index is not None and index < len(tokens):
             files.append(tokens[index])
+        elif kind == "code" and index is not None:
+            files.extend(_code_files(" ".join(tokens[index + 1:])))  # `python3 -c "exec(open('x.py').read())"`: the file is the program (1.7.38, C13 FR 20)
     elif name in ("source", ".") and at + 1 < len(tokens):
         files.append(tokens[at + 1])
     elif name in READ_ONLY_PROGRAMS or _is_harness(tokens, at):
@@ -1065,6 +1192,14 @@ def _runs_files(tokens: List[str], at: int, raw: List[str], feeds: bool) -> List
     if feeds and name in _READERS:
         files.extend(item for item in tokens[at + 1:] if not item.startswith("-"))
     return files
+
+
+_CODE_FILE = re.compile(r"""(?:\bopen|\brun_path|\bexecfile|\breadFileSync|\breadFile|\brequire|\bdofile|\bloadfile|\bGet-Content|\bgc|\bImport-Module)\s*\(?\s*(?:[A-Za-z_]+\s*=\s*)?['"]([^'"\n]{1,300})['"]""", re.IGNORECASE)
+
+
+def _code_files(code: str) -> List[str]:
+    """The files that the code of a one-liner opens by a name written in it (`open('x.py')`, `runpy.run_path('x.py')`, `readFileSync('x.js')`, `require('./x')`): when the code runs what it reads, they are its program. Best effort."""
+    return [name for name in dict.fromkeys(_CODE_FILE.findall(code or "")) if "/" in name or "\\" in name or "." in name]  # a bare name (`require('fs')`) is a module, not a file
 
 
 def _evaluated(tokens: List[str]) -> Optional[str]:

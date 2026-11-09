@@ -207,6 +207,29 @@ def use_list(root: Path) -> List[str]:
     return [str(item) for item in names if isinstance(item, str)] if isinstance(names, list) else []
 
 
+def use_fault(root: Path) -> Optional[Dict[str, str]]:
+    """(1.7.38, C13 FR 4) `{file, problem}` when the company's list of the factory packs it turns on (`tools/packs.json`) is there and cannot be read: not JSON, not an object, or a `use` that is not a list of names; None when it can
+    be read, or is not there (a team may turn none on). It used to be read as "no pack is on": the packs the company had turned on went quiet and nothing said why. Now `harness doctor` says it is an error, the Enter screen is red, `company sync`
+    stops, and the gate guards every factory pack as if it were on (`guarded`)."""
+    try:
+        folder = targets.company_folder(root)
+        path = folder / USE_FILE if folder else None
+        if path is None or not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as error:
+            return {"file": USE_FILE.as_posix(), "problem": " ".join(str(error).split())[:240]}
+        if not isinstance(data, dict):
+            return {"file": USE_FILE.as_posix(), "problem": say("toolpack.use.object")}
+        use = data.get("use")
+        if use is not None and (not isinstance(use, list) or not all(isinstance(item, str) for item in use)):
+            return {"file": USE_FILE.as_posix(), "problem": say("toolpack.use.list")}
+    except Exception as error:  # noqa: BLE001 - a file that cannot even be looked at is a fault too
+        return {"file": USE_FILE.as_posix(), "problem": f"{type(error).__name__}: {error}"[:240]}
+    return None
+
+
 def paths(root: Path) -> List[str]:
     return ledger(root)["paths"]
 
@@ -224,11 +247,16 @@ def clashes(root: Path) -> List[str]:
 
 
 def clash_lines(root: Path) -> List[str]:
-    return [say("toolpack.clash", name=name) for name in clashes(root)]
+    fault = use_fault(root)
+    return ([say("toolpack.use_fault", file=fault["file"], problem=fault["problem"])] if fault else []) + [say("toolpack.clash", name=name) for name in clashes(root)]
 
 
 def clash_stop(root: Path) -> str:
-    """The one line `company sync` answers with when a company pack has the name of a factory pack (1.7.38), naming every such pack; "" when there is none."""
+    """The one line `company sync` answers with when a company pack has the name of a factory pack (1.7.38), naming every such pack; "" when there is none. (1.7.38, C13 FR 4) Also when the company's list of tool
+    packs (`packs.json`) cannot be read: a sync would then put the skills of no pack, and take back those of the packs that are on."""
+    fault = use_fault(root)
+    if fault:
+        return say("company.sync.use_fault", file=fault["file"], problem=fault["problem"])
     names = clashes(root)
     return say("company.sync.clash", names=", ".join(f"`{name}`" for name in names)) if names else ""
 
@@ -317,6 +345,8 @@ def guarded(root: Path) -> Dict[str, Dict[str, Any]]:
     names = {str(server.get("type")) for server in connections_listed(root).values()}
     names -= {one for item in every.values() if item["active"] for one in type_names(item["folder"])}
     out = {name: item for name, item in every.items() if item["active"]}
+    if use_fault(root) is not None:  # (1.7.38, C13 FR 4) the list of the packs the company turns on cannot be read: no pack can be called off, so the gate guards every factory pack as if it were on (the stricter reading)
+        out.update({name: item for name, item in every.items() if item["source"] == HARNESS})
     if names:
         for name, item in every.items():
             if item["active"]:

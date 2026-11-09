@@ -125,7 +125,15 @@ def admin_switch_off(root: Path, session_id: str, surface: str = "vscode") -> Di
         was = admin_on(state)
         if "admin" in state:
             state["admin"] = {"on": False, "at": utc_now()}
-    return {"admin": False, "session_id": session_id, "was_on": was}
+    kept = ""
+    if was:  # 1.7.38 (C13 FR 17a): the person's admin session ends: what it changed in the guardrail files is accepted (the list of `integrity.py`)
+        try:
+            import integrity
+
+            kept = f"{integrity.accept(root)['files']} files"
+        except Exception:  # noqa: BLE001 - the mode is off whatever happens here; `harness doctor` says when the list is behind
+            kept = ""
+    return {"admin": False, "session_id": session_id, "was_on": was, **({"integrity": kept} if kept else {})}
 
 
 def admin_sessions(root: Path) -> List[Dict[str, Any]]:

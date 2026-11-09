@@ -910,7 +910,34 @@ def shown(lines: List[str]) -> str:
     return "\n".join(out)
 
 
-def run(root: Path) -> int:
+def check_integrity(report: Report, root: Path) -> None:
+    """(1.7.38, C13 FR 17a) The guardrail files against the list the person accepted (`integrity.py`): an error naming the files that are not as accepted (the hook refuses commands and writes meanwhile), a warning when
+    nothing was accepted yet."""
+    try:
+        import integrity
+
+        listed = integrity.read(root)
+        if listed is None:
+            report.ok(say("doctor.integrity.none"))  # a note, not a warning: a copy nobody started the board in has none yet
+            return
+        found = integrity.changes(root, listed)
+        if found:
+            report.error(say("doctor.integrity.changed", n=len(found), files=", ".join(found[: integrity.SHOWN]) + (f" (+{len(found) - integrity.SHOWN} more)" if len(found) > integrity.SHOWN else "")))
+        else:
+            report.ok(say("doctor.integrity.ok", n=len(listed.get("files") or {})))
+    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
+        report.warn(say("doctor.integrity.failed", error=error))
+
+
+def run(root: Path, accept: bool = False) -> int:
+    if accept:  # the person says the guardrail files are as they should be (cli.py: `harness doctor --accept`, a person at a terminal)
+        from core import approval
+
+        approval.require_person("doctor --accept", typed=False)
+        import integrity
+
+        done = integrity.accept(root)
+        print(say("doctor.integrity.accepted", n=done["files"], path=done["path"]))
     report = Report()
     check_python(report)
     check_interpreter(report)
@@ -944,6 +971,7 @@ def run(root: Path) -> int:
     check_company(report, root)
     report.topic = ""
     check_toolpacks(report, root)
+    check_integrity(report, root)
     check_vscode_settings(report, root)
     report.topic = "company"
     check_standards(report, root)

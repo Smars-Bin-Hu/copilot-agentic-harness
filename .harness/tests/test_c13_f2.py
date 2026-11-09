@@ -569,6 +569,8 @@ class FaultInjectionTests(SqlCase):
     GOVERNED = f"{SERVER} {READ}"
     LOCAL = ("ls", "python3 -m unittest", "git status", "cat notes.txt", "echo sqlcmd", "which sqlcmd", "python3 -c \"print(1)\"")
     FAULT = RuntimeError("injected fault")
+    LOCAL_REFUSED = ("modules.gate.handler.check_external", "modules.gate.handler.check_wrapped", "modules.gate.handler.check_terminal", "modules.gate.handler.judge_external", "modules.gate.handler.external_facts",
+                     "modules.gate.handler.asks_board", "modules.gate.handler.check_secrets")
 
     def event(self, command: str, tool: str = "run_in_terminal", given: Any = None) -> str:
         data = pre_tool(SESSION, tool, given or {"command": command, "explanation": "t", "isBackground": False})
@@ -596,7 +598,11 @@ class FaultInjectionTests(SqlCase):
                        "core.config.load_policy", "core.connections.listed", "core.connections.unconnected", "core.govern.remember"):
             self.closed(self.inject(target, self.event(self.GOVERNED)), target)
             for line in self.LOCAL:
-                self.assertEqual(self.inject(target, self.event(line)), {}, (target, line))
+                out = self.inject(target, self.event(line))
+                if target in self.LOCAL_REFUSED:  # 1.7.38, C13 FR 16 and 18: the gate raised on this call, so it cannot judge it: a local command does not pass either, and the line says what failed
+                    self.closed(out, (target, line))
+                else:
+                    self.assertEqual(out, {}, (target, line))  # a failure that something else on the path already holds (the handler's own net): local work goes on
 
     def test_a_list_of_systems_that_cannot_be_made_holds_the_programs_not_the_other_work(self) -> None:
         for target in ("core.toolpacks.rules_layer", "core.connections.derived", "core.connections.broken_systems", "core.toolpacks.broken_systems", "core.connections.widen", "core.govern.kb_systems"):
@@ -610,13 +616,19 @@ class FaultInjectionTests(SqlCase):
         for target in ("hook.registry_module.load_registry", "hook.state_module.session", "hook.adapters.detect"):
             self.closed(self.inject(target, self.event(self.GOVERNED)), target)
             for line in self.LOCAL:
-                self.assertEqual(self.inject(target, self.event(line)), {}, (target, line))
+                self.closed(self.inject(target, self.event(line)), (target, line))  # 1.7.38, C13 FR 16 and 18: a hook that cannot decide lets no command through, local ones neither
+            for tool, given in (("create_file", {"filePath": "notes.txt", "content": "x"}), ("Write", {"path": "a.txt", "content": "x"}), ("Edit", "*** Begin Patch\n*** End Patch\n")):
+                self.closed(self.inject(target, self.event("", tool, given)), (target, tool))
+            for tool, given in (("read_file", {"filePath": "notes.txt"}), ("Read", {"path": "a.txt"}), ("grep_search", {"query": "x"}), ("ask_user", {"question": "x"})):
+                self.assertEqual(self.inject(target, self.event("", tool, given)), {}, (target, tool))  # a read stays allowed
 
     def test_what_hook_prints_when_it_cannot_read_the_payload(self) -> None:
         import hook
 
-        for raw in ("", "not json", "[]", "{}", json.dumps({"hook_event_name": "PreToolUse"}), json.dumps({"hook_event_name": "PreToolUse", "tool_input": {"command": 5}})):
-            self.assertEqual(hook.fail_closed(self.root, raw, RuntimeError("x")), {}, raw)  # it cannot tell what the call is: no opinion, as before
+        for raw in ("", "not json", "[]", "{}"):
+            self.assertEqual(hook.fail_closed(self.root, raw, RuntimeError("x")), {}, raw)  # it cannot tell what the call is: it is not a tool call, and nothing is refused
+        for raw in (json.dumps({"hook_event_name": "PreToolUse"}), json.dumps({"hook_event_name": "PreToolUse", "tool_input": {"command": 5}})):
+            self.assertEqual(hook.fail_closed(self.root, raw, RuntimeError("x")).get("permissionDecision"), "deny", raw)  # a tool call with no name that may be read as a read is not one
         again = json.dumps({"hook_event_name": "PostToolUse", "tool_input": {"command": self.GOVERNED}})
         self.assertEqual(hook.fail_closed(self.root, again, RuntimeError("x")), {})  # only a call to come is refused
 

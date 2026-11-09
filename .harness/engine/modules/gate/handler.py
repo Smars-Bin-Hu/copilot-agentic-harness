@@ -26,7 +26,7 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, targetfault, terminal
+from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, scriptcheck, targetfault, terminal
 from . import policy as gate_policy
 from .policy import POLICY_NAME, Compiled, validate_policy
 
@@ -107,6 +107,11 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     said = harnesscmd.check(event.command, compiled)  # 1.7.38 (C13 F2): the harness commands only a person may run, read as the shell reads them (a quote, a variable, `xargs`, `python -m cli` hide nothing)
     if said:
         return Decision(permission="deny", reason=said)
+    if not ctx.admin:  # 1.7.38 (C13 FR 17b): a script this line runs that names a guardrail path and writes is refused (best effort); in the person's admin session the guardrail files are open
+        task = ctx.state.get("active_task")
+        said = scriptcheck.refusal(event.command, ctx.root, event.cwd or "", (ctx.root / str(task)) if task else None, policy)
+        if said:
+            return Decision(permission="deny", reason=said, facts={"kind": "script-guardrail"})
     verdict = terminal.check(event.command, compiled, network_judged(ctx))
     if verdict is None or verdict[0] != "deny":  # 1.7.38 (C13 F2): a command string a shell is given (`pwsh -Command '...'`, `bash -c '...'`) goes through the same rules as a bare line; the strictest answer stands
         for inner in external.nested(event.command):

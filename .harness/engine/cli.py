@@ -108,6 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(SHORT_FLAG, action="store_true", help="with --version: only `harness <version>`, one line")
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("doctor", help="check harness files and config")
+    check.add_argument("--accept", action="store_true", help="accept the guardrail files (engine, policies, hooks, bin, packs) as they are now: the list the hook checks them against is made again. A person at a terminal only")
     check.set_defaults(handler=None)
     name = commands.add_parser("user", help="the name of the person using this copy (user.override.json, else git config user.name), and skill_prefix: the word the company's own skills start with")
     name.set_defaults(handler=lambda _args: user.who(repo_root()))
@@ -191,7 +192,7 @@ def main(argv=None) -> int:
     forced_json = JSON_FLAG in words
     args = build_parser().parse_args([word for word in words if word != JSON_FLAG])
     if args.command == "doctor":
-        return doctor.run(repo_root())
+        return doctor.run(repo_root(), accept=bool(getattr(args, "accept", False)))
     try:
         result = args.handler(args)
         code = result.pop("exit_code", 0) if isinstance(result, dict) else 0

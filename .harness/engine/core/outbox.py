@@ -19,7 +19,7 @@ from typing import Callable, List
 
 from . import approvals, config, messages, pinfiles
 from .paths import utc_now
-from .systems import place
+from .systems import place, verb_word
 
 FOLDER = "OUTBOX"
 STATE_MARK = "<!-- state -->"
@@ -276,7 +276,7 @@ def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, int
     for number, item in enumerate(waiting, 1):
         draft = draft_of(item)
         print(say(
-            "gate.action.item", number=number, place=place(item.get("system", "?"), item.get("env", "?")), verb=item.get("verb", "?"),
+            "gate.action.item", number=number, place=place(item.get("system", "?"), item.get("env", "?")), verb=verb_word(item.get("verb", "?")),
             target=f" {item['target']}" if item.get("target") else "", session_id=item["session_id"], created_at=item["created_at"],
             draft=f"; {draft}" if draft else "",
         ), file=out)

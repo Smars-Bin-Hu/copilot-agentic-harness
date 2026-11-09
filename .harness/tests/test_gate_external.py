@@ -243,7 +243,7 @@ class GateExternalTests(HarnessTestCase):
         self.assertEqual(self.term("tk show T-1"), {})
         denied = self.term("cloudctl --sub dev delete x")
         self.assertEqual(denied["permissionDecision"], "deny")
-        for text in ("cloud", "dev", "destroy", "cloudctl --sub dev delete x", "不要重试"):
+        for text in ("cloud", "dev", "销毁", "cloudctl --sub dev delete x", "不要重试"):
             self.assertIn(text, denied["permissionDecisionReason"])
         held = self.term("tk comment T-1 hello")  # a write to a system without environments: the outbox (M43-4)
         self.assertEqual(held["permissionDecision"], "deny")

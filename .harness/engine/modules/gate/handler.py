@@ -250,8 +250,8 @@ def check_mcp(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if found["verb"] == "read":
         return Decision(facts=facts)
     if found["verb"] == "destroy" or event.agent_type.strip():
-        return Decision(permission="deny", reason=rules.say("gate.mcp.deny", tool=event.tool_name, toolpack=found["toolpack"], verb=found["verb"]), facts=facts)
-    return Decision(permission="ask", reason=rules.say("gate.mcp.ask", tool=event.tool_name, toolpack=found["toolpack"], verb=found["verb"]), facts=facts)
+        return Decision(permission="deny", reason=rules.say("gate.mcp.deny", tool=event.tool_name, toolpack=found["toolpack"], verb=rules.word(found["verb"])), facts=facts)
+    return Decision(permission="ask", reason=rules.say("gate.mcp.ask", tool=event.tool_name, toolpack=found["toolpack"], verb=rules.word(found["verb"])), facts=facts)
 
 
 def _item_scope(call: str, system: Dict[str, Any], verb: str, data: Optional[Dict[str, Any]]) -> Optional[Tuple[str, str]]:

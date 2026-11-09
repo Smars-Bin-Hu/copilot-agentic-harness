@@ -1212,14 +1212,14 @@
     return h("div", {class: "cmd-fmt"}, rows);
   }
   const known = (key, plain) => (Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : plain);  // a word of the harness in the language of the page; a name a tool pack gives stays as it is
-  const factSpan = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
+  const factSpan = (label, value, hot, title) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", title ? {title} : null, value)) : null);
   const factList = (facts) => Object.entries(facts || {}).map(([name, value]) => factSpan(known("desk.outbox.fact." + name, name), value));
   const manyWrites = (item) => Array.isArray(item.parts) && item.parts.length > 1;  // a held line of several writes: each has its own words, facts and text (1.7.38)
   function callFacts(item) {
     const verb = known("desk.outbox.verb." + item.verb, item.verb);
     const many = manyWrites(item);
     return h("div", {class: "tk-call-facts"},
-      factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
+      factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb, false, item.named === false ? null : item.verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
       ...(many ? [] : factList(item.facts)),
       many ? null : factSpan(t("desk.outbox.target"), item.target),
       item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t(item.layout.script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: item.layout.script.lines}))) : null);

@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from core import approvals, config, messages, outbox, tasks
+from core.systems import verb_word
 
 from . import external
 from .commands import CommandError
@@ -83,7 +84,7 @@ def run_wait(root: Path, command: str, until: str, every: int = 30, timeout: int
         raise CommandError(say("wait.not_listed"))
     bad = [action for action, _decision in judged if action.verb != external.READ]
     if bad:
-        raise CommandError(say("wait.not_read", verb=bad[0].verb, system=bad[0].system))
+        raise CommandError(say("wait.not_read", verb=verb_word(bad[0].verb), system=bad[0].system))
     target = out_path(root, out, task)
     run = runner or (lambda text: subprocess.run(text, shell=True, cwd=str(root), capture_output=True, text=True, errors="replace", timeout=ROUND_SECONDS))
     started = clock()

@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from core import messages
-from core.systems import place
+from core.systems import place, verb_word
 from core.paths import cli_command
 
 
@@ -102,11 +102,8 @@ def git_needs_approval(why: str, command: str, code: str, minutes: int) -> str:
 
 
 def word(verb: str) -> str:
-    """The kind of a call as a person reads it: the protocol word in English (`write`); in Chinese the word of the board with the protocol word after it (`写（write）`: the rules and the log use it)."""
-    if messages.language() == "en":
-        return verb
-    found = messages.text(f"desk.outbox.verb.{verb}")
-    return verb if found == f"desk.outbox.verb.{verb}" else f"{found}（{verb}）"
+    """The kind of a call as a person reads it: the protocol word in English (`write`); in Chinese the word of the board only (`写`)."""
+    return verb_word(verb)
 
 
 def _verb(verb: str) -> str:

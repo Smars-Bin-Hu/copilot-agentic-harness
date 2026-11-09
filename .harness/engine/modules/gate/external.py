@@ -30,12 +30,12 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import messages
+from core import inputfiles, messages, statements
 from core.systems import (  # noqa: F401 - the names the handler, doctor and the tests use from here
     ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, by_address, clis, reach, run_probe, validate, warnings,
 )
 
-from . import inputfiles, pin, statements
+from . import pin
 from .gitcmd import MAX_DEPTH, READ_ONLY as READ_ONLY_GIT, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
 
 

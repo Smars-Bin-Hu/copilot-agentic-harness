@@ -14,9 +14,9 @@ from taskcase import NAME, SESSION, TASK, TaskCase
 
 from test_gatereview import GateCase, deny
 
-from core import approvals, clip, connections, logs, messages, pinfiles, reach, systems
+from core import approvals, clip, connections, inputfiles, logs, messages, pinfiles, reach, systems
 from core.paths import utc_now
-from modules.gate import external, inputfiles, rules
+from modules.gate import external, rules
 from modules.task import boardserve, common, gatereview, ready, taskdesk, taskinsight, tasktrace
 
 SERVER = "sqlcmd -S localhost,14332 -C -d AcmeDW"

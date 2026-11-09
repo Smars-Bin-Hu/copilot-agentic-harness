@@ -16,6 +16,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core import inputfiles, statements  # the cut and the lists of the gate: the card tells what the gate will say
 from core import systems as outside
 
 from . import cmdview
@@ -65,8 +66,6 @@ def of_call(root: Path, task: str, command: str, listed: Dict[str, Any], pins: O
 
 
 def _of_call(root: Path, task: str, command: str, listed: Dict[str, Any], cwd: str) -> Optional[Dict[str, Any]]:
-    from modules.gate import inputfiles, statements  # the gate's own cut and lists: the card tells what the gate will say
-
     folder = root / task if task else None
     items: List[Dict[str, Any]] = []
     counts = {"read": 0, "write": 0, "ask": 0}

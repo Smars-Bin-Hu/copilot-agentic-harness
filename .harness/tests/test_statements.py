@@ -1,4 +1,4 @@
-"""1.7.38: free text cut into statements (modules/gate/statements.py)."""
+"""1.7.38: free text cut into statements (core/statements.py)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import unittest
 
 import support  # noqa: F401 - the engine on sys.path
 
-from modules.gate import statements
+from core import statements
 
 
 def texts(text: str):

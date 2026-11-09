@@ -522,7 +522,7 @@ class QuoteTheStatementTests(English, ListedCase):
     """L3: the text to the agent quotes the statement as it was written; the judging still uses the form with the strings blanked."""
 
     def test_the_cut_keeps_the_written_form_beside_the_judged_one(self) -> None:
-        from modules.gate import statements
+        from core import statements
 
         found = statements.split("UPDATE dbo.o SET w = N'WH-01'; select [a b] from \"x y\" /* c */ where q = 'it''s' -- end")
         self.assertEqual([item.text for item in found], ["UPDATE dbo.o SET w = N''", "select a_b from x_y where q = ''"])

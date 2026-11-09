@@ -11,7 +11,7 @@ from pathlib import Path
 import support  # noqa: F401 - the engine on sys.path
 
 from core import connections
-from modules.gate import statements
+from core import statements
 
 TYPE = Path(__file__).resolve().parents[1] / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
 KIND = json.loads(TYPE.read_text(encoding="utf-8"))

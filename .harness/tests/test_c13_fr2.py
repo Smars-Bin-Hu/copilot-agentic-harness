@@ -1083,5 +1083,78 @@ class FindFaultTests(lists.ListedCase):
         self.assertIn("One fits", self.find("acmedw dev", "en")["_text"])
 
 
+class ReportAndBoardWordsTests(unittest.TestCase):
+    """Item 7 (the Gate blocks table of the report page: one line for a reason, the rule in the words of the harness, the whole reason on hover and when opened) and item 8 (no command text on the board)."""
+
+    WEB = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from support import REPO
+
+        cls.web = REPO / ".harness" / "engine" / "modules" / "task" / "web"
+
+    def test_the_table_shows_a_summary_with_the_way_and_the_whole_reason_on_demand(self) -> None:
+        js = (self.web / "task.js").read_text(encoding="utf-8")
+        css = (self.web / "page.css").read_text(encoding="utf-8")
+        self.assertIn("reasonCell(item.reason)", js)
+        self.assertIn("ruleWords(item.rule)", js)  # `external-unpinned` is no word of a person
+        self.assertNotIn('tag(item.rule)', js)
+        self.assertIn("The way:", js)  # the summary keeps the start of the way, which comes last in the reason
+        self.assertIn("\\u6b63\\u8def", js)  # and in Chinese
+        self.assertIn(".gate-reason", css)
+        self.assertIn("-webkit-line-clamp:2", css)
+        self.assertIn("min-width:18em", css)  # an opened reason does not shrink to a column of letters in a narrow table
+
+    def test_the_words_exist_in_both_languages_and_the_rule_words_cover_the_rules_the_hook_writes(self) -> None:
+        from core import messages
+
+        for language in ("en", "zh"):
+            table = messages.table(language)
+            self.assertTrue(table["report.gate.reason.hide"], language)
+            for rule in ("external-unpinned", "external-blocked", "integrity", "engine", "script-guardrail", "task-scope"):
+                self.assertTrue(table["desk.trace.rule." + rule], (language, rule))
+
+    def test_the_words_the_board_shows_for_a_changed_guardrail_file_carry_no_command(self) -> None:
+        import io
+        import os
+        from contextlib import redirect_stdout
+        from unittest import mock
+
+        from core import messages
+
+        for language in ("en", "zh"):
+            table = messages.table(language)
+            for key in ("doctor.integrity.changed.board", "doctor.integrity.upgrade.board"):
+                self.assertNotIn("`", table[key], (language, key))
+                self.assertNotIn("harness ", table[key], (language, key))
+            self.assertIn("harness doctor --accept", table["doctor.integrity.changed"])  # the terminal keeps the command: a person types it there
+        import doctor
+        from support import REPO
+
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "copy"
+            lists = Path(folder) / "lists"
+            (root / ".harness").mkdir(parents=True)
+            shutil.copytree(REPO / ".harness" / "engine", root / ".harness" / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+            shutil.copy(REPO / ".harness" / "registry.json", root / ".harness" / "registry.json")
+            with mock.patch.dict(os.environ, {"HARNESS_INTEGRITY_DIR": str(lists)}):
+                import integrity
+
+                integrity.accept(root)
+                (root / ".harness" / "engine" / "core" / "paths.py").write_text("# changed\n", encoding="utf-8")
+                for board, expect in (("1", False), ("", True)):
+                    with mock.patch.dict(os.environ, {doctor.TOPICS: board} if board else {}, clear=False):
+                        if not board:
+                            os.environ.pop(doctor.TOPICS, None)
+                        report = doctor.Report()
+                        doctor.check_integrity(report, root)
+                    self.assertEqual("harness doctor --accept" in report.lines[0], expect, (board, report.lines[0]))
+
+
 if __name__ == "__main__":
     unittest.main()

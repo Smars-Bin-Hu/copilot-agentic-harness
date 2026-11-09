@@ -299,6 +299,25 @@
       .then(() => { gateBusy = false; draw(); });
   }
 
+  // What the hook refused for is a word of the harness, not the name of its rule (`external-unpinned`): the words of the table, else the name with its dashes taken out (1.7.38, C13 FR2 7).
+  const ruleWords = (rule) => { const key = "desk.trace.rule." + rule; return Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : String(rule).replace(/[-_.]+/g, " "); };
+  // The reason in full may be 1500 characters, and the right way comes last in it: a row shows one line (the start, and where the way begins), the mouse over it and the opened row show the whole.
+  const clipWords = (text, size) => (text.length <= size ? text : text.slice(0, size).replace(/\s+\S*$/, "") + "\u2026");
+  function reasonSummary(text) {
+    const lines = String(text || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
+    const way = lines.find((line, index) => index > 0 && /^(?:The way:|\u6b63\u8def\uff1a)/.test(line));
+    return way ? clipWords(lines[0], 90) + " \u00b7 " + clipWords(way, 90) : clipWords(lines.join(" "), 180);
+  }
+  function reasonCell(text) {
+    const whole = String(text || "");
+    if (whole.length <= 200 && !whole.includes("\n")) return h("span", {class: "sub"}, whole);
+    const short = reasonSummary(whole);
+    const label = h("summary", {class: "sub", title: whole}, short);
+    const node = h("details", {class: "gate-reason"}, label, h("div", {class: "sub gate-reason-full"}, whole));
+    node.addEventListener("toggle", () => { label.textContent = node.open ? t("report.gate.reason.hide") : short; });  // opened, the row shows the whole reason, and its label says how to fold it
+    return node;
+  }
+
   function gateCard() {
     const gate = whole.gate;
     if (!gate) return null;
@@ -310,8 +329,8 @@
     const rows = gate.items.map((item) => h("tr", null,
       h("td", {class: "when"}, when(item.at, 11, 16)),
       h("td", null, h("code", {class: "gate-what", title: item.command || item.paths.join(", ")}, item.command || item.paths.join(", ") || item.tool)),
-      h("td", null, tag(item.rule)),
-      h("td", {class: "sub"}, item.reason),
+      h("td", null, h("span", {title: item.rule}, tag(ruleWords(item.rule)))),
+      h("td", null, reasonCell(item.reason)),
       h("td", null, can
         ? [VERDICTS.map((name) => h("button", {type: "button", class: "act" + (item.verdict === name ? " live" : ""), disabled: gateBusy ? "" : null, "aria-pressed": item.verdict === name ? "true" : "false"}, t("report.gate.v." + name))),
            item.exported ? [" ", tag(t("report.gate.exported"), "good")] : null]

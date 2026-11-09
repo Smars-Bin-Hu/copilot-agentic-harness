@@ -958,7 +958,8 @@ def check_integrity(report: Report, root: Path) -> None:
             words = ", ".join(found[: integrity.SHOWN]) + (f" (+{len(found) - integrity.SHOWN} more)" if len(found) > integrity.SHOWN else "")
             now = integrity._registry_version(root)  # noqa: SLF001
             was = str(listed.get("harness") or "")
-            report.error(say("doctor.integrity.upgrade", n=len(found), files=words, was=was, now=now) if was != now else say("doctor.integrity.changed", n=len(found), files=words))
+            board = ".board" if os.environ.get(TOPICS) else ""  # the board's own run (FR2 8): the words are shown on a page, which carries no command text
+            report.error(say("doctor.integrity.upgrade" + board, n=len(found), files=words, was=was, now=now) if was != now else say("doctor.integrity.changed" + board, n=len(found), files=words))
         else:
             report.ok(say("doctor.integrity.ok", n=len(listed.get("files") or {})))
     except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor

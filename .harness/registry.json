@@ -241,6 +241,7 @@
         ".harness/tests/test_c12_fc.py",
         ".harness/tests/test_c12_fd.py",
         ".harness/tests/test_c13_d4.py",
+        ".harness/tests/test_c13_f2.py",
         ".harness/tests/test_statements.py",
         ".harness/tests/test_gate_lists.py",
         ".harness/tests/test_gate_sqlserver.py",

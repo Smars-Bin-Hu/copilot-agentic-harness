@@ -35,8 +35,8 @@ from core.systems import (  # noqa: F401 - the names the handler, doctor and the
     ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, by_address, clis, reach, run_probe, validate, warnings,
 )
 
-from . import inputfiles, statements
-from .gitcmd import MAX_DEPTH, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
+from . import inputfiles, pin, statements
+from .gitcmd import MAX_DEPTH, READ_ONLY as READ_ONLY_GIT, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
 
 
 @dataclass(frozen=True)
@@ -52,9 +52,10 @@ class Action:
     unseen: bool = False  # a segment the gate cannot read (a program in a variable it cannot expand): held, never guessed (1.7.21)
     file: str = ""  # (1.7.38, C12 RC-G1) a file the call names as its input (`sqlcmd -i`): the one whose text made the call a destroy, or the first one the gate could not judge
     file_why: str = ""  # "destroy" (the file holds a destroy of the `verbs`, a type with no lists: refused), "refuse" (the file holds a statement of the refuse list), "unread" (missing, too big, not text: asks the person), "twice" (the line names the file again and may change it: asks the person)
-    zone: str = ""  # (1.7.38) a type with lists (`reads`): "refuse" (a statement is on the refuse list), "read" (every statement is on the read list), "write" (every statement is on the read or write list: an opened connection passes it), "ask" (the rest); "broken" (G-1: a program of a tool pack whose file is faulty: always held, `note` says which file and what is wrong); "" for a type with no lists
+    zone: str = ""  # (1.7.38) a type with lists (`reads`): "refuse" (a statement is on the refuse list), "read" (every statement is on the read list), "write" (every statement is on the read or write list: an opened connection passes it), "ask" (the rest); "broken" (G-1: a program of a tool pack whose file is faulty: always held, `note` says which file and what is wrong); "unpinned" (1.7.38, C13 F2: a program whose type pins its calls to a connection, and this call names none the gate can read: refused, `why` says what is wrong: none, many, unread, word, other, unknown; `note` and `reason` are the refuse list's, when it caught a statement); "blocked" (a program or code the gate cannot judge: refused, `reason` says what to do instead); "" for a type with no lists
     note: str = ""  # the statement that decided: the one the refuse list caught, or the first that is on no list (cut short)
     reason: str = ""  # zone "refuse": the type's reason for it, in the language of the session: tells the agent the right way
+    option: str = ""  # zone "unpinned" (1.7.38, C13 F2): the option the type names the target with (`-S`), for the words that tell the agent the right way
 
     def facts(self) -> Dict[str, Any]:
         facts: Dict[str, Any] = {"system": self.system, "env": self.env, "verb": self.verb, "target": self.target}
@@ -62,7 +63,7 @@ class Action:
             facts["named"] = False  # said only when it matters: the log and the draft stay as they were for a named verb
         if self.file_why:
             facts["file"], facts["file_why"] = self.file, self.file_why  # said only when it matters
-        if self.zone in ("refuse", "ask", "broken"):
+        if self.zone in ("refuse", "ask", "broken", "unpinned", "blocked"):
             facts["zone"] = self.zone
         return facts
 
@@ -514,6 +515,8 @@ class _Ctx:
         self.folder, self.line = folder, line  # the task's folder (a place a relative path is looked for) and the whole line as written: for the files a call names as its input (1.7.38)
         self.dirs: List[str] = []  # directories this line changes to (`cd tools && ./run.sh`)
         self.quiet: set = set()  # programs a system lists `by_address`: not among the names that must be accounted for
+        self.reasons: Dict[str, str] = {}  # system -> its `blocked` text, in the language of the session
+        self.code: List[Tuple[Any, str]] = []  # (pattern of the words, system) of the systems that name `reach.code`: words a one-liner interpreter must not run (1.7.38, C13 F2)
 
 
 def _file_state(path: str, names: List[str], ctx: _Ctx) -> Tuple[str, str]:
@@ -604,6 +607,113 @@ def _short(text: str) -> str:
     return text if len(text) <= NOTE_CHARS else text[: NOTE_CHARS - 1].rstrip() + "\u2026"
 
 
+# The other commands of a line that runs a script file (1.7.38, C13 F2). `sqlcmd -i x.sql` is judged by what x.sql holds when the gate looks, and the line may change x.sql before sqlcmd runs it (`cp drop.sql o[k].sql && sqlcmd -i ok.sql`:
+# a glob, a quote or a bracket hides the name). So the rest of the line may only read: any program that is not on this list can write a file. A redirection and `tee` may write another file, never one the call reads.
+LINE_READERS = frozenset(
+    "cd pushd popd true false : test [ [[ echo printf pwd ls dir tree stat file du wc head tail cat tac nl less more sort uniq cut tr grep egrep fgrep rg basename dirname realpath readlink jq column fold rev "
+    "md5sum sha1sum sha256sum shasum od strings date sleep which type diff cmp harness set unset read exit return wait for in case esac select tee "
+    "get-content gc select-string sls get-childitem gci write-output write-host test-path set-location sl resolve-path measure-object tee-object".split()
+)
+_REDIRECT_TARGET = re.compile(r"^(?:\d*|&)(?:>>?\|?)(.*)$")
+_SPECIAL = re.compile(r"[$`*?\[\]{}~!]")
+_QUIET_FILES = frozenset(["/dev/null", "/dev/stdout", "/dev/stderr", "nul", "con"])
+
+
+def _redirect_targets(tokens: List[str]) -> List[str]:
+    """The files a command writes with `>` and `>>` (`> f`, `>f`, `2>f`, `&>f`); `2>&1` and `>&2` name none."""
+    found: List[str] = []
+    for index, token in enumerate(tokens):
+        match = _REDIRECT_TARGET.match(token)
+        if not match:
+            continue
+        rest = match.group(1)
+        if rest:
+            if not rest.startswith("&"):
+                found.append(rest)
+        elif index + 1 < len(tokens):
+            found.append(tokens[index + 1])
+    return found
+
+
+def _identities(name: str, ctx: "_Ctx") -> set:
+    """What a file name may be: the real paths it has from each place a relative name is looked for, and the file itself (device and inode) when it exists, so a link or a second name for it is found."""
+    from pathlib import Path
+
+    from core import pinfiles
+
+    out: set = set()
+    bases = pinfiles.bases(Path(str(ctx.root)), Path(str(ctx.folder)) if ctx.folder else Path(str(ctx.root)), ctx.cwd, ctx.line) if ctx.root is not None else [Path(ctx.cwd or ".")]
+    shaped = os.path.expanduser(name.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", name) else name)
+    for base in bases:
+        full = shaped if os.path.isabs(shaped) else os.path.join(str(base), shaped)
+        out.add(os.path.normcase(os.path.realpath(full)))
+        try:
+            found = os.stat(full)
+            out.add((found.st_dev, found.st_ino))
+        except OSError:
+            pass
+    return out
+
+
+def _safe_target(target: str, inputs: List[str], ctx: "_Ctx") -> bool:
+    """May a command of the line write this file? Only a plain name that is none of the files the call reads: no variable, no glob, no bracket, and not a second name for one of them."""
+    if target.lower() in _QUIET_FILES:
+        return True
+    if not target or _SPECIAL.search(target):
+        return False
+    mine = _identities(target, ctx)
+    return not any(mine & _identities(name, ctx) for name in inputs)
+
+
+def _line_writer(line: str, inputs: List[str], ctx: "_Ctx", allowed: set, depth: int = 0) -> str:
+    """The first command of the line (other than a call of `allowed`, the program of the call itself) that may write a file the call reads, as it stands in the line (cut short); "" when none can. See `LINE_READERS`."""
+    text, _bodies = _heredocs(join_lines(line))
+    for tokens in split_segments(text):
+        if tokens and tokens[0] in _DECLARE:
+            tokens = tokens[1:]
+        if not tokens or all(_is_environment(item) for item in tokens):
+            continue
+        shown = _short(" ".join(tokens))
+        files = [item for item in _redirect_targets(tokens)]
+        if any(not _safe_target(item, inputs, ctx) for item in files):
+            return shown
+        args = _without_redirects(tokens)
+        at = _head_index(args)
+        if at is None:
+            continue
+        head = args[at]
+        if head.startswith("$") or "$(" in head:
+            return shown  # a program the line does not name
+        name = _program(head)
+        rest = args[at + 1:]
+        if name in allowed:
+            continue
+        if name in SHELLS or name == "eval":
+            inner = _evaluated(args) if name == "eval" else next((" ".join(rest[i + 1:]) if len(rest) > i + 2 else rest[i + 1] for i, item in enumerate(rest) if item.lower() in SHELL_FLAGS and i + 1 < len(rest)), None)
+            if inner is None or depth >= MAX_DEPTH or _line_writer(inner, inputs, ctx, allowed, depth + 1):
+                return shown
+            continue
+        if name == "harness" or _name(head) == "cli.py":
+            wrapped, waited = as_run(args), _wait_run(args)
+            inner = wrapped[1] if wrapped else waited
+            if inner is not None and (depth >= MAX_DEPTH or _line_writer(inner, inputs, ctx, allowed, depth + 1)):
+                return shown
+            continue
+        if name == "tee" and all(_safe_target(item, inputs, ctx) for item in rest if not item.startswith("-")):
+            continue
+        if name == "sort" and any(item in ("-o", "--output") or item.startswith(("--output=", "-o")) for item in rest):
+            return shown
+        if name == "git":
+            word = next((item for item in rest if not item.startswith("-")), "")
+            if word in READ_ONLY_GIT:
+                continue
+            return shown
+        if name in LINE_READERS - {"tee"}:
+            continue
+        return shown
+    return ""
+
+
 def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: str, call: str, args: List[str], ctx: "_Ctx", lead: List[str]) -> Action:
     """A call of a type with lists (1.7.38, C12: pass, refuse, ask). The statements of the text and of the files it reads are cut (`statements.py`) and judged by `reads`, `writes` and `refuse`:
     refuse list first (whatever else is wrong with the call), then a call that gave the gate nothing to read, a text with a shell variable in it or a file the gate could not read (asks), then the lists.
@@ -620,6 +730,10 @@ def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: st
     file = read.files.get(verdict.statement, "") if verdict.zone == statements.REFUSE else read.file
     if verdict.zone == statements.REFUSE:
         return Action(name, env, DESTROY, target, text, call=call, file=file, file_why="refuse" if file else "", zone=statements.REFUSE, note=_short(verdict.statement), reason=messages.pick(verdict.reason) if verdict.reason else "")
+    if read.named:  # 1.7.38 (C13 F2): another command of the line may change the script file before it runs: refused, the file change and the call go in two calls
+        changing = _line_writer(ctx.line or text, read.named, ctx, set(clis(system)))
+        if changing:
+            return Action(name, env, DESTROY, target, text, call=call, file=read.named[0], zone=statements.REFUSE, note=changing, reason=messages.text("gate.external.same_line"))
     why = read.state  # "unread", "twice": a file the gate could not read, or may change before it runs
     if why or read.unsure or verdict.zone == statements.ASK or rest in (WRITE, EXEC):
         about = read.file if why else read.unsure or (verdict.statement if verdict.zone == statements.ASK else read.rest)
@@ -627,6 +741,53 @@ def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: st
     if verdict.zone == statements.WRITE:
         return Action(name, env, strict([label, WRITE]), target, text, named=True, call=call, zone=statements.WRITE)
     return Action(name, env, READ, target, text, call=call, zone=statements.READ)
+
+
+def _pin_owner(systems: Dict[str, Any], pinned: List[str], args: List[str]) -> Tuple[Optional[str], pin.Pinned]:
+    """The connection a call of a pinned program reaches (1.7.38, C13 F2): the one whose address the server of the call, folded as the type says, matches; `(None, what is wrong)` when the call names none the gate can read."""
+    seen = pin.read(systems[pinned[0]]["pin"], args)
+    if seen.state != pin.OK:
+        return None, seen
+    name = _owner(systems, pinned, f"{seen.option} {seen.canon}")  # only the server is matched: a `-S host,port` inside a statement is no server
+    return name, (seen if name is not None else pin.Pinned("unknown", seen.value, seen.canon, seen.option))
+
+
+def _unpinned(systems: Dict[str, Any], pinned: List[str], seen: pin.Pinned, tokens: List[str], start: int, ctx: "_Ctx", variables: Dict[str, str]) -> Optional[Action]:
+    """The refusal of a call of a pinned program that reaches no connection the gate can name (1.7.38, C13 F2). The refuse list of the type is read first, so a `DROP` is never decided by the server: the refusal then says
+    both. A call that only asks for help (`sqlcmd -?`) reaches nothing: None, it passes when the refuse list has nothing."""
+    first = systems[pinned[0]]
+    args = tokens[start + 1:]
+    text = " ".join(tokens)
+    program = _program(tokens[start])
+    call = " ".join([program] + args)
+    caught: Optional[Action] = None
+    if first.get("reads"):
+        zoned = _by_lists(first, pinned[0], "none", "", text, call, args, ctx, tokens[:start] + [f"{key}={value}" for key, value in variables.items()])
+        caught = zoned if zoned.zone == statements.REFUSE else None
+    if caught is None and (first.get("refuse") or first.get("reads")):  # a statement the gate does not cut (`sqlcmd query "DROP TABLE t"`): its words are read as one text
+        entry = statements.refuse_entry(first, " ".join(args))
+        if entry:
+            caught = Action(pinned[0], "none", DESTROY, "", text, zone=statements.REFUSE, note=_short(" ".join(args)), reason=messages.pick(entry.get("reason") or ""))
+    if seen.state == pin.FREE:
+        return caught
+    return Action("", "none", DESTROY, (seen.value or program)[:120], text, call=call, why=seen.state, zone="unpinned", option=seen.option, note=caught.note if caught else "", reason=caught.reason if caught else "", file=caught.file if caught else "", file_why=caught.file_why if caught else "")
+
+
+def _code_blocked(tokens: List[str], ctx: "_Ctx") -> Optional[Action]:
+    """The code a one-liner interpreter is given (`python3 -c`, `node -e`), when it names a word a system lists in `reach.code` (`pyodbc`): a program the gate cannot judge talks to the database from inside it (1.7.38, C13 F2)."""
+    if not ctx.code:
+        return None
+    at = _head_index(tokens)
+    if at is None or not _is_interpreter(tokens[at]):
+        return None
+    kind, index = _interp(tokens, at)
+    if kind != "code" or index is None:
+        return None
+    code = " ".join(tokens[index + 1:])
+    for regex, system in ctx.code:
+        if regex.search(code):
+            return Action("", "none", DESTROY, _program(tokens[at]), " ".join(tokens), call=" ".join(tokens), zone="blocked", reason=ctx.reasons.get(system, ""))
+    return None
 
 
 def strict(verbs: List[Optional[str]]) -> str:
@@ -659,6 +820,8 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
         tokens = _without_redirects(_expand(tokens, variables))
         if not tokens:
             continue
+        if len(tokens) > 2 and _name(tokens[0]) == "command" and tokens[1] in ("-v", "-V"):
+            continue  # `command -v sqlcmd` looks a program up: it runs nothing
         plain = _unescaped(tokens)
         if plain != tokens:
             _scan(" ".join(shlex_quote(item) for item in plain), systems, programs, depth + 1, found, variables, ctx) if depth < MAX_DEPTH else None
@@ -668,12 +831,27 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 for inner in (_substitutions(token) if "$(" in token else []):
                     _scan(inner, systems, programs, depth + 1, found, variables, ctx)
         start = _start(tokens, programs)
-        name = _owner(systems, programs[_program(tokens[start])], " ".join(tokens[start + 1:])) if start is not None else None
+        owners = programs[_program(tokens[start])] if start is not None else []
+        pinned = [one for one in owners if systems[one].get("pin") and not systems[one].get("broken")]  # a program whose type pins its calls to a connection (1.7.38, C13 F2)
+        name = _owner(systems, [one for one in owners if one not in pinned], " ".join(tokens[start + 1:])) if start is not None else None
+        if start is not None and name is None and pinned:
+            name, seen = _pin_owner(systems, pinned, tokens[start + 1:])
+            if name is None:
+                held = _unpinned(systems, pinned, seen, tokens, start, ctx, variables)
+                if held is not None:
+                    found.append(held)
+                continue
+        blocked = _code_blocked(tokens, ctx)  # `python3 -c "import pyodbc ..."`: code the gate cannot judge
+        if blocked is not None:
+            found.append(blocked)
         if name is not None and _program(tokens[start]) in ctx.quiet and (not addresses_fit(systems[name], " ".join(tokens[start + 1:])) or _cut_short(tokens[start + 1:], ctx.line)):
             name = None  # a program that only an address makes a call (curl) names an address that is not the system's: the system does not own it (nor a call whose end the line cut off: below)
         if name is not None:
             system = systems[name]
             line = " ".join(tokens)  # the environment settings in front of the program say something too
+            if system.get("blocked"):  # 1.7.38 (C13 F2): a program the gate cannot judge, listed so that it is not taken for a free one: refused, with what to do instead
+                found.append(Action("", "none", DESTROY, _program(tokens[start]), " ".join(tokens), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), zone="blocked", reason=messages.pick(system["blocked"])))
+                continue
             target = ""
             if system.get("target"):
                 match = re.search(system["target"], line, re.IGNORECASE)
@@ -694,6 +872,8 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             if ctx.root is not None and system.get("input"):  # 1.7.38, C12 RC-G1: the statements of `sqlcmd -i file` are in the file: judged as the same words in the line are
                 read = inputfiles.read(system, tokens[start + 1:], ctx.root, ctx.folder, ctx.cwd, ctx.line or " ".join(tokens))
                 if read is not None:
+                    if read.named and not read.state and _line_writer(ctx.line or " ".join(tokens), read.named, ctx, set(clis(system))):
+                        read.state = "twice"  # 1.7.38 (C13 F2): another command of the line may change the file: the call asks
                     verb = inputfiles.strictest([verb_named(system, read.rest), read.verb])
                     if read.state == "destroy":
                         verb, file, file_why = DESTROY, read.file, "destroy"
@@ -851,8 +1031,13 @@ def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: 
     found: List[Action] = []
     context = _Ctx(root, cwd, hold=unseen, folder=folder, line=command)
     context.quiet = quiet
+    for name, system in systems.items():  # words a one-liner interpreter must not run (1.7.38, C13 F2)
+        words = [str(one) for one in (system.get("reach") or {}).get("code") or []]
+        if words and system.get("blocked"):
+            context.code.append((re.compile(r"(?<![\w.])(?:" + "|".join(re.escape(one) for one in words) + r")(?![\w])", re.IGNORECASE), name))
+            context.reasons[name] = messages.pick(system["blocked"])
     _scan(command, systems, programs, 0, found, ctx=context)
-    return [(action, HUMAN if action.unseen else DENY if action.why == "command" or action.zone == "refuse" else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
+    return [(action, HUMAN if action.unseen else DENY if action.why == "command" or action.zone in ("refuse", "unpinned", "blocked") else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
 
 
 def strictest(judged: List[Tuple[Action, str]]) -> Optional[Tuple[Action, str]]:

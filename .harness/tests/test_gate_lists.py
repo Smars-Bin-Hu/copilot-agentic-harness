@@ -202,7 +202,8 @@ class FileTests(ListedCase):
     def test_a_file_that_cannot_be_read_asks(self) -> None:
         self.held(f"{SERVER} -i {TASK}/DEV/_manual/none.sql")
         path = self.script("select 1;\n")
-        self.held(f"echo 'DROP TABLE t' > {path}; {SERVER} -i {path}")
+        self.refused(f"echo 'DROP TABLE t' > {path}; {SERVER} -i {path}")  # 1.7.38 (C13 F2): another command of the line may write the file: refused, two calls
+        self.held(f"cat {path}; {SERVER} -i {path}")  # the file named again by a command that only reads: asks, as before
 
     def test_without_a_root_a_file_is_not_read_and_asks(self) -> None:
         from core import config

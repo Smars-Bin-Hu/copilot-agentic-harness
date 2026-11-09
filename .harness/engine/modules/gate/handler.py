@@ -215,6 +215,8 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     how = "allow" if passes else ""  # what let it through (core.calls): the evidence says it (1.7.9)
     if action.unseen:  # a command whose program the gate cannot read: it may be a listed one, so it is held, whatever the task allows
         return {"action": action, "decision": decision, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unseen": True}
+    if action.zone in ("unpinned", "blocked"):  # 1.7.38 (C13 F2): a call that reaches no connection the gate can name, or a program it cannot judge: refused, nothing to approve
+        return {"action": action, "decision": external.DENY, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "refused": action.zone}
     if action.why == "command":  # the pack's own program has no such command (1.7.38): nothing to approve, nothing runs
         return {"action": action, "decision": external.DENY, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unknown": action.target}
     if event.agent_type.strip():  # a subagent (the reviewer, the mapper) reads only: the person's leave (a plan, a grant, an open connection, an approval) is the main agent's, never its own (1.7.9)
@@ -364,6 +366,10 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes, offers, cwd) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task, offers, cwd))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft, offers, changed), facts=dict(facts, kind="external-outbox", **({"changed": changed} if changed else {})))
+    if judged.get("refused") == "unpinned":
+        return Decision(permission="deny", reason=rules.external_unpinned(action, command), facts=dict(facts, kind="external-unpinned"))
+    if judged.get("refused") == "blocked":
+        return Decision(permission="deny", reason=rules.external_blocked(action, command), facts=dict(facts, kind="external-blocked"))
     if judged.get("unseen"):
         named = action.target if action.unseen else ""
         key = {"file": "gate.external.unreadable_file", "encoded": "gate.external.encoded"}.get(action.why) or ("gate.external.unreadable" if named else "gate.external.unseen")
@@ -588,11 +594,18 @@ def owned_names(event: HookEvent, ctx: Context) -> set:
 
 def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any]]) -> Optional[Decision]:
     """A server whose identity this window does not hold is reached through `harness as <alias> --` (1.7.10): a call without it, or with another alias, is refused with the line to run."""
-    if not judged:
+    if not judged or judged["action"].zone in ("unpinned", "blocked"):
         return None
     alias = judged["action"].system
     wrapped = set(connections.state(ctx.root).get("wrap") or [])
     given = next((found for found in (external.as_run(tokens) for tokens in gitcmd.split_segments(event.command)) if found), None)
+    if given and given[0] != alias and alias not in connections.listed(ctx.root):  # 1.7.38 (C13 F2, U1): a system of a tool pack (`ado-web`) is no connection: the text names the connections that own it, never the system
+        owners = connections.serving(ctx.root, (ctx.policy("tools").get("systems") or {}).get(alias) or {})
+        if given[0] in owners:
+            return Decision(permission="deny", reason=rules.say("gate.connections.wrap.web", given=given[0]), facts={"kind": "wrap"})
+        if owners:
+            return Decision(permission="deny", reason=rules.say("gate.connections.wrap.other", given=given[0], alias=" or ".join(owners)), facts={"kind": "wrap"})
+        return Decision(permission="deny", reason=rules.say("gate.connections.wrap.none", given=given[0]), facts={"kind": "wrap"})
     if given and given[0] != alias:
         return Decision(permission="deny", reason=rules.say("gate.connections.wrap.other", given=given[0], alias=alias), facts={"kind": "wrap"})
     if alias in wrapped and not given:

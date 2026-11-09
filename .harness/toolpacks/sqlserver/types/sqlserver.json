@@ -19,7 +19,49 @@
       "optional": true
     }
   },
-  "match": "(?:-S|--server)(?:\\s+|=)\"?{host}(?:,{port})?(?![\\w.,-])",
+  "match": "(?:-S|--server)(?:\\s+|=)\"?{host},{port}(?![\\w.,-])",
+  "pin": {
+    "options": [
+      "-S",
+      "--server"
+    ],
+    "fold": [
+      [
+        "^tcp:",
+        ""
+      ],
+      [
+        "\\s*,\\s*",
+        ","
+      ],
+      [
+        "(?<!:):(\\d+)$",
+        ",\\1"
+      ],
+      [
+        "\\.(?=,|$)",
+        ""
+      ],
+      [
+        ",0+(?=\\d)",
+        ","
+      ],
+      [
+        "^([^,]+)$",
+        "\\1,1433"
+      ]
+    ],
+    "other": [
+      "-D",
+      "--dsn"
+    ],
+    "free": [
+      "-?",
+      "--help",
+      "--version"
+    ],
+    "subcommand": true
+  },
   "auth": {
     "windows": {
       "label": "Windows account (DOMAIN\\id)",

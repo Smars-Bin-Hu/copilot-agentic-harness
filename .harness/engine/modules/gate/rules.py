@@ -133,6 +133,20 @@ def external_refused(action: Any, command: str) -> str:
     return say(key, place=place(action.system, action.env), statement=action.note, file=action.file, reason=action.reason, call=command)
 
 
+def external_unpinned(action: Any, command: str) -> str:
+    """1.7.38 (C13 F2): the call of a program whose type pins its calls to a connection names none the gate can read. The line says what is wrong with the server; when the refuse list caught a statement too, its reason comes first."""
+    why = say(f"gate.external.unpinned.why.{action.why}", value=action.target, option=action.option)
+    if action.note:
+        key = "gate.external.unpinned_refused_file" if action.file_why == "refuse" and action.file else "gate.external.unpinned_refused"
+        return say(key, statement=action.note, file=action.file, reason=action.reason, why=why, program=action.call.split(" ", 1)[0], option=action.option, call=command)
+    return say("gate.external.unpinned", why=why, program=action.call.split(" ", 1)[0], option=action.option, call=command)
+
+
+def external_blocked(action: Any, command: str) -> str:
+    """1.7.38 (C13 F2): a program, or code, that the gate cannot judge and a tool pack lists so that it is not taken for a free one: the line gives the pack's own words on what to do instead."""
+    return say("gate.external.blocked", reason=action.reason, call=command)
+
+
 def external_human(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
     return say("gate.external.human", place=place(action.system, action.env), verb=word(action.verb), call=command, handoff_env="" if action.env in ("", "none") else f" --env {action.env.upper()}")

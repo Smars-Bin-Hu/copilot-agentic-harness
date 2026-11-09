@@ -179,7 +179,7 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
     return out + _gate_shape(kind, name)
 
 
-GATE_KEYS = ("verbs", "target", "show", "rules", "item", "link", "commands", "openable")  # keys the gate reads and that `type_problems` did not check before 1.7.38 (G-1)
+GATE_KEYS = ("verbs", "target", "show", "rules", "item", "link", "commands", "openable", "pin")  # keys the gate reads and that `type_problems` did not check before 1.7.38 (G-1)
 
 
 def _gate_shape(kind: Dict[str, Any], name: Any) -> List[str]:
@@ -433,7 +433,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
             chosen = (server.get(key) or kind.get(key)) if key == "rules" else kind.get(key)  # the connection's own rules win, else the type's (1.7.21)
             if chosen:
                 system[key] = chosen
-        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse"):
+        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse", "pin"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
         system["open"] = connection_scope(kind, server)
@@ -486,6 +486,18 @@ def widen(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
             found = "|".join(r"(?<![\w.-])" + re.escape(host) + r"(?![\w.-])" for host in hosts)  # not `host.evil.example`, not `evil-host`, not another port
             out[name] = dict(system, reach=dict(system["reach"], when=f"(?:{system['reach']['when']})|{found}"))
     return out
+
+
+def serving(root: Path, system: Dict[str, Any]) -> List[str]:
+    """The connections a system that is not a connection belongs to (1.7.38, C13 F2 U1): a tool pack's own system (`ado-web`, a web call to an Azure DevOps address) is reached with the identity of a connection of its type
+    (`reach.also.type`), or else of the tool pack that wrote it. `[]` when it is no one's."""
+    try:
+        kinds, servers = types(root, guard=True), listed(root)
+        wanted = str(((system.get("reach") or {}).get("also") or {}).get("type") or "")
+        pack = str(system.get("toolpack") or "")
+        return [alias for alias, server in servers.items() if (wanted and server.get("type") == wanted) or (not wanted and pack and str((kinds.get(str(server.get("type"))) or {}).get("toolpack") or "") == pack)]
+    except Exception:  # noqa: BLE001 - a name for the text; the call is refused either way
+        return []
 
 
 def calls(root: Path, every: bool = False) -> List[Dict[str, Any]]:

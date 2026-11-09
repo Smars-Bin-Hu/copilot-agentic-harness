@@ -183,8 +183,9 @@ class ScriptFileTests(TaskCase):
     def test_a_file_a_line_names_again_may_change_before_it_runs_so_it_is_held(self) -> None:
         path = self.script("select 1;\n")
         self.assertEqual(self.term(f"{SERVER} -i {path}"), {})
-        reason = self.held(f"echo 'DROP TABLE dbo.orders;' > {path}; {SERVER} -i {path}")
+        reason = self.held(f"cat {path}; {SERVER} -i {path}")  # named again by a command that only reads: it asks as before
         self.assertIn(messages.text("gate.external.input_twice", file=path), reason)
+        self.assertIn(messages.text("gate.external.same_line"), self.refused(f"echo 'DROP TABLE dbo.orders;' > {path}; {SERVER} -i {path}"))  # 1.7.38 (C13 F2): a command that may write it: refused, two calls
 
     def test_a_script_outside_the_task_is_read_too(self) -> None:
         outside = self.root / "outside.sql"

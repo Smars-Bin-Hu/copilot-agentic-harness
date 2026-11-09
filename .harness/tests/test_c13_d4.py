@@ -261,5 +261,63 @@ class AdoWebCallTests(HarnessTestCase):
         self.assertEqual(toolpacks.problems(self.root, REPO / ".harness" / "toolpacks" / "ado"), [])
 
 
+@unittest.skipUnless(GIT, "needs git")
+class SendToFolderTests(unittest.TestCase):
+    """FA-3: the window of "Send to the folder" is told the folder, the branch and the titles of the commits it sends, by the same engine answer the button reads; the line it runs is unchanged."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / "root"
+        (self.root / "knowledge-base").mkdir(parents=True)
+        (self.root / "knowledge-base" / "README.md").write_text("empty\n", encoding="utf-8")
+        self.source = make_repo(Path(self.temp.name) / "kb folder", {"README.md": "# KB\n", "domains/sales/domain.yaml": "name: sales\n"})
+        setupjob.copy_folder(self.root, self.source)
+        self.kb = self.root / "knowledge-base"
+
+    def commit(self, name: str, title: str) -> None:
+        (self.kb / name).write_text(title, encoding="utf-8")
+        run_git(self.kb, "add", "-A")
+        run_git(self.kb, "commit", "-q", "-m", title)
+
+    def test_the_answer_names_the_folder_the_branch_and_the_titles(self) -> None:
+        for index in range(12):
+            self.commit(f"n{index}.md", f"card number {index}")
+        found = company.folder_update(self.root, str(self.source))
+        self.assertEqual(found["state"], "ahead")
+        self.assertEqual(found["send"]["folder"], str(self.source))
+        self.assertEqual(found["send"]["branch"], run_git(self.kb, "rev-parse", "--abbrev-ref", "HEAD"))
+        self.assertEqual(found["send"]["ahead"], 12)
+        self.assertEqual(len(found["send"]["subjects"]), company.SEND_SUBJECTS)
+        self.assertEqual(found["send"]["subjects"][0], "card number 11", "the newest first")
+        self.assertEqual(len(found["subjects"]), company.UPDATE_SUBJECTS, "the form's own list is as short as before")
+        self.assertIn("--ff-only", found["pull"])
+        self.assertIn(found["send"]["branch"], found["pull"])
+
+    def test_nothing_to_send_and_no_button_give_no_window_data(self) -> None:
+        self.assertEqual(company.folder_update(self.root, str(self.source))["send"], {})
+        self.commit("mine.md", "my card")
+        (self.source / "theirs.md").write_text("x", encoding="utf-8")
+        run_git(self.source, "add", "-A")
+        run_git(self.source, "commit", "-q", "-m", "their card")
+        found = company.folder_update(self.root, str(self.source))
+        self.assertEqual((found["pull"], found["send"]), ("", {}), "both moved on: no button, so no window")
+
+    def test_the_page_gets_the_window_data_with_the_probe(self) -> None:
+        self.commit("mine.md", "my card")
+        found = setupjob.probe_folder(self.root, self.source)
+        self.assertEqual(found["update"]["send"]["subjects"], ["my card"])
+
+    def test_the_window_and_its_words_are_in_the_page(self) -> None:
+        text = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "setup.js").read_text(encoding="utf-8")
+        self.assertIn("function sendWindow", text)
+        self.assertIn("SERVE.dialog", text[text.index("function sendWindow"):text.index("function sendWindow") + 1500])
+        self.assertNotIn('TERM.run(u.pull, checkKb));  // the Terminal says how it ended', text, "the button no longer runs the line itself")
+        for key in ("setup.kb.update.send.about", "setup.kb.update.send.folder", "setup.kb.update.send.branch", "setup.kb.update.send.commits", "setup.kb.update.send.commits.one", "setup.kb.update.send.go"):
+            self.assertIn(key, text)
+            for language in ("en", "zh"):
+                self.assertTrue(messages.table(language).get(key), (key, language))
+
+
 if __name__ == "__main__":
     unittest.main()

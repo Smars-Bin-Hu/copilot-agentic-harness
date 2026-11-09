@@ -697,6 +697,7 @@ def apply_package(root: Path, kb: Path, path: Path, manifest: Dict[str, Any], ch
 
 UPDATE_SHOWN = 12  # files listed in the preview; `total` has them all
 UPDATE_SUBJECTS = 3  # commit subjects told when the copy is ahead
+SEND_SUBJECTS = 10  # the titles the window of "Send to the folder" lists (1.7.38, C13 FA-3)
 
 
 def _git_say(result: subprocess.CompletedProcess) -> str:
@@ -705,16 +706,21 @@ def _git_say(result: subprocess.CompletedProcess) -> str:
     return next((line.strip() for line in text.splitlines() if line.strip()), "")[:240]
 
 
-def _commit_subjects(kb: Path, span: str) -> List[str]:
-    done = git(kb, "log", "--format=%s", "-n", str(UPDATE_SUBJECTS), span)
+def _commit_subjects(kb: Path, span: str, limit: int = UPDATE_SUBJECTS) -> List[str]:
+    done = git(kb, "log", "--format=%s", "-n", str(limit), span)
     return [line.strip() for line in done.stdout.decode("utf-8", "replace").splitlines() if line.strip()] if done.returncode == 0 else []
 
 
-def _pull_line(kb: Path, source: Path, fallback: str) -> str:
-    """The one command that brings the commits of this copy into the folder (the board's button runs it in its Terminal): a fast-forward only, so the folder never gets a merge. Empty when a path cannot be quoted."""
+def _pull_branch(kb: Path, fallback: str) -> str:
+    """The branch the folder pulls: the one this copy is on, or the folder's own when this copy has none checked out."""
     named = git(kb, "rev-parse", "--abbrev-ref", "HEAD")
     here = named.stdout.decode("utf-8", "replace").strip() if named.returncode == 0 else ""
-    branch = here if here and here != "HEAD" else fallback
+    return here if here and here != "HEAD" else fallback
+
+
+def _pull_line(kb: Path, source: Path, fallback: str) -> str:
+    """The one command that brings the commits of this copy into the folder (the board's button runs it in its Terminal, after a window that names the folder, the branch and the commits): a fast-forward only, so the folder never gets a merge. Empty when a path cannot be quoted."""
+    branch = _pull_branch(kb, fallback)
     if '"' in str(source) or '"' in str(kb) or not re.fullmatch(r"[\w./+-]+", branch):
         return ""
     return f'git -C "{source}" pull --ff-only "{kb}" {branch}'
@@ -735,7 +741,7 @@ def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
     `why` is the sentence for the person (empty when all is well); `text` the preview. A fetch writes objects into this copy's `.git`, never a branch, never a file."""
     kb = root / targets.KB_DIR
     source = Path(raw)
-    out: Dict[str, Any] = {"state": "plain", "why": "", "text": "", "behind": 0, "ahead": 0, "changes": [], "total": 0, "counts": {"add": 0, "change": 0, "remove": 0}, "subjects": [], "files": [], "uncommitted_there": 0, "branch": "", "pull": ""}
+    out: Dict[str, Any] = {"state": "plain", "why": "", "text": "", "behind": 0, "ahead": 0, "changes": [], "total": 0, "counts": {"add": 0, "change": 0, "remove": 0}, "subjects": [], "files": [], "uncommitted_there": 0, "branch": "", "pull": "", "send": {}}
     if not (kb / ".git").exists() or not (source / ".git").exists():
         return out
     branch = git(source, "rev-parse", "--abbrev-ref", "HEAD")
@@ -758,7 +764,9 @@ def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
         count = lambda n: say("company.commits.one") if n == 1 else say("company.commits", n=n)  # noqa: E731
         if behind:  # both moved on: a fast-forward cannot join them, and a merge is for the person's git tool; no button
             return dict(out, state="ahead", why=say("company.folder.ahead.both", here=count(ahead), there=count(behind)))
-        return dict(out, state="ahead", pull=_pull_line(kb, source, name), why=say("company.folder.ahead" if ahead > 1 else "company.folder.ahead.one", n=ahead))
+        pull = _pull_line(kb, source, name)
+        send = {"folder": str(source), "branch": _pull_branch(kb, name), "subjects": _commit_subjects(kb, "FETCH_HEAD..HEAD", SEND_SUBJECTS), "ahead": ahead} if pull else {}  # what the window of "Send to the folder" shows before it runs the line (C13 FA-3)
+        return dict(out, state="ahead", pull=pull, send=send, why=say("company.folder.ahead" if ahead > 1 else "company.folder.ahead.one", n=ahead))
     if not behind:
         return dict(out, state="same", text=say("company.folder.same"))
     listed = git(kb, "diff", "--name-status", "--no-renames", "-z", "HEAD", "FETCH_HEAD")

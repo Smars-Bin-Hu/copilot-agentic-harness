@@ -3715,5 +3715,11 @@
   "ready.p.broken": "{pack}：{file} 有错。",
   "ready.p.broken.short": "包 {pack}：{file} 有错：{problem} 改好之前它的程序都被扣下。",
   "ready.packs.broken": "{n} 个有错",
-  "ready.packs.broken.one": "1 个有错"
+  "ready.packs.broken.one": "1 个有错",
+  "setup.kb.update.send.about": "文件夹会从这份知识库拉取这些提交。文件夹里已有的内容不会被替换，也不会产生合并：不能直接往前移时，什么都不会发生。",
+  "setup.kb.update.send.folder": "文件夹",
+  "setup.kb.update.send.branch": "分支",
+  "setup.kb.update.send.commits": "{n} 个提交",
+  "setup.kb.update.send.commits.one": "1 个提交",
+  "setup.kb.update.send.go": "送过去"
 }

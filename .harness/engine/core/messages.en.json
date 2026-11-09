@@ -3715,5 +3715,11 @@
   "ready.p.broken": "{pack}: {file} is faulty.",
   "ready.p.broken.short": "Pack {pack}: {file} is faulty: {problem} Its programs are held until it is fixed.",
   "ready.packs.broken": "{n} faulty",
-  "ready.packs.broken.one": "1 faulty"
+  "ready.packs.broken.one": "1 faulty",
+  "setup.kb.update.send.about": "The folder takes these commits from this copy of the knowledge base. Nothing in the folder is replaced, and it gets no merge: if it cannot just move forward, nothing happens.",
+  "setup.kb.update.send.folder": "Folder",
+  "setup.kb.update.send.branch": "Branch",
+  "setup.kb.update.send.commits": "{n} commits",
+  "setup.kb.update.send.commits.one": "1 commit",
+  "setup.kb.update.send.go": "Send"
 }

@@ -171,6 +171,20 @@ const SETUP = (function () {
       kbReplaceText.textContent = t(st.update && st.update.state === "behind" ? "setup.kb.update.tick" : "setup.kb.replace");  // a git update, or the old replace
       if (!st.full) { st.replace = false; kbReplaceBox.checked = false; }
     }
+    // "Send to the folder" first asks (C13 FA-3): the folder that takes the commits, its branch, and the title of each commit. "Send" runs the engine's line in the Terminal window (the line itself is never shown here);
+    // the Terminal says how it ended, and the form looks again when it ended well.
+    function sendWindow(u) {
+      const info = u.send || {}, titles = info.subjects || [], n = info.ahead || u.ahead || titles.length;
+      const go = h("button", {type: "button", class: "act hot"}, t("setup.kb.update.send.go"));
+      const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+      const view = SERVE.dialog([h("h2", null, t("setup.kb.update.pull")), h("p", {class: "sub"}, t("setup.kb.update.send.about")),
+        h("dl", {class: "su-send-facts"}, h("dt", null, t("setup.kb.update.send.folder")), h("dd", null, h("code", null, info.folder || "-")), h("dt", null, t("setup.kb.update.send.branch")), h("dd", null, h("code", null, info.branch || u.branch || "-")),
+          h("dt", null, t(n === 1 ? "setup.kb.update.send.commits.one" : "setup.kb.update.send.commits", {n})), h("dd", null, h("ul", {class: "su-chg"}, titles.map((line) => h("li", null, line)), n > titles.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: n - titles.length})) : null))),
+        h("div", {class: "row"}, go, no)]);
+      no.addEventListener("click", view.close);
+      go.addEventListener("click", () => { view.close(); TERM.run(u.pull, checkKb); });
+      go.focus();
+    }
     // The list of an update from a folder (Q5): the files it would add, change or remove, the first ones by name; for a copy that is ahead, the commits that stay.
     const MARK = {add: "+", change: "~", remove: "\u2212"};
     function paintChanges() {
@@ -178,7 +192,7 @@ const SETUP = (function () {
       const subjects = u && u.state === "ahead" ? u.subjects || [] : [];
       // The commits of this copy that the folder lacks (they stay): each title once, and a button that sends them to the folder in the Terminal window (the command is the engine's, never shown here).
       const send = u && u.state === "ahead" && u.pull && typeof TERM !== "undefined" ? h("button", {type: "button", class: "act su-send", title: t("setup.kb.update.pull.tip")}, t("setup.kb.update.pull")) : null;
-      if (send) send.addEventListener("click", () => TERM.run(u.pull, checkKb));  // the Terminal says how it ended; the form looks again when it ended well
+      if (send) send.addEventListener("click", () => sendWindow(u));
       kbChanges.hidden = !rows.length && !subjects.length && !send;
       kbChanges.replaceChildren(...(rows.length ? [h("ul", {class: "su-chg"}, rows.map((row) => h("li", {class: row.change}, h("b", null, MARK[row.change] || "~"), " ", h("code", null, row.path))), u.total > rows.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.total - rows.length})) : null)] : []),
         ...(subjects.length ? [h("ul", {class: "su-chg"}, subjects.map((line) => h("li", null, line)), u.ahead > subjects.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.ahead - subjects.length})) : null)] : []), ...(send ? [send] : []));  // never a bare null: replaceChildren writes it as the word "null" (C12 N3)

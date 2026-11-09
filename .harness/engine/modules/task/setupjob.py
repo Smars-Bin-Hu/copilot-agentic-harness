@@ -269,7 +269,7 @@ def probe_folder(root: Path, raw: Any) -> Dict[str, Any]:
         update = company.folder_update(root, str(path))
         if update["state"] == "plain":  # no git on one side: the old way, a replace the person ticks (the old one moves to a backup); the words say which side has no history
             return {"ok": False, "full": True, "why": say("setup.kb.full.here" if not (path / ".git").exists() else "setup.kb.full.here.copy"), "parts": company.layout(path)}
-        view = {key: update[key] for key in ("state", "behind", "ahead", "changes", "total", "counts", "subjects", "uncommitted_there", "branch", "pull")}
+        view = {key: update[key] for key in ("state", "behind", "ahead", "changes", "total", "counts", "subjects", "uncommitted_there", "branch", "pull", "send")}
         if update["state"] == "same":
             return {"ok": True, "why": update["text"], "update": view, "parts": company.layout(path)}
         if update["state"] == "behind":  # listed, and the person ticks to say yes: `full` asks for the tick

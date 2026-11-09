@@ -15,7 +15,8 @@
 .tk-batch .bt-tools{display:inline-flex;gap:6px;margin-left:8px}.tk-batch .bt-tools .act{height:26px;padding:0 10px}
 .tk-batch .tk-need-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tk-batch .tk-need-h .bt-count{margin-left:auto}
 .tk-batch .bt-list{max-height:min(55vh,520px);overflow:auto}
-.tk-batch .bt-go{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 0;background:var(--hot-bg);border-top:1px solid var(--hot-line)}
+.tk-batch .bt-go{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 0;background:linear-gradient(var(--hot-bg),var(--hot-bg)),var(--card);border-top:1px solid var(--hot-line)}  /* the tint over the card colour: the foot is not see-through, the rows that pass under it are not read through it (C13 FR2 9) */
 .tk-batch .bt-go .tk-code-in{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0}.tk-batch .bt-go .tk-code-in .sub{white-space:nowrap}
 .tk-batch .bt-limit{color:var(--hot)}
 @media (max-width:560px){.tk-batch .bt-go{gap:6px}.tk-batch .bt-go .tk-code-in{flex:1 1 100%}.tk-batch .bt-go .code{flex:1 1 8em;min-width:0}.tk-batch .bt-tools{margin-left:0;flex:1 1 100%}}
+@media (max-width:900px){.tk-batch .bt-go{bottom:76px}}  /* the dock is a row along the bottom edge here (dock.css): the foot of the box rests above it and is not under its buttons (1.7.38, C13 FR2 9) */

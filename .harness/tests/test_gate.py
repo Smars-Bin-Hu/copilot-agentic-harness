@@ -129,6 +129,32 @@ class GuardrailPolicyTests(unittest.TestCase):
                 self.assertEqual(bool(COMPILED.guardrail_match(relative)), expected)
 
 
+class InlineScriptTests(unittest.TestCase):
+    """1.7.38 (C13 FR2 3): the code of `python -c` is read by `scriptcheck` (it writes to a guardrail path when the target of a write is one), no longer by a text rule of gate.json (which refused any one-liner that named a guardrail
+    path and, anywhere after it, `open`)."""
+
+    def refusal(self, command: str):
+        import tempfile
+        from pathlib import Path
+
+        from modules.gate import scriptcheck
+
+        with tempfile.TemporaryDirectory() as folder:
+            return scriptcheck.refusal(command, Path(folder), folder, None, {"guardrail_paths": [], "terminal": {}})
+
+    def test_the_inline_code_that_writes_a_guardrail_file_is_refused(self) -> None:
+        for command in (
+            "python3 -c \"open('.harness/policies/gate.json','w').write('{}')\"",
+            "python -c \"open('.harness/policies/gate.json','w').write('{}')\"",
+            "py -c \"open('.harness/policies/gate.json','w').write('{}')\"",
+        ):
+            with self.subTest(command):
+                self.assertIsNotNone(self.refusal(command))
+
+    def test_the_inline_code_that_only_reads_one_runs(self) -> None:
+        self.assertIsNone(self.refusal("python3 -c \"import json; print(len(json.load(open('.harness/policies/gate.json'))))\""))
+
+
 class TerminalTests(unittest.TestCase):
     def verdict(self, command: str) -> str:
         guard = terminal.guardrail_write(command, COMPILED)
@@ -186,9 +212,6 @@ class TerminalTests(unittest.TestCase):
             "cd /tmp && cp x .harness/engine/",
             "git checkout -- .harness/policies/gate.json",
             "git restore .github/hooks/harness.json",
-            "python3 -c \"open('.harness/policies/gate.json','w').write('{}')\"",
-            "python -c \"open('.harness/policies/gate.json','w').write('{}')\"",
-            "py -c \"open('.harness/policies/gate.json','w').write('{}')\"",
             "RM .HARNESS/POLICIES/gate.json",
             "Remove-Item .harness\\policies\\gate.json",
             "Set-Content -Path .harness\\engine\\hook.py -Value x",

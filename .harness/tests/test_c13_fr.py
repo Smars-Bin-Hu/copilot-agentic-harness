@@ -631,7 +631,7 @@ class TextRunnerTests(ListedCase):
     def refused_runner(self, command: str) -> None:
         reason = self.refused(command)
         if not command.startswith("less "):  # less is no runner: it is no reader any more once it is given a `+` command, and the line is refused by the rule of the words of the line
-            self.assertIn("会运行文本", reason, command)  # the tests run in Chinese
+            self.assertTrue("会运行文本" in reason or "会运行文件" in reason, command)  # the tests run in Chinese: it runs text, or (FR2 2) a file it reads
         self.assertIn("sqlcmd", reason, command)
 
     def test_the_forms_rb_found_are_refused(self) -> None:

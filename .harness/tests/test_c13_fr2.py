@@ -509,15 +509,15 @@ class ScriptTargetTests(lists.ListedCase):
             "node -e \"require('fs').writeFileSync('.harness/engine/x', '')\"", "perl -e 'open(F, \">.harness/engine/x\")'", "ruby -e 'File.write(\".harness/engine/x\", \"\")'",
             "cd .harness/policies && python3 -c \"open('gate.json','w').write('{}')\"", "cd .harness/engine; node -e \"require('fs').writeFileSync('x', '')\"",
             "python3 - <<'EOF'\nopen('.harness/engine/x', 'w').write('')\nEOF", "python3 <<EOF\nimport os\nos.remove('.harness/registry.json')\nEOF",
-            "python3 -c \"import json; json.dump({}, open('%s', 'w'))\"" % (self.lists_dir() + "/x.json"),
+            "python3 -c \"import json; json.dump({}, open('%s', 'w'))\"" % (self.home_lists() + "/x.json"),
         ):
             out = self.term(command)
             self.assertEqual(out.get("permissionDecision"), "deny", command)  # by this check (the words say a guardrail path) or by the rule of the harness command line (`python3 -c ... os.system('rm .harness/...')`)
 
-    def lists_dir(self) -> str:
+    def home_lists(self) -> str:
         import os
 
-        return os.environ.get("HARNESS_INTEGRITY_DIR", "/tmp/harness-integrity")
+        return os.path.expanduser("~") + "/.copilot-harness/integrity"  # the folder of the lists, where a hook that has no `HARNESS_INTEGRITY_DIR` keeps them
 
     def test_the_one_liners_of_normal_work_run(self) -> None:
         self.script("notes.md", "we call sqlcmd for jobs\n")
@@ -1154,6 +1154,20 @@ class ReportAndBoardWordsTests(unittest.TestCase):
                         report = doctor.Report()
                         doctor.check_integrity(report, root)
                     self.assertEqual("harness doctor --accept" in report.lines[0], expect, (board, report.lines[0]))
+
+
+class BatchFootTests(unittest.TestCase):
+    """RC-A U1 (item 9): at 900 px and below the dock is a row along the bottom edge, and the sticky foot of the batch box (code, Approve, Do not approve any) rests above it instead of under its buttons; the foot is not
+    see-through, so the rows that pass under it are not read through it. (Looked at in a browser at 440, 800 and 1280 px, light and dark: `.local/截图/C13/FR2/s09-*`.)"""
+
+    def test_the_foot_rests_above_the_dock_and_is_opaque(self) -> None:
+        from support import REPO
+
+        css = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "batch.css").read_text(encoding="utf-8")
+        dock = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "dock.css").read_text(encoding="utf-8")
+        self.assertIn("@media (max-width:900px){.tk-batch .bt-go{bottom:76px}}", css)
+        self.assertIn("@media (max-width:900px){.dock-btn{bottom:20px}", dock)  # the dock row: 20 px from the edge and 44 px high, so 76 px clears it
+        self.assertIn("linear-gradient(var(--hot-bg),var(--hot-bg)),var(--card)", css)
 
 
 if __name__ == "__main__":

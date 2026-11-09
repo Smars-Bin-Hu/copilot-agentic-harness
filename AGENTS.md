@@ -56,6 +56,7 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - A call to an outside system passes only if it is on the pass list. On the refuse list it is refused. Anything else asks the user.
   When the gate cannot judge a call (it fails, a setting cannot be read, or it cannot tell which connection the call reaches), the call does not pass.
   Only helpers (reminders, logs, what the board shows) may fail without stopping normal work.
+  When the guardrails themselves cannot decide (the engine cannot load, the session state or the registry cannot be read, a guardrail file is not what the user accepted), commands and writes are refused and reads stay allowed, until the user repairs it. Tell the user; do not try to repair it or go round it.
 - Before you delete, overwrite or do anything hard to undo, confirm the target and the scope.
 - Guardrail files cannot be changed: a hook refuses. The list is in
   [.harness/policies/gate.json](.harness/policies/gate.json). When one must change, tell the user.

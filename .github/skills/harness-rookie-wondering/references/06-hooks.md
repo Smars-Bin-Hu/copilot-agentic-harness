@@ -8,7 +8,7 @@ A hook is a command Copilot runs by itself at a certain moment. It receives a pi
 
 ### 6.1 Which moments there are
 
-They are set in `.github/hooks/harness.json`, and every event points at the same entry, `hook.py`.
+They are set in `.github/hooks/harness.json`, and every event points at the same entry, `launch.py`: a few lines that load `hook.py` and answer for it (commands and writes refused, reads allowed) when `hook.py` itself is broken.
 
 | Event | When | What the harness uses it for |
 | --- | --- | --- |
@@ -71,7 +71,7 @@ A subagent runs in **its own session**, and its tool calls go through hooks all 
 
 ## Where to look
 
-- `.github/hooks/harness.json`, `.harness/engine/hook.py`, `.harness/engine/adapters/copilot_vscode.py`
+- `.github/hooks/harness.json`, `.harness/engine/launch.py`, `.harness/engine/hook.py`, `.harness/engine/adapters/copilot_vscode.py`
 - The part of [05-design.md](../../../../docs/05-design.md) about letting a call through when the hook itself fails
 
 ## Common questions

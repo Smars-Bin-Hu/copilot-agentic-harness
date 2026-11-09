@@ -2,7 +2,7 @@
 
 ## In one sentence
 
-Permissions in this repository rest on two things: the **deny** of a hook (hard), and a person typing a confirmation in the **terminal** (the agent cannot get around it). The platform's own "ask first" does not count as a limit.
+Permissions in this repository rest on two things: the **deny** of a hook (hard), and a person typing a confirmation code, on the task page or in the **terminal** (the agent cannot get around it). The platform's own "ask first" does not count as a limit.
 
 ## Chunks
 
@@ -16,15 +16,15 @@ Copilot's approval rules go no further than "ask the user". But:
 
 Only **deny works in every mode** (default, Allow all, Autopilot; measured). So what must hold uses deny. The "needs confirmation" of the gate (`terminal.ask`) is only a reminder.
 
-### 8.2 Why approvals happen in the terminal
+### 8.2 Why a person approves, and where
 
-A pop-up can be switched off with "allow for this session". A code in the terminal cannot:
+A pop-up can be switched off with "allow for this session". A code a person types cannot:
 
-- It needs a real terminal: a pipe or a script will not do. When an agent runs these commands, the gate refuses.
+- It is typed on the task page of the board, in a browser that was paired with the board program, or in a real terminal (a pipe or a script will not do). When an agent runs these commands or sends a request to the board, the gate refuses.
 - The code is bound to the sha256 of the plan (or the command): if the plan changes after the approval, the approval ends.
-- The content is read in the editor (plans and diffs are hard to read in a terminal); the terminal shows only the path and the code.
+- The content is read in the editor (plans and diffs are hard to read in a terminal); the page and the terminal show only the path and the code.
 
-What a person has to approve in the terminal: `task approve-plan`, `task approve-promote`, `task recover`, `task review extend`, `task review waive`, `task pause`, `task resume` (putting a task aside; no code to type), `approve-command` (git write commands), `admin on`.
+What only a person approves: on the task page, **Approve plan**, **Confirm requirement** and **Approve promote** (each asks for a code; the agent never asks you to run a command for them); and in a terminal, `task recover`, `task review extend`, `task review waive`, `task pause`, `task resume` (putting a task aside; no code to type), `approve-command` (git write commands), `admin on`. The three buttons have a command too (`task approve-plan`, `task confirm-req`, `task approve-promote`), which only a person at a terminal can run.
 
 ### 8.3 Grading by consequence
 
@@ -87,5 +87,5 @@ The served board can send "go on" to a chat after an approval, steer or stop a w
 
 ## Common questions
 
-- **"Can the agent approve itself?"** No. The approval commands need a real terminal, and the gate also refuses when an agent runs them.
+- **"Can the agent approve itself?"** No. The approval is a code a person types, on the paired task page or in a real terminal. The gate also refuses when an agent runs the commands or sends a request to the board.
 - **"Does Autopilot get around it?"** A deny is not got around. Only the "needs confirmation" kind is.

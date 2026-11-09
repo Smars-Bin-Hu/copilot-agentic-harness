@@ -21,10 +21,13 @@
 
 ### 13.2 Only you can run these (most need a code)
 
+The plan, the requirement and the promote you approve with the **Approve plan**, **Confirm requirement** and **Approve promote** buttons on the task page: it asks for the code. The commands below that they stand for (`task approve-plan`, `task confirm-req`, `task approve-promote`) are the same thing typed in a terminal, which only you can do. The agent never asks you to run them.
+
 | Command | When |
 | --- | --- |
-| `task approve-plan` | The agent wrote `PLAN.md` and gave the link, and you have read it |
-| `task approve-promote` | After `task promote --dry-run`, when you have read `PROMOTE-PLAN.diff` |
+| `task approve-plan` | The agent wrote `PLAN.md` and gave the link, and you have read it (the button: **Approve plan**) |
+| `task confirm-req` | You have read `REQ.md` (the button: **Confirm requirement**) |
+| `task approve-promote` | After `task promote --dry-run`, when you have read `PROMOTE-PLAN.diff` (the button: **Approve promote**) |
 | `task recover` | A write-back failed partway and the task went to `partial` |
 | `task review extend` / `waive` | The checks are used up: you decide to check more or to let it through |
 | `task queue` | When several tasks write to the same repository: who holds it, who waits, what you do next |

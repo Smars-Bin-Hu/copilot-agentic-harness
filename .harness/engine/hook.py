@@ -167,8 +167,9 @@ SAFE_TOOLS = frozenset((
 ).split())
 TERMINAL_TOOLS = frozenset("run_in_terminal Bash bash PowerShell powershell".split())
 TEXTS = {
-    "hook.emergency": "The harness engine cannot decide, so nothing that runs a command or changes a file is allowed until it is repaired: {why}\nYou may still read. Tell the user what is wrong, and do not try to repair it or to go round it. The user repairs it in their own terminal (for example `git status`, then put the file back with `git checkout -- <file>`).",
-    "hook.integrity": "A guardrail file is not what the user accepted: {why}\nNothing that runs a command or changes a file is allowed until the user has looked at it. You may still read. Tell the user which files changed, and do not try to repair it or to go round it. The user puts the file back (for example with `git checkout -- <file>`), or, if the change is right, accepts it with `harness doctor --accept` in their own terminal.",
+    "hook.emergency": "The harness engine cannot decide, so nothing that runs a command or changes a file is allowed until it is repaired: {why}\nYou may still read. Tell the user what is wrong, and do not try to repair it or to go round it. The user puts the file back from the zip the harness came from, and checks it with `harness doctor`.",
+    "hook.integrity": "A guardrail file is not what the user accepted: {why}\nNothing that runs a command or changes a file is allowed until the user has looked at it. You may still read. Tell the user which files changed, and do not try to repair it or to go round it. If the user changed them on purpose, they accept them with `harness doctor --accept` in their own terminal. If not, they put the files back from the zip the harness came from.",
+    "hook.integrity.upgrade": "A new version of the harness was put in this folder, and the board has not been started since: {why}\nNothing that runs a command or changes a file is allowed until the board accepts the new version. You may still read. Tell the user to start the board (Start Harness, or `harness task board`): it accepts the new version when it starts. Do not try to repair it or to go round it.",
     "hook.busy": "The harness was busy with another call of this session and could not decide: {why}\nRun the same call again.",
 }
 
@@ -302,21 +303,34 @@ def fail_closed(root: Path, raw: str, error: BaseException) -> Dict[str, Any]:
     return emergency(root, raw, where(error), "hook.busy" if busy else "hook.emergency")
 
 
-def integrity_problem(root: Path, raw: str) -> str:
-    """The files of the guardrails that are not what the person accepted (`integrity.py`), for the calls that decide something; "" when all are, when nothing was accepted yet, in admin mode, and for the events that decide
-    nothing. A check that cannot run because `integrity.py` cannot load is a problem too."""
+def integrity_problem(root: Path, raw: str) -> Tuple[str, str]:
+    """`(the files of the guardrails that are not what the person accepted (`integrity.py`), why)` for the calls that decide something; `("", "")` when all are, when nothing was accepted yet, in admin mode, and for the events
+    that decide nothing. Why is `upgrade` (a new version was put in, the board has not been started) or `changed`. A check that cannot run because `integrity.py` cannot load is a problem too."""
     payload = _payload(raw)
     if event_of(payload) not in ("PreToolUse", "UserPromptSubmit", "SessionStart"):
-        return ""
+        return "", ""
     try:
         import integrity
 
         session_id = payload.get("session_id") or payload.get("sessionId") or ""
         if isinstance(session_id, str) and session_id and integrity.admin_session(root, "vscode", session_id):
-            return ""  # the person switched admin mode on for this session: changing these files is its job
-        return integrity.problem(root)
+            return "", ""  # the person switched admin mode on for this session: changing these files is its job
+        return integrity.status(root)
     except BaseException as error:  # noqa: BLE001 - the file that checks is itself changed or gone
-        return where(error)
+        return where(error), "changed"
+
+
+def refusal_record(raw: str, output: Dict[str, Any], kind: str) -> Dict[str, Any]:
+    """The record of a call that this file refused itself (a guardrail file that is not as accepted, a hook that could not decide), as the log of a refusal has it, so that the task page, Live and the report show it (1.7.38, C13
+    FR2 5). Needs the engine's event reader: `{}` when it cannot be had (the caller keeps a thin record)."""
+    try:
+        payload = _payload(raw)
+        adapter = adapters.detect(payload)
+        event = adapter.parse(payload)
+        decision = Decision(permission="deny" if output.get("permissionDecision") == "deny" else None, reason=str(output.get("permissionDecisionReason") or ""), context=str(output.get("additionalContext") or ""))
+        return callrecord.build(event, decision, engine=getattr(adapter, "engine", lambda _payload: "")(payload), ran=[], sources=[], facts={"kind": kind}, parent_session_id=None, denial=None)
+    except BaseException:  # noqa: BLE001 - a log line is never a reason to change the answer
+        return {}
 
 
 def main() -> int:
@@ -327,15 +341,17 @@ def main() -> int:
     raw = ""
     try:
         raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
-        changed = integrity_problem(root, raw)
+        changed, why = integrity_problem(root, raw)
+        key = "hook.integrity.upgrade" if why == "upgrade" else "hook.integrity"
         if ENGINE_FAULT is not None:
             raise ENGINE_FAULT
         if changed and event_of(_payload(raw)) == "PreToolUse":
-            output, record = emergency(root, raw, changed, "hook.integrity"), {"error": f"integrity: {changed}"}
+            output = emergency(root, raw, changed, key)
+            record = refusal_record(raw, output, "integrity") or {"error": f"integrity: {changed}"}  # the refusal is in the log of the session, with a kind the pages name
         else:
             output, record = process(raw, root)
             if changed:  # a prompt or a session start: the agent hears of it at once
-                output = dict(output, additionalContext=(output.get("additionalContext", "") + "\n" if output.get("additionalContext") else "") + _say(root, "hook.integrity", changed))
+                output = dict(output, additionalContext=(output.get("additionalContext", "") + "\n" if output.get("additionalContext") else "") + _say(root, key, changed))
     except BaseException as error:  # noqa: BLE001 - including SystemExit: a guardrail that cannot decide does not pass (`fail_closed`)
         if ENGINE_FAULT is None:
             try:
@@ -344,8 +360,9 @@ def main() -> int:
                 pass
         else:
             note(root, "hook", error, raw)
-        record = {"error": where(error)}
         output = fail_closed(root, raw, error)
+        record = (refusal_record(raw, output, "engine") if ENGINE_FAULT is None and (output.get("permissionDecision") or output.get("additionalContext")) else {})
+        record = dict(record, error=where(error))
     record["ms"] = round((time.monotonic() - started) * 1000, 1)
     record["pid"] = os.getpid()
     if ENGINE_FAULT is None:

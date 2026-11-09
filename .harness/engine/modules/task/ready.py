@@ -19,6 +19,7 @@ A check that goes wrong itself is a line that failed with its reason, never an e
 from __future__ import annotations
 
 import json
+import re
 import os
 import subprocess
 import sys
@@ -89,6 +90,23 @@ def doctor_seconds(root: Path) -> float:
     return min(max(float(value), DOCTOR_LIMITS[0]), DOCTOR_LIMITS[1])
 
 
+def crash_words(stderr: str, root: Path) -> str:
+    """What a crashed `doctor` says, with where: `modules/gate/pin.py:1: SyntaxError: invalid syntax` (the last file and line of its traceback, from the root, and the last line of it); the last line alone when there is no file."""
+    lines = stderr.strip().splitlines()
+    if not lines:
+        return ""
+    found = [re.match(r'\s*File "(.+?)", line (\d+)', line) for line in lines]
+    frame = next((item for item in reversed(found) if item), None)
+    if frame is None:
+        return lines[-1]
+    name = frame.group(1)
+    try:
+        name = Path(name).resolve().relative_to(Path(root).resolve() / ".harness" / "engine").as_posix()
+    except (ValueError, OSError):
+        pass
+    return f"{name}:{frame.group(2)}: {lines[-1]}"
+
+
 def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
     """`doctor` in a child process: `{errors, first, failed}`. `failed`: why it could not be run or read (empty when it ran). Never raises."""
     timeout = doctor_seconds(root) if timeout is None else timeout
@@ -107,8 +125,7 @@ def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
     company = [line[len("[WARN:company]"):].strip() for line in text.splitlines() if line.startswith("[WARN:company]")]  # about the company's content: they go with the Optional block
     copies = [line[len("[WARN:copies]"):].strip() for line in text.splitlines() if line.startswith("[WARN:copies]")]  # the copies differ: the board counts them itself, with a Sync button (readyitems.sync_item)
     if not errors and done.returncode != 0 and '"errors"' not in text:  # it did not get as far as its summary line
-        tail = done.stderr.decode("utf-8", errors="replace").strip().splitlines()
-        return {"errors": 0, "first": "", "failed": short(tail[-1] if tail else f"exit code {done.returncode}")}
+        return {"errors": 0, "first": "", "failed": short(crash_words(done.stderr.decode("utf-8", errors="replace"), root) or f"exit code {done.returncode}")}
     return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company) + len(copies), "warning": clip(" ".join((warnings + company + copies)[0].split()), REASON_MAX) if warnings or company or copies else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
 
 
@@ -293,10 +310,14 @@ class Ready:
             import integrity
 
             changed = integrity.changes(self.root)
+            listed = integrity.read(self.root) if changed else None
         except Exception:  # noqa: BLE001
-            changed = []
+            changed, listed = [], None
         if changed:
-            return {"state": "fail", "why": "errors", "n": len(changed), "detail": short(messages.text("doctor.integrity.changed", n=len(changed), files=", ".join(changed[: integrity.SHOWN])))}
+            was, now = str((listed or {}).get("harness") or ""), integrity._registry_version(self.root)  # noqa: SLF001
+            files = ", ".join(changed[: integrity.SHOWN])
+            words = messages.text("doctor.integrity.upgrade", n=len(changed), files=files, was=was, now=now) if was != now else messages.text("doctor.integrity.changed", n=len(changed), files=files)
+            return {"state": "fail", "why": "errors", "n": len(changed), "detail": short(words)}
         return {"state": "ok", "why": "ok", "n": 0}
 
     def drop_doctor(self) -> None:

@@ -168,6 +168,35 @@ def problem(root: Path) -> str:
     return ", ".join(found[:SHOWN]) + (f" (+{len(found) - SHOWN} more)" if len(found) > SHOWN else "")
 
 
+def status(root: Path) -> Tuple[str, str]:
+    """`(the files that are not as accepted, as problem() words, and why)`: why is `upgrade` when the list was made for another version of the harness than the one in the folder now (a new version was unzipped, and the
+    board has not been started since: starting it accepts the new version), `changed` when it is the same version (a file was changed by hand or a repackaged copy was put over it: the person accepts or puts it back). `("", "")` when
+    all is as accepted (or nothing was accepted yet)."""
+    try:
+        listed = read(root)
+        found = changes(root, listed)
+    except Exception:  # noqa: BLE001 - a check that fails itself says nothing
+        return "", ""
+    if not found:
+        return "", ""
+    words = ", ".join(found[:SHOWN]) + (f" (+{len(found) - SHOWN} more)" if len(found) > SHOWN else "")
+    return words, ("upgrade" if listed and str(listed.get("harness") or "") != _registry_version(root) else "changed")
+
+
+def write_problem() -> str:
+    """"" when the folder of the lists can be written; else the fault in a few words (a home folder that is read only, a path that is no folder). For doctor: a list that cannot be kept is no check at all."""
+    base = home_dir()
+    if base is None:
+        return "there is no home folder"
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        probe = tempfile.NamedTemporaryFile("w", dir=str(base), delete=True)
+        probe.close()
+        return ""
+    except (OSError, ValueError) as error:
+        return " ".join(f"{type(error).__name__}: {error}".split())[:200]
+
+
 def accept_on_start(root: Path) -> str:
     """For the start of the board (the person's own action): make the list when there is none, or when the harness is another version than the list was made for (an upgrade by the documented steps).
     A list for this version that the files do not match is NOT replaced: that is a change nobody accepted, and `harness doctor` says which files. Returns `made`, `kept` (matches), `changed` (does not), `none` (could not write)."""

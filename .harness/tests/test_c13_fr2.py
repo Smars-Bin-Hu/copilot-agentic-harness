@@ -804,5 +804,216 @@ class HookStartDoctorTests(unittest.TestCase):
             path.chmod(0o644)
 
 
+class IntegrityWordsTests(unittest.TestCase):
+    """RC-A M5, L1, L2, L5 (item 5): the words say what to do for the case at hand (a new version was put in: start the board; the same version changed: `harness doctor --accept`, or put the files back from the zip, not
+    `git checkout`); a refusal by the integrity check is in the log of the session with a kind the pages name; `doctor --accept` names what it takes in and, when the folder of the lists cannot be written, says so in a
+    sentence; a doctor that crashes says the file and the line."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from support import REPO
+
+        cls.repo = REPO
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.tmp.name) / "copy"
+        cls.lists = Path(cls.tmp.name) / "lists"
+        (cls.root / ".harness").mkdir(parents=True)
+        shutil.copytree(REPO / ".harness" / "engine", cls.root / ".harness" / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+        for name in ("registry.json",):
+            shutil.copy(REPO / ".harness" / name, cls.root / ".harness" / name)
+        shutil.copytree(REPO / ".harness" / "policies", cls.root / ".harness" / "policies", ignore=shutil.ignore_patterns("*.override.json"))
+        shutil.copytree(REPO / ".harness" / "contracts", cls.root / ".harness" / "contracts")
+        shutil.copytree(REPO / ".github" / "hooks", cls.root / ".github" / "hooks")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.tmp.cleanup()
+
+    def setUp(self) -> None:
+        import os
+        import sys
+        from unittest import mock
+
+        patch = mock.patch.dict(os.environ, {"HARNESS_INTEGRITY_DIR": str(self.lists), "HARNESS_ROOT": str(self.root)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        if str(self.repo / ".harness" / "engine") not in sys.path:
+            sys.path.insert(0, str(self.repo / ".harness" / "engine"))
+        import integrity
+
+        self.integrity = integrity
+        self.original = {name: (self.root / name).read_text(encoding="utf-8") for name in (".harness/registry.json", ".harness/engine/core/paths.py")}
+        self.addCleanup(self.put_back)
+        for item in self.lists.glob("*.json") if self.lists.is_dir() else []:
+            item.unlink()
+        integrity.accept(self.root)
+
+    def put_back(self) -> None:
+        for name, text in self.original.items():
+            (self.root / name).write_text(text, encoding="utf-8")
+
+    def hook(self, data: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+        import os
+        import subprocess
+        import sys
+
+        done = subprocess.run([sys.executable, str(self.root / ".harness" / "engine" / "launch.py")], input=json.dumps(data), text=True, encoding="utf-8", capture_output=True, check=False,
+                              env={**os.environ, "HARNESS_LANGUAGE": language})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def bash(self, session: str = "sess-int", command: str = "ls") -> Dict[str, Any]:
+        return self.hook({"hook_event_name": "PreToolUse", "session_id": session, "cwd": str(self.root), "tool_name": "Bash", "tool_input": {"command": command}})
+
+    def change_a_file(self) -> None:
+        path = self.root / ".harness" / "engine" / "core" / "paths.py"
+        path.write_text(self.original[".harness/engine/core/paths.py"] + "\n# changed by hand\n", encoding="utf-8")
+
+    def new_version(self) -> None:
+        text = self.original[".harness/registry.json"]
+        (self.root / ".harness" / "registry.json").write_text(text.replace('"version": "1.7.38"', '"version": "1.7.39"'), encoding="utf-8")
+        self.change_a_file()
+
+    def test_a_new_version_says_start_the_board_and_not_git(self) -> None:
+        self.new_version()
+        out = self.bash()
+        reason = out["permissionDecisionReason"]
+        self.assertEqual(out["permissionDecision"], "deny")
+        self.assertIn("start the board", reason)
+        self.assertIn("core/paths.py (changed)", reason)
+        self.assertNotIn("git", reason)
+        prompt = self.hook({"hook_event_name": "UserPromptSubmit", "session_id": "sess-int", "cwd": str(self.root), "prompt": "hello"})
+        self.assertIn("start the board", prompt["additionalContext"])
+        self.assertEqual(self.integrity.status(self.root)[1], "upgrade")
+
+    def test_the_same_version_changed_says_what_changed_accept_or_put_the_files_back_and_not_git(self) -> None:
+        self.change_a_file()
+        reason = self.bash()["permissionDecisionReason"]
+        self.assertIn("core/paths.py (changed)", reason)
+        self.assertIn("harness doctor --accept", reason)
+        self.assertIn("zip", reason)
+        self.assertNotIn("git", reason)
+        self.assertEqual(self.integrity.status(self.root)[1], "changed")
+        zh = self.bash(command="pwd", session="sess-int-zh")
+        self.assertEqual(zh["permissionDecision"], "deny")
+        text = self.hook({"hook_event_name": "PreToolUse", "session_id": "sess-int", "cwd": str(self.root), "tool_name": "Bash", "tool_input": {"command": "ls"}}, language="zh")["permissionDecisionReason"]
+        self.assertIn("harness doctor --accept", text)
+        self.assertNotIn("git", text)
+
+    def test_the_engine_words_name_no_git_either(self) -> None:
+        from core import messages
+
+        for language in ("en", "zh"):
+            table = messages.table(language)
+            for key in ("hook.emergency", "hook.integrity", "hook.integrity.upgrade", "doctor.integrity.changed", "doctor.integrity.upgrade"):
+                self.assertNotIn("git checkout", table[key], (language, key))
+
+    def test_the_refusal_is_in_the_log_of_the_session_with_a_kind_the_page_names(self) -> None:
+        self.change_a_file()
+        self.bash(session="sess-log")
+        self.hook({"hook_event_name": "PreToolUse", "session_id": "sess-log", "cwd": str(self.root), "tool_name": "create_file", "tool_input": {"filePath": "a.txt", "content": "x"}})
+        rows = [json.loads(line) for path in (self.root / ".harness" / "runtime" / "logs").glob("*/sess-log.jsonl") for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        refused = [row for row in rows if row.get("decision") == "deny"]
+        self.assertEqual(len(refused), 2, rows)
+        for row in refused:
+            self.assertEqual(row["kind"], "integrity")
+            self.assertEqual(row["event"], "PreToolUse")
+            self.assertIn("core/paths.py", row["reason"])
+            self.assertTrue(row["target"]["command"] or row["target"]["paths"])
+        from core import messages
+
+        self.assertTrue(messages.table("en")["desk.trace.rule.integrity"])
+        self.assertTrue(messages.table("zh")["desk.trace.rule.integrity"])
+
+    def test_a_refusal_by_a_hook_that_could_not_decide_is_in_the_log_too(self) -> None:
+        state = self.root / ".harness" / "runtime" / "state" / "vscode"
+        state.mkdir(parents=True, exist_ok=True)
+        (state / "sess-engine.json").write_text("{ not json", encoding="utf-8")
+        out = self.bash(session="sess-engine")
+        self.assertEqual(out["permissionDecision"], "deny")
+        rows = [json.loads(line) for path in (self.root / ".harness" / "runtime" / "logs").glob("*/sess-engine.jsonl") for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual([row.get("kind") for row in rows if row.get("decision") == "deny"], ["engine"], rows)
+        (state / "sess-engine.json").unlink()
+
+    def test_accept_names_what_it_takes_in(self) -> None:
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+
+        import doctor
+
+        self.change_a_file()
+        out = io.StringIO()
+        with mock.patch("core.approval.require_person"), redirect_stdout(out):
+            doctor.run(self.root, accept=True)
+        self.assertIn("core/paths.py (changed)", out.getvalue().split("\n")[0])
+        self.assertEqual(self.integrity.changes(self.root), [])
+
+    def test_accept_into_a_folder_that_cannot_be_written_is_one_sentence_and_not_a_traceback(self) -> None:
+        import io
+        import os
+        from contextlib import redirect_stdout
+        from unittest import mock
+
+        import doctor
+
+        blocker = self.lists.parent / "a-file"
+        blocker.write_text("x", encoding="utf-8")
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {"HARNESS_INTEGRITY_DIR": str(blocker / "inside")}), mock.patch("core.approval.require_person"), redirect_stdout(out):
+            code = doctor.run(self.root, accept=True)
+        self.assertEqual(code, 1)
+        self.assertNotIn("Traceback", out.getvalue())
+        self.assertIn("HARNESS_INTEGRITY_DIR", out.getvalue())
+        self.assertIn(str(blocker), out.getvalue())
+
+    def test_doctor_warns_when_no_list_exists_and_none_can_be_kept(self) -> None:
+        import os
+        from unittest import mock
+
+        import doctor
+
+        blocker = self.lists.parent / "a-file2"
+        blocker.write_text("x", encoding="utf-8")
+        report = doctor.Report()
+        with mock.patch.dict(os.environ, {"HARNESS_INTEGRITY_DIR": str(blocker / "inside")}):
+            doctor.check_integrity(report, self.root)
+        self.assertTrue(report.lines[0].startswith("[WARN]"), report.lines)
+        self.assertIn("HARNESS_INTEGRITY_DIR", report.lines[0])
+
+    def test_doctor_says_start_the_board_for_a_new_version_and_accept_for_a_changed_file(self) -> None:
+        import doctor
+
+        self.change_a_file()
+        report = doctor.Report()
+        doctor.check_integrity(report, self.root)
+        self.assertEqual(report.errors, 1)
+        self.assertIn("harness doctor --accept", report.lines[0])
+        self.assertNotIn("git", report.lines[0])
+        self.new_version()
+        report = doctor.Report()
+        doctor.check_integrity(report, self.root)
+        self.assertIn("1.7.39", report.lines[0])
+        self.assertIn("Start the board", report.lines[0].replace("启动看板", "Start the board"))
+        self.assertNotIn("--accept", report.lines[0])
+
+    def test_a_doctor_that_crashes_says_the_file_and_the_line(self) -> None:
+        from modules.task import ready
+
+        pin = self.root / ".harness" / "engine" / "modules" / "gate" / "pin.py"
+        text = pin.read_text(encoding="utf-8")
+        self.addCleanup(pin.write_text, text, encoding="utf-8")
+        pin.write_text("<<<<<<< HEAD\n" + text, encoding="utf-8")
+        found = ready.run_doctor(self.root, 60)
+        self.assertIn("modules/gate/pin.py:1", found["failed"])
+        self.assertIn("SyntaxError", found["failed"])
+        self.assertEqual(ready.crash_words("", self.root), "")
+        self.assertEqual(ready.crash_words("boom", self.root), "boom")
+
+
 if __name__ == "__main__":
     unittest.main()

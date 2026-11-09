@@ -940,18 +940,25 @@ def shown(lines: List[str]) -> str:
 
 
 def check_integrity(report: Report, root: Path) -> None:
-    """(1.7.38, C13 FR 17a) The guardrail files against the list the person accepted (`integrity.py`): an error naming the files that are not as accepted (the hook refuses commands and writes meanwhile), a warning when
-    nothing was accepted yet."""
+    """(1.7.38, C13 FR 17a) The guardrail files against the list the person accepted (`integrity.py`): an error naming the files that are not as accepted (the hook refuses commands and writes meanwhile), and what to do: start the
+    board when a new version was put in, `harness doctor --accept` or put the files back when the same version changed. When nothing was accepted yet, a note; a warning when the list cannot be kept at all."""
     try:
         import integrity
 
         listed = integrity.read(root)
         if listed is None:
-            report.ok(say("doctor.integrity.none"))  # a note, not a warning: a copy nobody started the board in has none yet
+            fault = integrity.write_problem()
+            if fault:
+                report.warn(say("doctor.integrity.unwritable", folder=str(integrity.home_dir() or ""), error=fault))  # FR2 5: not a list nobody made yet: one that cannot be made
+            else:
+                report.ok(say("doctor.integrity.none"))  # a note, not a warning: a copy nobody started the board in has none yet
             return
         found = integrity.changes(root, listed)
         if found:
-            report.error(say("doctor.integrity.changed", n=len(found), files=", ".join(found[: integrity.SHOWN]) + (f" (+{len(found) - integrity.SHOWN} more)" if len(found) > integrity.SHOWN else "")))
+            words = ", ".join(found[: integrity.SHOWN]) + (f" (+{len(found) - integrity.SHOWN} more)" if len(found) > integrity.SHOWN else "")
+            now = integrity._registry_version(root)  # noqa: SLF001
+            was = str(listed.get("harness") or "")
+            report.error(say("doctor.integrity.upgrade", n=len(found), files=words, was=was, now=now) if was != now else say("doctor.integrity.changed", n=len(found), files=words))
         else:
             report.ok(say("doctor.integrity.ok", n=len(listed.get("files") or {})))
     except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
@@ -965,7 +972,14 @@ def run(root: Path, accept: bool = False) -> int:
         approval.require_person("doctor --accept", typed=False)
         import integrity
 
-        done = integrity.accept(root)
+        try:
+            before = integrity.changes(root)  # what the person takes in with this: the files that are not as the last list says (FR2 5)
+            done = integrity.accept(root)
+        except OSError as error:
+            print(say("doctor.integrity.cannot_write", folder=str(integrity.home_dir() or ""), error=" ".join(f"{type(error).__name__}: {error}".split())[:200]))
+            return 1
+        if before:
+            print(say("doctor.integrity.accepted_changes", n=len(before), files=", ".join(before[: integrity.SHOWN]) + (f" (+{len(before) - integrity.SHOWN} more)" if len(before) > integrity.SHOWN else "")))
         print(say("doctor.integrity.accepted", n=done["files"], path=done["path"]))
     report = Report()
     check_python(report)

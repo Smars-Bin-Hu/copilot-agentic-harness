@@ -431,7 +431,7 @@ class PromoteTests(TaskCase):
         self.assertEqual(self.data()["promote"]["state"], "partial")
         self.assertIn("中途出错", self.run_cli("task", "close", ok=False)["stderr"])
         self.assertIn("task recover", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
-        code = self.data()["promote"]["plan_sha256"][:8]
+        code = self.data()["promote"]["plan_sha256"][:6]
         screen = io.StringIO()
         result = task_ops.recover(self.root, TASK, reader=lambda _p: code, interactive=True, out=screen)
         self.assertTrue(result["recovered"])

@@ -184,7 +184,7 @@ class TaskScenarioTests(EvalCase):
             self.assertEqual(early["permissionDecision"], "deny")
         (self.root / name / "PLAN.md").write_text("# 计划\n\n写 hello.txt。\n", encoding="utf-8")
         confirm_requirement(self.root, name)
-        code = tasks.plan_digest(self.root, name)[:8]
+        code = tasks.plan_digest(self.root, name)[:6]
         task_ops.approve_plan(self.root, name, reader=lambda _p: code, interactive=True, out=io.StringIO())
         self.assertEqual(self.hook(pre_tool("t1-session", "create_file", {"filePath": target, "content": "hi"})), {})
         (self.root / name / "DEV" / "hello.txt").write_text("hi\n", encoding="utf-8")

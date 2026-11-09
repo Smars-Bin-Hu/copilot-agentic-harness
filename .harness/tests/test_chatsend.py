@@ -264,7 +264,7 @@ class SendCase(ServeCase):
 
     def approve_plan(self) -> str:
         confirm_requirement(self.root, TASK)
-        code = tasks.plan_digest(self.root, TASK)[:8]
+        code = tasks.plan_digest(self.root, TASK)[:6]
         status, data, _ = self.post("/api/act", {"action": "approve-plan", "code": code, "step": "act"})
         self.assertEqual(status, 200, data)
         return code

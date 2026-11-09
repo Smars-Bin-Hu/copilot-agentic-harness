@@ -303,7 +303,7 @@ class ServeTests(ServeCase):
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview", "with_req": True}, cookie=cookie)
         self.assertEqual(status, 200, data)
         self.assertTrue(any("REQ.md" in line for line in data["result"]["screen"]))
-        code = task_ops.plan_digest_with(req.read_text(encoding="utf-8"), tasks.plan_digest(self.root, TASK))[:8]
+        code = task_ops.plan_digest_with(req.read_text(encoding="utf-8"), tasks.plan_digest(self.root, TASK))[:6]
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "act", "code": code, "with_req": True}, cookie=cookie)
         self.assertEqual(status, 200, data)
         self.assertTrue(self.data()["plan"]["approved_sha256"])
@@ -353,7 +353,7 @@ class ServeTests(ServeCase):
         self.assertEqual(status_now["started"], status_now["now"], "the board says when it runs an older release than the files (B63)")
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
         self.assertEqual(status, 200, data)
-        code = tasks.plan_digest(self.root, TASK)[:8]
+        code = tasks.plan_digest(self.root, TASK)[:6]
         self.assertIn(code[:6].upper(), data["result"]["ask"])  # six capitals, as the code of a held call (C12 N13)
         self.assertTrue(data["result"]["screen"])
         self.assertFalse(tasks.plan_approved(self.root, TASK, self.data()))  # a preview approves nothing

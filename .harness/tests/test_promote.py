@@ -304,7 +304,7 @@ class RunTests(PromoteCase):
         self.dry_run(request_id)
         plan = self.request(request_id)["promote"]["plan_sha256"]
         out = io.StringIO()
-        task_ops.approve_promote(self.root, request_id, reader=lambda _prompt: plan[:8], interactive=True, out=out)
+        task_ops.approve_promote(self.root, request_id, reader=lambda _prompt: plan[:6], interactive=True, out=out)
         shown = out.getvalue()
         self.assertIn("仓库 repo_b", shown)
         self.assertIn(f"新建分支 {BRANCH}", shown)
@@ -399,7 +399,7 @@ class FailureTests(FailureBase):
         self.assertIn("task recover", self.refused("task", "promote", "--task", request_id, "--dry-run"))  # not recovered yet
         self.assertIn("中途出错", self.refused("task", "close", "--task", request_id))
         plan = self.request(request_id)["promote"]["plan_sha256"]
-        task_ops.recover(self.root, request_id, reader=lambda _prompt: plan[:8], interactive=True, out=io.StringIO())
+        task_ops.recover(self.root, request_id, reader=lambda _prompt: plan[:6], interactive=True, out=io.StringIO())
         self.dry_run(request_id)
         self.assertIn("还没有批准", self.refused("task", "promote", "--task", request_id))
         self.approve(request_id)
@@ -467,7 +467,7 @@ class RecoverTests(FailureBase):
         plan = self.request(request_id)["promote"]["plan_sha256"]
         out = io.StringIO()
         self.shown = out
-        return task_ops.recover(self.root, request_id, reader=lambda _prompt: code if code is not None else plan[:8], interactive=True, out=out)
+        return task_ops.recover(self.root, request_id, reader=lambda _prompt: code if code is not None else plan[:6], interactive=True, out=out)
 
     def test_the_message_names_the_command_and_the_record_has_the_steps(self) -> None:
         request_id = self.two_repo_request()
@@ -553,7 +553,7 @@ class RecoverTests(FailureBase):
     def test_recover_without_a_name_finds_the_one_task(self) -> None:
         request_id = self.partial_request()
         plan = self.request(request_id)["promote"]["plan_sha256"]
-        task_ops.recover(self.root, "", reader=lambda _prompt: plan[:8], interactive=True, out=io.StringIO())
+        task_ops.recover(self.root, "", reader=lambda _prompt: plan[:6], interactive=True, out=io.StringIO())
         self.assert_untouched(self.repo_a)
 
     def test_only_a_person_at_a_terminal_can_recover(self) -> None:

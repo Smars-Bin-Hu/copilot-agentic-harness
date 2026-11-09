@@ -11,7 +11,7 @@ from support import HarnessTestCase
 from test_connection_find import FindCase
 from test_connections import KIND, ConnectionsCase
 
-from core import connections, messages, systems
+from core import approval, connections, messages, systems
 from modules.gate import rules
 from modules.task import boardserve
 
@@ -105,6 +105,19 @@ class AllConnectionsTests(FindCase):
     def test_a_window_opened_with_nothing_said_marks_nothing(self) -> None:
         self.assertEqual(connections.away_aliases(self.root), [])
         self.assertNotIn(messages.text("connections.away.context", n=1), self.start())
+
+
+class OldCodeTests(unittest.TestCase):
+    """C12 FC-4: the code of 8 small characters (before 1.7.38) is not taken any more; the code is 6 capitals, typed in either case."""
+
+    def test_only_the_six_character_code_is_taken(self) -> None:
+        digest = "6e285378ab12"
+        for typed in ("6E2853", "6e2853"):
+            approval.ask("go?", digest, "no", reader=lambda _prompt, typed=typed: typed)
+        for typed in ("6e285378", "6E285378", "6e2853 78", "", "6E285"):
+            with self.assertRaises(approval.Refused, msg=typed):
+                approval.ask("go?", digest, "no", reader=lambda _prompt, typed=typed: typed)
+        self.assertFalse(hasattr(approval, "LEGACY_LENGTH"))
 
 
 if __name__ == "__main__":

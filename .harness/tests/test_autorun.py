@@ -27,7 +27,7 @@ class AutorunCase(TaskCase):
             self.prompt("[review]=1 开始做")
 
     def on(self, code: Optional[str] = None, out: Any = None) -> Dict[str, Any]:
-        typed = code if code is not None else autorun.code_source(self.root, TASK, self.data())[:8]
+        typed = code if code is not None else autorun.code_source(self.root, TASK, self.data())[:6]
         return autorun.turn_on(self.root, NAME, reader=lambda _prompt: typed, interactive=True, out=out or io.StringIO(), force=True)  # these tests are about autorun; whether the agent has stopped is tested in test_tasklife
 
     def stop(self, **fields: Any) -> Dict[str, Any]:
@@ -101,7 +101,7 @@ class TurnOnTests(AutorunCase):
 
     def test_a_plan_changed_after_the_screen_is_not_what_was_agreed(self) -> None:
         self.prepare()
-        code = autorun.code_source(self.root, TASK, self.data())[:8]
+        code = autorun.code_source(self.root, TASK, self.data())[:6]
         (self.task / "TODO.md").write_text(TODO + "- [ ] 顺手重构\n", encoding="utf-8")
         with self.assertRaises(CommandError):
             self.on(code=code)

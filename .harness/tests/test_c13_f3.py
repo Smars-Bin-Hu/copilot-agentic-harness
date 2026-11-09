@@ -787,5 +787,58 @@ class RecordOfDecisionsTests(BatchBoardTests):
         self.assertEqual((row["code"], row["batch"]), (code, 0))
 
 
+class SerifFaceTests(unittest.TestCase):
+    """Item 7 (the person, 2026-11-09): the whole board uses a serif face of the system for its words; code, commands, SQL, paths, codes and the terminal keep the monospace face. One token holds it."""
+
+    WEB = REPO / ".harness" / "engine" / "modules" / "task" / "web"
+    STACK = ('ui-serif,"Iowan Old Style",Charter,"Charter BT","New York",Cambria,Georgia,"Songti SC","Noto Serif CJK SC","Source Han Serif SC",SimSun,serif')
+
+    def sheets(self) -> Dict[str, str]:
+        return {path.name: path.read_text(encoding="utf-8") for path in sorted(self.WEB.glob("*.css"))}
+
+    def test_one_token_holds_the_serif_stack_and_no_token_is_called_sans(self) -> None:
+        tokens = self.sheets()["tokens.css"]
+        self.assertIn("--serif:" + self.STACK + ";", tokens)
+        for name, text in self.sheets().items():
+            self.assertNotIn("--sans", text, name)
+        for path in list(self.WEB.glob("*.js")) + list(self.WEB.glob("*.html")):
+            self.assertNotIn("--sans", path.read_text(encoding="utf-8"), path.name)
+
+    def test_the_page_and_the_controls_take_the_serif_face_and_the_figures_line_up(self) -> None:
+        ui = self.sheets()["ui.css"]
+        body = next(line for line in ui.splitlines() if line.startswith("body{"))
+        self.assertIn("font:14px/1.55 var(--serif)", body)
+        self.assertIn("font-variant-numeric:tabular-nums lining-nums", body)
+        self.assertIn("button,input,select,textarea,summary{font-family:inherit}", ui)
+
+    def test_every_font_setting_is_the_serif_token_the_monospace_one_or_inherited(self) -> None:
+        import re
+
+        for name, text in self.sheets().items():
+            for found in re.finditer(r"font-family\s*:\s*([^;}]+)", text):
+                value = found.group(1).strip()
+                self.assertTrue(value.startswith(("var(--serif)", "var(--mono", "inherit", "ui-monospace")), f"{name}: {value[:60]}")
+            for found in re.finditer(r"(?<![-\w])font\s*:\s*([^;}]+)", text):
+                value = found.group(1).strip()
+                if "var(--serif)" in value or "var(--mono" in value or value.startswith("inherit") or " inherit" in value or "ui-monospace" in value:
+                    continue
+                self.assertRegex(value, r"^[\d\s./a-z%-]*$", f"{name}: a font shorthand that names a face: {value[:60]}")
+            self.assertNotIn("sans-serif", text, name)
+
+    def test_the_words_of_the_enter_list_are_serif_and_its_paths_and_names_stay_monospace(self) -> None:
+        enter = self.sheets()["enter.css"]
+        self.assertIn("flex-direction:column;font:12px/1.45 var(--serif)", enter)
+        self.assertIn(".en-chk-l .en-path{font-family:var(--mono)}", enter)
+        self.assertIn("font:12px/1.5 var(--mono);color:var(--en-ink);cursor:default", enter, "the names of connections and packs are identifiers")
+        js = (self.WEB / "enter.js").read_text(encoding="utf-8")
+        self.assertIn("function setEm(", js)
+
+    def test_the_terminal_the_code_boxes_and_the_codes_keep_the_monospace_face(self) -> None:
+        sheets = self.sheets()
+        self.assertIn("font:600 12.5px var(--mono)", sheets["dock.css"])  # the terminal toggle
+        self.assertIn("pre.code,pre.diff,.send-preview,pre.commit{font-family:var(--mono)}", sheets["ui.css"])
+        self.assertIn("font-family:ui-monospace,Menlo,monospace;letter-spacing:2px", sheets["desk.css"])  # the box a code is typed in
+
+
 if __name__ == "__main__":
     unittest.main()

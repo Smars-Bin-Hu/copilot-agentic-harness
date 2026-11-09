@@ -9,7 +9,7 @@
 .rd-title{min-width:0;overflow-wrap:anywhere}
 .rd-x{margin-left:auto;flex:none;padding:0;border:0;background:none;color:var(--soft);font:inherit;font-weight:450;cursor:pointer;white-space:nowrap}
 .rd-x:hover{color:var(--ink)}.rd-x:focus-visible,.rd-fix:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px}
-.rd-grp{padding-bottom:6px;font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--soft)}
+.rd-grp{padding-bottom:6px;font:600 11px var(--serif);letter-spacing:.14em;text-transform:uppercase;color:var(--soft)}
 html[lang="zh"] .rd-grp{letter-spacing:.06em;text-transform:none;font-size:12px}
 .rd-li{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
 .rd-t{flex:1;min-width:0;overflow-wrap:anywhere}

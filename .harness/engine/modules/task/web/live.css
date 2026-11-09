@@ -56,7 +56,7 @@
 .fi .ti svg{display:block;width:15px;height:15px;stroke:var(--soft)}
 .fi-tool .in{flex:0 1 auto;min-width:0;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:500}
 .fi-tool .tg{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:6px;background:var(--track);color:var(--soft);font:12px var(--mono)}
-.fi .el{flex:none;margin-left:auto;padding-left:8px;font:12px var(--mono);color:var(--soft);white-space:nowrap;font-variant-numeric:tabular-nums}
+.fi .el{flex:none;margin-left:auto;padding-left:8px;font:12px var(--serif);color:var(--soft);white-space:nowrap;font-variant-numeric:tabular-nums lining-nums}
 .fi-tool.is-done .in{color:var(--soft);font-weight:450}
 .fi-tool.is-fail .dot{background:var(--bad);border-color:var(--bad)}
 .fi-tool.is-fail .el{color:var(--bad)}

@@ -41,4 +41,4 @@ html[data-theme="dark"]{
  --sp-rgb:255,255,255;--sp-dust-o:.15;--sp-grid:.06;--sp-grid2:.10;--sp-glow:.04;--sp-veil:.34;
  color-scheme:dark;
 }
-html{--enw-ink:#f5f6f7;--enw-soft:#c9ccd2;--enw-good:#4fd18c;--enw-good-dot:#3ecf8e;--enw-hot:#f4b64a;--enw-hot-dot:#f5a623;--enw-bad:#ff8a80;--enw-body:#1b1c20;--enw-head:#25272c;--enw-line:#5b5f68;--enw-visor:#050506;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;--mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace;--r:12px}
+html{--enw-ink:#f5f6f7;--enw-soft:#c9ccd2;--enw-good:#4fd18c;--enw-good-dot:#3ecf8e;--enw-hot:#f4b64a;--enw-hot-dot:#f5a623;--enw-bad:#ff8a80;--enw-body:#1b1c20;--enw-head:#25272c;--enw-line:#5b5f68;--enw-visor:#050506;--serif:ui-serif,"Iowan Old Style",Charter,"Charter BT","New York",Cambria,Georgia,"Songti SC","Noto Serif CJK SC","Source Han Serif SC",SimSun,serif;--mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace;--r:12px}

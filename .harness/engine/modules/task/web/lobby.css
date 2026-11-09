@@ -57,7 +57,7 @@
 .lb-acc .lb-fill{fill:var(--c);stroke:none;opacity:.9}
 .lb-cable{opacity:0;fill:none;stroke:var(--lb-left);stroke-width:2;stroke-linecap:round}.lb-cable .lb-spark{fill:var(--lb-left);stroke:none}
 .lb-bubble{opacity:0;transform-box:fill-box;transform-origin:20% 90%}
-.lb-zz{opacity:0;fill:var(--soft);font:700 11px var(--serif)}
+.lb-zz{opacity:0;fill:var(--soft);font:700 11px sans-serif}
 /* the poses */
 .lb-pose-work{--c:var(--lb-work)}
 .lb-pose-work .lb-arm.lb-l{animation:lbtypeL .5s ease-in-out infinite alternate}

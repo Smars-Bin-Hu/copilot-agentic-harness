@@ -3,8 +3,7 @@
    A page on disk and a saved page get the same file: nothing here needs a server. */
 
 /* ---------- base ---------- */
-body{background:var(--bg);color:var(--ink);font:14px/1.55 var(--serif);font-variant-numeric:tabular-nums lining-nums;text-wrap:pretty;-webkit-font-smoothing:antialiased;position:relative;min-height:100vh}
-button,input,select,textarea,summary{font-family:inherit}  /* controls take the face of the page (serif, 1.7.38); a class that sets the monospace face for a code box wins over this */
+body{background:var(--bg);color:var(--ink);font:14px/1.55 var(--sans);font-feature-settings:"tnum" 1,"cv11" 1;-webkit-font-smoothing:antialiased;position:relative;min-height:100vh}
 main{padding-top:28px;padding-bottom:52px}main.wide{padding-top:0}
 a{color:var(--ink)}a:hover{text-decoration:underline;text-underline-offset:3px}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:6px}
@@ -221,7 +220,7 @@ pre.diff .add{background:var(--good-bg)}pre.diff .del{background:var(--bad-bg)}p
 
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
-.hover-card{position:fixed;z-index:400;max-width:min(380px,calc(100vw - 24px));padding:7px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--pop);color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.18);font:12.5px/1.45 var(--serif);letter-spacing:0;text-transform:none;pointer-events:none;overflow-wrap:anywhere}
+.hover-card{position:fixed;z-index:400;max-width:min(380px,calc(100vw - 24px));padding:7px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--pop);color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.18);font:12.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0;text-transform:none;pointer-events:none;overflow-wrap:anywhere}
 .hover-card>div+div{margin-top:3px}.hover-card b{font-weight:600}.hover-card .mk{font-weight:600;margin:0 1px}.hover-card .mk.ok{color:var(--good-dot)}.hover-card .mk.bad{color:var(--hot-dot)}
 .act.primary:not(:disabled){background:var(--btn);border-color:var(--btn);color:var(--btn-ink);font-weight:600}.act.primary:not(:disabled):hover{background:var(--btn-hover);border-color:var(--btn-hover)}  /* the one main button of a window (1.7.28) */
 @media (max-width:900px){.copyright{bottom:72px;max-width:calc(100% - 32px)}}  /* the dock is a row along the bottom edge here: the notice stands above it, not under its buttons (1.7.38, F1 U2) */

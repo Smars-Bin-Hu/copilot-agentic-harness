@@ -2,7 +2,7 @@
    Colours are tokens (--en-* in tokens.css, light and dark). It sits under the fixed search and gear of shell.css (z-index 160 and up), so those stay the global ones.
    Motion: transform and opacity (the charge is drawn on a canvas). `html.lite` and `prefers-reduced-motion` turn all of it off; the screen still works. */
 
-#enter{position:fixed;inset:0;z-index:100;overflow:hidden;color:var(--en-ink);background:transparent;font-family:var(--serif);transition:opacity .38s ease,transform .38s ease,visibility 0s .38s}
+#enter{position:fixed;inset:0;z-index:100;overflow:hidden;color:var(--en-ink);background:transparent;font-family:var(--sans);transition:opacity .38s ease,transform .38s ease,visibility 0s .38s}
 #enter[hidden]{display:none}
 #enter.pending{opacity:0;visibility:hidden;pointer-events:none;transition:none}
 #enter.out{opacity:0;transform:scale(1.025);visibility:hidden;pointer-events:none}
@@ -27,7 +27,7 @@ html[data-theme="light"]:not(.has-wall) .en-chk-l .m.soft{background:rgba(255,25
 
 /* top right: only the greeting (the search is the fixed one of shell.css, which keeps the room at the right) */
 .en-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:flex-end;padding:21px 24px;z-index:3;pointer-events:none}
-.en-hi{max-width:min(56vw,560px);font:500 13px/20px var(--serif);color:var(--en-cap);letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.en-hi{max-width:min(56vw,560px);font:500 13px/20px var(--sans);color:var(--en-cap);letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .en-hi b{color:var(--en-ink);font-weight:600}
 html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; enter.js gives its width */
 
@@ -65,17 +65,17 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 @keyframes enfloat{50%{transform:translateY(-7px)}}
 @keyframes enhop{0%{transform:translateY(0)}35%{transform:translateY(-26px) rotate(-4deg)}100%{transform:none}}
 @keyframes enshake{from{transform:translate(calc(var(--sh,0px)*-1),0)}to{transform:translate(var(--sh,0px),calc(var(--sh,0px)*.5))}}
-.en-say{position:absolute;z-index:5;transform:translate(-50%,-100%);padding:8px 13px;border-radius:14px 14px 14px 4px;font:500 13px var(--serif);color:var(--en-say-ink);background:var(--en-say);
+.en-say{position:absolute;z-index:5;transform:translate(-50%,-100%);padding:8px 13px;border-radius:14px 14px 14px 4px;font:500 13px var(--sans);color:var(--en-say-ink);background:var(--en-say);
  box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;margin-top:-6px}
 .en-say.on{opacity:1}
 
 /* the bottom: the readiness list, the Enter pill, the hint */
 .en-foot{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;column-gap:20px;padding:0 32px 44px;z-index:3}  /* clear of the copyright line at the foot */
-.en-chk{justify-self:start;width:min(clamp(420px,40vw,560px),100%);max-height:var(--chk-max,60vh);display:flex;flex-direction:column;font:12px/1.45 var(--serif);color:var(--en-cap)}  /* one width rule for every screen: a wider window never shows less (1.7.24) */
+.en-chk{justify-self:start;width:min(clamp(420px,40vw,560px),100%);max-height:var(--chk-max,60vh);display:flex;flex-direction:column;font:12px/1.45 var(--mono);color:var(--en-cap)}  /* one width rule for every screen: a wider window never shows less (1.7.24) */
 .en-chk-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin}
 .en-chk .en-legal{flex:none}
 .en-chk{position:relative}.en-chk.more .en-chk-body{-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 14px),transparent);mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 14px),transparent)}  /* more lines below: they fade out at the foot, so the box reads as scrollable (1.7.26) */
-.en-chk.more::after{content:"\2193";position:absolute;right:8px;bottom:0;font:600 13px/1 var(--serif);color:var(--en-ink);opacity:.7;pointer-events:none;animation:enbeat 1.8s ease-in-out infinite}
+.en-chk.more::after{content:"\2193";position:absolute;right:8px;bottom:0;font:600 13px/1 var(--sans);color:var(--en-ink);opacity:.7;pointer-events:none;animation:enbeat 1.8s ease-in-out infinite}
 .en-chk-h{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;font-size:11px;color:var(--en-cap)}
 html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5px}
 .en-chk-h i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--soft)}
@@ -94,22 +94,22 @@ html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5
 .en-chk-l em.has-tip{cursor:help;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--soft)}
 .en-chk-l .s-wait em,.en-chk-l .s-fail em{color:var(--hot);opacity:1}
 .en-chk-l .s-note .t,.en-chk-l .warns .t{opacity:.82}
-.en-chk-l .m{grid-column:2/4;margin:2px 0 6px;padding:7px 10px;border-radius:8px;background:var(--hot-bg);border:1px solid var(--hot-line);color:var(--hot);font:12px/1.5 var(--serif);overflow-wrap:anywhere;word-break:break-word}
+.en-chk-l .m{grid-column:2/4;margin:2px 0 6px;padding:7px 10px;border-radius:8px;background:var(--hot-bg);border:1px solid var(--hot-line);color:var(--hot);font:12px/1.5 var(--sans);overflow-wrap:anywhere;word-break:break-word}
 .en-chk-l .m.soft{background:var(--track);border-color:var(--line);color:var(--en-cap)}
 .en-chk-l .m[hidden]{display:none}
-.en-chk-l .en-open{display:inline-flex;margin-top:7px;font:600 12.5px var(--serif);height:28px;align-items:center;padding:0 12px;border-radius:999px;border:0;background:var(--en-btn);color:var(--en-btn-ink);cursor:pointer}
+.en-chk-l .en-open{display:inline-flex;margin-top:7px;font:600 12.5px var(--sans);height:28px;align-items:center;padding:0 12px;border-radius:999px;border:0;background:var(--en-btn);color:var(--en-btn-ink);cursor:pointer}
 .en-chk-l .en-open:disabled{opacity:.5;cursor:default}
-.en-err{margin:8px 0 0;padding:7px 10px;border-radius:8px;border:1px solid var(--bad-line);background:var(--bad-bg);color:var(--bad);font:12px/1.5 var(--serif);overflow-wrap:anywhere}
+.en-err{margin:8px 0 0;padding:7px 10px;border-radius:8px;border:1px solid var(--bad-line);background:var(--bad-bg);color:var(--bad);font:12px/1.5 var(--sans);overflow-wrap:anywhere}
 .en-err[hidden]{display:none}
-.en-legal{margin:10px 0 0;font:11px/1.4 var(--serif);color:var(--en-cap);overflow-wrap:anywhere}
-.en-go{font:600 15px var(--serif);display:inline-flex;align-items:center;gap:12px;height:54px;padding:0 14px 0 30px;border-radius:999px;border:0;cursor:pointer;color:var(--en-btn-ink);background:var(--en-btn);
+.en-legal{margin:10px 0 0;font:11px/1.4 var(--mono);color:var(--en-cap);overflow-wrap:anywhere}
+.en-go{font:600 15px var(--sans);display:inline-flex;align-items:center;gap:12px;height:54px;padding:0 14px 0 30px;border-radius:999px;border:0;cursor:pointer;color:var(--en-btn-ink);background:var(--en-btn);
  box-shadow:0 14px 34px rgba(0,0,0,.3);transition:transform .2s,box-shadow .2s}
 .en-go.plain{padding:0 30px}
 .en-go:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 0 60px rgba(var(--en-fx),.35),0 18px 40px rgba(0,0,0,.35)}
 .en-go kbd{font:500 12px var(--mono);padding:6px 8px;border-radius:6px;background:rgba(128,128,128,.25);border:1px solid rgba(128,128,128,.3);color:inherit}
 .en-go:disabled{cursor:not-allowed;background:var(--en-btn-off);color:var(--en-btn-off-ink);box-shadow:none;padding-left:26px;padding-right:26px}
 .en-go:focus-visible,.en-open:focus-visible{outline:2px solid var(--en-ink);outline-offset:3px}
-.en-cap{font:500 11px/1.5 var(--serif);letter-spacing:.2em;text-transform:uppercase;color:var(--en-cap)}
+.en-cap{font:500 11px/1.5 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--en-cap)}
 html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 .en-hint{justify-self:end;text-align:right;padding-right:56px}
 
@@ -134,7 +134,7 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 html.lite #enter,html.lite #enter *,html.lite #enter *::before,html.lite #enter *::after{animation:none!important;transition:none!important}
 html.lite #en-fx{display:none}
 @media (prefers-reduced-motion:reduce){#enter,#enter *,#enter *::before,#enter *::after{animation:none!important;transition:none!important}#en-fx{display:none}}
-.en-chk-h .en-getready{margin:0 0 0 auto;height:22px;padding:0 10px;font:600 11px var(--serif);letter-spacing:0;text-transform:none;display:inline-flex;align-items:center;border-radius:999px;border:0;background:var(--en-btn);color:var(--en-btn-ink);cursor:pointer}.en-chk-h .en-getready[hidden]{display:none}
+.en-chk-h .en-getready{margin:0 0 0 auto;height:22px;padding:0 10px;font:600 11px var(--sans);letter-spacing:0;text-transform:none;display:inline-flex;align-items:center;border-radius:999px;border:0;background:var(--en-btn);color:var(--en-btn-ink);cursor:pointer}.en-chk-h .en-getready[hidden]{display:none}
 
 /* Outside systems (1.7.19): names with a dot, +N, a table on hover */
 .en-chk-l .sy{grid-column:2/4;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;max-height:1.5em;overflow:hidden;font:12px/1.5 var(--mono);color:var(--en-ink);cursor:default;outline:0}
@@ -143,7 +143,7 @@ html.lite #en-fx{display:none}
 .en-chk-l .sy-more{font-weight:600;color:var(--en-cap)}.en-chk-l .sy-more[hidden]{display:none}
 .sy-d{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--soft)}.sy-d.ok{background:var(--good-dot)}.sy-d.down{background:var(--bad)}.sy-d.partly,.sy-d.held{background:var(--hot-dot)}.sy-d.unknown{background:var(--soft);opacity:.7}
 .en-chk-l .m[hidden]+.sy{margin-top:0}
-.en-pop{position:fixed;z-index:400;max-width:min(720px,calc(100vw - 16px));border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--ink);box-shadow:0 14px 40px rgba(0,0,0,.28);font:12px/1.45 var(--serif)}
+.en-pop{position:fixed;z-index:400;max-width:min(720px,calc(100vw - 16px));border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--ink);box-shadow:0 14px 40px rgba(0,0,0,.28);font:12px/1.45 var(--sans)}
 .en-pop[hidden]{display:none}
 .en-pop-in{max-height:min(70vh,560px);overflow:auto;padding:6px 10px 8px;overscroll-behavior:contain}
 .en-pop .sy-scroll{position:sticky;bottom:-8px;margin:6px -10px -8px;padding:5px 10px 6px;background:var(--card);border-top:1px solid var(--line);color:var(--soft);font-size:11.5px}
@@ -159,8 +159,8 @@ html.lite #en-fx{display:none}
 
 @media (max-width:900px){.en-hint{justify-self:start;text-align:left}}  /* the dock lies in a row along the bottom edge: the hint keeps the left (1.7.32) */
 /* 1.7.36: three groups, a dot by level, a small line under the top word, a folded list */
-.en-chk-l li.gh{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px;font:600 10.5px var(--serif);letter-spacing:.14em;text-transform:uppercase;color:var(--en-cap);min-width:0}
-.en-chk-l li.gh:first-child{margin-top:0}.en-chk-l .gh-t{flex:none}.en-chk-l .gh-n{display:none;min-width:0;font:12px var(--serif);letter-spacing:0;text-transform:none;color:var(--en-ink);overflow-wrap:anywhere;opacity:.85}
+.en-chk-l li.gh{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px;font:600 10.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--en-cap);min-width:0}
+.en-chk-l li.gh:first-child{margin-top:0}.en-chk-l .gh-t{flex:none}.en-chk-l .gh-n{display:none;min-width:0;font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--en-ink);overflow-wrap:anywhere;opacity:.85}
 html[lang="zh"] .en-chk-l li.gh{letter-spacing:.06em;text-transform:none;font-size:11.5px}
 
 .en-chk-l li.row .m,.en-chk-l li.row .sy{grid-column:2/-1}
@@ -173,7 +173,7 @@ html[lang="zh"] .en-chk-l li.gh{letter-spacing:.06em;text-transform:none;font-si
 /* 1.7.38, block B: two blocks (Harness & Local: required; From the company: optional), a tag on each head, the VS Code button beside Enter */
 .en-chk-l li.gh{align-items:center}
 .en-chk-l li.gh .ck{display:none;flex:none;width:7px;height:7px;border-radius:50%;align-self:center}
-.en-chk-l .gh-tag{margin-left:auto;flex:none;padding:1px 7px;border-radius:4px;font:600 10px var(--serif);letter-spacing:.1em;white-space:nowrap}
+.en-chk-l .gh-tag{margin-left:auto;flex:none;padding:1px 7px;border-radius:4px;font:600 10px var(--mono);letter-spacing:.1em;white-space:nowrap}
 .en-chk-l li.gh[data-g="required"] .gh-tag{background:var(--en-btn);color:var(--en-btn-ink)}
 .en-chk-l li.gh[data-g="optional"] .gh-tag{border:1px solid var(--line2);color:var(--en-cap)}
 html[lang="zh"] .en-chk-l .gh-tag{letter-spacing:.04em;font-size:11px}
@@ -192,7 +192,7 @@ html[data-theme="light"]:not(.has-wall) .en-chk-l .m.bad{background:linear-gradi
 /* folded: one line for each block, name and summary, a mark that it opens */
 .en-chk-l.folded{cursor:pointer}
 .en-chk-l.folded:not(.unfold):not(:hover) li.row{display:none}
-.en-chk-l.folded:not(.unfold):not(:hover) li.gh{margin:5px 0 0;font:12px var(--serif);letter-spacing:0;text-transform:none;color:var(--en-ink);gap:9px}
+.en-chk-l.folded:not(.unfold):not(:hover) li.gh{margin:5px 0 0;font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--en-ink);gap:9px}
 .en-chk-l.folded:not(.unfold):not(:hover) li.gh .ck{display:block}
 .en-chk-l.folded:not(.unfold):not(:hover) .gh-tag{display:none}
 .en-chk-l.folded:not(.unfold):not(:hover) .gh-n{display:inline;margin-left:auto;text-align:right;color:var(--en-cap);max-width:70%}
@@ -200,7 +200,7 @@ html[data-theme="light"]:not(.has-wall) .en-chk-l .m.bad{background:linear-gradi
 html[lang="zh"] .en-chk-l.folded:not(.unfold):not(:hover) li.gh{font-size:12.5px}
 /* the buttons beside the pill: Open / Restart VS Code and Enter */
 .en-cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center}
-.en-vs{font:600 15px var(--serif);display:inline-flex;align-items:center;height:54px;padding:0 26px;border-radius:999px;cursor:pointer;color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);box-shadow:0 8px 22px rgba(0,0,0,.14);transition:transform .2s,box-shadow .2s;white-space:nowrap;max-width:100%}
+.en-vs{font:600 15px var(--sans);display:inline-flex;align-items:center;height:54px;padding:0 26px;border-radius:999px;cursor:pointer;color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);box-shadow:0 8px 22px rgba(0,0,0,.14);transition:transform .2s,box-shadow .2s;white-space:nowrap;max-width:100%}
 .en-vs[hidden]{display:none}
 .en-vs:hover:not(:disabled){transform:translateY(-2px)}
 .en-vs.hot{background:var(--en-btn);color:var(--en-btn-ink);border-color:transparent;box-shadow:0 14px 34px rgba(0,0,0,.3)}
@@ -227,10 +227,8 @@ html.has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);color:var(--en-ink);b
 .en-chk-l li.row.s-fail.blocks.l-red em{color:var(--bad)}
 /* 1.7.38 (C11 T2-07): the note beside the VS Code button: a restart that waits for a window, or did not end; the button then says Try again */
 .en-cta{position:relative}
-.en-vsnote{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);width:max-content;margin:0 0 12px;max-width:min(34em,92vw);box-sizing:border-box;z-index:4;text-align:center;font:500 12.5px/1.45 var(--serif);color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);border-radius:10px;padding:6px 12px;overflow-wrap:anywhere}  /* a card: it may lie over the wordmark in a narrow window */
+.en-vsnote{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);width:max-content;margin:0 0 12px;max-width:min(34em,92vw);box-sizing:border-box;z-index:4;text-align:center;font:500 12.5px/1.45 var(--sans);color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);border-radius:10px;padding:6px 12px;overflow-wrap:anywhere}  /* a card: it may lie over the wordmark in a narrow window */
 .en-vsnote[hidden]{display:none}
 .en-vsnote.bad{color:var(--bad);border-color:var(--bad)}
 /* 1.7.38 (F1 U2): a phone-wide window: the pill and the list are tall, so the wordmark sits at the top, above them, not in the middle where the pill covered it */
 @media (max-width:640px){.en-stage{justify-content:flex-start;padding-top:min(15vh,110px);padding-bottom:0}.en-foot{max-height:calc(100vh - 215px);overflow-y:auto;overscroll-behavior:contain}}  /* a low window: the list scrolls under the wordmark, it never rises over it */
-
-.en-chk-l .en-path{font-family:var(--mono)}  /* a path in a word of the list keeps the monospace face (1.7.38, F3) */

@@ -337,13 +337,6 @@
   const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, opened: 0, ready: false, restart: null, restarting: false, fail: ""};
   const OPENED_FOR = 120000;  // ms in which a VS Code that was just opened is waited for, not blamed
   const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
-  // The word at the right of a row: serif like the rest; a path in it (the folder of the repositories) keeps the monospace face, as every path does (1.7.38, F3).
-  const PATHISH = /^(?:~[\\/]|\/|[A-Za-z]:[\\/])\S*$/;
-  function setEm(node, text) {
-    if (node.dataset.k === text && node.textContent === text) return;
-    node.dataset.k = text;
-    node.replaceChildren(...text.split(" \u00b7 ").flatMap((part, index) => [index ? " \u00b7 " : "", PATHISH.test(part) ? h("span", {class: "en-path"}, part) : part]));
-  }
   const setClass = (node, cls) => { if (node.className !== cls) node.className = cls; };
   const slot = (i) => chk0.t0 && Date.now() - chk0.t0 >= FIRST + i * STEP;
   function build() {
@@ -492,7 +485,7 @@
       const em = li.querySelector("em");
       li.title = id === "connections" && c && c.rows && c.rows.length ? "" : view.tip || "";  // the hover table has the same sentence at its foot: not a second bubble beside it
       li.dataset.fix = !req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? "1" : "";
-      if (!req && c && c.names && c.names.length) { delete em.dataset.k; setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setEm(em, view.tag || (view.state === "check" ? "" : "—")); }
+      if (!req && c && c.names && c.names.length) { setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setText(em, view.tag || (view.state === "check" ? "" : "—")); }
       const p = li.querySelector(".m");
       const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), id === "vscode" ? [chk0.restart && chk0.restart.state, chk0.restart && chk0.restart.why, chk0.fail] : "", c && c.launch, root.lang]);
       let note = view.note, soft = view.soft;

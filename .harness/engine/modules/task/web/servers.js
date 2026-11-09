@@ -160,6 +160,7 @@ const SERVERS = (function () {
     function paint() {
       const last = env.results.get(key);
       const wait = waiting();
+      const slow = wait && (last ? last.kept_why === "no-answer" : row.untested_why === "no-answer");  // the test got no answer: saved all the same (1.7.38, C13 D3-1)
       const bad = fail() && !wait;
       const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : wait ? "ring" : row.signed ? "ok" : "ring")});  // `signed`: kept here, or a program's own sign-in that the last check got through (the Enter screen counts the same)
       let words;
@@ -170,7 +171,6 @@ const SERVERS = (function () {
         // Who it is signed in as (1.7.38): the account kept here; else the name the last test answered with; else, for a token, that a token is saved. A failed test of something not kept says it was not kept.
         const who = row.account || (last && last.state === "ok" && last.who) || ((row.saved || row.signed) && row.who) || (row.saved && row.identity === "token" ? t("connections.token.saved") : row.signed && !row.saved ? t("connections.tool.signed") : "");
         const failed = last && last.timeout ? t("connections.state.timeout", {seconds: last.timeout}) : t(row.saved ? "connections.state.testfailed" : "connections.state.notsaved");
-        const slow = wait && (last ? last.kept_why === "no-answer" : row.untested_why === "no-answer");  // the test got no answer: saved all the same (1.7.38, C13 D3-1)
         const note = wait ? t(slow ? (who ? "connections.state.untested.noanswer" : "connections.state.untested.noanswer.alone") : who ? "connections.state.untested" : "connections.state.untested.alone") : bad ? failed : "";  // "token saved · not tested yet": the name of the row already says saved
         words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, who + (note ? (who ? " · " : "") + note : ""));
       }

@@ -263,10 +263,12 @@ class SendCase(ServeCase):
         return code
 
     def approve_plan(self) -> str:
+        """The plan is approved as a person does in the terminal: these tests are about the button that sends "go on" after it. (An approval on the board wakes the agent by itself since 1.7.38, C13 RB-2: test_c13_d4.)"""
+        import io
+
         confirm_requirement(self.root, TASK)
         code = tasks.plan_digest(self.root, TASK)[:8]
-        status, data, _ = self.post("/api/act", {"action": "approve-plan", "code": code, "step": "act"})
-        self.assertEqual(status, 200, data)
+        task_ops.approve_plan(self.root, TASK, reader=lambda _asked: code, interactive=True, out=io.StringIO())
         return code
 
     def busy(self, turn: str = "t9") -> None:

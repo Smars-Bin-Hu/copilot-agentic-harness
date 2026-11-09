@@ -241,7 +241,10 @@ class DeliveryLeavesHeldCallsBehindTests(AcceptCase):
         self.assertEqual(desk["waiting_why"], "accept")
         self.assertTrue(desk["outbox"][0]["moved_on"], "the card stays, to dismiss or approve, as a call the agent went on without")
         self.assertIn("accept", [item["action"] for item in desk["actions"]])
-        self.assertEqual(self.board().act("accept", NAME, "act")["status"], "closed")
+        with self.assertRaises(CommandError):  # C13 FB-4: a call that still waits is listed first; the acceptance without the second yes is refused
+            self.board().act("accept", NAME, "act")
+        self.assertEqual(self.board().act("accept", NAME, "preview")["held"][0]["code"], code)
+        self.assertEqual(self.board().act("accept", NAME, "act", void=True)["status"], "closed")
 
     def test_a_call_the_agent_ended_its_turn_on_stays_what_it_was(self) -> None:
         from core import approvals, outbox

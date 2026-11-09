@@ -60,8 +60,8 @@ class SampleListsTests(unittest.TestCase):
 
     def test_the_type_is_valid_and_declares_its_lists(self) -> None:
         self.assertEqual(connections.type_problems(KIND), [])
-        self.assertEqual(KIND["input"]["text"], ["-Q"])
-        self.assertEqual(KIND["input"]["options"], ["-i"])
+        self.assertEqual(KIND["input"]["text"], ["-Q", "--query"])  # 1.7.38 (C13): go-sqlcmd's long options are read like the short ones
+        self.assertEqual(KIND["input"]["options"], ["-i", "--input-file"])
         self.assertNotIn("unjudged", KIND["input"])
         for entry in KIND["refuse"]:
             self.assertTrue(entry["reason"]["en"] and entry["reason"]["zh"], entry["pattern"])

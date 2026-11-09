@@ -424,6 +424,38 @@ def carried(root: Path, pid: Any, environ: Optional[Callable[[Any], Optional[Dic
     return {"state": UNSEEN, "by": "none", "missing": []}
 
 
+def windows_without_settings(root: Path, endpoints: Optional[Callable[[], List[Any]]] = None) -> List[Dict[str, Any]]:
+    """(1.7.38, C13 TA-Q2) For `harness doctor`: the VS Code processes that run now and are known to lack the settings of this copy: `[{pid, by, missing}]`. The same check the board makes (`carried`: macOS and Linux read
+    the environment of the editor's agent host by its pid; Windows compares when the board started VS Code with when that process was created); a VS Code the check cannot judge (`unseen`) is not listed. Empty
+    when this copy has nothing to carry, when no `code` command or no running VS Code is found, or when it cannot be asked. `endpoints` is for the tests. Never raises."""
+    want = needs(root)
+    if not want["folders"] and not want["bundle"]:
+        return []
+    try:
+        if endpoints is None:
+            from . import ahp
+
+            code = ahp.find_code()
+            if not code:
+                return []
+            found = ahp.parse_endpoints(ahp.run_code(code, ["agent", "endpoints"], timeout=10))
+        else:
+            found = endpoints()
+        out: List[Dict[str, Any]] = []
+        done: set = set()
+        for endpoint in found:
+            pid = getattr(endpoint, "pid", None)
+            if not pid or pid in done:
+                continue
+            done.add(pid)
+            verdict = carried(root, pid)
+            if verdict["state"] == MISSING:
+                out.append({"pid": pid, "by": verdict.get("by", ""), "missing": list(verdict.get("missing") or [])})
+        return out
+    except Exception:  # noqa: BLE001 - a look at the editor must never hurt a check
+        return []
+
+
 def vscode_running(run: Callable[..., Any] = subprocess.run, platform: str = sys.platform) -> bool:
     """Is a VS Code running on this computer? macOS and Linux: `pgrep`; Windows: one `tasklist`. A start that finds one running gives it no environment."""
     try:

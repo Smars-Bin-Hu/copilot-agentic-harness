@@ -10,20 +10,23 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 import support  # noqa: F401 - the engine on sys.path
-from support import GIT, REPO, HarnessTestCase, make_repo, pre_tool, run_git, use_packs
+from support import GIT, REPO, HarnessTestCase, make_repo, pre_tool, put_type, run_git, use_packs
 
 from core import approvals, company, config, connections, messages, outbox, pinfiles, readyitems, toolpacks
 from modules.gate import external
-from modules.task import accept, boardserve, cmdview, setupjob, taskdesk, task as task_ops
+from modules.task import accept, boardserve, cmdview, companyview, ready as ready_module, setupjob, taskdesk, task as task_ops
 from modules.task.common import CommandError
 from taskcase import NAME, SESSION, TASK
 from test_accept import AcceptCase
 from test_approval_wake import FakeLink as WakeLink
+from test_connections import KIND, ConnectionsCase
 from test_gate_lists import SERVER, ListedCase
 
 import doctor
+from core import launchenv
 
 
 class BrokenPackTests(ListedCase):
@@ -536,6 +539,207 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.board.act("approve-plan", NAME, "preview", with_req=True)
         self.assertEqual(self.link.sent, [])
         self.assertEqual(self.waiting_why(), "stopped", "a preview decides nothing")
+
+
+class TestWithNoAnswerKeepsTheSignInTests(ConnectionsCase):
+    """D3-1: a sign-in test that times out counts as not reaching the server: the sign-in is saved all the same, and the row says "saved, not tested yet: no answer"."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.board = boardserve.Board(self.root, False, 8794, [])
+        self.addCleanup(lambda: self.board.link.stop() if hasattr(self.board.link, "stop") else None)
+
+    def typed(self, password: str = "right") -> dict:
+        with mock.patch.object(connections, "run_with", return_value=(None, "no answer in 15 s")):
+            return self.board.servers({"step": "test", "alias": "db-dev", "account": "alice", "password": password, "keep": True})
+
+    def row(self) -> dict:
+        return next(item for item in self.board.servers({"step": "list"})["connections"] if item["alias"] == "db-dev")
+
+    def test_the_sign_in_is_saved_and_marked_no_answer(self) -> None:
+        from core import reach
+
+        found = self.typed()
+        self.assertEqual((found["state"], found["kept"], found["kept_why"]), ("down", True, "no-answer"))
+        self.assertEqual(connections.read_env(self.root)["HARNESS_CONNECTION_DB_DEV_ACCOUNT"], "alice")
+        line = reach.read(self.root)["db-dev:dev"]
+        self.assertEqual((line["state"], line["why"]), (reach.UNKNOWN, connections.UNTESTED_SLOW))
+        row = self.row()
+        self.assertEqual((row["saved"], row["untested"], row["untested_why"]), (True, True, "no-answer"))
+
+    def test_a_timeout_does_not_make_the_next_ordinary_row_wrong(self) -> None:
+        self.typed()
+        from core import readyitems
+
+        self.assertEqual({one["name"]: one["state"] for one in readyitems.connection_states(self.root)}["db-dev"], "untested", "waiting, not a problem of the Enter screen")
+
+    def test_a_wrong_sign_in_is_still_not_kept_and_the_page_has_the_words(self) -> None:
+        found = self.board.servers({"step": "test", "alias": "db-dev", "account": "alice", "password": "wrong", "keep": True})
+        self.assertFalse(found["kept"])
+        text = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "servers.js").read_text(encoding="utf-8")
+        for key in ("connections.state.untested.noanswer", "connections.state.untested.noanswer.alone", "connections.untested.noanswer.tip"):
+            self.assertIn(key, text)
+
+
+class IdentityNoteTests(ConnectionsCase):
+    """D3-3: an identity that must be in the environment of VS Code is not in Required; while a VS Code is connected and was not started with it, a yellow note stands on the connections row (and its row of the hover table)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        self.up = {"ready": True, "bound": 1, "unbound": 0, "why": "ok"}
+
+    def check(self, status=None):
+        from test_board_enter import StubLink, clean
+
+        return ready_module.Ready(self.root, StubLink(status or self.up), clean)
+
+    def note(self, check) -> list:
+        found = check.optional()
+        entry = next(item for item in found["items"] if item["key"] == "connections")
+        return [problem for problem in entry["problems"] if problem["key"] == "identity"]
+
+    def test_a_saved_identity_that_the_window_does_not_carry_is_a_yellow_note_not_a_required_line(self) -> None:
+        self.assertEqual(connections.identity_lacks(self.root), ["db-dev"])
+        check = self.check()
+        found = self.note(check)
+        self.assertEqual(len(found), 1)
+        self.assertIn("db-dev", found[0]["short"])
+        self.assertIn(messages.text("ready.vs.identities"), found[0]["short"])
+        self.assertNotIn("identity", [problem["key"] for problem in readyitems.connections_counted(self.root)["problems"]], "the core row has no such note: the board adds it while a VS Code is connected")
+        self.assertEqual([item for item in check.required_problems([], {"kind": "open", "label": "x"}) if item["key"] == "identity"], [])
+
+    def test_with_no_vscode_connected_the_vscode_line_speaks_and_there_is_no_note(self) -> None:
+        self.assertEqual(self.note(self.check({"ready": False, "why": "none"})), [])
+
+    def test_a_window_the_board_started_with_it_or_that_goes_through_the_wrapper_has_no_note(self) -> None:
+        state = self.root / connections.STATE_FILE
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps({"direct": ["db-dev"], "wrap": []}), encoding="utf-8")
+        self.assertEqual((connections.identity_lacks(self.root), self.note(self.check())), ([], []))
+        state.write_text(json.dumps({"direct": [], "wrap": ["db-dev"]}), encoding="utf-8")
+        self.assertEqual((connections.identity_lacks(self.root), self.note(self.check())), ([], []))
+
+    def test_nothing_saved_means_no_note_and_a_program_that_reads_its_own_sign_in_needs_none(self) -> None:
+        connections.forget(self.root, "db-dev")
+        self.assertEqual(connections.identity_lacks(self.root), [])
+        put_type(self.root, dict(KIND, type="selfsign", label="Self", cli=["selfsign"], match="--conn\\s+{host}", test="selfsign --conn {host}", auth={"signin": {"identity": "tool", "label": "az", "login": "selfsign login"}}))
+        self.company({"s-one": {"type": "selfsign", "env": "dev", "auth": "signin", "host": "h", "port": "1"}})
+        self.assertEqual(connections.identity_lacks(self.root), [])
+
+    def test_the_hover_table_row_carries_the_note_only_for_that_connection(self) -> None:
+        from core import reach
+
+        check = self.check()
+        systems = {"db-dev": {"toolpack": "testpack"}, "db-ist": {"toolpack": "testpack"}}
+        raw = [{"system": "db-dev", "env": "dev", "state": reach.UNKNOWN, "at": ""}, {"system": "db-ist", "env": "ist", "state": reach.UNKNOWN, "at": ""}]
+        rows = check.table(systems, raw)["rows"]
+        self.assertTrue(next(row for row in rows if row["system"] == "db-dev")["note"])
+        self.assertNotIn("note", next(row for row in rows if row["system"] == "db-ist"))
+
+
+class DoctorVsCodeSettingsTests(HarnessTestCase):
+    """TA-Q2: `harness doctor` warns when a VS Code that runs lacks this copy's settings, says what is missing and to use Restart VS Code on the board. The same check the board makes."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.root / ".harness" / "tools-bin").mkdir(parents=True)
+        self.endpoints = [SimpleNamespace(pid=4242), SimpleNamespace(pid=4242), SimpleNamespace(pid=77)]
+
+    def want(self):
+        """This copy has one tool folder to carry (`tool_folders` is what both `needs` and `lacking` read)."""
+        return mock.patch.object(launchenv, "tool_folders", return_value=[str(self.root / "pack" / "bin")])
+
+    def test_a_window_without_the_tool_folder_is_listed_once_with_what_it_lacks(self) -> None:
+        env = lambda pid: {"PATH": "/usr/bin"} if pid == 4242 else {"PATH": str(self.root / "pack" / "bin")}  # noqa: E731
+        with self.want(), mock.patch.object(launchenv, "host_environ", side_effect=env):
+            found = launchenv.windows_without_settings(self.root, endpoints=lambda: self.endpoints)
+        self.assertEqual([(one["pid"], one["by"]) for one in found], [(4242, "env")])
+        self.assertTrue(found[0]["missing"][0].startswith("PATH "))
+
+    def test_a_window_that_cannot_be_judged_or_a_copy_with_nothing_to_carry_says_nothing(self) -> None:
+        with self.want(), mock.patch.object(launchenv, "host_environ", return_value=None), mock.patch.object(launchenv, "process_started", return_value=None):
+            self.assertEqual(launchenv.windows_without_settings(self.root, endpoints=lambda: self.endpoints), [])
+        self.assertEqual(launchenv.windows_without_settings(self.root, endpoints=lambda: self.endpoints), [], "no settings to carry: any VS Code will do")
+        with self.want():
+            self.assertEqual(launchenv.windows_without_settings(self.root, endpoints=lambda: (_ for _ in ()).throw(RuntimeError("no host"))), [])
+
+    def test_doctor_gives_one_warning_with_the_words_and_the_way_out(self) -> None:
+        report = doctor.Report()
+        found = [{"pid": 4242, "by": "env", "missing": [f"PATH {self.root / 'pack' / 'bin'}", "REQUESTS_CA_BUNDLE"]}]
+        with mock.patch.object(launchenv, "windows_without_settings", return_value=found):
+            doctor.check_vscode_settings(report, self.root)
+        self.assertEqual(len(report.lines), 1, report.lines)
+        self.assertTrue(report.lines[0].startswith("[WARN]"))
+        for word in ("pack/bin", messages.text("ready.vs.lacks.bundle"), "harness task board", messages.text("ready.vs.restart")):
+            self.assertIn(word, report.lines[0])
+        self.assertEqual(report.errors, 0)
+
+    def test_nothing_is_said_when_all_is_well_or_when_the_board_runs_doctor_itself(self) -> None:
+        report = doctor.Report()
+        with mock.patch.object(launchenv, "windows_without_settings", return_value=[]):
+            doctor.check_vscode_settings(report, self.root)
+        with mock.patch.object(launchenv, "windows_without_settings", return_value=[{"pid": 1, "by": "env", "missing": ["x"]}]), mock.patch.dict("os.environ", {doctor.TOPICS: "1"}):
+            doctor.check_vscode_settings(report, self.root)
+        self.assertEqual(report.lines, [])
+
+
+class LongOptionsAndReadCountTests(HarnessTestCase):
+    """Leftovers of the gate work: (a) the company view counts the `reads` list of a type with lists; (b) go-sqlcmd's long options are read like the short ones."""
+
+    def test_the_read_count_of_a_type_with_lists_is_its_pass_list(self) -> None:
+        kinds = [{"type": "sqlserver", "verbs": [{"pattern": "\\b(?:select|with)\\b", "verb": "read"}], "reads": ["SELECT .*", "USE \\w+", "PRINT .*"]}]
+        self.assertEqual(companyview._reads({}, kinds), 3)
+        plain = [{"type": "t", "verbs": [{"pattern": "\\b(?:get|list)\\b", "verb": "read"}]}]
+        self.assertEqual(companyview._reads({}, plain), 2, "a type with no lists is counted by its read verbs, as before")
+        self.assertEqual(companyview._reads({}, kinds + plain), 5)
+        self.assertEqual(companyview._reads({"commands": ["get", "list", "put"]}, kinds + [dict(plain[0], verbs=[{"pattern": "\\bput\\b", "verb": "write"}])]), 3 + 2)
+
+    def test_the_shipped_sample_counts_its_pass_list(self) -> None:
+        kind = json.loads((REPO / ".harness" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json").read_text(encoding="utf-8"))
+        self.assertEqual(companyview._reads({}, [kind]), len(kind["reads"]))
+        self.assertGreater(len(kind["reads"]), 5)
+
+
+class SqlcmdLongOptionsGateTests(ListedCase):
+    """13(b): `sqlcmd --help` on this machine (go-sqlcmd 1.10) has the long options `--server`, `--input-file`, `--query`, `--initial-query`, `--output-file`, `--trace-file`, `--database-name`. The sample type reads them like the short ones."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        sample = json.loads((REPO / ".harness" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json").read_text(encoding="utf-8"))  # the sample as shipped: ListedCase's own lists are the test's
+        path = self.root / ".harness" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
+        path.write_text(json.dumps(sample), encoding="utf-8")
+        self.long = "sqlcmd --server localhost,14332 -C --database-name AcmeDW"
+
+    def test_the_type_names_the_long_options(self) -> None:
+        sample = json.loads((REPO / ".harness" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json").read_text(encoding="utf-8"))
+        self.assertEqual((sample["input"]["options"], sample["input"]["text"]), (["-i", "--input-file"], ["-Q", "--query"]))
+        self.assertEqual(connections.type_problems(sample), [])
+
+    def test_a_long_server_names_the_connection_and_a_long_query_is_judged_as_a_text(self) -> None:
+        self.runs(f'{self.long} --query "SELECT 1"')
+        self.runs(f'{self.long} --query="SELECT 1"')
+        self.refused(f'{self.long} --query "DROP TABLE t"')
+        self.refused(f'{self.long} --query="DROP TABLE t"')
+        reason = self.held(f'{self.long} --query "SELECT 1; UPDATE t SET a = 1"')
+        self.assertIn("UPDATE", reason)
+
+    def test_a_long_input_file_is_read_like_dash_i(self) -> None:
+        self.refused(f"{self.long} --input-file {self.script('drop table t;')}")
+        self.runs(f"{self.long} --input-file {self.script('select 1;')}")
+        self.runs(f"{self.long} --input-file={self.script('select 2;', 'y.sql')}")
+
+    def test_the_long_options_that_write_a_file_or_go_on_reading_ask(self) -> None:
+        for option in ("--output-file out.txt", "--output-file=out.txt", "--initial-query \"select 1\"", "--trace-file t.log"):
+            self.held(f'{self.long} --query "SELECT 1" {option}')
+
+    def test_the_card_shows_the_server_and_the_statement_of_a_long_query(self) -> None:
+        self.held(f'{self.long} --query "INSERT INTO t VALUES (1)"')
+        card = taskdesk.outbox_view(self.root, TASK)[0]
+        self.assertEqual(card["system"], "acmedw-dev")
+        self.assertEqual(card["facts"]["server"], "localhost")
+        self.assertEqual(card["facts"]["database"], "AcmeDW")
+        self.assertIn("INSERT INTO t", card["body"]["text"])
 
 
 if __name__ == "__main__":

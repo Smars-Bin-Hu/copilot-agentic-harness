@@ -115,11 +115,13 @@ def _read_names(manifest: Dict[str, Any], kinds: List[Dict[str, Any]]) -> List[s
 def _reads(manifest: Dict[str, Any], kinds: List[Dict[str, Any]]) -> int:
     """How many commands the agent may run without asking. A pack that lists its `commands`: those that no write, exec or destroy verb names (ado: 37 - 6 - 4 = 27).
     One that does not: the command words of its read verbs."""
+    listed = sum(len([one for one in kind["reads"] if isinstance(one, str) and one]) for kind in kinds if isinstance(kind.get("reads"), list) and kind["reads"])  # 1.7.38: a type with lists (`reads`): its pass list is what the agent may do, a pattern each
+    kinds = [kind for kind in kinds if not (isinstance(kind.get("reads"), list) and kind["reads"])]  # the verbs of such a type no longer decide whether a call passes: they are not read words
     commands = [str(one) for one in manifest.get("commands") or [] if isinstance(one, str)]
     if commands:
         held = {word for kind in kinds for entry in kind.get("verbs") or [] if isinstance(entry, dict) and entry.get("verb") in ("write", "exec", "destroy") for word in _words(str(entry.get("pattern") or ""))}
-        return len([one for one in commands if one not in held])
-    return sum(max(1, len(_words(str(entry.get("pattern") or "")))) for kind in kinds for entry in kind.get("verbs") or [] if isinstance(entry, dict) and entry.get("verb") == "read")
+        return listed + len([one for one in commands if one not in held])
+    return listed + sum(max(1, len(_words(str(entry.get("pattern") or "")))) for kind in kinds for entry in kind.get("verbs") or [] if isinstance(entry, dict) and entry.get("verb") == "read")
 
 
 def tools(root: Path, lang: str) -> List[Dict[str, Any]]:

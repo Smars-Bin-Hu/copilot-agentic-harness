@@ -387,9 +387,10 @@ class BoardChecksItself(ConnectionsCase):
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
         found = self.line(self.ready())
         self.assertEqual(found["names"], [{"name": "db-dev", "state": "untested", "saved": True}, {"name": "db-ist", "state": "none", "saved": False}])  # saved, not tested yet: waiting; nothing saved: not signed in
-        self.assertEqual([problem["key"] for problem in found["problems"]], ["signin"])  # only db-ist is a problem
-        self.assertIn("db-ist", found["problems"][0]["text"])
-        self.assertNotIn("db-dev", found["problems"][0]["text"])
+        problems = [problem for problem in found["problems"] if problem["key"] != "identity"]  # 1.7.38 (C13 D3-3): the yellow note of an identity VS Code does not carry has its own tests
+        self.assertEqual([problem["key"] for problem in problems], ["signin"])  # only db-ist is a problem
+        self.assertIn("db-ist", problems[0]["text"])
+        self.assertNotIn("db-dev", problems[0]["text"])
         connections.probe_all(self.root)  # db-ist has no identity kept here: left to the hook
         found = self.line(self.ready())
         self.assertEqual(found["names"], [{"name": "db-dev", "state": "ok", "saved": True}, {"name": "db-ist", "state": "none", "saved": False}])
@@ -400,7 +401,7 @@ class BoardChecksItself(ConnectionsCase):
         connections.probe_all(self.root)
         found = self.line(self.ready())
         self.assertEqual(found["names"][0]["state"], "down")  # saved, and the last test failed
-        self.assertEqual([problem["key"] for problem in found["problems"]], ["signin", "down"])
+        self.assertEqual([problem["key"] for problem in found["problems"] if problem["key"] != "identity"], ["signin", "down"])
         self.assertEqual(self.ready().answer(True)["optional"]["identities"], 0)
 
     def test_the_table_follows_the_order_of_the_window_and_says_not_signed_in_for_a_connection_with_no_sign_in(self) -> None:
@@ -427,7 +428,7 @@ class BoardChecksItself(ConnectionsCase):
         self.assertEqual([one["name"] for one in found["names"]], ["db-dev"])
         self.assertEqual([row["system"] for row in found["rows"]], ["db-dev"])
         self.assertEqual(found["off"]["text"], messages.text("ready.conn.off.one", names="old-a"))
-        self.assertEqual(found["problems"], [])  # the one connection that counts is signed in
+        self.assertEqual([problem for problem in found["problems"] if problem["key"] != "identity"], [])  # the one connection that counts is signed in
 
     def test_a_connection_without_an_environment_has_an_empty_env_cell_and_a_system_with_two_states_is_partly(self) -> None:
         from core import reach

@@ -284,6 +284,13 @@ def connections_item(root: Path) -> Dict[str, Any]:
     return out
 
 
+def identity_problem(lacks: List[str]) -> Dict[str, Any]:
+    """(1.7.38, C13 D3-3) The yellow note of the connections row: VS Code runs and was not started with the identity of these connections. Not a line of Required. The agent reaches them with `harness as`, and
+    Restart VS Code with identities carries them. The board adds it (`ready.Ready.optional`) only while a VS Code is connected: with none, the VS Code line says what to do."""
+    return {"key": "identity", "text": say("ready.p.identity.one" if len(lacks) == 1 else "ready.p.identity", n=len(lacks), names=names_text(lacks)), "why": say("ready.p.identity.why"),
+            "short": say("ready.p.identity.short.one" if len(lacks) == 1 else "ready.p.identity.short", n=len(lacks), names=names_text(lacks)), "fix": {}, "names": lacks}
+
+
 def connections_counted(root: Path) -> Dict[str, Any]:
     found = connection_states(root)
     problems: List[Dict[str, Any]] = []

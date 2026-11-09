@@ -19,7 +19,7 @@
       "optional": true
     }
   },
-  "match": "-S\\s+\"?{host}(?:,{port})?(?![\\w.,-])",
+  "match": "(?:-S|--server)(?:\\s+|=)\"?{host}(?:,{port})?(?![\\w.,-])",
   "auth": {
     "windows": {
       "label": "Windows account (DOMAIN\\id)",
@@ -58,7 +58,7 @@
       "verb": "exec"
     },
     {
-      "pattern": "(?:^|\\s)-(?:q|o)(?:\\s|$)|(?:^|\\s)-o\\S|\\bSQLCMDINI\\b",
+      "pattern": "(?:^|\\s)-(?:q|o)(?:\\s|$)|(?:^|\\s)-o\\S|\\bSQLCMDINI\\b|(?:^|\\s)--(?:initial-query|output-file|unicode-output-file|trace-file)(?:\\s|=|$)",
       "verb": "write"
     },
     {
@@ -145,16 +145,18 @@
   ],
   "input": {
     "options": [
-      "-i"
+      "-i",
+      "--input-file"
     ],
     "include": "^\\s*:r\\s+(?:\"([^\"\\r\\n]+)\"|(\\S+))",
     "text": [
-      "-Q"
+      "-Q",
+      "--query"
     ]
   },
   "body": [
     {
-      "pattern": "(?:^|\\s)-[Qq]\\s+\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "pattern": "(?:^|\\s)(?:-[Qq]|--query|--initial-query)(?:\\s+|=)\"((?:[^\"\\\\]|\\\\.)*)\"",
       "from": "text",
       "raw": true,
       "label": {
@@ -163,7 +165,7 @@
       }
     },
     {
-      "pattern": "(?:^|\\s)-[Qq]\\s+'([^']*)'",
+      "pattern": "(?:^|\\s)(?:-[Qq]|--query|--initial-query)(?:\\s+|=)'([^']*)'",
       "from": "text",
       "raw": true,
       "label": {
@@ -174,9 +176,9 @@
   ],
   "target": "\\b(?:from|into|update|join)\\s+([\\w.\\[\\]]+)",
   "show": {
-    "server": "-S\\s+\"?([^\\s,\"]+)",
-    "port": "-S\\s+\"?[^\\s,\"]+,(\\d+)",
-    "database": "-d\\s+(\\S+)"
+    "server": "(?:-S|--server)(?:\\s+|=)\"?([^\\s,\"]+)",
+    "port": "(?:-S|--server)(?:\\s+|=)\"?[^\\s,\"]+,(\\d+)",
+    "database": "(?:-d|--database-name)(?:\\s+|=)(\\S+)"
   },
   "open": {
     "dev": "all",

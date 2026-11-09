@@ -644,6 +644,24 @@ def check_toolpacks(report: Report, root: Path) -> None:
         report.warn(say("doctor.company.failed", error=error))
 
 
+def check_vscode_settings(report: Report, root: Path) -> None:
+    """(1.7.38, C13 TA-Q2) A VS Code that runs without the settings of this copy (the tool folders, the CA bundle): a warning that says what is missing and where to mend it. The board makes the same check itself
+    (its VS Code line), so the board's own run of doctor leaves it out. A VS Code that cannot be judged says nothing."""
+    if os.environ.get(TOPICS):
+        return
+    try:
+        from core import launchenv
+
+        found = launchenv.windows_without_settings(root)
+        if found:
+            from modules.task import ready
+
+            lost = list(dict.fromkeys(item for one in found for item in one["missing"]))
+            report.warn(say("doctor.vscode.settings", missing=ready.missing_words(lost) or "-"))
+    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
+        report.warn(say("doctor.company.failed", error=error))
+
+
 def reach_words(code: str, said: str = "") -> str:
     """The word a probe leaves (`no-answer`, `identity`, `exit-<n>`) as a person reads it; anything else is kept as it is. `said`: what the probe printed when nothing answered."""
     if code == "no-answer":
@@ -903,6 +921,7 @@ def run(root: Path) -> int:
     check_company(report, root)
     report.topic = ""
     check_toolpacks(report, root)
+    check_vscode_settings(report, root)
     report.topic = "company"
     check_standards(report, root)
     report.topic = ""

@@ -208,6 +208,7 @@ def test_seconds(kind: Dict[str, Any], server: Optional[Dict[str, Any]] = None) 
 
 
 UNTESTED = "untested"  # the `why` of a `reach` line: the sign-in is kept and no test has got through to the system yet
+UNTESTED_SLOW = "untested-noanswer"  # (1.7.38, C13 D3-1) the same, and the test got no answer in time: the sign-in is kept all the same
 
 
 def env_key(alias: str, field: str) -> str:
@@ -814,18 +815,43 @@ def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, 
 def keep_untested(root: Path, alias: str, found: Dict[str, Any], given: Dict[str, str]) -> bool:
     """A sign-in whose test never reached the system is kept, marked "not tested yet" (1.7.38). It broke at the program or at the address: nothing says the account is wrong, and the person would
     have to type it again after fixing a certificate or a proxy. A sign-in that broke at the sign-in or at the account access is not kept (it is wrong), nor one that broke for a reason no step
-    can name (a timeout). Nothing typed (a program keeps its own sign-in) means nothing to keep. True when it was kept."""
+    can name. 1.7.38 (C13 D3-1): a test that got no answer in time counts as not reaching the server: nothing says the account is wrong, so it is kept too, and the row says "no answer". Nothing typed (a
+    program keeps its own sign-in) means nothing to keep. True when it was kept."""
     from . import reach
 
     server = listed(root).get(alias)
     kind = types(root).get(str((server or {}).get("type")))
-    if not server or not kind or found.get("state") in ("ok", "mcp") or (found.get("layers") or {}).get("broken") not in ("program", "address"):
+    slow = bool(found.get("timeout"))  # the program was still running at the limit (a `down` answer the program printed itself is the address's: the layers say so)
+    if not server or not kind or found.get("state") in ("ok", "mcp") or ((found.get("layers") or {}).get("broken") not in ("program", "address") and not slow):
         return False
     if delivery(kind, server)["identity"] == "tool" or not given_identity(kind, server, given):
         return False
     save(root, alias, given)
-    reach.record(root, f"{alias}:{server.get('env', '')}", reach.UNKNOWN, UNTESTED)
+    reach.record(root, f"{alias}:{server.get('env', '')}", reach.UNKNOWN, UNTESTED_SLOW if slow else UNTESTED)
     return True
+
+
+def identity_lacks(root: Path) -> List[str]:
+    """(1.7.38, C13 D3-3) The connections whose identity must be in the environment of the VS Code window (variables, or a Windows account the window holds) and that the window was not started with: it is
+    saved here, and the last start from the board did not carry it (`direct`) nor route it through `harness as` (`wrap`). Such a connection is no reason for VS Code to be "wrong": the agent reaches it
+    with `harness as`, and Restart with identities carries it. A connection whose program reads its own sign-in or token (`ado`: a `tool` identity, or a token the program reads itself) needs nothing from the window and
+    is not listed. Names, in the order of the list."""
+    opened = state(root)
+    held = set(opened.get("direct") or []) | set(opened.get("wrap") or [])
+    known, env = types(root), read_env(root)
+    out: List[str] = []
+    for alias, server in listed(root).items():
+        kind = known.get(str(server.get("type")))
+        if not kind or alias in held or kind.get("via") == "mcp" or not kind.get("cli") or type_problems(kind):
+            continue
+        how = delivery(kind, server)["identity"]
+        identity = identity_of(env, alias, kind, server)
+        if how == "tool" or not identity:
+            continue
+        if how != "netonly" and not variables(kind, server, identity):
+            continue
+        out.append(alias)
+    return out
 
 
 def forget_tool(root: Path, program: str) -> None:

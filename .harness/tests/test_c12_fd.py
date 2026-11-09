@@ -242,7 +242,7 @@ class InputDeclarationTests(unittest.TestCase):
 
     def test_the_sample_type_declares_it_and_its_destroy_rule_comes_first(self) -> None:
         kind = json.loads((Path(__file__).resolve().parents[1] / "toolpacks" / "sqlserver" / "types" / "sqlserver.json").read_text(encoding="utf-8"))
-        self.assertEqual(kind["input"]["options"], ["-i"])
+        self.assertEqual(kind["input"]["options"], ["-i", "--input-file"])
         self.assertEqual(connections.type_problems(kind), [])
         self.assertEqual(kind["verbs"][0]["verb"], "destroy", "a drop after an update in the same text is still a drop")
         import re

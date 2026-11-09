@@ -286,6 +286,13 @@ class Ready:
 
     # --- the optional items ----------------------------------------------------------------------------------------
 
+    def identity_lacks(self) -> List[str]:
+        """(1.7.38, C13 D3-3) The connections whose identity a VS Code that is connected now was not started with (`core.connections.identity_lacks`); none while no VS Code is connected. Never raises."""
+        try:
+            return conn_core.identity_lacks(self.root) if self.vscode().get("state") == "ok" else []
+        except Exception:  # noqa: BLE001 - a note must not break the screen
+            return []
+
     def table(self, systems: Dict[str, Any], raw: List[Dict[str, Any]]) -> Dict[str, Any]:
         """For the hover of the connections row (1.7.19): `names`, a state for each system (ok, down, unknown, partly), and `rows` for the table, one per system and environment.
         The environment of a system that has none (`none`, `any`) is empty."""
@@ -302,6 +309,7 @@ class Ready:
             loose = set(conn_core.unsigned(self.root)) | {one["name"] for one in readyitems.connection_states(self.root) if one["state"] == "none"}  # a connection with no sign-in kept here: its row says so, as the name with its dot did (C12 N7), and the yellow line counts the same ones (RC-1)
         except Exception:  # noqa: BLE001 - see above
             loose = set()
+        lacks = set(self.identity_lacks())  # 1.7.38 (C13 D3-3): VS Code was not started with the identity of these: a yellow note on the row of the connection
         label_of = lambda system: str((kinds.get(str((listed.get(system) or {}).get("type") or "")) or {}).get("label") or "").casefold()  # noqa: E731
         # The order of the Connections window: by the label of the kind, then environment, then name (`servers.js`); the table was ordered by the name of the pack, so the two lists differed (C12 N6)
         raw = sorted(raw, key=lambda item: (not label_of(item["system"]), label_of(item["system"]), not pack_of(item["system"]), pack_of(item["system"]), first_env(item["system"]), item["system"], order.get(item["env"], -1)))
@@ -321,7 +329,7 @@ class Ready:
                 elif system in loose:
                     why = messages.text("board.enter.cs.none")
                 rows.append({"system": system, "env": "" if item["env"] in ("none", "any") else item["env"], "state": kind(item["state"]), "reason": short(why), "at": item.get("at", ""),
-                             "pack": str((systems.get(system) or {}).get("toolpack") or "")})
+                             "pack": str((systems.get(system) or {}).get("toolpack") or ""), **({"note": messages.text("board.enter.sys.identity")} if system in lacks else {})})
             states = {row["state"] for row in rows if row["system"] == system}
             names.append({"name": system, "state": "partly" if len(states) > 1 else next(iter(states))})
         return {"names": names, "rows": rows, "checking": self.checker.busy()}
@@ -385,6 +393,12 @@ class Ready:
                                "fix": {"to": "term", "run": "harness doctor", "label": messages.text("ready.fix.doctor")}}
                     entry["problems"] = [*entry["problems"], problem]
                     entry["state"] = "yellow"
+        lacks = self.identity_lacks()
+        if lacks:  # not in Required: a yellow note on the connections row (1.7.38, C13 D3-3)
+            for entry in listed:
+                if entry["key"] == "connections":
+                    entry["problems"] = [*entry["problems"], readyitems.identity_problem(lacks)]
+                    entry["state"] = "yellow" if entry.get("state") != "red" else "red"
         problems = readyitems.problems(listed)
         return {"items": listed, "problems": problems, "count": len(problems), "kb": any(entry["key"] == "kb" and entry.get("found") for entry in listed), "identities": base["identities"]}
 

@@ -72,7 +72,7 @@ When a call is held or refused, the agent is told to tell you what the call is f
 
 ## Two checkpoints
 
-**1. Before a command runs (now).** The gate reads the command line. One rule covers the many ways to write a line: every outside program the line names must be accounted for. Either it is the program of a call the gate judged, or it is only an argument of a program that reads or copies files (`grep`, `cat`, `cp`, ...). Anything else is held, with the reason. A script the line runs is read too.
+**1. Before a command runs (now).** The gate reads the command line. One rule covers the many ways to write a line: every outside program the line names must be accounted for. Either it is the program of a call the gate judged, or it is only an argument of a program that reads or copies files (`grep`, `cat`, `cp`, ...). Anything else is held, with the reason. A script the line runs is read too. A rule file that is faulty does not open the gate: when a tool pack's type file or `rules.json` cannot be read or is not valid, every call of that pack's programs is held, and the card, `harness doctor` and the Tool packs row of the Enter screen say which file is wrong.
 
 What the line cannot show: a build or test tool, a scheduled job or a git hook can start a script that writes, and the line never names the program. The list is in the [tool pack protocol](../.harness/contracts/toolpack/README.md#what-the-gate-reads-and-what-it-cannot-1725).
 

@@ -3868,5 +3868,7 @@
   "desk.trace.outcome.ran.at": "The agent ran it at {at}.",
   "desk.trace.outcome.waiting": "not run yet",
   "desk.trace.outcome.expired": "not run: the approval ran out",
-  "desk.trace.outcome.changed": "the agent came back with another command: it needs a new approval"
+  "desk.trace.outcome.changed": "the agent came back with another command: it needs a new approval",
+  "event.approve-call": "the person approved a held call",
+  "event.approve-call.batch": "the person approved {n} held calls together"
 }

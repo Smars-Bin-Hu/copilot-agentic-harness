@@ -375,9 +375,12 @@ def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         detail = taskinsight.SESSION_IN_DETAIL.sub(lambda found: say("task.note.session", session_id=found.group(1)), str(event.get("detail", "")))
         mark, key = standout(what, detail)
-        if what in ("allow-env", "link", "test-runner"):
-            key, detail = common.plain_event(what, detail)
-        label = say(key) if key in messages.table(messages.language()) else what
+        values: Dict[str, Any] = {}
+        if what in ("allow-env", "link", "test-runner", "approve-call"):
+            facts = event.get("facts") if isinstance(event.get("facts"), dict) else {}
+            key, detail = common.plain_event(what, detail, facts)
+            values = {"n": int(facts.get("batch") or 0)}
+        label = say(key, **values) if key in messages.table(messages.language()) else what
         out.append({"at": event.get("at", ""), "round": event.get("round", 1), "what": what, "label": label, "detail": detail, "via": "", "mark": mark})
     out.reverse()
     return out

@@ -558,6 +558,20 @@ class BatchBoardTests(BatchCase):
         with_files = next(event for event in events if event["facts"]["code"] == scripted)
         self.assertTrue(with_files["facts"]["files"], "the files it was approved with, and their fingerprints")
 
+    def test_the_task_record_and_the_report_say_an_approval_in_words_with_only_the_code_as_detail(self) -> None:
+        self.new(kind="rca")
+        a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        self.stop()
+        board = self.board()
+        board.batch({"step": "act", "codes": [a, b], "code": board.batch({"step": "preview", "codes": [a, b]})["code"], "seen": {}})
+        lines = [line for line in taskdesk.history(self.data()) if line["what"] == "approve-call"]
+        self.assertEqual(sorted(line["detail"] for line in lines), sorted([a, b]))
+        self.assertEqual({line["label"] for line in lines}, {messages.text("event.approve-call.batch", n=2)})
+        text = task_report.render(self.root, TASK, self.data())
+        self.assertIn(messages.text("event.approve-call.batch", n=2), text)
+        self.assertNotIn("approve-call", text)
+        both_languages(self, "event.approve-call", "event.approve-call.batch")
+
     def test_another_board_gives_another_code_and_a_board_that_does_not_serve_approvals_refuses(self) -> None:
         self.new(kind="rca")
         a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')

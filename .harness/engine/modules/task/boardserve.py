@@ -700,7 +700,7 @@ class Board:
         if task:
             with task_ops.locked(self.root, task_ops.resolve(self.root, task)) as held:  # the record of the task: each call was approved, with the batch it was in and the files it was approved with
                 for call in calls:
-                    task_ops.note(held, "approve-call", f"{call['code']}: batch of {result['count']}", code=call["code"], batch=result["count"], files={key: str(value)[:12] for key, value in (call.get("files") or {}).items()}, system=call.get("system", ""), env=call.get("env", ""))
+                    task_ops.note(held, "approve-call", str(call["code"]), code=call["code"], batch=result["count"], files={key: str(value)[:12] for key, value in (call.get("files") or {}).items()}, system=call.get("system", ""), env=call.get("env", ""))
             noted(self.root, task, "approve-action")
             stood = [(code, outbox.agent_place(before[code])) for code in (call["code"] for call in calls) if code in before]
             self.after_decision(task, stood, messages.text("desk.outbox.tell.body", codes=", ".join(code for code, _place in stood)))
@@ -800,7 +800,7 @@ class Board:
         if action == "approve-action" and step == "act" and result.get("code"):  # the record of the task: this call was approved, alone, with the files it was approved with (F3 AP)
             try:
                 with task_ops.locked(self.root, task_ops.resolve(self.root, str(result.get("task") or task))) as held:
-                    task_ops.note(held, "approve-call", f"{result['code']}: alone", code=result["code"], batch=0, files={key: str(value)[:12] for key, value in (result.get("files") or {}).items()}, system=result.get("system", ""), env=result.get("env", ""))
+                    task_ops.note(held, "approve-call", str(result["code"]), code=result["code"], batch=0, files={key: str(value)[:12] for key, value in (result.get("files") or {}).items()}, system=result.get("system", ""), env=result.get("env", ""))
             except Exception:  # noqa: BLE001 - the call is approved; a missing line must not undo it in the person's eyes
                 pass
         noted(self.root, result.get("task") or task, action)

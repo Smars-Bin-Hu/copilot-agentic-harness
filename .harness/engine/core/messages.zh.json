@@ -3868,5 +3868,7 @@
   "desk.trace.outcome.ran.at": "agent 在 {at} 运行了它。",
   "desk.trace.outcome.waiting": "还没运行",
   "desk.trace.outcome.expired": "没运行：批准已过期",
-  "desk.trace.outcome.changed": "agent 换了条命令再来：要重新批准"
+  "desk.trace.outcome.changed": "agent 换了条命令再来：要重新批准",
+  "event.approve-call": "用户批准了一个被扣下的调用",
+  "event.approve-call.batch": "用户一起批准了 {n} 个被扣下的调用"
 }

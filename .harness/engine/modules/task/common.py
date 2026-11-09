@@ -399,9 +399,12 @@ def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
 PAIRED_EVENTS = re.compile(r"^(.+): (on|off|agent|person)$")  # the notes `allow-env`, `link` and `test-runner` write: a name, a colon and a state
 
 
-def plain_event(what: str, detail: str) -> Tuple[str, str]:
+def plain_event(what: str, detail: str, facts: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
     """The key of the line of the Task Record and its detail in words a person reads (1.7.38, F3 U5): `allow-env`, `link` and `test-runner` wrote `name: state`, and the page showed that with the internal word as its label.
-    Now the state is in the label and only the name stays in the detail; the linked items, which are not a connection, have their own label. Anything else is left as it was."""
+    Now the state is in the label and only the name stays in the detail; the linked items, which are not a connection, have their own label. `approve-call` says in its label whether the call was approved alone or in
+    a batch (`facts["batch"]`, the number of calls approved together). Anything else is left as it was."""
+    if what == "approve-call":
+        return ("event.approve-call.batch" if int((facts or {}).get("batch") or 0) > 1 else "event.approve-call"), str((facts or {}).get("code") or detail.split(":", 1)[0])
     found = PAIRED_EVENTS.match(detail) if what in ("allow-env", "link", "test-runner") else None
     if not found:
         return f"event.{what}", detail

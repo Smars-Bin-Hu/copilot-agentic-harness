@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "ado",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "harness": "1.7.38",
   "description": "Azure DevOps through its own program `ado`: work items (read, history, links, attachments, saved queries; comment, update, tags, create, link, attach), pipeline runs (the stage, job and task tree, why a run failed, logs, test results, changes; queue, cancel, retry) and classic releases (deploy). Reads run; a write, a pipeline run or a deployment waits for the person's approval on the task page (a write goes through for the items the task is linked to when the person opened them).",
   "needs": {

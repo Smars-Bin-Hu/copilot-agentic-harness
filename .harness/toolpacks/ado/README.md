@@ -1,4 +1,4 @@
-# ado: an Azure DevOps tool pack (0.4.10)
+# ado: an Azure DevOps tool pack (0.4.11)
 
 The agent works with Azure DevOps through this pack's own program, `ado` (`bin/ado`, Python's standard library only; on Windows `bin/ado.cmd`): one plain command per thing to do, so it never builds an `az rest` call. `ado` reads the server, org and project from the harness connection, signs in with the Azure CLI (`az login`, once) or a personal access token, and sends its requests with the proxy and the CA bundle VS Code was started with.
 
@@ -21,7 +21,7 @@ There is no delete. A write to a work item the task is not linked to is refused;
 3. Each person, once: Get ready, Tools, **This computer** (the az `bin` folder; the CA bundle behind a proxy that inspects TLS), then **Connections**, `ado`: **Sign in** (`signin`) or paste the token (`token`; kept in `.harness/.env`, never in a file that is shared), **Test**, **Save**. Open VS Code from the board.
 4. Try: "read ado:<id>", then "comment on it: checked" - the comment waits on the task page.
 
-`rules.json` holds `ado-curl` (0.4.9: a `curl` to the same addresses is judged like `az rest`: a read runs, a post, put, patch or a body is held, a delete is refused; a `curl` to any other address, or one that saves to a file with `-o`, asks as before; 0.4.10: the held card shows what `-d`, `--data*`, `-F` and `--json` send), `ado-any` (an `az rest` call to any Azure DevOps address: `dev.azure.com`, `*.visualstudio.com`, and the `url` of each connection of this type; a delete is refused, a post or put is held) and `ado-az` (`az devops`, `az boards`, `az pipelines`: `show`, `list`, `query` and a GET `invoke` run; anything else is held; a delete is refused), for the day the agent reaches for `az` anyway.
+`rules.json` holds `ado-web` (0.4.11: `wget`, `Invoke-WebRequest`, `Invoke-RestMethod`, `iwr` and `irm` to the same addresses: a read runs, `-Method` or `--method` other than get, a body or a file to send is held, a delete is refused and the agent is told to use `ado`; one that saves to a file, or `wget` that does not print with `-O -`, asks), `ado-curl` (0.4.9: a `curl` to the same addresses is judged like `az rest`: a read runs, a post, put, patch or a body is held, a delete is refused; a `curl` to any other address, or one that saves to a file with `-o`, asks as before; 0.4.10: the held card shows what `-d`, `--data*`, `-F` and `--json` send), `ado-any` (an `az rest` call to any Azure DevOps address: `dev.azure.com`, `*.visualstudio.com`, and the `url` of each connection of this type; a delete is refused, a post or put is held) and `ado-az` (`az devops`, `az boards`, `az pipelines`: `show`, `list`, `query` and a GET `invoke` run; anything else is held; a delete is refused), for the day the agent reaches for `az` anyway.
 
 Skills: `ado-workitem`, `ado-pipeline-triage`, `ado-release`. To name them with your company's skill prefix, rename the folders and their `name:` to `<prefix>-ado-...`.
 

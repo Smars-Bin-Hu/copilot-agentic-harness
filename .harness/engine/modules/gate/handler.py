@@ -126,6 +126,22 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
 
 
 FILE_OPTIONS = re.compile(r"(?:^|\s)(?:-[A-Za-z]*[oODK]|--(?:output|remote-name|remote-header-name|dump-header|trace|trace-ascii|stderr|config|create-dirs|libcurl)\b)")
+WEB_PROGRAM = re.compile(r"(?:^|[\s/])(curl|wget|invoke-webrequest|iwr|invoke-restmethod|irm)(?:\.exe)?(?=\s|$)", re.IGNORECASE)
+WGET_STDOUT = re.compile(r"(?:^|\s)(?:-[A-Za-z]*O\s*-(?=\s|$)|--output-document(?:=|\s+)-(?=\s|$))")  # wget prints to the terminal only when its output file is `-`; otherwise it saves a file named after the address
+WGET_FILES = re.compile(r"(?:^|\s)(?:-[A-Za-z]*[oaPrmxcNi]|--(?:output-file|append-output|directory-prefix|recursive|mirror|input-file|force-directories|continue|timestamping|warc-file|save-cookies|save-headers|post-file|body-file|config|ca-certificate)\b)")
+POWERSHELL_FILE = re.compile(r"(?:^|\s)-o[a-z]*(?=[\s:=]|$)", re.IGNORECASE)  # -OutFile and its short forms (-OutVariable too: it asks, which is safe)
+
+
+def writes_a_file(segment: str) -> bool:
+    """(1.7.38, D1-7) Does this web call save to a file? `curl -o`, `wget` unless its output is `-`, PowerShell `-OutFile`. Such a call could write a guardrail file, so the rule of the network still asks, whatever the address."""
+    found = WEB_PROGRAM.search(segment)
+    program = found.group(1).lower() if found else "curl"
+    args = segment[found.end():] if found else segment
+    if program == "wget":
+        return not WGET_STDOUT.search(args) or bool(WGET_FILES.search(args))
+    if program != "curl":
+        return bool(POWERSHELL_FILE.search(args))  # PowerShell's own commands: curl's letters (`-Method` has an `o` and a `d`) mean nothing there
+    return bool(FILE_OPTIONS.search(args) or POWERSHELL_FILE.search(args))
 
 
 def network_judged(ctx: Context) -> Optional[Any]:
@@ -139,7 +155,7 @@ def network_judged(ctx: Context) -> Optional[Any]:
         return None
 
     def judged(segment: str) -> bool:
-        if FILE_OPTIONS.search(segment):  # a curl that writes a file (`-o`, `-O`, `--output`, `-D`, a config file) could write a guardrail file: it asks, as before
+        if writes_a_file(segment):  # a web call that writes a file (`curl -o`, `-O`, `--output`, `-D`, a config file, `wget` that does not print, `-OutFile`) could write a guardrail file: it asks, as before
             return False
         try:
             found = external.classify(segment, listed)
@@ -358,6 +374,10 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
     if judged.get("unlinked"):
         return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_refused if action.zone == "refuse" else rules.external_denied_file if action.file_why == "destroy" else rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
+    if decision == external.DENY and not action.zone and not action.file_why:  # 1.7.38 (D1-7): a system may say what to do instead of the refused call (`hint`)
+        hint = ((ctx.policy("tools").get("systems") or {}).get(action.system) or {}).get("hint")
+        if hint:
+            reason = rules.external_denied(action, command, hint)
     return Decision(permission="deny", reason=reason, facts=facts)
 
 

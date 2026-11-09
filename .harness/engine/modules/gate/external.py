@@ -140,6 +140,15 @@ def addresses_fit(system: Dict[str, Any], args: str) -> bool:
     return bool(when and hosts and all(re.search(when, "//" + host, re.IGNORECASE) for host in hosts))
 
 
+_CONTINUED = re.compile(r"`[ \t]*\r?\n")
+
+
+def _cut_short(args: List[str], line: str) -> bool:
+    """(1.7.38, D1-7) A web call that PowerShell goes on with where the line was cut: a backtick at the end of a line, or a hashtable (`@{a=1; b=2}`) whose `;` ended the command. The rest (`-Method Delete`) is
+    in the next command, which the gate does not connect to this one, so this one is not judged by the address alone: the rule of the network asks."""
+    return bool(_CONTINUED.search(line or "")) or sum(item.count("{") for item in args) > sum(item.count("}") for item in args)
+
+
 def _owner(systems: Dict[str, Any], names: List[str], args: str) -> Optional[str]:
     """The system a call belongs to, of those that use the program: the one whose `when` pattern matches the most of the arguments (1.7.10: two servers on
     one host, told apart by the port, both match `-S host`; the one that also matches the port wins); on a tie the first; one with no `when` only when no other matches."""
@@ -660,8 +669,8 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                     _scan(inner, systems, programs, depth + 1, found, variables, ctx)
         start = _start(tokens, programs)
         name = _owner(systems, programs[_program(tokens[start])], " ".join(tokens[start + 1:])) if start is not None else None
-        if name is not None and _program(tokens[start]) in ctx.quiet and not addresses_fit(systems[name], " ".join(tokens[start + 1:])):
-            name = None  # a program that only an address makes a call (curl) names an address that is not the system's: the system does not own it
+        if name is not None and _program(tokens[start]) in ctx.quiet and (not addresses_fit(systems[name], " ".join(tokens[start + 1:])) or _cut_short(tokens[start + 1:], ctx.line)):
+            name = None  # a program that only an address makes a call (curl) names an address that is not the system's: the system does not own it (nor a call whose end the line cut off: below)
         if name is not None:
             system = systems[name]
             line = " ".join(tokens)  # the environment settings in front of the program say something too

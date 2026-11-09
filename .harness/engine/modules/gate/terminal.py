@@ -153,13 +153,19 @@ def _segment(text: str, at: int) -> str:
 
 
 _NET_PROGRAM = re.compile(r"[\w.-]+$")
+JUDGEABLE = frozenset(("curl", "curl.exe", "wget", "wget.exe", "invoke-webrequest", "iwr", "invoke-restmethod", "irm"))  # 1.7.38 (D1-7): the web programs a system the gate knows may judge by the address they name
+
+def cut_short(segment: str) -> bool:
+    """(1.7.38, D1-7) The line was cut where PowerShell goes on: a backtick at the end of a line, or a hashtable (`@{a=1; b=2}`) whose `;` ends the segment. What follows is part of the same call (a `-Method Delete`), and the
+    gate sees only the first part, so it does not call the part judged."""
+    return segment.rstrip().endswith("`") or segment.count("{") > segment.count("}")
 
 
 def check(command: str, compiled: Compiled, judged: Optional[Callable[[str], bool]] = None) -> Optional[Verdict]:
     """`("deny", why)`, `("ask", why)` or None. Deny rules come first.
 
-    `judged` (1.7.38): says of one command of the line whether a system the gate knows has judged it. The `ask` rule of the network does not ask again for a `curl` that was judged (a curl to an
-    Azure DevOps address is a read, a write or a destroy by its own rule); a curl to any other address, in the same line or alone, still asks."""
+    `judged` (1.7.38): says of one command of the line whether a system the gate knows has judged it. The `ask` rule of the network does not ask again for a web call that was judged (`curl`, `wget`,
+    `Invoke-WebRequest`, `Invoke-RestMethod`, `iwr`, `irm` to an Azure DevOps address is a read, a write or a destroy by its own rule); one to any other address, in the same line or alone, still asks."""
     if not command.strip():
         return None
     text = normalize(command)
@@ -169,7 +175,7 @@ def check(command: str, compiled: Compiled, judged: Optional[Callable[[str], boo
     for regex, why in compiled.ask:
         for found in regex.finditer(text):
             program = _NET_PROGRAM.search(found.group(0).strip())
-            if judged is not None and program and program.group(0).lower() in ("curl", "curl.exe") and judged(_segment(text, found.start())):
+            if judged is not None and program and program.group(0).lower() in JUDGEABLE and not cut_short(_segment(text, found.start())) and judged(_segment(text, found.start())):
                 continue
             return "ask", why
     return None

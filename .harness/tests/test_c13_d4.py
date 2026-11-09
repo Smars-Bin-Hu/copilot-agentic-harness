@@ -5,15 +5,16 @@ from __future__ import annotations
 
 import io
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
 import support  # noqa: F401 - the engine on sys.path
-from support import REPO
+from support import GIT, REPO, HarnessTestCase, make_repo, pre_tool, run_git, use_packs
 
-from core import approvals, config, connections, messages, outbox, pinfiles, readyitems, toolpacks
+from core import approvals, company, config, connections, messages, outbox, pinfiles, readyitems, toolpacks
 from modules.gate import external
-from modules.task import cmdview, taskdesk
+from modules.task import cmdview, setupjob, taskdesk
 from taskcase import NAME, TASK
 from test_gate_lists import SERVER, ListedCase
 
@@ -167,6 +168,97 @@ class RepoScriptTests(ListedCase):
         self.held(self.line)
         outbox.approve_action(self.root, reader=lambda _asked: self.code(), interactive=True, out=io.StringIO())
         self.runs(self.line)
+
+
+class AdoWebCallTests(HarnessTestCase):
+    """D1-7: `curl`, `wget`, `Invoke-WebRequest`, `Invoke-RestMethod`, `iwr` and `irm` to an Azure DevOps address are judged by the three zones: a plain read passes, a delete is refused (and the agent is told to use
+    `ado`), anything else asks the person. A call that saves to a file, or goes to another address, asks as before."""
+
+    BASES = ("https://dev.azure.com", "https://vsrm.dev.azure.com", "https://acme.visualstudio.com", "https://localhost:18443")
+
+    def setUp(self) -> None:
+        super().setUp()
+        use_packs(self.root, "ado")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "url": "https://localhost:18443"}}}), encoding="utf-8")
+
+    def call(self, line: str) -> dict:
+        event = pre_tool("s-web", "run_in_terminal", {"command": line, "explanation": "t", "isBackground": False})
+        event["cwd"] = str(self.root)
+        return self.hook(event)
+
+    def term(self, line: str) -> str:
+        return self.call(line).get("permissionDecision", "allow")
+
+    def waiting(self) -> int:
+        return len(approvals.pending(self.root, 10, file=approvals.ACTIONS))
+
+    def test_a_plain_read_passes_for_every_program_and_address(self) -> None:
+        for base in self.BASES:
+            for line in (f"wget -qO- {base}/acme/_apis/projects", f"wget -q -O - {base}/x", f"wget --output-document=- {base}/x", f"iwr {base}/x -UseBasicParsing", f"Invoke-WebRequest -Uri {base}/x",
+                         f"irm -Uri {base}/x -Method Get", f"Invoke-RestMethod {base}/x -Method:Get", f"irm {base}/x -Headers @{{Accept='application/json'}}", f"irm '{base}/x' | ConvertTo-Json",
+                         f"curl -m 30 {base}/x", f"curl -b cookies.txt {base}/x"):
+                self.assertEqual(self.term(line), "allow", line)
+        self.assertEqual(self.waiting(), 0)
+
+    def test_a_delete_is_refused_in_every_spelling_with_no_card_and_the_agent_is_told_to_use_ado(self) -> None:
+        for base in self.BASES:
+            for line in (f"wget --method=DELETE {base}/x", f"wget --method delete {base}/x", f"wget --meth=Delete {base}/x", f"iwr {base}/x -Method Delete", f"Invoke-WebRequest -Uri {base}/x -Method DELETE",
+                         f"irm {base}/x -Method:delete", f"irm {base}/x -Method 'Delete'", f"irm {base}/x -Me Delete", f"iwr {base}/x -CustomMethod Delete", f"curl -Method Delete {base}/x",
+                         f"curl -X DELETE {base}/x", f"iwr -Method Delete -Uri {base}/x -Body '{{}}'", f"iwr {base}/x -Method Post; iwr {base}/y -Method Delete"):
+                out = self.call(line)
+                self.assertEqual(out.get("permissionDecision"), "deny", line)
+                self.assertIn("ado", out["permissionDecisionReason"], line)
+        self.assertEqual(self.waiting(), 0, "a delete is refused, not held")
+
+    def test_anything_else_asks_the_person_on_a_card(self) -> None:
+        lines = ("iwr {b}/x -Method Post -Body '{{}}'", "irm {b}/x -Method Put", "irm {b}/x -Body '{{}}'", "iwr {b}/x -InFile a.json", "wget --post-data='x' {b}/x", "wget --post-file=a.json {b}/x",
+                 "wget --method=PATCH {b}/x", "iwr {b}/x -Method $m", "irm {b}/x -Method (Get-Verb)", "Invoke-RestMethod -Uri {b}/x -Method Patch -ContentType application/json", "curl -Method Post {b}/x", "curl -Body '{{}}' {b}/x",
+                 "wget --body-data=x {b}/x")
+        for index, line in enumerate(lines):
+            before = self.waiting()
+            self.assertEqual(self.term(line.format(b="https://dev.azure.com")), "deny", line)
+            self.assertEqual(self.waiting(), before + 1, f"held for the person: {line}")
+
+    def test_the_card_says_what_it_changes_and_shows_the_body(self) -> None:
+        from modules.task import taskdesk
+
+        systems = config.policy_or_empty(self.root, "tools")["systems"]
+        found = taskdesk.call_words("iwr https://dev.azure.com/acme/_apis/wit/workitems/1 -Method Patch -Body '{\"a\": 1}'", systems["ado-web"], self.root, self.root)
+        self.assertIn("Azure DevOps", found["say"])
+        self.assertIn('"a"', found["body"]["text"])
+        found = taskdesk.call_words("wget --post-data='x=1' https://dev.azure.com/acme/_apis/x", systems["ado-web"], self.root, self.root)
+        self.assertEqual(found["body"]["text"], "x=1")
+
+    def test_a_call_that_saves_to_a_file_still_asks_even_for_a_read(self) -> None:
+        for line in ("iwr https://dev.azure.com/x -OutFile out.json", "irm https://dev.azure.com/x -o out.json", "wget https://dev.azure.com/x", "wget -O out.json https://dev.azure.com/x", "wget -qO- -P d https://dev.azure.com/x",
+                     "wget -O .harness/policies/gate.json https://dev.azure.com/x", "curl -o x https://dev.azure.com/x"):
+            self.assertEqual(self.term(line), "ask", line)
+
+    def test_another_address_asks_as_before_and_a_mix_does_too(self) -> None:
+        for line in ("iwr https://example.com/x", "wget https://example.com/x", "irm https://example.com/x -Method Delete", "iwr https://dev.azure.com.evil.example/x", "iwr https://evil-dev.azure.com/x",
+                     "iwr https://dev.azure.com/x https://example.com/y", "irm https://dev.azure.com/x && irm https://example.com/y", "irm https://localhost:18444/x", "iwr dev.azure.com/x"):
+            self.assertEqual(self.term(line), "ask", line)
+
+    def test_a_call_whose_end_the_line_cut_off_is_not_judged_a_read(self) -> None:
+        """PowerShell goes on after a backtick at the end of a line, and a hashtable has a `;` in it: the gate would see only the first part and call it a read."""
+        for line in ('iwr https://dev.azure.com/x -Headers @{A="b"; C="d"} -Method Delete', "iwr https://dev.azure.com/x -Headers @{A='b'; C='d'} -Method Delete", "iwr https://dev.azure.com/x `\n -Method Delete",
+                     "irm https://dev.azure.com/x `\r\n -Method Delete", "curl -s https://dev.azure.com/x `\n -Method Delete"):
+            self.assertIn(self.term(line), ("ask", "deny"), line)
+        self.assertEqual(self.term('irm https://dev.azure.com/x -Headers @{A="b"; C="d"}'), "ask")
+
+    def test_the_word_alone_holds_nothing(self) -> None:
+        for line in ("echo wget", "grep irm notes.txt", "which wget", "git commit -m 'wget: retry'", "python3 -c \"print('iwr')\"", "docker run --rm busybox wget --help"):
+            self.assertNotEqual(self.term(line), "deny", line)
+
+    def test_the_rules_are_valid_and_name_the_programs_by_address_only(self) -> None:
+        from core import systems
+
+        listed = config.policy_or_empty(self.root, "tools")["systems"]
+        self.assertEqual(systems.validate(listed), [])
+        self.assertEqual(systems.by_address(listed["ado-web"]), ["wget", "invoke-webrequest", "iwr", "invoke-restmethod", "irm"])
+        self.assertEqual(systems.clis(listed["ado-web"]), [])
+        self.assertEqual(toolpacks.problems(self.root, REPO / ".harness" / "toolpacks" / "ado"), [])
 
 
 if __name__ == "__main__":

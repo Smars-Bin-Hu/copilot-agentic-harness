@@ -90,6 +90,7 @@ SYSTEMS_SCHEMA = {
                 "items": {"type": "object", "required": ["pattern", "reason"], "properties": {"pattern": {"type": "string", "minLength": 1}, "reason": {"type": ["string", "object"], "minLength": 1}}},
             },
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
+            "hint": {"type": ["string", "object"], "minLength": 1},  # 1.7.38 (D1-7): what a refusal tells the agent to do instead (a string, or {"en": ..., "zh": ...}): `ado` for a delete sent to Azure DevOps by hand
             "broken": {"type": "string", "minLength": 1},  # 1.7.38 (G-1): written by the harness for a tool pack whose type file or rules file is faulty: what is wrong. Every call of the programs it lists is held (it owns them before any other system)
             "openable": {"type": "boolean"},
             "open": {"type": "string", "enum": list(OPEN_SCOPES)},  # 1.7.38: how far Open to the agent goes for this system; see `open_scope`

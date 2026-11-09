@@ -110,11 +110,15 @@
       "env": "none",
       "verbs": [
         {
-          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*X)|--request)[\\s=]*['\\\"]?(?i:delete)\\b",
+          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*X)|--request)[\\s=]*['\\\"]?(?i:delete)\\b|(?:^|\\s)(?:-(?:me(?:t(?:h(?:o(?:d)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))[\\s:=]+['\\\"]?delete\\b",
           "verb": "destroy"
         },
         {
-          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*X)|--request)[\\s=]*['\\\"]?(?!(?i:get|head|options)\\b)[A-Za-z]+",
+          "pattern": "(?:^|\\s)(?:-(?:me(?:t(?:h(?:o(?:d)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))[\\s:=]+['\\\"]?(?!(?:get|head|options)\\b)[A-Za-z$(@]|(?:^|\\s)(?:-(?:me(?:t(?:h(?:o(?:d)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))(?:\\s*$)|(?:^|\\s)(?:-bo(?:d(?:y)?)?|-in(?:f(?:i(?:l(?:e)?)?)?)?|-fo(?:r(?:m)?)?)(?=[\\s:=]|$)",
+          "verb": "write"
+        },
+        {
+          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*X)|--request)[\\s=]*['\\\"]?(?!(?i:get|head|options)\\b)[A-Za-z$]+",
           "verb": "write"
         },
         {
@@ -139,7 +143,7 @@
       },
       "say": [
         {
-          "pattern": "(?:^|\\s)(?:(?:(?-i:-[A-Za-z]*[dFT])|--data(?:-[\\w]+)?|--form(?:-string)?|--upload-file|--json)|(?:(?-i:-[A-Za-z]*X)|--request))",
+          "pattern": "(?:^|\\s)(?:(?:(?-i:-[A-Za-z]*[dFT])|--data(?:-[\\w]+)?|--form(?:-string)?|--upload-file|--json)|(?:(?-i:-[A-Za-z]*X)|--request))|(?:^|\\s)(?:-(?:me(?:t(?:h(?:o(?:d)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))[\\s:=]+['\\\"]?(?!(?:get|head|options)\\b)[A-Za-z$(@]|(?:^|\\s)(?:-(?:me(?:t(?:h(?:o(?:d)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))(?:\\s*$)|(?:^|\\s)(?:-bo(?:d(?:y)?)?|-in(?:f(?:i(?:l(?:e)?)?)?)?|-fo(?:r(?:m)?)?)(?=[\\s:=]|$)",
           "text": {
             "en": "Change Azure DevOps with curl",
             "zh": "用 curl 修改 Azure DevOps"
@@ -162,7 +166,84 @@
           "from": "text",
           "raw": true
         }
-      ]
+      ],
+      "hint": {
+        "en": "Use the `ado` program for Azure DevOps (`ado --help`). It has no delete.",
+        "zh": "访问 Azure DevOps 请用 `ado` 程序（`ado --help`）。它没有删除命令。"
+      }
+    },
+    "ado-web": {
+      "reach": {
+        "cli": [],
+        "by_address": [
+          "wget",
+          "invoke-webrequest",
+          "iwr",
+          "invoke-restmethod",
+          "irm"
+        ],
+        "when": "(?:^|[\\s'\\\"=/@])(?:dev|vsrm\\.dev)\\.azure\\.com(?![\\w.-])|(?:^|[\\s'\\\"=/@])(?:[\\w-]+\\.)+visualstudio\\.com(?![\\w.-])",
+        "also": {
+          "type": "azure-devops",
+          "field": "url"
+        }
+      },
+      "env": "none",
+      "verbs": [
+        {
+          "pattern": "(?:^|\\s)(?:--meth(?:o(?:d)?)?|-(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))[\\s:=]+['\\\"]?delete\\b",
+          "verb": "destroy"
+        },
+        {
+          "pattern": "(?:^|\\s)(?:--meth(?:o(?:d)?)?)[\\s:=]+['\\\"]?(?!(?:get|head|options)\\b)[A-Za-z$(@]|(?:^|\\s)(?:-(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))[\\s:=]+['\\\"]?(?!(?:get|head|options)\\b)[A-Za-z$(@]|(?:^|\\s)(?:--meth(?:o(?:d)?)?)(?:\\s*$)|(?:^|\\s)(?:-(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))(?:\\s*$)|(?:^|\\s)(?:--pos[\\w-]*|--bod[\\w-]*|-b(?:o(?:d(?:y)?)?)?|-i(?:n(?:f(?:i(?:l(?:e)?)?)?)?)?|-fo(?:r(?:m)?)?)(?=[\\s:=]|$)",
+          "verb": "write"
+        },
+        {
+          "pattern": "^",
+          "verb": "read"
+        }
+      ],
+      "show": {
+        "api": "_apis/([\\w/.-]+)"
+      },
+      "rules": {
+        "none": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "outbox",
+          "destroy": "deny"
+        }
+      },
+      "say": [
+        {
+          "pattern": "(?:^|\\s)(?:--meth(?:o(?:d)?)?)[\\s:=]+['\\\"]?(?!(?:get|head|options)\\b)[A-Za-z$(@]|(?:^|\\s)(?:-(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))[\\s:=]+['\\\"]?(?!(?:get|head|options)\\b)[A-Za-z$(@]|(?:^|\\s)(?:--meth(?:o(?:d)?)?)(?:\\s*$)|(?:^|\\s)(?:-(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?|cu(?:s(?:t(?:o(?:m(?:m(?:e(?:t(?:h(?:o(?:d)?)?)?)?)?)?)?)?)?)?))(?:\\s*$)|(?:^|\\s)(?:--pos[\\w-]*|--bod[\\w-]*|-b(?:o(?:d(?:y)?)?)?|-i(?:n(?:f(?:i(?:l(?:e)?)?)?)?)?|-fo(?:r(?:m)?)?)(?=[\\s:=]|$)",
+          "text": {
+            "en": "Change Azure DevOps with a web call",
+            "zh": "用网页调用修改 Azure DevOps"
+          }
+        }
+      ],
+      "body": [
+        {
+          "pattern": "(?:^|\\s)(?:--post-data|--body-data|--post-file|--body-file|-b(?:o(?:d(?:y)?)?)?|-i(?:n(?:f(?:i(?:l(?:e)?)?)?)?)?)[\\s:=]*'([^']*)'",
+          "from": "text",
+          "raw": true
+        },
+        {
+          "pattern": "(?:^|\\s)(?:--post-data|--body-data|--post-file|--body-file|-b(?:o(?:d(?:y)?)?)?|-i(?:n(?:f(?:i(?:l(?:e)?)?)?)?)?)[\\s:=]*\\\"((?:[^\\\"\\\\\\\\]|\\\\\\\\.)*)\\\"",
+          "from": "text",
+          "raw": true
+        },
+        {
+          "pattern": "(?:^|\\s)(?:--post-data|--body-data|--post-file|--body-file|-b(?:o(?:d(?:y)?)?)?|-i(?:n(?:f(?:i(?:l(?:e)?)?)?)?)?)[\\s:=]*(@?[^\\s'\\\"]+)",
+          "from": "text",
+          "raw": true
+        }
+      ],
+      "hint": {
+        "en": "Use the `ado` program for Azure DevOps (`ado --help`). It has no delete.",
+        "zh": "访问 Azure DevOps 请用 `ado` 程序（`ado --help`）。它没有删除命令。"
+      }
     }
   }
 }

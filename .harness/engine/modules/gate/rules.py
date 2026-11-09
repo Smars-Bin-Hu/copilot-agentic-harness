@@ -118,9 +118,11 @@ def external_subagent(action: Any, command: str, agent: str) -> str:
     return say("gate.external.subagent", agent=agent, place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
-def external_denied(action: Any, command: str) -> str:
-    """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
-    return say("gate.external.denied", place=place(action.system, action.env), verb=word(action.verb), call=command)
+def external_denied(action: Any, command: str, hint: Any = "") -> str:
+    """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay. `hint` (1.7.38, D1-7): the system's own words on what to do instead."""
+    text = say("gate.external.denied", place=place(action.system, action.env), verb=word(action.verb), call=command)
+    shown = messages.pick(hint) if hint else ""
+    return text + messages.gap() + shown if shown else text
 
 
 def external_denied_file(action: Any, command: str) -> str:

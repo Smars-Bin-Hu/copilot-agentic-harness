@@ -371,6 +371,7 @@ def broken_systems(root: Path) -> Dict[str, Any]:
 
 
 NO_CONNECTION = "no-connection-"  # the name of a system made for a program that no connection of its type lists (`unconnected`)
+DIRECT_ONLY = "direct_only"  # (1.7.38, C13 F2c) on a system `unconnected` makes for a pack that is off and that no connection uses: the gate refuses a direct call of its programs, and does not take their names in a script or a word of a line for a call
 
 
 def _free_words(kind: Dict[str, Any]) -> List[str]:
@@ -399,13 +400,14 @@ def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
             key += "_"
         return key
 
+    guarded = set(toolpacks.guarded(root))
+
     def hold(pack: str, file: str, problem: Any, names: List[str]) -> None:
         names = [one for one in names if one not in have]
         if names:
-            out[fresh(f"broken-{pack}")] = {"reach": {"cli": names}, "env": "none", "toolpack": pack, "broken": f"{pack}: {file}: {' '.join(str(problem).split())}"[:400]}
+            out[fresh(f"broken-{pack}")] = dict({"reach": {"cli": names}, "env": "none", "toolpack": pack, "broken": f"{pack}: {file}: {' '.join(str(problem).split())}"[:400]}, **({} if pack in guarded else {DIRECT_ONLY: True}))
             have.update(names)
 
-    guarded = set(toolpacks.guarded(root))
     for folder in govern.folders(root):
         pack = folder.name
         for path in sorted((folder / toolpacks.TYPES).glob("*.json")) if (folder / toolpacks.TYPES).is_dir() else []:
@@ -429,6 +431,8 @@ def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
             for key in ("verbs", "reads", "writes", "refuse", "input"):  # what the refuse list needs to read the statements of the call
                 if kind.get(key) is not None:
                     system[key] = kind[key]
+            if pack not in guarded:
+                system[DIRECT_ONLY] = True  # the pack is off and no connection uses it: a call of its program is refused; its name in a script or a word of a line is not read (1.7.38, C13 F2c)
             out[fresh(NO_CONNECTION + str(system["noconn"]["type"]))] = system
             have.update(programs)
         if pack in guarded or not (folder / toolpacks.RULES).is_file():
@@ -443,7 +447,7 @@ def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
             continue
         for key, spec in listed.items():
             if isinstance(spec, dict) and fresh(key) == key:
-                out[key] = dict(spec, toolpack=pack)
+                out[key] = dict(spec, toolpack=pack, **{DIRECT_ONLY: True})
                 have.update(outside.clis(spec))
     return out
 

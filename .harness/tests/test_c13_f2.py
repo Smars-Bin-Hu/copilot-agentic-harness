@@ -757,6 +757,64 @@ class NoConnectionTests(NoConnectionCase):
         self.assertNotIn("no-connection-sqlserver", connections.unconnected(self.root, systems))  # a system lists sqlcmd: nothing is made for it
 
 
+class OffPackTests(NoConnectionCase):
+    """F2c item 1 (F2b-6 #1): the three sample packs are there and none is on, and no connection uses them. A direct call of their programs is refused (F2b); their names in a script a line runs, and the words of a line that is no call,
+    are not read for names (as before F2b): a repository that has an `ado` word in a script is not held for it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.turn_off()
+        for folder in ("tools", "scripts"):
+            (self.root / folder).mkdir(exist_ok=True)
+        (self.root / "tools/ado_report.py").write_text("print('report about ado tickets')\n", encoding="utf-8")
+        (self.root / "tools/plain.py").write_text("print('hello')\n", encoding="utf-8")
+        (self.root / "scripts/run.sh").write_text("echo build\n", encoding="utf-8")
+        (self.root / "scripts/db.sh").write_text("sqlcmd -S localhost,14332 -Q 'SELECT 1'\n", encoding="utf-8")
+
+    NAMES = ("python3 tools/ado_report.py", "python3 tools/plain.py", "bash scripts/run.sh", "bash scripts/missing.sh", "./scripts/run.sh", "grep -rn ado .", "echo ado", "cat docs/ado-notes.md", "ls ado/", "npm run ado", "make ado",
+             "echo 'run ado items later' > notes.md", "git commit -m 'ado fix'", "find . -name '*.md' -exec grep -l sqlcmd {} \\;", "python3 -c \"print('ado')\"", "pwsh -Command \"Write-Host sqlcmd\"", "ls; echo demotracker", "$EDITOR notes.md",
+             "iex \"Write-Host hi\"", "base64 -d notes.b64 | sh")
+
+    def test_a_script_or_a_word_that_names_a_program_of_a_pack_that_is_off_is_not_a_call(self) -> None:
+        self.check("allow", list(self.NAMES))
+
+    def test_a_direct_call_is_still_refused_and_help_and_version_are_free(self) -> None:
+        for line in UNCONNECTED:
+            self.refused_how(line)
+        self.check("allow", list(FREE_CALLS) + list(LOCAL_CALLS))
+
+    def test_a_launch_of_the_program_is_a_call_too(self) -> None:
+        for line in ("Start-Process sqlcmd -ArgumentList '-S x -Q select1'", "Start-Process -FilePath ado -ArgumentList items"):
+            out = self.call(line)
+            self.assertEqual(out.get("permissionDecision"), "deny", line)
+        self.check("allow", ["Start-Process notepad notes.txt", "Start-Process code ."])
+
+    def test_the_old_blind_spot_stays_where_it_was(self) -> None:
+        """A script that calls the program is not read while nothing on this computer is governed by name: the same as before F2b. docs/12 lists it."""
+        self.check("allow", ["bash scripts/db.sh"])
+
+    def test_the_flag_is_on_the_systems_of_a_pack_that_is_off_only(self) -> None:
+        made = connections.unconnected(self.root, config.load_policy(self.root, "tools")["systems"])
+        self.assertTrue(made)
+        self.assertTrue(all(item.get(connections.DIRECT_ONLY) for item in made.values()), sorted(made))
+        (self.root / "knowledge-base/company/tools/packs.json").write_text(json.dumps({"use": ["ado"]}), encoding="utf-8")
+        made = connections.unconnected(self.root, config.load_policy(self.root, "tools")["systems"])
+        self.assertNotIn(connections.DIRECT_ONLY, made["no-connection-azure-devops"])  # on, no connection: read for names, as in F2b
+        self.assertTrue(made["no-connection-sqlserver"][connections.DIRECT_ONLY])
+
+    def test_a_pack_that_is_on_reads_the_names_of_its_programs_in_a_script(self) -> None:
+        (self.root / "knowledge-base/company/tools/packs.json").write_text(json.dumps({"use": ["ado", "sqlserver"]}), encoding="utf-8")
+        self.check("refuse", ["python3 tools/ado_report.py", "bash scripts/db.sh"])  # held with no card: the line names a program the gate cannot read the call of
+        self.check("allow", ["python3 tools/plain.py", "bash scripts/run.sh", "grep -rn ado .", "echo ado"])
+        self.check("allow", ["python3 -c \"print('demotracker')\""])  # a pack that is off is not read for names even when another is on
+
+    def test_a_connection_that_uses_the_type_of_a_pack_that_is_off_reads_its_names_too(self) -> None:
+        self.put({"ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "url": "https://localhost:18443"}})
+        self.check("refuse", ["python3 tools/ado_report.py"])  # the connection guards its program (the pack is off, the connection counts)
+        self.check("allow", ["bash scripts/run.sh", "python3 tools/plain.py"])
+        self.refused_how("sqlcmd -S localhost,14332 -Q 'SELECT 1'")  # no connection for the pack that is still off
+
+
 class UnreadableTargetTests(TaskCase):
     """F2b spot 2: a target policy that cannot be read does not mean "no target repositories". The gate does not know where they are, so it takes every git repository other than this one for one: a write into it and a
     git command that writes there are refused, with the file and what is wrong. Work in the task folder, reads and the harness folder's own git stay free. `harness doctor` says ERROR."""

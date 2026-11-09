@@ -196,7 +196,8 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
         if not systems and not bare:
             return None
         task = ctx.state.get("active_task")
-        every = external.classify(event.command, {**systems, **bare}, unseen=True, root=ctx.root, cwd=event.cwd or "", folder=(ctx.root / str(task)) if task else None)
+        scanned = bool(systems) or any(not item.get("direct_only") for item in bare.values())  # 1.7.38 (C13 F2c): the names in scripts and words of the line are read only when a system the gate reads is there; the programs of a pack that is off and that no connection uses are refused when called directly, nothing more
+        every = external.classify(event.command, {**systems, **bare}, unseen=scanned, root=ctx.root, cwd=event.cwd or "", folder=(ctx.root / str(task)) if task else None)
         results = [_judge_one(event, ctx, {**systems, **bare}, action, decision) for action, decision in every]
     except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2): the gate failed on this line: refused when the line names a program a tool pack governs, as before (no opinion) when it names none
         return failclosed.refusal(ctx.root, event.command, error)

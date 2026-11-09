@@ -518,6 +518,7 @@ class _Ctx:
         self.folder, self.line = folder, line  # the task's folder (a place a relative path is looked for) and the whole line as written: for the files a call names as its input (1.7.38)
         self.dirs: List[str] = []  # directories this line changes to (`cd tools && ./run.sh`)
         self.quiet: set = set()  # programs a system lists `by_address`: not among the names that must be accounted for
+        self.direct: set = set()  # programs only a `direct_only` system lists (a pack that is off and that no connection uses, 1.7.38, C13 F2c): a direct call is refused, their name in a script or a word of a line is no call
         self.reasons: Dict[str, str] = {}  # system -> its `blocked` text, in the language of the session
         self.code: List[Tuple[Any, str]] = []  # (pattern of the words, system) of the systems that name `reach.code`: words a one-liner interpreter must not run (1.7.38, C13 F2)
 
@@ -848,10 +849,12 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
     ctx = ctx or _Ctx()
     text, bodies = _heredocs(join_lines(text))
     segments = split_segments(text)
-    names = [program for program in programs if program not in ctx.quiet]
+    names = [program for program in programs if program not in ctx.quiet and program not in ctx.direct]
     feeds = ctx.hold and (any(_feeds_code(_without_redirects(tokens)) for tokens in segments) or ("<(" in text and any(_head_name(tokens) in ("source", ".") or _head_is_interpreter(tokens) for tokens in segments)))
     if ctx.hold:
         _hidden_in_line(segments, text, programs, feeds, found)
+    elif ctx.direct:
+        _launched(segments, programs, found)
     for body, expands in bodies:
         if depth < MAX_DEPTH and expands:  # an unquoted here-document: the shell runs what is in `$( )` and backticks
             for inner in _substitutions(join_lines(body)):
@@ -1091,6 +1094,18 @@ def _hidden(kind: str, call: str, **values: Any) -> Action:
     return Action("", "none", DESTROY, "", call, call=call, zone="blocked", reason=messages.text(f"gate.external.hidden.{kind}", **values))
 
 
+def _launched(segments: List[List[str]], programs: Dict[str, List[str]], found: List[Action]) -> None:
+    """`Start-Process <program>` of a program a `direct_only` system lists (1.7.38, C13 F2c): a line of a computer where nothing else is read for names (`unseen` is off) still refuses it, as a direct call."""
+    for tokens in segments:
+        at = _head_index(tokens)
+        if at is None or _program(tokens[at]) not in _START:
+            continue
+        named = _mentioned(" ".join(tokens[at + 1:]), list(programs))
+        if named:
+            found.append(_hidden("start", " ".join(tokens), program=named))
+            return
+
+
 def _hidden_in_line(segments: List[List[str]], text: str, programs: Dict[str, List[str]], feeds: bool, found: List[Action]) -> None:
     """The text of a line that runs what it is not shown (1.7.38, C13 F2): `iex`, text piped into a shell or an interpreter (`base64 -d | sh`), `source <(...)`, `Start-Process` of a program a system governs.
     `echo '...' | sh` and a here-document are read as before (their text is a word of the line). Each is refused: the way is to run the command itself."""
@@ -1156,9 +1171,11 @@ def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: 
             programs.setdefault(program, []).append(name)
             quiet.add(program)
     quiet -= {program for system in systems.values() for program in clis(system)}  # a program some system lists by name is a listed program for all
+    direct = {program for system in systems.values() if system.get("direct_only") for program in clis(system)} - {program for system in systems.values() if not system.get("direct_only") for program in clis(system)} - quiet
     found: List[Action] = []
     context = _Ctx(root, cwd, hold=unseen, folder=folder, line=command)
     context.quiet = quiet
+    context.direct = direct
     for name, system in systems.items():  # words a one-liner interpreter must not run (1.7.38, C13 F2)
         words = [str(one) for one in (system.get("reach") or {}).get("code") or []]
         if words and system.get("blocked"):

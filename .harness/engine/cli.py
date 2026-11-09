@@ -30,14 +30,38 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import approval, company, toolpacks, domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
-from core.paths import repo_root  # noqa: E402
-from core.registry import harness_version, version_banner  # noqa: E402
-import doctor  # noqa: E402
-from modules.evalcheck import commands as eval_commands  # noqa: E402
-from modules.gate import commands as gate_commands  # noqa: E402
-from modules.observe import commands as observe_commands  # noqa: E402
-from modules.task import commands as task_commands  # noqa: E402
+
+
+def _cannot_load(error: BaseException) -> None:
+    """A file of the engine that cannot be loaded (1.7.38, C13 FR2 5): one sentence with the file and the line, not a bare traceback. Standard library only."""
+    import traceback
+
+    here = Path(__file__).resolve().parent
+    name, line = getattr(error, "filename", None), getattr(error, "lineno", None)
+    if not name:
+        frames = [frame for frame in traceback.extract_tb(error.__traceback__) if str(here) in str(frame.filename)]
+        name, line = (frames[-1].filename, frames[-1].lineno) if frames else ("", None)
+    try:
+        name = Path(str(name)).resolve().relative_to(here).as_posix() if name else ""
+    except (ValueError, OSError):
+        name = str(name or "")
+    where = f"{name}{':' + str(line) if line else ''}: " if name else ""
+    print(f"harness: the engine cannot load: {where}{type(error).__name__}: {' '.join(str(getattr(error, 'msg', None) or error).split())[:200]}", file=sys.stderr)
+    print("A file of the harness is faulty or missing. Put it back from the zip the harness came from, then run `harness doctor`.", file=sys.stderr)
+    raise SystemExit(1)
+
+
+try:
+    from core import approval, company, toolpacks, domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
+    from core.paths import repo_root  # noqa: E402
+    from core.registry import harness_version, version_banner  # noqa: E402
+    import doctor  # noqa: E402
+    from modules.evalcheck import commands as eval_commands  # noqa: E402
+    from modules.gate import commands as gate_commands  # noqa: E402
+    from modules.observe import commands as observe_commands  # noqa: E402
+    from modules.task import commands as task_commands  # noqa: E402
+except Exception as _error:  # noqa: BLE001 - a syntax error, a conflict marker, a missing file
+    _cannot_load(_error)
 
 
 SHORT_FLAG = "--short"

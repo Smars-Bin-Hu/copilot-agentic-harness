@@ -268,6 +268,22 @@ def check_hook_start(report: Report, root: Path) -> None:
         report.ok(say("doctor.hookstart.ok"))
 
 
+def check_messages(report: Report) -> None:
+    """(1.7.38, C13 FR2 10) The two message tables can be read. A table that cannot be read leaves the other language to speak for it (an English user is told the rules in Chinese): an error naming the file and the fault."""
+    bad = 0
+    for language in messages.LANGUAGES:
+        path = messages.table_path(language)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            if not isinstance(data, dict) or not data:
+                raise ValueError("it is not a table of messages")
+        except (OSError, ValueError) as error:
+            bad += 1
+            report.error(say("doctor.messages.unreadable", file=f".harness/engine/core/{path.name}", error=" ".join(str(error).split())[:200]))
+    if not bad:
+        report.ok(say("doctor.messages.ok"))
+
+
 def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -> None:
     if entry["status"] == "retired":
         return
@@ -997,6 +1013,7 @@ def run(root: Path, accept: bool = False) -> int:
     check_tool_kinds(report)
     check_hook_config(report, root, registry)
     check_hook_start(report, root)
+    check_messages(report)
     check_hook_activity(report, root, registry)
     check_agents(report, root)
     check_logs(report, root, registry)

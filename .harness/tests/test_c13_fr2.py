@@ -1170,5 +1170,69 @@ class BatchFootTests(unittest.TestCase):
         self.assertIn("linear-gradient(var(--hot-bg),var(--hot-bg)),var(--card)", css)
 
 
+class SmallFixesTests(unittest.TestCase):
+    """Item 10: the small and UI problems of the second retest that are mended (RC-A L3 U2 L5 L7 L8 L9)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from support import REPO
+
+        cls.repo = REPO
+
+    def test_the_void_window_names_the_call_translates_the_kind_and_stays_open_for_the_others(self) -> None:
+        js = (self.repo / ".harness" / "engine" / "modules" / "task" / "web" / "board.js").read_text(encoding="utf-8")
+        self.assertIn('"desk.outbox.verb."', js)  # `write` is a word of the table: zh says it in Chinese
+        self.assertIn("el-cmd", js)  # the call itself, one line: two calls that look alike are told apart
+        self.assertIn("left = left.filter", js)  # one Void takes one row out: the window closes when none is left
+        self.assertIn("if (!left.length) { view.close(); }", js)
+
+    def test_a_doctor_that_cannot_load_the_engine_says_the_file_and_the_line(self) -> None:
+        import os
+        import shutil
+        import subprocess
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness").mkdir()
+            shutil.copytree(self.repo / ".harness" / "engine", root / ".harness" / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+            pin = root / ".harness" / "engine" / "modules" / "gate" / "pin.py"
+            pin.write_text("<<<<<<< HEAD\n" + pin.read_text(encoding="utf-8"), encoding="utf-8")
+            done = subprocess.run([sys.executable, str(root / ".harness" / "engine" / "cli.py"), "doctor"], capture_output=True, text=True, env={**os.environ, "HARNESS_ROOT": str(root)})
+            self.assertEqual(done.returncode, 1)
+            self.assertNotIn("Traceback", done.stderr)
+            self.assertIn("modules/gate/pin.py:1: SyntaxError", done.stderr)
+            self.assertIn("zip", done.stderr)
+
+    def test_doctor_names_a_message_table_that_cannot_be_read(self) -> None:
+        from unittest import mock
+
+        import doctor
+        from core import messages
+
+        report = doctor.Report()
+        doctor.check_messages(report)
+        self.assertEqual(report.errors, 0)
+        with mock.patch.object(messages, "table_path", side_effect=lambda language="en": self.repo / "no-such" / f"messages.{language}.json"):
+            report = doctor.Report()
+            doctor.check_messages(report)
+        self.assertEqual(report.errors, 2)
+        self.assertIn("messages.en.json", report.lines[0])
+
+    def test_the_settings_window_says_what_is_kept_at_once_and_what_needs_save(self) -> None:
+        from core import messages
+
+        for language, word in (("en", "kept at once"), ("zh", "立刻保存")):
+            self.assertIn(word, messages.table(language)["setup.lead.again"])
+
+    def test_tick_viewed_says_it_ticks_what_the_gate_could_only_ask_about(self) -> None:
+        from core import messages
+
+        for language, word in (("en", "only ask you about"), ("zh", "只能问你")):
+            self.assertIn(word, messages.table(language)["desk.batch.all.tip"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -283,18 +283,36 @@
     const open = h("button", {type: "button", class: "act", title: t("board.held.tip")}, t("board.held.review"));
     open.addEventListener("click", () => {
       const said = h("div", {class: "bad"});
-      const voidThem = (codes, button) => { button.disabled = true; SERVE.post("/api/void", {codes}).then(() => { view.close(); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); button.disabled = false; }); };
-      const all = h("button", {type: "button", class: "act hot"}, t(list.length === 1 ? "board.held.void.one" : "board.held.void_all", {n: list.length}));
-      all.addEventListener("click", () => voidThem(list.map((item) => item.code), all));
+      let left = list.slice();  // the calls still listed: a call that was voided leaves the window, which stays open for the others (1.7.38, C13 FR2 10)
+      const title = h("h2", null);
+      const all = h("button", {type: "button", class: "act hot"});
+      const rowOf = new Map();
+      const count = () => { title.textContent = t(left.length === 1 ? "board.held.title.one" : "board.held.title", {n: left.length}); all.textContent = t(left.length === 1 ? "board.held.void.one" : "board.held.void_all", {n: left.length}); };
+      const voidThem = (codes, button) => {
+        button.disabled = true;
+        SERVE.post("/api/void", {codes}).then(() => {
+          codes.forEach((code) => { const row = rowOf.get(code); if (row) row.remove(); });
+          left = left.filter((item) => !codes.includes(item.code));
+          if (!left.length) { view.close(); } else { count(); button.disabled = false; }
+          SERVE.done();
+        }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); button.disabled = false; });
+      };
+      all.addEventListener("click", () => voidThem(left.map((item) => item.code), all));
       const close = h("button", {type: "button", class: "act"}, t("connections.close"));
+      const verbWords = (verb) => { const key = "desk.outbox.verb." + verb; return Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : (verb || "-"); };
+      const clipped = (text) => (text.length <= 140 ? text : text.slice(0, 139) + "\u2026");
       const rowsOf = list.map((item) => {
         const one = h("button", {type: "button", class: "act"}, t("board.held.void"));
         one.addEventListener("click", () => voidThem([item.code], one));
-        return h("li", {class: "el-row", title: item.command},
-          h("b", null, item.system || "-"), item.env && item.env !== "none" ? [" ", h("span", {class: "tag hot"}, item.env)] : null, " ", h("span", {class: "tag"}, item.verb || "-"), " ",
-          h("span", {class: "sub"}, item.task ? t("board.held.of", {task: item.task}) : t("board.held.notask"), " · ", item.at ? item.at.slice(0, 16).replace("T", " ") : ""), " ", one);
+        const row = h("li", {class: "el-row", title: item.command},
+          h("b", null, item.system || "-"), item.env && item.env !== "none" ? [" ", h("span", {class: "tag hot"}, item.env)] : null, " ", h("span", {class: "tag"}, verbWords(item.verb)), " ",
+          h("span", {class: "sub"}, item.task ? t("board.held.of", {task: item.task}) : t("board.held.notask"), " \u00b7 ", item.at ? item.at.slice(0, 16).replace("T", " ") : ""), " ", one,
+          item.command ? h("div", null, h("code", {class: "el-cmd"}, clipped(item.command))) : null);  // what the call is: two calls that look alike are told apart by it
+        rowOf.set(item.code, row);
+        return row;
       });
-      const view = SERVE.dialog([h("h2", null, t("board.held.title", {n: list.length})), h("p", {class: "sub"}, t("board.held.lead")), h("ul", {class: "el-list"}, ...rowsOf), said, h("div", {class: "row win-foot"}, all, close)]);
+      count();
+      const view = SERVE.dialog([title, h("p", {class: "sub"}, t("board.held.lead")), h("ul", {class: "el-list"}, ...rowsOf), said, h("div", {class: "row win-foot"}, all, close)]);
       close.addEventListener("click", view.close);
     });
     elsewhereBox.replaceChildren(h("span", {class: "tag hot"}, t(list.length === 1 ? "board.held.title.one" : "board.held.title", {n: list.length})), " ", open);

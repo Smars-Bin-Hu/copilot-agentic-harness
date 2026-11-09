@@ -592,5 +592,217 @@ class NormalWorkTests(lists.ListedCase):
             self.assertEqual(out.get("permissionDecision"), None, (command, str(out.get("permissionDecisionReason"))[:200]))
 
 
+class LauncherTests(unittest.TestCase):
+    """RC-A M3 (item 4): `hook.py` itself had a syntax error and the hook exited with no answer. The hook configuration starts `launch.py`, a few lines of the standard library, which loads `hook.py` and answers in its place when
+    it cannot be loaded: commands, writes and unknown tools refused, reads allowed, the file and the fault named. A temp copy of the engine gets a fault in `hook.py` at a time."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from support import REPO
+
+        cls.repo = REPO
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.tmp.name)
+        shutil.copytree(REPO / ".harness" / "engine", cls.root / ".harness" / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy(REPO / ".harness" / "registry.json", cls.root / ".harness" / "registry.json")
+        shutil.copytree(REPO / ".harness" / "policies", cls.root / ".harness" / "policies", ignore=shutil.ignore_patterns("*.override.json"))
+        cls.launch = cls.root / ".harness" / "engine" / "launch.py"
+        cls.hook = cls.root / ".harness" / "engine" / "hook.py"
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.tmp.cleanup()
+
+    def run_launch(self, data: Any, raw: str = "") -> Dict[str, Any]:
+        import os
+        import subprocess
+        import sys
+
+        done = subprocess.run([sys.executable, str(self.launch)], input=raw or json.dumps(data), text=True, encoding="utf-8", capture_output=True, check=False,
+                              env={**os.environ, "HARNESS_ROOT": str(self.root), "HARNESS_LANGUAGE": "en", "HARNESS_INTEGRITY_DIR": str(self.root / "no-integrity-here")})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def restore(self) -> None:
+        self.hook.write_text((self.repo / ".harness" / "engine" / "hook.py").read_text(encoding="utf-8"), encoding="utf-8")
+
+    def ruin(self, how: str) -> None:
+        text = self.hook.read_text(encoding="utf-8")
+        self.addCleanup(self.restore)
+        if how == "syntax":
+            self.hook.write_text(text + "\ndef broken(:\n    pass\n", encoding="utf-8")
+        elif how == "conflict":
+            self.hook.write_text("<<<<<<< HEAD\n" + text + "\n=======\n" + text + "\n>>>>>>> branch\n", encoding="utf-8")
+        elif how == "boom":
+            self.hook.write_text("raise RuntimeError('boom')\n" + text, encoding="utf-8")
+        elif how == "exit":
+            self.hook.write_text("import sys\nsys.exit(3)\n" + text, encoding="utf-8")
+        elif how == "empty":
+            self.hook.write_text("", encoding="utf-8")
+        elif how == "gone":
+            self.hook.unlink()
+
+    SHAPES = {
+        "sdk": lambda name, given: {"hook_event_name": "PreToolUse", "session_id": "sess-fr2-4", "cwd": "/w", "tool_name": name, "tool_input": given},
+        "camel": lambda name, given: {"hookEventName": "PreToolUse", "sessionId": "sess-fr2-4", "cwd": "/w", "toolName": name, "toolArgs": json.dumps(given)},
+    }
+    REFUSED = (("Bash", {"command": "rm -rf /"}), ("run_in_terminal", {"command": "sqlcmd -S x -Q \"DROP TABLE t\"", "isBackground": False}), ("powershell", {"command": "Remove-Item x"}),
+               ("Write", {"path": ".harness/policies/gate.json", "content": "{}"}), ("create_file", {"filePath": "a.txt", "content": "x"}), ("replace_string_in_file", {"filePath": "a.txt", "oldString": "a", "newString": "b"}),
+               ("Edit", {"path": "a.txt", "old_str": "a", "new_str": "b"}), ("apply_patch", {"input": "x"}), ("some_unknown_tool", {"x": 1}), ("mcp_thing", {"command": "do it"}))
+    ALLOWED = (("Read", {"path": "a.txt"}), ("read_file", {"filePath": "a.txt"}), ("grep_search", {"query": "x"}), ("Glob", {"pattern": "*"}), ("ask_user", {"question": "ok?"}), ("task_complete", {"summary": "x"}))
+
+    def check_all(self, label: str) -> None:
+        for shape, make in self.SHAPES.items():
+            for name, given in self.REFUSED:
+                out = self.run_launch(make(name, given))
+                self.assertEqual(out.get("permissionDecision"), "deny", (label, shape, name))
+                self.assertIn("hook.py", out["permissionDecisionReason"], (label, shape, name))  # the file is named
+                self.assertIn("cannot start", out["permissionDecisionReason"], (label, shape, name))
+            for name, given in self.ALLOWED:
+                self.assertEqual(self.run_launch(make(name, given)), {}, (label, shape, name))
+        self.assertEqual(self.run_launch({"hook_event_name": "PostToolUse", "session_id": "s", "tool_name": "Bash", "tool_input": {"command": "ls"}, "tool_result": {"text_result_for_llm": "x"}}), {}, label)
+        self.assertEqual(self.run_launch({"hook_event_name": "Stop", "session_id": "s", "stop_reason": "end_turn"}), {}, label)
+        prompt = self.run_launch({"hook_event_name": "UserPromptSubmit", "session_id": "s", "prompt": "hello"})
+        self.assertNotIn("permissionDecision", prompt, label)
+        self.assertIn("cannot start", prompt.get("additionalContext", ""), label)  # the agent hears of it at once
+
+    def test_a_hook_py_that_cannot_be_loaded_is_answered_for(self) -> None:
+        for how in ("syntax", "conflict", "boom", "exit", "gone"):
+            with self.subTest(how):
+                self.ruin(how)
+                self.check_all(how)
+                self.restore()
+
+    def test_the_file_and_the_line_are_named(self) -> None:
+        self.ruin("syntax")
+        out = self.run_launch(self.SHAPES["sdk"]("Bash", {"command": "ls"}))
+        self.assertRegex(out["permissionDecisionReason"], r"hook\.py:\d+: SyntaxError")
+
+    def test_a_payload_nobody_can_read_prints_valid_output(self) -> None:
+        self.ruin("syntax")
+        for raw in (" ", "not json", "[]", "{}"):
+            self.assertEqual(self.run_launch(None, raw=raw), {}, raw)
+
+    def test_a_hook_py_that_loads_runs_as_if_it_was_started_alone(self) -> None:
+        import os
+        import subprocess
+        import sys
+
+        data = self.SHAPES["sdk"]("Read", {"path": "a.txt"})
+        env = {**os.environ, "HARNESS_ROOT": str(self.root), "HARNESS_LANGUAGE": "en", "HARNESS_INTEGRITY_DIR": str(self.root / "no-integrity-here")}
+        alone = subprocess.run([sys.executable, str(self.hook)], input=json.dumps(data), text=True, capture_output=True, env=env)
+        self.assertEqual(self.run_launch(data), json.loads(alone.stdout))
+        bash = self.SHAPES["sdk"]("Bash", {"command": "rm -rf /"})
+        self.assertEqual(self.run_launch(bash).get("permissionDecision"), "deny")
+        self.assertNotIn("cannot start", self.run_launch(bash)["permissionDecisionReason"])  # the answer of the gate itself, not the one of the launcher
+
+    def test_every_event_of_the_hook_configuration_starts_launch_py_for_every_engine(self) -> None:
+        data = json.loads((self.repo / ".github" / "hooks" / "harness.json").read_text(encoding="utf-8"))
+        for event, entries in data["hooks"].items():
+            for entry in entries:
+                for key in ("command", "windows", "bash", "powershell"):
+                    self.assertTrue(entry[key].endswith(".harness/engine/launch.py"), (event, key, entry[key]))
+                    self.assertNotIn("hook.py", entry[key])
+
+    def test_the_launcher_is_small_standard_library_only_and_keeps_the_tool_list_of_hook_py(self) -> None:
+        import ast
+        import importlib.util
+        import sys
+
+        text = (self.repo / ".harness" / "engine" / "launch.py").read_text(encoding="utf-8")
+        self.assertLess(len(text.splitlines()), 80)
+        tree = ast.parse(text)
+        imported = {alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} | {node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module}
+        self.assertLessEqual(imported, set(sys.stdlib_module_names))
+        sys.path.insert(0, str(self.repo / ".harness" / "engine"))
+        import hook
+
+        spec = importlib.util.spec_from_file_location("harness_launch", self.repo / ".harness" / "engine" / "launch.py")
+        launch = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(launch)
+        self.assertEqual(set(launch.SAFE), set(hook.SAFE_TOOLS))
+
+    def test_the_registry_lists_the_launcher(self) -> None:
+        registry = json.loads((self.repo / ".harness" / "registry.json").read_text(encoding="utf-8"))
+        self.assertIn(".harness/engine/launch.py", registry["engine"]["files"])
+
+
+class HookStartDoctorTests(unittest.TestCase):
+    """What `harness doctor` (and so Enter on the board) says when the hook start files or the hook configuration are broken: red, with the file and the line."""
+
+    def setUp(self) -> None:
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from support import REPO
+
+        self.repo = REPO
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        shutil.copytree(REPO / ".harness" / "engine", self.root / ".harness" / "engine", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy(REPO / ".harness" / "registry.json", self.root / ".harness" / "registry.json")
+        shutil.copytree(REPO / ".harness" / "policies", self.root / ".harness" / "policies", ignore=shutil.ignore_patterns("*.override.json"))
+        shutil.copytree(REPO / ".github" / "hooks", self.root / ".github" / "hooks")
+
+    def report(self, check: str) -> Any:
+        import doctor
+        from core.registry import load_registry
+
+        report = doctor.Report()
+        if check == "start":
+            doctor.check_hook_start(report, self.root)
+        else:
+            doctor.check_hook_config(report, self.root, load_registry(self.root))
+        return report
+
+    def test_the_start_files_that_compile_are_ok(self) -> None:
+        report = self.report("start")
+        self.assertEqual(report.errors, 0)
+        self.assertIn("launch.py", report.lines[0])
+
+    def test_a_syntax_error_in_hook_py_or_launch_py_is_red_with_the_file_and_the_line(self) -> None:
+        for name in ("hook.py", "launch.py"):
+            path = self.root / ".harness" / "engine" / name
+            original = path.read_text(encoding="utf-8")
+            path.write_text(original + "\ndef broken(:\n    pass\n", encoding="utf-8")
+            report = self.report("start")
+            path.write_text(original, encoding="utf-8")
+            self.assertEqual(report.errors, 1, name)
+            self.assertIn(f".harness/engine/{name}", report.lines[0])
+            self.assertRegex(report.lines[0], r"第 \d+ 行")  # the tests run in Chinese
+
+    def test_a_start_file_that_is_gone_is_red(self) -> None:
+        (self.root / ".harness" / "engine" / "hook.py").unlink()
+        self.assertEqual(self.report("start").errors, 1)
+
+    def test_a_hook_configuration_that_cannot_be_read_or_is_not_json_or_starts_another_file_is_red(self) -> None:
+        import os
+
+        path = self.root / ".github" / "hooks" / "harness.json"
+        original = path.read_text(encoding="utf-8")
+        path.write_text("{ not json", encoding="utf-8")
+        self.assertGreaterEqual(self.report("config").errors, 1)
+        path.write_text(original.replace("launch.py", "hook.py"), encoding="utf-8")  # the old entry: the launcher is not started
+        found = self.report("config")
+        self.assertGreaterEqual(found.errors, 1)
+        self.assertIn("launch.py", "\n".join(found.lines))
+        path.write_text("[]", encoding="utf-8")
+        self.assertGreaterEqual(self.report("config").errors, 1)
+        path.write_text(original, encoding="utf-8")
+        self.assertEqual(self.report("config").errors, 0)
+        path.chmod(0)
+        try:
+            if os.geteuid() != 0:
+                self.assertGreaterEqual(self.report("config").errors, 1)  # not readable
+        finally:
+            path.chmod(0o644)
+
+
 if __name__ == "__main__":
     unittest.main()

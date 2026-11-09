@@ -9,6 +9,7 @@
   "engine": {
     "files": [
       ".harness/engine/hook.py",
+      ".harness/engine/launch.py",
    ".harness/engine/integrity.py",
       ".harness/engine/cli.py",
       ".harness/engine/doctor.py",
@@ -246,6 +247,7 @@
         ".harness/tests/test_c13_f2.py",
         ".harness/tests/test_c13_f3.py",
         ".harness/tests/test_c13_fr.py",
+        ".harness/tests/test_c13_fr2.py",
         ".harness/tests/test_statements.py",
         ".harness/tests/test_gate_lists.py",
         ".harness/tests/test_gate_sqlserver.py",

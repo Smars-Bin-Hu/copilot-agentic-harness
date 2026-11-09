@@ -25,7 +25,7 @@ from core.state import TRACKED_EVENTS
 def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
-HOOK_ENTRY = ".harness/engine/hook.py"
+HOOK_ENTRY = ".harness/engine/launch.py"  # the one file the hook configuration starts (1.7.38, C13 FR2 4); it loads hook.py
 COMMAND_KEYS = ("command", "windows", "linux", "osx", "bash", "powershell")
 KB_DIR = "knowledge-base"
 BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
@@ -248,6 +248,24 @@ def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> N
         report.warn(say("doctor.hookcfg.event_unused", event=event))
     if configured >= needed:
         report.ok(say("doctor.hookcfg.ok", count=len(configured & needed)))
+
+
+def check_hook_start(report: Report, root: Path) -> None:
+    """(1.7.38, C13 FR2 4) The two files the hook starts from, `launch.py` and `hook.py`, can be compiled. A syntax error in `hook.py` made the hook exit with no answer; the launcher now refuses commands and writes in its place,
+    and this says which file and line so that the person can put it back. A fault in `launch.py` itself cannot be covered: Copilot cannot start it."""
+    folder = root / ".harness" / "engine"
+    bad = 0
+    for name in ("launch.py", "hook.py"):
+        try:
+            compile((folder / name).read_text(encoding="utf-8-sig"), str(folder / name), "exec")
+        except SyntaxError as error:
+            bad += 1
+            report.error(say("doctor.hookstart.broken", file=f".harness/engine/{name}", line=error.lineno or 0, error=" ".join(str(error.msg).split()), consequence=say("doctor.hookstart.launch" if name == "launch.py" else "doctor.hookstart.hook")))
+        except (OSError, ValueError) as error:
+            bad += 1
+            report.error(say("doctor.hookstart.unreadable", file=f".harness/engine/{name}", error=" ".join(str(error).split())[:200], consequence=say("doctor.hookstart.launch" if name == "launch.py" else "doctor.hookstart.hook")))
+    if not bad:
+        report.ok(say("doctor.hookstart.ok"))
 
 
 def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -> None:
@@ -963,6 +981,7 @@ def run(root: Path, accept: bool = False) -> int:
     check_files(report, root, "engine", registry["engine"]["files"])
     check_tool_kinds(report)
     check_hook_config(report, root, registry)
+    check_hook_start(report, root)
     check_hook_activity(report, root, registry)
     check_agents(report, root)
     check_logs(report, root, registry)

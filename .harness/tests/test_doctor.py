@@ -303,7 +303,7 @@ class DoctorTests(unittest.TestCase):
         for key in ("windows", "powershell"):
             with self.subTest(key):
                 def change(data: dict, key: str = key) -> None:
-                    data["hooks"]["Stop"][0][key] = "python3 .harness/engine/hook.py"
+                    data["hooks"]["Stop"][0][key] = "python3 .harness/engine/launch.py"
 
                 self.edit_json(".github/hooks/harness.json", change)
                 result = self.doctor()

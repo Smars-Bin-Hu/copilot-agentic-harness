@@ -230,3 +230,5 @@ html.has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);color:var(--en-ink);b
 .en-vsnote{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);width:max-content;margin:0 0 12px;max-width:min(34em,92vw);box-sizing:border-box;z-index:4;text-align:center;font:500 12.5px/1.45 var(--sans);color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);border-radius:10px;padding:6px 12px;overflow-wrap:anywhere}  /* a card: it may lie over the wordmark in a narrow window */
 .en-vsnote[hidden]{display:none}
 .en-vsnote.bad{color:var(--bad);border-color:var(--bad)}
+/* 1.7.38 (F1 U2): a phone-wide window: the pill and the list are tall, so the wordmark sits at the top, above them, not in the middle where the pill covered it */
+@media (max-width:640px){.en-stage{justify-content:flex-start;padding-top:min(15vh,110px);padding-bottom:0}.en-foot{max-height:calc(100vh - 215px);overflow-y:auto;overscroll-behavior:contain}}  /* a low window: the list scrolls under the wordmark, it never rises over it */

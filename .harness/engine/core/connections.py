@@ -792,9 +792,16 @@ def probe_lines(root: Path, workers: int = 4) -> Dict[str, Dict[str, Any]]:
         if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
             answer = {"state": reach.FAILED, "why": "exit-127", "who": ""}
         else:
-            answer = reach.judged(needs, lambda: run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch, alias=alias))
-            if answer["state"] == reach.FAILED and answer["why"] == "no-answer" and delivery(kind, server)["identity"] != "tool":
-                answer = {"state": reach.UNKNOWN, "why": UNTESTED_SLOW, "who": ""}  # (1.7.38, F1 M9) no answer is not a refusal: the sign-in is kept here, and the row says "saved, not tested yet: no answer" (amber), as after a Test that got none
+            last: List[Any] = [None, ""]
+
+            def run() -> Tuple[Optional[int], str]:
+                found = run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch, alias=alias)
+                last[0], last[1] = found
+                return found
+
+            answer = reach.judged(needs, run)
+            if answer["state"] == reach.FAILED and answer["why"] == "no-answer" and last[0] is None and str(last[1]).startswith("no answer in") and delivery(kind, server)["identity"] != "tool":
+                answer = {"state": reach.UNKNOWN, "why": UNTESTED_SLOW, "who": ""}  # (1.7.38, F1 M9) the program was still running at the limit: no answer is not a refusal. The sign-in is kept here, and the row says "saved, not tested yet: no answer" (amber), as after a Test that got none. A server that says it is down is a failure with what it said
         return f"{alias}:{server['env']}", {**answer, "at": utc_now(), "source": "probe"}
 
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(jobs) or 1))) as pool:

@@ -241,3 +241,4 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 /* 1.7.38 (C11 T2-13): the question or the command the chat waits on, on the card itself */
 .tk-asked{flex:1 1 100%;margin:6px 0 4px;padding:8px 12px;border-left:3px solid var(--line2);background:var(--card);border-radius:6px;font-size:13px;line-height:1.5;overflow-wrap:anywhere;min-width:0}
 .tk-asked .tk-peek{max-width:none}.tk-asked p{margin:2px 0}.tk-asked ul{margin:4px 0 0;padding-left:20px}
+.tk-fact code.tk-path{max-width:100%;text-overflow:clip}  /* a script path is cut from the left by the page (it keeps the file name), never again by the box (1.7.38, F1 M3) */

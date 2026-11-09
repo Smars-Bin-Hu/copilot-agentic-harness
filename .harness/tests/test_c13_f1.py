@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -426,7 +428,7 @@ class CardWordsTests(unittest.TestCase):
     def test_the_page_shows_the_end_of_a_long_path_with_the_whole_path_on_hover(self) -> None:
         text = (Path(boardserve.__file__).parent / "web" / "desk.js").read_text(encoding="utf-8")
         self.assertIn("const tailPath = (path, max)", text)
-        self.assertIn('h("code", {title: script.path}, tailPath(script.path, 44))', text)
+        self.assertIn('h("code", {class: "tk-path", title: script.path}, tailPath(script.path, window.innerWidth < 560 ? 24 : 44))', text)
 
     def test_the_head_of_a_statement_on_one_of_two_systems_says_on(self) -> None:
         text = (Path(boardserve.__file__).parent / "web" / "desk.js").read_text(encoding="utf-8")
@@ -589,9 +591,9 @@ class BackgroundCheckTimeoutTests(English, ConnectionsCase):
         row = self.row()
         self.assertEqual((row["untested"], row["untested_why"], row["reach_tip"]), (True, "no-answer", ""))
 
-    def test_the_server_that_says_it_is_down_is_no_answer_too(self) -> None:
+    def test_a_server_that_says_it_is_down_is_still_a_failure_with_what_it_said(self) -> None:
         line = self.probe((1, "connection refused"))
-        self.assertEqual((line["state"], line["why"]), (reach.UNKNOWN, connections.UNTESTED_SLOW))
+        self.assertEqual((line["state"], line["why"], line["said"]), (reach.FAILED, "no-answer", "connection refused"))
 
     def test_a_refusal_is_a_failure_and_the_hover_says_why(self) -> None:
         line = self.probe((1, "Login failed for user"))
@@ -687,6 +689,16 @@ class TicketFieldTests(English, TaskCase):
         self.assertIn("links.placeholder = state.linkTypes.slice(0, 2)", text)
         self.assertEqual(messages.table("en")["board.new.links.ph"], "type:id")
         both_languages(self, "task.link.id")
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class PageScriptsParseTests(unittest.TestCase):
+    """A script of the board that does not parse leaves a blank page (a `//` comment put in the middle of a line did it once, in the browser check of F1): every script of the page must pass `node --check`."""
+
+    def test_every_script_of_the_board_parses(self) -> None:
+        for path in sorted(WEB.glob("*.js")):
+            done = subprocess.run([shutil.which("node"), "--check", str(path)], capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, f"{path.name}: {done.stderr[:300]}")
 
 
 class WordsOfTheBoardTests(unittest.TestCase):

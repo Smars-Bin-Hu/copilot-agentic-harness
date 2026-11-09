@@ -1232,7 +1232,7 @@
       ...(many ? [] : factList(item.facts)),
       many ? null : factSpan(t("desk.outbox.target"), item.target),
       ...(holds ? holds.map((hold) => zoneFact(hold.zone, hold.note, hold.system, hold.env)) : [zoneFact(item.zone, item.zone_note)]),  // 1.7.38: why a call of a type with lists waits; a line on more than one system says why for each part (F1 M6)
-      ...scriptsOf(item).map((script) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", {title: script.path}, tailPath(script.path, 44)), " ",  // the end of the path: two scripts of one folder differ there (F1 M3) h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: script.lines})))));
+      ...scriptsOf(item).map((script) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", {class: "tk-path", title: script.path}, tailPath(script.path, window.innerWidth < 560 ? 24 : 44)), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: script.lines})))));  // the end of the path: two scripts of one folder differ there (F1 M3)
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
   // The raw command is folded: ids, headers and long addresses are not on the face of the card. A line of several writes (1.7.38) says each on a line of its own, with its own facts and text.
@@ -1248,7 +1248,7 @@
     if (!body) return null;
     if (body.missing) return h("div", {class: "tk-call-body missing"}, h("p", {class: "bad"}, t("desk.outbox.body.missing", {path: body.path, dismiss: t("desk.outbox.dismiss")})));
     return h("div", {class: "tk-call-body"},
-      h("div", {class: "tk-body-h"}, h("b", null, body.system ? t("desk.outbox.body.on", {label: body.label || t("desk.outbox.body"), where: body.system + (body.env && body.env !== "none" ? " (" + body.env + ")" : "")}) : body.label || t("desk.outbox.body")), " ",  // "The statement that will run on acmedw-dev (dev)" when the line reaches more than one system (F1 M4) h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
+      h("div", {class: "tk-body-h"}, h("b", null, body.system ? t("desk.outbox.body.on", {label: body.label || t("desk.outbox.body"), where: body.system + (body.env && body.env !== "none" ? " (" + body.env + ")" : "")}) : body.label || t("desk.outbox.body")), " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),  // "The statement that will run on acmedw-dev (dev)" when the line reaches more than one system (F1 M4)
       h("pre", {class: "tk-body-text", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null);
   }
   const rawFold = (item) => h("details", {class: "tk-raw"}, h("summary", null, t("desk.outbox.raw")), h("pre", {class: "cmd-script one"}, item.command));

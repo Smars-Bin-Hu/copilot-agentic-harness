@@ -214,7 +214,8 @@ class PageRules(unittest.TestCase):
 
     def test_a_connection_of_ones_own_is_removed_only_after_the_browser_asked(self) -> None:
         servers = self.source("servers.js")
-        self.assertIn('window.confirm(t("connections.forget.ask"', servers)
+        self.assertIn('"connections.forget.ask"', servers)  # F1 L9: every forget asks; a connection of one's own has its own sentence
+        self.assertIn("window.confirm(t(key,", servers)
         self.assertNotIn("connections.forget.sure", servers)
         self.assertIn('"connections.state.notsaved"', servers)  # a failed test of what is not kept says so
         self.assertIn("env.redraw()", servers.split("shareWindow(row, (said, bad) =>")[1].split("));")[0])  # a share draws the list again

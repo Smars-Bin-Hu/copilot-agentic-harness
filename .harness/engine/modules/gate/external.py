@@ -182,7 +182,7 @@ _REDIRECT_WITH_FILE = re.compile(r"^\d*(?:>>?|<<-?|<)[^\s<]")  # `>f`, `2>/dev/n
 # among its arguments makes the line held: the gate cannot tell what the program does with it.
 READ_ONLY_PROGRAMS = frozenset(
     "grep egrep fgrep rg cat tac echo printf head tail less more wc sort uniq cut nl ls dir tree stat file du diff cmp which whereis type pwd cd test [ [[ true false basename dirname "
-    "realpath readlink jq column fold rev md5sum sha1sum sha256sum shasum od xxd strings date man apropos whatis sed find git gh harness where get-command gcm get-help "
+    "realpath readlink jq column fold rev md5sum sha1sum sha256sum shasum od xxd strings date man apropos whatis sed find git gh harness where get-help "
     "get-content gc select-string sls get-childitem gci write-output write-host get-item test-path set-location sl resolve-path measure-object".split()
 )
 # Programs that manage files (1.7.27): they do not run their arguments, so a program name among them is only a name (`cp .../ado /tmp`, `chmod +x .../ado`, `mkdir out/ado`). The program that was

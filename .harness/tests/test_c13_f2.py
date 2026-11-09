@@ -149,7 +149,7 @@ class NormalUseTests(ListedCase):
     def test_normal_use_unchanged(self) -> None:
         x = self.script("select 1;\n", "x.sql")
         for command in ("sqlcmd -?", "sqlcmd --help", "sqlcmd --version", f"{SERVER} {READ}", "sqlcmd -S localhost,14339 -C -Q 'select 1'", "which sqlcmd", "command -v sqlcmd", "command -V sqlcmd", "type sqlcmd", "whereis sqlcmd",
-                        "man sqlcmd", "where sqlcmd", "Get-Command sqlcmd", "gcm sqlcmd", "echo sqlcmd", "grep -rn sqlcmd .", "git log -S sqlcmd", "git diff -- sqlcmd.sql", f"cat {x}", f"ls {TASK}", f"echo 'sqlcmd -S x -Q \"DROP TABLE t\"' > {TASK}/notes.md",
+                        "man sqlcmd", "where sqlcmd", "where.exe sqlcmd", "echo sqlcmd", "grep -rn sqlcmd .", "git log -S sqlcmd", "git diff -- sqlcmd.sql", f"cat {x}", f"ls {TASK}", f"echo 'sqlcmd -S x -Q \"DROP TABLE t\"' > {TASK}/notes.md",
                         "ado --help", "ado --version", "ado items", "az --version", "az login", "az account show", "az group list", "harness connections find dev", "python3 -m unittest", "ls", "git status",
                         "az rest --method get --url https://dev.azure.com/acme/_apis/projects"):
             self.runs(command)

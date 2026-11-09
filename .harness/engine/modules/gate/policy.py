@@ -6,7 +6,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Pattern, Tuple
 
-from core import messages, repo_paths, schema
+from core import config, messages, repo_paths, schema
+from core.paths import policies_dir
 from core.guardrails import CORE_GUARDRAILS, admin_locked, guardrail_paths, missing_core
 
 POLICY_NAME = "gate"
@@ -71,6 +72,37 @@ def validate_policy(policy: Dict[str, Any], floor: bool = True) -> None:
                 re.compile(expand(rule["pattern"], "x"))
             except re.error as error:
                 raise ValueError(f"Invalid {POLICY_NAME}.json: bad pattern {rule['pattern']!r}: {error}") from error
+
+
+def diagnose(root: Path, error: BaseException) -> Tuple[str, str]:
+    """`(file, what is wrong)` for a gate policy that cannot be read (1.7.38, C13 F2c): the first of its three files (`gate.json`, the company's, the person's) that is missing (the first one), not valid JSON or not an object; else
+    the first layer that makes the merged policy one the schema refuses; else `gate.json` with the fault as it was raised. For the gate, which runs on its built-in copy meanwhile, and for `harness doctor`. Never raises."""
+    try:
+        merged: Any = {}
+        seen: List[Tuple[str, Any]] = []
+        for suffix in ("", ".company", ".override"):
+            name = f"{POLICY_NAME}{suffix}.json"
+            path = policies_dir(root) / name
+            if not path.is_file():
+                if not suffix:
+                    return name, "the file is missing"
+                continue
+            try:
+                data = config.read_json(path)
+            except (OSError, ValueError) as problem:
+                return name, " ".join(str(problem).split())[:200]
+            if not isinstance(data, dict):
+                return name, "the file is not an object"
+            seen.append((name, data))
+        for name, data in seen:
+            try:
+                merged = config.deep_merge(merged, data)
+                validate_policy(merged, floor=False)
+            except Exception as problem:  # noqa: BLE001 - the layer that made the policy wrong
+                return name, " ".join(str(problem).split())[:200]
+    except Exception:  # noqa: BLE001 - a name for the text only
+        pass
+    return f"{POLICY_NAME}.json", " ".join(str(error).split())[:200]
 
 
 class Compiled:

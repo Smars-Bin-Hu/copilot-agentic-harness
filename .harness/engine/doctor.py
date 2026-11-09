@@ -275,7 +275,12 @@ def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -
             module.validate_policy(config.load_policy(root, policy_name))
             report.ok(say("doctor.policy.ok", name=policy_name))
         except Exception as error:
-            report.error(say("doctor.policy.bad", name=policy_name, error=error))
+            diagnose = getattr(module, "diagnose", None)
+            if policy_name == "gate" and callable(diagnose):  # 1.7.38 (C13 F2c): which file, what is wrong, and what the gate does meanwhile
+                file, problem = diagnose(root, error)
+                report.error(say("doctor.gate.policy_bad", file=file, error=problem))
+            else:
+                report.error(say("doctor.policy.bad", name=policy_name, error=error))
 
 
 def check_unseen(report: Report, root: Path) -> None:

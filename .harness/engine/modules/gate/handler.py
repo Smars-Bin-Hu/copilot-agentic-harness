@@ -26,7 +26,8 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, external, failclosed, gitcmd, harnesscmd, outbox, rules, targetfault, terminal
+from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, targetfault, terminal
+from . import policy as gate_policy
 from .policy import POLICY_NAME, Compiled, validate_policy
 
 NAME = "gate"
@@ -694,11 +695,21 @@ def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
             return refused
     if event.event != "PreToolUse" or event.tool_kind not in WRITE_KINDS + ("terminal",):
         return None
-    policy = ctx.policy(POLICY_NAME)
-    validate_policy(policy, floor=False)
     found, unreadable = read_targets(ctx)
-    compiled = Compiled(policy, [(repo.name, repo.path, repo.refused_paths) for repo in found.repos.values()] if found else None, admin=ctx.admin)
+    repos = [(repo.name, repo.path, repo.refused_paths) for repo in found.repos.values()] if found else None
+    broken: Optional[BaseException] = None
+    try:
+        policy = ctx.policy(POLICY_NAME)
+        validate_policy(policy, floor=False)
+        compiled = Compiled(policy, repos, admin=ctx.admin)
+    except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2c): the gate's own policy cannot be read: it runs on a built-in copy of the shipped one, and a write that is not inside the task folder and a git write are refused (`fallback`)
+        broken = error
+        policy = builtin.policy()
+        compiled = Compiled(policy, repos, admin=ctx.admin)
     decided = _handle_call(event, ctx, policy, compiled, found)
+    if broken is not None:
+        file, problem = gate_policy.diagnose(ctx.root, broken)
+        decided = fallback.refine(event, ctx, decided, file, problem, WRITE_KINDS)
     if unreadable is not None and not (decided and decided.permission == "deny"):  # 1.7.38 (C13 F2b): the target policy cannot be read, so the gate does not know where the target repositories are: a call that may write into one does not pass
         try:
             file, problem = targets.diagnose(ctx.root, unreadable)

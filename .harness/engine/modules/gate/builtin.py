@@ -1,0 +1,211 @@
+"""A built-in copy of the shipped gate policy (1.7.38, C13 F2c).
+
+When `gate.json`, or the company's or the person's layer on it, cannot be read, the gate used to raise, the hook counted that as "no opinion", and every local protection passed (guardrail files, writes outside the task
+folder, git writes). Now the gate runs on this copy: the shipped guardrail paths, the terminal rules and the git setting, without the company's and the person's layers (they are the part that cannot be read). The
+rules are the same as the shipped ones; `fallback.py` adds the strict part (a write passes only inside the folder of an open task, no git write passes) and the reason names the file and the fault.
+
+This is a copy of `.harness/policies/gate.json`. When that file changes, change this one: `test_c13_f2.BuiltinPolicyTests` fails until the two say the same. The `description` of the file is left out.
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+from typing import Any, Dict
+
+_JSON = r'''
+{
+ "schema_version": 1,
+ "guardrail_paths": [
+  ".github/hooks/**",
+  ".harness/policies/**",
+  ".harness/engine/**",
+  ".harness/bin/**",
+  ".harness/toolpacks/**",
+  ".harness/.env",
+  "Start Harness.command",
+  "Start Harness.cmd",
+  ".harness/registry.json",
+  ".harness/runtime/**",
+  ".vscode/settings.json",
+  ".vscode/mcp.json",
+  "LICENSE",
+  "NOTICE"
+ ],
+ "extra_guardrail_paths": [],
+ "admin_locked_paths": [
+  ".harness/runtime/**"
+ ],
+ "cli_owned_paths": [
+  ".workspace/sandbox/tasks/*/.task/**",
+  ".workspace/sandbox/tasks/*/PROMOTE-PLAN.diff",
+  ".workspace/sandbox/tasks/*/CHANGES.diff",
+  ".workspace/sandbox/tasks/*/CHANGES_r*.diff",
+  ".workspace/sandbox/tasks/*/REVIEW/**",
+  ".workspace/sandbox/tasks/*/SNAPSHOT/**",
+  ".workspace/sandbox/tasks/*/OUTBOX/**",
+  ".workspace/reports/**"
+ ],
+ "terminal": {
+  "guardrail_write": [
+   {
+    "why": {
+     "en": "it writes, deletes or moves one",
+     "zh": "写入、删除或移动"
+    },
+    "pattern": "(?:>>?\\s*|\\btee\\b[^;&|\\n]*\\s)[\"']?(?:[^\\s\"';&|<>]*/)?{guard}"
+   },
+   {
+    "why": {
+     "en": "it writes, deletes or changes the rights of one",
+     "zh": "写入、删除或改权限"
+    },
+    "pattern": "{cmd}(?:rm|rmdir|unlink|mv|touch|chmod|chown|truncate|ln|mkdir|patch|del|erase|rd|ren|move|remove-item|move-item|rename-item|new-item|set-content|add-content|clear-content|out-file)\\b[^;&|\\n]*{guard}"
+   },
+   {
+    "why": {
+     "en": "it deletes or rewrites one with find",
+     "zh": "用 find 删除或改写"
+    },
+    "pattern": "\\bfind\\b[^;&|\\n]*{guard}[^;&|\\n]*(?:-delete\\b|-exec\\s+(?:rm|mv|chmod|sed)\\b)"
+   },
+   {
+    "why": {
+     "en": "it copies into one",
+     "zh": "复制到它里面"
+    },
+    "pattern": "{cmd}(?:cp|rsync|install|copy|xcopy|copy-item)\\b[^;&|\\n]*{guard}[^\\s\"';&|]*[\"']?\\s*(?:[;&|]|$)"
+   },
+   {
+    "why": {
+     "en": "it edits one in place",
+     "zh": "原地修改"
+    },
+    "pattern": "{cmd}(?:sed|perl|ruby)\\b[^;&|\\n]*\\s-[a-z]*i[a-z]*\\b[^;&|\\n]*{guard}"
+   },
+   {
+    "why": {
+     "en": "it overwrites or rewrites one with git",
+     "zh": "用 git 覆盖或改写"
+    },
+    "pattern": "{cmd}git\\s+(?:checkout|restore|rm|mv|apply|stash|reset)\\b[^;&|\\n]*{guard}"
+   },
+   {
+    "why": {
+     "en": "it rewrites one with an inline script",
+     "zh": "用内联脚本改写"
+    },
+    "pattern": "{cmd}(?:python3?|py|node|perl|ruby)\\b[^\\n]*\\s-[ce]\\s[^\\n]*{guard}[^\\n]*(?:open|write|unlink|remove|rmtree|rename|replace|truncate)"
+   }
+  ],
+  "deny": [
+   {
+    "why": {
+     "en": "it recursively deletes the root, the home folder or the current folder",
+     "zh": "递归删除根目录、家目录或当前目录"
+    },
+    "pattern": "{cmd}rm\\s+(?:-[a-z]+\\s+)*-[a-z]*(?:r[a-z]*f|f[a-z]*r)[a-z]*\\s+(?:/|~|\\$home|\\*|\\.|\\.\\.)/?\\*?(?:\\s|$|[;&|])"
+   },
+   {
+    "why": {
+     "en": "it recursively force-deletes the root, the home folder or every file",
+     "zh": "递归强制删除根目录、家目录或所有文件"
+    },
+    "pattern": "{cmd}remove-item\\b[^;&|\\n]*-recurse[^;&|\\n]*\\s(?:/|~|\\*|[a-z]:/?)(?:\\s|$|[;&|])"
+   },
+   {
+    "why": {
+     "en": "it hands a download straight to a shell or an interpreter to run",
+     "zh": "把下载的内容直接交给 shell 或解释器执行"
+    },
+    "pattern": "{cmd}(?:curl|wget|iwr|invoke-webrequest|irm|invoke-restmethod)\\b[^\\n]*\\|\\s*(?:sudo\\s+)?(?:sh|bash|zsh|python3?|py|node|perl|iex|invoke-expression)\\b"
+   },
+   {
+    "why": {
+     "en": "it formats a disk or writes to a disk device directly",
+     "zh": "格式化磁盘或直接写磁盘设备"
+    },
+    "pattern": "{cmd}mkfs(?:\\.\\w+)?\\b|{cmd}dd\\b[^\\n]*\\bof=/dev/|>\\s*/dev/(?:sd|nvme|disk)"
+   },
+   {
+    "why": {
+     "en": "it runs with administrator rights",
+     "zh": "会用管理员权限运行"
+    },
+    "pattern": "{cmd}(?:sudo|gsudo|doas|runas)(?:\\.exe)?\\b|-verb\\s+[\\\"']?runas\\b"
+   },
+   {
+    "why": {
+     "en": "it changes rights recursively, or deletes containers, clusters or infrastructure",
+     "zh": "会递归改权限，或删除容器、集群、基础设施"
+    },
+    "pattern": "\\b(?:chmod|chown|chgrp)\\s+(?:-R\\b|--recursive\\b)|\\bicacls(?:\\.exe)?\\b[^;&|\\n]*\\s/t\\b|\\btakeown(?:\\.exe)?\\b[^;&|\\n]*\\s/r\\b|-recurse\\b[^\\n]*\\bset-acl\\b|\\bdocker(?:\\.exe)?\\s+(?:rm|rmi|system\\s+prune|volume\\s+rm)\\b|\\bkubectl(?:\\.exe)?\\s+delete\\b|\\bterraform(?:\\.exe)?\\s+(?:apply|destroy)\\b"
+   },
+   {
+    "why": {
+     "en": "only the user may run these, in their own terminal: approving a plan (task approve-plan), confirming the requirement (task confirm-req), approving a write-back (task approve-promote), recovering a promote that failed halfway (task recover), giving more checks, waiving them or dismissing one (task review extend, task review waive, task review dismiss), letting the agent run a test environment itself (task test runner), opening an environment for a task (task allow), pausing and resuming a task (task pause, task resume, and all at once: task offwork, task onwork), switching autorun on (task autorun on), serving the board with buttons that act (task board, task board --serve; an agent writes the page with task board --once), approving a git command (approve-command), approving a call to an outside system (approve-action), switching admin mode on (admin on). Setting how many checks a task gets (task review set) is the user's too. Tell the user to run the command; do not run it yourself",
+     "zh": "批准计划（task approve-plan）、批准回写（task approve-promote）、恢复中途出错的 promote（task recover）、再给检查次数、放行或作废一次检查（task review extend、task review waive、task review dismiss）、让 agent 自己跑一个测试环境（task test runner）、为一个任务打开一个环境（task allow）、搁置和恢复任务（task pause、task resume，以及一次全部：task offwork、task onwork）、开 autorun（task autorun on）、启动能操作的看板服务（task board、task board --serve；agent 只能用 task board --once 生成页面）、批准 git 命令（approve-command）、批准外部调用（approve-action）、开 admin 模式（admin on）只能由用户在自己的终端里运行。设定任务的检查次数（task review set）也只能由用户来做。告诉用户运行这条命令，不要自己运行"
+    },
+    "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:task\\s+(?:approve-plan|confirm-req|approve-promote|recover|pause|resume|offwork|onwork|autorun\\s+on|review\\s+(?:set|extend|waive|dismiss)|test\\s+runner|allow\\s+--env|board\\b(?![^;&|\\n]*\\s--once\\b))|approve-command|approve-action|admin\\s+on)\\b"
+   },
+   {
+    "why": {
+     "en": "the agent never closes a task. When the work is done, run `harness task deliver --summary \"<text>\"` and stop: the board shows the task as to accept, and the user presses Accept and closes it (or keeps talking in the same task). If the user asks you to close one, tell them to use Close on the board",
+     "zh": "agent 不自己关任务。工作做完后运行 `harness task deliver --summary \"<text>\"` 然后停下：看板会把任务显示为“待验收”，由用户点“验收并关闭”（或继续在同一个任务里说话）。用户让你关任务时，告诉他在看板上用“关闭”"
+    },
+    "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+task\\s+close(?![\\w-])"
+   }
+  ],
+  "ask": [
+   {
+    "why": {
+     "en": "it deletes files",
+     "zh": "删除文件"
+    },
+    "pattern": "{cmd}(?:rm|rmdir|unlink|del|erase|rd|remove-item)\\b|\\bxargs\\s+rm\\b|\\bfind\\b[^;&|\\n]*(?:-delete\\b|-exec\\s+rm\\b)"
+   },
+   {
+    "why": {
+     "en": "it rewrites or drops git history, branches or changes that are not committed",
+     "zh": "会改写或丢弃 git 历史、分支或未提交的改动"
+    },
+    "pattern": "\\bgit\\s+(?:push|reset\\s+--hard|clean(?!\\s+(?:-[a-zA-Z]*n[a-zA-Z]*|--dry-run)(?![\\w-]))|checkout\\s+(?:-f|--force)|branch\\s+-D|stash\\s+(?:drop|clear)|restore(?!\\s+--staged)|filter-branch|reflog\\s+expire)\\b"
+   },
+   {
+    "why": {
+     "en": "it goes on the network",
+     "zh": "会联网"
+    },
+    "pattern": "{cmd}(?:curl|wget|nc|ncat|ssh|scp|sftp|rsync|ftp|telnet|invoke-webrequest|iwr|invoke-restmethod|irm)\\b"
+   },
+   {
+    "why": {
+     "en": "it installs packages",
+     "zh": "会安装软件包"
+    },
+    "pattern": "\\b(?:pip3?|(?:python3?|py)(?:\\s+-[0-9.]+)?\\s+-m\\s+pip|npm|pnpm|yarn|brew|apt|apt-get|choco|winget|gem|cargo)\\s+(?:install|add|i)\\b|\\bgo\\s+(?:install|get)\\b|{cmd}npx\\b"
+   },
+   {
+    "why": {
+     "en": "it deletes session logs",
+     "zh": "会删除会话日志"
+    },
+    "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+logs\\s+prune\\b"
+   }
+  ]
+ },
+ "git": {
+  "approval_minutes": 10
+ },
+ "circuit_breaker": {
+  "repeat_limit": 3
+ }
+}
+'''
+
+POLICY: Dict[str, Any] = json.loads(_JSON)
+
+
+def policy() -> Dict[str, Any]:
+    """A fresh copy: the caller may change it."""
+    return copy.deepcopy(POLICY)

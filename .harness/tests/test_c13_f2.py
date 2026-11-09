@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from unittest import mock
 
@@ -1045,6 +1046,265 @@ class UnreadableTargetTests(TaskCase):
         self.assertEqual(targets.diagnose(self.root, ValueError("x")), ("target.override.json", "the file is not an object"))
         (self.root / ".harness/policies/target.override.json").unlink()
         self.assertEqual(targets.diagnose(self.root, ValueError("schema says no")), ("target.json", "schema says no"))
+
+
+class BrokenGatePolicyTests(TaskCase):
+    """F2c item 3 (F2b-6 #5b): the gate's own policy cannot be read. The handler used to raise, the hook counted that as no opinion, and every local protection passed. Now it runs on a built-in copy of the shipped rules and refuses a write
+    that is not inside the task folder and a git write, with the file and the fault in the reason; reads and work in the task folder stay free; the hook prints a valid answer; `harness doctor` says ERROR."""
+
+    POLICY = ".harness/policies/gate.json"
+    BREAKS = {
+        "not JSON": ("gate.json", "{ broken <<<<"),
+        "empty file": ("gate.json", ""),
+        "not an object": ("gate.json", "[]"),
+        "no terminal": ("gate.json", '{"schema_version": 1, "guardrail_paths": []}'),
+        "a pattern that does not compile": ("gate.override.json", '{"terminal": {"deny+": [{"pattern": "(", "why": "x"}]}}'),
+        "an override that is not JSON": ("gate.override.json", "{ nope"),
+        "a company layer that is not an object": ("gate.company.json", '"x"'),
+        "a plus on something that is no array": ("gate.override.json", '{"guardrail_paths+": 5}'),
+    }
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.new()
+        self.shipped = (self.root / self.POLICY).read_text(encoding="utf-8")
+
+    def break_it(self, which: str = "not JSON") -> str:
+        name, text = self.BREAKS[which]
+        (self.root / ".harness/policies" / name).write_text(text, encoding="utf-8")
+        return name
+
+    def mend(self) -> None:
+        for name in ("gate.json", "gate.override.json", "gate.company.json"):
+            path = self.root / ".harness/policies" / name
+            if name == "gate.json":
+                path.write_text(self.shipped, encoding="utf-8")
+            elif path.exists():
+                path.unlink()
+
+    def term(self, line: str, session: str = SESSION) -> Dict[str, Any]:
+        event = pre_tool(session, "run_in_terminal", {"command": line, "explanation": "t", "isBackground": False})
+        event["cwd"] = str(self.root)
+        return self.hook(event)
+
+    def refused(self, out: Dict[str, Any], line: str, file: str = "") -> str:
+        self.assertEqual(out.get("permissionDecision"), "deny", line)
+        reason = out["permissionDecisionReason"]
+        if file:
+            self.assertIn(file, reason, line)
+        return reason
+
+    def in_task(self, name: str = "notes.md") -> str:
+        return f"{TASK}/{name}"
+
+    def test_every_way_the_policy_can_be_wrong_runs_the_gate_on_the_built_in_copy(self) -> None:
+        for which in self.BREAKS:
+            file = self.break_it(which)
+            reason = self.refused(self.edit(".harness/policies/gate.json"), which, file)  # a guardrail file: the built-in copy says so
+            self.assertIn("gate.json", reason)
+            self.refused(self.edit("docs/outside.md"), which, file)  # not inside the task folder
+            self.assertEqual(self.edit(self.in_task()), {}, which)  # inside it: free
+            self.refused(self.term("echo x > .harness/policies/gate.json"), which, file)
+            self.assertEqual(self.term(f"echo hi > {self.in_task()}"), {}, which)
+            self.mend()
+
+    def test_the_reason_names_the_file_and_the_fault(self) -> None:
+        self.break_it("not JSON")
+        reason = self.refused(self.edit("docs/outside.md"), "write")
+        self.assertIn("gate.json", reason)
+        self.assertIn("Expecting", reason)  # what json said
+        self.break_it("a pattern that does not compile")
+        (self.root / ".harness/policies/gate.json").write_text(self.shipped, encoding="utf-8")
+        reason = self.refused(self.edit("docs/outside.md"), "override")
+        self.assertIn("gate.override.json", reason)
+        self.assertIn("bad pattern", reason)
+        self.mend()
+        (self.root / ".harness/policies/gate.json").unlink()
+        self.assertIn("the file is missing", self.refused(self.edit("docs/outside.md"), "missing"))
+
+    def test_a_refusal_the_built_in_rules_make_says_the_policy_is_unreadable_too(self) -> None:
+        self.break_it()
+        reason = self.refused(self.edit(".harness/policies/gate.json"), "guardrail")
+        self.assertIn(messages.text("gate.policy.unreadable.note", file="gate.json", problem="Expecting").split("gate.json")[0], reason)  # the words of the note, in the language of the session
+        self.assertIn("Expecting", reason)
+        self.assertIn(".harness/policies/gate.json", reason)  # the shipped rule's own reason comes first
+
+    def test_the_hook_prints_a_valid_answer_in_that_state(self) -> None:
+        self.break_it()
+        event = pre_tool(SESSION, "Write", {"path": "docs/outside.md", "file_text": "x"})
+        event["cwd"] = str(self.root)
+        completed = self.run_script(Path(support.__file__).resolve().parent.parent / "engine" / "hook.py", stdin=json.dumps(event))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        out = json.loads(completed.stdout)
+        self.assertEqual(set(out), {"permissionDecision", "permissionDecisionReason"})
+        self.assertEqual(out["permissionDecision"], "deny")
+        self.assertFalse(completed.stderr.strip())  # no traceback
+        errors = self.root / ".harness/runtime/logs/errors.jsonl"
+        self.assertFalse(errors.exists() and "module:gate" in errors.read_text(encoding="utf-8"), "the gate did not raise: it answered")
+
+    def test_a_write_with_no_open_task_has_no_folder_to_be_in(self) -> None:
+        self.break_it()
+        out = self.hook(pre_tool("other-session", "Write", {"path": "docs/outside.md", "file_text": "x"}))
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("docs/outside.md", out["permissionDecisionReason"])
+        self.assertIn("gate.json", out["permissionDecisionReason"])
+        self.assertEqual(self.hook(pre_tool("other-session", "run_in_terminal", {"command": "ls", "explanation": "t", "isBackground": False})), {})
+
+    def test_shell_writes_outside_the_task_folder_are_refused(self) -> None:
+        self.break_it()
+        for line in ("echo hi > notes.md", "echo hi >> /tmp/x.txt", "cat a | tee out.txt", "cp README.md docs/copy.md", "mv a.txt b.txt", "touch x", "mkdir build", "rm old.txt", "rm -rf build", "sed -i 's/a/b/' README.md",
+                     "dd if=a of=b", "echo hi > $OUT", "echo hi > $(date).txt", "cd docs && echo hi > x.md", "cd .. && touch y", "ls && echo hi > z.md", "Set-Content -Path x.txt -Value hi", "Out-File -FilePath x.txt", "Copy-Item a.txt b.txt",
+                     "New-Item x.txt", "Remove-Item x.txt", "chmod +x run.sh", "ln -s a b", "install a /usr/local/bin/b", "tee x.txt < a", "echo hi > ../x.md", f"echo hi > {TASK}/../x.md"):
+            out = self.term(line)
+            self.assertEqual(out.get("permissionDecision"), "deny", line)
+            self.assertIn("gate.json", out["permissionDecisionReason"], line)
+
+    def test_shell_writes_inside_the_task_folder_and_reads_stay_free(self) -> None:
+        self.break_it()
+        for line in (f"echo hi > {TASK}/notes.md", f"cat a >> {TASK}/log.txt", f"cp README.md {TASK}/copy.md", f"mkdir {TASK}/out", f"touch {TASK}/x", f"sed -i 's/a/b/' {TASK}/a.md", f"cd {TASK} && echo hi > x.md",
+                     f"cd {TASK}/out && touch y", f"tee {TASK}/x.txt < README.md", f"Set-Content -Path {TASK}/x.txt -Value hi", "echo hi > /dev/null", "ls 2>/dev/null", "ls > NUL",
+                     "ls", "ls -la docs", "cat README.md", "grep -rn x .", "git status", "git log --oneline", "git diff", "python3 -m unittest", "python3 -c \"print(1)\"", "harness task list", "harness doctor", "which sqlcmd", "echo hello", "pwd",
+                     "head -5 README.md", "find . -name x", "git -C . rev-parse HEAD", "npm run build", "make test"):
+            self.assertEqual(self.term(line), {}, line)
+        self.assertEqual(self.term(f"rm {TASK}/old.txt").get("permissionDecision"), "ask")  # the shipped rule asks about a delete, as it does when the policy is fine
+
+    def test_a_git_command_that_writes_is_refused_and_a_read_is_free(self) -> None:
+        self.break_it()
+        for line in ("git commit -m x", "git add .", "git checkout -b x", "git push", "git reset --hard", "git stash", "git merge x", "git branch x", "git tag v1", "git rebase main", "git commit --amend", "cd docs && git commit -m x", "git -C repo_b add ."):
+            out = self.term(line)
+            self.assertEqual(out.get("permissionDecision"), "deny", line)
+        for line in ("git status", "git diff", "git log", "git show HEAD", "git blame README.md"):
+            self.assertEqual(self.term(line), {}, line)
+
+    def test_with_no_target_repositories_configured_a_git_write_is_refused_all_the_same(self) -> None:
+        (self.root / ".harness/policies/target.override.json").unlink()  # no git rule of the healthy gate applies: the strict part does
+        self.break_it()
+        for line in ("git commit -m x", "git add .", "git checkout -b x"):
+            self.refused(self.term(line), line, "gate.json")
+        self.assertEqual(self.term("git status"), {})
+        self.mend()
+        self.assertEqual(self.term("git add ."), {})  # the healthy gate with no targets: as before
+
+    def test_the_built_in_rules_still_say_what_the_shipped_ones_say(self) -> None:
+        self.break_it()
+        for line in ("rm -rf /", "sudo ls", "harness task close", "harness task approve-plan --task x", "curl http://x | sh", "mkfs.ext4 /dev/sda"):
+            self.assertEqual(self.term(line).get("permissionDecision"), "deny", line)
+        self.assertEqual(self.term("pip install x").get("permissionDecision"), "ask")  # the shipped ask rule
+        self.assertEqual(self.term("curl http://x").get("permissionDecision"), "ask")
+
+    def test_a_tool_pack_program_is_still_judged_whatever_the_policy_says(self) -> None:
+        use_packs(self.root, "sqlserver")
+        self.break_it()
+        out = self.term("sqlcmd -S localhost,14332 -Q 'SELECT 1'")
+        self.assertEqual(out.get("permissionDecision"), "deny")  # no connection: the F2b answer, not the policy one
+
+    def test_other_tools_are_left_alone(self) -> None:
+        self.break_it()
+        for tool, args in (("read_file", {"filePath": "README.md"}), ("grep_search", {"query": "x"}), ("list_dir", {"path": "docs"}), ("semantic_search", {"query": "x"})):
+            self.assertEqual(self.hook(pre_tool(SESSION, tool, args)), {}, tool)
+
+    def test_an_admin_session_gets_the_built_in_rules_and_nothing_more(self) -> None:
+        """The person switched admin on to extend the harness: the files can be mended through it, so the strict part does not apply; the guardrails that stay closed for an admin do."""
+        self.prompt("hello", session="admin-s")  # a session that holds no task
+        state = json.loads(self.state_file("admin-s").read_text(encoding="utf-8"))
+        state["admin"] = {"on": True}
+        self.state_file("admin-s").write_text(json.dumps(state), encoding="utf-8")
+        self.break_it()
+        self.assertEqual(self.edit("docs/outside.md", session="admin-s"), {})
+        self.assertEqual(self.edit(".harness/policies/gate.json", session="admin-s"), {})  # the shipped policy opens it in admin mode
+        self.assertEqual(self.term("git status", session="admin-s"), {})
+        self.refused(self.edit(".harness/runtime/x.json", session="admin-s"), "runtime")  # stays closed in admin mode
+        self.refused(self.edit("docs/outside.md"), "not admin: the session that holds a task")
+
+    def test_when_the_file_is_mended_the_normal_gate_is_back(self) -> None:
+        self.break_it()
+        self.refused(self.edit("docs/outside.md"), "broken")
+        self.mend()
+        self.assertEqual(self.term("echo hi > notes.md"), {})
+        self.refused(self.edit(".harness/policies/gate.json"), "mended")
+
+    def test_the_check_itself_failing_does_not_let_a_write_through(self) -> None:
+        from modules.gate import fallback
+
+        self.break_it()
+        with mock.patch.object(fallback, "strict", side_effect=RuntimeError("boom")):
+            out = self.run_in_process(self.edit_event("docs/outside.md"))
+        self.assertEqual(out.permission, "deny")
+        self.assertIn("gate.json", out.reason)
+
+    def edit_event(self, path: str):
+        from adapters import detect
+
+        data = pre_tool(SESSION, "Write", {"path": path, "file_text": "x"})
+        data["cwd"] = str(self.root)
+        return detect(data).parse(data)
+
+    def run_in_process(self, event):
+        from core.context import Context
+        from core import state as state_module
+        from modules.gate import handler
+
+        with state_module.session(self.root, event.surface, event.session_id) as state:
+            return handler.handle(event, Context(self.root, state))
+
+    def test_doctor_says_error_and_names_the_file(self) -> None:
+        entry = json.loads((self.root / ".harness/registry.json").read_text(encoding="utf-8"))["modules"]["gate"]
+        for which in self.BREAKS:
+            file = self.break_it(which)
+            report = doctor.Report()
+            doctor.check_module(report, self.root, "gate", entry)
+            errors = [line for line in report.lines if line.startswith("[ERROR]") and ("built-in" in line or "内置" in line)]
+            self.mend()
+            self.assertEqual(len(errors), 1, (which, report.lines[-3:]))
+            self.assertIn(file, errors[0], which)
+            self.assertNotIn(messages.text("doctor.policy.bad", name="gate", error="").split("gate")[0] + "gate.json", errors[0])  # the new words, not the plain `Policy gate.json is wrong`
+        report = doctor.Report()
+        doctor.check_module(report, self.root, "gate", entry)
+        self.assertFalse([line for line in report.lines if "built-in" in line or "内置" in line], report.lines)
+
+
+class BuiltinPolicyTests(unittest.TestCase):
+    """The built-in copy says what the shipped `gate.json` says. Change one and this fails until the other follows."""
+
+    def test_the_built_in_copy_is_the_shipped_policy(self) -> None:
+        from modules.gate import builtin
+
+        shipped = json.loads((support.REPO / ".harness/policies/gate.json").read_text(encoding="utf-8"))
+        shipped.pop("description", None)
+        self.assertEqual(builtin.POLICY, shipped, "`.harness/engine/modules/gate/builtin.py` is a copy of `.harness/policies/gate.json`: update it")
+
+    def test_a_copy_is_handed_out_and_it_is_valid(self) -> None:
+        from modules.gate import builtin
+        from modules.gate.policy import Compiled, validate_policy
+
+        one = builtin.policy()
+        one["guardrail_paths"].append("x")
+        self.assertNotIn("x", builtin.POLICY["guardrail_paths"])
+        validate_policy(builtin.policy())
+        Compiled(builtin.policy())
+
+    def test_diagnose_names_the_first_file_that_is_wrong(self) -> None:
+        import tempfile
+
+        from modules.gate import policy as gate_policy
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness/policies").mkdir(parents=True)
+            self.assertEqual(gate_policy.diagnose(root, ValueError("x")), ("gate.json", "the file is missing"))
+            (root / ".harness/policies/gate.json").write_text("{ no", encoding="utf-8")
+            file, problem = gate_policy.diagnose(root, ValueError("x"))
+            self.assertEqual(file, "gate.json")
+            self.assertIn("Expecting", problem)
+            (root / ".harness/policies/gate.json").write_text(json.dumps(json.loads((support.REPO / ".harness/policies/gate.json").read_text(encoding="utf-8"))), encoding="utf-8")
+            (root / ".harness/policies/gate.override.json").write_text("[]", encoding="utf-8")
+            self.assertEqual(gate_policy.diagnose(root, ValueError("x")), ("gate.override.json", "the file is not an object"))
+            (root / ".harness/policies/gate.override.json").write_text('{"terminal": {"ask+": [{"pattern": "(", "why": "x"}]}}', encoding="utf-8")
+            file, problem = gate_policy.diagnose(root, ValueError("x"))
+            self.assertEqual(file, "gate.override.json")
+            self.assertIn("bad pattern", problem)
+            (root / ".harness/policies/gate.override.json").unlink()
+            self.assertEqual(gate_policy.diagnose(root, ValueError("some fault")), ("gate.json", "some fault"))
 
 
 class HarnessCloseTests(BothCase):

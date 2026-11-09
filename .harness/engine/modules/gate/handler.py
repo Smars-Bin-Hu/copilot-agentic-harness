@@ -26,7 +26,7 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, external, failclosed, gitcmd, harnesscmd, outbox, rules, terminal
+from . import approvals, external, failclosed, gitcmd, harnesscmd, outbox, rules, targetfault, terminal
 from .policy import POLICY_NAME, Compiled, validate_policy
 
 NAME = "gate"
@@ -530,11 +530,16 @@ def asks_board(ctx: Context, text: str) -> int:
 
 
 def load_targets(ctx: Context) -> Optional[targets.Targets]:
-    """The target repositories. A broken target.json gives None: the `.git` floor still holds, and doctor reports it."""
+    """The target repositories. A target policy that cannot be read gives None (`read_targets` says why): the `.git` floor still holds, a write that may reach a target is refused (`targetfault`, 1.7.38 F2b), and doctor reports it."""
+    return read_targets(ctx)[0]
+
+
+def read_targets(ctx: Context) -> Tuple[Optional[targets.Targets], Optional[BaseException]]:
+    """`(targets, None)`, or `(None, the error)` when the target policy cannot be read or is not valid: the gate does not know where the target repositories are then."""
     try:
-        return targets.load(ctx.root)
-    except Exception:  # noqa: BLE001 - the gate must not fail on a bad target.json
-        return None
+        return targets.load(ctx.root), None
+    except Exception as error:  # noqa: BLE001 - the gate must not fail on a bad target.json; it refuses what may write into a target instead (targetfault)
+        return None, error
 
 
 def watch_reach(event: HookEvent, ctx: Context) -> None:
@@ -690,8 +695,21 @@ def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return None
     policy = ctx.policy(POLICY_NAME)
     validate_policy(policy, floor=False)
-    found = load_targets(ctx)
+    found, unreadable = read_targets(ctx)
     compiled = Compiled(policy, [(repo.name, repo.path, repo.refused_paths) for repo in found.repos.values()] if found else None, admin=ctx.admin)
+    decided = _handle_call(event, ctx, policy, compiled, found)
+    if unreadable is not None and not (decided and decided.permission == "deny"):  # 1.7.38 (C13 F2b): the target policy cannot be read, so the gate does not know where the target repositories are: a call that may write into one does not pass
+        try:
+            file, problem = targets.diagnose(ctx.root, unreadable)
+        except Exception:  # noqa: BLE001 - a name for the text
+            file, problem = f"{targets.POLICY_NAME}.json", str(unreadable)[:200]
+        refused = targetfault.check(event, ctx, policy, WRITE_KINDS, file, problem)
+        if refused:
+            return refused
+    return decided
+
+
+def _handle_call(event: HookEvent, ctx: Context, policy: dict, compiled: Compiled, found: Optional[targets.Targets]) -> Optional[Decision]:
     if event.tool_kind == "terminal":
         # Without target repositories the harness behaves as before: only the ask rules in gate.json look at git.
         judged = judge_external(event, ctx)

@@ -13,9 +13,9 @@ from unittest import mock
 import support  # noqa: F401 - the engine on sys.path
 import doctor  # noqa: E402
 from support import HarnessTestCase, pre_tool, use_packs
-from taskcase import SESSION, TASK
+from taskcase import SESSION, TASK, TaskCase
 
-from core import approvals, config, connections, messages, toolpacks
+from core import approvals, config, connections, messages, targets, toolpacks
 from modules.gate import external, pin
 from test_gate_lists import SERVER, ListedCase
 
@@ -755,6 +755,167 @@ class NoConnectionTests(NoConnectionCase):
         self.put({"acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"}})
         systems = config.load_policy(self.root, "tools")["systems"]
         self.assertNotIn("no-connection-sqlserver", connections.unconnected(self.root, systems))  # a system lists sqlcmd: nothing is made for it
+
+
+class UnreadableTargetTests(TaskCase):
+    """F2b spot 2: a target policy that cannot be read does not mean "no target repositories". The gate does not know where they are, so it takes every git repository other than this one for one: a write into it and a
+    git command that writes there are refused, with the file and what is wrong. Work in the task folder, reads and the harness folder's own git stay free. `harness doctor` says ERROR."""
+
+    BROKEN = ("{ not json", "[]", '"x"', "", '{"repos": []}', '{"repos": {"a": 3}}', '{"repos": {"a": {"path": 5}}}', '{"repos_root": 5}', '{"schema_version": 2}', '{"repos": {"a": {"nope": 1}}}', '{"base_ref": ""}')
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.repo = str(self.repo_b)
+        self.write_target("target.override.json", "{ not json")
+
+    def write_target(self, name: str, text: str) -> None:
+        (self.root / ".harness" / "policies" / name).write_text(text, encoding="utf-8")
+
+    def term(self, command: str, cwd: str = "") -> Dict[str, Any]:
+        data = pre_tool(SESSION, "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+        data["cwd"] = cwd or str(self.root)
+        return self.hook(data)
+
+    def tool(self, name: str, given: Dict[str, Any]) -> Dict[str, Any]:
+        data = pre_tool(SESSION, name, given)
+        data["cwd"] = str(self.root)
+        return self.hook(data)
+
+    def refused(self, out: Dict[str, Any], label: str, file: str = "target.override.json") -> str:
+        self.assertEqual(out.get("permissionDecision"), "deny", label)
+        reason = out["permissionDecisionReason"]
+        self.assertIn(file, reason, label)  # which file is wrong
+        self.assertIn(messages.text("gate.target.unreadable", what="", file="", problem="").split("{")[0][:6], reason, label)
+        return reason
+
+    def test_a_write_tool_into_a_repository_other_than_this_one_is_refused_for_every_unreadable_shape(self) -> None:
+        for text in self.BROKEN:
+            self.write_target("target.override.json", text)
+            for path in (f"{self.repo}/src/a.sql", f"{self.repo}/new/file.sql", f"{self.repo}/.github/x.yml", f"{self.repos}/repo_a/a.sql"):
+                out = self.edit(path)
+                self.assertEqual(out.get("permissionDecision"), "deny", (text, path))
+                self.assertIn("target.override.json", out["permissionDecisionReason"], (text, path))
+
+    def test_the_reason_says_what_is_wrong_in_the_file(self) -> None:
+        self.write_target("target.override.json", "{ not json")
+        reason = self.refused(self.edit(f"{self.repo}/src/a.sql"), "json")
+        self.assertIn("Expecting property name", reason)
+        self.write_target("target.override.json", "[]")
+        self.assertIn("not an object", self.refused(self.edit(f"{self.repo}/src/a.sql"), "list"))
+        self.write_target("target.override.json", '{"repos": {"a": 3}}')
+        reason = self.refused(self.edit(f"{self.repo}/src/a.sql"), "shape")  # the file whose layer makes the merged policy one the schema refuses
+        self.assertIn("expected object", reason)
+
+    def test_each_of_the_three_files_of_the_policy_can_be_the_wrong_one(self) -> None:
+        self.write_target("target.override.json", json.dumps({"repos_root": str(self.repos)}))
+        self.assertIn("只能由 promote 写", self.edit(f"{self.repo}/src/a.sql")["permissionDecisionReason"])  # readable: the target rules as before
+        for name in ("target.json", "target.company.json", "target.override.json"):
+            self.write_target(name, "{ broken")
+            self.refused(self.edit(f"{self.repo}/src/a.sql"), name, name)
+            if name == "target.json":
+                self.write_target(name, json.dumps({"schema_version": 1, "repos_root": "", "repos": {}, "base_ref": "main", "refused_paths": [".git/**"]}))
+            else:
+                (self.root / ".harness/policies" / name).unlink()
+                self.write_target("target.override.json", json.dumps({"repos_root": str(self.repos)}))
+
+    def test_a_terminal_write_into_such_a_repository_is_refused(self) -> None:
+        for command in (f"echo x > {self.repo}/src/a.sql", f"cp a {self.repo}/new.sql", f"sed -i '' 's/1/2/' {self.repo}/src/a.sql", f"printf x | tee {self.repo}/src/a.sql", f"rm {self.repo}/src/a.sql",
+                        f"mv {self.repo}/src/a.sql {self.repo}/src/c.sql", f"mkdir -p {self.repo}/new", f"touch {self.repo}/x"):
+            self.refused(self.term(command), command)
+        self.refused(self.term("echo x > src/a.sql", cwd=self.repo), "relative path in the terminal of the repository")
+        self.refused(self.term(f"cd {self.repo} && echo x > src/a.sql"), "cd")
+        for command in ("echo x > source/repos/repo_b/src/a.sql", "cp a source/repos/repo_b/new.sql", "sed -i '' 's/1/2/' ./source/repos/repo_b/src/a.sql", "echo x > source/repos/repo_a/a.sql"):
+            self.refused(self.term(command), command)  # a relative path from the folder of the harness
+        self.refused(self.term("echo x > ../repos/repo_b/src/a.sql", cwd=str(self.root / "source" / "repos")), "a path with ..")
+        self.refused(self.term("echo x > source/repos/../repos/repo_b/src/a.sql"), "a path with .. in the middle")
+        self.assertEqual(self.term("echo x > ../notes.txt", cwd=str(self.repos)), {})  # beside the repositories, not in one
+
+    def test_a_git_command_that_writes_is_refused_unless_it_certainly_runs_in_this_repository(self) -> None:
+        for command, cwd in ((f"git -C {self.repo} commit -m x", ""), ("git commit -m x", self.repo), (f"cd {self.repo} && git add .", ""), (f"git --git-dir={self.repo}/.git push", ""), (f"git -C {self.repo} push", ""),
+                             ("git add .", self.repo), ("git checkout -b x", self.repo), (f"GIT_DIR={self.repo}/.git git commit -m x", ""), (f"git commit -m x -- {self.repo}/src/a.sql", ""), ("git -C repo_b commit -m x", str(self.repos)),
+                             ("cd ../x && git commit -m x", ""), (f"bash -c 'git -C {self.repo} commit -m x'", "")):
+            self.refused(self.term(command, cwd), command)
+        self.assertEqual(self.term("git commit -m x"), {})  # in this folder, as before: nothing names another place
+
+    def test_reads_and_local_work_stay_free(self) -> None:
+        for command, cwd in (("ls", ""), ("python3 -m unittest", ""), (f"cat {self.repo}/src/a.sql", ""), (f"git -C {self.repo} status", ""), (f"git -C {self.repo} log --oneline", ""), ("git diff", self.repo), ("git status", self.repo),
+                             (f"ls {self.repo}", ""), (f"grep -rn select {self.repo}", ""), ("cat src/a.sql", self.repo), (f"echo x > {TASK}/notes.md", ""), ("echo x > /tmp/not-a-repo.txt", ""),
+                             (f"cp {self.repo}/src/a.sql /tmp/copy.sql", ""), ("echo hello", self.repo), ("python3 -m unittest", self.repo)):
+            self.assertEqual(self.term(command, cwd), {}, command)
+        self.assertEqual(self.tool("read_file", {"filePath": f"{self.repo}/src/a.sql"}), {})
+        self.assertEqual(self.edit(f"{self.repos}/not_a_repo.txt"), {})  # beside the repositories, not in one
+        self.assertEqual(self.edit("/tmp/harness-f2b/not-a-repo.txt"), {})
+        self.assertEqual(self.edit("notes-in-the-harness-folder.md"), {})
+
+    def test_the_task_folder_of_an_open_task_stays_free(self) -> None:
+        self.write_target("target.override.json", json.dumps({"repos_root": str(self.repos)}))  # a task is made while the policy can be read
+        self.ready()
+        self.write_target("target.override.json", "{ not json")
+        self.assertEqual(self.edit(f"{TASK}/DEV/x.sql"), {})
+        self.assertEqual(self.edit(f"{TASK}/notes.md"), {})
+        self.assertEqual(self.term(f"echo x > {TASK}/DEV/y.sql"), {})
+        self.assertEqual(self.edit(f"{self.repo}/src/a.sql").get("permissionDecision"), "deny")  # outside the task folder: refused, by the task's own rule
+
+    def test_the_git_floor_and_the_guardrails_keep_their_own_words(self) -> None:
+        out = self.edit(f"{self.repo}/.git/config")
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("`.git` 文件夹", out["permissionDecisionReason"])  # the floor says its own reason, not the unreadable policy's
+        out = self.edit(".harness/policies/gate.json")
+        self.assertIn("guardrail", out["permissionDecisionReason"].lower())
+
+    def test_a_fixed_file_gives_the_target_rules_back(self) -> None:
+        self.write_target("target.override.json", json.dumps({"repos_root": str(self.repos)}))
+        out = self.edit(f"{self.repo}/src/a.sql")
+        self.assertIn("只能由 promote 写", out["permissionDecisionReason"])
+        self.assertNotIn("gate.target.unreadable", out["permissionDecisionReason"])
+        self.assertEqual(self.term("git commit -m x")["permissionDecision"], "deny")  # the git rule of a configured target
+
+    def test_a_policy_with_no_target_at_all_is_not_a_fault(self) -> None:
+        (self.root / ".harness/policies/target.override.json").unlink()
+        self.assertEqual(self.edit(f"{self.repo}/src/a.sql"), {})  # nothing configured: as before (the repository is not a target)
+        self.assertEqual(self.term(f"echo x > {self.repo}/src/a.sql"), {})
+
+    def test_a_failure_of_the_check_itself_refuses_a_write_and_leaves_the_rest(self) -> None:
+        import hook
+
+        def run(command: str = "", tool: str = "create_file", given: Any = None) -> Dict[str, Any]:
+            data = pre_tool(SESSION, tool, given or {"command": command, "explanation": "t", "isBackground": False})
+            data["cwd"] = str(self.root)
+            with mock.patch("modules.gate.targetfault.foreign", side_effect=RuntimeError("injected fault")), mock.patch("modules.gate.targetfault._named", side_effect=RuntimeError("injected fault")):
+                out, _record = hook.process(json.dumps(data), self.root)
+            return out
+
+        self.assertEqual(run(tool="create_file", given={"filePath": f"{self.repo}/src/a.sql", "content": "x"}).get("permissionDecision"), "deny")
+        self.assertEqual(run("git commit -m x", "run_in_terminal").get("permissionDecision"), "deny")
+        for line in ("ls", "python3 -m unittest", "git status", "cat notes.txt"):
+            self.assertEqual(run(line, "run_in_terminal"), {}, line)
+        self.assertEqual(run(tool="read_file", given={"filePath": f"{self.repo}/src/a.sql"}), {})
+
+    def test_doctor_says_error_and_names_the_file(self) -> None:
+        for text in self.BROKEN:
+            self.write_target("target.override.json", text)
+            report = doctor.Report()
+            doctor.check_targets(report, self.root)
+            errors = [line for line in report.lines if line.startswith("[ERROR]")]
+            self.assertEqual(report.errors, 1, (text, report.lines))
+            self.assertIn("target", errors[0], text)
+        self.write_target("target.override.json", "{ not json")
+        report = doctor.Report()
+        doctor.check_targets(report, self.root)
+        self.assertIn("target.override.json", report.lines[0])
+        self.write_target("target.override.json", json.dumps({"repos_root": str(self.repos)}))
+        report = doctor.Report()
+        doctor.check_targets(report, self.root)
+        self.assertEqual(report.errors, 0, report.lines)
+
+    def test_the_diagnosis_names_the_first_file_that_is_wrong(self) -> None:
+        self.write_target("target.override.json", "[1]")
+        self.write_target("target.company.json", "{ nope")
+        self.assertEqual(targets.diagnose(self.root, ValueError("x"))[0], "target.company.json")
+        (self.root / ".harness/policies/target.company.json").unlink()
+        self.assertEqual(targets.diagnose(self.root, ValueError("x")), ("target.override.json", "the file is not an object"))
+        (self.root / ".harness/policies/target.override.json").unlink()
+        self.assertEqual(targets.diagnose(self.root, ValueError("schema says no")), ("target.json", "schema says no"))
 
 
 class HarnessCloseTests(BothCase):

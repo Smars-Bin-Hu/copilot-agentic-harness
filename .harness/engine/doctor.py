@@ -756,7 +756,8 @@ def check_targets(report: Report, root: Path) -> None:
     try:
         found = targets.load(root)
     except Exception as error:
-        report.error(say("doctor.target.policy_bad", error=error))
+        file, problem = targets.diagnose(root, error)  # 1.7.38 (C13 F2b): which file, and what is wrong
+        report.error(say("doctor.target.policy_bad", file=file, error=problem))
         return
     if not found.configured:
         report.ok(say("doctor.target.none"))

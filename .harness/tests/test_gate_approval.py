@@ -235,7 +235,7 @@ class GateGitCommandTests(HarnessTestCase):
 
     def test_a_broken_target_policy_leaves_git_alone_and_does_not_crash(self) -> None:
         (self.root / ".harness" / "policies" / "target.override.json").write_text("{ not json", encoding="utf-8")
-        self.assertEqual(self.term("git commit -m x"), {})
+        self.assertEqual(self.term("git commit -m x"), {})  # in the harness folder, naming no other place: as before. A git write in another repository is refused (1.7.38, F2b: test_c13_f2.UnreadableTargetTests)
 
     def test_other_gate_denials_still_come_first(self) -> None:
         output = self.term("git add .harness/policies/gate.json && echo x > .harness/policies/gate.json")

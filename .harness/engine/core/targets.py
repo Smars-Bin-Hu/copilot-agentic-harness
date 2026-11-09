@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, gitread, messages, repo_paths, schema
+from .paths import policies_dir
 
 POLICY_NAME = "target"
 REPO_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -135,6 +136,32 @@ def load(root: Path) -> Targets:
         repo.refused_paths = list(entry.get("refused_paths", repo.refused_paths))
         repo.knowledge_base = bool(entry.get("knowledge_base", False))
     return Targets(configured=bool(base or policy["repos"]), repos=repos, problems=problems, timeout=timeout)
+
+
+def diagnose(root: Path, error: BaseException) -> Tuple[str, str]:
+    """`(file, what is wrong)` for a target policy that cannot be read (1.7.38, C13 F2b): the first of its three files (`target.json`, the company's, the person's) that is not valid JSON or not an object; else the
+    first layer that makes the merged policy one the schema refuses; else `target.json` with the fault as it was raised. For the gate, which refuses what may write into a target meanwhile, and for `harness doctor`."""
+    merged: Any = {}
+    seen: List[Tuple[str, Any]] = []
+    for suffix in ("", ".company", ".override"):
+        name = f"{POLICY_NAME}{suffix}.json"
+        path = policies_dir(root) / name
+        if not path.is_file():
+            continue
+        try:
+            data = config.read_json(path)
+        except (OSError, ValueError) as problem:
+            return name, " ".join(str(problem).split())[:200]
+        if not isinstance(data, dict):
+            return name, "the file is not an object"
+        seen.append((name, data))
+    for name, data in seen:
+        try:
+            merged = config.deep_merge(merged, data)
+            validate_policy(merged)
+        except Exception as problem:  # noqa: BLE001 - the layer that made the policy wrong
+            return name, " ".join(str(problem).split())[:200]
+    return f"{POLICY_NAME}.json", " ".join(str(error).split())[:200]
 
 
 KB_DIR = "knowledge-base"  # where a team puts its knowledge base when it is not registered as a repository

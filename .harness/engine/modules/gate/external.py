@@ -1361,7 +1361,8 @@ def as_run(tokens: List[str]) -> Optional[Tuple[str, str]]:
     head = [index for index, token in enumerate(tokens) if _program(token) == "harness" or _name(token) == "cli.py"]
     if not head or len(tokens) < head[0] + 5 or tokens[head[0] + 1].lower() != "as" or tokens[head[0] + 3] != "--":
         return None
-    return tokens[head[0] + 2], " ".join(tokens[head[0] + 4:])
+    settings = [item for item in tokens[: head[0]] if _is_environment(item)]  # `SQLCMDINI=x harness as ...`: the settings stand before the program the command runs, as they do without the prefix
+    return tokens[head[0] + 2], " ".join(shlex_quote(item) for item in settings + tokens[head[0] + 4:])  # 1.7.38 (C13 FR2 1): as the program is given its words (`run_as` joins them with quotes): a statement with a `;` or a space in one word stays one word
 
 
 def _wait_run(tokens: List[str]) -> Optional[str]:

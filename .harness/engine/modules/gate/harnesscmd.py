@@ -84,7 +84,8 @@ def calls(command: str) -> Tuple[List[str], str]:
             args = _harness_args(tokens, at)
             if args is None:
                 continue
-            if any("$" in item or "`" in item for item in args):
+            own = args[:3] if len(args) > 3 and args[0].lower() == "as" and args[2] == "--" else args  # 1.7.38 (C13 FR2 1): the command after `harness as <connection> --` is not a harness command: it is read in its own right (`nested`), as the same words are without the prefix
+            if any("$" in item or "`" in item for item in own):
                 return found, " ".join(tokens)[:200]
             found.append("harness " + " ".join(item for item in args if item != JSON_FLAG))
     return found, ""

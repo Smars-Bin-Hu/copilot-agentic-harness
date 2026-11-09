@@ -414,7 +414,7 @@ def refusal(command: str, root: Any, cwd: str, folder: Any, policy: Dict[str, An
                 code = None
                 if external._is_interpreter(tokens[at]):  # noqa: SLF001
                     kind, index = external._interp(tokens, at)  # noqa: SLF001
-                    shell = external._family(tokens[at]) in ("shell", "power")  # noqa: SLF001
+                    shell = external._family(tokens[at]) in ("shell", "power", "cmd")  # noqa: SLF001
                     if kind == "code" and index is not None and not shell:
                         code = " ".join(tokens[index + 1:])  # `python3 -c "..."`, `node -e "..."`: the code is read as a script is
                     elif kind == "stdin":

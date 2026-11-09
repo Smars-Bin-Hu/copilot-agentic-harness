@@ -380,9 +380,7 @@ def _feeds_code(tokens: List[str]) -> bool:
     at = _head_index(tokens)
     if at is None:
         return False
-    if _name(tokens[at]) == "cmd":
-        return False
-    if _is_interpreter(tokens[at]) or _name(tokens[at]) in ("fish",):
+    if _is_interpreter(tokens[at]):  # a shell with no code in the line reads its input: `cmd`, `fish`, `ksh` too (1.7.38, C13 FR3)
         return _interp(tokens, at)[0] == "stdin"
     return _xargs_runs_code(tokens)
 
@@ -1231,6 +1229,8 @@ def _runs_files(tokens: List[str], at: int, raw: List[str], feeds: bool) -> List
                 files.extend("?" + one for one in _code_files(code))  # `python3 -c "exec(open('x.py').read())"`: the file is the program (1.7.38, C13 FR 20). A `?` says it may be data: no file, or none the gate can read, is no reason to hold the line
     elif name in ("source", ".") and at + 1 < len(tokens):
         files.append(tokens[at + 1])
+    elif name in ("import-module", "ipmo"):  # PowerShell runs the file of a module (`.psm1`, `.ps1`): `?`, a name that is no file (`Import-Module Az`) is no reason to hold the line (1.7.38, C13 FR3)
+        files.extend("?" + item for item in tokens[at + 1:] if not item.startswith("-") and re.search(r"[\\/]|\.(?:psm1|ps1|psd1)$", item, re.IGNORECASE))
     elif name in READ_ONLY_PROGRAMS or _is_harness(tokens, at):
         pass
     elif ("/" in head or "\\" in head or head.startswith("~") or head.lower().endswith(_SCRIPT_EXTENSIONS)) and not head.startswith("$"):
@@ -1344,7 +1344,7 @@ def _hidden_in_line(segments: List[List[str]], text: str, programs: Dict[str, Li
             if named:
                 found.append(_hidden("start", call, program=named))
                 return
-    shells = [tokens for tokens in segments if _head_index(tokens) is not None and _is_interpreter(tokens[_head_index(tokens)]) and _family(tokens[_head_index(tokens)]) in ("shell", "power")]  # a shell, not python or node: what a program prints and a python reads is data to a person's eyes (K5)
+    shells = [tokens for tokens in segments if _head_index(tokens) is not None and _is_interpreter(tokens[_head_index(tokens)]) and _family(tokens[_head_index(tokens)]) in ("shell", "power", "cmd")]  # a shell, not python or node: what a program prints and a python reads is data to a person's eyes (K5)
     if feeds and any(_interp(tokens, _head_index(tokens))[0] == "stdin" for tokens in shells):
         for tokens in segments:
             at = _head_index(tokens)

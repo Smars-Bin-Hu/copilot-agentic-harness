@@ -49,9 +49,9 @@ def _named(what: str, name: str) -> str:
 # Subcommands where a lone `-f` means force. (`git tag -F`, `git config -f <file>` mean something else.)
 FORCE_SHORT = frozenset("add checkout switch branch tag mv rm fetch pull worktree submodule clean push".split())
 # Words that may stand before `git` without hiding it.
-WRAPPERS = frozenset("sudo env nohup time command exec nice timeout xargs call start watch builtin".split())
-SHELLS = frozenset("bash sh zsh dash fish pwsh powershell cmd".split())
-SHELL_FLAGS = frozenset(["-c", "-command", "/c", "-lc", "-ic", "-encodedcommand"])
+WRAPPERS = frozenset("sudo env nohup time command exec nice timeout xargs call start watch builtin busybox".split())  # `busybox sh -c '...'`: the applet is the shell (1.7.38, C13 FR3)
+SHELLS = shellwords.SHELL_NAMES | shellwords.POWER_NAMES | frozenset(["cmd"])  # the shells that are given a command line (`-c`, `-Command`, `/c`): the names are in shellwords.py
+SHELL_FLAGS = frozenset(["-c", "-command", "/c", "/k", "/r", "-lc", "-ic", "-encodedcommand", "--command", "--commands"])
 SCRIPT_RUNNERS = frozenset("python python3 py node perl ruby".split())
 SCRIPT_FLAGS = frozenset(["-c", "-e", "-r"])
 OPTIONS_WITH_VALUE = frozenset(["-c", "-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env", "--exec-path", "--attr-source"])

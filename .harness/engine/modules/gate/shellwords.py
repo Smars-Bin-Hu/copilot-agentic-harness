@@ -14,9 +14,9 @@ import posixpath
 import re
 from typing import List, Optional, Tuple
 
-SHELL_NAMES = frozenset("bash sh zsh dash fish".split())  # a POSIX-like shell
+SHELL_NAMES = frozenset("bash sh zsh dash fish ksh csh tcsh nu xonsh".split())  # a POSIX-like shell (and the ones that read the same `-c 'string'`)
 POWER_NAMES = frozenset(["pwsh", "powershell"])
-INTERPRETERS = frozenset("python python3 py node ruby perl".split()) | (SHELL_NAMES - {"fish"}) | POWER_NAMES
+INTERPRETERS = frozenset("python python3 py node ruby perl cmd".split()) | SHELL_NAMES | POWER_NAMES
 ENCODED = "encodedcommand"
 
 
@@ -37,6 +37,8 @@ def family(token: str) -> str:
         return "shell"
     if plain in POWER_NAMES:
         return "power"
+    if plain == "cmd":
+        return "cmd"
     if plain == "node":
         return "node"
     if plain in ("ruby", "perl"):
@@ -55,12 +57,12 @@ def interp(tokens: List[str], at: int) -> Tuple[str, Optional[int]]:
         if word in ("-", "<<<"):
             return "stdin", None
         if kind == "shell":
-            if word in ("-o", "+o"):
+            if word in ("-o", "+o", "-O", "+O"):
                 index += 2
                 continue
             if word == "-s":
                 return "stdin", None
-            if re.fullmatch(r"-[A-Za-z]*c", word):
+            if low in ("--command", "--commands") or re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", word):  # `-c`, `-lc`, `-xc`, `-ce`; `nu --commands`, `fish --command`
                 return "code", index
             if word.startswith("-") or word.startswith("+"):
                 index += 1
@@ -76,6 +78,11 @@ def interp(tokens: List[str], at: int) -> Tuple[str, Optional[int]]:
                     return ("script", index + 1) if index + 1 < len(tokens) and tokens[index + 1] != "-" else ("stdin", None)
                 index += 2 if flag in ("executionpolicy", "ep", "windowstyle", "w", "workingdirectory", "wd", "inputformat", "outputformat", "version", "v", "configurationname", "settingsfile", "custompipename") else 1
                 continue
+        elif kind == "cmd":
+            if low in ("/c", "/k", "/r"):
+                return "code", index
+            index += 1  # `/d`, `/q`, `/s`, `/a`, `/u`, `/e:on`, `/v:on`, a word cmd ignores: no code in the line unless `/c` or `/k` comes
+            continue
         elif kind == "node":
             if low in ("-e", "-p", "--eval", "--print"):
                 return "code", index

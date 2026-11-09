@@ -278,6 +278,11 @@ class Ready:
         with self.lock:
             self.at = -1e9
 
+    def drop_optional(self) -> None:
+        """What the optional items said is old (a sync was done, F3 FB1-b): the next question reads them again at once, so a yellow note that a sync mended is gone on the poll that follows it, not when the kept answer runs out."""
+        with self.lock:
+            self.optional_kept = None
+
     def doctor_notes(self) -> Dict[str, Any]:
         """What `harness doctor` warned of about the company's content, from the kept result: `{n, first}`."""
         with self.lock:
@@ -360,7 +365,7 @@ class Ready:
         """What the items read: the policies, the sign-ins, the answers of the connections, the packs, the skills, the knowledge base. A change shows at once, not after the cache."""
         mark: List[Any] = []
         for path in [*sorted((self.root / ".harness" / "policies").glob("*.json")), self.root / ".harness" / ".env", reach.path(self.root), self.root / ".harness" / "runtime" / "toolpacks.json", self.root / ".harness" / "toolpacks",
-                     self.root / ".github" / "skills", self.root / targets.KB_DIR, self.root / ".harness" / "certs"]:
+                     self.root / ".github" / "skills", self.root / ".github" / "instructions", *sorted((self.root / ".github" / "instructions").glob("*.md")), self.root / targets.KB_DIR, self.root / ".harness" / "certs"]:
             try:
                 mark.append((path.name, path.stat().st_mtime_ns))
             except OSError:

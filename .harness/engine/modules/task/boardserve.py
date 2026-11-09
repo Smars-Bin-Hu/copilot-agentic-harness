@@ -1800,6 +1800,7 @@ def handler_for(board: Board) -> type:
                         if done.get("failed"):  # a company pack has the name of a factory pack: nothing was changed (1.7.38)
                             return self.answer(409, {"error": done["error"], "clashes": done.get("clashes") or []})
                         board.ready.drop_doctor()  # the notes of doctor were about the copies as they were
+                        board.ready.drop_optional()  # and so was the yellow note of the Enter screen: it is read again on the next poll (F3 FB1-b)
                     return self.answer(200, {"result": company.diff(board.root)})
                 except company.DirtyError as error:
                     return self.answer(409, {"error": str(error), "dirty": error.path, "files": error.lines[:12], "more": max(0, len(error.lines) - 12)})
@@ -1968,6 +1969,16 @@ def already_running(root: Path, port: int, out: Any, opener: Callable[[str], Any
     return {"served": address, "stopped": False, "already": True, "port": port}
 
 
+def sync_on_start(root: Path) -> None:
+    """The company's content is in place when the board opens (1.7.38, F3 FB1-a; the skills of the tool packs since 1.7.30): the instructions and the skills of the company and the skills of the packs, as Sync now puts them, but it takes
+    nothing back (a skill that left the content is the person's to take back). After an upgrade that unzipped a factory version of a file the company changed, the company's version is back when the board starts. It never stops the start:
+    a clash or a broken pack is what `doctor` and the Enter screen say."""
+    try:
+        company.sync_after(root)
+    except Exception:  # noqa: BLE001 - a broken pack or file must not keep the board from starting
+        pass
+
+
 def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,
           link: Optional[vslink.VsLink] = None) -> Dict[str, Any]:
     """Run until Ctrl+C. `opener`, `ready` and `link` exist for the tests: `ready` gets the server once it listens; `link`, a link made by hand (a fake host, or none)."""
@@ -1988,10 +1999,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
             return already_running(root, running, out, opener)
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
-    try:
-        toolpacks.sync_skills(root)  # the skills of the packs the knowledge base turns on are in place when the board opens (1.7.30)
-    except Exception:  # noqa: BLE001 - a broken pack must not keep the board from starting; doctor says why
-        pass
+    sync_on_start(root)
     link.start()  # the thread only; the board does not wait for VS Code
     board.space.start()
     board.start_sweeper()  # a promoted task closes by itself, with no page open (1.7.38)

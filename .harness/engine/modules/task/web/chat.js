@@ -380,7 +380,7 @@ const CHAT = (function () {
       if (last && state.models.some((item) => item.id === last.id)) model.value = last.id;
       state.domainList = Array.isArray(found.domains) ? found.domains : [];
       state.linkTypes = Array.isArray(found.link_types) ? found.link_types : [];
-      if (state.linkTypes.length) links.placeholder = state.linkTypes.slice(0, 2).map((one) => one.type + ":" + (one.example || "1")).join(" ");  // a sample of a type that is really there (F1 L6)
+      if (state.linkTypes.length) links.placeholder = state.linkTypes.slice(0, 2).map((one) => one.type + ":" + (one.example || "id")).join(" ");  // a sample of a type that is really there (F1 L6)
       for (const one of state.linkTypes) {  // a click puts the type in, ready for the number
         const chip = h("button", {type: "button", class: "chip", title: (one.label || one.type) + " \u00b7 " + one.toolpack}, one.type + ":");
         chip.addEventListener("click", () => { links.value = (links.value.trim() ? links.value.trim() + " " : "") + one.type + ":"; links.focus(); refresh(); });

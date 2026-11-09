@@ -762,6 +762,7 @@ class WordsOfTheBoardTests(unittest.TestCase):
     def test_a_red_row_of_the_enter_screen_has_a_red_note(self) -> None:
         text = (WEB / "enter.js").read_text(encoding="utf-8")
         self.assertIn('(!req && view.level === "red") ? " bad" : ""', text)
+        self.assertRegex(text, r'\? " bad" : ""\)\); if \(p\.hidden\) p\.hidden = false;\s+//', "the note is still shown: the comment comes after the code on that line, not before it")
 
     def test_the_add_button_has_the_action_and_the_form_keeps_the_longer_name(self) -> None:
         text = (WEB / "servers.js").read_text(encoding="utf-8")

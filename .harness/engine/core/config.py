@@ -135,6 +135,14 @@ def load_policy(root: Path, name: str) -> Dict[str, Any]:
                 found = dict(found, systems={**(found.get("systems") or {}), **held})
         except Exception as error:  # noqa: BLE001 - a broken pack must not take the other systems away; doctor reports it. 1.7.38 (C13 F2): its programs are held
             found = _hold(root, found, "toolpack-files", error)
+        try:  # 1.7.38 (C13 F2c): the list of knowledge bases cannot be read, so the company packs in a knowledge base registered elsewhere are not seen: the ones the text of the files still names are held
+            from . import govern
+
+            held = govern.kb_systems(root)
+            if held:
+                found = dict(found, systems={**(found.get("systems") or {}), **held})
+        except Exception as error:  # noqa: BLE001 - see above
+            found = _hold(root, found, "knowledge-bases", error)
     return found
 
 

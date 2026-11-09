@@ -6,6 +6,7 @@ Every spelling of the red team is a row here, through the real hook (`ListedCase
 from __future__ import annotations
 
 import json
+import shutil
 import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -16,7 +17,7 @@ import doctor  # noqa: E402
 from support import HarnessTestCase, pre_tool, use_packs
 from taskcase import SESSION, TASK, TaskCase
 
-from core import approvals, config, connections, messages, targets, toolpacks
+from core import approvals, config, connections, govern, messages, targets, toolpacks
 from modules.gate import external, pin
 from test_gate_lists import SERVER, ListedCase
 
@@ -1305,6 +1306,131 @@ class BuiltinPolicyTests(unittest.TestCase):
             self.assertIn("bad pattern", problem)
             (root / ".harness/policies/gate.override.json").unlink()
             self.assertEqual(gate_policy.diagnose(root, ValueError("some fault")), ("gate.json", "some fault"))
+
+
+class KbListCase(AdoCase):
+    """F2c item 4 (F2b-6 #5a): the company's tool pack is in a knowledge base registered in the target policy (not `knowledge-base/` of this folder), and a connection of its type is listed. `AdoCase.answer` says allow, ask or refuse."""
+
+    CONNECTIONS = {"demo": {"type": "demotracker", "env": "none", "project": "DEMO"}}
+
+    def setUp(self) -> None:
+        HarnessTestCase.setUp(self)  # not AdoCase.setUp: that one switches the ado pack on
+        self.kb = self.root / "elsewhere" / "company-kb"
+        pack = self.kb / "company" / "tools" / "packs" / "demotracker"
+        shutil.copytree(support.REPO / ".harness" / "toolpacks" / "demotracker", pack, ignore=shutil.ignore_patterns("__pycache__"))
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": self.CONNECTIONS}), encoding="utf-8")
+        self.register()
+
+    def register(self, text: str = "") -> None:
+        (self.root / ".harness/policies/target.override.json").write_text(text or json.dumps({"repos": {"kb": {"path": str(self.kb), "knowledge_base": True}}}), encoding="utf-8")
+
+    def mend(self) -> None:
+        self.register()
+
+    READ = "demotracker --project DEMO get T-1"
+    WRITE = "demotracker --project DEMO comment T-1 hello"
+    DELETE = "demotracker --project DEMO delete T-1"
+
+    def held(self, line: str, text: str = "target.override.json") -> str:
+        out = self.call(line)
+        self.assertEqual(out.get("permissionDecision"), "deny", line)
+        self.assertIn(text, out["permissionDecisionReason"], line)
+        return out["permissionDecisionReason"]
+
+
+class KbListTests(KbListCase):
+    """The list of knowledge bases cannot be read: `targets.knowledge_bases` answers with `knowledge-base/` only, and the company pack in the one registered elsewhere was not seen, so its programs were judged by no one. The gate now holds
+    the programs of the packs the text of the files still names (the way an unreadable pack file is held), with the file and the fault in the card; `harness doctor` says ERROR."""
+
+    TRAILING_COMMA = '{"repos": {"kb": {"path": "%s", "knowledge_base": true},}}'
+    REPOS_A_LIST = '{"repos": [{"path": "%s", "knowledge_base": true}]}'
+
+    def broken(self, shape: str) -> None:
+        self.register(shape % str(self.kb) if "%s" in shape else shape)
+
+    def test_when_the_list_is_fine_the_company_pack_is_judged_by_its_connection(self) -> None:
+        self.assertIsNone(targets.kb_fault(self.root))
+        self.check("allow", [self.READ])
+        self.check("refuse", [self.DELETE, self.WRITE])  # a write to an item the task does not name is refused (linked items), a delete always
+
+    def test_a_list_that_cannot_be_read_holds_the_programs_of_the_pack_it_still_names(self) -> None:
+        for shape in (self.TRAILING_COMMA, self.REPOS_A_LIST, '{"repos": {"kb": {"path": "%s", "knowledge_base": true}}, "x": ', '// a comment\\n{"repos": {"kb": {"path": "%s", "knowledge_base": true}}}'):
+            self.broken(shape)
+            self.assertTrue(targets.kb_fault(self.root), shape)
+            for line in (self.READ, self.WRITE, self.DELETE, "demotracker --help", "demotracker", "/usr/local/bin/demotracker --project DEMO get T-1", "bash -c 'demotracker --project DEMO get T-1'"):
+                self.held(line)
+            self.mend()
+            self.assertIsNone(targets.kb_fault(self.root))
+        self.check("allow", [self.READ])
+
+    def test_the_card_names_the_file_and_the_fault(self) -> None:
+        self.broken(self.TRAILING_COMMA)
+        reason = self.held(self.READ)
+        self.assertIn("target.override.json", reason)
+        self.assertIn("demotracker", reason)
+
+    def test_the_repository_root_is_read_from_the_text_too(self) -> None:
+        self.register('{"repos_root": "%s", "repos": [1],}' % str(self.kb.parent).replace("\\", "\\\\"))
+        self.assertTrue(targets.kb_fault(self.root))
+        self.held(self.READ)
+
+    def test_a_list_that_names_no_folder_leaves_nothing_to_hold_and_doctor_says_so(self) -> None:
+        self.register("{ <<<< all gone")
+        self.assertTrue(targets.kb_fault(self.root))
+        self.assertEqual(govern.kb_systems(self.root), {})
+        self.check("allow", [self.READ])  # the blind spot that stays (docs/12): the pack is in a folder no file names any more
+        report = doctor.Report()
+        doctor.check_targets(report, self.root)
+        errors = [line for line in report.lines if line.startswith("[ERROR]")]
+        self.assertEqual(len(errors), 1, errors)  # the target policy line only: no pack was found to name
+        self.assertIn("target.override.json", errors[0])
+
+    def test_doctor_names_the_file_and_the_programs_held(self) -> None:
+        self.broken(self.TRAILING_COMMA)
+        report = doctor.Report()
+        doctor.check_targets(report, self.root)
+        errors = [line for line in report.lines if line.startswith("[ERROR]")]
+        self.assertEqual(len(errors), 2, errors)
+        self.assertIn("target.override.json", errors[1])
+        self.assertIn("demotracker", errors[1])
+
+    def test_a_knowledge_base_the_gate_sees_is_not_held_for_the_fault(self) -> None:
+        """The default `knowledge-base/` of this folder is read whatever the policy says: its packs are judged by their connections, as ever."""
+        shutil.rmtree(self.kb)
+        pack = self.root / "knowledge-base" / "company" / "tools" / "packs" / "demotracker"
+        shutil.copytree(support.REPO / ".harness" / "toolpacks" / "demotracker", pack, ignore=shutil.ignore_patterns("__pycache__"))
+        self.register("{ not json")
+        self.assertTrue(targets.kb_fault(self.root))
+        self.check("allow", [self.READ])
+        self.check("refuse", [self.DELETE])
+
+    def test_local_work_is_not_held(self) -> None:
+        self.broken(self.TRAILING_COMMA)
+        self.check("allow", ["ls", "git status", "python3 -m unittest", "which demotracker", "echo demotracker", "grep -rn demotracker .", "cat notes.txt", "harness connections find demo"])
+
+    def test_the_other_programs_of_other_packs_are_not_held_either(self) -> None:
+        use_packs(self.root, "sqlserver")
+        self.put_sql()
+        self.broken(self.TRAILING_COMMA)
+        self.check("allow", ['sqlcmd -S localhost,14332 -C -Q "SELECT 1"'])  # a pack of the folder's own knowledge-base/: seen, judged by its connection
+
+    def put_sql(self) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {**self.CONNECTIONS, "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"}}}), encoding="utf-8")
+
+    def test_the_fault_is_the_files_whatever_it_swallowed(self) -> None:
+        self.assertEqual(targets.knowledge_bases(self.root)[0][0], "kb")
+        self.broken(self.TRAILING_COMMA)
+        self.assertEqual([name for name, _path in targets.knowledge_bases(self.root)], ["knowledge-base"])  # unchanged: it still answers with the default only
+        self.assertEqual(targets.kb_fault(self.root)[0], "target.override.json")
+        self.mend()
+        (self.root / ".harness/policies/target.json").unlink()
+        self.assertEqual(targets.kb_fault(self.root)[0], "target.json")
+
+    def test_the_whole_gate_failing_still_names_the_program(self) -> None:
+        """`govern.programs` (the gate failed) reads the recovered pack too: a line that names its program is refused."""
+        self.broken(self.TRAILING_COMMA)
+        self.assertIn("demotracker", govern.programs(self.root))
+        self.assertIn("demotracker", govern.named(self.root, "demotracker --project DEMO get T-1"))
 
 
 class HarnessCloseTests(BothCase):

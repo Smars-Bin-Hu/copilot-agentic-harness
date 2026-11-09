@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import ahp, clip, company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
+from core import ahp, clip, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -769,6 +769,10 @@ def check_targets(report: Report, root: Path) -> None:
     except Exception as error:
         file, problem = targets.diagnose(root, error)  # 1.7.38 (C13 F2b): which file, and what is wrong
         report.error(say("doctor.target.policy_bad", file=file, error=problem))
+        kb = targets.kb_fault(root)  # 1.7.38 (C13 F2c): the list of knowledge bases is unreadable too, so the company packs in one registered elsewhere are not seen: the programs the gate still found in the text of the files are named
+        held = sorted({word for item in govern.kb_systems(root).values() for word in item["reach"]["cli"]}) if kb else []
+        if held:
+            report.error(say("doctor.target.kb_bad", file=kb[0], error=kb[1], held=say("doctor.target.kb_held", programs=", ".join(held))))
         return
     if not found.configured:
         report.ok(say("doctor.target.none"))

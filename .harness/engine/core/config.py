@@ -104,6 +104,14 @@ def load_policy(root: Path, name: str) -> Dict[str, Any]:
                 found = dict(found, systems=connections.widen(root, found["systems"]))
         except Exception:  # noqa: BLE001 - a broken server list must not take the gate's hand-written systems away; doctor reports it
             pass
+        try:  # 1.7.38 (G-1): a tool pack with a faulty file: every call of its programs is held, never left unjudged
+            from . import toolpacks
+
+            held = toolpacks.broken_systems(root)
+            if held:
+                found = dict(found, systems={**(found.get("systems") or {}), **held})
+        except Exception:  # noqa: BLE001 - a broken pack must not take the other systems away; doctor reports it
+            pass
     return found
 
 

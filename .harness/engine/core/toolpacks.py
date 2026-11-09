@@ -36,7 +36,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import messages, skillcheck, targets
 from .paths import runtime_dir, utc_now
@@ -455,14 +455,94 @@ def type_files(root: Path) -> List[Path]:
     return [path for _name, path in type_entries(root)]
 
 
+def _pack_rules(folder: Path) -> Tuple[Dict[str, Any], List[str]]:
+    """`(systems, problems)` of a pack's `rules.json`: the systems it writes by hand, and what is wrong with them. A file that is not there says nothing; one that cannot be read, or is not valid, is one problem."""
+    from . import systems
+
+    path = folder / RULES
+    if not path.is_file():
+        return {}, []
+    try:
+        listed = json.loads(path.read_text(encoding="utf-8-sig")).get("systems") or {}
+    except (OSError, ValueError, AttributeError) as error:
+        return {}, [str(error)]
+    if not isinstance(listed, dict):
+        return {}, ["`systems` is an object"]
+    errors = systems.validate(listed)
+    return ({} if errors else listed), errors
+
+
+def _program_names(value: Any) -> List[str]:
+    return [str(one).lower() for one in ([value] if isinstance(value, str) else value if isinstance(value, list) else []) if isinstance(one, str) and one]
+
+
+def faults(root: Path) -> List[Dict[str, Any]]:
+    """(1.7.38, G-1) The packs the gate reads (`guarded`) that have a faulty file: a type file that cannot be read or is not valid (an unknown key, a pattern that does not compile, a list of the wrong shape),
+    or a `rules.json` that is not valid. `[{pack, source, faults: [{file, problem}], programs}]`; `programs` are the programs the pack declares, in lower case: the `cli` of its types, `needs.programs` of its
+    manifest, the files of its `bin/`, and the programs its `rules.json` lists. A type that is not valid used to be left out, so the programs of its pack were not judged at all; now every call of them is held
+    (`broken_systems`). A fault `doctor` and the Enter screen show, with the file and what is wrong."""
+    from . import connections
+
+    out: List[Dict[str, Any]] = []
+    for name, item in guarded(root).items():
+        folder, found, programs = item["folder"], item["manifest"], set()
+        bad: List[Dict[str, str]] = []
+        needs = found.get("needs") if isinstance(found.get("needs"), dict) else {}
+        programs.update(_program_names(needs.get("programs")))
+        bin_folder = folder / "bin"
+        for one in sorted(bin_folder.iterdir()) if bin_folder.is_dir() else []:
+            if one.is_file():
+                programs.add(re.sub(r"\.(?:cmd|bat|exe|ps1|py|sh)$", "", one.name.lower()))
+        for path in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+            try:
+                kind = json.loads(path.read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError) as error:
+                bad.append({"file": f"{TYPES}/{path.name}", "problem": str(error)})
+                continue
+            if not isinstance(kind, dict):
+                bad.append({"file": f"{TYPES}/{path.name}", "problem": "a type is an object"})
+                continue
+            programs.update(_program_names(kind.get("cli")))
+            try:
+                bad.extend({"file": f"{TYPES}/{path.name}", "problem": problem} for problem in connections.type_problems(kind))
+            except Exception as error:  # noqa: BLE001 - a type the checker cannot read is a fault too
+                bad.append({"file": f"{TYPES}/{path.name}", "problem": f"{type(error).__name__}: {error}"})
+        listed, rule_problems = _pack_rules(folder)
+        bad.extend({"file": RULES, "problem": problem} for problem in rule_problems)
+        if rule_problems and (folder / RULES).is_file():  # the programs it listed are still the pack's, even when the file is not valid
+            try:
+                raw = json.loads((folder / RULES).read_text(encoding="utf-8-sig")).get("systems") or {}
+                for system in raw.values() if isinstance(raw, dict) else []:
+                    if isinstance(system, dict) and isinstance(system.get("reach"), dict):
+                        programs.update(_program_names(system["reach"].get("cli")))
+            except (OSError, ValueError, AttributeError):
+                pass
+        for system in listed.values():
+            programs.update(_program_names((system.get("reach") or {}).get("cli")))
+        if bad:
+            out.append({"pack": name, "source": item["source"], "faults": bad, "programs": sorted(programs)})
+    return out
+
+
+def broken_systems(root: Path) -> Dict[str, Any]:
+    """(1.7.38, G-1) For the gate: one system for each pack with a faulty file (`faults`), named `broken-<pack>`, that owns every program of the pack. Every call of one of them is held for the person, and the
+    card and the agent's text say which file is wrong and how. Fail closed: the pack's calls are no longer left unjudged because its file cannot be read. A pack that declares no program makes none."""
+    out: Dict[str, Any] = {}
+    for one in faults(root):
+        if not one["programs"]:
+            continue
+        first = one["faults"][0]
+        more = f" (+{len(one['faults']) - 1})" if len(one["faults"]) > 1 else ""
+        out[f"broken-{one['pack']}"] = {"reach": {"cli": one["programs"]}, "env": "none", "toolpack": one["pack"], "broken": f"{one['pack']}: {first['file']}: {first['problem']}{more}"[:400]}
+    return out
+
+
 def rules_layer(root: Path) -> Dict[str, Any]:
-    """The systems the tool packs write by hand, each marked with its tool pack (`toolpack`), in the form of tools.json: the packs that are on, and the off packs a connection uses (1.7.38)."""
+    """The systems the tool packs write by hand, each marked with its tool pack (`toolpack`), in the form of tools.json: the packs that are on, and the off packs a connection uses (1.7.38).
+    A pack whose `rules.json` is not valid adds none (G-1): the whole list would be invalid, and no call would be judged; its programs are held by `broken_systems` instead."""
     out: Dict[str, Any] = {}
     for name, item in guarded(root).items():
-        try:
-            listed = json.loads((item["folder"] / RULES).read_text(encoding="utf-8-sig")).get("systems") or {}
-        except (OSError, ValueError, AttributeError):
-            continue
+        listed, _problems = _pack_rules(item["folder"])
         for system, spec in listed.items():
             if isinstance(spec, dict):
                 out[system] = dict(spec, toolpack=name)

@@ -52,7 +52,7 @@ class Action:
     unseen: bool = False  # a segment the gate cannot read (a program in a variable it cannot expand): held, never guessed (1.7.21)
     file: str = ""  # (1.7.38, C12 RC-G1) a file the call names as its input (`sqlcmd -i`): the one whose text made the call a destroy, or the first one the gate could not judge
     file_why: str = ""  # "destroy" (the file holds a destroy of the `verbs`, a type with no lists: refused), "refuse" (the file holds a statement of the refuse list), "unread" (missing, too big, not text: asks the person), "twice" (the line names the file again and may change it: asks the person)
-    zone: str = ""  # (1.7.38) a type with lists (`reads`): "refuse" (a statement is on the refuse list), "read" (every statement is on the read list), "write" (every statement is on the read or write list: an opened connection passes it), "ask" (the rest); "" for a type with no lists
+    zone: str = ""  # (1.7.38) a type with lists (`reads`): "refuse" (a statement is on the refuse list), "read" (every statement is on the read list), "write" (every statement is on the read or write list: an opened connection passes it), "ask" (the rest); "broken" (G-1: a program of a tool pack whose file is faulty: always held, `note` says which file and what is wrong); "" for a type with no lists
     note: str = ""  # the statement that decided: the one the refuse list caught, or the first that is on no list (cut short)
     reason: str = ""  # zone "refuse": the type's reason for it, in the language of the session: tells the agent the right way
 
@@ -62,7 +62,7 @@ class Action:
             facts["named"] = False  # said only when it matters: the log and the draft stay as they were for a named verb
         if self.file_why:
             facts["file"], facts["file_why"] = self.file, self.file_why  # said only when it matters
-        if self.zone in ("refuse", "ask"):
+        if self.zone in ("refuse", "ask", "broken"):
             facts["zone"] = self.zone
         return facts
 
@@ -144,6 +144,9 @@ def _owner(systems: Dict[str, Any], names: List[str], args: str) -> Optional[str
     """The system a call belongs to, of those that use the program: the one whose `when` pattern matches the most of the arguments (1.7.10: two servers on
     one host, told apart by the port, both match `-S host`; the one that also matches the port wins); on a tie the first; one with no `when` only when no other matches."""
     best, best_len, fallback = None, -1, None
+    for name in names:
+        if systems[name].get("broken"):
+            return name  # a tool pack whose file is faulty owns every call of its programs (1.7.38, G-1): they are held, not left to a system that may not name them
     for name in names:
         when = (systems[name].get("reach") or {}).get("when")
         if not when:
@@ -666,6 +669,9 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             if system.get("target"):
                 match = re.search(system["target"], line, re.IGNORECASE)
                 target = (match.group(1) if match and match.groups() else match.group(0) if match else "")[:120]
+            if system.get("broken"):  # 1.7.38 (G-1): the pack's file is faulty, so the gate cannot judge this program: held, and the card says why
+                found.append(Action(name, "none", WRITE, "", " ".join(tokens), named=True, call=" ".join([_program(tokens[start])] + tokens[start + 1:]), zone="broken", note=str(system["broken"])))
+                continue
             word = unknown_command(system, " ".join(tokens[start + 1:]))
             if word:  # the pack's own program has no such command: refused, with a line (the gate's `unknown` answer)
                 found.append(Action(name, environment(system, line), WRITE, word[:120], " ".join(tokens), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), why="command"))

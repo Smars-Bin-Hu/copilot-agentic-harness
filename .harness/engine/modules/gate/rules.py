@@ -149,7 +149,9 @@ def external_outbox(action: Any, command: str, code: str, minutes: int, draft: s
     key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
     gap = messages.gap()
     note = say(key, file=action.file) + gap if key else ""
-    if not key and getattr(action, "zone", "") == "ask" and action.note:  # 1.7.38: a call of a type with lists that is on no list: it waits, and opening the connection will not pass it
+    if getattr(action, "zone", "") == "broken":  # 1.7.38 (G-1): a file of the tool pack is faulty: the call waits, and the line says which file and what is wrong
+        note = say("gate.external.broken", note=action.note) + gap
+    elif not key and getattr(action, "zone", "") == "ask" and action.note:  # 1.7.38: a call of a type with lists that is on no list: it waits, and opening the connection will not pass it
         note = say("gate.external.zone_ask", statement=action.note, place=place(action.system, action.env)) + gap
     text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + gap if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
     if offers:  # 1.7.38: the card can also open the connection for the task; the agent says so, and runs the same command again if the user does

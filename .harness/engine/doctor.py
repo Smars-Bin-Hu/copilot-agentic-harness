@@ -622,6 +622,9 @@ def check_toolpacks(report: Report, root: Path) -> None:
                 faults = [str(error)]
             if faults:
                 report.warn(say("doctor.toolpacks.recipe", faults="; ".join(faults)))
+        for one in toolpacks.faults(root):  # 1.7.38 (G-1): a faulty file makes the gate hold every call of the pack's programs; it is an error, not a quiet gap
+            for fault in one["faults"]:
+                report.error(say("doctor.toolpacks.broken", pack=one["pack"], file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(one["programs"]) or "-"))
         names = sorted(toolpacks.active(root))
         if names:
             report.ok(say("doctor.toolpacks.on", names=", ".join(names)))

@@ -379,7 +379,7 @@
   }
   // An item of the second block -> {state, level, tag, notes: [{text, fix}], tip}. The note is what the problems of the row say, with a link each to where it is mended.
   function optView(c) {
-    const level = c.state === "ok" ? "ok" : c.state === "yellow" ? "yellow" : "grey";
+    const level = c.state === "ok" ? "ok" : c.state === "red" ? "red" : c.state === "yellow" ? "yellow" : "grey";  // red (1.7.38, G-1): a tool pack with a faulty file
     const notes = (c.problems || []).filter((problem) => problem.short).map((problem) => ({text: problem.short, fix: problem.fix}));
     return {state: c.state === "ok" ? "ok" : "note", level, tag: c.detail || "", notes, tip: c.tip || ""};
   }
@@ -446,7 +446,7 @@
     more.textContent = "+" + (items.length - keep.size); more.hidden = false;
     more.title = items.filter((item, index) => !keep.has(index)).map((item) => item.textContent).join(", ");
   }
-  const DOT = {ok: "ok", need: "partly", down: "partly", none: "none", untested: "unknown"};  // the state of a pack or a connection -> the class of its dot
+  const DOT = {ok: "ok", need: "partly", down: "partly", none: "none", untested: "unknown", bad: "down"};  // the state of a pack or a connection -> the class of its dot
   function names(li, c, hover) {
     let sy = li.querySelector(".sy");
     if (!sy) {
@@ -458,7 +458,7 @@
     const key = JSON.stringify([c.names, root.lang]);
     if (sy.dataset.k !== key) {
       sy.dataset.k = key;
-      const title = (item) => (hover ? "" : c.key === "packs" ? (item.state === "ok" ? "" : t("machine.conn.notusable", {programs: item.missing || ""})) : t("board.enter.cs." + item.state));  // the connections row has its window on hover: a second bubble beside it covered the lines below (C12 N7)
+      const title = (item) => (hover ? "" : c.key === "packs" ? (item.state === "ok" ? "" : item.state === "bad" ? (item.fault || "") : t("machine.conn.notusable", {programs: item.missing || ""})) : t("board.enter.cs." + item.state));  // the connections row has its window on hover: a second bubble beside it covered the lines below (C12 N7)
       sy.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: title(item)}, h("i", {class: "sy-d " + (DOT[item.state] || "unknown")}), item.name)), h("span", {class: "sy-more", hidden: ""}));
     }
     fitNames(sy);

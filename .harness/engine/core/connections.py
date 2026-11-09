@@ -158,8 +158,12 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
     if (kind.get("writes") or kind.get("refuse")) and not kind.get("reads"):
         out.append(f"types.{name}: `writes` and `refuse` work with `reads`, the pass list: give it")
     for key in ("expect", "denied", "down", "match", "signin_lost", "command"):
+        value = kind.get(key) or ""
+        if not isinstance(value, str):
+            out.append(f"types.{name}.{key}: a pattern, as text")
+            continue
         try:
-            re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")
+            re.compile(_fill(value, {}, escape=True) if key == "match" else value)
         except re.error as error:
             out.append(f"types.{name}.{key}: bad pattern: {error}")
     for part in ("include", "unjudged"):
@@ -168,7 +172,23 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 re.compile(given[part])
             except re.error as error:
                 out.append(f"types.{name}.input.{part}: bad pattern: {error}")
-    return out
+    if isinstance(kind.get("fields"), dict) and not all(isinstance(spec, dict) for spec in kind["fields"].values()):
+        out.append(f"types.{name}.fields: each field is an object (`label`, `placeholder`, `default`, `optional`)")
+    return out + _gate_shape(kind, name)
+
+
+GATE_KEYS = ("verbs", "target", "show", "rules", "item", "link", "commands", "openable")  # keys the gate reads and that `type_problems` did not check before 1.7.38 (G-1)
+
+
+def _gate_shape(kind: Dict[str, Any], name: Any) -> List[str]:
+    """(1.7.38, G-1) What the gate would find wrong in the system a type makes: a key of the wrong shape or a pattern that does not compile (`verbs`, `target`, `show`, `rules`, `item`, `link`, `commands`).
+    Such a type used to be skipped, and one that got past here made the whole list of systems invalid, so no call was judged. The same schema the list is checked with is used; the words are the type's."""
+    given = {key: kind[key] for key in GATE_KEYS if key in kind}
+    if not given:
+        return []
+    cli = kind.get("cli")
+    system = {"reach": {"cli": cli if isinstance(cli, (str, list)) and cli else ["x"]}, **given}
+    return [item.replace("systems.x", f"types.{name}", 1) for item in outside.validate({"x": system})]
 
 
 # --- the .env file ----------------------------------------------------------------------------------------------------------------------------------------

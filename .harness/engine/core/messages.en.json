@@ -3707,5 +3707,13 @@
   "desk.outbox.zone.ask": "Not on a list",
   "desk.outbox.zone.ask.tip": "`{what}` is on neither the read list nor the write list of this connection type, so it waits for you. Opening the connection for this task does not pass it.",
   "desk.outbox.zone.write": "Write list",
-  "desk.outbox.zone.write.tip": "Every statement is on the type's read or write list. It waits only because the connection is not open: open it for this task and calls like this pass."
+  "desk.outbox.zone.write.tip": "Every statement is on the type's read or write list. It waits only because the connection is not open: open it for this task and calls like this pass.",
+  "gate.external.broken": "A file of a tool pack is faulty, so the gate cannot judge this program, and every call of the pack's programs waits for the user until it is fixed: {note}\nTell the user which file is wrong (`harness doctor` names it). Do not work around it.",
+  "desk.outbox.zone.broken": "Pack file faulty",
+  "desk.outbox.zone.broken.tip": "{what}\nThe gate cannot judge this program until the file is fixed, so every call of it waits for you. Opening the connection does not pass it.",
+  "doctor.toolpacks.broken": "Tool pack {pack}: {file} is faulty: {problem} Calls of its programs ({programs}) are held: each one asks the user until the file is fixed.",
+  "ready.p.broken": "{pack}: {file} is faulty.",
+  "ready.p.broken.short": "Pack {pack}: {file} is faulty: {problem} Its programs are held until it is fixed.",
+  "ready.packs.broken": "{n} faulty",
+  "ready.packs.broken.one": "1 faulty"
 }

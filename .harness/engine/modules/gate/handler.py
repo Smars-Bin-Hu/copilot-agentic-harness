@@ -220,7 +220,7 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     if scoped and scoped[0] == "opened":  # the person opened the linked items, but this connection's type does not let them through (a company lowered it to `no`): held as before
         scoped = ("linked", scoped[1])
     held = decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes
-    unjudged = getattr(action, "zone", "") == "ask"  # a call of a type with lists that is in no list (a script the gate could not read, a statement off the write list): opening the connection does not let it through, each run waits for the person
+    unjudged = getattr(action, "zone", "") in ("ask", "broken")  # a call of a type with lists that is in no list (a script the gate could not read, a statement off the write list): opening the connection does not let it through, each run waits for the person
     if held and scope == systems_mod.ALL and action.verb != external.DESTROY and not unjudged:  # the person opened this connection for this task (`task allow --conn`, 1.7.38): no further approval. A destroy never passes
         data = _open_task(ctx)
         opened = bool(data and _conn_opened(data, action.system, action.env))

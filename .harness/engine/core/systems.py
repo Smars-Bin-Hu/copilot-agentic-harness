@@ -90,6 +90,7 @@ SYSTEMS_SCHEMA = {
                 "items": {"type": "object", "required": ["pattern", "reason"], "properties": {"pattern": {"type": "string", "minLength": 1}, "reason": {"type": ["string", "object"], "minLength": 1}}},
             },
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
+            "broken": {"type": "string", "minLength": 1},  # 1.7.38 (G-1): written by the harness for a tool pack whose type file or rules file is faulty: what is wrong. Every call of the programs it lists is held (it owns them before any other system)
             "openable": {"type": "boolean"},
             "open": {"type": "string", "enum": list(OPEN_SCOPES)},  # 1.7.38: how far Open to the agent goes for this system; see `open_scope`
             "item": {"type": ["string", "array"], "minLength": 1, "items": {"type": "string", "minLength": 1}},  # 1.7.18: a pattern whose first group is the id of the item a write names (a work item); 1.7.25: a pattern, or a list of them; every group of every match names an item
@@ -139,7 +140,7 @@ def validate(systems: Any) -> List[str]:
         when = (system.get("reach") or {}).get("when")
         if by_address(system) and not when:
             errors.append(f"systems.{name}.reach: `by_address` needs a `when` that names the address")
-        for program in clis(system) if not when else ():
+        for program in clis(system) if not when and not system.get("broken") else ():
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
@@ -163,6 +164,8 @@ def warnings(systems: Dict[str, Any]) -> List[str]:
     """What is allowed but is likely a mistake. For `tools check`."""
     found: List[str] = []
     for name, system in (systems or {}).items():
+        if system.get("broken"):
+            continue  # said by `doctor`, as an error
         if not system.get("verbs"):
             found.append(f"{name}: no `verbs`, so every call counts as a write")
         if system.get("default_env") not in (None, PROD) and "env" not in system:

@@ -219,8 +219,21 @@ def packs_item(root: Path) -> Dict[str, Any]:
                 continue
             problems.append({"key": "packs", "text": say("ready.p.program", programs=names_text(lost)), "why": say("ready.p.program.why.many" if many else "ready.p.program.why", pack=name),
                              "short": say("ready.p.program.short", pack=name, programs=", ".join(lost)), "fix": fix_tools("local", say("ready.fix.local"), "programs")})
+    broken = toolpacks.faults(root)  # 1.7.38 (G-1): a faulty file of a pack the gate reads: red, with the file and what is wrong; the pack's programs are held
+    for one in broken:
+        mark = next((entry for entry in names if entry["name"] == one["pack"]), None)
+        if mark is None:
+            mark = {"name": one["pack"], "state": "bad", "missing": ""}
+            names.append(mark)
+        mark["state"] = "bad"
+        first = one["faults"][0]
+        mark["fault"] = f"{first['file']}: {first['problem']}"[:300]
+        problems.insert(0, {"key": "packs", "text": say("ready.p.broken", pack=one["pack"], file=first["file"]), "why": first["problem"][:240],
+                            "short": say("ready.p.broken.short", pack=one["pack"], file=first["file"], problem=first["problem"][:240]), "fix": fix_tools("packs", say("board.enter.t.packs"))})
     if not names:
         return item("packs", "grey", say("ready.none"))
+    if broken:
+        return item("packs", "red", count(len(broken), "ready.packs.broken"), problems[0]["fix"], names, problems)
     return item("packs", "yellow" if problems else "ok", count(len(names), "ready.packs"), problems[0]["fix"] if problems else {}, names, problems)
 
 

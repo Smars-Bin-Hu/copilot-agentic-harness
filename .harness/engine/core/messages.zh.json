@@ -3707,5 +3707,13 @@
   "desk.outbox.zone.ask": "不在清单里",
   "desk.outbox.zone.ask.tip": "`{what}` 既不在这个连接类型的读清单里，也不在写清单里，所以等你处理。为这个任务打开连接也不会放行它。",
   "desk.outbox.zone.write": "在写清单里",
-  "desk.outbox.zone.write.tip": "每条语句都在这个类型的读清单或写清单里。它只是因为连接没有打开才等着：为这个任务打开连接，这样的调用就会放行。"
+  "desk.outbox.zone.write.tip": "每条语句都在这个类型的读清单或写清单里。它只是因为连接没有打开才等着：为这个任务打开连接，这样的调用就会放行。",
+  "gate.external.broken": "工具包有一个文件有错，gate 没法判断这个程序，所以这个包的程序每次调用都要等用户处理，直到文件改好：{note}\n告诉用户哪个文件有错（`harness doctor` 会点名）。不要绕开。",
+  "desk.outbox.zone.broken": "包的文件有错",
+  "desk.outbox.zone.broken.tip": "{what}\n文件改好之前，gate 没法判断这个程序，所以它的每次调用都等你处理。打开连接也不会放行。",
+  "doctor.toolpacks.broken": "工具包 {pack}：{file} 有错：{problem} 它的程序（{programs}）的调用都被扣下，文件改好之前每次都问用户。",
+  "ready.p.broken": "{pack}：{file} 有错。",
+  "ready.p.broken.short": "包 {pack}：{file} 有错：{problem} 改好之前它的程序都被扣下。",
+  "ready.packs.broken": "{n} 个有错",
+  "ready.packs.broken.one": "1 个有错"
 }

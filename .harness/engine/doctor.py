@@ -386,6 +386,15 @@ def check_user(report: Report, root: Path) -> None:
         report.ok(say("doctor.user.name", name=found["name"], source=found["source"]))
 
 
+def _connection_fault_names(root: Path) -> set:
+    try:
+        from core import connections
+
+        return {str(item["file"]) for item in connections.faults(root)}
+    except Exception:  # noqa: BLE001 - doctor says it in its own check
+        return set()
+
+
 def check_overrides(report: Report, root: Path) -> None:
     """Each `<name>.company.json` (the company pack) and `<name>.override.json` (the person's): a layer that merges onto an existing policy, and what it changed."""
     directory = policies_dir(root)
@@ -404,6 +413,8 @@ def check_overrides(report: Report, root: Path) -> None:
             override = config.read_json(path)
             config.deep_merge(base, override)
         except Exception as error:
+            if name == "connections" and _connection_fault_names(root) & {path.name, f"{name}*.json"}:
+                continue  # (1.7.38, C13 FR 15) the connection list error below says the same, with what it holds: one error for one fault, not two
             report.error(say("doctor.override.unmergeable", file=path.name, name=name, error=error))
             continue
         touched = config.changes(base, override)

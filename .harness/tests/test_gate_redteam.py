@@ -79,7 +79,11 @@ ROWS: List[Tuple[str, str, str]] = [
     # sqlcmd lines and variables
     (f'{S} -Q "SELECT 1\n:connect prod"', "refuse", ":connect"),
     (f'{S} -Q "SELECT 1\n!! whoami"', "refuse", "!!"),
-    (f'{S} -Q ":on error exit\nSELECT 1"', "ask", "a sqlcmd line no list names"),
+    (f'{S} -Q ":listvar\nSELECT 1"', "ask", "a sqlcmd line no list names"),
+    (f'{S} -Q ":on error exit\nSELECT 1"', "pass", "FR 23: a line that only changes how sqlcmd reacts to an error is free"),
+    (f'{S} -Q ":ON ERROR IGNORE\nSELECT 1"', "pass", "FR 23: the same, in capitals"),
+    (f'{S} -Q ":on error exit now\nSELECT 1"', "ask", "FR 23: only the two exact lines are free"),
+    (f'{S} -Q ":on error exit\nSELECT 1; DROP TABLE t"', "refuse", "FR 23: the refuse list is read whatever the free line says"),
     (f'{S} -Q "SELECT * FROM dbo.$(t)"', "refuse", "a sqlcmd variable"),
     (f"{S} -Q \"SELECT '$(SQLCMDPASSWORD)'\"", "refuse", "sqlcmd fills a variable in inside a string too: the password would come back as a result"),
     (f'{S} -Q "SELECT 1 -- $(x)"', "refuse", "and inside a comment"),

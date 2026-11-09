@@ -45,9 +45,12 @@ _found: Dict[str, Tuple[Tuple[int, int], List[Tuple[str, str, float]]]] = {}  # 
 _trees: Dict[str, Tuple[Any, float, Dict[str, Any]]] = {}  # task -> what its files were, when it was read, the tree
 
 
-def _clip(text: Any) -> str:
+REASON_CHARS = 1600  # (1.7.38, C13 FR 11) what the gate told the agent, kept whole enough to show the right way it ends with; the row shows the start and the rest opens
+
+
+def _clip(text: Any, limit: int = TEXT_CHARS) -> str:
     text = redact.text(str(text or "")).strip()
-    return text if len(text) <= TEXT_CHARS else text[:TEXT_CHARS - 1].rstrip() + "…"
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
 
 
 def _path(text: Any) -> str:
@@ -70,7 +73,7 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
             target = row.get("target") if isinstance(row.get("target"), dict) else {}
             entries.append({
                 "at": at, "kind": "gate", "tool": name, "tool_kind": str(row.get("tool_kind") or ""), "decision": "held" if common.is_held(row) else row["decision"],  # a call that waits for the person is held, not blocked (C12 RC-4)
-                "rule": str(row.get("kind") or "") or ".".join(str(item) for item in (row.get("by") or [])), "reason": _clip(row.get("reason")),
+                "rule": str(row.get("kind") or "") or ".".join(str(item) for item in (row.get("by") or [])), "reason": _clip(row.get("reason"), REASON_CHARS),
                 "paths": [_path(item) for item in target.get("paths") or []], "command": _clip(target.get("command")),
             })
         elif event == "PreToolUse" and name:

@@ -219,14 +219,17 @@ class GateTests(ConnectionsCase):
         asked = payload("UserPromptSubmit", SESSION, prompt="db-dev和db-ist都查一下")
         asked["cwd"] = str(self.root)
         named = self.hook(asked).get("additionalContext", "")
-        self.assertIn("- db-ist (IST): Fake DB [host=db2, port=5000]", named)  # 1.7.20: the fields; no tool pack skill, so the test command is offered as that
+        self.assertIn("- db-ist (IST): Fake DB", named)  # 1.7.20: the fields; no tool pack skill, so the test command is offered as that
+        self.assertIn(messages.text("connections.named.call", call="fakedb --host db2:5000 --who"), named, "1.7.38 (C13 FR 9): how to call it comes first")
+        self.assertIn(messages.text("connections.named.fields", fields="host: db2; port: 5000"), named, "the fields are facts, not `host=db2`")
+        self.assertNotIn("host=db2", named)
         self.assertIn("`fakedb --host db2:5000", named)
         self.assertIn("`harness as db-dev -- fakedb --host db1:5000", named)
         (self.root / ".harness" / "toolpacks" / "testpack" / "skills" / "testpack-db").mkdir(parents=True)  # now the pack has a skill: the line points at it and at the program
         told_again = self.hook(asked).get("additionalContext", "")
         self.assertIn(connections.say("connections.named.pack", toolpack="testpack", skills="testpack-db", program="fakedb"), told_again)
         self.assertIn(connections.say("connections.named.wrap", alias="db-dev"), told_again)
-        self.assertNotIn("fakedb --host", told_again)
+        self.assertNotIn(connections.say("connections.named.test", call="@@").split("@@")[0], told_again, "with a skill the test command is not offered as the way; the call line (1.7.38, C13 FR 9) always is")
         other = payload("UserPromptSubmit", SESSION, prompt="look at db-devx and my-db-ist2")  # only a whole alias counts
         other["cwd"] = str(self.root)
         self.assertNotIn("fakedb --host", self.hook(other).get("additionalContext", ""))

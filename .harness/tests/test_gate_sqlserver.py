@@ -43,7 +43,7 @@ CASES = [
  ("EXEC('DR' + 'OP TABLE t')", "refuse"), ("EXECUTE ('x')", "refuse"), ("EXEC sp_executesql N'x'", "refuse"), ("EXEC   sp_executesql   @s", "refuse"),
  ("DROP TABLE t", "refuse"), ("drop/**/table t", "refuse"), ("DR/**/OP TABLE t", "ask"), ("TRUNCATE TABLE t", "refuse"), ("KILL 55", "refuse"), ("SHUTDOWN", "refuse"), ("RESTORE DATABASE x FROM DISK = 'y'", "refuse"),
  ("SELECT 1\n!! whoami", "refuse"), ("SELECT 1\n:connect prod", "refuse"), (":out x.txt\nSELECT 1", "refuse"), (":setvar a b", "refuse"), ("SELECT * FROM dbo.$(t)", "refuse"), ("SELECT '$(SQLCMDPASSWORD)'", "refuse"),
- (":on error exit\nSELECT 1", "ask"), (":r other.sql", "ask"),
+ (":listvar\nSELECT 1", "ask"), (":on error exit\nSELECT 1", "read"), (":ON ERROR IGNORE\nSELECT 1", "read"), (":r other.sql", "ask"),
  ("BEGIN TRAN", "ask"), ("GRANT SELECT ON t TO u", "ask"), ("WAITFOR DELAY '00:00:10'", "ask"), ("ALTER TABLE t ADD c int", "ask"), ("ALTER TABLE t DROP COLUMN c", "refuse"),
  ("IF 1 = 1 DROP TABLE t", "refuse"), ("IF 1 = 1 UPDATE t SET a = 1 WHERE b = 2", "ask"),
  # 1.7.38 (C13 F2, M1): a condition that is true whatever the row holds is no WHERE. A guard against a slip, not a wall: `WHERE id > 0` still passes (docs/12)

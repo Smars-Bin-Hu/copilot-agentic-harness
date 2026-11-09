@@ -211,13 +211,17 @@ def servers_list(root: Path) -> Dict[str, Any]:
     return {"connections": out, "state": connections.state(root)}
 
 
-def _find_lines(found: Dict[str, Any], away: Optional[List[str]] = None, unknown: Optional[List[str]] = None) -> List[str]:
+def _find_lines(found: Dict[str, Any], away: Optional[List[str]] = None, unknown: Optional[List[str]] = None, how_of: Optional[Dict[str, str]] = None) -> List[str]:
+    how_of = how_of or {}
     lines = []
     for one in found["matches"]:
         where = "" if one["env"] in ("", "none") else f", {one['env'].upper()}"
         about = one["about"] or one["label"]
         mark = ("  " + say("connections.find.away", alias=one["alias"])) if away and one["alias"] in away else ("  " + say("connections.find.unknown", alias=one["alias"])) if unknown and one["alias"] in unknown else ""  # not in the window, or not known if it is: it works through `harness as` either way (1.7.38)
+        how = how_of.get(one["alias"]) or one.get("how") or ""  # 1.7.38 (C13 FR 6): how to call it, one line, so the agent does not have to find the server anywhere else
         lines.append(f"{one['alias']}  ({one['type_label']}{where})" + (f"  {about}" if about else "") + mark)
+        if how:
+            lines.append("  " + say("connections.find.call", call=how))
     return lines
 
 
@@ -228,6 +232,7 @@ def servers_find(root: Path, words: List[str]) -> Dict[str, Any]:
     text = " ".join(words).strip()
     window = connections.window_aliases(root)  # the same connections as the line at the start of a chat: all of them (1.7.38, C12 TB-07, FB-3)
     away, unknown = connections.away_aliases(root), connections.unknown_aliases(root)
+    how_of = {one["alias"]: one["how"] for one in connections.calls(root, every=True) if one.get("how")}  # with `harness as <name> --` in front when this window does not carry it (or it is not known)
     found = connections.find(root, text, aliases=window) if text else {"matches": [], "total": 0, "all": len(window), "envs": []}
     if not found["all"]:
         try:
@@ -242,8 +247,8 @@ def servers_find(root: Path, words: List[str]) -> Dict[str, Any]:
     if not found["matches"]:
         return {"_text": say("connections.find.none", words=text, n=found["all"])}
     if found.get("envs") and found["total"] == 1:
-        return {"_text": "\n".join(_find_lines(found, away, unknown)) + "\n" + say("connections.find.one.env", env=", ".join(env.upper() for env in found["envs"]))}
-    lines = _find_lines(found, away, unknown)
+        return {"_text": "\n".join(_find_lines(found, away, unknown, how_of)) + "\n" + say("connections.find.one.env", env=", ".join(env.upper() for env in found["envs"]))}
+    lines = _find_lines(found, away, unknown, how_of)
     if found["total"] > len(found["matches"]):
         lines.append(say("connections.find.more", n=found["total"] - len(found["matches"])))
     lines.append(say("connections.find.many", n=found["total"]) + messages.gap() + say("connections.ask") if found["total"] > 1 else say("connections.find.one"))

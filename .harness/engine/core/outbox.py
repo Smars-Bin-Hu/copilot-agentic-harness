@@ -428,6 +428,37 @@ def void_for_task(root: Path, task: str, note: str = "") -> List[Dict[str, Any]]
     return out
 
 
+def held_elsewhere(root: Path, is_open: Any) -> List[Dict[str, Any]]:
+    """(1.7.38, C13 FR 25) The calls that wait for the person and belong to no open task: a call of a chat that holds no task, and a call that came after its task was closed. Nobody waits for them, nothing on a task page shows them, and they count
+    toward the limit of calls that wait. `is_open(task)` says whether a task is open. Oldest first; never raises."""
+    out: List[Dict[str, Any]] = []
+    try:
+        minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+        for item in sorted(approvals.pending(root, minutes, file=approvals.ACTIONS), key=lambda one: str(one.get("created_at", ""))):
+            task = str(item.get("task") or "")
+            if not task or not is_open(task):
+                out.append({"code": str(item.get("code") or ""), "system": str(item.get("system") or ""), "env": str(item.get("env") or ""), "verb": str(item.get("verb") or ""), "task": task.rsplit("/", 1)[-1],
+                            "at": str(item.get("created_at") or ""), "command": " ".join(str(item.get("command") or "").split())[:160]})
+    except Exception:  # noqa: BLE001 - a list for the board must not fail
+        return []
+    return out
+
+
+def void_elsewhere(root: Path, codes: List[str], is_open: Any) -> List[str]:
+    """Void the calls of `codes` that are held elsewhere (`held_elsewhere`): each goes to the state `dismissed` with the reason `closed`, as the calls of a task that is closed do. A code that is not one of them is left alone (a call of an open task
+    is dismissed on its own page, with a reason). The codes voided."""
+    wanted = {str(code or "").strip().upper() for code in codes}
+    done: List[str] = []
+    minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+    for item in held_elsewhere(root, is_open):
+        if item["code"] in wanted:
+            gone = approvals.dismiss(root, item["code"], minutes, file=approvals.ACTIONS, reason=CLOSED, note="")
+            if gone is not None:
+                mark(root, draft_of(gone), "dismissed", reason=CLOSED)
+                done.append(item["code"])
+    return done
+
+
 REASONS = ("command", "connection", "later", "other_way")  # why the person did not approve (1.7.38): the command is wrong, a wrong connection or environment, not now, do it another way
 LINE_REASONS = ("command", "other_way")  # these two may carry a line of the person's own words
 NOTE_CHARS = 500
@@ -475,6 +506,8 @@ def decided(entry: Dict[str, Any], minutes: int = approvals.DEFAULT_MINUTES) -> 
     state = entry.get("state")
     if state == "approved":
         return {"approved": True, "state": "approved", "next": say("wait.approval.approved", minutes=minutes)}
+    if state == "used":  # (1.7.38, C13 FR 21) this call was approved and has run: a late answer of a wait must not make the agent run it again
+        return {"approved": False, "state": "used", "used": True, "next": say("wait.approval.used")}
     if state == "opened":
         names = ", ".join(str(name) for name in entry.get("opened_for") or [])
         shown = ", ".join(opened_words(str(name), entry.get("opened_offers")) for name in entry.get("opened_for") or [])

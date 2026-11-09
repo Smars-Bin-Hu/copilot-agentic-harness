@@ -43,6 +43,7 @@
     }
   },
   "test": "ado --conn {conn} me --short",
+  "call": "ado --conn {conn} <command>",
   "expect": "^(\\S+)\\s*$",
   "denied": "az login|AADSTS|expired|Sign in|token",
   "signin_lost": "^ado: (?:not signed in to Azure DevOps|az is not found|this connection signs in with a token and none is saved)",

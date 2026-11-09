@@ -71,7 +71,7 @@ def trimmed(entries: List[Dict[str, Any]], limit_minutes: Optional[int] = None, 
         return seconds is not None and not _alive(item, seconds, stamp)
 
     gone: set = set()
-    for rank in (lambda item: item.get("state") == "dismissed", lambda item: spent(item) or item.get("state") not in KEPT_STATES):
+    for rank in (lambda item: item.get("state") in ("dismissed", "used"), lambda item: spent(item) or item.get("state") not in KEPT_STATES):
         for index, item in enumerate(entries):
             if len(gone) >= over:
                 break
@@ -146,9 +146,11 @@ def consume(root: Path, session_id: str, command: str, limit_minutes: int, now: 
         entries = [item for item in _read(root, file) if _alive(item, limit, now)]
         for item in entries:
             if item["session_id"] == session_id and item["command"] == text and item["state"] == "approved":
-                entries.remove(item)
+                used = dict(item)
+                item.pop("files", None)
+                item.update(state="used", at=now, used_at=utc_now())  # (1.7.38, C13 FR 21) a stub, as a dismissal leaves: a `harness wait` that comes back for this code later learns that the call has run
                 _write(root, entries, file)
-                return item
+                return used
         _write(root, entries, file)
     return None
 

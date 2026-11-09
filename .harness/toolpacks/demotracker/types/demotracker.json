@@ -25,6 +25,7 @@
     }
   },
   "test": "demotracker --project {project} whoami",
+  "call": "demotracker --project {project} <command>",
   "expect": "^(\\S+)\\s*$",
   "denied": "not signed in",
   "verbs": [

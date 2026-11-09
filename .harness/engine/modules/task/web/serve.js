@@ -207,7 +207,7 @@ const SERVE = (function () {
       const found = heldBlock(data.result.held);
       held.replaceChildren(h("p", {class: "bad"}, found.title), ...found.nodes);
       held.hidden = false;
-      if (!row.todo_left) go.textContent = t("board.accept.held.go");
+      if (!row.todo_left) go.textContent = t(listed.length === 1 ? "board.accept.held.go.one" : "board.accept.held.go");  // one call: "Void it and close" (1.7.38, C13 FR 12)
       requestAnimationFrame(found.mark);
     }, () => { go.disabled = false; });  // when the list cannot be had, the server still refuses to close while a call waits, and the button says so
     no.addEventListener("click", view.close);
@@ -245,7 +245,7 @@ const SERVE = (function () {
   // `run(true, codes)` closes with the person's yes and the codes it was shown (the server asks for both); it gives a promise.
   function askVoid(calls, run, back) {
     const found = heldBlock(calls);
-    const go = h("button", {class: "act hot", type: "button"}, t("board.accept.held.go"));
+    const go = h("button", {class: "act hot", type: "button"}, t(calls.length === 1 ? "board.accept.held.go.one" : "board.accept.held.go"));
     const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
     const said = h("div", {class: "bad"});
     const view = dialog([h("h2", null, found.title), ...found.nodes, h("div", {class: "row"}, go, no), said]);

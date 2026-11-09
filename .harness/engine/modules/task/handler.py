@@ -433,7 +433,8 @@ def note_asking(event: HookEvent, ctx: Context) -> None:
             if mark.get("why") != "asking":
                 tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "asking"})
         elif mark.get("why") == "asking":
-            tasklife.set_waiting(ctx.root, data["task"], None)  # answered (or the agent went on): it is at work again
+            delivered = data.get("deliver") if isinstance(data.get("deliver"), dict) else None  # 1.7.38 (C13 FR 24): a delivered task is still to accept after a question and its answer, until the person accepts or the agent delivers again
+            tasklife.set_waiting(ctx.root, data["task"], {"since": str(delivered.get("at") or utc_now()), "why": "accept"} if delivered else None)  # answered (or the agent went on): it is at work again
     except Exception:  # noqa: BLE001 - the mark is for the board; losing it must not turn a tool call into an error
         pass
 

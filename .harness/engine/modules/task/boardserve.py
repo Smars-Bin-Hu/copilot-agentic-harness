@@ -404,8 +404,24 @@ class Board:
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
-        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
+        elsewhere = outbox.held_elsewhere(self.root, self.task_is_open)
+        return {"held_elsewhere": elsewhere, "rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
+
+    def task_is_open(self, task: str) -> bool:
+        """Is this task (as an approval entry names it: its folder) open? A task that cannot be read is not."""
+        try:
+            return (tasks.read(self.root, task) or {}).get("status") == "open"
+        except Exception:  # noqa: BLE001
+            return False
+
+    def void_elsewhere(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The person voids calls that belong to no open task (1.7.38, C13 FR 25): the page lists them (`held_elsewhere` of the rows) and the codes it sends are checked again here, so a call of an open task is never voided by this."""
+        if "dismiss action" not in self.actions:
+            raise CommandError(say("serve.action.off", action="dismiss action"))
+        codes = [str(code) for code in data.get("codes") or []] if isinstance(data.get("codes"), list) else []
+        done = outbox.void_elsewhere(self.root, codes, self.task_is_open)
+        return {"voided": done, "count": len(done)}
 
     SWEEP_EVERY = 5.0  # seconds between two looks for a promoted task that waits for nothing
 
@@ -707,7 +723,7 @@ class Board:
                 for call in calls:
                     task_ops.note(held, "approve-call", str(call["code"]), code=call["code"], batch=result["count"], files={key: str(value)[:12] for key, value in (call.get("files") or {}).items()}, system=call.get("system", ""), env=call.get("env", ""))
             noted(self.root, task, "approve-action")
-            stood = [(code, outbox.agent_place(before[code])) for code in (call["code"] for call in calls) if code in before]
+            stood = [(code, self.place_of(before[code])) for code in (call["code"] for call in calls) if code in before]
             self.after_decision(task, stood, messages.text("desk.outbox.tell.body", codes=", ".join(code for code, _place in stood)))
             result["agent"] = {code: place for code, place in stood}
         return result
@@ -812,7 +828,7 @@ class Board:
         if step == "act" and action in WAKING:  # 1.7.38, C13 RB-2: a decision that moves the task on wakes the agent by itself, as an approved call does: no second click on "tell the agent"
             result["agent"] = self.wake_go(result.get("task") or task)
         if stood and stood.get("task"):
-            place = outbox.agent_place(stood)
+            place = self.place_of(stood)
             self.after_decision(str(stood["task"]), [(str(stood["code"]), place)], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
             result["agent"] = place  # the page says so on the green card at once, before its next poll (1.7.38, C12 TB-02)
         return result
@@ -839,6 +855,22 @@ class Board:
         except Exception:  # noqa: BLE001 - the decision is made; the button is the way back
             return ""
 
+    def turn_ended(self, task: str) -> bool:
+        """Has the agent of this task stopped its turn (the Stop hook left its mark and no new prompt has taken it away)? A `harness wait` it left running in a background terminal then answers nobody until a message wakes the agent (1.7.38, C13 FR 8)."""
+        try:
+            mark = (tasks.read(self.root, task) or {}).get("waiting")
+            return isinstance(mark, dict) and mark.get("why") == "stopped"
+        except Exception:  # noqa: BLE001
+            return False
+
+    def place_of(self, entry: Dict[str, Any]) -> str:
+        """`outbox.agent_place`, with one more fact (1.7.38, C13 FR 8): a wait that still beats but whose agent has stopped its turn is `ended`, not `wait`: the board wakes the agent with the decision, as it does for a wait that ran out. A page
+        that said "goes on now" for it was wrong: nobody read the answer of the wait."""
+        place = outbox.agent_place(entry)
+        if place == "wait" and entry.get("task") and self.turn_ended(str(entry["task"])):
+            return "ended"
+        return place
+
     def after_decision(self, task: str, decided: List[Tuple[str, str]], text: str) -> None:
         """The person approved calls or opened their connection. `decided`: each code and where the agent stood (`outbox.agent_place`). One that waits in `harness wait --approval` hears it by itself
         (the entry is marked). One whose wait ran out and whose turn ended is woken with `text`, as one message for all of them. Others are left: the card asks the person to tell the agent."""
@@ -860,9 +892,12 @@ class Board:
             if task:
                 with task_ops.locked(self.root, task) as data:
                     task_ops.note(data, "outbox-dismiss", f"{done.get('code')}: {outbox.reason_text(str(done.get('reason') or ''), str(done.get('note') or ''))}", code=str(done.get("code") or ""), reason=str(done.get("reason") or ""), note=str(done.get("note") or ""))
-            if done.get("agent") == "wait":
+            place = done.get("agent")
+            if place == "wait" and task and self.turn_ended(task):  # its wait runs in a background terminal and its turn is over: the reason and the person's line reach it only by a message (1.7.38, C13 FR 21)
+                place = "ended"
+            if place == "wait":
                 return "wait"
-            if done.get("reason") and done.get("agent") == "ended" and task and self.wake(task, outbox.wake_dismissed(entry)):
+            if done.get("reason") and place == "ended" and task and self.wake(task, outbox.wake_dismissed(entry)):
                 return "message"
         except Exception:  # noqa: BLE001 - the call is dismissed; a missing line must not undo it in the person's eyes
             pass
@@ -1002,7 +1037,11 @@ class Board:
             if env not in conn_core.ENVS:
                 return
             state = {"ok": reach.OK, "denied": reach.DENIED}.get(str(found.get("state")), reach.FAILED)
-            reach.record(self.root, f"{alias}:{env}", state, str(found.get("why") or ""), str(found.get("who") or ""))
+            why = str(found.get("why") or "")
+            kind = conn_core.types(self.root).get(str(server.get("type"))) or {}
+            if found.get("timeout") and state == reach.FAILED and kind and conn_core.delivery(kind, server)["identity"] != "tool":
+                state, why = reach.UNKNOWN, conn_core.UNTESTED_SLOW  # (1.7.38, C13 FR 12) a test that got no answer in time is kept as the background check keeps it: "not tested yet: no answer", never "test failed"
+            reach.record(self.root, f"{alias}:{env}", state, why, str(found.get("who") or ""))
         except Exception:  # noqa: BLE001 - a note on a state must never fail the test the person pressed
             pass
 
@@ -1898,6 +1937,15 @@ def handler_for(board: Board) -> type:
                         return self.answer(200, {"result": {"held": accept.held(board.root, str(data.get("task", "")))}})
                     return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")), data.get("void") is True, data.get("voids"))})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/void":  # void the calls that belong to no open task (1.7.38, C13 FR 25): the paired browser only, like every decision on a held call
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.void_elsewhere(data)
+                    print(say("serve.did", action="void-held", task="-"), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
             if path == "/api/archive":
                 if not board.paired(self.token()):

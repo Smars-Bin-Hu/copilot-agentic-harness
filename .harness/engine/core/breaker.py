@@ -8,6 +8,7 @@ The count is per session. A subagent runs in a session of its own, so it has its
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -34,8 +35,12 @@ def reset(state: Dict[str, Any]) -> None:
     state["denials"] = {}
 
 
+_PREFIX = re.compile(r"^\s*(?:Refused|\u5df2\u62d2\u7edd|\u88ab\u62d2)\s*[:\uff1a]\s*")
+
+
 def stop_text(count: int, reason: str) -> str:
-    return messages.text("breaker.stop", count=count, reason=reason)
+    """The text that stops a refusal that came again. The reason may start with the word itself (`Refused: ...`) and the text puts it in front: one word, not two (1.7.38, C13 FR 12)."""
+    return messages.text("breaker.stop", count=count, reason=_PREFIX.sub("", reason, count=1))
 
 
 def apply(root: Path, state: Dict[str, Any], event: HookEvent, decision: Decision) -> Optional[Dict[str, Any]]:

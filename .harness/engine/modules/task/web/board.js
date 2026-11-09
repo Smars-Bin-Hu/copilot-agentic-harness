@@ -274,6 +274,31 @@
   const stamp = h("span");
   const boardName = h("b", null, t("board.title"));
   const newSlot = h("span", {class: "new-slot"});  // the main act of the board: the far end of the header, filled
+  // Calls that wait for the person and belong to no open task (1.7.38, C13 FR 25): a chat that holds no task, or a call that came after its task was closed. No task page shows them, and they count toward the limit of waiting calls,
+  // so the board lists them here, with a way to void them. Hidden when there are none.
+  const elsewhereBox = h("div", {class: "lb-elsewhere", hidden: ""});
+  function paintElsewhere(list) {
+    elsewhereBox.hidden = !list.length;
+    if (!list.length) { elsewhereBox.replaceChildren(); return; }
+    const open = h("button", {type: "button", class: "act", title: t("board.held.tip")}, t("board.held.review"));
+    open.addEventListener("click", () => {
+      const said = h("div", {class: "bad"});
+      const voidThem = (codes, button) => { button.disabled = true; SERVE.post("/api/void", {codes}).then(() => { view.close(); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); button.disabled = false; }); };
+      const all = h("button", {type: "button", class: "act hot"}, t(list.length === 1 ? "board.held.void.one" : "board.held.void_all", {n: list.length}));
+      all.addEventListener("click", () => voidThem(list.map((item) => item.code), all));
+      const close = h("button", {type: "button", class: "act"}, t("connections.close"));
+      const rowsOf = list.map((item) => {
+        const one = h("button", {type: "button", class: "act"}, t("board.held.void"));
+        one.addEventListener("click", () => voidThem([item.code], one));
+        return h("li", {class: "el-row", title: item.command},
+          h("b", null, item.system || "-"), item.env && item.env !== "none" ? [" ", h("span", {class: "tag hot"}, item.env)] : null, " ", h("span", {class: "tag"}, item.verb || "-"), " ",
+          h("span", {class: "sub"}, item.task ? t("board.held.of", {task: item.task}) : t("board.held.notask"), " · ", item.at ? item.at.slice(0, 16).replace("T", " ") : ""), " ", one);
+      });
+      const view = SERVE.dialog([h("h2", null, t("board.held.title", {n: list.length})), h("p", {class: "sub"}, t("board.held.lead")), h("ul", {class: "el-list"}, ...rowsOf), said, h("div", {class: "row win-foot"}, all, close)]);
+      close.addEventListener("click", view.close);
+    });
+    elsewhereBox.replaceChildren(h("span", {class: "tag hot"}, t(list.length === 1 ? "board.held.title.one" : "board.held.title", {n: list.length})), " ", open);
+  }
   const statusBox = h("span", {class: "lb-status"});  // a served board: VS Code and the pairing. The time of the numbers is a tip on the name: the page keeps itself fresh
   const stampNote = h("span");  // a page on disk says in the footer how to get fresher numbers; the header has room for the time only
   document.querySelector("main").classList.add("wide");
@@ -533,7 +558,7 @@
 
   app.replaceChildren(
     h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), ...(typeof READYBAR !== "undefined" ? [READYBAR.node()] : []), SHELL.banner(), said,
-    kpis, controls, lobby.node,
+    elsewhereBox, kpis, controls, lobby.node,
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint"), DATA.serve ? null : " ", DATA.serve ? null : stampNote), copyright());
   draw();
@@ -557,6 +582,7 @@
     asOf = data.as_of;
     if (typeof CHAT !== "undefined") CHAT.seen(data.rows);  // the New task notice may be waiting for its task
     archiveTo = data.archive_to || "";
+    paintElsewhere(DATA.serve ? data.held_elsewhere || [] : []);
     SHELL.vs(data.vscode);
     if (DATA.serve) { DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); }
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);

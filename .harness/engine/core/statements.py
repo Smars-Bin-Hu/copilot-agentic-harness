@@ -207,10 +207,13 @@ def judge(system: Dict[str, Any], items: List[Statement]) -> Verdict:
             return Verdict(REFUSE, item.text, entry.get("reason") or "", quote=item.raw or item.text)
     reads = _compiled(system.get("reads"))
     writes = _compiled(system.get("writes"))
+    free = _compiled(system.get("directives"))
     first_unlisted = quote = ""
     all_reads = all_listed = bool(items)
     wrote = False
     for item in items:
+        if item.directive and not item.odd and any(rule.fullmatch(item.text) for rule in free):
+            continue  # 1.7.38 (C13 FR 23): a sqlcmd line that only changes how the program reacts to an error (`:ON ERROR EXIT`): it is no statement and decides nothing (the refuse list was read above)
         if item.directive or item.odd:
             all_reads = all_listed = False
             if not first_unlisted:

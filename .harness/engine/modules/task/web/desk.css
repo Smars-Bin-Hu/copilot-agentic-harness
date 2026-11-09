@@ -166,7 +166,7 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 
 @media (max-width:1100px){.tk-stage{width:100px}.tk-name{max-width:30ch}}
 @media (max-width:900px){.tk-head{flex-wrap:wrap;padding-right:96px}.tk-name{flex:1 1 40%}.tk-sp{display:none}}  /* the search pill floats over the right end */
-@media (max-width:900px){.rv-name{display:none}}
+@media (max-width:900px) and (min-width:641px){.rv-name{display:none}}  /* below 640 the line wraps, and the names of the two buttons show: a button that says only `off` or `none` says nothing (1.7.38, C13 FR 14) */
 @media (max-width:640px){.tk-info{flex-wrap:wrap}.tk-info-l{flex-basis:100%;flex-wrap:wrap}.rv-pop{right:auto;left:0}}
 @media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}
 /* "Open to the agent" (1.7.38): the pop of the head pill lists what is open in this task, one row each with a button that closes it */
@@ -242,3 +242,4 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .tk-asked{flex:1 1 100%;margin:6px 0 4px;padding:8px 12px;border-left:3px solid var(--line2);background:var(--card);border-radius:6px;font-size:13px;line-height:1.5;overflow-wrap:anywhere;min-width:0}
 .tk-asked .tk-peek{max-width:none}.tk-asked p{margin:2px 0}.tk-asked ul{margin:4px 0 0;padding-left:20px}
 .tk-fact code.tk-path{max-width:100%;text-overflow:clip}  /* a script path is cut from the left by the page (it keeps the file name), never again by the box (1.7.38, F1 M3) */
+.tr-reason summary{cursor:pointer;overflow-wrap:anywhere}.tr-reason-full{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px}

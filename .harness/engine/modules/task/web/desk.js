@@ -1299,7 +1299,7 @@
     if (held.length < 2 || typeof BATCH === "undefined" || !served() || desk.past) return null;
     const title = (item) => (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })();
     return BATCH.box({
-      task: desk.name, items: held, can: Boolean(canAct() && SERVE.runs("approve-action")),
+      task: desk.name, items: held, max: desk.batch_max || 60, can: Boolean(canAct() && SERVE.runs("approve-action")),
       needsView: () => true,  // as on the card of a call: View first, for every call (1.7.38, C13 FR 1)
       viewed: (code) => viewedCalls.get(code), unview: (code) => { viewedCalls.delete(code); },
       view: (item) => callWindow(item, null), redraw: () => draw(true), done: () => SERVE.done(),
@@ -2449,14 +2449,23 @@
     const gate = item.kind === "gate";
     return h("li", {class: (gate ? (item.decision === "held" ? "tr-held" : "tr-gate") : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "")}, stamp,
       h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
-        gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub"}, " \u00b7 " + item.rule) : null] : null,
+        gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub", title: item.rule}, " \u00b7 " + ruleWords(item.rule)) : null] : null,
         !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
         !gate && item.ok === null ? [" ", item.stopped ? tag(t("desk.trace.stopped")) : tag(t("desk.trace.running"), "good run")] : null,
         item.seconds ? h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds)) : null,
         (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)]),
         item.command ? [" ", h("code", null, item.command)] : null,
-        item.reason ? h("div", {class: "sub"}, item.reason) : null,
+        item.reason ? reasonNode(item.reason) : null,
         item.error ? h("div", {class: "sub"}, item.error) : null));
+  }
+  // What the hook refused for is a word of the harness, not the name of its rule (`external-unpinned`): the words of the table, else the name with its dashes taken out (1.7.38, C13 FR 11).
+  const ruleWords = (rule) => { const key = "desk.trace.rule." + rule; return Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : String(rule).replace(/[-_.]+/g, " "); };
+  // The reason in full is what tells the agent the right way, and it comes last: a long one shows its start and opens to the whole.
+  const REASON_SHOWN = 180;
+  function reasonNode(text) {
+    if (text.length <= REASON_SHOWN) return h("div", {class: "sub"}, text);
+    const cut = text.slice(0, REASON_SHOWN).replace(/\s+\S*$/, "");
+    return h("details", {class: "tr-reason"}, h("summary", {class: "sub"}, cut + "\u2026"), h("div", {class: "sub tr-reason-full"}, text));
   }
 
   function traceStats(stats) {

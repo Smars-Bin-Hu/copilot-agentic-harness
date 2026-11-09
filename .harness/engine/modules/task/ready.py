@@ -172,6 +172,7 @@ class Ready:
         self.clock = clock
         self.lock = threading.Lock()
         self.found: Optional[Dict[str, Any]] = None  # the kept result of doctor
+        self.mark_seen: Optional[str] = None  # the mark of the configuration files when doctor last started (`config_mark`)
         self.at = 0.0
         self.running = False
         self.optional_kept: Any = None  # (what the items read, when, the answer)
@@ -182,15 +183,32 @@ class Ready:
 
     # --- doctor: once, off the request thread ----------------------------------------------------------------------
 
+    CONFIG_FILES = (".harness/policies/*.json", ".harness/registry.json", ".harness/toolpacks/*/toolpack.json", ".harness/toolpacks/*/types/*.json", ".harness/toolpacks/*/rules.json", "knowledge-base/company/tools/*.json",
+                    "knowledge-base/company/tools/packs/*/toolpack.json", "knowledge-base/company/tools/packs/*/types/*.json", "knowledge-base/company/tools/packs/*/rules.json")  # the files whose change `doctor` may report (1.7.38, C13 FR 13)
+
+    def config_mark(self) -> str:
+        """A short mark of the configuration files (their names, sizes and times): when it changes, what doctor said is old, and the next question runs it again. Two stats for each file; never raises."""
+        try:
+            parts: List[str] = []
+            for pattern in self.CONFIG_FILES:
+                for path in sorted(self.root.glob(pattern)):
+                    info = path.stat()
+                    parts.append(f"{path.relative_to(self.root).as_posix()}:{info.st_size}:{info.st_mtime_ns}")
+            return "|".join(parts)
+        except Exception:  # noqa: BLE001 - a mark that cannot be made is no mark: the timer decides as before
+            return ""
+
     def start_doctor(self) -> None:
+        mark = self.config_mark()
         with self.lock:
             if self.running:
                 return
             now = self.clock()
-            again = self.found is None or now - self.at >= (REFRESH_CLEAN if not self.found["errors"] and not self.found["failed"] else RETRY_FAILED)
+            again = self.found is None or now - self.at >= (REFRESH_CLEAN if not self.found["errors"] and not self.found["failed"] else RETRY_FAILED) or (bool(mark) and mark != self.mark_seen)  # a configuration file changed: ask again now, not in ten minutes
             if not again:
                 return
             self.running = True
+            self.mark_seen = mark
         threading.Thread(target=self.run_doctor, name="ready-doctor", daemon=True).start()
 
     def run_doctor(self) -> None:
@@ -271,6 +289,14 @@ class Ready:
             clash = []
         if clash:
             return {"state": "fail", "why": "errors", "n": len(clash), "detail": short(clash[0])}
+        try:  # 1.7.38 (C13 FR 17a): a guardrail file that is not what the person accepted is an error of doctor too, and the hook refuses commands and writes meanwhile: the screen says so at once, not when doctor runs again
+            import integrity
+
+            changed = integrity.changes(self.root)
+        except Exception:  # noqa: BLE001
+            changed = []
+        if changed:
+            return {"state": "fail", "why": "errors", "n": len(changed), "detail": short(messages.text("doctor.integrity.changed", n=len(changed), files=", ".join(changed[: integrity.SHOWN])))}
         return {"state": "ok", "why": "ok", "n": 0}
 
     def drop_doctor(self) -> None:

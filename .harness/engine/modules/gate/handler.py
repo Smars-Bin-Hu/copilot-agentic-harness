@@ -482,8 +482,9 @@ def named_line(ctx: Context, one: Dict[str, str]) -> str:
     info.setdefault("signin", False)
     info.setdefault("about", "")
     env = "" if info["env"] in ("", "none") else f" ({info['env'].upper()})"
-    fields = ", ".join(f"{key}={value}" for key, value in info["fields"].items())
-    head = f"- {info['alias']}{env}" + (f": {info['label']}" if info["label"] else "") + (f" [{fields}]" if fields else "") + (rules.say("connections.named.about", about=info["about"]) if info.get("about") else "")
+    fields = "; ".join(f"{key}: {value}" for key, value in info["fields"].items())
+    how = str(one.get("how") or info.get("how") or "")  # 1.7.38 (C13 FR 9): how to call it comes first; the fields are facts about it, written so that they are not taken for options (`url=` was written as `--url`)
+    head = f"- {info['alias']}{env}" + (f": {info['label']}" if info["label"] else "") + (rules.say("connections.named.call", call=how) if how else "") + (rules.say("connections.named.fields", fields=fields) if fields else "") + (rules.say("connections.named.about", about=info["about"]) if info.get("about") else "")
     wrap = rules.say("connections.named.wrap", alias=info["alias"]) if one["call"].startswith(f"harness as {info['alias']} --") else ""
     lacks = "".join(messages.gap() + rules.say("connections.named.missing", program=program) for program in info["missing"])  # 1.7.37: a program the pack needs is not on this computer
     lacks += messages.gap() + rules.say("connections.named.signin", alias=info["alias"]) if info["signin"] else ""
@@ -545,6 +546,9 @@ def first_reach(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return Decision(context=rules.say("connections.first.context", names=", ".join(fresh), lines="\n".join(lines)))
     except Exception:  # noqa: BLE001 - details are help; nothing is stopped for them
         return None
+
+
+USER_TEXT_TOOLS = ("ask_user", "askuserquestion")  # tools whose input is text shown to the person: a question, with its choices. They call no address
 
 
 def asks_board(ctx: Context, text: str) -> int:
@@ -708,7 +712,7 @@ def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return None if told.is_empty() else told
     if event.event == "PreToolUse" and event.tool_kind != "terminal":
         # A web fetch, a browser or an MCP tool, whatever its name: its input names the address of the board server.
-        port = asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))
+        port = 0 if event.tool_name.strip().lower() in USER_TEXT_TOOLS else asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))  # 1.7.38 (C13 FR 26): the tool that only shows a question to the person sends no request: its text may hold the address of the board (a link to the task page)
         if port:
             return Decision(permission="deny", reason=rules.board_request(port))
         if event.tool_kind == "other":  # an MCP or browser tool: no file and no command line

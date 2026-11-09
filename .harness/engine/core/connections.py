@@ -86,7 +86,7 @@ def _say_text_ok(text: Any) -> bool:
 
 
 TYPE_KEYS = ("type", "label", "description", "via", "env", "fields", "auth", "test", "expect", "denied", "down", "signin_lost", "cli", "match", "command", "commands", "verbs", "target", "rules", "show", "say", "body",
-             "open", "openable", "item", "link", "input", "reads", "writes", "refuse", "pin", "free", "toolpack")  # every top-level key of a type file (the protocol's list; `toolpack` is put in by `types` when it loads one); a key not here is a typo (1.7.38, L8)
+             "open", "openable", "item", "link", "input", "reads", "writes", "refuse", "directives", "outputs", "pin", "free", "call", "toolpack")  # every top-level key of a type file (the protocol's list; `toolpack` is put in by `types` when it loads one); a key not here is a typo (1.7.38, L8)
 
 
 def type_problems(kind: Dict[str, Any]) -> List[str]:
@@ -156,6 +156,18 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 re.compile(pattern)
             except re.error as error:
                 out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
+    if kind.get("directives") is not None:  # 1.7.38 (C13 FR 23): the sqlcmd lines that are free
+        if not (isinstance(kind["directives"], list) and all(isinstance(one, str) and one for one in kind["directives"])):
+            out.append(f"types.{name}.directives: a list of patterns, each matched against a whole sqlcmd line")
+        else:
+            for index, pattern in enumerate(kind["directives"]):
+                try:
+                    re.compile(pattern)
+                except re.error as error:
+                    out.append(f"types.{name}.directives[{index}]: bad pattern: {error}")
+    if kind.get("outputs") is not None and not (isinstance(kind["outputs"], dict) and set(kind["outputs"]) <= {"options"} and isinstance(kind["outputs"].get("options", []), list)
+                                                and all(isinstance(one, str) and one for one in kind["outputs"].get("options", []))):  # 1.7.38 (C13 FR 22)
+        out.append(f"types.{name}.outputs: {{\"options\": [\"-o\", ...]}}, the options that name the file the program writes its output to")
     if kind.get("refuse") is not None and not isinstance(kind["refuse"], list):
         out.append(f"types.{name}.refuse: a list of {{\"pattern\", \"reason\"}}")
     for index, entry in enumerate(kind.get("refuse") or []):
@@ -443,7 +455,7 @@ def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
             words, default = _free_words(kind)
             system: Dict[str, Any] = {"reach": {"cli": programs}, "env": "none", "toolpack": pack,
                                       "noconn": {"type": str(kind.get("type") or path.stem), "free": words, "default": default, "pin": kind["pin"] if isinstance(kind.get("pin"), dict) else None}}
-            for key in ("verbs", "reads", "writes", "refuse", "input"):  # what the refuse list needs to read the statements of the call
+            for key in ("verbs", "reads", "writes", "refuse", "input", "directives", "outputs"):  # what the refuse list needs to read the statements of the call
                 if kind.get(key) is not None:
                     system[key] = kind[key]
             if pack not in guarded:
@@ -548,6 +560,19 @@ def command(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, st
     return " ".join(_fill(test_command(kind), quoted).split())
 
 
+def call_line(kind: Dict[str, Any], server: Dict[str, Any], alias: str = "") -> str:
+    """How a call of this connection is written (1.7.38, C13 FR 6): the type's `call` template (`sqlcmd -S {host},{port} {auth} -C -d {database} -Q "<statement>"`) filled with the connection's fields (a field it leaves empty
+    stays as `<field>`), `{auth}` with the way-in's arguments (`-E`) and `{conn}` with its name; a type with no `call` gives the test command (the program and its options). No password and no account, ever. One line."""
+    template = kind.get("call")
+    if not isinstance(template, str) or not template.strip():
+        return command(kind, server, {}, alias)
+    modes = kind.get("auth") or {}
+    auth = modes.get(server.get("auth") or next(iter(modes), "")) or {}
+    values: Dict[str, Any] = {field: (server.get(field) if server.get(field) not in (None, "") else spec.get("default") or f"<{field}>") for field, spec in (kind.get("fields") or {}).items() if isinstance(spec, dict)}
+    values.update({"conn": alias, "auth": str(auth.get("args") or "")})
+    return " ".join(_fill(template, {key: _quote(str(value)) if key not in ("auth",) and not str(value).startswith("<") else value for key, value in values.items()}).split())
+
+
 def delivery(kind: Dict[str, Any], server: Dict[str, Any]) -> Dict[str, Any]:
     """How an identity reaches this server's commands: `{identity, env: {VAR: field}}`."""
     modes = kind.get("auth") or {}
@@ -607,7 +632,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
             chosen = (server.get(key) or kind.get(key)) if key == "rules" else kind.get(key)  # the connection's own rules win, else the type's (1.7.21)
             if chosen:
                 system[key] = chosen
-        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse", "pin"):
+        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse", "directives", "outputs", "pin"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
         system["open"] = connection_scope(kind, server)
@@ -707,7 +732,8 @@ def calls(root: Path, every: bool = False) -> List[Dict[str, Any]]:
         identity = identity_of(env, alias, kind, server)
         unsure = not opened and _carried(kind, server, identity)
         call = command(kind, server, identity, alias)
-        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped or away or unsure else call, **({"away": True} if away else {}), **({"unknown": True} if unsure else {})})
+        prefixed = alias in wrapped or away or unsure
+        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if prefixed else call, "how": (f"harness as {alias} -- " if prefixed else "") + call_line(kind, server, alias), **({"away": True} if away else {}), **({"unknown": True} if unsure else {})})
     return out
 
 
@@ -725,7 +751,7 @@ def brief(root: Path, alias: str, call: str = "") -> Dict[str, Any]:
     put = (toolpacks.ledger(root)["packs"].get(pack) or {}).get("skills") or []  # the names in .github/skills/: the company's word leads them (1.7.30)
     skills = sorted(str(one) for one in put) or (sorted(item.name for item in (folder / "skills").iterdir() if item.is_dir()) if isinstance(folder, Path) and (folder / "skills").is_dir() else [])
     return {"alias": alias, "env": str(server.get("env") or ""), "type": str(server.get("type") or ""), "label": str(kind.get("label") or ""), "about": " ".join(str(server.get("about") or "").split()),
-            "fields": {key: value for key, value in fields.items() if value}, "toolpack": pack, "skills": skills, "program": str((kind.get("cli") or [""])[0]), "call": call, "missing": lost,
+            "fields": {key: value for key, value in fields.items() if value}, "toolpack": pack, "skills": skills, "program": str((kind.get("cli") or [""])[0]), "call": call, "how": call_line(kind, server, alias) if kind and not type_problems(kind) else "", "missing": lost,
             "signin": bool(_way(kind, server).get("identity") == "tool" and not identity_of(read_env(root), alias, kind, server))}
 
 
@@ -753,7 +779,7 @@ def describe(root: Path, alias: str, servers: Optional[Dict[str, Dict[str, Any]]
     """What `find` knows of one connection: `{alias, type, type_label, env, label, about, repos, domains}` (the fields the company wrote for finding it; no secret, no sign-in)."""
     server = (listed(root) if servers is None else servers).get(alias) or {}
     kind = (types(root) if kinds is None else kinds).get(str(server.get("type"))) or {}
-    return {"alias": alias, "type": str(server.get("type") or ""), "type_label": str(kind.get("label") or server.get("type") or ""), "env": str(server.get("env") or ""),
+    return {"alias": alias, "type": str(server.get("type") or ""), "type_label": str(kind.get("label") or server.get("type") or ""), "env": str(server.get("env") or ""), "how": call_line(kind, server, alias) if kind and not type_problems(kind) else "",
             "label": str(server.get("label") or ""), "about": " ".join(str(server.get("about") or "").split()), "repos": _words(server.get("repos")), "domains": _words(server.get("domains"))}
 
 

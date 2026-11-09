@@ -985,7 +985,7 @@ def deploy(ado: Ado, args) -> str:
 
 # --- the command line ----------------------------------------------------------------------------------------------------------------------------------------
 
-PACK_VERSION = "0.4.12"  # the same as toolpack.json
+PACK_VERSION = "0.4.13"  # the same as toolpack.json
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1113,7 +1113,32 @@ COMMANDS = {name: globals()[name] for name in ("me", "item", "items", "comments"
                                                 "queue", "cancel", "retry", "releases", "release", "deploy")}
 
 
+TOP_OPTIONS = ("--conn", "--org", "--project", "--json", "--version", "-h", "--help")
+TOP_WITH_VALUE = ("--conn", "--org", "--project")
+
+
+def unknown_option(words):
+    """The first option written before the command that ado does not have (0.4.13). A connection's fields (url, org, project) are facts about it, not options: an agent that read `url=...` wrote `--url`, and argparse
+    answered `invalid choice` for the word after it. Now the line names the option and the ones there are."""
+    skip = False
+    for word in words:
+        if skip:
+            skip = False
+        elif word in TOP_WITH_VALUE:
+            skip = True
+        elif not word.startswith("-"):
+            return ""  # the command: what follows is its own
+        elif word not in TOP_OPTIONS and not word.startswith(tuple(option + "=" for option in TOP_WITH_VALUE)):
+            return word
+    return ""
+
+
 def main(argv=None) -> int:
+    given = sys.argv[1:] if argv is None else list(argv)
+    wrong = unknown_option(given)
+    if wrong:
+        print(f"ado: `{wrong}` is not an option of ado. Before the command it takes only --conn NAME, --org ORG, --project PROJECT and --json. The server address and the other fields of a connection are the connection's own: ado reads them from it, they are never options. Write: ado --conn NAME <command> ... ; `ado <command> --help` lists the options of a command.", file=sys.stderr)
+        return 2
     args = parser().parse_args(argv)
     try:
         for stream in (sys.stdout, sys.stderr):

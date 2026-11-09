@@ -151,7 +151,10 @@ class LayerTwoTests(FindCase):
 
     def test_the_first_command_that_ran_gets_the_details_once_and_the_second_gets_none(self) -> None:
         first = self.ran(self.SQL).get("additionalContext", "")
-        self.assertIn("orders-dev (DEV): SQL Server [host=localhost, port=14332", first)
+        self.assertIn("orders-dev (DEV): SQL Server", first)
+        self.assertIn(messages.text("connections.named.call", call='sqlcmd -S localhost,14332 -C -d <database> -Q "<statement>"'), first, "FR 9: the call line comes first")
+        self.assertIn(messages.text("connections.named.fields", fields="host: localhost; port: 14332"), first)
+        self.assertNotIn("host=localhost", first, "a field is a fact, not an option")
         self.assertIn(messages.text("connections.named.about", about="Sales orders and invoices, development").strip(), first)
         self.assertIn("sqlserver-jobs", first)
         self.assertIn("`sqlcmd`", first)

@@ -146,6 +146,12 @@ def sentence(text: str) -> str:
     return (one[:1].upper() + one[1:] + ("" if one.endswith((".", "!", "?", "\u3002", "\uff01", "\uff1f")) else ".")) if one else ""  # a Chinese full stop is a stop too (no "。.")
 
 
+def _stop(problem: str) -> str:
+    """What a file said was wrong, ended with a full stop, so the sentence that follows it starts as a sentence (1.7.38, C13 FR 15)."""
+    one = " ".join(str(problem).split()).rstrip(" .")
+    return one + "." if one else ""
+
+
 def skills_item(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
     prefix = skillcheck.effective_prefix(root)  # the word the names are judged by: the person's, else the company's
     used = skillcheck.company_prefix(root)  # the word a sync copies by: only the person's file counts (1.7.38: the row tells when the two words differ)
@@ -230,11 +236,11 @@ def packs_item(root: Path) -> Dict[str, Any]:
         mark["fault"] = f"{first['file']}: {first['problem']}"[:300]
         key = "ready.p.unreadable" if one.get("unreadable") else "ready.p.broken"  # S1: a `toolpack.json` that cannot be read is told as that
         problems.insert(0, {"key": "packs", "text": say(key, pack=one["pack"], file=first["file"]), "why": first["problem"][:240],
-                            "short": say(key + ".short", pack=one["pack"], file=first["file"], problem=first["problem"][:240]), "fix": fix_tools("packs", say("board.enter.t.packs"))})
+                            "short": say(key + ".short", pack=one["pack"], file=first["file"], problem=_stop(first["problem"][:240])), "fix": fix_tools("packs", say("board.enter.t.packs"))})
     listfault = toolpacks.use_fault(root)  # 1.7.38 (C13 FR 4): the company's list of packs cannot be read: red, with the file; the packs it turns on are not known to be on, and the gate guards all factory packs
     if listfault:
         fix = fix_tools("packs", say("board.enter.t.packs"))
-        problems.insert(0, {"key": "packs", "text": say("ready.p.packsfile", file=listfault["file"]), "why": listfault["problem"], "short": say("ready.p.packsfile.short", file=listfault["file"], problem=listfault["problem"]), "fix": fix})
+        problems.insert(0, {"key": "packs", "text": say("ready.p.packsfile", file=listfault["file"]), "why": listfault["problem"], "short": say("ready.p.packsfile.short", file=listfault["file"], problem=_stop(listfault["problem"])), "fix": fix})
         return item("packs", "red", say("ready.packs.listfault"), fix, names, problems)
     if not names:
         return item("packs", "grey", say("ready.none"))
@@ -317,7 +323,7 @@ def connections_item(root: Path) -> Dict[str, Any]:
         first = broken[0]
         fix = fix_tools("connections", say("board.enter.t.connections"))
         more = f" (+{len(broken) - 1})" if len(broken) > 1 else ""
-        problem = {"key": "connlist", "text": say("ready.p.connlist", file=first["file"]) + more, "why": str(first["problem"])[:240], "short": say("ready.p.connlist.short", file=first["file"], problem=str(first["problem"])[:240]), "fix": fix}
+        problem = {"key": "connlist", "text": say("ready.p.connlist", file=first["file"]) + more, "why": str(first["problem"])[:240], "short": say("ready.p.connlist.short", file=first["file"], problem=_stop(str(first["problem"])[:240])), "fix": fix}
         return item("connections", "red", say("ready.conn.broken"), fix, [], [problem])
     out = connections_counted(root)
     off = connections_off(root)

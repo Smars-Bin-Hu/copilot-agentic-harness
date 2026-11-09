@@ -56,6 +56,7 @@ class Action:
     note: str = ""  # the statement that decided: the one the refuse list caught, or the first that is on no list (cut short)
     reason: str = ""  # zone "refuse": the type's reason for it, in the language of the session: tells the agent the right way
     option: str = ""  # zone "unpinned" (1.7.38, C13 F2): the option the type names the target with (`-S`), for the words that tell the agent the right way
+    via: str = ""  # zone "unpinned" (1.7.38, C13 FR 5): the connection the call was written for with `harness as <alias> --`: that gives its sign-in, not its server, so the words say how to write the server
 
     def facts(self) -> Dict[str, Any]:
         facts: Dict[str, Any] = {"system": self.system, "env": self.env, "verb": self.verb, "target": self.target}
@@ -522,6 +523,7 @@ class _Ctx:
         self.quiet: set = set()  # programs a system lists `by_address`: not among the names that must be accounted for
         self.direct: set = set()  # programs only a `direct_only` system lists (a pack that is off and that no connection uses, 1.7.38, C13 F2c): a direct call is refused, their name in a script or a word of a line is no call
         self.reasons: Dict[str, str] = {}  # system -> its `blocked` text, in the language of the session
+        self.as_alias = ""  # the connection of the `harness as <alias> --` whose command is being read (1.7.38, C13 FR 5)
         self.type_lists: Optional[Dict[str, Dict[str, Any]]] = None  # (1.7.38, C13 FR 2) the lists of the types that can be read, for a call of a faulty pack: read when the first such call comes
         self.code: List[Tuple[Any, str]] = []  # (pattern of the words, system) of the systems that name `reach.code`: words a one-liner interpreter must not run (1.7.38, C13 F2)
 
@@ -739,10 +741,58 @@ def _line_writer(line: str, inputs: List[str], ctx: "_Ctx", allowed: set, depth:
     return ""
 
 
+RESERVED_IN_TASK = (".task", "OUTBOX", "REVIEW", "SNAPSHOT")  # places of a task folder that only the harness writes (`gate.json` `cli_owned_paths`): an output file is never one of them
+
+
+def _in_task_folder(path: str, ctx: "_Ctx") -> bool:
+    """Is this file (as the shell resolves it, from the folder the call runs in) a place inside the task folder the agent may write: not a variable, a glob, `~`, a place the harness owns, nor a link or `..` that leaves the folder?"""
+    if ctx.folder is None or not path or _SPECIAL.search(path) or "$" in path:
+        return False
+    folder = os.path.realpath(str(ctx.folder))
+    base = ctx.cwd or str(ctx.root or ".")
+    full = os.path.realpath(os.path.join(base, os.path.expanduser(path)))
+    try:
+        if os.path.commonpath([full, folder]) != folder or full == folder:
+            return False
+    except ValueError:
+        return False
+    parts = os.path.relpath(full, folder).replace("\\", "/").split("/")
+    return parts[0] not in RESERVED_IN_TASK and not (len(parts) == 1 and (parts[0].endswith(".diff") or parts[0] in ("TASK.md", "REQ.md")))
+
+
+def _without_task_outputs(system: Dict[str, Any], args: List[str], ctx: "_Ctx") -> List[str]:
+    """The words of the call without each output option (`outputs.options` of the type: `-o`, `--output-file`) and its file, when the file is inside the task folder (`_in_task_folder`). An output file anywhere else stays in
+    the words: the call asks, as a write."""
+    options = [str(one) for one in ((system.get("outputs") or {}).get("options") or [])]
+    if not options:
+        return args
+    out: List[str] = []
+    index = 0
+    while index < len(args):
+        word = args[index]
+        value, step = "", 0
+        for option in options:
+            if word == option and index + 1 < len(args):
+                value, step = args[index + 1], 2
+            elif option.startswith("--") and word.startswith(option + "="):
+                value, step = word[len(option) + 1:], 1
+            elif not option.startswith("--") and word.startswith(option) and len(word) > len(option):
+                value, step = word[len(option):], 1
+            if step:
+                break
+        if step and _in_task_folder(value, ctx):
+            index += step
+            continue
+        out.append(word)
+        index += 1
+    return out
+
+
 def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: str, call: str, args: List[str], ctx: "_Ctx", lead: List[str]) -> Action:
     """A call of a type with lists (1.7.38, C12: pass, refuse, ask). The statements of the text and of the files it reads are cut (`statements.py`) and judged by `reads`, `writes` and `refuse`:
     refuse list first (whatever else is wrong with the call), then a call that gave the gate nothing to read, a text with a shell variable in it or a file the gate could not read (asks), then the lists.
     `verbs` do not decide the zone: they say what kind of call the card shows (write, exec), and a destroy rule that matches a statement is one more refusal."""
+    args = _without_task_outputs(system, args, ctx)  # 1.7.38 (C13 FR 22): `-o file` into the task folder is a local write: the call is judged by its statements as without it
     read = inputfiles.read(system, args, ctx.root, ctx.folder, ctx.cwd, ctx.line or text)
     rest = inputfiles.verb_of_text(system, " ".join(lead + ([read.rest] if read else args)))  # the words that are no statement: the settings before the program (`SQLCMDINI=file`) and its options (`-o file`, `-q`)
     if read is None or not read.sources:  # the program reads what it is given on its input: nothing the gate sees
@@ -820,7 +870,7 @@ def _unpinned(systems: Dict[str, Any], pinned: List[str], seen: pin.Pinned, toke
         return caught
     program = _program(tokens[start])
     call = " ".join([program] + tokens[start + 1:])
-    return Action("", "none", DESTROY, (seen.value or program)[:120], " ".join(tokens), call=call, why=seen.state, zone="unpinned", option=seen.option, note=caught.note if caught else "", reason=caught.reason if caught else "", file=caught.file if caught else "", file_why=caught.file_why if caught else "")
+    return Action("", "none", DESTROY, (seen.value or program)[:120], " ".join(tokens), call=call, why=seen.state, zone="unpinned", option=seen.option, via=ctx.as_alias, note=caught.note if caught else "", reason=caught.reason if caught else "", file=caught.file if caught else "", file_why=caught.file_why if caught else "")
 
 
 def _free(info: Dict[str, Any], args: List[str]) -> bool:
@@ -985,7 +1035,11 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             continue
         wrapped = as_run(tokens)
         if wrapped is not None and depth < MAX_DEPTH:  # `harness as <alias> -- <command>` (1.7.10): the command inside is the call
-            _scan(wrapped[1], systems, programs, depth + 1, found, variables, ctx)
+            before, ctx.as_alias = ctx.as_alias, wrapped[0]
+            try:
+                _scan(wrapped[1], systems, programs, depth + 1, found, variables, ctx)
+            finally:
+                ctx.as_alias = before
             continue
         checked = len(tokens)
         shelled = _shell_string(tokens) if depth < MAX_DEPTH else None
@@ -1160,10 +1214,14 @@ def _account(tokens: List[str], raw: List[str], names: List[str], feeds: bool, c
             hold(hit)
             return
     for path in _runs_files(tokens, at, raw, feeds):
+        maybe = path.startswith("?")
+        path = path[1:] if maybe else path
         state, program = _file_state(path, names, ctx)
         if state == "names":
             hold(program)
             return
+        if maybe:
+            continue
         if state in ("unreadable", "missing") and not (state == "missing" and _program(tokens[at]) in _READERS):
             hold(path, "file")
             return
@@ -1180,7 +1238,7 @@ def _runs_files(tokens: List[str], at: int, raw: List[str], feeds: bool) -> List
         if kind == "script" and index is not None and index < len(tokens):
             files.append(tokens[index])
         elif kind == "code" and index is not None:
-            files.extend(_code_files(" ".join(tokens[index + 1:])))  # `python3 -c "exec(open('x.py').read())"`: the file is the program (1.7.38, C13 FR 20)
+            files.extend("?" + one for one in _code_files(" ".join(tokens[index + 1:])))  # `python3 -c "exec(open('x.py').read())"`: the file is the program (1.7.38, C13 FR 20). A `?` says it may be data: no file, or none the gate can read, is no reason to hold the line
     elif name in ("source", ".") and at + 1 < len(tokens):
         files.append(tokens[at + 1])
     elif name in READ_ONLY_PROGRAMS or _is_harness(tokens, at):

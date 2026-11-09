@@ -92,6 +92,7 @@ def refusal(command: str, root: Any, cwd: str, folder: Any, policy: Dict[str, An
                 if at is None:
                     continue
                 for path in external._runs_files(tokens, at, tokens, False):  # noqa: SLF001
+                    path = path[1:] if path.startswith("?") else path  # a file a one-liner opens by name
                     body = _read(path, ctx)
                     if body is None:
                         continue

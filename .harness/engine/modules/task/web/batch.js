@@ -14,17 +14,18 @@ const BATCH = (function () {
     return states.get(task);
   }
 
-  // ctx: {task, items, can, viewed(code) -> the files as View had them or undefined, needsView(item), view(item), unview(code), approved(calls, result), done(), reasons, lineReasons}
+  // ctx: {task, items, max, can, viewed(code) -> the files as View had them or undefined, needsView(item), view(item), unview(code), approved(calls, result), done(), reasons, lineReasons}
   function box(ctx) {
     const items = ctx.items || [];
     if (items.length < 2) { states.delete(ctx.task); return null; }
     const st = stateOf(ctx.task);
+    const max = ctx.max || 60;  // the most calls one code approves (the board's own limit, `outbox.BATCH_MAX`)
     const codes = new Set(items.map((item) => item.code));
     for (const code of [...st.known]) if (!codes.has(code)) { st.known.delete(code); st.checked.delete(code); st.autoed.delete(code); }
     for (const item of items) st.known.add(item.code);
     // The tick: a call is ticked for the person only when it is an ordinary write of a write list (`item.batch` is `plain`) and View was pressed on it, once; the person may untick it, and it stays unticked. Any other call
     // is ticked by the person, after View. A call that comes later is not ticked: the list under the person's hand does not change (1.7.38, C13 FR 1).
-    for (const item of items) if (item.batch === "plain" && ctx.viewed(item.code) && !st.autoed.has(item.code)) { st.autoed.add(item.code); st.checked.add(item.code); }
+    for (const item of items) if (item.batch === "plain" && ctx.viewed(item.code) && !st.autoed.has(item.code) && st.checked.size < max) { st.autoed.add(item.code); st.checked.add(item.code); }
     for (const code of [...st.checked]) if (ctx.needsView(items.find((item) => item.code === code) || {}) && !ctx.viewed(code)) st.checked.delete(code);  // a View that was lost (the file changed) takes the tick away
 
     const said = h("div", {class: "bad"}, st.said || null);
@@ -33,14 +34,24 @@ const BATCH = (function () {
     const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled"}, t("desk.batch.approve", {n: st.checked.size}));
     const no = h("button", {type: "button", class: "act", disabled: ctx.can ? null : "disabled", "aria-expanded": st.asking ? "true" : "false"}, t("desk.batch.dismiss"));
     const count = h("span", {class: "sub bt-count"});
+    let box = null;  // the section below: the rows are asked about while it is drawn
     const reasonBox = h("div", {class: "tk-reasons", role: "group", "aria-label": t("desk.outbox.reason.title"), hidden: st.asking ? null : ""});
 
+    const tickAll = h("button", {type: "button", class: "act bt-all", title: t("desk.batch.all.tip", {max})}, t("desk.batch.all"));
+    const tickNone = h("button", {type: "button", class: "act bt-none"}, t("desk.batch.none.btn"));
     const arm = () => {
       const n = st.checked.size;
       yes.textContent = t("desk.batch.approve", {n});
-      yes.disabled = !(ctx.can && n && code.value.trim() && st.shown.code);
-      yes.title = !ctx.can ? "" : !n ? t("desk.batch.none") : !st.shown.code ? t("desk.batch.wait") : !code.value.trim() ? t("desk.batch.type") : "";
+      yes.disabled = !(ctx.can && n && n <= max && code.value.trim() && st.shown.code);
+      yes.title = !ctx.can ? "" : !n ? t("desk.batch.none") : n > max ? t("desk.batch.limit.now", {max}) : !st.shown.code ? t("desk.batch.wait") : !code.value.trim() ? t("desk.batch.type") : "";
       count.textContent = t("desk.batch.count", {n, total: items.length});
+      for (const row of box ? box.querySelectorAll(".bt-row") : []) {  // at the limit the calls that are not ticked cannot be: the box says why on hover
+        const one = row.querySelector(".bt-tick");
+        const blocked = row.classList.contains("blocked");
+        one.disabled = !ctx.can || blocked || (!one.checked && n >= max);
+        one.title = !one.checked && n >= max && !blocked ? t("desk.batch.limit.row", {max}) : "";
+      }
+      tickAll.disabled = !ctx.can; tickNone.disabled = !n;
       code.classList.toggle("pulse", ctx.can && n > 0 && !code.value.trim());
     };
     let timer = 0;
@@ -79,6 +90,17 @@ const BATCH = (function () {
         view);
     });
 
+    tickAll.addEventListener("click", () => {  // the calls that were viewed, up to the limit, in the order of the list
+      for (const item of items) if (st.checked.size < max && ctx.viewed(item.code) && !st.checked.has(item.code)) st.checked.add(item.code);
+      st.said = ""; said.replaceChildren();
+      for (const row of box.querySelectorAll(".bt-row")) row.querySelector(".bt-tick").checked = st.checked.has(row.dataset.code);
+      preview();
+    });
+    tickNone.addEventListener("click", () => {
+      st.checked.clear(); st.said = ""; said.replaceChildren();
+      for (const row of box.querySelectorAll(".bt-row")) row.querySelector(".bt-tick").checked = false;
+      preview();
+    });
     code.addEventListener("input", () => { st.code = code.value; arm(); });
     chip.addEventListener("click", () => { navigator.clipboard.writeText(st.shown.code).then(() => {}, () => {}); code.value = st.shown.code; st.code = code.value; arm(); yes.focus(); });
     const send = () => {
@@ -133,12 +155,15 @@ const BATCH = (function () {
     paintReasons();
     preview();
     arm();
-    return h("section", {class: "tk-need tk-call strong tk-batch", "data-action": "approve-batch"},
-      h("div", {class: "tk-need-h"}, tag(t("desk.batch.title", {n: items.length}), "hot"), count),
+    box = h("section", {class: "tk-need tk-call strong tk-batch", "data-action": "approve-batch"},
+      h("div", {class: "tk-need-h"}, tag(t("desk.batch.title", {n: items.length}), "hot"), count, h("span", {class: "bt-tools"}, tickAll, tickNone)),  // "tick all" and "tick none" at the top: a long list needs no scrolling to change its mind
       h("p", {class: "hint"}, t("desk.batch.hint")),
+      items.length > max ? h("p", {class: "hint bt-limit"}, t("desk.batch.limit", {max, n: items.length})) : null,
       h("ul", {class: "bt-list"}, ...rows),
-      h("div", {class: "tk-need-go tk-call-go"}, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("desk.batch.code.label")), chip, code, yes), no, h("span", {class: "sub"}, t("desk.batch.same_as"))),
+      h("div", {class: "tk-need-go tk-call-go bt-go"}, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("desk.batch.code.label")), chip, code, yes), no, h("span", {class: "sub"}, t("desk.batch.same_as"))),  // stays at the foot of the box, in view, whatever the list is
       reasonBox, said);
+    arm();
+    return box;
   }
 
   return {box};

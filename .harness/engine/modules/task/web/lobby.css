@@ -149,3 +149,6 @@ a.lb-name:hover{text-decoration:underline;text-underline-offset:3px}
 @keyframes lbcharge{0%,100%{opacity:.25}50%{opacity:1}}
 @keyframes lbswing{0%,100%{transform:rotate(-12deg)}50%{transform:rotate(14deg)}}
 @media (prefers-reduced-motion:reduce){.lb-scene *{animation:none!important;transition:none!important}.lb-docked:hover,.lb-docked:focus{transform:none}}
+
+.lb-elsewhere{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0}.lb-elsewhere[hidden]{display:none}
+.el-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}.el-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}.el-row .act{margin:0 0 0 auto}

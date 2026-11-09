@@ -13,6 +13,14 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 os.environ.setdefault("HARNESS_VSCODE_CLI", "off")  # no test touches the real VS Code of the machine (core/ahp.py reads this)
+if "HARNESS_INTEGRITY_DIR" not in os.environ:  # the lists of accepted guardrail files are kept in the home of the person (integrity.py): a test must not write there (1.7.38, C13 FR 17a)
+    import atexit
+    import shutil as _shutil
+    import tempfile as _tempfile
+
+    _INTEGRITY = _tempfile.mkdtemp(prefix="harness-integrity-")
+    os.environ["HARNESS_INTEGRITY_DIR"] = _INTEGRITY
+    atexit.register(_shutil.rmtree, _INTEGRITY, True)
 
 REPO = Path(__file__).resolve().parents[2]
 ENGINE = REPO / ".harness" / "engine"

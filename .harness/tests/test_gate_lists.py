@@ -189,7 +189,8 @@ class FileTests(ListedCase):
         self.assertEqual((action.zone, action.file, action.file_why), ("refuse", path, "refuse"))
 
     def test_a_sqlcmd_line_the_lists_do_not_name_asks(self) -> None:
-        self.held(f"{SERVER} -i {self.script(':on error exit' + chr(10) + 'SELECT 1;' + chr(10), 'o.sql')}")
+        self.held(f"{SERVER} -i {self.script(':listvar' + chr(10) + 'SELECT 1;' + chr(10), 'o.sql')}")
+        self.runs(f"{SERVER} -i {self.script(':on error exit' + chr(10) + 'SELECT 1;' + chr(10), 'o2.sql')}")  # FR 23: this one only changes how sqlcmd reacts to an error
 
     def test_an_included_file_is_judged_in_its_place_and_a_missing_one_asks(self) -> None:
         self.script("SELECT 2;\n", "inner.sql")
@@ -234,7 +235,7 @@ class OpenedConnectionTests(ListedCase):
         self.open_connection()
         self.runs(f"{SERVER} -i {self.script('UPDATE t SET a = 1 WHERE b = 2;' + chr(10), 'w.sql')}")
         self.held(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql")
-        self.held(f"{SERVER} -i {self.script(':on error exit' + chr(10) + 'UPDATE t SET a = 1 WHERE b = 2;' + chr(10), 'o.sql')}")
+        self.held(f"{SERVER} -i {self.script(':listvar' + chr(10) + 'UPDATE t SET a = 1 WHERE b = 2;' + chr(10), 'o.sql')}")
 
     def test_the_card_of_a_call_the_opening_would_not_pass_offers_no_open(self) -> None:
         self.assertNotIn(messages.text("desk.outbox.open", name="acmedw-dev"), self.held(f'{SERVER} -Q "SELECT a INTO b FROM c"'))

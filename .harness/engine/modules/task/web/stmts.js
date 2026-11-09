@@ -4,6 +4,8 @@
 // Colours come from highlight.js (SQL: keywords, strings, comments); the text is put in with textContent, so nothing in a statement can become markup.
 "use strict";
 
+const tailName = (name) => (name.length <= 24 ? name : "\u2026" + name.slice(1 - 24));
+
 const STMTS = (function () {
   const PIECE = 40;  // the rows made at a time; "Show more" makes the next piece
 
@@ -18,7 +20,7 @@ const STMTS = (function () {
       h("span", {class: "stm-mark", title: tip}, t("desk.stmt.zone." + item.zone)),
       many ? systemTag(item) : null,
       h("code", {class: "stm-code", title: item.cut ? t("desk.stmt.cut") : null}, ...sql(item.text), item.cut ? "…" : ""),
-      item.file ? h("span", {class: "stm-file sub", title: item.file}, item.file.split(/[\\/]/).pop()) : null,
+      item.file ? h("span", {class: "stm-file sub", title: item.file}, tailName(item.file.split(/[\\/]/).pop())) : null,  // a long name keeps its end, where two files of one folder differ (1.7.38, C13 FR 15)
       why ? h("div", {class: "stm-why"}, why) : null);
   }
 

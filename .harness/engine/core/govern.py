@@ -185,7 +185,7 @@ def programs(root: Path) -> Set[str]:
     return names
 
 
-LIST_KEYS = ("verbs", "reads", "writes", "refuse", "input")  # what a type holds that the statements of a call are read with
+LIST_KEYS = ("verbs", "reads", "writes", "refuse", "input", "directives", "outputs")  # what a type holds that the statements of a call are read with
 
 
 def type_lists(root: Path) -> Dict[str, Dict[str, Any]]:

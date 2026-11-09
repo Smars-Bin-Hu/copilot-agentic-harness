@@ -79,6 +79,7 @@
     }
   },
   "test": "sqlcmd -S {host},{port} {auth} -C -l 5 -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\"",
+  "call": "sqlcmd -S {host},{port} {auth} -C -d {database} -Q \"<statement>\"",
   "expect": "^\\s*(\\S+)\\s*$",
   "denied": "Login failed|Cannot generate SSPI context|The login is from an untrusted domain",
   "down": "TCP Provider|Named Pipes Provider|Login timeout expired|Cannot open server|network-related or instance-specific error|unable to open tcp connection|connection refused|i/o timeout",
@@ -185,6 +186,15 @@
       }
     }
   ],
+  "directives": [
+    "^:on\\s+error\\s+(?:exit|ignore)$"
+  ],
+  "outputs": {
+    "options": [
+      "-o",
+      "--output-file"
+    ]
+  },
   "input": {
     "options": [
       "-i",
@@ -232,6 +242,17 @@
       "why": {
         "en": "It has no WHERE, so it would change every row of the table.",
         "zh": "它没有 WHERE，会改动表里的每一行。"
+      }
+    },
+    {
+      "pattern": "(?:^|\\s)(?:-o\\s*\\S|--output-file(?:\\s+|=)\\S)",
+      "text": {
+        "en": "Saves its output in a file",
+        "zh": "把输出存进一个文件"
+      },
+      "why": {
+        "en": "The file is not inside the task folder, so the call waits for you.",
+        "zh": "这个文件不在任务文件夹里，所以要等你决定。"
       }
     }
   ],

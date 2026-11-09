@@ -139,6 +139,8 @@ def external_unpinned(action: Any, command: str) -> str:
     if action.note:
         key = "gate.external.unpinned_refused_file" if action.file_why == "refuse" and action.file else "gate.external.unpinned_refused"
         return say(key, statement=action.note, file=action.file, reason=action.reason, why=why, program=action.call.split(" ", 1)[0], option=action.option, call=command)
+    if action.via and action.why == "none":  # `harness as <alias> -- sqlcmd -d x` (1.7.38, C13 FR 5): the prefix gives the sign-in, not the server
+        return say("gate.external.unpinned_as", alias=action.via, why=why, program=action.call.split(" ", 1)[0], option=action.option, call=command)
     return say("gate.external.unpinned", why=why, program=action.call.split(" ", 1)[0], option=action.option, call=command)
 
 

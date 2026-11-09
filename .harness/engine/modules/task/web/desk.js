@@ -1222,6 +1222,7 @@
       factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
       ...(many ? [] : factList(item.facts)),
       many ? null : factSpan(t("desk.outbox.target"), item.target),
+      item.zone === "ask" || item.zone === "write" ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.zone")), h("span", {class: "unnamed", title: t(item.zone === "ask" ? "desk.outbox.zone.ask.tip" : "desk.outbox.zone.write.tip", {what: item.zone_note || "-"})}, t(item.zone === "ask" ? "desk.outbox.zone.ask" : "desk.outbox.zone.write"), " ", h("span", {class: "why"}, "?"))) : null,  // 1.7.38: why a call of a type with lists waits
       item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t(item.layout.script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: item.layout.script.lines}))) : null);
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).

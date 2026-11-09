@@ -111,6 +111,10 @@ def entry_extra(action: Any, task: Optional[str], offers: Optional[List[Dict[str
     extra = {"system": action.system, "env": action.env, "verb": action.verb, "target": action.target, "task": task or "", "cwd": cwd or ""}
     if not getattr(action, "named", True):
         extra["named"] = False  # no verbs rule matched: the card and the draft say so
+    if getattr(action, "zone", "") in ("ask", "write"):
+        extra["zone"] = action.zone  # 1.7.38: why the call waits: on no list (ask), or on the write list of a connection that is not opened (write)
+        if action.zone == "ask" and getattr(action, "note", ""):
+            extra["zone_note"] = action.note
     if offers:
         extra["offers"] = offers
     return extra

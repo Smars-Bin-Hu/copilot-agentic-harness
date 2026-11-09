@@ -114,6 +114,16 @@ class PassAskRefuseTests(ListedCase):
         action, _ = self.classify(f'{SERVER} -Q "SELECT a INTO b FROM c"')
         self.assertEqual((action.zone, action.verb, action.note), ("ask", "write", "SELECT a INTO b FROM c"))
 
+    def test_the_agent_and_the_card_are_told_why_the_call_waits(self) -> None:
+        reason = self.held(f'{SERVER} -Q "SELECT a INTO b FROM c"')
+        self.assertIn("SELECT a INTO b FROM c", reason)
+        self.assertIn(messages.text("gate.external.zone_ask", statement="SELECT a INTO b FROM c", place="acmedw-dev (dev)"), reason)
+        entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual((entry["zone"], entry["zone_note"]), ("ask", "SELECT a INTO b FROM c"))
+        self.held(f'{SERVER} -Q "UPDATE dbo.orders SET a = 1 WHERE id = 3"')
+        entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual((entry["zone"], entry.get("zone_note")), ("write", None), "a write the opening would pass says so, with no statement named")
+
     def test_a_word_after_the_first_words_does_not_make_a_read_of_a_write(self) -> None:
         """Without a semicolon the server reads `SELECT 1 UPDATE ...` as two statements: the pattern of the type must not let the second one hide in the tail."""
         self.held(f'{SERVER} -Q "SELECT 1 UPDATE dbo.orders SET a = 1 WHERE id = 3"')

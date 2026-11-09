@@ -154,7 +154,7 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
             system = systems.get(item.get("system", "")) or {}
             place = outbox.agent_place(item)
             out.append({"moved_on": str(item["code"]) in gone, "agent": "" if place == "ended" and (item.get("wait") or {}).get("state") != "timeout" else place,  # "" for a call held a moment ago: it has not started its wait yet, and says nothing
-                "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
+                "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True), "zone": item.get("zone", ""), "zone_note": item.get("zone_note", ""),
                 "offers": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "scope": str(one.get("scope", "")), "refs": [str(ref) for ref in one.get("refs") or []]} for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system")],  # 1.7.38: the connections this card may open for the task
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
                 "layout": cmdview.layout(item["command"], folder, root, str(item.get("cwd") or "")),

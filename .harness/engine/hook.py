@@ -118,7 +118,7 @@ def process(raw: str, root: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
             decision = merge([item for _name, item in sources])
             failed = facts.pop("guard_failed", "")
             if failed and event.event in ("UserPromptSubmit", "SessionStart"):  # a guardrail module could not run: the agent hears of it at the start, not only when a call is refused
-                decision.context = (decision.context + "\n" if decision.context else "") + _say(root, "hook.emergency", failed)
+                decision.context = (decision.context + "\n" if decision.context else "") + _say(root, "hook.module_failed" if failed.startswith(tuple(f"module {name}:" for name in GUARDS_FOR)) else "hook.emergency", failed)  # FR-8: the task module's fault stops only subagents (C13 RE-A L3)
             if event.event == "UserPromptTransformed":
                 decision = state_module.restored_prompt(state, event)  # core: the rules the engine dropped, put back
                 facts.update(decision.facts)

@@ -85,7 +85,7 @@
   "down": "TCP Provider|Named Pipes Provider|Login timeout expired|Cannot open server|network-related or instance-specific error|unable to open tcp connection|connection refused|i/o timeout",
   "verbs": [
     {
-      "pattern": "\\btruncate\\s+table\\s+(?!#\\w)|\\bdrop\\s+(?!(?:procedure|proc|view|function|trigger|synonym)\\b)(?!table\\s+(?:if\\s+exists\\s+)?#\\w+\\s*(?:;|$))\\w+|\\b(?:kill|shutdown|restore)\\b",
+      "pattern": "\\btruncate[\\s\\x00-\\x20]+table[\\s\\x00-\\x20]+(?!#\\w)|\\bdrop[\\s\\x00-\\x20]+(?!(?:procedure|proc|view|function|trigger|synonym)\\b)(?!table[\\s\\x00-\\x20]+(?:if[\\s\\x00-\\x20]+exists[\\s\\x00-\\x20]+)?#\\w+[\\s\\x00-\\x20]*(?:;|$))\\w+|\\b(?:kill|shutdown|restore)\\b",
       "verb": "destroy"
     },
     {
@@ -101,7 +101,7 @@
       "verb": "exec"
     },
     {
-      "pattern": "(?:^|\\s)-(?:q|o)(?:\\s|$)|(?:^|\\s)-o\\S|\\bSQLCMDINI\\b|(?:^|\\s)--(?:initial-query|output-file|unicode-output-file|trace-file)(?:\\s|=|$)",
+      "pattern": "(?:^|\\s)-(?:q|o)(?:\\s|$)|(?:^|\\s)-o\\S|SQLCMD\\w*\\s*=|\\bSQLCMDINI\\b|(?:^|\\s)(?-i:-c)|(?:^|\\s)--batch-terminator\\b|(?:^|\\s)--(?:initial-query|output-file|unicode-output-file|trace-file)(?:\\s|=|$)",
       "verb": "write"
     },
     {
@@ -110,31 +110,32 @@
     }
   ],
   "reads": [
-    "SELECT\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|next value for)\\b).*",
-    "WITH\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|next value for)\\b).*\\bSELECT\\b.*",
+    "SELECT\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|next value for)\\b).*",
+    "WITH\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|next value for)\\b).*\\bSELECT\\b.*",
     "USE \\w+",
     "SET (?:(?:NOCOUNT|NOEXEC|PARSEONLY|FMTONLY|XACT_ABORT|ARITHABORT|ANSI_\\w+|QUOTED_IDENTIFIER|CONCAT_NULL_YIELDS_NULL|NUMERIC_ROUNDABORT|STATISTICS (?:IO|TIME|XML|PROFILE)|SHOWPLAN_(?:ALL|TEXT|XML)) (?:ON|OFF)|TRANSACTION ISOLATION LEVEL (?:READ UNCOMMITTED|READ COMMITTED|REPEATABLE READ|SNAPSHOT|SERIALIZABLE)|(?:LOCK_TIMEOUT|DATEFIRST|ROWCOUNT|TEXTSIZE) \\d+|DATEFORMAT \\w+|LANGUAGE \\w+)",
-    "PRINT\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|next value for)\\b).*",
+    "PRINT\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|next value for)\\b).*",
     "DECLARE @\\w+ (?:AS )?[A-Za-z_]\\w*(?: ?\\( ?(?:\\d+|MAX)(?: ?, ?\\d+)? ?\\))?(?: ?= ?(?:-?\\d+(?:\\.\\d+)?|N?''|NULL))?(?: ?, ?@\\w+ (?:AS )?[A-Za-z_]\\w*(?: ?\\( ?(?:\\d+|MAX)(?: ?, ?\\d+)? ?\\))?(?: ?= ?(?:-?\\d+(?:\\.\\d+)?|N?''|NULL))?)*",
     "SET @\\w+ ?= ?(?:(?:-?\\d+(?:\\.\\d+)?|N?''|NULL)|@\\w+)",
     "EXEC(?:UTE)? (?:\\w+\\.)*(?:sp_help|sp_helptext|sp_helpindex|sp_helpconstraint|sp_columns|sp_tables|sp_pkeys|sp_fkeys|sp_stored_procedures)(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?"
   ],
   "writes": [
-    "INSERT INTO\\b(?!.*\\b(?:update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*",
-    "UPDATE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? [\\w.#@]+ SET (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
-    "DELETE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? FROM [\\w.#@]+ (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
-    "MERGE\\b(?!.*\\b(?:drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|merge .*merge)\\b).*",
+    "INSERT INTO\\b(?!.*\\b(?:update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+)\\b).*",
+    "UPDATE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? [\\w.#@]+ SET (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
+    "DELETE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? FROM [\\w.#@]+ (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
+    "MERGE\\b(?!.*\\b(?:drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|merge .*merge)\\b).*",
     "(?:CREATE OR ALTER|CREATE|ALTER) (?:PROCEDURE|PROC|VIEW|FUNCTION) [\\w.]+(?!.*\\b(?:xp_\\w+|kill|shutdown|restore|reconfigure|openrowset|opendatasource|openquery|bulk)\\b).*",
     "EXEC(?:UTE)? (?!(?:\\w+\\.)*(?:sp|xp)_)(?:\\w+\\.)*\\w+(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?",
     "(?:BEGIN|END|BEGIN TRY|END TRY|BEGIN CATCH|END CATCH|RETURN)",
     "(?:DROP TABLE|TRUNCATE TABLE)(?: IF EXISTS)? [\\w.#]+(?: ?, ?[\\w.#]+)*",
     "DROP (?:PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER|SYNONYM)(?: IF EXISTS)? [\\w.]+(?: ?, ?[\\w.]+)*",
     "IF OBJECT_ID ?\\( ?N?'' ?(?:, ?N?'' ?)?\\) IS NOT NULL DROP (?:TABLE|PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER|SYNONYM) [\\w.#]+",
-    "CREATE TABLE [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*\\)",
-    "CREATE (?:UNIQUE )?(?:CLUSTERED |NONCLUSTERED )?INDEX \\w+ ON [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*",
-    "ALTER TABLE [\\w.#]+ ADD (?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*",
-    "(?:BEGIN TRAN(?:SACTION)?|COMMIT(?: TRAN(?:SACTION)?)?|ROLLBACK(?: TRAN(?:SACTION)?)?)(?: \\w+)?",
-    "SELECT\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?!.*\\binto (?!#\\w))(?=.*\\binto #\\w+\\b).*"
+    "CREATE TABLE [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|into|select|use|xp_\\w+|sp_\\w+)\\b).*\\)",
+    "CREATE (?:UNIQUE )?(?:CLUSTERED |NONCLUSTERED )?INDEX \\w+ ON [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|into|select|use|xp_\\w+|sp_\\w+)\\b).*",
+    "ALTER TABLE [\\w.#]+ ADD (?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|into|select|use|xp_\\w+|sp_\\w+)\\b).*",
+    "(?:BEGIN TRAN(?:SACTION)?|COMMIT(?: TRAN(?:SACTION)?)?|ROLLBACK(?: TRAN(?:SACTION)?)?)",
+    "SELECT\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|use|xp_\\w+|sp_\\w+)\\b)(?!.*\\binto (?!#\\w))(?=.*\\binto #\\w+\\b).*",
+    "IF OBJECT_ID ?\\( ?N?'' ?(?:, ?N?'' ?)?\\) IS NULL (?:BEGIN )?CREATE TABLE [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|into|select|use)\\b).*\\)(?: END)?"
   ],
   "refuse": [
     {

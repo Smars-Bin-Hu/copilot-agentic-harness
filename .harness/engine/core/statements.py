@@ -63,6 +63,7 @@ def _closing(text: str, start: int, quote: str) -> int:
     return len(text)
 
 
+_GO_LIKE = re.compile(r"^[ \t]*go\b", re.IGNORECASE | re.MULTILINE)
 _DEFINITION = re.compile(r"^(?:CREATE(?: OR ALTER)?|ALTER) (?:PROCEDURE|PROC|FUNCTION|VIEW)\b", re.IGNORECASE)  # a batch that is one definition (1.7.38, C13 F2)
 
 
@@ -72,6 +73,8 @@ def _batch(text: str) -> List[Statement]:
     A `TRIGGER` is not one: it is cut as before and asks."""
     whole = _cut(text, False)
     if len(whole) == 1 and _DEFINITION.match(whole[0].text):
+        if _GO_LIKE.search(text):  # (C13 RE-A S2) a line that starts with `GO` and is not the plain batch end (`GO /* c */`): sqlcmd may end the batch there, so the rest may be no body
+            return [Statement(whole[0].text, odd=True, raw=whole[0].raw)]
         return whole
     return _cut(text, True)
 
@@ -147,7 +150,7 @@ _USE = re.compile(r"\$\(([A-Za-z_][\w-]*)\)")
 
 def fill(line: str, variables: Dict[str, str]) -> str:
     """A line with each `$(name)` that `variables` knows put in, as sqlcmd does before it reads the line (1.7.38, C13 SQL: an SSDT publish script). Names are matched in any case; a name not known stays."""
-    return _USE.sub(lambda hit: variables.get(hit.group(1).lower(), hit.group(0)), line) if "$(" in line else line
+    return _USE.sub(lambda hit: variables.get(hit.group(1).lower()) or hit.group(0), line) if "$(" in line else line
 
 
 def split(text: str, variables: Optional[Dict[str, str]] = None) -> List[Statement]:
@@ -167,10 +170,12 @@ def split(text: str, variables: Optional[Dict[str, str]] = None) -> List[Stateme
         if setvar:
             batch()
             value = setvar.group(2).replace('""', '"') if setvar.group(2) is not None else setvar.group(3)
-            if value is None:
-                known.pop(setvar.group(1).lower(), None)
+            name = setvar.group(1).lower()
+            value = fill(value, known) if value is not None else None
+            if name in known and known[name] != value:
+                known[name] = None  # (C13 RE-A M2) set again to something else: a file the text includes is read after the whole text, so the gate cannot tell which value it gets; its uses ask
             else:
-                known[setvar.group(1).lower()] = fill(value, known)
+                known[name] = value
             items.append(Statement(raw.strip(), True))
             continue
         line = fill(raw, known)

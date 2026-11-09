@@ -729,6 +729,8 @@ def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: st
         return Action(name, env, strict([label, WRITE]), target, text, named=label is not None and not why, call=call, file=read.file if why else "", file_why=why, zone=statements.ASK, note=_short(about))
     if verdict.zone == statements.WRITE:
         return Action(name, env, strict([label, WRITE]), target, text, named=True, call=call, zone=statements.WRITE)
+    if label == DESTROY:  # (C13 RE-A M6) the read list says read, the verbs say destroy: a read list that is too wide; the person decides
+        return Action(name, env, DESTROY, target, text, named=True, call=call, zone=statements.ASK, note=_short(joined))
     return Action(name, env, READ, target, text, call=call, zone=statements.READ)
 
 

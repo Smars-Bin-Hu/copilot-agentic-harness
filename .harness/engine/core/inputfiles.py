@@ -143,7 +143,7 @@ def read(system: Dict[str, Any], args: List[str], root: Optional[Path], folder: 
         return None
     named, rest = split(args, file_options) if file_options else ([], list(args))
     texts, rest = split(rest, text_options, text=True) if text_options else ([], rest)
-    known, rest = variables(rest, [str(item) for item in given.get("variables") or []]) if listed else ({}, rest)
+    known = variables(rest, [str(item) for item in given.get("variables") or []])[0] if listed else {}  # the words stay in `rest`: a variable sqlcmd reads itself (`-v SQLCMDINI=file`) is a verb of the type (C13 RE-A S1)
     if not named and not texts and not listed:
         return None
     found = Found(rest=" ".join(rest), sources=len(named) + len(texts))

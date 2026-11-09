@@ -95,5 +95,52 @@ class ScriptVariablesTests(ShippedCase):
         self.held(f"{SERVER} -i {path}")
 
 
+class RetestHolesTests(ShippedCase):
+    """C13 RE-A: what the first build of this change let through, and RE-B's idempotent create."""
+
+    def answer(self, command: str) -> str:
+        before = self.pending()
+        out = self.term(command)
+        return "pass" if out.get("permissionDecision") != "deny" else "held" if self.pending() > before else "refused"
+
+    def test_s1_a_variable_sqlcmd_reads_itself_never_passes(self) -> None:
+        ini = self.script("SELECT 1;\n", "ini.sql")
+        for server in (SERVER, PROD):
+            for option in (f"-v SQLCMDINI={ini}", f"-vSQLCMDINI={ini}", f"-v A=1 SQLCMDINI={ini}"):
+                self.assertNotEqual(self.answer(f'{server} {option} -Q "SELECT 1"'), "pass", option)
+
+    def test_s2_a_batch_end_the_gate_does_not_know_makes_no_body(self) -> None:
+        self.open_connection()
+        for number, end in enumerate(("GO /* c */", "GO 1 /* c */", "go -- x")):
+            body = "CREATE PROCEDURE dbo.p AS SELECT 1\n" + end + "\nEXEC('x')\n"
+            self.assertEqual(self.answer(f"{SERVER} -i {self.script(body, f'end{number}.sql')}"), "held", end)
+        other = self.script("CREATE PROCEDURE dbo.p AS SELECT 1\nXX\nEXEC('x')\n", "xx.sql")
+        for option in ("-c XX", "-cXX", "--batch-terminator XX"):
+            self.assertEqual(self.answer(f"{SERVER} {option} -i {other}"), "held", option)
+        self.assertEqual(self.answer(f'{SERVER} -C -Q "SELECT 1"'), "pass", "-C (trust the certificate) is not -c")
+
+    def test_s3_s4_and_a_read_carry_no_statement_on_the_next_line(self) -> None:
+        self.open_connection()
+        for number, text in enumerate(("COMMIT RECONFIGURE", "BEGIN TRAN\nRECONFIGURE", "ROLLBACK SETUSER", "ALTER TABLE dbo.t ADD c int\nSELECT * INTO dbo.copy FROM dbo.t",
+                     "CREATE TABLE dbo.t (a int)\nDISABLE TRIGGER tr ON dbo.x", "CREATE INDEX ix ON dbo.t (a)\nUSE master", "SELECT a INTO #t FROM dbo.t\nENABLE TRIGGER tr ON dbo.x",
+                     "INSERT INTO dbo.t VALUES (1)\nDISABLE TRIGGER tr ON dbo.x", "UPDATE dbo.t SET a = 1 WHERE b = 2\nWRITETEXT dbo.t.c @p 'x'")):
+            self.assertEqual(self.answer(f"{SERVER} -i {self.script(text + chr(10), f'tail{number}.sql')}"), "held", text)
+        self.assertEqual(self.answer(f"{QAT} -i {self.script('SELECT 1' + chr(10) + 'DISABLE TRIGGER tr ON dbo.x' + chr(10), 'readtail.sql')}"), "held", "a read with a write on the next line is no read")
+
+    def test_m2_a_variable_set_twice_is_not_trusted(self) -> None:
+        self.script("DROP TABLE $(T);\n", "inc.sql")
+        main = self.script(f":setvar T dbo.real\n:r .workspace/sandbox/tasks/job1/DEV/_manual/inc.sql\n:setvar T #t\n", "main.sql")
+        self.assertNotEqual(self.answer(f"{QAT} -i {main}"), "pass")
+
+    def test_m3_a_control_character_is_space_to_the_destroy_rule(self) -> None:
+        self.assertEqual(self.answer(f"{QAT} -i {self.script('DROP' + chr(1) + 'TABLE dbo.real;' + chr(10), 'ctl.sql')}"), "refused")
+
+    def test_reb_m1_the_idempotent_create_of_a_deploy_script_passes_an_opened_connection(self) -> None:
+        text = "IF OBJECT_ID('dbo.t') IS NULL BEGIN CREATE TABLE dbo.t (a int, b nvarchar(10)) END"
+        self.assertEqual(self.answer(self.q(SERVER, text)), "held")
+        self.open_connection()
+        self.assertEqual(self.answer(self.q(SERVER, text)), "pass")
+
+
 if __name__ == "__main__":
     unittest.main()

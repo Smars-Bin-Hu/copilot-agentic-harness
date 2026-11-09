@@ -62,8 +62,20 @@ def _closing(text: str, start: int, quote: str) -> int:
     return len(text)
 
 
+_DEFINITION = re.compile(r"^(?:CREATE(?: OR ALTER)?|ALTER) (?:PROCEDURE|PROC|FUNCTION|VIEW)\b", re.IGNORECASE)  # a batch that is one definition (1.7.38, C13 F2)
+
+
 def _batch(text: str) -> List[Statement]:
-    """The statements of one batch (no `GO` and no sqlcmd line in it): prepared, cut at `;`."""
+    """The statements of one batch (no `GO` and no sqlcmd line in it): prepared, cut at `;`. SQL Server reads `CREATE [OR ALTER] | ALTER` `PROCEDURE`, `FUNCTION` and `VIEW` as the only statement of its batch,
+    its body running to the end of the batch: such a batch is one statement here too (the `;` inside the body cuts nothing), so the lists judge the definition and the refuse list reads the whole body (1.7.38, C13 F2).
+    A `TRIGGER` is not one: it is cut as before and asks."""
+    whole = _cut(text, False)
+    if len(whole) == 1 and _DEFINITION.match(whole[0].text):
+        return whole
+    return _cut(text, True)
+
+
+def _cut(text: str, at_semicolon: bool) -> List[Statement]:
     out: List[Statement] = []
     current: List[str] = []
     odd = False
@@ -111,7 +123,7 @@ def _batch(text: str) -> List[Statement]:
             current.append(_NOT_WORD.sub("_", inner.replace('""' if char == '"' else "]]", "_")) + (_VARIABLE if "$(" in inner else ""))
             index = end
             continue
-        if char == ";":
+        if char == ";" and at_semicolon:
             flush()
         else:
             current.append(char)

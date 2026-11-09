@@ -491,7 +491,7 @@ class SamplePackTests(unittest.TestCase):
         listed = json.loads((examples / "connections.json").read_text(encoding="utf-8"))["connections"]
         (root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {name: item for name, item in listed.items() if item["type"] == "sqlserver"}}), encoding="utf-8")
         systems = config.load_policy(root, "tools")["systems"]  # each connection of the sample is a system (1.7.10)
-        self.assertEqual(sorted(systems), ["orders-dev", "orders-ist", "orders-qat"])
+        self.assertEqual(sorted(systems), ["orders-dev", "orders-ist", "orders-qat", "sqlserver-other"])  # the last is the pack's own (1.7.38, C13 F2): the programs that reach a SQL Server with no connection are refused
         self.assertEqual(external.validate(systems), [])
         verb = lambda query: external.classify(f'sqlcmd -S sql-dev.example.local,1433 -E -Q "{query}"', systems)[0][0].verb  # noqa: E731
         self.assertEqual(external.classify('sqlcmd -S sql-ist.example.local -E -Q "SELECT 1"', systems)[0][0].system, "orders-ist")  # the default port may be left out

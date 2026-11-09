@@ -46,6 +46,16 @@ CASES = [
  (":on error exit\nSELECT 1", "ask"), (":r other.sql", "ask"),
  ("BEGIN TRAN", "ask"), ("GRANT SELECT ON t TO u", "ask"), ("WAITFOR DELAY '00:00:10'", "ask"), ("ALTER TABLE t ADD c int", "ask"), ("ALTER TABLE t DROP COLUMN c", "refuse"),
  ("IF 1 = 1 DROP TABLE t", "refuse"), ("IF 1 = 1 UPDATE t SET a = 1 WHERE b = 2", "ask"),
+ # 1.7.38 (C13 F2, M1): a condition that is true whatever the row holds is no WHERE. A guard against a slip, not a wall: `WHERE id > 0` still passes (docs/12)
+ ("UPDATE t SET a = 1 WHERE (1=1)", "ask"), ("UPDATE t SET a = 1 WHERE 1<2", "ask"), ("UPDATE t SET a = 1 WHERE 2>1", "ask"), ("UPDATE t SET a = 1 WHERE NOT 1=0", "ask"), ("UPDATE t SET a = 1 WHERE NOT(1=0)", "ask"),
+ ("UPDATE t SET a = 1 WHERE 'a'='a'", "ask"), ("UPDATE t SET a = 1 WHERE col=col", "ask"), ("UPDATE t SET a = 1 WHERE t.col = t.col", "ask"), ("UPDATE t SET a = 1 WHERE ((1 = 1))", "ask"),
+ ("UPDATE t SET a = 1 WHERE id = 3 OR 1=1", "ask"), ("UPDATE t SET a = 1 WHERE id = 3 OR (NOT 1=0)", "ask"), ("DELETE FROM t WHERE 1<2", "ask"), ("DELETE FROM t WHERE id = id", "ask"), ("DELETE FROM t WHERE (1=1)", "ask"),
+ ("UPDATE t SET a = 1 WHERE id = id2", "write"), ("UPDATE t SET a = 1 WHERE id = 3 OR id = 4", "write"), ("UPDATE t SET a = 1 WHERE a = 1 AND b <> 2", "write"), ("DELETE FROM t WHERE id > 0", "write"),
+ # 1.7.38 (C13 F2, D1): a CREATE or ALTER of a procedure, function or view is one statement to the end of its batch; the body is read by the refuse list, and a trigger asks
+ ("CREATE PROCEDURE dbo.p AS BEGIN SET NOCOUNT ON; IF 1=1 BEGIN DECLARE @a int, @b int; SET @a = @@ROWCOUNT; SELECT @b = count(*) FROM t; CREATE TABLE #x (a int); END END", "write"),
+ ("CREATE OR ALTER PROCEDURE dbo.p AS\nBEGIN\n  UPDATE t SET a = 1;\n  DELETE FROM u;\nEND", "write"), ("ALTER FUNCTION dbo.f() RETURNS int AS BEGIN RETURN 1; END", "write"), ("CREATE VIEW v AS SELECT 1 a;", "write"),
+ ("CREATE PROCEDURE dbo.p AS BEGIN TRUNCATE TABLE t; END", "refuse"), ("CREATE PROCEDURE dbo.p AS BEGIN DROP TABLE t; END", "refuse"), ("CREATE PROCEDURE dbo.p AS BEGIN EXEC(@s); END", "refuse"),
+ ("CREATE PROCEDURE dbo.p AS SELECT 1;\nGO\nDROP TABLE t", "refuse"), ("CREATE TRIGGER tr ON t AFTER INSERT AS BEGIN SELECT 1; END", "ask"),
 ]
 
 

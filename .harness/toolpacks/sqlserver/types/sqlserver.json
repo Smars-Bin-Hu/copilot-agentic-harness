@@ -120,8 +120,8 @@
   ],
   "writes": [
     "INSERT INTO\\b(?!.*\\b(?:update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*",
-    "UPDATE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? [\\w.#@]+ SET (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?(?:1 ?= ?1|0 ?= ?0|'' ?= ?''|1 ?<> ?0|'1' ?= ?'1')\\b).+",
-    "DELETE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? FROM [\\w.#@]+ (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?(?:1 ?= ?1|0 ?= ?0|'' ?= ?''|1 ?<> ?0|'1' ?= ?'1')\\b).+",
+    "UPDATE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? [\\w.#@]+ SET (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
+    "DELETE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? FROM [\\w.#@]+ (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
     "MERGE\\b(?!.*\\b(?:drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|merge .*merge)\\b).*",
     "(?:CREATE OR ALTER|CREATE|ALTER) (?:PROCEDURE|PROC|VIEW|FUNCTION) [\\w.]+.*",
     "EXEC(?:UTE)? (?!(?:\\w+\\.)*(?:sp|xp)_)(?:\\w+\\.)+\\w+(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?",
@@ -131,8 +131,8 @@
     {
       "pattern": "\\b(?:drop|truncate)\\b",
       "reason": {
-        "en": "DROP and TRUNCATE are never run by the agent. To remove rows, use DELETE FROM <table> WHERE <condition>. To drop or truncate an object, tell the user which one and why: the user runs it with their own account.",
-        "zh": "agent 不执行 DROP 和 TRUNCATE。要删数据，用 DELETE FROM <表> WHERE <条件>。要删除或清空对象，告诉用户是哪一个、为什么：由用户用自己的账号执行。"
+        "en": "DROP and TRUNCATE are never run by the agent. Tell the user which object or table, and why: the user runs it with their own account.",
+        "zh": "agent 不执行 DROP 和 TRUNCATE。告诉用户是哪个对象或哪张表、为什么：由用户用自己的账号执行。"
       }
     },
     {

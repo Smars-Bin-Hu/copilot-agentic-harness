@@ -87,7 +87,7 @@ def seconds(stamp: Any) -> Optional[float]:
 def new_prompt(at: float) -> Dict[str, Any]:
     return {
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
-        "tools": [], "subagents": [], "skills": [], "models": [], "aiu": None, "premium_requests": None, "context_tokens": None,
+        "tools": [], "subagents": [], "skills": [], "models": [], "calls": [], "aiu": None, "premium_requests": None, "context_tokens": None,
         "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [], "cache_calls": [], "thinks": [],
         "spends": [], "docs": [],  # when the usage came (`at`, aiu, premium, input, output) and when REQ.md or PLAN.md of a task was written: a report splits a prompt by stage with them
     }
@@ -172,6 +172,22 @@ def context_tokens(data: Dict[str, Any]) -> Optional[int]:
             if tokens is not None and (best is None or tokens > best):
                 best = int(tokens)
     return best
+
+
+MAIN_CALL = "conversation-agent"  # the `interactionType` of a model call of the main agent; Copilot's own small calls (a title for the chat, say) have another one
+
+
+def model_call(spent: Dict[str, Any], at: float) -> Optional[Dict[str, Any]]:
+    """One model call of the main agent as the record says it (1.7.38, F3 M): `{at, model, effort, reasoning}`: the model, the thinking effort it was asked for (empty when the record gives none) and the reasoning tokens
+    it spent (None when none are given). None for a call that is not the main agent's (`interactionType` is another one: a title, a summary Copilot asks for by itself) and for one with no model named. A missing value is left empty, never guessed."""
+    kind = spent.get("interactionType")
+    if kind not in (None, "", MAIN_CALL):
+        return None
+    model = spent.get("model")
+    if not isinstance(model, str) or not model.strip():
+        return None
+    effort = spent.get("reasoningEffort")
+    return {"at": at, "model": model.strip(), "effort": effort.strip() if isinstance(effort, str) else "", "reasoning": whole_number(spent.get("reasoningTokens"))}
 
 
 def cache_call(spent: Dict[str, Any], at: float, before: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -360,6 +376,9 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                         mark[key] = int(value)
                 if len(mark) > 1:
                     current["spends"].append(mark)
+                made = model_call(spent, at)
+                if made is not None:
+                    current["calls"].append(made)
                 call = cache_call(spent, at, last_call.get(str(spent.get("model") or "")))
                 if call is not None:
                     current["cache_calls"].append(call)

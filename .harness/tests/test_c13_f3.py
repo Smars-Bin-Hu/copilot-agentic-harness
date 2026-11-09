@@ -19,12 +19,13 @@ import support  # noqa: F401 - the engine on sys.path
 from support import REPO, HarnessTestCase
 
 from core import approvals, company, messages, outbox
-from modules.task import boardserve, common, ready, task as task_ops, task_report, taskdesk, tasklife, taskhtml
+from modules.task import boardserve, common, ready, task as task_ops, task_report, taskdesk, taskinsight, tasklife, taskhtml
 from taskcase import NAME, SESSION, TASK, TaskCase
 from test_board_enter import StubLink, UP, clean, item as enter_item, settled
 from test_boardserve import free_port
 from test_accept import AcceptCase
 from test_company import CompanyCase, put, set_prefix
+from test_taskboard import BASE, BoardCase, S1, one_prompt, row
 
 WEB = taskhtml.WEB
 
@@ -303,6 +304,77 @@ class AskReasonTests(unittest.TestCase):
         desk = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "desk.js").read_text(encoding="utf-8")
         self.assertIn('t("desk.outbox.zone.why", {why})', desk)
         both_languages(self, "desk.outbox.zone.why")
+
+
+def spent(start: Any, seconds: float, model: str, effort: Any = "medium", reasoning: Any = 0, kind: Any = "conversation-agent", agent: str = "") -> Dict[str, Any]:
+    """One `session.usage_record` as Copilot writes it (fields from a real session, 2026-11-09)."""
+    use = {"model": model, "inputTokens": 1000, "outputTokens": 50, "reasoningEffort": effort, "reasoningTokens": reasoning, "interactionType": kind, "initiator": "agent"}
+    return row("session.usage_record", start, seconds, agent, usage={key: value for key, value in use.items() if value is not None})
+
+
+class ModelAndEffortTests(BoardCase):
+    """M: each prompt of the report says which model the main agent used and with what thinking effort, from the usage records of Copilot's own record: one mark on its row, the runs on hover. Copilot's small calls of its own
+    (a title) are not counted; a prompt with no usage record has no mark; a prompt that changed model lists both."""
+
+    def report(self, rows: Any, second: bool = False) -> Dict[str, Any]:
+        self.new()
+        if second:
+            self.prompt()
+        times = self.prompt_times()
+        self.copilot_record(S1, rows(times))
+        return taskinsight.of_task(self.root, f"{BASE}/job")
+
+    def test_the_model_and_the_effort_of_the_main_agent_are_on_the_prompt(self) -> None:
+        info = self.report(lambda times: one_prompt(times[0], 5, 1, 1000) + [spent(times[0], 5, "claude-sonnet-5.5", "medium", 53), spent(times[0], 20, "claude-sonnet-5.5", "medium", 0), spent(times[0], 40, "claude-sonnet-5.5", "medium", 12)])
+        found = info["prompts"][0]["model_calls"]
+        self.assertEqual(found["calls"], 3)
+        self.assertEqual(found["runs"], [{"model": "claude-sonnet-5.5", "effort": "medium", "calls": 3, "reasoning_tokens": 65}])
+        self.assertEqual(found["more"], 0)
+
+    def test_a_prompt_that_changed_model_or_effort_lists_each_run_in_order(self) -> None:
+        info = self.report(lambda times: one_prompt(times[0], 5, 1, 1000) + [spent(times[0], 5, "claude-sonnet-5.5", "medium", 10), spent(times[0], 20, "claude-sonnet-5.5", "medium", 20), spent(times[0], 30, "claude-sonnet-5.5", "high", 300), spent(times[0], 40, "gpt-6-luna", None, None)])
+        self.assertEqual([(run["model"], run["effort"], run["calls"], run["reasoning_tokens"]) for run in info["prompts"][0]["model_calls"]["runs"]],
+                         [("claude-sonnet-5.5", "medium", 2, 30), ("claude-sonnet-5.5", "high", 1, 300), ("gpt-6-luna", "", 1, None)])
+
+    def test_copilots_own_small_calls_and_a_subagents_calls_are_not_counted(self) -> None:
+        info = self.report(lambda times: one_prompt(times[0], 5, 1, 1000) + [spent(times[0], 5, "claude-sonnet-5.5"), spent(times[0], 6, "claude-haiku-5.5", "low", kind="conversation-title"), spent(times[0], 7, "claude-haiku-5.5", "low", kind="conversation-subagent"),
+                                                                           spent(times[0], 8, "claude-haiku-5.5", "low", kind="conversation-agent", agent="a1")])
+        self.assertEqual([run["model"] for run in info["prompts"][0]["model_calls"]["runs"]], ["claude-sonnet-5.5"])
+        self.assertEqual(info["prompts"][0]["model_calls"]["calls"], 1)
+
+    def test_a_record_with_no_usage_gives_no_mark_and_nothing_is_guessed(self) -> None:
+        info = self.report(lambda times: one_prompt(times[0], 5, 1, 1000))
+        self.assertEqual(info["prompts"][0]["model_calls"], {"runs": [], "calls": 0, "more": 0})
+        hook_only = taskinsight.of_task(self.root, f"{BASE}/job", use_events=False)
+        self.assertEqual(hook_only["source"], "hook-log")
+        self.assertEqual(hook_only["prompts"][0]["model_calls"]["runs"], [], "no record, no mark")
+
+    def test_a_record_that_names_no_model_or_a_model_that_is_not_text_is_left_out(self) -> None:
+        info = self.report(lambda times: one_prompt(times[0], 5, 1, 1000) + [spent(times[0], 5, "", "medium"), spent(times[0], 6, 7, "medium")])
+        self.assertEqual(info["prompts"][0]["model_calls"]["calls"], 0)
+
+    def test_each_prompt_has_its_own_and_a_queued_message_joins_the_one_before(self) -> None:
+        def rows(times: Any) -> Any:
+            return (one_prompt(times[0], 5, 1, 1000) + [spent(times[0], 5, "model-a", "low", 1)] + one_prompt(times[1], 9, 1, 1000) + [spent(times[1], 5, "model-b", "high", 2)])
+
+        info = self.report(rows, second=True)
+        self.assertEqual([[(run["model"], run["effort"]) for run in item["model_calls"]["runs"]] for item in info["prompts"]], [[("model-a", "low")], [("model-b", "high")]])
+
+    def test_a_prompt_with_very_many_changes_is_cut_and_says_how_many_are_left(self) -> None:
+        calls = [{"at": float(n), "model": f"m{n % 2}", "effort": "", "reasoning": n} for n in range(taskinsight.RUNS_KEPT * 2 + 6)]
+        found = taskinsight.model_runs(calls)
+        self.assertEqual((len(found["runs"]), found["more"], found["calls"]), (taskinsight.RUNS_KEPT, 46, len(calls)))
+
+    def test_the_page_draws_one_short_mark_with_the_runs_on_hover_and_the_words_exist_in_both_languages(self) -> None:
+        text = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "task.js").read_text(encoding="utf-8")
+        self.assertIn("function modelMark(entry)", text)
+        self.assertIn('class: "tag model", title: lines.join', text)
+        self.assertIn("modelMark(entry)", text[text.index("function promptsCard()"):])
+        both_languages(self, "report.model.call", "report.model.calls", "report.model.reasoning", "report.model.more")
+
+    def test_the_report_an_agent_reads_carries_no_prompt_text_with_the_new_field(self) -> None:
+        info = self.report(lambda times: one_prompt(times[0], 5, 1, 1000) + [spent(times[0], 5, "claude-sonnet-5.5")])
+        self.assertIn("claude-sonnet-5.5", json.dumps(taskinsight.for_agent(info, detail=True)))
 
 
 if __name__ == "__main__":

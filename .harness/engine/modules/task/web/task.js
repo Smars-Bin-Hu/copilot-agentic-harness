@@ -112,6 +112,20 @@
     return card(t("report.time"), nodes);
   }
 
+  // The model and the thinking effort of the main agent for one prompt (1.7.38, F3 M): a short mark, `model · effort` (the ones it changed between joined by an arrow), and each run on hover: the model, the effort, how many
+  // calls and how many reasoning tokens. Copilot's own small calls are not in it. A prompt the record gave no call for has no mark: nothing is guessed.
+  function modelMark(entry) {
+    const found = entry.model_calls;
+    if (!found || !found.runs || !found.runs.length) return null;
+    const name = (run) => run.model + (run.effort ? " \u00b7 " + run.effort : "");
+    const pairs = found.runs.filter((run, index, all) => all.findIndex((other) => name(other) === name(run)) === index);
+    const brief = pairs.slice(0, 2).map((run, index) => (index && run.model === pairs[index - 1].model && run.effort ? run.effort : name(run)));  // the second, on the same model, is only its effort
+    const shown = brief.join(" \u2192 ") + (pairs.length > 2 ? " +" + (pairs.length - 2) : "");
+    const lines = found.runs.map((run) => name(run) + " \u00b7 " + t(run.calls === 1 ? "report.model.call" : "report.model.calls", {n: run.calls}) + (run.reasoning_tokens !== null && run.reasoning_tokens !== undefined ? " \u00b7 " + t("report.model.reasoning", {n: amount(run.reasoning_tokens)}) : ""));
+    if (found.more) lines.push(t("report.model.more", {n: found.more}));
+    return (where) => h("div", {class: "model-line" + (where ? " " + where : "")}, h("span", {class: "tag model", title: lines.join("\n")}, shown));  // a function: the line is made twice, in the cell and under the row (a narrow window)
+  }
+
   function promptsCard() {
     const longest = Math.max(...info.prompts.map((entry) => entry.active_s)) || 1;
     const dearest = Math.max(...info.prompts.map((entry) => entry.aiu || 0)) || 1;
@@ -123,12 +137,14 @@
       const notes = [["report.tag.denied", "denied"], ["report.tag.held", "held"], ["report.tag.blocks", "stop_blocks"], ["report.tag.failed", "failed_tool_calls"]]
         .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), field === "held" ? "" : "bad")]);  // a held call waited for the person: not a fault (C12 RB-N6)
       if (entry.compactions && entry.compactions.length) notes.push([" ", h("span", {class: "tag", title: compactedText(entry.compactions)}, t("report.tag.compacted", {n: entry.compactions.length}))]);
+      const mark = modelMark(entry);
       rows.push(h("tr", null,
         h("td", null, entry.n), h("td", {class: "when"}, when(entry.at, 5, 16)),
-        h("td", null, tag(entry.stage_labels && entry.stage_labels.length > 1 ? entry.stage_labels.join(" \u2192 ") : entry.stage_label || entry.stage), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null),
+        h("td", null, tag(entry.stage_labels && entry.stage_labels.length > 1 ? entry.stage_labels.join(" \u2192 ") : entry.stage_label || entry.stage), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null, mark ? mark("in") : null),
         h("td", {class: "grow"}, bar(timeParts(entry), longest)), num(clock(entry.active_s)),
         hasUsage ? [h("td", {style: "width:14%"}, bar([["usage", entry.aiu || 0, "Credits " + amount(entry.aiu)]], dearest, true)), num(amount(entry.aiu))] : null,
         num(entry.turns || "-"), num(entry.tool_calls)));
+      if (mark) rows.push(h("tr", {class: "tr-model"}, h("td"), h("td", {colspan: columns - 1}, mark(""))));
       if (entry.waited_after_s && entry.waited_after_s >= 60) {
         const wait = info.waits.find((item) => item.after_prompt === entry.n);
         rows.push(h("tr", {class: "gap"}, h("td"), h("td", {colspan: columns - 1},

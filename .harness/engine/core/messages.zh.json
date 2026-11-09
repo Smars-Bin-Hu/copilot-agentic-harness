@@ -3809,5 +3809,9 @@
   "desk.live.held.tag": "已扣下",
   "desk.live.refused": "被 gate 拒绝",
   "desk.live.refused.tag": "被拒",
-  "desk.outbox.zone.why": "原因：{why}"
+  "desk.outbox.zone.why": "原因：{why}",
+  "report.model.calls": "{n} 次调用",
+  "report.model.reasoning": "{n} 个推理 token",
+  "report.model.more": "另有 {n} 段没有列出",
+  "report.model.call": "1 次调用"
 }

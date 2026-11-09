@@ -3809,5 +3809,9 @@
   "desk.live.held.tag": "held",
   "desk.live.refused": "Refused by the gate",
   "desk.live.refused.tag": "refused",
-  "desk.outbox.zone.why": "Why: {why}"
+  "desk.outbox.zone.why": "Why: {why}",
+  "report.model.calls": "{n} calls",
+  "report.model.reasoning": "{n} reasoning tokens",
+  "report.model.more": "{n} more runs not listed",
+  "report.model.call": "1 call"
 }

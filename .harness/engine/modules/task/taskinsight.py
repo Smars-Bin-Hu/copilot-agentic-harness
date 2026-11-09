@@ -129,7 +129,7 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
     into["end"] = max(into["end"], other["end"])
     for key in ("turns", "model_s", "turn_s", "approval_s", "hook_s", "subagent_s"):
         into[key] += other[key]
-    for key in ("tools", "subagents", "skills", "compactions", "cache_calls", "thinks", "spends", "docs"):
+    for key in ("tools", "subagents", "skills", "compactions", "cache_calls", "thinks", "spends", "docs", "calls"):
         into[key].extend(other.get(key) or [])
     for name in other["models"]:
         if name not in into["models"]:
@@ -139,6 +139,23 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
             into[key] = (into.get(key) or 0) + other[key]
     if other["context_tokens"] is not None:
         into["context_tokens"] = other["context_tokens"]
+
+
+RUNS_KEPT = 40  # model runs one prompt sends to the page, the first ones: a prompt with more is cut and says how many were left out
+
+
+def model_runs(calls: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The model calls of one prompt as runs (1.7.38, F3 M): calls in a row with the same model and effort are one run. `{runs: [{model, effort, calls, reasoning_tokens}], calls, more}`.
+    `reasoning_tokens` is None when no call of the run gave a number. Nothing is made up: a prompt the record gave no call for has no runs, and the page shows no mark."""
+    runs: List[Dict[str, Any]] = []
+    for call in calls:
+        if runs and (runs[-1]["model"], runs[-1]["effort"]) == (call["model"], call["effort"]):
+            runs[-1]["calls"] += 1
+            if call["reasoning"] is not None:
+                runs[-1]["reasoning_tokens"] = (runs[-1]["reasoning_tokens"] or 0) + call["reasoning"]
+        else:
+            runs.append({"model": call["model"], "effort": call["effort"], "calls": 1, "reasoning_tokens": call["reasoning"]})
+    return {"runs": runs[:RUNS_KEPT], "calls": len(calls), "more": max(0, len(runs) - RUNS_KEPT)}
 
 
 def from_events(record: Dict[str, Any], hook_prompts: List[Dict[str, Any]], picked_up: List[float]) -> List[Dict[str, Any]]:
@@ -578,7 +595,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, 
             "turns": prompt["turns"], "tool_calls": len(prompt["tools"]), "failed_tool_calls": len([tool for tool in prompt["tools"] if not tool["ok"]]),
             "slowest_tool": {"name": slowest["name"], "seconds": round(slowest["seconds"], 1)} if slowest and slowest["seconds"] >= 1 else None,
             "input_tokens": prompt.get("input_tokens"), "output_tokens": prompt.get("output_tokens"),
-            "subagents": len(prompt["subagents"]), "skills": sorted(set(prompt["skills"])), "models": prompt["models"], **counted,
+            "subagents": len(prompt["subagents"]), "skills": sorted(set(prompt["skills"])), "models": prompt["models"], "model_calls": model_runs(prompt.get("calls") or []), **counted,
             "compactions": [{key: value for key, value in item.items() if key != "at"} for item in prompt["compactions"]],
             "text": prompt.get("text", ""),  # for the page only: `for_agent` takes it out
             "compact": bool(prompt.get("compact")),  # a /compact the person asked for, not a message (1.6.113)

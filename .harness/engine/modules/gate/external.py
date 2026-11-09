@@ -1098,14 +1098,15 @@ def _hidden(kind: str, call: str, **values: Any) -> Action:
 
 
 def _launched(segments: List[List[str]], programs: Dict[str, List[str]], found: List[Action]) -> None:
-    """`Start-Process <program>` of a program a `direct_only` system lists (1.7.38, C13 F2c): a line of a computer where nothing else is read for names (`unseen` is off) still refuses it, as a direct call."""
+    """`Start-Process <program>`, and `iex "<program> ..."`, of a program a `direct_only` system lists (1.7.38, C13 F2c): a line of a computer where nothing else is read for names (`unseen` is off) still refuses them, as a direct call.
+    An `iex` of text that names none of them (`iex "Write-Host hi"`) is left alone."""
     for tokens in segments:
         at = _head_index(tokens)
-        if at is None or _program(tokens[at]) not in _START:
+        if at is None or _program(tokens[at]) not in _START | _IEX:
             continue
         named = _mentioned(" ".join(tokens[at + 1:]), list(programs))
         if named:
-            found.append(_hidden("start", " ".join(tokens), program=named))
+            found.append(_hidden("iex" if _program(tokens[at]) in _IEX else "start", " ".join(tokens), program=named))
             return
 
 

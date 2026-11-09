@@ -820,6 +820,12 @@ class OffPackTests(NoConnectionCase):
             self.assertEqual(out.get("permissionDecision"), "deny", line)
         self.check("allow", ["Start-Process notepad notes.txt", "Start-Process code ."])
 
+    def test_an_iex_of_a_call_is_a_call_too_and_an_iex_of_other_text_is_left_alone(self) -> None:
+        for line in ("iex \"sqlcmd -S localhost,14332 -Q 'select 1'\"", "Invoke-Expression 'ado items'", "iex 'demotracker --help x'"):
+            out = self.call(line)
+            self.assertEqual(out.get("permissionDecision"), "deny", line)
+        self.check("allow", ["iex \"Write-Host hi\"", "Invoke-Expression 'Get-Date'"])
+
     def test_the_old_blind_spot_stays_where_it_was(self) -> None:
         """A script that calls the program is not read while nothing on this computer is governed by name: the same as before F2b. docs/12 lists it."""
         self.check("allow", ["bash scripts/db.sh"])

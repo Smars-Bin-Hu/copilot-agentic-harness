@@ -119,25 +119,23 @@ def remember(root: Path) -> None:
 def kb_systems(root: Path) -> Dict[str, Any]:
     """(1.7.38, C13 F2c) For the gate: when the list of knowledge bases cannot be read, one system `broken-kb-<pack>` for each company tool pack found in the text of the target policy files (`kb_pack_folders`) that owns every
     program of the pack, so a call of one waits for the user and the card names the file and the fault. The gate cannot place those programs otherwise: the packs are in a knowledge base it does not see. A pack the gate saw while the list could
-    be read (`remember`) is held too, even when no file names its folder any more. `{}` when the list is fine or no pack was found or remembered (the fault is then `harness doctor`'s). Never raises."""
-    try:
-        from core import targets
+    be read (`remember`) is held too, even when no file names its folder any more. `{}` when the list is fine or no pack was found or remembered (the fault is then `harness doctor`'s). A fault in this code is raised: `config.load_policy` holds every program then."""
+    from core import targets
 
-        fault = targets.kb_fault(root)
-        if fault is None:
-            return {}
-        out: Dict[str, Any] = {}
-        said = f"{fault[0]}: {fault[1]} (the list of knowledge bases: the tool pack %s cannot be placed)"
-        for folder in kb_pack_folders(root):
-            names = sorted(_pack_programs(folder))
-            if names:
-                out[f"broken-kb-{folder.name}"] = {"reach": {"cli": names}, "env": "none", "toolpack": folder.name, "broken": (said % folder.name)[:400]}
-        for pack, names in _ledger(root).items():  # the packs the gate saw before the list could not be read, wherever they were
-            if f"broken-kb-{pack}" not in out and names:
-                out[f"broken-kb-{pack}"] = {"reach": {"cli": sorted(set(names))}, "env": "none", "toolpack": pack, "broken": (said % pack)[:400]}
-        return out
-    except Exception:  # noqa: BLE001
+    fault = targets.kb_fault(root)
+    if fault is None:
         return {}
+    out: Dict[str, Any] = {}
+    said = f"{fault[0]}: {fault[1]} (the list of knowledge bases: the tool pack %s cannot be placed)"
+    for folder in kb_pack_folders(root):
+        names = sorted(_pack_programs(folder))
+        if names:
+            out[f"broken-kb-{folder.name}"] = {"reach": {"cli": names}, "env": "none", "toolpack": folder.name, "broken": (said % folder.name)[:400]}
+    for pack, names in _ledger(root).items():  # the packs the gate saw before the list could not be read, wherever they were
+        if f"broken-kb-{pack}" not in out and names:
+            out[f"broken-kb-{pack}"] = {"reach": {"cli": sorted(set(names))}, "env": "none", "toolpack": pack, "broken": (said % pack)[:400]}
+    return out
+
 
 
 def cli_words(text: str) -> List[str]:

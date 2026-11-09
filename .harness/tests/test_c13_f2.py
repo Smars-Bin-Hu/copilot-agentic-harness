@@ -592,13 +592,13 @@ class FaultInjectionTests(SqlCase):
     def test_a_failure_in_the_handler_refuses_a_governed_call_and_leaves_local_work(self) -> None:
         for target in ("modules.gate.external.classify", "modules.gate.handler._judge_one", "modules.gate.handler.check_external", "modules.gate.handler.check_wrapped", "modules.gate.handler.check_terminal",
                        "modules.gate.handler.judge_external", "modules.gate.handler.settle_opened", "modules.gate.handler.external_facts", "modules.gate.handler.asks_board", "modules.gate.handler.check_secrets",
-                       "core.config.load_policy", "core.connections.listed", "core.connections.unconnected"):
+                       "core.config.load_policy", "core.connections.listed", "core.connections.unconnected", "core.govern.remember"):
             self.closed(self.inject(target, self.event(self.GOVERNED)), target)
             for line in self.LOCAL:
                 self.assertEqual(self.inject(target, self.event(line)), {}, (target, line))
 
     def test_a_list_of_systems_that_cannot_be_made_holds_the_programs_not_the_other_work(self) -> None:
-        for target in ("core.toolpacks.rules_layer", "core.connections.derived", "core.connections.broken_systems", "core.toolpacks.broken_systems", "core.connections.widen"):
+        for target in ("core.toolpacks.rules_layer", "core.connections.derived", "core.connections.broken_systems", "core.toolpacks.broken_systems", "core.connections.widen", "core.govern.kb_systems"):
             out = self.inject(target, self.event(self.GOVERNED))
             self.assertEqual(out.get("permissionDecision"), "deny", target)
             self.assertIn("injected fault", out["permissionDecisionReason"], target)

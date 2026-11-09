@@ -770,7 +770,10 @@ def check_targets(report: Report, root: Path) -> None:
         file, problem = targets.diagnose(root, error)  # 1.7.38 (C13 F2b): which file, and what is wrong
         report.error(say("doctor.target.policy_bad", file=file, error=problem))
         kb = targets.kb_fault(root)  # 1.7.38 (C13 F2c): the list of knowledge bases is unreadable too, so the company packs in one registered elsewhere are not seen: the programs the gate still found in the text of the files are named
-        held = sorted({word for item in govern.kb_systems(root).values() for word in item["reach"]["cli"]}) if kb else []
+        try:
+            held = sorted({word for item in govern.kb_systems(root).values() for word in item["reach"]["cli"]}) if kb else []
+        except Exception:  # noqa: BLE001 - the line about the target policy above says the file; this one only names programs
+            held = []
         if held:
             report.error(say("doctor.target.kb_bad", file=kb[0], error=kb[1], held=say("doctor.target.kb_held", programs=", ".join(held))))
         return

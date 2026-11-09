@@ -90,9 +90,9 @@ def locked(root: Path, task: str) -> Iterator[Dict[str, Any]]:
         atomic_write(path, data)
 
 
-def note(data: Dict[str, Any], what: str, detail: str = "") -> None:
-    """One line of the audit trail the report prints."""
-    data.setdefault("events", []).append({"at": utc_now(), "round": data["round"], "what": what, "detail": detail})
+def note(data: Dict[str, Any], what: str, detail: str = "", **facts: Any) -> None:
+    """One line of the audit trail the report prints. `facts` (F3 AP): what a page reads back instead of the words of `detail` (the code of a call, the files it was approved with)."""
+    data.setdefault("events", []).append({"at": utc_now(), "round": data["round"], "what": what, "detail": detail, **({"facts": facts} if facts else {})})
     del data["events"][:-EVENTS_KEPT]
 
 

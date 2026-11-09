@@ -15,7 +15,7 @@ from core import systems as outside
 from core import approval, config, messages, outbox, pinfiles, tasks
 from core.paths import cli_command, utc_now
 
-from . import accept, autorun, cmdview, common, evidence, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
+from . import accept, autorun, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
 from . import steps as step_parts
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
@@ -215,13 +215,15 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
             system = systems.get(item.get("system", "")) or {}
             place = outbox.agent_place(item)
             there = reached(item["command"], systems)
+            pinned = pinfiles.pins(str(item["command"]), root, str(item.get("task") or ""), str(item.get("cwd") or ""))
+            listing = stmtview.of_call(root, task, str(item["command"]), systems, pinned, str(item.get("cwd") or ""))  # F3 AP: each statement of a call that carries many, judged by the lists of its type
             out.append({"moved_on": str(item["code"]) in gone, "agent": "" if place == "ended" and (item.get("wait") or {}).get("state") != "timeout" else place,  # "" for a call held a moment ago: it has not started its wait yet, and says nothing
                 "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": "unknown" if item.get("zone") == "broken" else item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True), "zone": item.get("zone", ""), "zone_note": item.get("zone_note", ""), "holds": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "zone": str(one.get("zone", "")), "note": str(one.get("note", "")), "opens": bool(one.get("opens"))} for one in item.get("holds") or [] if isinstance(one, dict)],
                 "offers": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "scope": str(one.get("scope", "")), "refs": [str(ref) for ref in one.get("refs") or []]} for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system")],  # 1.7.38: the connections this card may open for the task
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
                 "layout": cmdview.layout(item["command"], folder, root, str(item.get("cwd") or "")),
                 "reaches": there if len(there) > 1 else [],  # 1.7.38: a line on more than one system names each (the head of the card shows them all)
-                "seen": pinfiles.pins(str(item["command"]), root, str(item.get("task") or ""), str(item.get("cwd") or "")),  # the files the line names, as they are as this card is drawn: what View shows and Approve is held to (RB-N5)
+                "seen": pinned, "stmts": listing if listing and listing["total"] > 1 else None,  # the files the line names, as they are as this card is drawn: what View shows and Approve is held to (RB-N5)
                 **call_words(item["command"], system, folder, root, systems),
             })
         return out

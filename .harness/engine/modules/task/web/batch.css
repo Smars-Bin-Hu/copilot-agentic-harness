@@ -1,0 +1,14 @@
+/* The box over the held calls of a task (batch.js): one row for each call, a tick, one code. */
+.tk-batch .bt-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.tk-batch .bt-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:6px 8px;border-radius:8px;background:var(--card);border:1px solid var(--line);min-width:0}
+.tk-batch .bt-row.blocked{border-style:dashed}
+.tk-batch .bt-tick{flex:none;width:16px;height:16px;margin:0}
+.tk-batch .bt-sys{flex:none;white-space:nowrap}
+.tk-batch .bt-what{flex:none}
+.tk-batch .bt-sum{flex:1 1 12em;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere;font:12.5px/1.4 var(--mono)}
+.tk-batch .bt-stm{flex:none;white-space:nowrap}
+.tk-batch .bt-why{flex:none;font-size:12px;color:var(--hot);cursor:help;white-space:nowrap}
+.tk-batch .bt-view{flex:none;margin-left:auto;height:28px;padding:0 12px}
+.tk-batch .bt-chip{font:600 13px var(--mono);letter-spacing:.06em}.tk-batch .bt-chip[hidden]{display:none}
+.tk-batch .bt-count{margin-left:auto}
+@media (max-width:560px){.tk-batch .bt-row{gap:4px 8px}.tk-batch .bt-sum{flex-basis:100%;order:5}.tk-batch .bt-sys{flex:1 1 auto;min-width:0}}

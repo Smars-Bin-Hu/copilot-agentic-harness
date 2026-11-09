@@ -5,6 +5,8 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   task.html, board.html   the skeleton of each page; desk.html: one task as the board server sends it (M16)
   tokens.css, ui.css      the look, shared: the colours of the light and the dark theme, and how things look under them; theme.js sets the theme and Lite before the page is drawn
   status.js, status.css   the small status marks (model, context ring, run time, mini stage ribbon, TODO) under a task name and on the lobby card; the ribbon is shared: the task page draws its stage strip from it and opens a card on it (`Status.card`)
+  batch.js, batch.css           a served task page only: the box over two held calls or more, one code for the ticked ones (1.7.38, F3)
+  stmts.js, stmts.css           the task page: the statements of a held call one by one, numbered, each with its system and how its type judges it, the reads folded (1.7.38, F3)
   rounds.js, rounds.css         a served task page only: the earlier rounds of the chat, at the top of the Live tab
   run.js, run.css               a served task page only: the Ask agent and Run buttons of a shell code block, the panel of a running command
   live.js, reply.js, live.css   a served task page only: the stream of the Live tab (the latest items of the chat, changed in place) and the reply panel (a pill at the bottom centre; text, language, model, drafts, Send, Steer, Stop)
@@ -132,7 +134,7 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"])
 
 
-DESK_STYLES = ["page.css", "diffview.css", "highlight.css"]
+DESK_STYLES = ["page.css", "diffview.css", "highlight.css", "stmts.css", "batch.css"]
 
 # A saved copy opens from a disk, away from the board: it may run its own script and nothing else, and ask the network for nothing.
 SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
@@ -147,6 +149,6 @@ def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> s
     """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
     Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
     if serve is not None:
-        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
-    page = build("desk.html", ["common.js", "status.js", "highlight.js", "diffview.js", "space.js", "wall.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
+        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "stmts.js", "batch.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
+    page = build("desk.html", ["common.js", "status.js", "highlight.js", "stmts.js", "diffview.js", "space.js", "wall.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

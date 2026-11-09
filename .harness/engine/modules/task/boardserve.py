@@ -280,6 +280,7 @@ class Board:
         self.port = port
         self.actions = actions
         self.restarted = bool(os.environ.get(RESTART_CODE))
+        self.batch_salt = secrets.token_hex(16)  # a secret of this process: the code of a batch of held calls is made with it (core.outbox.batch_code); a restarted board gives other codes
         self.code = os.environ.pop(RESTART_CODE, "") or secrets.token_urlsafe(12)  # after Restart board the page brings this code back; a new process holds no session
         self.next_code = ""
         self.server: Any = None
@@ -673,6 +674,35 @@ class Board:
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
+    def batch(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Approve held calls of a task together with one code (1.7.38, C13 F3 AP). `step` preview: the code of the list the person ticked (`outbox.batch_preview`); act: approve those calls, each as if alone
+        (`outbox.approve_batch`: the code is checked against the list, a call that names files must have been viewed and its files unchanged; nothing is approved unless all hold). The agents that wait are told, as for one call."""
+        if "approve-action" not in self.actions:
+            raise CommandError(say("serve.action.off", action="approve-action"))
+        codes = [str(code) for code in data.get("codes") or []] if isinstance(data.get("codes"), list) else []
+        try:
+            if str(data.get("step", "act")) == "preview":
+                return outbox.batch_preview(self.root, codes, self.batch_salt)
+            before = {str(item.get("code")): item for item in (self.entry(code) for code in codes) if item}
+            result = outbox.approve_batch(self.root, codes, str(data.get("code", "")), self.batch_salt, data.get("seen") if isinstance(data.get("seen"), dict) else {}, interactive=True)
+        except outbox.BatchRefused as error:
+            refusal = CommandError(str(error))
+            refusal.changed = list(error.files)
+            raise refusal from None
+        except ValueError as error:
+            raise CommandError(str(error)) from None
+        calls = result["calls"]
+        task = str(calls[0]["task"]) if calls else ""
+        if task:
+            with task_ops.locked(self.root, task_ops.resolve(self.root, task)) as held:  # the record of the task: each call was approved, with the batch it was in and the files it was approved with
+                for call in calls:
+                    task_ops.note(held, "approve-call", f"{call['code']}: batch of {result['count']}", code=call["code"], batch=result["count"], files={key: str(value)[:12] for key, value in (call.get("files") or {}).items()}, system=call.get("system", ""), env=call.get("env", ""))
+            noted(self.root, task, "approve-action")
+            stood = [(code, outbox.agent_place(before[code])) for code in (call["code"] for call in calls) if code in before]
+            self.after_decision(task, stood, messages.text("desk.outbox.tell.body", codes=", ".join(code for code, _place in stood)))
+            result["agent"] = {code: place for code, place in stood}
+        return result
+
     def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False, voids: Any = None) -> Dict[str, Any]:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`;
         `seen` for `approve-action` only: what the person saw when they pressed View (`outbox.approve_action`)."""
@@ -763,6 +793,12 @@ class Board:
             refusal = CommandError(str(error))
             refusal.changed = list(getattr(error, "files", []) or [])  # a file of the call changed after View: the page asks to press View again
             raise refusal from None
+        if action == "approve-action" and step == "act" and result.get("code"):  # the record of the task: this call was approved, alone, with the files it was approved with (F3 AP)
+            try:
+                with task_ops.locked(self.root, task_ops.resolve(self.root, str(result.get("task") or task))) as held:
+                    task_ops.note(held, "approve-call", f"{result['code']}: alone", code=result["code"], batch=0, files={key: str(value)[:12] for key, value in (result.get("files") or {}).items()}, system=result.get("system", ""), env=result.get("env", ""))
+            except Exception:  # noqa: BLE001 - the call is approved; a missing line must not undo it in the person's eyes
+                pass
         noted(self.root, result.get("task") or task, action)
         if step == "act" and action in WAKING:  # 1.7.38, C13 RB-2: a decision that moves the task on wakes the agent by itself, as an approved call does: no second click on "tell the agent"
             result["agent"] = self.wake_go(result.get("task") or task)
@@ -808,17 +844,17 @@ class Board:
 
     def after_dismiss(self, done: Dict[str, Any]) -> str:
         """The person did not approve a held call. The agent that waits has the reason from its wait. One whose turn ended on the call is woken with the reason, when there is one; without a reason, or when the
-        agent went on, it is only written in the task. Returns what happened: `wait`, `message` or `logged`."""
+        agent went on, it is only written in the task. Returns what happened: `wait`, `message` or `logged`. The record of the task says it in every case (F3 AP): the code, the reason and the person's line."""
         try:
             task = str(done.get("task") or "")
             entry = self.entry(str(done.get("code") or "")) or {}
+            if task:
+                with task_ops.locked(self.root, task) as data:
+                    task_ops.note(data, "outbox-dismiss", f"{done.get('code')}: {outbox.reason_text(str(done.get('reason') or ''), str(done.get('note') or ''))}", code=str(done.get("code") or ""), reason=str(done.get("reason") or ""), note=str(done.get("note") or ""))
             if done.get("agent") == "wait":
                 return "wait"
             if done.get("reason") and done.get("agent") == "ended" and task and self.wake(task, outbox.wake_dismissed(entry)):
                 return "message"
-            if task:
-                with task_ops.locked(self.root, task) as data:
-                    task_ops.note(data, "outbox-dismiss", f"{done.get('code')}: {outbox.reason_text(str(done.get('reason') or ''), str(done.get('note') or ''))}")
         except Exception:  # noqa: BLE001 - the call is dismissed; a missing line must not undo it in the person's eyes
             pass
         return "logged"
@@ -1916,6 +1952,16 @@ def handler_for(board: Board) -> type:
                 except Exception:  # noqa: BLE001 - the page keeps what it shows
                     found = None
                 return self.answer(200, {"file": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
+            if path == "/api/batch":  # approve held calls together with one code (1.7.38, F3 AP): the paired browser only, like every approval
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.batch(data)
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as for one call
+                    return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
+                if str(data.get("step", "act")) != "preview":
+                    print(say("serve.did", action="approve-batch", task="-"), flush=True)
+                return self.answer(200, {"result": result})
             if path != "/api/act":
                 return self.answer(404, {"error": say("serve.refused.request")})
             action, task, step = str(data.get("action", "")), str(data.get("task", "")), str(data.get("step", "act"))

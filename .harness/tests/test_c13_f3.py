@@ -19,12 +19,14 @@ import support  # noqa: F401 - the engine on sys.path
 from support import REPO, HarnessTestCase
 
 from core import approvals, company, messages, outbox
-from modules.task import boardserve, common, ready, task as task_ops, task_report, taskdesk, taskinsight, tasklife, taskhtml
+from modules.task import boardserve, common, ready, stmtview, task as task_ops, task_report, taskdesk, taskinsight, tasklife, taskhtml, tasktrace
+from modules.task.common import CommandError
 from taskcase import NAME, SESSION, TASK, TaskCase
 from test_board_enter import StubLink, UP, clean, item as enter_item, settled
 from test_boardserve import free_port
 from test_accept import AcceptCase
 from test_company import CompanyCase, put, set_prefix
+from test_gate_lists import SERVER, ListedCase
 from test_taskboard import BASE, BoardCase, S1, one_prompt, row
 
 WEB = taskhtml.WEB
@@ -375,6 +377,386 @@ class ModelAndEffortTests(BoardCase):
     def test_the_report_an_agent_reads_carries_no_prompt_text_with_the_new_field(self) -> None:
         info = self.report(lambda times: one_prompt(times[0], 5, 1, 1000) + [spent(times[0], 5, "claude-sonnet-5.5")])
         self.assertIn("claude-sonnet-5.5", json.dumps(taskinsight.for_agent(info, detail=True)))
+
+
+class BatchCase(AcceptCase):
+    """Held calls of a task, some of them naming a script in the task folder."""
+
+    def hold(self, command: str, task: str = TASK, session: str = SESSION) -> str:
+        action = SimpleNamespace(system="acmedw-dev", env="dev", verb="write", target="", named=True, zone="", note="")
+        return approvals.request(self.root, "vscode", session, command, 10, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task))
+
+    def script(self, name: str, text: str = "SELECT 1;") -> str:
+        path = self.root / TASK / "DEV"
+        path.mkdir(parents=True, exist_ok=True)
+        (path / name).write_text(text, encoding="utf-8")
+        return f"sqlcmd -S acmedw -i DEV/{name}"
+
+    def state(self, code: str) -> str:
+        return str((approvals.find(self.root, code, 10, file=approvals.ACTIONS) or {}).get("state"))
+
+    def seen_of(self, command: str) -> Dict[str, Any]:
+        from core import pinfiles
+
+        return {"files": pinfiles.pins(command, self.root, TASK, "")}
+
+    SALT = "salt-of-this-board"
+
+
+class BatchCodeTests(BatchCase):
+    """AP: one code for a list of held calls; it is good for that list only."""
+
+    def test_the_code_is_the_same_for_the_same_list_and_another_for_any_change(self) -> None:
+        self.new(kind="rca")
+        a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "UPDATE t SET a = 1 WHERE id = 2"')
+        both = outbox.batch_entries(self.root, [a, b])
+        code = outbox.batch_code(both, self.SALT)
+        self.assertRegex(code, r"^[0-9A-F]{6}$")
+        self.assertEqual(outbox.batch_code(list(reversed(both)), self.SALT), code, "the order the person ticked them in is no part of it")
+        self.assertNotEqual(outbox.batch_code(both[:1], self.SALT), code, "a call left out")
+        self.assertNotEqual(outbox.batch_code(both, "another board"), code, "a restarted board")
+        changed = [dict(both[0], command=both[0]["command"] + " "), both[1]]
+        self.assertNotEqual(outbox.batch_code(changed, self.SALT), code, "a changed command")
+
+    def test_the_preview_refuses_what_is_not_waiting_a_code_twice_two_tasks_and_nothing(self) -> None:
+        self.new(kind="rca")
+        a = self.hold('sqlcmd -S s -Q "SELECT 1"')
+        with self.assertRaises(outbox.BatchRefused):
+            outbox.batch_preview(self.root, [], self.SALT)
+        with self.assertRaises(outbox.BatchRefused) as caught:
+            outbox.batch_preview(self.root, [a, "NOSUCH"], self.SALT)
+        self.assertIn("NOSUCH", str(caught.exception))
+        self.assertEqual(outbox.batch_preview(self.root, [a, a.lower()], self.SALT)["count"], 1, "the same code twice is one call")
+        other = self.hold('sqlcmd -S s -Q "SELECT 2"', task=".workspace/sandbox/tasks/another", session="s-other")
+        with self.assertRaises(outbox.BatchRefused) as two:
+            outbox.batch_preview(self.root, [a, other], self.SALT)
+        self.assertIn(messages.text("gate.batch.tasks"), str(two.exception))
+        with self.assertRaises(outbox.BatchRefused):
+            outbox.batch_preview(self.root, [f"C{n:05d}" for n in range(outbox.BATCH_MAX + 1)], self.SALT)
+
+    def test_the_words_exist_in_both_languages(self) -> None:
+        both_languages(self, "gate.batch.none", "gate.batch.many", "gate.batch.gone", "gate.batch.tasks", "gate.batch.code", "gate.batch.view", "gate.batch.changed")
+
+
+class BatchApprovalTests(BatchCase):
+    """AP: a batch approves what was ticked, as it was shown, and nothing else. Every check refuses the whole batch."""
+
+    def batch(self, *calls: str, code: Any = None, seen: Any = None, task_codes: Any = None) -> Dict[str, Any]:
+        codes = list(task_codes if task_codes is not None else calls)
+        typed = code if code is not None else outbox.batch_code(outbox.batch_entries(self.root, codes), self.SALT)
+        return outbox.approve_batch(self.root, codes, typed, self.SALT, seen or {}, interactive=True)
+
+    def test_only_the_calls_that_were_listed_are_approved_each_alone_and_the_one_left_out_still_waits(self) -> None:
+        self.new(kind="rca")
+        a, b, left = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "UPDATE t SET a = 1 WHERE id = 2"'), self.hold('sqlcmd -S s -Q "INSERT INTO t VALUES (1)"')
+        done = self.batch(a, b)
+        self.assertEqual((done["count"], done["skipped"]), (2, []))
+        self.assertEqual([self.state(a), self.state(b), self.state(left)], ["approved", "approved", "pending"])
+        for code, command in ((a, 'sqlcmd -S s -Q "SELECT 1"'), (b, 'sqlcmd -S s -Q "UPDATE t SET a = 1 WHERE id = 2"')):
+            used = approvals.consume(self.root, SESSION, command, 10, file=approvals.ACTIONS)
+            self.assertEqual((used or {}).get("code"), code, "each call has its own approval: the agent's run of it is let through once")
+        self.assertIsNone(approvals.consume(self.root, SESSION, 'sqlcmd -S s -Q "INSERT INTO t VALUES (1)"', 10, file=approvals.ACTIONS), "the one that was not ticked is not approved")
+
+    def test_a_wrong_or_empty_code_or_the_code_of_another_list_approves_nothing(self) -> None:
+        self.new(kind="rca")
+        a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        for typed in ("", "ZZZZZZ", a, outbox.batch_code(outbox.batch_entries(self.root, [a]), self.SALT)):
+            with self.assertRaises(outbox.BatchRefused):
+                self.batch(a, b, code=typed)
+        self.assertEqual([self.state(a), self.state(b)], ["pending", "pending"])
+        self.assertEqual(self.batch(a, b, code=outbox.batch_code(outbox.batch_entries(self.root, [a, b]), self.SALT).lower())["count"], 2, "the person may type it in lower case")
+
+    def test_only_the_board_approves_a_batch(self) -> None:
+        self.new(kind="rca")
+        a = self.hold('sqlcmd -S s -Q "SELECT 1"')
+        with self.assertRaises(ValueError):
+            outbox.approve_batch(self.root, [a], outbox.batch_code(outbox.batch_entries(self.root, [a]), self.SALT), self.SALT, {}, interactive=False)
+        self.assertEqual(self.state(a), "pending")
+
+    def test_a_call_that_names_a_script_must_have_been_viewed_and_one_that_was_not_stops_the_whole_batch(self) -> None:
+        self.new(kind="rca")
+        plain, scripted = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold(self.script("a.sql"))
+        with self.assertRaises(outbox.BatchRefused) as caught:
+            self.batch(plain, scripted)
+        self.assertEqual(caught.exception.files, [scripted])
+        self.assertEqual([self.state(plain), self.state(scripted)], ["pending", "pending"], "the call with no file was not approved either: the batch is whole or nothing")
+        with self.assertRaises(outbox.BatchRefused):
+            self.batch(plain, scripted, seen={scripted: {}})
+        with self.assertRaises(outbox.BatchRefused):
+            self.batch(plain, scripted, seen={plain: {"files": {}}})  # the view of another call is no view of this one
+        done = self.batch(plain, scripted, seen={scripted: self.seen_of(self.script("a.sql"))})
+        self.assertEqual(done["count"], 2)
+
+    def test_a_script_that_changed_after_it_was_viewed_stops_the_batch_and_the_approval_pins_what_is_read_now(self) -> None:
+        self.new(kind="rca")
+        command = self.script("b.sql", "SELECT 1;")
+        scripted = self.hold(command)
+        seen = {scripted: self.seen_of(command)}
+        self.script("b.sql", "DELETE FROM t WHERE id = 1;")
+        with self.assertRaises(outbox.BatchRefused) as caught:
+            self.batch(scripted, seen=seen)
+        self.assertEqual(caught.exception.files, [scripted])
+        self.assertEqual(self.state(scripted), "pending")
+        seen = {scripted: self.seen_of(command)}  # viewed again
+        done = self.batch(scripted, seen=seen)
+        kept = approvals.find(self.root, scripted, 10, file=approvals.ACTIONS)["files"]
+        self.assertEqual(kept, seen[scripted]["files"], "what is pinned is what the person read")
+        self.assertEqual(done["calls"][0]["files"], kept)
+
+    def test_a_call_that_took_a_new_command_after_the_list_was_shown_is_not_approved(self) -> None:
+        self.new(kind="rca")
+        a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        shown = outbox.batch_code(outbox.batch_entries(self.root, [a, b]), self.SALT)
+        approvals.rewrite(self.root, b, SESSION, 'sqlcmd -S s -Q "DROP TABLE t"', 10, file=approvals.ACTIONS)  # the agent asked again with a new command and kept the code
+        with self.assertRaises(outbox.BatchRefused):
+            outbox.approve_batch(self.root, [a, b], shown, self.SALT, {}, interactive=True)
+        self.assertEqual([self.state(a), self.state(b)], ["pending", "pending"])
+        # the last ms: the command changes between the check and the approval: that call alone is skipped
+        self.assertIsNone(approvals.approve(self.root, b, 10, file=approvals.ACTIONS, command='sqlcmd -S s -Q "SELECT 2"'))
+        self.assertEqual(self.state(b), "pending")
+        self.assertIsNotNone(approvals.approve(self.root, b, 10, file=approvals.ACTIONS, command='sqlcmd -S s -Q "DROP TABLE t"'))
+
+    def test_a_call_answered_meanwhile_stops_the_batch_and_a_dismissed_one_is_never_approved(self) -> None:
+        self.new(kind="rca")
+        a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        outbox.dismiss_action(self.root, b, interactive=True, reason="later")
+        with self.assertRaises(outbox.BatchRefused) as caught:
+            self.batch(a, b, code="ABCDEF", task_codes=[a, b])
+        self.assertIn(b, str(caught.exception))
+        self.assertEqual([self.state(a), self.state(b)], ["pending", "dismissed"])
+
+    def test_at_most_the_listed_calls_whatever_else_waits(self) -> None:
+        self.new(kind="rca")
+        codes = [self.hold(f'sqlcmd -S s -Q "SELECT {n}"') for n in range(6)]
+        self.batch(*codes[:3])
+        self.assertEqual([self.state(code) for code in codes], ["approved"] * 3 + ["pending"] * 3)
+
+
+class BatchBoardTests(BatchCase):
+    """AP: the board's side of a batch: the code is shown by the board, the answer tells each agent, the task records each approval."""
+
+    def board(self) -> boardserve.Board:
+        found = super().board()
+        found.actions = ["accept", "close", "pause", "resume", "approve-action"]
+        return found
+
+    def test_the_board_gives_a_code_and_approves_with_it_and_writes_each_approval_in_the_record_of_the_task(self) -> None:
+        self.new(kind="rca")
+        plain, scripted = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold(self.script("c.sql"))
+        board = self.board()
+        shown = board.batch({"step": "preview", "codes": [plain, scripted]})
+        self.assertRegex(shown["code"], r"^[0-9A-F]{6}$")
+        self.assertEqual(shown["count"], 2)
+        with self.assertRaises(CommandError):
+            board.batch({"step": "act", "codes": [plain, scripted], "code": shown["code"], "seen": {}})  # the script was not viewed
+        done = board.batch({"step": "act", "codes": [plain, scripted], "code": shown["code"], "seen": {scripted: self.seen_of(self.script("c.sql"))}})
+        self.assertEqual(done["count"], 2)
+        events = [event for event in self.data()["events"] if event["what"] == "approve-call"]
+        self.assertEqual(sorted(event["facts"]["code"] for event in events), sorted([plain, scripted]))
+        self.assertTrue(all(event["facts"]["batch"] == 2 for event in events))
+        with_files = next(event for event in events if event["facts"]["code"] == scripted)
+        self.assertTrue(with_files["facts"]["files"], "the files it was approved with, and their fingerprints")
+
+    def test_another_board_gives_another_code_and_a_board_that_does_not_serve_approvals_refuses(self) -> None:
+        self.new(kind="rca")
+        a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        first, second = self.board(), self.board()
+        self.assertNotEqual(first.batch({"step": "preview", "codes": [a, b]})["code"], second.batch({"step": "preview", "codes": [a, b]})["code"])
+        with self.assertRaises(CommandError):
+            first.batch({"step": "act", "codes": [a, b], "code": second.batch({"step": "preview", "codes": [a, b]})["code"], "seen": {}})
+        off = super().board()  # `approve-action` is not among its actions
+        with self.assertRaises(CommandError):
+            off.batch({"step": "preview", "codes": [a, b]})
+
+    def test_the_endpoint_is_for_the_paired_browser_only(self) -> None:
+        text = Path(boardserve.__file__).read_text(encoding="utf-8")
+        start = text.index('if path == "/api/batch":')
+        self.assertIn("board.paired(self.token())", text[start:start + 400])
+
+
+class StatementsOfACallTests(ListedCase):
+    """AP: a held call that carries many statements says each one: numbered, on which system, and how its type judges it (read, write, asks, and why). Run on the real hook and the sample SQL Server pack."""
+
+    def card(self, command: str) -> Dict[str, Any]:
+        self.held(command)
+        return taskdesk.outbox_view(self.root, TASK)[-1]
+
+    def test_a_text_with_five_statements_is_five_rows_each_judged_by_the_lists(self) -> None:
+        found = self.card(f'{SERVER} -Q "SELECT 1; UPDATE t SET a = 1 WHERE id = 2; INSERT INTO t VALUES (1); UPDATE t SET a = 2; EXEC dbo.proc"')["stmts"]
+        self.assertEqual(found["total"], 5)
+        self.assertEqual([row["zone"] for row in found["items"]], ["read", "write", "write", "ask", "ask"])  # the lists of this fixture: EXEC of a procedure is on none
+        self.assertEqual([row["n"] for row in found["items"]], [1, 2, 3, 4, 5])
+        self.assertEqual(found["counts"], {"read": 1, "write": 2, "ask": 2})
+        self.assertEqual([one["system"] for one in found["systems"]], ["acmedw-dev"])
+        self.assertTrue(all(row["system"] == "acmedw-dev" and row["env"] == "dev" for row in found["items"]))
+
+    def test_the_reason_a_type_gives_for_a_statement_that_waits_is_on_its_row(self) -> None:
+        path = self.root / ".harness" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
+        kind = json.loads(path.read_text(encoding="utf-8"))
+        kind["say"] = [{"pattern": "^(?!.*\\bwhere\\b)(?=.*\\bupdate\\s+[\\w.]+\\s+set\\b)", "text": "No WHERE", "why": "It has no WHERE, so it would change every row."}]
+        path.write_text(json.dumps(kind), encoding="utf-8")
+        found = self.card(f'{SERVER} -Q "SELECT 1; UPDATE t SET a = 2"')["stmts"]
+        row = next(item for item in found["items"] if item["zone"] == "ask")
+        self.assertIn("WHERE", row["why"])
+
+    def test_a_script_of_more_statements_than_the_limit_is_counted_whole_and_listed_up_to_the_limit(self) -> None:
+        total = stmtview.MAX_STATEMENTS + 150
+        text = "\n".join(f"UPDATE dbo.t SET a = {n} WHERE id = {n};" for n in range(total))
+        command = f"{SERVER} -i {self.script(text, 'long.sql')}"
+        found = self.card(command)["stmts"]
+        self.assertEqual(found["total"], total)
+        self.assertEqual((len(found["items"]), found["more"]), (stmtview.MAX_STATEMENTS, 150))
+        self.assertTrue(found["items"][0]["file"].endswith("long.sql"))
+
+    def test_a_long_statement_is_cut_with_a_mark(self) -> None:
+        found = self.card(f'{SERVER} -Q "SELECT {"x" * 600}; UPDATE t SET a = 1 WHERE id = 2"')["stmts"]
+        self.assertTrue(found["items"][0]["cut"])
+        self.assertLessEqual(len(found["items"][0]["text"]), stmtview.STATEMENT_CHARS)
+
+    def test_the_card_carries_the_list_only_when_there_are_two_or_more(self) -> None:
+        self.assertIsNone(self.card(f'{SERVER} -Q "UPDATE t SET a = 1 WHERE id = 2"')["stmts"])
+        self.assertEqual(self.card(f'{SERVER} -Q "SELECT 1; UPDATE t SET a = 1 WHERE id = 3"')["stmts"]["total"], 2)
+
+    def test_a_line_that_is_no_call_of_a_type_with_lists_has_none_and_never_raises(self) -> None:
+        self.assertIsNone(stmtview.of_call(self.root, TASK, "ls -l", {}, {}, ""))
+        self.assertIsNone(stmtview.of_call(self.root, TASK, "sqlcmd -S s -Q 'SELECT 1; SELECT 2'", {"x": "not a system"}, {}, ""))
+
+    def test_the_page_draws_held_ones_first_folds_the_reads_and_makes_rows_in_pieces(self) -> None:
+        web = REPO / ".harness" / "engine" / "modules" / "task" / "web"
+        text = (web / "stmts.js").read_text(encoding="utf-8")
+        self.assertIn("const PIECE", text)
+        self.assertIn('zone !== "read"', text)
+        self.assertIn('class: "stm-reads"', text)
+        self.assertIn('addEventListener("toggle"', text, "the reads are made when the fold is opened")
+        self.assertIn("Highlight.nodes", text)
+        self.assertNotIn("innerHTML", text, "a statement can never become markup")
+        both_languages(self, "desk.stmt.title", "desk.stmt.count.read", "desk.stmt.count.write", "desk.stmt.count.ask", "desk.stmt.zone.read", "desk.stmt.zone.write", "desk.stmt.zone.ask", "desk.stmt.zone.refuse",
+                       "desk.stmt.zone.read.tip", "desk.stmt.zone.write.tip", "desk.stmt.zone.ask.tip", "desk.stmt.zone.refuse.tip", "desk.stmt.reads", "desk.stmt.more", "desk.stmt.left", "desk.stmt.cut")
+
+
+class BatchBoxPageTests(unittest.TestCase):
+    """AP: the box over the held calls, in the page code."""
+
+    def setUp(self) -> None:
+        web = REPO / ".harness" / "engine" / "modules" / "task" / "web"
+        self.box = (web / "batch.js").read_text(encoding="utf-8")
+        self.desk = (web / "desk.js").read_text(encoding="utf-8")
+
+    def test_the_box_is_drawn_for_two_calls_or_more_over_their_cards(self) -> None:
+        self.assertIn("if (items.length < 2)", self.box)
+        self.assertIn("held.length < 2", self.desk)
+        self.assertIn("batchBox()", self.desk)
+
+    def test_a_call_that_names_a_file_cannot_be_ticked_before_view(self) -> None:
+        self.assertIn("const blocked = needs && !viewed", self.box)
+        self.assertIn('disabled: ctx.can && !blocked ? null : "disabled"', self.box)
+        self.assertIn("a View that was lost", self.box, "a file that changed takes the tick away")
+        self.assertIn("seen[one] = {files: ctx.viewed(one)}", self.box, "what View showed goes back to the board, which checks it again")
+
+    def test_the_code_comes_from_the_board_and_the_new_calls_are_not_ticked_for_the_person(self) -> None:
+        self.assertIn('"/api/batch", {step: "preview"', self.box)
+        self.assertIn("a call that comes later is not ticked", self.box)
+
+    def test_do_not_approve_any_asks_for_the_reason_and_dismisses_each_call_with_it(self) -> None:
+        self.assertIn('"dismiss action"', self.box)
+        self.assertIn("ctx.lineReasons.includes", self.box)
+
+    def test_the_words_exist_in_both_languages(self) -> None:
+        both_languages(self, "desk.batch.title", "desk.batch.count", "desk.batch.hint", "desk.batch.code", "desk.batch.code.label", "desk.batch.chip.tip", "desk.batch.approve", "desk.batch.dismiss", "desk.batch.none",
+                       "desk.batch.wait", "desk.batch.type", "desk.batch.tick", "desk.batch.view_first", "desk.batch.view_first.tip", "desk.batch.reason.title", "desk.batch.same_as")
+
+    def test_the_files_are_registered_in_the_page(self) -> None:
+        text = (Path(taskhtml.__file__)).read_text(encoding="utf-8")
+        for name in ("stmts.js", "batch.js", "stmts.css", "batch.css"):
+            self.assertIn(f'"{name}"', text)
+
+
+class RecordOfDecisionsTests(BatchBoardTests):
+    """AP: the person's decisions stand in the Agent actions list, in time, from the history of the task, the draft of each call and the hook log: nothing is stored again."""
+
+    def decisions(self) -> List[Dict[str, Any]]:
+        return tasktrace.decisions(self.root, self.data(), TASK)
+
+    def test_a_batch_leaves_one_line_for_each_call_with_the_command_as_the_draft_kept_it_and_the_files(self) -> None:
+        self.new(kind="rca")
+        command = self.script("d.sql")
+        plain, scripted = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold(command)
+        for code, text in ((plain, 'sqlcmd -S s -Q "SELECT 1"'), (scripted, command)):
+            outbox.write_draft(self.root, TASK, code, SimpleNamespace(system="acmedw-dev", env="dev", verb="write", target="", named=True), text, SESSION, 10)
+        board = self.board()
+        shown = board.batch({"step": "preview", "codes": [plain, scripted]})
+        board.batch({"step": "act", "codes": [plain, scripted], "code": shown["code"], "seen": {scripted: self.seen_of(command)}})
+        found = self.decisions()
+        self.assertEqual(sorted((row["code"], row["what"], row["batch"]) for row in found), sorted([(plain, "approved", 2), (scripted, "approved", 2)]))
+        row = next(one for one in found if one["code"] == scripted)
+        self.assertEqual(row["command"], command)
+        self.assertEqual([item["path"] for item in row["files"]], ["DEV/d.sql"])
+        self.assertEqual(len(row["files"][0]["sha"]), 12)
+        self.assertEqual(row["outcome"], "waiting")
+
+    def test_an_approved_call_that_ran_is_told_it_ran_and_one_that_did_not_is_told_so(self) -> None:
+        self.new(kind="rca")
+        ran, other = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        board = self.board()
+        board.batch({"step": "act", "codes": [ran, other], "code": board.batch({"step": "preview", "codes": [ran, other]})["code"], "seen": {}})
+        log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{SESSION}.jsonl"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        from core.paths import utc_now
+
+        with log.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"at": utc_now(), "event": "PreToolUse", "decision": "none", "external": {"approved": True, "decision": "outbox", "system": "acmedw-dev", "env": "dev"}, "session_id": SESSION}) + "\n")
+        outcomes = {row["code"]: row["outcome"] for row in self.decisions()}
+        self.assertEqual(sorted(outcomes.values()), ["ran", "waiting"], "one run is one call's: the other still waits for the agent")
+
+    def test_a_dismissal_leaves_its_reason_and_the_line_of_the_person(self) -> None:
+        self.new(kind="rca")
+        code = self.hold('sqlcmd -S s -Q "SELECT 1"')
+        board = self.board()
+        done = outbox.dismiss_action(self.root, code, interactive=True, reason="command", note="use id 7")
+        board.after_dismiss(done)
+        row = next(one for one in self.decisions() if one["what"] == "dismissed")
+        self.assertEqual((row["code"], row["reason"], row["note"]), (code, "command", "use id 7"))
+
+    def test_a_connection_that_was_opened_says_which_and_for_which_environment(self) -> None:
+        self.new(kind="rca")
+        self.note_allow("acmedw-dev (dev): on", name="acmedw-dev", env="dev")
+        self.note_allow("links: on", name="links", env="")
+        found = [row for row in self.decisions() if row["what"] == "opened"]
+        self.assertEqual([(row["name"], row["env"], row["links"]) for row in found], [("acmedw-dev", "dev", False), ("links", "", True)])
+
+    def note_allow(self, detail: str, **facts: Any) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            task_ops.note(data, "allow-env", detail, **facts)
+
+    def test_the_voided_calls_of_a_close_have_their_line(self) -> None:
+        self.new(kind="rca")
+        self.hold('sqlcmd -S s -Q "SELECT 1"')
+        self.run_cli("task", "deliver", "--task", NAME, "--summary", "done")
+        self.stop()
+        self.board().act("accept", NAME, "act", void=True)
+        self.assertEqual([row["what"] for row in self.decisions() if row["what"] == "void"], ["void"])
+
+    def test_the_list_of_the_tab_has_them_in_their_place_by_time_and_the_page_draws_them(self) -> None:
+        self.new(kind="rca")
+        a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        board = self.board()
+        board.batch({"step": "act", "codes": [a, b], "code": board.batch({"step": "preview", "codes": [a, b]})["code"], "seen": {}})
+        entries = tasktrace.flat(self.root, self.data())["entries"]
+        self.assertEqual([entry["what"] for entry in entries if entry["kind"] == "decision"], ["approved", "approved"])
+        text = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "desk.js").read_text(encoding="utf-8")
+        self.assertIn("function decisionRow(", text)
+        both_languages(self, "desk.trace.decision.approved", "desk.trace.decision.batch", "desk.trace.decision.dismissed", "desk.trace.decision.opened", "desk.trace.decision.opened.links", "desk.trace.decision.closed",
+                       "desk.trace.decision.closed.links", "desk.trace.decision.scope.all", "desk.trace.decision.scope.items", "desk.trace.decision.void", "desk.trace.decision.file", "desk.trace.outcome.ran",
+                       "desk.trace.outcome.ran.at", "desk.trace.outcome.waiting", "desk.trace.outcome.expired", "desk.trace.outcome.changed")
+
+    def test_a_call_approved_alone_is_in_the_record_too(self) -> None:
+        self.new(kind="rca")
+        code = self.hold('sqlcmd -S s -Q "SELECT 1"')
+        self.stop()  # the agent is not at work: the board acts on its calls
+        board = self.board()
+        board.act("approve-action", NAME, "act", code)
+        row = next(one for one in self.decisions() if one["what"] == "approved")
+        self.assertEqual((row["code"], row["batch"]), (code, 0))
 
 
 if __name__ == "__main__":

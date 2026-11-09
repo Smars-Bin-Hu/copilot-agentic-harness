@@ -569,7 +569,8 @@ def set_allow(root: Path, raw_task: str, name: str, on: bool, interactive: Optio
             held.pop(name, None)
         data[ALLOW_KEY] = held
         if before != on:
-            task_ops.note(data, "allow-env", f"{name}: {'on' if on else 'off'}")
+            where = str(held.get(name, {}).get("env") or env or (system or {}).get("env") or "").lower() if on else str(env or "").lower()  # the scope: the environment it was opened for (F3 AP)
+            task_ops.note(data, "allow-env", f"{name}{f' ({where})' if where and where != 'none' else ''}: {'on' if on else 'off'}", name=name, env=where if where != "none" else "")
     return {"task": task, "conn": name, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.conn.on" if on else "task.allow.conn.off", name=name)}
 
 

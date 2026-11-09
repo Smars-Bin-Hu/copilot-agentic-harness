@@ -299,7 +299,94 @@ def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, int
     if done is None:
         raise ValueError(say("gate.action.refused"))
     mark(Path(root), draft_of(done), "approved")
-    return {"approved": True, "command": done["command"], "system": done.get("system", ""), "valid_minutes": minutes, "draft": draft_of(done), "next": say("gate.action.next")}
+    return {"approved": True, "command": done["command"], "system": done.get("system", ""), "env": done.get("env", ""), "code": done.get("code", ""), "task": done.get("task", ""), "files": kept, "valid_minutes": minutes, "draft": draft_of(done), "next": say("gate.action.next")}
+
+
+# --- one code for a batch of held calls (1.7.38, C13 F3 AP) -------------------------------------------------------------------------------------------------
+# Two calls or more of a task wait at once: the board lists them in one box, the person unticks what they do not want and types ONE code for the rest. The code is made here from the calls ticked, as they are
+# now (their codes, sessions and exact commands) and a secret of this board process, and the board shows it: a call that changed, one that was left out, one that was added or a board that was restarted
+# gives another code, so a code is good only for the list it was shown with. Each call is approved as if alone: its own entry, its own pinned files, its own wait that returns approved.
+BATCH_MAX = 60  # calls in one batch
+
+
+class BatchRefused(ValueError):
+    """A batch is not approved, and nothing in it was (1.7.38, F3 AP). `files` are the calls that were not viewed or whose files changed (their codes), for the page to say which."""
+
+    def __init__(self, message: str, files: Optional[List[str]] = None) -> None:
+        super().__init__(message)
+        self.files = files or []
+
+
+def batch_code(entries: List[Dict[str, Any]], salt: str) -> str:
+    """The code of this exact list of held calls: six characters, from the calls (code, session, command, in the order of their codes) and `salt`, a secret of the board process."""
+    import hashlib
+
+    text = "\n".join(f"{item['code']}\n{item.get('session_id', '')}\n{item['command']}" for item in sorted(entries, key=lambda one: str(one["code"])))
+    return hashlib.sha256(f"{salt}\n{text}".encode("utf-8")).hexdigest()[:6].upper()
+
+
+def batch_entries(root: Path, codes: List[str]) -> List[Dict[str, Any]]:
+    """The held calls of a batch, as they wait now. A code that is not waiting (answered, void, run out, not there), a code twice, too many calls, or calls of two tasks refuse the whole batch: nothing is picked out."""
+    wanted = list(dict.fromkeys(str(code or "").strip().upper() for code in codes))
+    if not wanted or any(not code for code in wanted):
+        raise BatchRefused(say("gate.batch.none"))
+    if len(wanted) > BATCH_MAX:
+        raise BatchRefused(say("gate.batch.many", n=BATCH_MAX))
+    minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+    waiting = {str(item.get("code")): item for item in approvals.pending(root, minutes, file=approvals.ACTIONS)}
+    missing = [code for code in wanted if code not in waiting]
+    if missing:
+        raise BatchRefused(say("gate.batch.gone", codes=", ".join(missing[:5]) + (f" +{len(missing) - 5}" if len(missing) > 5 else "")))
+    found = [waiting[code] for code in wanted]
+    if len({str(item.get("task") or "") for item in found}) > 1:
+        raise BatchRefused(say("gate.batch.tasks"))
+    return found
+
+
+def batch_preview(root: Path, codes: List[str], salt: str) -> Dict[str, Any]:
+    """The code of the batch the person ticked, for the board to show. The same refusals as `approve_batch` that do not need the code or the files."""
+    found = batch_entries(root, codes)
+    return {"code": batch_code(found, salt), "count": len(found), "task": str(found[0].get("task") or "")}
+
+
+def approve_batch(root: Path, codes: List[str], typed: str, salt: str, seen: Optional[Dict[str, Any]] = None, interactive: bool = False) -> Dict[str, Any]:
+    """Approve the calls of `codes` with one code. Only the board calls it (`interactive`), the way `approve_action` is. Nothing is approved unless every check holds for every call:
+    the typed code is the one of this list (`batch_code`); each call that names files was viewed (`seen[code]["files"]`) and its files are as they were then. Then each call is approved alone, with the files pinned
+    as they are now. A call that is answered in the very moment (another tab) is not approved and is listed in `skipped`; a call that was not ticked is never touched."""
+    if not interactive:
+        raise ValueError(say("gate.action.terminal_only"))
+    found = batch_entries(root, codes)
+    if not str(typed or "").strip() or str(typed).strip().upper() != batch_code(found, salt):
+        raise BatchRefused(say("gate.batch.code"))
+    pinned: Dict[str, Dict[str, str]] = {}
+    unseen: List[str] = []
+    moved: List[str] = []
+    for item in found:
+        code = str(item["code"])
+        kept = pinfiles.pins(str(item["command"]), Path(root), str(item.get("task") or ""), str(item.get("cwd") or ""))
+        pinned[code] = kept
+        if not kept:
+            continue
+        said = (seen or {}).get(code) if isinstance(seen, dict) else None
+        if not isinstance(said, dict) or not isinstance(said.get("files"), dict):
+            unseen.append(code)
+        elif pinfiles.changed({str(key): str(value) for key, value in said["files"].items()}, kept):
+            moved.append(code)
+    if unseen:
+        raise BatchRefused(say("gate.batch.view", codes=", ".join(unseen[:5]) + (f" +{len(unseen) - 5}" if len(unseen) > 5 else "")), unseen)
+    if moved:
+        raise BatchRefused(say("gate.batch.changed", codes=", ".join(moved[:5]) + (f" +{len(moved) - 5}" if len(moved) > 5 else "")), moved)
+    minutes = approvals.minutes(config.load_policy(root, GATE_POLICY))
+    approved: List[Dict[str, Any]] = []
+    skipped: List[str] = []
+    for item in found:
+        done = approvals.approve(root, str(item["code"]), minutes, file=approvals.ACTIONS, files=pinned[str(item["code"])], command=str(item["command"]))  # exactly the command that was listed
+        if done is None:
+            skipped.append(str(item["code"]))
+            continue
+        mark(Path(root), draft_of(done), "approved")
+        approved.append({"code": done["code"], "command": done["command"], "system": done.get("system", ""), "env": done.get("env", ""), "task": done.get("task", ""), "draft": draft_of(done), "files": pinned[str(item["code"])]})
+    return {"approved": True, "batch": True, "count": len(approved), "calls": approved, "skipped": skipped, "valid_minutes": minutes, "next": say("gate.action.next")}
 
 
 CLOSED = "closed"  # (1.7.38, C13 FB-4) not a reason the person gives: the task was closed while the call waited, and the call is void

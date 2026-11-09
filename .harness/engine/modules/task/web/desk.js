@@ -1086,12 +1086,14 @@
     if (desk.past) return pastNote();
     const told = [approvedCard(), openedCard()].filter(Boolean);  // the approved calls, and the calls whose connection was opened: the one step left is to tell the agent
     const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
-    if (!needsCard()) return told.length || left.length ? [...told, ...left] : null;
+    const box = batchBox();  // two held calls or more, the ones the agent went on without too: one box over their cards (F3 AP)
+    if (!needsCard()) return told.length || left.length ? [...told, ...(box ? [box] : []), ...left] : null;
     const items = needItems().filter((item) => item.action !== "approve-action" && item.action !== "accept");  // the held calls and the delivered work have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
     const cards = [...told];
+    if (box) cards.push(box);
     cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told.length ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
     const finish = acceptCard();
     if (finish) cards.push(finish);
@@ -1275,6 +1277,7 @@
     const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), sayLine(item), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: when(item.created_at, 0, 16)}), " ", codeChip),
       h("div", {class: "win-body"},  // one scrolling body (both ways); the blocks in it scroll sideways only; the buttons stay in view
         manyWrites(item) ? null : bodyBlock(item),
+        typeof STMTS !== "undefined" ? STMTS.block(item.stmts) : null,
         h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)),
         scripts.map((script) => [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.script.note.one" : "desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)]),
         h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command))),
@@ -1290,6 +1293,21 @@
     const names = holds.filter((hold) => !hold.opens).map((hold) => hold.system + (hold.env && hold.env !== "none" ? " (" + hold.env + ")" : ""));
     return h("p", {class: "sub tk-open-note"}, t("desk.outbox.open.stuck", {parts: names.join(", ")}));
   }
+  // The box over two held calls or more (batch.js, 1.7.38 F3 AP): what it needs of this page is whether the files of a call were viewed, how to open its View window, and what the page does after an approval.
+  function batchBox() {
+    const held = desk.outbox || [];  // all that wait for the person: a call the agent went on without can still be approved, and the card then asks to tell the agent
+    if (held.length < 2 || typeof BATCH === "undefined" || !served() || desk.past) return null;
+    const title = (item) => (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })();
+    return BATCH.box({
+      task: desk.name, items: held, can: Boolean(canAct() && SERVE.runs("approve-action")),
+      needsView: (item) => scriptsOf(item).length > 0 || Object.keys(item.seen || {}).length > 0,
+      viewed: (code) => viewedCalls.get(code), unview: (code) => { viewedCalls.delete(code); },
+      view: (item) => callWindow(item, null), redraw: () => draw(true), done: () => SERVE.done(),
+      reasons: REASONS, lineReasons: LINE_REASONS,
+      approved: (codes, result) => { for (const code of codes) { const item = held.find((one) => one.code === code); approvedCalls.set(String(code).toUpperCase(), {at: Date.now(), heard: result && result.agent && result.agent[code] === "wait" ? "wait" : "", title: item ? title(item) : ""}); } },
+    });
+  }
+
   function outboxCard(item, notes) {
     const can = served() && canAct() && SERVE.runs("approve-action");
     const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("desk.outbox.code"), "aria-label": t("board.serve.code")});
@@ -1381,6 +1399,7 @@
       sayLine(item),
       callFacts(item),
       manyWrites(item) ? null : bodyBlock(item),
+      typeof STMTS !== "undefined" ? STMTS.block(item.stmts) : null,  // F3 AP: the statements of a call that carries many, each judged by its type's lists
       words ? rawFold(item) : h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
       gone ? h("p", {class: "hint"}, t("desk.outbox.moved.note")) : item.agent === "wait" || item.agent === "ended" ? h("p", {class: "sub tk-agent", "data-agent": item.agent}, t("desk.outbox.agent." + item.agent)) : null,  // 1.7.38: where the agent stands: it waits here, or it stopped on this call
       stuckNote(item),
@@ -2391,11 +2410,42 @@
   const traceOpen = new Map();  // prompt number -> open; the newest is open until the person says otherwise
   const spent = (seconds) => (seconds > 0 && seconds < 10 ? seconds.toFixed(1) + " s" : clock(seconds));
 
+  // What the person decided, in its place by time (1.7.38, F3 AP): one line for each (a call approved alone or in a batch, a connection opened or closed, a call not approved with the reason, the calls a close
+  // voided) and what became of an approved call. The details are under the line: the command exactly as it was approved, the files it was approved with and their fingerprints.
+  function decisionRow(item, stamp) {
+    const code = item.code ? h("code", {class: "tr-code"}, item.code) : null;
+    const where = item.system ? [" ", h("span", {class: "sub"}, item.system + (item.env && item.env !== "none" ? " \u00b7 " + item.env.toUpperCase() : ""))] : null;
+    let head, mark = null, lines = [];
+    if (item.what === "approved") {
+      head = [h("b", null, t("desk.trace.decision.approved")), " ", code, item.batch > 1 ? [" ", tag(t("desk.trace.decision.batch", {n: item.batch}))] : null, where];
+      mark = tag(t("desk.trace.outcome." + (item.outcome || "waiting")), item.outcome === "ran" ? "good" : item.outcome === "waiting" ? "" : "hot");
+      if (item.outcome === "ran" && item.ran_at) lines.push(h("div", {class: "sub"}, t("desk.trace.outcome.ran.at", {at: when(item.ran_at, 11, 19)})));
+      if (item.command) lines.push(h("pre", {class: "tr-cmd", tabindex: "0"}, item.command));
+      for (const file of item.files || []) lines.push(h("div", {class: "sub tr-file", title: file.path}, t("desk.trace.decision.file", {path: file.path, sha: file.sha})));
+    } else if (item.what === "dismissed") {
+      head = [h("b", null, t("desk.trace.decision.dismissed")), " ", code];
+      const why = item.reason ? t("desk.outbox.reason." + item.reason) : t("desk.outbox.reason.none");
+      mark = tag(why, "");
+      if (item.note) lines.push(h("div", {class: "sub"}, item.note));
+      if (item.text) lines.push(h("div", {class: "sub"}, item.text));
+      if (item.command) lines.push(h("pre", {class: "tr-cmd", tabindex: "0"}, item.command));
+    } else if (item.what === "opened" || item.what === "closed") {
+      head = [h("b", null, t(item.links ? "desk.trace.decision." + item.what + ".links" : "desk.trace.decision." + item.what)), " ", item.links ? null : h("span", {class: "sub"}, item.name + (item.env ? " \u00b7 " + item.env.toUpperCase() : ""))];
+      if (item.what === "opened") mark = tag(t(item.links ? "desk.trace.decision.scope.items" : "desk.trace.decision.scope.all"), "hot");
+    } else {
+      head = [h("b", null, t("desk.trace.decision.void")), " ", h("span", {class: "sub"}, item.text || "")];
+    }
+    const summary = h("summary", null, ...head, mark ? [" ", mark] : null);
+    const body = lines.length ? h("details", {class: "tr-more"}, summary, ...lines) : null;
+    return h("li", {class: "tr-decision " + item.what}, stamp, h("div", {class: "what"}, body || h("div", null, ...head, mark ? [" ", mark] : null)));
+  }
+
   function traceRow(item) {
     const stamp = h("span", {class: "when sub"}, when(item.at, 5, 19));
     if (item.kind === "prompt") return h("li", {class: "tr-prompt"}, stamp, h("div", {class: "what sub"}, t("desk.trace.prompt")));
     if (item.kind === "think") return h("li", {class: "tr-think"}, stamp, h("div", {class: "what sub"}, t("desk.trace.think"), " \u00b7 " + spent(item.seconds)));
     if (item.kind === "subagent") return h("li", {class: "tr-agent"}, stamp, h("div", {class: "what"}, h("b", null, item.agent), " ", tag(t("desk.trace.subagent")), h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds) + " \u00b7 " + t("desk.trace.calls", {n: item.tool_calls || 0}) + (item.model ? " \u00b7 " + item.model : ""))));
+    if (item.kind === "decision") return decisionRow(item, stamp);
     const gate = item.kind === "gate";
     return h("li", {class: (gate ? (item.decision === "held" ? "tr-held" : "tr-gate") : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "")}, stamp,
       h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,

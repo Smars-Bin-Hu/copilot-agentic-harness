@@ -297,6 +297,9 @@ class HomeFolderTests(lists.ListedCase):
                     self.assertIn("admin 模式下也不能改", out["permissionDecisionReason"], relative)
                 self.assertEqual(inner.term(f"echo x > {self.target}").get("permissionDecision"), "deny")
                 self.assertEqual(inner.term("echo x > .harness/policies/gate.json").get("permissionDecision"), None)  # a guardrail file of the repository opens up there, as it did
+                self.assertEqual(inner.term("python3 -c \"open('.harness/policies/gate.json','w').write('{}')\"").get("permissionDecision"), None)  # and a one-liner that writes it too
+                self.assertEqual(inner.term("python3 -c \"open('.harness/runtime/state/x.json','w').write('{}')\"").get("permissionDecision"), "deny")  # what stays closed in admin mode is closed for a script too
+                self.assertEqual(inner.term(f"python3 -c \"open({self.target!r},'w').write('{{}}')\"").get("permissionDecision"), "deny")
 
         result = unittest.TestResult()
         case = Admin()

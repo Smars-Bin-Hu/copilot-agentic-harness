@@ -117,9 +117,50 @@ def evidence_pictures(folder: Path, env: str) -> List[str]:
         return []
 
 
-def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optional[Path] = None) -> Dict[str, Any]:
+def _program(text: str) -> str:
+    """The program a statement runs, as the gate names it: the first word, with no folder, no `.cmd`, `.bat` or `.exe`, in lower case."""
+    found = cmdview.tokens(text)
+    word = found[0]["text"] if found else ""
+    return re.sub(r"\.(?:cmd|bat|exe)$", "", re.split(r"[\\/]", word)[-1], flags=re.IGNORECASE).lower()
+
+
+def system_of(text: str, listed: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """The system one statement reaches, `{system, env}`: of the systems whose program it runs, the one whose `reach.when` pattern matches the most of its arguments (the way the gate tells two servers
+    on one host apart); one with no pattern only when no other matches. A name for a card, not a judgment: the gate decides."""
+    program = _program(text)
+    args = cmdview.args_of(text, [program]) if program else ""
+    best, best_len, fallback = None, -1, None
+    for name, system in listed.items():
+        if not isinstance(system, dict) or program not in outside.clis(system):
+            continue
+        when = str((system.get("reach") or {}).get("when") or "")
+        if not when:
+            fallback = fallback or name
+            continue
+        try:
+            found = re.search(when, args, re.IGNORECASE)
+        except re.error:
+            continue
+        if found and len(found.group(0)) > best_len:
+            best, best_len = name, len(found.group(0))
+    name = best or fallback
+    return {"system": name, "env": str((listed[name] or {}).get("env") or "")} if name else None
+
+
+def reached(command: str, listed: Optional[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """The systems a command line reaches, each once, in the order of the line: `[{system, env}]` (1.7.38). Each statement of the line (cut as `cmdview.commands` cuts it) on its own."""
+    out: List[Dict[str, str]] = []
+    for text in cmdview.commands(command) if listed else []:
+        one = system_of(text, listed or {})
+        if one and one not in out:
+            out.append(one)
+    return out
+
+
+def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optional[Path] = None, listed: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none.
-    1.7.38: a held line of several writes has one part for each (`parts`: `{say, facts, body}`), cut where the line is cut outside quotes, so a card can say every write on a line of its own with its own facts;
+    1.7.38: a held line of several writes has one part for each (`parts`: `{say, facts, body, system?}`), cut where the line is cut outside quotes, so a card can say every write on a line of its own with its own facts;
+    with `listed` (the systems of the tools policy) a part names the system and the environment its own command reaches, when the line reaches more than one (`system`, `env`);
     `says` is every title; `writes` their number; `say`, `facts` and `body` are those of the first (or, for a call that says nothing, of the whole command). `parts` is there only for more than one."""
     programs = outside.clis(system)
     rules = system.get("say")
@@ -130,11 +171,18 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
         said = cmdview.say_of(args, rules)
         body = cmdview.body_of(args, system.get("body"), folder, root)
         if said:
-            parts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body})  # by command, not by the word `ado` (a `--conn ado` is no second write)
+            parts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body, "at": text})  # by command, not by the word `ado` (a `--conn ado` is no second write)
         if body:
-            texts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body})
+            texts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body, "at": text})
     if len(texts) > 1 and len(texts) > len(parts):
         parts = texts  # the line runs several statements, and they do not all have a title: each is shown with its own server and text, the second is not hidden behind the first
+    if len(parts) > 1 and len(reached(command, listed)) > 1:  # two statements on two systems: each says its own (a card that names the first only is wrong for the second)
+        for part in parts:
+            there = reached(part["at"], listed)
+            if there:
+                part.update(system=there[0]["system"], env=there[0]["env"])
+    for part in parts:
+        part.pop("at", None)
     if parts:
         return {"say": parts[0]["say"], "says": [part["say"] for part in parts if part["say"]], "writes": len(parts), "facts": parts[0]["facts"] if len(parts) == 1 else {}, "body": parts[0]["body"], **({"parts": parts} if len(parts) > 1 else {})}
     args = cmdview.args_of(command, programs)
@@ -153,13 +201,15 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
         for item in waiting:
             system = systems.get(item.get("system", "")) or {}
             place = outbox.agent_place(item)
+            there = reached(item["command"], systems)
             out.append({"moved_on": str(item["code"]) in gone, "agent": "" if place == "ended" and (item.get("wait") or {}).get("state") != "timeout" else place,  # "" for a call held a moment ago: it has not started its wait yet, and says nothing
                 "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
                 "offers": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "scope": str(one.get("scope", "")), "refs": [str(ref) for ref in one.get("refs") or []]} for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system")],  # 1.7.38: the connections this card may open for the task
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
                 "layout": cmdview.layout(item["command"], folder, root, str(item.get("cwd") or "")),
+                "reaches": there if len(there) > 1 else [],  # 1.7.38: a line on more than one system names each (the head of the card shows them all)
                 "seen": pinfiles.pins(str(item["command"]), root, str(item.get("task") or ""), str(item.get("cwd") or "")),  # the files the line names, as they are as this card is drawn: what View shows and Approve is held to (RB-N5)
-                **call_words(item["command"], system, folder, root),
+                **call_words(item["command"], system, folder, root, systems),
             })
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task

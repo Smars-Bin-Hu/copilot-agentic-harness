@@ -6,14 +6,16 @@ import unittest
 from pathlib import Path
 
 import support  # noqa: F401 - the engine on sys.path
-from support import HarnessTestCase
+from support import HarnessTestCase, pre_tool, use_packs
+from taskcase import SESSION, TASK, TaskCase
+from test_c12_fb import SYSTEMS
 
 from test_connection_find import FindCase
 from test_connections import KIND, ConnectionsCase
 
 from core import approval, connections, messages, systems
 from modules.gate import rules
-from modules.task import boardserve
+from modules.task import boardserve, cmdview, taskdesk
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
 WEB = ENGINE / "modules" / "task" / "web"
@@ -134,6 +136,90 @@ class ButtonLabelTests(unittest.TestCase):
     def test_the_page_no_longer_changes_a_label_by_the_size_of_the_button(self) -> None:
         source = (WEB / "common.js").read_text(encoding="utf-8")
         self.assertNotIn("charAt(0).toUpperCase() + label.slice(1)", source)
+
+
+class HeldCardTests(HarnessTestCase):
+    """C12 FC-5: a card that names two `-i` files shows both scripts; a card with two statements on two systems names each system."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.folder = self.root / ".workspace" / "sandbox" / "tasks" / "t1"
+        for name, text in (("a.sql", "SELECT 1;\n"), ("b.sql", "SELECT 2;\nSELECT 3;\n")):
+            (self.folder / "DEV").mkdir(parents=True, exist_ok=True)
+            (self.folder / "DEV" / name).write_text(text, encoding="utf-8")
+
+    def layout(self, line: str) -> dict:
+        return cmdview.layout(line, self.folder, self.root, str(self.root))
+
+    def test_a_line_that_names_two_script_files_shows_both_in_the_order_of_the_line(self) -> None:
+        found = self.layout("sqlcmd -S h -i DEV/a.sql -i DEV/b.sql")
+        self.assertEqual([(one["path"], one["lines"]) for one in found["scripts"]], [("DEV/a.sql", 1), ("DEV/b.sql", 2)])
+        self.assertEqual(found["script"]["path"], "DEV/a.sql", "script is the first, as before")
+        self.assertEqual([line["value"] for line in found["lines"] if line["text"] == "-i"], ["DEV/a.sql", "DEV/b.sql"])
+
+    def test_a_file_named_twice_is_shown_once_and_no_file_is_no_script(self) -> None:
+        self.assertEqual([one["path"] for one in self.layout("sqlcmd -i DEV/a.sql -i DEV/a.sql")["scripts"]], ["DEV/a.sql"])
+        found = self.layout("sqlcmd -S h -Q SELECT")
+        self.assertEqual((found["script"], found["scripts"]), (None, []))
+        self.assertEqual(cmdview.layout("", self.folder)["scripts"], [])
+
+    def test_the_page_draws_every_script_of_the_line(self) -> None:
+        source = (WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn("scriptsOf(item).map((script)", source)
+        self.assertIn('files.map((script) => script.text).join("\\n")', source)
+        self.assertIn("scripts.map((script) =>", source)
+
+    def words(self, line: str) -> dict:
+        import json
+
+        from core import config
+
+        use_packs(self.root, "sqlserver")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "database": "AcmeDW", "auth": "sql"},
+            "acmedw-ist": {"type": "sqlserver", "env": "ist", "host": "localhost", "port": "14331", "database": "AcmeDW", "auth": "sql"}}}), encoding="utf-8")
+        self.systems = config.policy_or_empty(self.root, "tools")["systems"]
+        return taskdesk.call_words(line, self.systems["acmedw-dev"], self.folder, self.root, self.systems)
+
+    def test_two_statements_on_two_systems_name_each_system(self) -> None:
+        first, second = "UPDATE dbo.orders SET status = 1 WHERE id = 1", "UPDATE dbo.orders SET status = 2 WHERE id = 2"
+        line = f'sqlcmd -S localhost,14332 -C -d AcmeDW -Q "{first}" && sqlcmd -S localhost,14331 -C -d AcmeDW -Q "{second}"'
+        found = self.words(line)
+        self.assertEqual([(part["system"], part["env"]) for part in found["parts"]], [("acmedw-dev", "dev"), ("acmedw-ist", "ist")])
+        self.assertNotIn("at", found["parts"][0], "the cut of the line is not sent to the page")
+        self.assertEqual([(one["system"], one["env"]) for one in taskdesk.reached(line, self.systems)], [("acmedw-dev", "dev"), ("acmedw-ist", "ist")])
+
+    def test_two_statements_on_one_system_say_nothing_more_and_one_statement_is_as_before(self) -> None:
+        first, second = "UPDATE dbo.orders SET status = 1 WHERE id = 1", "UPDATE dbo.orders SET status = 2 WHERE id = 2"
+        found = self.words(f'sqlcmd -S localhost,14332 -C -Q "{first}" && sqlcmd -S localhost,14332 -C -Q "{second}"')
+        self.assertEqual(len(found["parts"]), 2)
+        self.assertNotIn("system", found["parts"][0], "one system: the head of the card names it")
+        one = self.words(f'sqlcmd -S localhost,14332 -C -Q "{first}"')
+        self.assertNotIn("parts", one)
+        self.assertEqual(taskdesk.reached("", self.systems), [])
+        self.assertEqual(taskdesk.reached("echo hi", {}), [])
+
+
+class HeldLineOnTwoSystemsTests(TaskCase):
+    """A held line that reaches two systems and names two scripts: the card the page gets has both."""
+
+    def test_the_card_of_a_line_on_two_systems_with_two_scripts_has_each_of_them(self) -> None:
+        import json
+
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": SYSTEMS}), encoding="utf-8")
+        self.new()
+        for name in ("a.sql", "b.sql"):
+            path = self.root / TASK / "DEV" / "_manual" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"-- {name}\nSELECT 1;\n", encoding="utf-8")
+        line = f"sqlctl -S h -i {TASK}/DEV/_manual/a.sql -i {TASK}/DEV/_manual/b.sql && ado comment 7 hello"
+        data = pre_tool(SESSION, "run_in_terminal", {"command": line, "explanation": "t", "isBackground": False})
+        data["cwd"] = str(self.root)
+        self.assertEqual(self.hook(data)["permissionDecision"], "deny")  # held
+        (card,) = taskdesk.outbox_view(self.root, TASK)
+        self.assertEqual([one["system"] for one in card["reaches"]], ["sqlsys", "adosys"])
+        self.assertEqual([one["path"] for one in card["layout"]["scripts"]], [f"{TASK}/DEV/_manual/a.sql", f"{TASK}/DEV/_manual/b.sql"])
+        self.assertEqual(len(card["seen"]), 2, "both files are pinned, and both are shown")
 
 
 if __name__ == "__main__":

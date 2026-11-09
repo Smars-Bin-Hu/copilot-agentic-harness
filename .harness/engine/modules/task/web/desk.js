@@ -1215,21 +1215,25 @@
   const factSpan = (label, value, hot, title) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", title ? {title} : null, value)) : null);
   const factList = (facts) => Object.entries(facts || {}).map(([name, value]) => factSpan(known("desk.outbox.fact." + name, name), value));
   const manyWrites = (item) => Array.isArray(item.parts) && item.parts.length > 1;  // a held line of several writes: each has its own words, facts and text (1.7.38)
+  const scriptsOf = (item) => (item.layout ? item.layout.scripts || (item.layout.script ? [item.layout.script] : []) : []);  // every file the line names and the task holds (1.7.38: two `-i` files show both)
+  const systemFact = (system, env) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, system), env && env !== "none" ? [" ", tag(env, "hot")] : null);
   function callFacts(item) {
     const verb = known("desk.outbox.verb." + item.verb, item.verb);
     const many = manyWrites(item);
+    const reaches = item.reaches && item.reaches.length > 1 ? item.reaches : null;  // a line on more than one system names each of them (1.7.38)
     return h("div", {class: "tk-call-facts"},
-      factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb, false, item.named === false ? null : item.verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
+      factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb, false, item.named === false ? null : item.verb),
+      reaches ? h("span", {class: "tk-fact tk-systems"}, h("span", {class: "k"}, t("desk.outbox.systems")), reaches.map((one, index) => [index ? " " : "", h("b", null, one.system), one.env && one.env !== "none" ? [" ", tag(one.env, "hot")] : null])) : systemFact(item.system, item.env),
       ...(many ? [] : factList(item.facts)),
       many ? null : factSpan(t("desk.outbox.target"), item.target),
-      item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t(item.layout.script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: item.layout.script.lines}))) : null);
+      ...scriptsOf(item).map((script) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, script.path), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: script.lines})))));
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
   // The raw command is folded: ids, headers and long addresses are not on the face of the card. A line of several writes (1.7.38) says each on a line of its own, with its own facts and text.
   const sayLine = (item) => {
     if (manyWrites(item)) {
       return h("div", {class: "tk-parts"}, h("span", {class: "tk-writes"}, t(item.parts.every((part) => part.say) ? "desk.outbox.writes" : "desk.outbox.statements", {n: item.parts.length})),  // statements: the type gave no title to each, and one may be a read
-        h("ol", null, item.parts.map((part) => h("li", null, part.say ? h("div", {class: "tk-call-say"}, part.say) : null, Object.keys(part.facts || {}).length ? h("div", {class: "tk-call-facts"}, ...factList(part.facts)) : null, bodyBlock(part)))));
+        h("ol", null, item.parts.map((part) => h("li", null, part.say ? h("div", {class: "tk-call-say"}, part.say) : null, part.system || Object.keys(part.facts || {}).length ? h("div", {class: "tk-call-facts"}, part.system ? systemFact(part.system, part.env) : null, ...factList(part.facts)) : null, bodyBlock(part)))));
     }
     return item.say ? h("div", {class: "tk-call-say"}, item.say) : null;
   };
@@ -1245,8 +1249,8 @@
   // What a person wants to copy out of a call is the body: the query in the quoted block, or the script the command reads; the command line itself only when there is neither.
   function callBody(item) {
     if (item.body) return item.command;  // the text it writes is on the card; what Copy gives is the command itself
-    const script = item.layout && item.layout.script;
-    if (script && script.text) return script.text;
+    const files = scriptsOf(item).filter((script) => script.text);
+    if (files.length) return files.map((script) => script.text).join("\n");  // two files: both, one after the other
     const lines = item.layout ? item.layout.lines : [];
     const block = lines.find((line) => line.kind === "block") || lines.find((line) => line.quoted && (line.kind === "arg" || line.value));  // a long quoted value, or a short one (`-Q "SELECT 1"`)
     return block ? (block.kind === "option" ? block.value : block.text) : item.command;
@@ -1257,14 +1261,14 @@
     const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
     copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-    const script = item.layout && item.layout.script;
+    const scripts = scriptsOf(item);
     // The code, as a chip: a click copies it, puts it in the card's box and closes the window, so Approve is the next press.
     const codeChip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, item.code);
     const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), sayLine(item), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: when(item.created_at, 0, 16)}), " ", codeChip),
       h("div", {class: "win-body"},  // one scrolling body (both ways); the blocks in it scroll sideways only; the buttons stay in view
         manyWrites(item) ? null : bodyBlock(item),
         h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)),
-        script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.script.note.one" : "desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
+        scripts.map((script) => [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.script.note.one" : "desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)]),
         h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command))),
       h("div", {class: "row win-foot"}, copy, close)]);
     view.box.classList.add("wide");

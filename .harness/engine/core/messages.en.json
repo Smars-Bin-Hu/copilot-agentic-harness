@@ -3703,5 +3703,6 @@
   "desk.live.approval": "Waits for your approval",
   "connections.own.kind.first": "Choose the kind of connection first.",
   "connections.away.context": "{n} of them are not in this window: VS Code was opened without them. `harness connections find` marks them. A command of one of these runs as `harness as <name> -- <command>`.",
-  "connections.find.away": "[not in this window: harness as {alias} -- <command>]"
+  "connections.find.away": "[not in this window: harness as {alias} -- <command>]",
+  "desk.outbox.systems": "systems"
 }

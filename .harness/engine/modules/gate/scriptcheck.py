@@ -19,7 +19,7 @@ from . import external
 from .gitcmd import join_lines, split_segments
 
 MAX_BYTES = 200 * 1024
-EXTRA = (r"\.harness\b", r"\.github[\\/]+hooks", r"AGENTS\.md", r"Start Harness\.(?:command|cmd)")  # named whole, even when the policy lists fewer
+EXTRA = (r"\.harness\b", r"\.github[\\/]+hooks", r"AGENTS\.md", r"Start Harness\.(?:command|cmd)", r"\.copilot-harness\b", r"HARNESS_INTEGRITY_DIR")  # named whole, even when the policy lists fewer; the folder of the lists the guardrails trust (1.7.38, C13 FR2 11b) too
 
 WRITES = re.compile(
     r"""open\s*\([^)]*,\s*(?:mode\s*=\s*)?['"][^'"]*[wax+]"""  # python: open(path, "w")
@@ -42,6 +42,8 @@ def names_of(policy: Dict[str, Any]) -> "re.Pattern[str]":
         plain = re.sub(r"(?:/\*\*|/\*)$", "", str(path)).strip("/")
         if plain and not plain.startswith(("*", "!")) and "*" not in plain:
             parts.append(re.escape(plain).replace(r"\/", r"[\\/]+"))
+    for folder in guardrails.home_folders():  # a folder `HARNESS_INTEGRITY_DIR` names, written by its full path
+        parts.append(re.escape(folder).replace(r"\/", r"[\\/]+"))
     return re.compile("|".join(parts), re.IGNORECASE)
 
 

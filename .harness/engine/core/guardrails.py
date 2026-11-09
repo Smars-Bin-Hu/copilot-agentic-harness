@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any, Dict, List
 
 # Without these the gate would not protect the harness itself. They are always guarded, even when a policy or an
@@ -39,3 +41,21 @@ def admin_locked(policy: Dict[str, Any]) -> List[str]:
 def missing_core(policy: Dict[str, Any]) -> List[str]:
     have = listed(policy)
     return [item for item in CORE_GUARDRAILS if item not in have]
+
+
+# What the guardrails trust lies outside the workspace too (1.7.38, C13 FR2 11b): the lists of the guardrail files the person accepted (`integrity.py`) are kept in the person's home. A list an agent can rewrite is a list
+# that accepts anything, so the folder is guarded as a guardrail path is: write tools and terminal writes are refused, in admin mode too (`admin off` writes the list itself).
+HOME_FOLDER = ".copilot-harness"
+
+
+def home_folders() -> List[str]:
+    """The folders outside the workspace that are guarded: `~/.copilot-harness`, and the folder `HARNESS_INTEGRITY_DIR` names. As absolute paths, `/` as separator. Never raises."""
+    found: List[str] = []
+    try:
+        found.append(str(Path.home() / HOME_FOLDER))
+    except (RuntimeError, KeyError, OSError):
+        pass
+    custom = os.environ.get("HARNESS_INTEGRITY_DIR", "").strip()
+    if custom:
+        found.append(custom)
+    return [item.replace("\\", "/").rstrip("/") for item in found if item]

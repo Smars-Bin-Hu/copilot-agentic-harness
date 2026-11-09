@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 import json
+import os
 import re
 
 from core import calls, govern, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
@@ -36,9 +37,13 @@ WRITE_KINDS = ("edit", "create")
 
 def check_write(event: HookEvent, ctx: Context, compiled: Compiled) -> Optional[Decision]:
     for raw in event.paths:
-        for absolute in repo_paths.resolve(raw, ctx.root, event.cwd):
+        spelled = os.path.expandvars(os.path.expanduser(raw)) if raw.strip().startswith(("~", "$", "%")) else raw  # a tool that is given `~/x` or `$HOME/x` may expand it
+        for absolute in repo_paths.resolve(raw, ctx.root, event.cwd) + (repo_paths.resolve(spelled, ctx.root, event.cwd) if spelled != raw else []):
             if repo_paths.has_git_folder(absolute):
                 return Decision(permission="deny", reason=rules.git_folder(absolute))
+            home = compiled.home_match(absolute)
+            if home:  # 1.7.38 (C13 FR2 11b): the lists the guardrails trust (`~/.copilot-harness/integrity`) are guarded like a guardrail path, in admin mode too
+                return Decision(permission="deny", reason=rules.admin_locked_file(absolute, f"{home}/**") if ctx.admin else rules.guardrail_file(absolute, f"{home}/**"))
             hit = compiled.refused_match(absolute)
             if hit:
                 return Decision(permission="deny", reason=rules.target_refused_file(*hit))

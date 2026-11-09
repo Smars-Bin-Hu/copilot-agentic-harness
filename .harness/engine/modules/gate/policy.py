@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Pattern, Tuple
 
 from core import config, messages, repo_paths, schema
 from core.paths import policies_dir
-from core.guardrails import CORE_GUARDRAILS, admin_locked, guardrail_paths, missing_core
+from core.guardrails import CORE_GUARDRAILS, HOME_FOLDER, admin_locked, guardrail_paths, home_folders, missing_core
 
 POLICY_NAME = "gate"
 # Any `.git` folder (in a target repository or anywhere else) in a terminal command, with the spellings Windows treats as the same.
@@ -115,7 +115,8 @@ class Compiled:
         """
         self.paths = admin_locked(policy) if admin else guardrail_paths(policy)
         self.path_regexes: List[Tuple[str, Pattern[str]]] = [(item, repo_paths.glob_regex(item)) for item in self.paths]
-        guard = repo_paths.command_regex(self.paths).pattern
+        self.home = home_folders()  # (1.7.38, C13 FR2 11b) the folders outside the workspace that hold what the guardrails trust: closed in admin mode too
+        guard = repo_paths.command_regex(self.paths + [f"{HOME_FOLDER}/**"] + self.home).pattern  # a command names the folder as `~/.copilot-harness/...`, `$HOME/...`, or by its full path
         self.guard_writes = [
             (re.compile(expand(rule["pattern"], guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"]
@@ -152,6 +153,13 @@ class Compiled:
             (re.compile(expand(rule["pattern"], tree_guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"] if not rule["pattern"].startswith(COMMAND_PLACEHOLDER + "git")
         ] if trees else []
+
+    def home_match(self, absolute: str) -> str:
+        """The guarded folder outside the workspace an absolute path (normal form) lies in, or an empty string."""
+        for folder in self.home:
+            if repo_paths.inside(absolute, Path(folder)):
+                return folder
+        return ""
 
     def guardrail_match(self, relative: str) -> str:
         """The guardrail pattern a repo-relative path falls under, or an empty string."""

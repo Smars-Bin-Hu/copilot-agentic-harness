@@ -208,5 +208,98 @@ class AsBrokenTests(lists.ListedCase):
         self.hold_and_refuse()
 
 
+class HomeFolderTests(lists.ListedCase):
+    """RC-B S4 (item 11b): the lists of accepted guardrail files lie in the person's home (`~/.copilot-harness/integrity`). A list the agent can rewrite accepts anything: the folder is guarded as a guardrail path is."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import os
+        from pathlib import Path
+
+        self.home = Path(os.environ["HOME"]) / ".copilot-harness"
+        self.lists_dir = Path(os.environ["HARNESS_INTEGRITY_DIR"])
+        self.env["HOME"] = os.environ["HOME"]
+        self.target = str(self.lists_dir / "0123456789abcdef.json")
+        self.in_home = str(self.home / "integrity" / "0123456789abcdef.json")
+
+    def tool(self, name: str, path: str) -> Dict[str, Any]:
+        from support import pre_tool
+        from taskcase import SESSION
+
+        data = pre_tool(SESSION, name, {"filePath": path, "content": "{}"})
+        data["cwd"] = str(self.root)
+        return self.hook(data)
+
+    def test_the_write_tools_are_refused_for_the_folder_and_for_the_folder_the_environment_names(self) -> None:
+        for path in (self.target, self.in_home, "~/.copilot-harness/integrity/x.json", "$HOME/.copilot-harness/integrity/x.json", str(self.home), str(self.home / "other.json"), self.target.upper().replace("0123456789ABCDEF.JSON", "x.json")):
+            for tool in ("create_file", "replace_string_in_file", "Write", "Edit"):
+                out = self.tool(tool, path)
+                self.assertEqual(out.get("permissionDecision"), "deny", (tool, path))
+                self.assertIn("guardrail", out["permissionDecisionReason"], (tool, path))
+
+    def test_reads_of_the_folder_are_not_stopped(self) -> None:
+        self.runs(f"cat {self.target}")
+        self.runs("cat ~/.copilot-harness/integrity/x.json")
+        self.runs(f"ls {self.lists_dir}")
+        from support import pre_tool
+        from taskcase import SESSION
+
+        data = pre_tool(SESSION, "read_file", {"filePath": self.target})
+        data["cwd"] = str(self.root)
+        self.assertEqual(self.hook(data), {})
+
+    def test_the_terminal_writes_are_refused_however_the_folder_is_spelled(self) -> None:
+        for command in (f"echo '{{}}' > {self.target}", "echo '{}' > ~/.copilot-harness/integrity/x.json", "echo '{}' >> $HOME/.copilot-harness/integrity/x.json", f"cp x.json {self.in_home}",
+                        f"rm {self.target}", "rm -rf ~/.copilot-harness", f"mv x {self.lists_dir}/", f"tee {self.target} < x.json", f"sed -i 's/a/b/' {self.target}", f"touch {self.target}",
+                        f"cd {self.lists_dir} && echo x > a.json", "cd ~/.copilot-harness/integrity && cp /tmp/x.json y.json",
+                        f"python3 -c \"open('{self.target}','w').write('{{}}')\"",
+                        f"Set-Content -Path {self.target} -Value x", f"Remove-Item {self.in_home}", f"bash -c 'echo x > {self.target}'"):
+            out = self.term(command)
+            self.assertEqual(out.get("permissionDecision"), "deny", command)
+
+    def test_a_script_that_writes_the_folder_is_refused(self) -> None:
+        for name, text in {
+            "forge.py": f"import json\nopen({self.target!r}, 'w').write(json.dumps({{}}))\n",
+            "forge3.py": "import os\nfrom pathlib import Path\nPath(os.environ['HARNESS_INTEGRITY_DIR'], 'x.json').write_text('{}')\n",
+            "forge.sh": "echo '{}' > ~/.copilot-harness/integrity/x.json\n",
+        }.items():
+            path = f"{TASK}/DEV/{name}"
+            (self.root / TASK / "DEV").mkdir(parents=True, exist_ok=True)
+            (self.root / path).write_text(text, encoding="utf-8")
+            command = f"bash {path}" if name.endswith(".sh") else f"python3 {path}"
+            out = self.term(command)
+            self.assertEqual(out.get("permissionDecision"), "deny", name)
+
+    def test_the_folder_stays_closed_in_admin_mode_too(self) -> None:
+        import test_admin
+
+        class Admin(test_admin.AdminTestCase):
+            def runTest(inner) -> None:  # noqa: N805
+                inner.switch_on()
+                from support import pre_tool
+
+                for relative in (self.target, self.in_home):
+                    data = pre_tool(inner.session, "create_file", {"filePath": relative, "content": "x"})
+                    data["cwd"] = inner.base
+                    out = inner.hook(data)
+                    self.assertEqual(out.get("permissionDecision"), "deny", relative)
+                    self.assertIn("admin 模式下也不能改", out["permissionDecisionReason"], relative)
+                self.assertEqual(inner.term(f"echo x > {self.target}").get("permissionDecision"), "deny")
+                self.assertEqual(inner.term("echo x > .harness/policies/gate.json").get("permissionDecision"), None)  # a guardrail file of the repository opens up there, as it did
+
+        result = unittest.TestResult()
+        case = Admin()
+        case.run(result)
+        self.assertEqual(([text for _case, text in result.failures], [text for _case, text in result.errors]), ([], []))
+
+    def test_the_words_of_the_folder_are_a_guardrail_and_the_cli_still_writes_the_list(self) -> None:
+        """The harness itself (`doctor --accept`, the board at its start, `admin off`) writes the list: that goes through `integrity.accept`, not through a hook."""
+        import integrity
+
+        done = integrity.accept(self.root)
+        self.assertTrue(done.get("ok", True) is not False)
+        self.assertTrue(integrity.list_path(self.root).is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

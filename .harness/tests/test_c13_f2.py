@@ -157,6 +157,35 @@ class NormalUseTests(ListedCase):
             self.runs(command)
 
 
+class NormalUseOffTests(ListedCase):
+    """The same list of normal work (the person's requirement, 2026-11-09) on a copy where the three sample packs are there and none is on, and no connection is listed: nothing gets a new hold or a new refusal, a script that merely
+    names a program included. A direct call of a program of such a pack is refused (F2b); help and version are free."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        for name in ("sqlserver", "ado", "demotracker"):
+            shutil.copytree(support.REPO / ".harness" / "toolpacks" / name, self.root / ".harness" / "toolpacks" / name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+        (self.root / "knowledge-base/company/tools/packs.json").write_text(json.dumps({"use": []}), encoding="utf-8")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {}}), encoding="utf-8")
+        (self.root / "tools").mkdir(exist_ok=True)
+        (self.root / "tools/ado_report.py").write_text("print('report about ado tickets')\n", encoding="utf-8")
+        (self.root / "run.sh").write_text("echo build; echo sqlcmd\n", encoding="utf-8")
+
+    def test_normal_use_unchanged(self) -> None:
+        x = self.script("select 1;\n", "x.sql")
+        for command in ("sqlcmd -?", "sqlcmd --help", "sqlcmd --version", "which sqlcmd", "command -v sqlcmd", "command -V sqlcmd", "type sqlcmd", "whereis sqlcmd", "man sqlcmd", "where sqlcmd", "where.exe sqlcmd", "echo sqlcmd",
+                        "grep -rn sqlcmd .", "git log -S sqlcmd", "git diff -- sqlcmd.sql", f"cat {x}", f"ls {TASK}", f"echo 'sqlcmd -S x -Q \"DROP TABLE t\"' > {TASK}/notes.md", "ado --help", "ado --version", "az --version", "az login",
+                        "az account show", "az group list", "harness connections find dev", "python3 -m unittest", "ls", "git status", "az rest --method get --url https://dev.azure.com/acme/_apis/projects",
+                        "python3 tools/ado_report.py", "bash run.sh", "npm run ado", "echo 'run ado items later' > notes.md"):
+            self.runs(command)
+
+    def test_a_direct_call_is_refused_with_the_way(self) -> None:
+        for command in ('sqlcmd -S localhost,14332 -Q "SELECT 1"', "ado items", f"cat {self.script()}; sqlcmd -S localhost,14332 -i {self.script()}"):
+            out = self.term(command)
+            self.assertEqual(out.get("permissionDecision"), "deny", command)
+            self.assertIn(HOW, out["permissionDecisionReason"], command)
+
+
 class AdoCase(HarnessTestCase):
     """The Azure DevOps pack with one connection, and the hook; `answer` says what happens to a line: allow, ask (held on a card), refuse (no card, the reason says what to do)."""
 
@@ -1142,6 +1171,22 @@ class BrokenGatePolicyTests(TaskCase):
         self.assertFalse(completed.stderr.strip())  # no traceback
         errors = self.root / ".harness/runtime/logs/errors.jsonl"
         self.assertFalse(errors.exists() and "module:gate" in errors.read_text(encoding="utf-8"), "the gate did not raise: it answered")
+
+    def test_the_sdk_payload_gets_the_same_answer(self) -> None:
+        self.break_it()
+        for name, key in (("copilot-sdk/payloads/PreToolUse.Write.json", "path"), ("copilot-sdk/payloads/PreToolUse.Edit.json", "path")):
+            data = json.loads((support.REPO / ".harness" / "eval" / "fixtures" / "hooks" / name).read_text(encoding="utf-8"))
+            data["tool_input"][key] = f"{self.root}/docs/outside.md"
+            out = self.hook(dict(data, cwd=str(self.root)))
+            self.assertEqual(out.get("permissionDecision"), "deny", name)
+            self.assertIn("gate.json", out["permissionDecisionReason"], name)
+
+    def test_the_doctor_command_says_error(self) -> None:
+        self.break_it()
+        done = self.cli("doctor")
+        self.assertEqual(done.returncode, 1, done.stdout[-500:])
+        errors = [line for line in done.stdout.splitlines() if line.startswith("[ERROR]") and "gate.json" in line and ("built-in" in line or "内置" in line)]
+        self.assertEqual(len(errors), 1, done.stdout[-800:])
 
     def test_a_write_with_no_open_task_has_no_folder_to_be_in(self) -> None:
         self.break_it()

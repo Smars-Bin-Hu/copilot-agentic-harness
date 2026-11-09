@@ -24,6 +24,8 @@ A pop-up can be switched off with "allow for this session". A code a person type
 - The code is bound to the sha256 of the plan (or the command): if the plan changes after the approval, the approval ends.
 - The content is read in the editor (plans and diffs are hard to read in a terminal); the page and the terminal show only the path and the code.
 
+When two held calls or more wait, the board gives one box with a tick for each and one code made from exactly the ticked calls; a script you did not view cannot be ticked, and the board checks it again (1.7.38). Every decision lands in the **Agent actions** tab at its time.
+
 What only a person approves: on the task page, **Approve plan**, **Confirm requirement** and **Approve promote** (each asks for a code; the agent never asks you to run a command for them); and in a terminal, `task recover`, `task review extend`, `task review waive`, `task pause`, `task resume` (putting a task aside; no code to type), `approve-command` (git write commands), `admin on`. The three buttons have a command too (`task approve-plan`, `task confirm-req`, `task approve-promote`), which only a person at a terminal can run.
 
 ### 8.3 Grading by consequence

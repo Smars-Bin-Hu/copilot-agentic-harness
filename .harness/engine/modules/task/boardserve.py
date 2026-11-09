@@ -684,6 +684,10 @@ class Board:
             if str(data.get("step", "act")) == "preview":
                 return outbox.batch_preview(self.root, codes, self.batch_salt)
             before = {str(item.get("code")): item for item in (self.entry(code) for code in codes) if item}
+            for item in before.values():  # as for one call: while the agent is at work on the task (not waiting on a call), the page may be old and the agent may be answering
+                if item.get("task"):
+                    self.idle("approve-action", str(item["task"]))
+                    break
             result = outbox.approve_batch(self.root, codes, str(data.get("code", "")), self.batch_salt, data.get("seen") if isinstance(data.get("seen"), dict) else {}, interactive=True)
         except outbox.BatchRefused as error:
             refusal = CommandError(str(error))

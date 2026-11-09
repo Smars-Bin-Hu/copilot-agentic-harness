@@ -543,6 +543,7 @@ class BatchBoardTests(BatchCase):
     def test_the_board_gives_a_code_and_approves_with_it_and_writes_each_approval_in_the_record_of_the_task(self) -> None:
         self.new(kind="rca")
         plain, scripted = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold(self.script("c.sql"))
+        self.stop()  # the agent is not at work: the board acts on its calls
         board = self.board()
         shown = board.batch({"step": "preview", "codes": [plain, scripted]})
         self.assertRegex(shown["code"], r"^[0-9A-F]{6}$")
@@ -560,6 +561,7 @@ class BatchBoardTests(BatchCase):
     def test_another_board_gives_another_code_and_a_board_that_does_not_serve_approvals_refuses(self) -> None:
         self.new(kind="rca")
         a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        self.stop()
         first, second = self.board(), self.board()
         self.assertNotEqual(first.batch({"step": "preview", "codes": [a, b]})["code"], second.batch({"step": "preview", "codes": [a, b]})["code"])
         with self.assertRaises(CommandError):
@@ -567,6 +569,15 @@ class BatchBoardTests(BatchCase):
         off = super().board()  # `approve-action` is not among its actions
         with self.assertRaises(CommandError):
             off.batch({"step": "preview", "codes": [a, b]})
+
+    def test_while_the_agent_is_at_work_on_the_task_the_board_does_not_approve_as_it_does_not_for_one_call(self) -> None:
+        self.new(kind="rca")
+        a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')  # no Stop: the agent works
+        board = self.board()
+        shown = board.batch({"step": "preview", "codes": [a, b]})  # the code may be asked for
+        with self.assertRaises(CommandError):
+            board.batch({"step": "act", "codes": [a, b], "code": shown["code"], "seen": {}})
+        self.assertEqual([approvals.find(self.root, code, 10, file=approvals.ACTIONS)["state"] for code in (a, b)], ["pending", "pending"])
 
     def test_the_endpoint_is_for_the_paired_browser_only(self) -> None:
         text = Path(boardserve.__file__).read_text(encoding="utf-8")
@@ -683,6 +694,7 @@ class RecordOfDecisionsTests(BatchBoardTests):
         plain, scripted = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold(command)
         for code, text in ((plain, 'sqlcmd -S s -Q "SELECT 1"'), (scripted, command)):
             outbox.write_draft(self.root, TASK, code, SimpleNamespace(system="acmedw-dev", env="dev", verb="write", target="", named=True), text, SESSION, 10)
+        self.stop()
         board = self.board()
         shown = board.batch({"step": "preview", "codes": [plain, scripted]})
         board.batch({"step": "act", "codes": [plain, scripted], "code": shown["code"], "seen": {scripted: self.seen_of(command)}})
@@ -697,6 +709,7 @@ class RecordOfDecisionsTests(BatchBoardTests):
     def test_an_approved_call_that_ran_is_told_it_ran_and_one_that_did_not_is_told_so(self) -> None:
         self.new(kind="rca")
         ran, other = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        self.stop()
         board = self.board()
         board.batch({"step": "act", "codes": [ran, other], "code": board.batch({"step": "preview", "codes": [ran, other]})["code"], "seen": {}})
         log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{SESSION}.jsonl"
@@ -739,6 +752,7 @@ class RecordOfDecisionsTests(BatchBoardTests):
     def test_the_list_of_the_tab_has_them_in_their_place_by_time_and_the_page_draws_them(self) -> None:
         self.new(kind="rca")
         a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')
+        self.stop()
         board = self.board()
         board.batch({"step": "act", "codes": [a, b], "code": board.batch({"step": "preview", "codes": [a, b]})["code"], "seen": {}})
         entries = tasktrace.flat(self.root, self.data())["entries"]

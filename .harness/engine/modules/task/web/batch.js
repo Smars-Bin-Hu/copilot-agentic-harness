@@ -73,7 +73,7 @@ const BATCH = (function () {
       return h("li", {class: "bt-row" + (blocked ? " blocked" : ""), "data-code": item.code},
         tick,
         h("span", {class: "bt-sys"}, h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
-        h("span", {class: "bt-what tag"}, item.verb === "unknown" ? t("desk.outbox.verb.unknown") : item.verb),
+        h("span", {class: "bt-what tag"}, (() => { const key = "desk.outbox.verb." + item.verb; const word = t(key); return word === key ? item.verb : word; })()),
         h("span", {class: "bt-sum", title: flat(item.command).slice(0, 400)}, summary),
         item.stmts ? h("span", {class: "bt-stm sub", title: t("desk.stmt.count.ask", {n: item.stmts.counts.ask || 0})}, t("desk.stmt.title", {n: item.stmts.total})) : null,
         blocked ? h("span", {class: "bt-why", title: t("desk.batch.view_first.tip")}, t("desk.batch.view_first")) : null,

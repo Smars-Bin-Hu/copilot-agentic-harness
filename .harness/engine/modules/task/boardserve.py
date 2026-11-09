@@ -90,6 +90,7 @@ EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal i
 REOPEN_EVERY = 3.0  # seconds
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 SETTINGS = ("review set", "task allow", "task link", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
+WAKING = ("confirm-req", "approve-plan", "approve-promote")  # the decisions of the person that wake the agent by themselves (1.7.38, C13 RB-2)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
 DESK_REFRESH = 3  # seconds between two reads of a task page (10 until 1.7.26: a state that came from a hook, such as "waits for your answer", showed up about 7 seconds late)
@@ -653,7 +654,7 @@ class Board:
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None) -> Dict[str, Any]:
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False) -> Dict[str, Any]:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`;
         `seen` for `approve-action` only: what the person saw when they pressed View (`outbox.approve_action`)."""
         if action in ALL_AT_ONCE:
@@ -666,8 +667,10 @@ class Board:
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = False if action in SETTINGS else self.idle(action, task)
-        if action == "accept":  # the person accepts the delivered work (1.7.38): the board closes the task; nothing is sent to the chat
-            result = accept.accept(self.root, task)
+        if action == "accept" and step == "preview":  # the calls of the task that still wait for the person: the page lists them and asks before it closes the task (1.7.38, C13 FB-4)
+            return {"held": accept.held(self.root, task)}
+        if action == "accept":  # the person accepts the delivered work (1.7.38): the board closes the task; nothing is sent to the chat. `void`: the person said yes to the calls that still wait: they are void now
+            result = accept.accept(self.root, task, void=bool(void))
             noted_after = result.get("task") or task
             print(say("serve.did", action="accept", task=task_ops.name_of(noted_after)), flush=True)
             return result
@@ -742,6 +745,8 @@ class Board:
             refusal.changed = list(getattr(error, "files", []) or [])  # a file of the call changed after View: the page asks to press View again
             raise refusal from None
         noted(self.root, result.get("task") or task, action)
+        if step == "act" and action in WAKING:  # 1.7.38, C13 RB-2: a decision that moves the task on wakes the agent by itself, as an approved call does: no second click on "tell the agent"
+            result["agent"] = self.wake_go(result.get("task") or task)
         if stood and stood.get("task"):
             place = outbox.agent_place(stood)
             self.after_decision(str(stood["task"]), [(str(stood["code"]), place)], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
@@ -756,6 +761,19 @@ class Board:
             return approvals.find(self.root, str(code or ""), approvals.minutes(config.policy_or_empty(self.root, "gate")), file=approvals.ACTIONS)
         except Exception:  # noqa: BLE001
             return None
+
+    def wake_go(self, task: str) -> str:
+        """The person confirmed the requirement, approved the plan or approved the promote (1.7.38, C13 RB-2): the task now waits with a `go-*` mark, "tell the agent to go on". The board sends that message itself,
+        the one the button would send (`kind` go: the fixed text, the notes of the person, the model of the task). `message` when it went; "" when it could not (no chat, VS Code closed, the chat is busy, nothing to send):
+        the mark stays and the card still offers the button, so nothing is lost. Never raises."""
+        try:
+            found = tasks.read(self.root, task) or {}
+            if tasklife.waiting(self.root, task, found)["why"] not in chatsend.GO:
+                return ""
+            self.send({"task": task, "kind": "go", "lang": ""})
+            return "message"
+        except Exception:  # noqa: BLE001 - the decision is made; the button is the way back
+            return ""
 
     def after_decision(self, task: str, decided: List[Tuple[str, str]], text: str) -> None:
         """The person approved calls or opened their connection. `decided`: each code and where the agent stood (`outbox.agent_place`). One that waits in `harness wait --approval` hears it by itself
@@ -1880,7 +1898,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"), bool(data.get("void")))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

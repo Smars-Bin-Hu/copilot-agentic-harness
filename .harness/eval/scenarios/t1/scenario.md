@@ -18,15 +18,17 @@ This is a hook test. Do these in order:
 After the agent stops, open `PLAN.md` in the editor and look at it, press **Approve plan** on the task page of the board, and type the code. Then answer in **the same conversation**:
 
 ```text
-The plan is approved. Write hello.txt under DEV/, run task diff, then task close, and tell me the path of the report.
+The plan is approved. Write hello.txt under DEV/, run task diff, then deliver the task (harness task deliver, with a one-line summary) and stop.
 ```
+
+The task page now shows **to accept**. Press **Accept and close**: the board closes the task and writes the report. The agent never closes a task itself.
 
 ## Manual checks
 
 - Step 2 was refused, the agent told you the reason as written, and the reason names `PLAN.md` and the **Approve plan** button of the task page.
 - The agent gave the link to `PLAN.md` and did not paste the whole plan into the conversation.
 - The approval screen in the terminal shows only the file path and the code; it does not print the plan.
-- The report has the line "the person approved the plan".
+- After you pressed **Accept and close**, the report `.workspace/reports/tasks/eval-t1/report.md` has the line "the person approved the plan".
 - `SNAPSHOT/` has a `plan-…` folder that holds `PLAN.md` as it was approved.
 
 ## After the run

@@ -1215,6 +1215,7 @@
   const factSpan = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
   const factList = (facts) => Object.entries(facts || {}).map(([name, value]) => factSpan(known("desk.outbox.fact." + name, name), value));
   const manyWrites = (item) => Array.isArray(item.parts) && item.parts.length > 1;  // a held line of several writes: each has its own words, facts and text (1.7.38)
+  const ZONE_WORDS = {ask: ["desk.outbox.zone.ask", "desk.outbox.zone.ask.tip"], write: ["desk.outbox.zone.write", "desk.outbox.zone.write.tip"], broken: ["desk.outbox.zone.broken", "desk.outbox.zone.broken.tip"]};  // why a held call waits: word and hover
   function callFacts(item) {
     const verb = known("desk.outbox.verb." + item.verb, item.verb);
     const many = manyWrites(item);
@@ -1222,7 +1223,7 @@
       factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
       ...(many ? [] : factList(item.facts)),
       many ? null : factSpan(t("desk.outbox.target"), item.target),
-      item.zone === "ask" || item.zone === "write" || item.zone === "broken" ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.zone")), h("span", {class: "unnamed", title: t("desk.outbox.zone." + item.zone + ".tip", {what: item.zone_note || "-"})}, t("desk.outbox.zone." + item.zone), " ", h("span", {class: "why"}, "?"))) : null,  // 1.7.38: why a call of a type with lists waits
+      ZONE_WORDS[item.zone] ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.zone")), h("span", {class: "unnamed", title: t(ZONE_WORDS[item.zone][1], {what: item.zone_note || "-"})}, t(ZONE_WORDS[item.zone][0]), " ", h("span", {class: "why"}, "?"))) : null,  // 1.7.38: why a call of a type with lists waits
       item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t(item.layout.script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: item.layout.script.lines}))) : null);
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).

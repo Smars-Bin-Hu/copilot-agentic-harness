@@ -50,7 +50,7 @@ When an agent runs these, the gate refuses; a pipe or a script does not work eit
 | `task review start` / `status` | Starts a check; shows the counts |
 | `task promote [--dry-run]` | Writes back to a new branch, without committing |
 | `task set-branch` | Changes the name of the feature branch |
-| `task close` | Lets go of the task and writes the report (the agent runs it for a look or a chore only) |
+| `task close` | Lets go of the task and writes the report (yours: in your terminal, or **Close** and **Accept and close** on the board; the agent is refused and delivers instead) |
 | `task deliver --summary "<text>"` | The agent hands in the work of a test, RCA or design task and stops; the task shows *to accept* and you accept it on the board |
 
 ### 13.4 The knowledge base

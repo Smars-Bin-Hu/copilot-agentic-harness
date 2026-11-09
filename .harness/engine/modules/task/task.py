@@ -263,8 +263,8 @@ def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
 
 
 def finish_text(task: str, data: Dict[str, Any]) -> str:
-    """How this kind of task ends, in one rule for the agent (1.7.38, C12 Q14): closing is the person's acceptance, and the agent never asks "close the task?". A look closes itself; a development task is accepted by its
-    promote; any other task is delivered with a short summary and accepted on the board. The rule is in the skill `harness-my-task`; this is its one sentence for the prompt."""
+    """How this kind of task ends, in one rule for the agent (1.7.38, C12 Q14; C13): closing is the person's acceptance, and the agent never closes a task or asks "close the task?". A development task is accepted by its
+    promote; any other task, a look included, is delivered with a short summary and accepted on the board. The rule is in the skill `harness-my-task`; this is its one sentence for the prompt."""
     kind = data.get("kind")
     if kind == "qa":
         return say("task.finish.qa", name=name_of(task))
@@ -340,9 +340,10 @@ def todo_left(root: Path, task: str) -> List[str]:
     return [step["text"] for step in autorun.steps_of(root, task) if not step["done"]]
 
 
-def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "", check_todo: bool = True, todo_note: str = "") -> Dict[str, Any]:
+def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "", check_todo: bool = True, todo_note: str = "", void_note: str = "") -> Dict[str, Any]:
     """Close the task. Steps of TODO.md not ticked stop it (`check_todo`) unless `todo_open` says why they stay: tick what is done, or say why not.
-    The person closing on the board page decides for themselves: the page shows how many are left, and passes `check_todo=False`; `todo_note` keeps their words in TODO.md."""
+    The person closing on the board page decides for themselves: the page shows how many are left, and passes `check_todo=False`; `todo_note` keeps their words in TODO.md.
+    A call of the task that still waits for the person is void when it closes (1.7.38, C13 FB-4): it goes to the history with `void_note` (default: the task was closed) and can never be approved or run."""
     task = resolve(root, raw_task)
     left = todo_left(root, task)
     if check_todo and left and not todo_open.strip():
@@ -369,8 +370,12 @@ def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "",
     hint = tasklife.links_hint(root, tasks.read(root, task) or {})
     from core import outbox  # a held write shows on the page only while the task is open (1.7.20: a Q&A chore on a ticket may leave one)
 
-    held = len(outbox.pending_for(root, task))
+    voided = outbox.void_for_task(root, task, void_note or say("task.close.void"))  # 1.7.38, C13 FB-4: they are void now, not left to be approved later
+    held = len(voided)
     if held:
+        with locked(root, task) as again:
+            note(again, "void", f"{held}: {void_note or say('task.close.void')}")
+        result["voided"] = held
         hint = say("task.close.held", count=held, name=name_of(task)) + hint
     if hint:
         result["next"] = hint

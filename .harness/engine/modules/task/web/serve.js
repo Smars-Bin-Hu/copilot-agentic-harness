@@ -216,6 +216,32 @@ const SERVE = (function () {
     });
   }
 
+  // Accept and close (1.7.38, C13 FB-4): when calls of the task still wait for the person, the page lists them first ("N calls still wait for you; closing voids them") and closes on the second yes.
+  // The server asks for that yes too: an acceptance that does not carry it is refused while a call waits.
+  function accept(button, row, body) {
+    const work = () => { button.textContent = t("board.serve.working"); };
+    const back = () => { button.textContent = button.dataset.label; };
+    const close = (void_) => post("/api/act", {...body, step: "act", ...(void_ ? {void: true} : {})});
+    work();
+    post("/api/act", {...body, step: "preview"}).then((data) => {
+      const calls = (data.result && data.result.held) || [];
+      if (!calls.length) return close(false).then(done);
+      back();
+      const go = h("button", {class: "act hot", type: "button"}, t("board.accept.held.go"));
+      const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+      const said = h("div", {class: "bad"});
+      const view = dialog([h("h2", null, t(calls.length === 1 ? "board.accept.held.title.one" : "board.accept.held.title", {n: calls.length})), h("p", null, t("board.accept.held.warn")),
+        h("ul", {class: "held-list"}, calls.map((call) => h("li", null, h("b", null, call.system + (call.env && call.env !== "none" ? " " + call.env.toUpperCase() : "")), " ", h("span", {class: "held-title"}, call.title)))),
+        h("div", {class: "row"}, go, no), said]);
+      no.addEventListener("click", view.close);
+      go.addEventListener("click", () => {
+        go.disabled = true;
+        work();
+        close(true).then(() => { view.close(); done(); }, (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; back(); });
+      });
+    }).catch((error) => { back(); failed(error); });
+  }
+
   function act(button, row, item, withReq) {
     if (item.action === "send") return CHAT.panel(row, item.action);  // chat.js: the panel that shows the message, then sends it
     if (item.action === "answer" || item.action === "steer") return speak(row);
@@ -228,6 +254,7 @@ const SERVE = (function () {
     const joint = item.action === "approve-plan" && Boolean(row.req_unconfirmed);
     withReq = withReq || joint;
     const body = {action: item.action, task: row.name, ...(withReq ? {with_req: true} : {})};
+    if (item.action === "accept") return accept(button, row, body);
     if (free(item.action)) {
       button.textContent = t("board.serve.working");
       post("/api/act", {...body, step: "act"}).then(done, (error) => { button.textContent = button.dataset.label; failed(error); });

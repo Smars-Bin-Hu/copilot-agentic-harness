@@ -3,19 +3,24 @@ One class or more for each item; the name of the item is in the class doc."""
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import support  # noqa: F401 - the engine on sys.path
 from support import GIT, REPO, HarnessTestCase, make_repo, pre_tool, run_git, use_packs
 
 from core import approvals, company, config, connections, messages, outbox, pinfiles, readyitems, toolpacks
 from modules.gate import external
-from modules.task import cmdview, setupjob, taskdesk
-from taskcase import NAME, TASK
+from modules.task import accept, boardserve, cmdview, setupjob, taskdesk, task as task_ops
+from modules.task.common import CommandError
+from taskcase import NAME, SESSION, TASK
+from test_accept import AcceptCase
+from test_approval_wake import FakeLink as WakeLink
 from test_gate_lists import SERVER, ListedCase
 
 import doctor
@@ -317,6 +322,220 @@ class SendToFolderTests(unittest.TestCase):
             self.assertIn(key, text)
             for language in ("en", "zh"):
                 self.assertTrue(messages.table(language).get(key), (key, language))
+
+
+class TheAgentClosesNothingTests(AcceptCase):
+    """Closing rule (C13): a look and a ticket chore are delivered like any other task, the person accepts and closes them, follow-ups stay in the same task, and the gate refuses `task close` from the agent."""
+
+    def test_a_look_is_delivered_waits_to_accept_and_the_person_closes_it(self) -> None:
+        self.new(kind="qa")
+        self.run_cli("task", "deliver", "--task", NAME, "--summary", "DEV returns 3 rows.\nLook at TASK.md, Answer.")
+        self.stop()
+        self.assertEqual(self.data()["waiting"]["why"], "accept")
+        self.assertEqual(self.data()["status"], "open")
+        done = self.board().act("accept", NAME, "act")
+        self.assertEqual((done["status"], self.data()["status"]), ("closed", "closed"))
+
+    def test_a_follow_up_stays_in_the_same_task_and_is_delivered_again(self) -> None:
+        self.new(kind="qa")
+        self.run_cli("task", "deliver", "--task", NAME, "--summary", "first answer")
+        self.stop()
+        self.prompt("and what about IST?")
+        data = self.data()
+        self.assertEqual(data["status"], "open")
+        self.assertNotIn("deliver", data, "the person spoke: what they were asked to accept is not delivered any more")
+        self.run_cli("task", "deliver", "--task", NAME, "--summary", "second answer")
+        self.stop()
+        self.assertEqual(self.data()["deliver"]["summary"], "second answer")
+        self.assertEqual(self.data()["waiting"]["why"], "accept")
+
+    def test_after_it_is_closed_a_new_question_is_a_new_task(self) -> None:
+        self.new(kind="qa")
+        self.run_cli("task", "deliver", "--task", NAME, "--summary", "answer")
+        self.stop()
+        self.board().act("accept", NAME, "act")
+        made = self.new(name="job2", kind="qa")
+        self.assertEqual(made["task"].rsplit("/", 1)[-1], "job2")
+        self.assertEqual(self.data()["status"], "closed")
+
+    def test_the_gate_refuses_task_close_from_the_agent_with_one_line_that_says_deliver(self) -> None:
+        self.new(kind="qa")
+        for line in ("harness task close", "harness task close --task job1 --reason done", "python3 .harness/engine/cli.py task close", "harness.cmd task close"):
+            out = self.hook(pre_tool(SESSION, "run_in_terminal", {"command": line, "explanation": "t", "isBackground": False}))
+            self.assertEqual(out.get("permissionDecision"), "deny", line)
+            self.assertIn("task deliver", out["permissionDecisionReason"], line)
+        self.assertEqual(self.data()["status"], "open")
+        for line in ("harness task deliver --summary x", "harness task status", "echo harness task closed", "harness task close-up"):
+            out = self.hook(pre_tool(SESSION, "run_in_terminal", {"command": line, "explanation": "t", "isBackground": False}))
+            self.assertNotIn("task deliver", out.get("permissionDecisionReason", ""), line)
+
+    def test_the_persons_own_close_still_works_from_the_terminal_and_the_board(self) -> None:
+        self.new(kind="qa")
+        self.run_cli("task", "close")  # the CLI is the person's terminal; the gate is where the agent is stopped
+        self.assertEqual(self.data()["status"], "closed")
+        self.new(name="job2", kind="qa")
+        self.stop()
+        closed = self.board().close("job2")  # the board's own Close button, which the agent cannot press
+        self.assertEqual(closed["status"], "closed")
+
+    def test_every_text_that_tells_the_agent_to_end_a_task_says_deliver(self) -> None:
+        for key in ("task.next.qa", "task.finish.qa", "board.close.words"):
+            for language in ("en", "zh"):
+                text = messages.table(language)[key]
+                self.assertIn("deliver", text, (key, language))
+                self.assertNotIn("then run `{command} task close", text, (key, language))
+        self.assertNotIn("accept.qa", messages.table("en"))
+
+
+class AcceptWithHeldCallsTests(AcceptCase):
+    """FB-4: Accept and close with calls that still wait: the board lists them first and closes on the second yes; the calls are void, in the history, and can never be approved or run."""
+
+    COMMAND = 'sqlcmd -S acmedw -Q "UPDATE t SET a = 1 WHERE id = 3"'
+
+    def hold(self, command: str = COMMAND, system: str = "acmedw-dev") -> str:
+        action = SimpleNamespace(system=system, env="dev", verb="write", target="", named=True, zone="", note="")
+        return approvals.request(self.root, "vscode", SESSION, command, 10, file=approvals.ACTIONS, extra=outbox.entry_extra(action, TASK))
+
+    def delivered(self, *commands: str) -> list:
+        """A task whose agent held calls, then delivered and stopped: the calls it never waited on are left behind, and the task shows to accept (core.outbox.agent_left)."""
+        self.new(kind="rca")
+        codes = [self.hold(command) for command in commands]
+        self.run_cli("task", "deliver", "--task", NAME, "--summary", "done")
+        self.stop()
+        return codes
+
+    def pending(self) -> list:
+        return approvals.pending(self.root, 10, file=approvals.ACTIONS)
+
+    def test_the_preview_lists_what_waits_and_nothing_is_closed(self) -> None:
+        code, = self.delivered(self.COMMAND)
+        found = self.board().act("accept", NAME, "preview")
+        self.assertEqual([(item["code"], item["system"], item["env"]) for item in found["held"]], [(code, "acmedw-dev", "dev")])
+        self.assertIn("UPDATE t SET a = 1", found["held"][0]["title"])
+        self.assertEqual(self.data()["status"], "open")
+        self.assertEqual(len(self.pending()), 1)
+
+    def test_with_no_call_waiting_the_preview_is_empty_and_the_acceptance_closes(self) -> None:
+        self.delivered()
+        self.assertEqual(self.board().act("accept", NAME, "preview"), {"held": []})
+        self.assertEqual(self.board().act("accept", NAME, "act")["status"], "closed")
+
+    def test_an_acceptance_that_was_not_asked_is_refused_while_a_call_waits(self) -> None:
+        self.delivered(self.COMMAND)
+        with self.assertRaises(CommandError) as caught:
+            self.board().act("accept", NAME, "act")
+        self.assertIn("1", str(caught.exception))
+        self.assertEqual(self.data()["status"], "open")
+        self.assertEqual(len(self.pending()), 1, "nothing was voided")
+
+    def test_the_second_yes_closes_voids_the_calls_and_writes_the_history(self) -> None:
+        first, second = self.delivered(self.COMMAND, 'sqlcmd -S acmedw -Q "DELETE FROM t WHERE id = 9"')
+        done = self.board().act("accept", NAME, "act", void=True)
+        self.assertEqual((done["status"], done["voided"]), ("closed", 2))
+        self.assertEqual(self.pending(), [])
+        events = [event for event in self.data()["events"] if event["what"] == "void"]
+        self.assertEqual(len(events), 1)
+        self.assertIn(messages.text("accept.void"), events[0]["detail"])
+        for code in (first, second):
+            stub = approvals.find(self.root, code, 10, file=approvals.ACTIONS)
+            self.assertEqual((stub["state"], stub["reason"]), ("dismissed", "closed"))
+            self.assertEqual(stub["note"], messages.text("accept.void"))
+
+    def test_a_void_call_can_never_be_approved_or_run(self) -> None:
+        code, = self.delivered(self.COMMAND)
+        self.board().act("accept", NAME, "act", void=True)
+        self.assertIsNone(approvals.approve(self.root, code, 10, file=approvals.ACTIONS))
+        with self.assertRaises(ValueError):
+            outbox.approve_action(self.root, reader=lambda _asked: code, interactive=True, out=io.StringIO())
+        self.assertIsNone(approvals.consume(self.root, SESSION, self.COMMAND, 10, file=approvals.ACTIONS))
+        found = outbox.decided(approvals.find(self.root, code, 10, file=approvals.ACTIONS))
+        self.assertEqual((found["state"], found["reason"]), ("dismissed", "closed"))
+        self.assertIn(messages.text("wait.approval.follow.closed"), found["next"])
+        self.assertNotIn(messages.text("accept.void"), found["next"].replace(messages.text("outbox.reason.closed"), ""), "the history note is not shown as words of the person")
+
+    def test_every_other_way_to_close_voids_the_calls_too(self) -> None:
+        self.new(kind="rca")
+        code = self.hold()
+        self.stop()
+        closed = self.board().close(NAME)
+        self.assertEqual(closed["voided"], 1)
+        self.assertEqual(approvals.find(self.root, code, 10, file=approvals.ACTIONS)["reason"], "closed")
+        self.assertIn(messages.text("task.close.void"), approvals.find(self.root, code, 10, file=approvals.ACTIONS)["note"])
+
+    def test_the_window_is_in_the_page_and_its_words_are_in_both_languages(self) -> None:
+        text = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "serve.js").read_text(encoding="utf-8")
+        self.assertIn("function accept(button, row, body)", text)
+        for key in ("board.accept.held.title", "board.accept.held.title.one", "board.accept.held.warn", "board.accept.held.go"):
+            self.assertIn(key, text)
+            for language in ("en", "zh"):
+                self.assertTrue(messages.table(language).get(key), (key, language))
+
+
+class ApprovalsWakeTheAgentTests(AcceptCase):
+    """RB-2: confirming the requirement, approving the plan and approving the promote on the board wake the agent by themselves (the same message the button sent); when it cannot go, the mark stays and the button is still there."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.new()
+        self.link = WakeLink()
+        self.board = boardserve.Board(self.root, False, 8795, ["confirm-req", "approve-plan", "approve-promote", "accept"])
+        self.board.link = self.link
+
+    def stopped(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["waiting"] = {"since": "2026-10-20T00:00:00+00:00", "why": "stopped"}
+
+    def waiting_why(self) -> str:
+        return str((self.data().get("waiting") or {}).get("why") or "")
+
+    def test_confirming_the_requirement_wakes_the_agent(self) -> None:
+        self.write_req()
+        self.stopped()
+        code = hashlib.sha256((self.task / "REQ.md").read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:8]
+        done = self.board.act("confirm-req", NAME, "act", code=code)
+        self.assertEqual(done["agent"], "message")
+        self.assertEqual([item["text"] for item in self.link.sent], ["Requirement confirmed (REQ.md). Go on."])
+        self.assertEqual(self.waiting_why(), "", "the mark of the wait is gone with the message")
+
+    def test_approving_the_plan_wakes_the_agent_and_records_what_was_sent(self) -> None:
+        self.write_plan()
+        self.write_req()
+        self.stopped()
+        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(with_req=True), with_req=True)
+        self.assertEqual(done["agent"], "message")
+        self.assertEqual([item["text"] for item in self.link.sent], ["Plan approved (PLAN.md). Go on with TODO.md."])
+        self.assertEqual(self.waiting_why(), "")
+        sent = (self.task / ".task" / "sent.jsonl").read_text(encoding="utf-8")
+        self.assertIn("Plan approved", sent)
+
+    def test_approving_the_promote_wakes_the_agent(self) -> None:
+        self.ready()
+        self.fetch("repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
+        self.run_cli("task", "promote", "--dry-run")
+        self.stopped()
+        done = self.board.act("approve-promote", NAME, "act", code=self.data()["promote"]["plan_sha256"][:8])
+        self.assertEqual(done["agent"], "message")
+        self.assertIn("Promote (write-back repo) approved", self.link.sent[-1]["text"])
+
+    def test_when_the_chat_cannot_take_it_the_mark_stays_and_the_decision_stands(self) -> None:
+        self.write_plan()
+        self.write_req()
+        self.stopped()
+        self.link.refuse = True
+        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(with_req=True), with_req=True)
+        self.assertEqual(done["agent"], "")
+        self.assertEqual(self.link.sent, [])
+        self.assertEqual(self.waiting_why(), "go-plan", "the card still says: tell the agent to go on")
+        self.assertTrue(self.data()["plan"]["approved_sha256"])
+
+    def test_a_preview_and_a_delivered_task_wake_nobody(self) -> None:
+        self.write_plan()
+        self.write_req()
+        self.stopped()
+        self.board.act("approve-plan", NAME, "preview", with_req=True)
+        self.assertEqual(self.link.sent, [])
+        self.assertEqual(self.waiting_why(), "stopped", "a preview decides nothing")
 
 
 if __name__ == "__main__":

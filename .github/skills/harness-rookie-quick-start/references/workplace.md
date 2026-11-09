@@ -30,7 +30,7 @@ Open the board with the user and show these five things, one at a time:
 3. **The buttons.** *Confirm requirement*, *approve plan*, *approve write-back*, *pause*, *resume*, *archive*. An approval asks for a code that the page shows; you type it, which is how it stays your decision.
 4. **Time and usage.** A link on the task's page: where the time and the usage of this task went.
 
-5. **VS Code, when it is open.** A pill at the top says the board is linked to the chats. Then the button **send to agent** appears after an approval (it sends the "go on" message for you, so there is nothing to paste), a working agent has **steer** and **stop**, and a command Copilot asks to run can be allowed from the board. Only you can press these. **New task** makes a chat that opens a task. Just mention them now; the practice task shows send.
+5. **VS Code, when it is open.** A pill at the top says the board is linked to the chats. Then an approval of the requirement, the plan or the write-back wakes the agent by itself; the button **send to agent** appears only when the chat could not take the message (it sends the "go on" message for you, so there is nothing to paste), a working agent has **steer** and **stop**, and a command Copilot asks to run can be allowed from the board. Only you can press these. **New task** makes a chat that opens a task. Just mention them now; the practice task shows send.
 
 The agent gives you the address of the task's page in its messages. Click it, or open the board and click the task.
 

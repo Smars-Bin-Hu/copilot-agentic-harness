@@ -100,7 +100,7 @@ def mark(root: Path, relative: Optional[str], state: str, reason: str = "") -> N
     except OSError:
         return
     key = f"outbox.state.{state}"
-    words = say(key, at=utc_now()) + (say("outbox.state.reason", reason=say(f"outbox.reason.{reason}")) if reason in REASONS else "")
+    words = say(key, at=utc_now()) + (say("outbox.state.reason", reason=say(f"outbox.reason.{reason}")) if reason in REASONS or reason == CLOSED else "")
     line = f"- {say('outbox.draft.state')}: {words} {STATE_MARK}"
     path.write_text(_STATE_LINE.sub(lambda _match: line, text, count=1), encoding="utf-8")
 
@@ -299,6 +299,25 @@ def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, int
     return {"approved": True, "command": done["command"], "system": done.get("system", ""), "valid_minutes": minutes, "draft": draft_of(done), "next": say("gate.action.next")}
 
 
+CLOSED = "closed"  # (1.7.38, C13 FB-4) not a reason the person gives: the task was closed while the call waited, and the call is void
+
+
+def void_for_task(root: Path, task: str, note: str = "") -> List[Dict[str, Any]]:
+    """The task is closed: every call of it that still waits for the person is void. Each goes to the state `dismissed` with the reason `closed` (the same stub a dismissal leaves, so `approve` finds nothing pending
+    and the agent that waits on the code is told it is void); the draft says dismissed. Never approved or run later. The entries voided, as they were; never raises (a task is closed whatever happens here)."""
+    out: List[Dict[str, Any]] = []
+    try:
+        minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+        for item in pending_for(root, task):
+            done = approvals.dismiss(root, str(item.get("code")), minutes, file=approvals.ACTIONS, reason=CLOSED, note=" ".join(str(note or "").split())[:NOTE_CHARS])
+            if done is not None:
+                mark(root, draft_of(done), "dismissed", reason=CLOSED)
+                out.append(done)
+    except Exception:  # noqa: BLE001 - see above
+        pass
+    return out
+
+
 REASONS = ("command", "connection", "later", "other_way")  # why the person did not approve (1.7.38): the command is wrong, a wrong connection or environment, not now, do it another way
 LINE_REASONS = ("command", "other_way")  # these two may carry a line of the person's own words
 NOTE_CHARS = 500
@@ -327,7 +346,7 @@ def dismiss_action(root: Path, code: str, interactive: Optional[bool] = None, re
 
 def reason_words(reason: str) -> str:
     """The kind of reason in words (no sentence stop: the text that holds it adds its own)."""
-    return say(f"outbox.reason.{reason}") if reason in REASONS else say("outbox.reason.none")
+    return say(f"outbox.reason.{reason}") if reason in REASONS or reason == CLOSED else say("outbox.reason.none")
 
 
 def note_text(note: str) -> str:
@@ -352,12 +371,12 @@ def decided(entry: Dict[str, Any], minutes: int = approvals.DEFAULT_MINUTES) -> 
         return {"approved": False, "state": "opened", "opened": True, "names": names, "next": say("wait.approval.opened", names=shown)}
     reason, note = str(entry.get("reason") or ""), str(entry.get("note") or "")
     why = reason_text(reason, note)
-    return {"approved": False, "state": "dismissed", "dismissed": True, "reason": reason or "none", "note": note, "why": why, "next": say("wait.approval.not_approved", why=reason_words(reason), note=note_text(note), follow=follow_text(reason)), "exit_code": 1}
+    return {"approved": False, "state": "dismissed", "dismissed": True, "reason": reason or "none", "note": note, "why": why, "next": say("wait.approval.not_approved", why=reason_words(reason), note="" if reason == CLOSED else note_text(note), follow=follow_text(reason)), "exit_code": 1}  # a call void because the task closed has a note for the history, not words of the person
 
 
 def follow_text(reason: str) -> str:
     """What the agent is to do after a call was not approved, by the reason (the rules for the agent: one source, here)."""
-    text = say(f"wait.approval.follow.{reason}") if reason in REASONS else say("wait.approval.follow.none")
+    text = say(f"wait.approval.follow.{reason}") if reason in REASONS or reason == CLOSED else say("wait.approval.follow.none")
     return text + messages.gap() + say("connections.ask") if reason == "connection" else text  # 1.7.38, C12 TB-08: the agent asked "which connection?" with PROD or the one just turned down as the default
 
 

@@ -628,9 +628,9 @@ class RequirementFileTests(LifeCase):
         self.assertIn(f"{BASE}/job/REQ.md", self.new()["next"])
         self.assertNotIn("REQ.md", self.new("quick", "qa")["next"])
 
-    def test_a_qa_task_is_closed_once_answered(self) -> None:
-        """A look at a server is a Q&A: the agent answers, writes it down and closes the task itself (1.7.10)."""
-        self.assertIn("task close --task quick", self.new("quick", "qa")["next"])
+    def test_a_qa_task_is_delivered_once_answered(self) -> None:
+        """A look at a server is a Q&A: the agent answers, writes it down and delivers it; it never closes the task (C13: the person accepts)."""
+        self.assertIn("task deliver --task quick", self.new("quick", "qa")["next"])
         self.assertNotIn("task close", self.new()["next"])
 
 

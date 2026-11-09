@@ -72,7 +72,7 @@ The harness leaves your working tree, your current branch and your existing comm
 
 ### 8.8 The board can speak to the chat, and only you can press it
 
-The served board can send "go on" to a chat after an approval, steer or stop a working agent, allow a command and answer a question. Each is a request from your paired browser; no command and no agent can make it, and the gate refuses an agent that tries. The board sends only when it is sure which chat is the task's and the chat is in the right state; otherwise it says why and gives you the text to paste. A chat made from the board lets every tool run by default, so the gate is then the only brake. The gate review in the task report shows what it blocked, and you judge each block.
+The served board wakes the agent with a "go on" message when you confirm the requirement, approve the plan or approve the write-back (no second click; when the chat cannot take it, the button **send to agent** stays), and can steer or stop a working agent, allow a command and answer a question. Each is a request from your paired browser; no command and no agent can make it, and the gate refuses an agent that tries. The board sends only when it is sure which chat is the task's and the chat is in the right state; otherwise it says why and gives you the text to paste. A chat made from the board lets every tool run by default, so the gate is then the only brake. The gate review in the task report shows what it blocked, and you judge each block.
 
 ## Hands on
 

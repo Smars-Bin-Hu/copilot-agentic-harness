@@ -1,5 +1,5 @@
-"""1.7.38 (C12 Q14): closing is the person's acceptance. A look and a ticket chore close themselves; a development task is accepted by its promote and the board closes it; testing, RCA, design and analysis
-are delivered with a short summary and accepted on the board. The agent never asks "close the task?"."""
+"""1.7.38 (C12 Q14, C13): closing is the person's acceptance. The agent closes nothing: a development task is accepted by its promote and the board closes it; every other task, a look and a ticket chore included,
+is delivered with a short summary and accepted on the board. The agent never asks "close the task?"."""
 
 from __future__ import annotations
 
@@ -66,12 +66,15 @@ class DeliverTests(AcceptCase):
         self.assertEqual(found["skipped"], [])
         self.assertEqual([event["what"] for event in self.data()["events"]][-1], "deliver")
 
-    def test_a_summary_is_needed_and_a_look_closes_itself(self) -> None:
+    def test_a_summary_is_needed_and_a_look_is_delivered_too(self) -> None:
         self.new(kind="rca")
         self.assertIn("--summary", self.refused("task", "deliver", "--task", NAME))
         self.prompt("start", session="sess-two")
         self.new(name="look", kind="qa", session="sess-two")
-        self.assertIn("close", self.refused("task", "deliver", "--task", "look", "--summary", "answered"))
+        done = self.run_cli("task", "deliver", "--task", "look", "--summary", "answered")  # C13: the agent closes nothing, a look included
+        self.assertTrue(done["delivered"])
+        self.assertEqual(self.data(".workspace/sandbox/tasks/look")["status"], "open", "delivered, not closed: the person accepts it on the board")
+        self.assertEqual(self.data(".workspace/sandbox/tasks/look")["deliver"]["summary"], "answered")
 
     def test_a_promoted_development_task_is_accepted_by_its_promote_not_delivered(self) -> None:
         self.promoted()
@@ -372,7 +375,9 @@ class RulesForTheAgentTests(AcceptCase):
                 self.assertNotIn(phrase, text, kind)
 
     def test_each_kind_gets_its_way_to_end(self) -> None:
-        self.assertIn("task close", self.next_of("qa"))
+        qa = self.next_of("qa")
+        self.assertIn("task deliver", qa)
+        self.assertNotIn("then run `harness task close", qa)
         for kind in ("rca", "design", "other"):
             text = self.next_of(kind)
             self.assertIn("task deliver", text, kind)

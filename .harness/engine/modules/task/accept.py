@@ -1,9 +1,10 @@
-"""Closing is the person's acceptance (1.7.38, C12 Q14). The agent never asks "close the task?".
+"""Closing is the person's acceptance (1.7.38, C12 Q14; C13: the agent closes nothing). The agent never asks "close the task?", and never runs `task close` (the gate refuses it).
 
-  a look (Q&A) and a chore on a ticket   the agent closes the task itself (`task close`): the writes were already approved on their cards
   a development task                      the promote is the acceptance; the board closes the task after it when nothing else waits (`sweep`)
-  testing, RCA, design, analysis          the agent writes a short summary and stops: `task deliver --summary "<text>"`. The task then shows "to accept"
-                                          with **Accept and close** (the board closes it: no chat, no tokens) and **Not yet** (the reply box opens)
+  every other task, a look (Q&A) and a chore on a ticket included
+                                          the agent writes a short summary and stops: `task deliver --summary "<text>"`. The task then shows "to accept"
+                                          with **Accept and close** (the board closes it: no chat, no tokens) and **Not yet** (the reply box opens). Until then the person may go on
+                                          talking in the same task; after it is closed, a new question opens a new task
 
 The mark: `deliver` saves the summary in `task.json`; the Stop hook turns it into the waiting mark `accept` once the agent really stopped; the person's next message takes both away
 (`tasklife.set_waiting`). A test where the person skipped an environment says so in `--skipped`, with the reason: it is shown on the card.
@@ -21,7 +22,7 @@ from core.paths import cli_command, utc_now
 from . import task as task_ops, tasklife
 from .common import CommandError
 
-DELIVER_KINDS = ("rca", "design", "test", "other", "dev", "kb")  # not qa: a look closes itself
+DELIVER_KINDS = ("qa", "rca", "design", "test", "other", "dev", "kb")  # every kind (C13: a look is delivered too)
 SUMMARY_CHARS = 1500
 SKIPPED_CHARS = 300
 SKIPPED_MAX = 6
@@ -42,7 +43,7 @@ def paragraphs(text: str, limit: int) -> str:
 
 
 def deliver(root: Path, raw_task: str = "", summary: str = "", skipped: Optional[List[str]] = None, todo_open: str = "") -> Dict[str, Any]:
-    """The agent says the work is done and stops for the person to accept it. Refused for a look (it closes itself) and for a development task whose promote is the acceptance."""
+    """The agent says the work is done and stops for the person to accept it. Refused for a development task whose promote is the acceptance."""
     task = task_ops.resolve(root, raw_task)
     text = paragraphs(summary, SUMMARY_CHARS)
     if not text:
@@ -54,8 +55,6 @@ def deliver(root: Path, raw_task: str = "", summary: str = "", skipped: Optional
     with task_ops.locked(root, task) as data:
         task_ops.require_open(data)
         kind = data.get("kind")
-        if kind == "qa":
-            raise CommandError(say("accept.qa", name=task_ops.name_of(task)))
         if kind in ("dev", "kb") and (data.get("promote") or {}).get("state") == "done":
             raise CommandError(say("accept.promoted"))
         data["deliver"] = {
@@ -102,14 +101,37 @@ def mark_done(root: Path, task: str, key: str) -> bool:
         return False
 
 
-def accept(root: Path, raw_task: str) -> Dict[str, Any]:
-    """The person accepts the delivered work on the board: the task closes (the report is written, the session lets go). Nothing is sent to the chat. Refused unless the task waits for acceptance."""
+TITLE_CHARS = 90
+
+
+def held(root: Path, raw_task: str) -> List[Dict[str, str]]:
+    """The calls of this task that still wait for the person, for the question the board asks before it closes the task (1.7.38, C13 FB-4): `[{code, system, env, title}]`, oldest first. `title` is what the call says in
+    words, else the start of the command."""
+    task = task_ops.resolve(root, raw_task)
+    from . import taskdesk  # it reads this module
+
+    said = {str(item.get("code")): item for item in taskdesk.outbox_view(root, task)}
+    out: List[Dict[str, str]] = []
+    for entry in outbox.pending_for(root, task):  # the entries decide what waits; the page's view only gives the words
+        item = said.get(str(entry.get("code"))) or {}
+        words = " \u00b7 ".join(str(line) for line in item.get("says") or [] if line) or taskdesk.cut_command(entry.get("command") or "", TITLE_CHARS)
+        out.append({"code": str(entry.get("code") or ""), "system": str(entry.get("system") or ""), "env": str(entry.get("env") or ""), "title": words[:200]})
+    return out
+
+
+def accept(root: Path, raw_task: str, void: bool = False) -> Dict[str, Any]:
+    """The person accepts the delivered work on the board: the task closes (the report is written, the session lets go). Nothing is sent to the chat. Refused unless the task waits for acceptance.
+    Calls of the task that still wait for the person are void when it closes (1.7.38, C13 FB-4): the board lists them and asks first, and `void` says the person said yes; without it the acceptance is refused
+    and the answer says how many wait, so a page that was not told cannot void a call the person never saw."""
     task = task_ops.resolve(root, raw_task)
     data = tasks.read(root, task) or {}
     if tasklife.waiting(root, task, data)["why"] != "accept":
         raise CommandError(say("accept.not_waiting", name=task_ops.name_of(task)))
+    waiting = held(root, task)
+    if waiting and not void:
+        raise CommandError(say("accept.held", count=len(waiting)))
     left = (data.get("deliver") or {}).get("todo_open") or ""
-    result = task_ops.close(root, task, say("accept.reason"), check_todo=False, todo_note=left or say("accept.reason"))
+    result = task_ops.close(root, task, say("accept.reason"), check_todo=False, todo_note=left or say("accept.reason"), void_note=say("accept.void"))
     mark_done(root, task, "accept.status.accepted")
     return result
 

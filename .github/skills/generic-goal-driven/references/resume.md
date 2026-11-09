@@ -16,7 +16,7 @@ When the user says "continue" in a new session, do as below. Read little: the po
 
 ## Common cases
 
-- **Last time it stopped at `doing`, and the task is still open**: first ask the user whether to go on with the step or give it up. To go on, pick the task up with `task open`; to give it up, run `task close`, set the step back to `todo`, and write the reason under "Feedback".
+- **Last time it stopped at `doing`, and the task is still open**: first ask the user whether to go on with the step or give it up. To go on, pick the task up with `task open`; to give it up, ask the user to close the task on the board (**Close**), then set the step back to `todo`, and write the reason under "Feedback".
 - **Last time it stopped at `handed over`**: the user may have tested it already. Ask for the result; do not do it again.
 - **The date in `NOW.md` is old**: first confirm the goal and the requirements still hold, then go on.
 - **`NOW.md` is longer than one screen**: tidy it first as "Keep NOW.md short" in `SKILL.md` says, move the details to `LOG.md`, then report.

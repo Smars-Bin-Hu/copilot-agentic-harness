@@ -1295,12 +1295,12 @@
   }
   // The box over two held calls or more (batch.js, 1.7.38 F3 AP): what it needs of this page is whether the files of a call were viewed, how to open its View window, and what the page does after an approval.
   function batchBox() {
-    const held = desk.outbox || [];  // all that wait for the person: a call the agent went on without can still be approved, and the card then asks to tell the agent
+    const held = (desk.outbox || []).filter((item) => item.batch && item.batch !== "never");  // all that wait for the person and may be approved together: a call the agent went on without can still be approved, and the card then asks to tell the agent. A call the gate could not judge, and a delete, is never in the box (1.7.38, C13 FR 1): only its own card approves it, after View
     if (held.length < 2 || typeof BATCH === "undefined" || !served() || desk.past) return null;
     const title = (item) => (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })();
     return BATCH.box({
       task: desk.name, items: held, can: Boolean(canAct() && SERVE.runs("approve-action")),
-      needsView: (item) => scriptsOf(item).length > 0 || Object.keys(item.seen || {}).length > 0,
+      needsView: () => true,  // as on the card of a call: View first, for every call (1.7.38, C13 FR 1)
       viewed: (code) => viewedCalls.get(code), unview: (code) => { viewedCalls.delete(code); },
       view: (item) => callWindow(item, null), redraw: () => draw(true), done: () => SERVE.done(),
       reasons: REASONS, lineReasons: LINE_REASONS,

@@ -317,6 +317,23 @@ class BatchRefused(ValueError):
         self.files = files or []
 
 
+BATCH_PLAIN, BATCH_OTHER, BATCH_NEVER = "plain", "other", "never"
+
+
+def batch_class(entry: Dict[str, Any]) -> str:
+    """Which calls the box of a batch may hold (1.7.38, C13 FR 1). `plain`: an ordinary write of a write list (every part of the line is on the write list of its connection, the verb is a write): the box ticks it
+    once it was viewed. `other`: a call the person has to judge (a statement on no list, a write a pack names by its verbs, an exec): it can be ticked after View, never by itself. `never`: a call the gate could not judge
+    (a faulty file of a pack, the connection list or the gate policy, a script it could not read, a verb no rule names) and every destroy: it is never in the box and the board refuses it there, whatever the page sends.
+    It is approved alone, after View. An entry that says too little to tell is `never`: the stricter side."""
+    zones = [str(entry.get("zone") or "")] + [str(one.get("zone") or "") for one in entry.get("holds") or [] if isinstance(one, dict)]
+    verb = str(entry.get("verb") or "")
+    if "broken" in zones or verb not in ("write", "exec", "read") or entry.get("named") is False or not str(entry.get("system") or "").strip():
+        return BATCH_NEVER  # no verb is "unknown" or "destroy": the call is a fault or a deletion
+    if verb == "write" and all(zone == "write" for zone in [zones[0]] + [one for one in zones[1:]]):
+        return BATCH_PLAIN
+    return BATCH_OTHER
+
+
 def batch_code(entries: List[Dict[str, Any]], salt: str) -> str:
     """The code of this exact list of held calls: six characters, from the calls (code, session, command, in the order of their codes) and `salt`, a secret of the board process."""
     import hashlib
@@ -340,6 +357,9 @@ def batch_entries(root: Path, codes: List[str]) -> List[Dict[str, Any]]:
     found = [waiting[code] for code in wanted]
     if len({str(item.get("task") or "") for item in found}) > 1:
         raise BatchRefused(say("gate.batch.tasks"))
+    never = [str(item["code"]) for item in found if batch_class(item) == BATCH_NEVER]
+    if never:  # 1.7.38, C13 FR 1: a call the gate could not judge, or a destroy, is approved alone after View, never in a batch: the board refuses it here, whatever the page sent
+        raise BatchRefused(say("gate.batch.never", codes=", ".join(never[:5]) + (f" +{len(never) - 5}" if len(never) > 5 else "")))
     return found
 
 

@@ -680,7 +680,7 @@ class BatchBoxPageTests(unittest.TestCase):
 
     def test_the_code_comes_from_the_board_and_the_new_calls_are_not_ticked_for_the_person(self) -> None:
         self.assertIn('"/api/batch", {step: "preview"', self.box)
-        self.assertIn("a call that comes later is not ticked", self.box)
+        self.assertIn("A call that comes later is not ticked", self.box)
 
     def test_do_not_approve_any_asks_for_the_reason_and_dismisses_each_call_with_it(self) -> None:
         self.assertIn('"dismiss action"', self.box)

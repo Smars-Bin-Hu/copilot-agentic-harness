@@ -10,7 +10,7 @@ const BATCH = (function () {
   const cut = (text, size) => (text.length > size ? text.slice(0, size - 1).trimEnd() + "…" : text);
 
   function stateOf(task) {
-    if (!states.has(task)) states.set(task, {known: new Set(), checked: new Set(), code: "", shown: {key: "", code: ""}, asking: null, line: "", said: ""});
+    if (!states.has(task)) states.set(task, {known: new Set(), checked: new Set(), autoed: new Set(), code: "", shown: {key: "", code: ""}, asking: null, line: "", said: ""});
     return states.get(task);
   }
 
@@ -20,12 +20,11 @@ const BATCH = (function () {
     if (items.length < 2) { states.delete(ctx.task); return null; }
     const st = stateOf(ctx.task);
     const codes = new Set(items.map((item) => item.code));
-    for (const code of [...st.known]) if (!codes.has(code)) { st.known.delete(code); st.checked.delete(code); }
+    for (const code of [...st.known]) if (!codes.has(code)) { st.known.delete(code); st.checked.delete(code); st.autoed.delete(code); }
     for (const item of items) st.known.add(item.code);
-    if (!st.firstDrawn) {  // the calls that were there when the box first came are ticked, but not those that need View; a call that comes later is not ticked: the list under the person's hand does not change
-      st.firstDrawn = true;
-      for (const item of items) if (!ctx.needsView(item)) st.checked.add(item.code);
-    }
+    // The tick: a call is ticked for the person only when it is an ordinary write of a write list (`item.batch` is `plain`) and View was pressed on it, once; the person may untick it, and it stays unticked. Any other call
+    // is ticked by the person, after View. A call that comes later is not ticked: the list under the person's hand does not change (1.7.38, C13 FR 1).
+    for (const item of items) if (item.batch === "plain" && ctx.viewed(item.code) && !st.autoed.has(item.code)) { st.autoed.add(item.code); st.checked.add(item.code); }
     for (const code of [...st.checked]) if (ctx.needsView(items.find((item) => item.code === code) || {}) && !ctx.viewed(code)) st.checked.delete(code);  // a View that was lost (the file changed) takes the tick away
 
     const said = h("div", {class: "bad"}, st.said || null);

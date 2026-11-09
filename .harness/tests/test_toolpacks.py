@@ -1570,7 +1570,7 @@ class SqlCardWords(HarnessTestCase):
 class OpenRulesOfTheTypes(TaskCase):
     """1.7.38 (C12 D1): a tool pack's type says how far a connection of it may be opened for a task, per environment; the company can lower it; prod and a destroy are never opened."""
 
-    SQL = "sqlcmd -S localhost,{port} -C -Q \"UPDATE t SET a = 1\""
+    SQL = "sqlcmd -S localhost,{port} -C -Q \"UPDATE t SET a = 1 WHERE b = 2\""
 
     def setUp(self) -> None:
         super().setUp()
@@ -1673,7 +1673,8 @@ class OpenRulesOfTheTypes(TaskCase):
         for port in (14329, 14330):
             self.assertEqual(self.term(self.SQL.format(port=port))["permissionDecision"], "deny", port)
 
-    def test_a_destroy_is_not_passed_by_an_open_connection_even_when_the_company_made_it_a_held_call(self) -> None:
+    def test_a_statement_on_the_refuse_list_is_refused_even_when_the_company_made_a_destroy_a_held_call(self) -> None:
+        """1.7.38: the refuse list is the strictest answer. A company's `rules` for the destroy verb do not turn it into a card, and an opened connection does not pass it."""
         from core import approvals
         from modules.task import tasklife
 
@@ -1681,8 +1682,7 @@ class OpenRulesOfTheTypes(TaskCase):
         self.new()
         tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
         self.assertEqual(self.term('sqlcmd -S localhost,14332 -C -Q "DROP TABLE t"')["permissionDecision"], "deny")
-        held = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
-        self.assertEqual((held["verb"], held.get("offers")), ("destroy", None), "held for the person, with no Open button: the opening does not cover a destroy")
+        self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [], "refused, not held: nothing to approve, no Open button")
 
     def test_a_subagent_gets_nothing_from_an_opened_connection(self) -> None:
         from modules.task import tasklife

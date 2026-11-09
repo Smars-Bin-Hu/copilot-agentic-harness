@@ -58,7 +58,7 @@
       "verb": "exec"
     },
     {
-      "pattern": "\\s-i\\s",
+      "pattern": "(?:^|\\s)-q(?:\\s|$)",
       "verb": "write"
     },
     {
@@ -66,12 +66,91 @@
       "verb": "read"
     }
   ],
+  "reads": [
+    "SELECT\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|next value for)\\b).*",
+    "WITH\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|next value for)\\b).*\\bSELECT\\b.*",
+    "USE \\w+",
+    "SET (?:(?:NOCOUNT|NOEXEC|PARSEONLY|FMTONLY|XACT_ABORT|ARITHABORT|ANSI_\\w+|QUOTED_IDENTIFIER|CONCAT_NULL_YIELDS_NULL|NUMERIC_ROUNDABORT|STATISTICS (?:IO|TIME|XML|PROFILE)|SHOWPLAN_(?:ALL|TEXT|XML)) (?:ON|OFF)|TRANSACTION ISOLATION LEVEL (?:READ UNCOMMITTED|READ COMMITTED|REPEATABLE READ|SNAPSHOT|SERIALIZABLE)|(?:LOCK_TIMEOUT|DATEFIRST|ROWCOUNT|TEXTSIZE) \\d+|DATEFORMAT \\w+|LANGUAGE \\w+)",
+    "PRINT\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|next value for)\\b).*",
+    "DECLARE @\\w+ (?:AS )?[A-Za-z_]\\w*(?: ?\\( ?(?:\\d+|MAX)(?: ?, ?\\d+)? ?\\))?(?: ?= ?(?:-?\\d+(?:\\.\\d+)?|N?''|NULL))?(?: ?, ?@\\w+ (?:AS )?[A-Za-z_]\\w*(?: ?\\( ?(?:\\d+|MAX)(?: ?, ?\\d+)? ?\\))?(?: ?= ?(?:-?\\d+(?:\\.\\d+)?|N?''|NULL))?)*",
+    "SET @\\w+ ?= ?(?:(?:-?\\d+(?:\\.\\d+)?|N?''|NULL)|@\\w+)",
+    "EXEC(?:UTE)? (?:\\w+\\.)*(?:sp_help|sp_helptext|sp_helpindex|sp_helpconstraint|sp_columns|sp_tables|sp_pkeys|sp_fkeys|sp_stored_procedures)(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?"
+  ],
+  "writes": [
+    "INSERT INTO\\b(?!.*\\b(?:update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b).*",
+    "UPDATE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? [\\w.#@]+ SET (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?(?:1 ?= ?1|0 ?= ?0|'' ?= ?''|1 ?<> ?0|'1' ?= ?'1')\\b).+",
+    "DELETE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? FROM [\\w.#@]+ (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?(?:1 ?= ?1|0 ?= ?0|'' ?= ?''|1 ?<> ?0|'1' ?= ?'1')\\b).+",
+    "MERGE\\b(?!.*\\b(?:drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|xp_\\w+|sp_\\w+|merge .*merge)\\b).*",
+    "(?:CREATE OR ALTER|CREATE|ALTER) (?:PROCEDURE|PROC|VIEW|FUNCTION) [\\w.]+.*",
+    "EXEC(?:UTE)? (?!(?:\\w+\\.)*(?:sp|xp)_)(?:\\w+\\.)+\\w+(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?",
+    "(?:BEGIN|END|BEGIN TRY|END TRY|BEGIN CATCH|END CATCH|RETURN)"
+  ],
+  "refuse": [
+    {
+      "pattern": "\\b(?:drop|truncate)\\b",
+      "reason": {
+        "en": "DROP and TRUNCATE are never run by the agent. To remove rows, use DELETE FROM <table> WHERE <condition>. To drop or truncate an object, tell the user which one and why: the user runs it with their own account.",
+        "zh": "agent 不执行 DROP 和 TRUNCATE。要删数据，用 DELETE FROM <表> WHERE <条件>。要删除或清空对象，告诉用户是哪一个、为什么：由用户用自己的账号执行。"
+      }
+    },
+    {
+      "pattern": "\\b(?:kill|shutdown|restore)\\b",
+      "reason": {
+        "en": "The agent never ends sessions, stops the server or restores a database. Tell the user what is needed and why: the user does it.",
+        "zh": "agent 不结束会话、不停服务器、不还原数据库。告诉用户需要什么、为什么：由用户来做。"
+      }
+    },
+    {
+      "pattern": "^!!",
+      "reason": {
+        "en": "`!!` runs a shell command on this computer, outside the database. Run that command in the terminal on its own, where the gate judges it.",
+        "zh": "`!!` 会在这台电脑上执行 shell 命令，在数据库之外。把那条命令单独放到终端里执行，由 gate 判断。"
+      }
+    },
+    {
+      "pattern": "^:connect\\b",
+      "reason": {
+        "en": "`:connect` sends what follows to another server, so the gate cannot tell which connection is used. Run the statement as its own call with `sqlcmd -S <that server>`.",
+        "zh": "`:connect` 会把后面的内容发到另一台服务器，gate 看不出用的是哪个连接。把语句单独用 `sqlcmd -S <那台服务器>` 调用。"
+      }
+    },
+    {
+      "pattern": "^:(?:out|error|perftrace)\\b",
+      "reason": {
+        "en": "`:out`, `:error` and `:perftrace` write to a file the gate does not see. Redirect the output in the terminal instead (`> file` inside the task folder).",
+        "zh": "`:out`、`:error`、`:perftrace` 会写到 gate 看不见的文件。改在终端里重定向输出（任务文件夹内的 `> 文件`）。"
+      }
+    },
+    {
+      "pattern": "^:setvar\\b|\\$\\(",
+      "reason": {
+        "en": "A `:setvar` or `$(name)` is filled in by sqlcmd when the script runs, so the gate cannot see the statement. Write the value into the statement.",
+        "zh": "`:setvar` 和 `$(名字)` 由 sqlcmd 在运行时填入，gate 看不到真正的语句。把值直接写进语句。"
+      }
+    },
+    {
+      "pattern": "\\bexec(?:ute)?\\s*\\(|\\bsp_executesql\\b",
+      "reason": {
+        "en": "`EXEC('...')` and `sp_executesql` run a string as SQL, so the gate cannot see what it does. Write the statement itself, one at a time.",
+        "zh": "`EXEC('...')` 和 `sp_executesql` 把字符串当 SQL 执行，gate 看不到它做什么。直接写出语句本身，一次一条。"
+      }
+    },
+    {
+      "pattern": "\\bxp_\\w+",
+      "reason": {
+        "en": "Extended procedures such as `xp_cmdshell` run outside the database. Do the work in the terminal, where the gate judges it, or tell the user.",
+        "zh": "`xp_cmdshell` 这类扩展过程在数据库之外执行。在终端里做（由 gate 判断），或告诉用户。"
+      }
+    }
+  ],
   "input": {
     "options": [
       "-i"
     ],
     "include": "^\\s*:r\\s+(?:\"([^\"\\r\\n]+)\"|(\\S+))",
-    "unjudged": "^\\s*(?:!!|:(?:connect|out|error|perftrace|serverlist|setvar|on\\s+error|exit|xml|listvar|ed)\\b)|\\$\\("
+    "text": [
+      "-Q"
+    ]
   },
   "body": [
     {

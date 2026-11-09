@@ -51,15 +51,14 @@ class ScriptFileTests(TaskCase):
         return len(approvals.pending(self.root, 10, file=approvals.ACTIONS))
 
     def refused(self, command: str, file: str = "") -> str:
-        """The call is refused, with the line of a destroy in a file (`file` is named in it), and nothing waits for the person."""
+        """The call is refused, with the line of a refused statement in a file (`file` is named in it), and nothing waits for the person."""
         before = self.pending()
         out = self.term(command)
         self.assertEqual(out.get("permissionDecision"), "deny", command)
         self.assertEqual(self.pending(), before, f"refused, not held: nothing to approve for {command}")
         reason = out["permissionDecisionReason"]
         if file:
-            between = messages.text("gate.external.denied_file", place="P", verb="V", file="F", call="C", command="").split("F", 1)[1].split("V", 1)[0]  # the words of the line after the file
-            self.assertIn(f"`{file}{between}", reason, command)
+            self.assertIn(f"`{file}`", reason, command)  # the line names the file that holds the refused statement
         return reason
 
     def held(self, command: str) -> str:
@@ -70,7 +69,7 @@ class ScriptFileTests(TaskCase):
         return out["permissionDecisionReason"]
 
     def open_connection(self) -> None:
-        self.term(f'{SERVER} -Q "UPDATE t SET a = 1"')
+        self.term(f'{SERVER} -Q "UPDATE t SET a = 1 WHERE b = 2"')
         code = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]["code"]
         with mock.patch.object(boardserve.Board, "idle", return_value=False):
             self.board.act("task allow", NAME, "act", code=code, env_name="acmedw-dev", who="on")
@@ -81,7 +80,7 @@ class ScriptFileTests(TaskCase):
         for text in ("DROP TABLE dbo.orders;\n", "truncate table dbo.orders\ngo\n", "USE AcmeDW;\nGO\nDROP PROCEDURE dbo.usp_x;\n"):
             path = self.script(text)
             reason = self.refused(f"{SERVER} -i {path}", path)
-            self.assertIn("destroy", reason)
+            self.assertIn("DROP", reason.upper())
             self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [])
 
     def test_the_same_words_are_refused_in_the_text_of_q_and_after_a_write_in_it(self) -> None:
@@ -95,7 +94,7 @@ class ScriptFileTests(TaskCase):
 
     def test_an_opened_connection_never_lets_a_destroy_through_and_still_lets_a_write_through(self) -> None:
         self.open_connection()
-        write = self.script("UPDATE dbo.orders SET status = 1;\n", "w.sql")
+        write = self.script("UPDATE dbo.orders SET status = 1 WHERE id = 3;\n", "w.sql")
         self.assertEqual(self.term(f"{SERVER} -i {write}"), {}, "a write on the opened connection runs")
         drop = self.script("DROP TABLE dbo.orders;\n", "d.sql")
         self.refused(f"{SERVER} -i {drop}", drop)
@@ -109,18 +108,16 @@ class ScriptFileTests(TaskCase):
         read = self.script("-- a look\nUSE AcmeDW;\nGO\nSET NOCOUNT ON;\nSELECT TOP 5 * FROM dbo.orders;\n", "r.sql")
         self.assertEqual(self.term(f"{SERVER} -i {read}"), {})
 
-    def test_a_file_of_reads_with_a_line_the_gate_cannot_judge_is_held_not_run(self) -> None:
-        """A shell command (`!!`), another server (`:connect`) or words made at run time (`$(...)`) are not in the text: such a file is held as a write, never passed as a read; a drop in it still refuses."""
-        for name, text in (("shell.sql", "SELECT 1;\n!! rm -rf /tmp/x\n"), ("other.sql", ":connect prod-server\nSELECT 1;\n"), ("var.sql", ":setvar what orders\nSELECT * FROM dbo.$(what);\n"), ("out.sql", ":out /tmp/x.txt\nSELECT 1;\n")):
+    def test_a_file_with_a_line_the_gate_cannot_judge_is_refused_with_the_right_way(self) -> None:
+        """A shell command (`!!`), another server (`:connect`), a file written (`:out`) or words made at run time (`:setvar`, `$(...)`) are not in the text: the refuse list refuses them and says what to do instead. An opened connection does not change that."""
+        for name, text, word in (("shell.sql", "SELECT 1;\n!! rm -rf /tmp/x\n", "`!!`"), ("other.sql", ":connect prod-server\nSELECT 1;\n", "`:connect`"), ("var.sql", ":setvar what orders\nSELECT * FROM dbo.$(what);\n", "`:setvar`"), ("out.sql", ":out /tmp/x.txt\nSELECT 1;\n", "`:out`")):
             path = self.script(text, name)
-            reason = self.held(f"{SERVER} -i {path}")
-            self.assertIn(name, reason, name)
-            self.assertIn("!!", reason)
-        drop = self.script(":connect prod-server\nDROP TABLE dbo.orders;\n", "both.sql")
-        self.refused(f"{SERVER} -i {drop}", drop)
+            reason = self.refused(f"{SERVER} -i {path}", path)
+            self.assertIn(word, reason, name)
         self.open_connection()
-        self.held(f"{SERVER} -i {self.script('SELECT 1;' + chr(10) + '!! whoami' + chr(10), 'shell2.sql')}")  # an opened connection does not let it through either: what it does is not known
-        self.held(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql")  # nor a file it cannot read
+        self.refused(f"{SERVER} -i {self.script('SELECT 1;' + chr(10) + '!! whoami' + chr(10), 'shell2.sql')}", f"{TASK}/DEV/_manual/shell2.sql")
+        self.held(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql")  # a file it cannot read still waits for the person, opened or not
+        self.held(f"{SERVER} -i {self.script(':on error exit' + chr(10) + 'SELECT 1;' + chr(10), 'onerr.sql')}")  # a sqlcmd line no list names: asks
 
     def test_a_script_that_calls_a_procedure_is_an_exec_and_waits_in_dev(self) -> None:
         path = self.script("EXEC dbo.usp_load;\n", "e.sql")
@@ -199,7 +196,7 @@ class ScriptFileTests(TaskCase):
     def test_the_log_says_which_file_decided(self) -> None:
         path = self.script("DROP TABLE dbo.orders;\n")
         action = external.classify(f"{SERVER} -i {path}", self.systems(), unseen=True, root=self.root, cwd=str(self.root))[0][0]
-        self.assertEqual((action.verb, action.file, action.file_why), ("destroy", path, "destroy"))
+        self.assertEqual((action.verb, action.file, action.file_why), ("destroy", path, "refuse"))
         self.assertEqual(action.facts()["file"], path)
         plain = external.classify(f'{SERVER} -Q "select 1"', self.systems(), unseen=True, root=self.root)[0][0]
         self.assertNotIn("file", plain.facts())
@@ -208,7 +205,7 @@ class ScriptFileTests(TaskCase):
         """`harness wait --run` and the board judge a line without a root: they cannot read the file, so the option still makes it a write."""
         path = self.script("select 1;\n")
         action = external.classify(f"{SERVER} -i {path}", self.systems())[0][0]
-        self.assertEqual((action.verb, action.file_why), ("write", ""))
+        self.assertEqual((action.verb, action.file_why, action.zone), ("write", "unread", "ask"))
 
     def test_a_type_with_no_input_is_judged_as_before(self) -> None:
         plain = {"sqlsys": {"reach": {"cli": ["sqlctl"]}, "env": "dev", "verbs": [{"pattern": r"\b-i\b", "verb": "write"}, {"pattern": r"\bselect\b", "verb": "read"}]}}

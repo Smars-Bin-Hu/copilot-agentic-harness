@@ -13,9 +13,9 @@ from core import approvals, config, outbox
 from modules.task import boardserve, taskdesk, tasklife
 from modules.task.common import CommandError
 
-DEV = 'sqlcmd -S localhost,14332 -C -Q "UPDATE t SET a = 1"'
-IST = 'sqlcmd -S localhost,14331 -C -Q "UPDATE t SET a = 1"'
-QAT = 'sqlcmd -S localhost,14330 -C -Q "UPDATE t SET a = 1"'
+DEV = 'sqlcmd -S localhost,14332 -C -Q "UPDATE t SET a = 1 WHERE b = 2"'
+IST = 'sqlcmd -S localhost,14331 -C -Q "UPDATE t SET a = 1 WHERE b = 2"'
+QAT = 'sqlcmd -S localhost,14330 -C -Q "UPDATE t SET a = 1 WHERE b = 2"'
 
 
 class OpenFromTheCard(TaskCase):
@@ -103,7 +103,7 @@ class OpenFromTheCard(TaskCase):
 
     def test_every_held_call_that_offered_the_connection_is_done_when_it_is_opened_once(self) -> None:
         self.term(DEV)
-        self.term('sqlcmd -S localhost,14332 -C -Q "UPDATE t SET b = 2"')
+        self.term('sqlcmd -S localhost,14332 -C -Q "UPDATE t SET b = 2 WHERE a = 1"')
         self.term(IST)
         first = taskdesk.outbox_view(self.root, TASK)[0]["code"]
         self.open("acmedw-dev", first)

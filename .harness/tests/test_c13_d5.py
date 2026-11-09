@@ -72,8 +72,8 @@ class OwnConnectionFormTests(ConnectionsCase):
     def test_the_form_has_no_kind_chosen_and_hides_the_environment_for_a_type_without_one(self) -> None:
         source = (WEB / "servers.js").read_text(encoding="utf-8")
         self.assertIn('h("option", {value: ""}, t("connections.own.env.pick")), names.map(', source)  # a first, empty kind
-        self.assertIn('envField.hidden = noEnv', source)
-        self.assertIn('spec.env === "none"', source)
+        self.assertIn('envField.hidden = !spec || spec.env === "none"', source)
+        self.assertIn("authField.hidden = !spec", source)
         self.assertIn(".sv-field[hidden]{display:none}", (WEB / "setup.css").read_text(encoding="utf-8"))
 
 

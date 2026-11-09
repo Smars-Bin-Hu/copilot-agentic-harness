@@ -1015,5 +1015,73 @@ class IntegrityWordsTests(unittest.TestCase):
         self.assertEqual(ready.crash_words("boom", self.root), "boom")
 
 
+class FindFaultTests(lists.ListedCase):
+    """RC-A M2 (item 6): `harness connections find` when a list cannot be read says so first (the file and the fault), even when the person has a connection of their own; it does not offer a connection the gate holds
+    every call of, and it does not say `No connection fits` for a list of tool packs that cannot be read."""
+
+    def find(self, words: str, language: str = "zh") -> Dict[str, Any]:
+        import os
+        from unittest import mock
+
+        from modules.gate import commands
+
+        with mock.patch.dict(os.environ, {"HARNESS_LANGUAGE": language}):
+            messages.reset()
+            try:
+                return commands.servers_find(self.root, words.split())
+            finally:
+                messages.reset()
+
+    def own_connection(self) -> None:
+        from core import connections
+
+        connections.save(self.root, "my-scratch", {"account": "me", "password": "x"}, own={"type": "sqlserver", "env": "dev", "auth": "sql", "host": "db9", "port": "1433", "about": "my scratch copy"})
+
+    def test_a_connection_list_that_cannot_be_read_comes_first_even_with_an_own_connection(self) -> None:
+        self.own_connection()
+        self.assertIn("my-scratch", self.find("scratch")["_text"])  # the own connection is found while the lists are fine
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text("{ broken", encoding="utf-8")
+        for words in ("dev", "acmedw", "scratch", ""):
+            out = self.find(words, "en")
+            self.assertEqual(out["exit_code"], 1, words)
+            self.assertIn("connections.company.json", out["_text"], words)
+            self.assertIn("Expecting property name", out["_text"], words)
+            self.assertNotIn("my-scratch", out["_text"], words)
+            self.assertNotIn("Use it", out["_text"], words)
+            self.assertNotIn("No connection fits", out["_text"], words)
+        self.assertIn("连接清单读不出来", self.find("dev", "zh")["_text"])
+
+    def test_a_list_of_tool_packs_that_cannot_be_read_is_said_and_not_no_connection_fits(self) -> None:
+        self.own_connection()
+        (self.root / "knowledge-base" / "company" / "tools").mkdir(parents=True, exist_ok=True)
+        (self.root / "knowledge-base" / "company" / "tools" / "packs.json").write_text("{ x", encoding="utf-8")
+        for words in ("dev", "acmedw", "scratch"):
+            out = self.find(words, "en")
+            self.assertEqual(out["exit_code"], 1, words)
+            self.assertIn("tools/packs.json", out["_text"], words)
+            self.assertIn("list of tool packs cannot be read", out["_text"], words)
+            self.assertNotIn("No connection fits", out["_text"], words)
+        self.assertIn("工具包清单读不出来", self.find("dev", "zh")["_text"])
+
+    def test_the_window_says_the_list_cannot_be_read_and_not_that_the_pack_is_off(self) -> None:
+        from core import toolpacks
+
+        self.assertEqual(toolpacks.guard_of(self.root, "no-such-type")["state"], "gone")
+        (self.root / "knowledge-base" / "company" / "tools").mkdir(parents=True, exist_ok=True)
+        (self.root / "knowledge-base" / "company" / "tools" / "packs.json").write_text("{ x", encoding="utf-8")
+        found = toolpacks.guard_of(self.root, "sqlserver")
+        self.assertEqual(found["state"], "listfault")
+        self.assertEqual(found["file"], "tools/packs.json")
+        table = messages.table("en")
+        self.assertIn("cannot be read", table["connections.state.listfault"])
+        self.assertIn("{file}", table["connections.state.listfault.tip"])
+        servers = (support.REPO / ".harness" / "engine" / "modules" / "task" / "web" / "servers.js").read_text(encoding="utf-8")
+        self.assertIn('"listfault"', servers)
+
+    def test_fine_lists_find_as_before(self) -> None:
+        self.assertIn("acmedw-dev", self.find("acmedw dev", "en")["_text"])
+        self.assertIn("One fits", self.find("acmedw dev", "en")["_text"])
+
+
 if __name__ == "__main__":
     unittest.main()

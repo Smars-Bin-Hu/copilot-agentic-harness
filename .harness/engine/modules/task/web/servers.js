@@ -176,7 +176,7 @@ const SERVERS = (function () {
       const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : wait ? "ring" : row.signed ? "ok" : "ring")});  // `signed`: kept here, or a program's own sign-in that the last check got through (the Enter screen counts the same)
       let words;
       if (via === "mcp") words = h("span", {class: "tl-who none"}, t("connections.state.mcp"));
-      else if (via === "nopack") { const mode = guard && ["faulty", "gone"].includes(guard.state) ? guard.state : "off"; words = h("span", {class: "tl-who none", title: t(mode === "off" ? "connections.state.nopack.tip" : "connections.state." + mode + ".tip", {file: guard ? guard.file : "", problem: guard ? guard.problem : ""})}, t(mode === "off" ? "connections.state.nopack" : "connections.state." + mode)); }  // what the gate does with its calls is told as it is (1.7.38, S1)
+      else if (via === "nopack") { const mode = guard && ["faulty", "gone", "listfault"].includes(guard.state) ? guard.state : "off"; words = h("span", {class: "tl-who none", title: t(mode === "off" ? "connections.state.nopack.tip" : "connections.state." + mode + ".tip", {file: guard ? guard.file : "", problem: guard ? guard.problem : ""})}, t(mode === "off" ? "connections.state.nopack" : "connections.state." + mode)); }  // what the gate does with its calls is told as it is (1.7.38, S1)
       else if (!row.signed && !last) words = h("span", {class: "tl-who none"}, t("connections.none"));
       else {
         // Who it is signed in as (1.7.38): the account kept here; else the name the last test answered with; else, for a token, that a token is saved. A failed test of something not kept says it was not kept.

@@ -616,6 +616,9 @@ def guard_of(root: Path, type_name: str, found: Optional[List[Dict[str, Any]]] =
         if type_name in one["types"] or (one["unreadable"] and not one["types"] and one["pack"] == type_name):
             first = one["faults"][0]
             return {"state": "faulty", "file": first["file"], "problem": str(first["problem"])[:240]}
+    unlisted = use_fault(root)
+    if unlisted:  # (1.7.38, C13 FR2 6) the list of the packs that are on cannot be read: the pack is not off, nobody could say if it is
+        return {"state": "listfault", "file": unlisted["file"], "problem": unlisted["problem"]}
     if any(type_name in type_names(item["folder"]) for item in listed(root).values()):
         return {"state": "off", "file": "", "problem": ""}
     return {"state": "gone", "file": "", "problem": ""}

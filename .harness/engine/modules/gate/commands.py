@@ -233,14 +233,19 @@ def servers_find(root: Path, words: List[str]) -> Dict[str, Any]:
     window = connections.window_aliases(root)  # the same connections as the line at the start of a chat: all of them (1.7.38, C12 TB-07, FB-3)
     away, unknown = connections.away_aliases(root), connections.unknown_aliases(root)
     how_of = {one["alias"]: one["how"] for one in connections.calls(root, every=True) if one.get("how")}  # with `harness as <name> --` in front when this window does not carry it (or it is not known)
+    try:
+        broken = connections.faults(root)  # 1.7.38 (C13 FR 3, FR2 6): a list that cannot be read is not an empty list, and not a list with one connection fewer: say the file and the fault first, so the agent tells the user and does not wait for connections to be set up
+        from core import toolpacks
+
+        unlisted = toolpacks.use_fault(root)  # the company's list of the tool packs it turns on cannot be read: the connections cannot be matched with their packs
+    except Exception:  # noqa: BLE001 - the answer below is still true
+        broken, unlisted = [], None
+    if broken:  # even a connection of the person's own: the gate holds every call of the programs of the connection types until the file is fixed, so it is not one to use
+        return {"_text": say("connections.find.fault", file=broken[0]["file"], problem=" ".join(str(broken[0]["problem"]).split())[:240]), "exit_code": 1}
+    if unlisted:
+        return {"_text": say("connections.find.packs_fault", file=unlisted["file"], problem=" ".join(str(unlisted["problem"]).split())[:240]), "exit_code": 1}
     found = connections.find(root, text, aliases=window) if text else {"matches": [], "total": 0, "all": len(window), "envs": []}
     if not found["all"]:
-        try:
-            broken = connections.faults(root)  # 1.7.38 (C13 FR 3): a list that cannot be read is not an empty list: say the file and the fault, so the agent tells the user and does not wait for connections to be set up
-        except Exception:  # noqa: BLE001 - the answer below is still true
-            broken = []
-        if broken:
-            return {"_text": say("connections.find.fault", file=broken[0]["file"], problem=" ".join(str(broken[0]["problem"]).split())[:240]), "exit_code": 1}
         return {"_text": say("connections.find.empty")}
     if not text:
         return {"_text": say("connections.find.words")}

@@ -23,7 +23,7 @@ To see which version you have: `harness --version`.
 - **The agent waits for your answer in the same turn** (`harness wait --approval <code>`): no model call, 9 minutes at most. It goes on at once when you approve, open or dismiss; with no answer it ends its turn and the board wakes it when you decide. **Dismiss asks why** (wrong command, wrong connection, not now, do it another way, no reason). The agent fixes the call or stops; it never reaches the same result another way.
 - **Closing is your acceptance, and the agent closes nothing.** The agent never asks "close the task?" and never runs `harness task close`: the gate refuses it with a line that says to deliver. A promote accepts a development task, and the board closes it. Every other task, a look and a ticket chore included, ends with `harness task deliver` and a short summary, and shows **to accept**: **Accept and close** (no tokens) or **Not yet**. Until you accept, a follow-up stays in the same task; once it is closed, a new question opens a new task.
 - **Accept and close lists what still waits.** When calls of the task still wait for you, the board says "N calls still wait for you" with a line for each, and closes on the second yes. Every close voids those calls for good: they go to the task history ("task accepted and closed") and can never be approved or run.
-- **An approval wakes the agent by itself.** Confirming the requirement, approving the plan and approving the promote on the board send the "go on" message at once, when the chat is idle: no second click on **send to agent**. When the chat cannot take it, the button stays.
+- **An approval wakes the agent by itself.** Confirming the requirement, approving the plan and approving the promote on the board send the "go on" message at once, when the chat is idle: no second click on **Send to agent**. When the chat cannot take it, the button stays.
 - **A tool pack with a faulty file fails closed.** A type file that cannot be read or is not valid (an unknown key, a pattern that does not compile, a list of the wrong shape), or a `rules.json` that is not valid, no longer leaves the pack's programs unguarded: every call of them is held, the card and the agent's text say which file is wrong and how, `harness doctor` reports an error and the **Tool packs** row of the Enter screen is red.
 - **A script a command names is shown and pinned in a target repository too** (`sqlcmd -i source/repos/<repository>/load.sql`): on the card, in View, and kept as you read it, as a script in the task folder was.
 - **`wget`, `Invoke-WebRequest`, `Invoke-RestMethod`, `iwr` and `irm` to an Azure DevOps address are judged like `curl`:** a plain read runs, a delete is refused and the agent is told to use `ado`, anything else asks. A call that saves to a file, goes to another address or was cut in two by a backtick or a PowerShell hashtable asks as before. ado 0.4.11.
@@ -32,11 +32,14 @@ To see which version you have: `harness --version`.
 - **`harness doctor` warns when a running VS Code lacks this copy's settings,** says what is missing and to use **Restart VS Code** on the board.
 - **go-sqlcmd's long options** (`--server`, `--input-file`, `--query`, `--initial-query`, `--output-file`, `--trace-file`, `--database-name`) are read like `-S`, `-i`, `-Q`, `-q`, `-o`, `-d`. sqlserver 1.1.1.
 - **The agent finds a connection a little at a time.** A chat starts with kinds and counts (`3 SQL Server, 1 Azure DevOps`). `harness connections find <words>` matches name, type, environment (`dev` keeps only DEV) and **What it is for**. When two fit, it asks you and never picks PROD for you.
+- **A held card shows every script file and the system of every statement.** A line with `-i a.sql -i b.sql` shows both, in its facts and in View, and Copy gives both. A line that reaches more than one system names each system, on the head of the card and on each statement.
 - **Held cards say more:** the script of `sqlcmd -i <file>`, what `curl -d` sends, each statement of a line with two. **Approve** keeps the script as you read it: a file changed after View or Approve is asked again. The report counts a held call apart from a refused one, and the wait as your time.
 - **Gate.** A pack that is off still guards its connections. `az rest` and `curl` to an Azure DevOps address are judged alike: a read runs, a write is held, a delete is refused. A made-up subcommand of a pack's program (`ado workitem`) is refused in one line. A company pack named like a factory pack stops `harness company sync`.
 - **Three answers for a call to a database.** A tool pack type whose program takes text (`sqlcmd -Q`, a script file) lists what passes (`reads`), what an opened connection passes (`writes`) and what is refused (`refuse`, each with the right way). Only what the gate can show to be a read runs unasked; `DROP`, `TRUNCATE`, `EXEC('...')`, `xp_cmdshell`, sqlcmd's `!!` and `:connect` are refused and the agent is told what to do instead; everything else waits for you, and the card says why (**Why held**). An opened connection passes only the write list; a call off the lists has no **Open** button. Prod passes reads only. The refuse list is best effort; the final guarantee is the account's rights ([12](12-guardrails-and-gate.md)).
 - **Skills and packs.** The `ado` skills write what you asked without asking in the chat first. The `sqlserver` skill deploys to DEV and IST itself, held for you. **ado 0.4.10** and **sqlserver 1.1.0** need harness 1.7.38. In ado `--text`, only `\n` and `\\` are turned (`C:\temp\data` arrives whole); the `ADO_*` variables are no longer read.
 - **One board for a copy.** A second start, on any port, opens the board that runs.
+- **A small link icon after the name of a task linked to tickets,** in the task list and on the lobby card. Point at it: the tickets are listed as `type:id`, and each opens its address in a new tab.
+- **A connection type may say `"env": "none"`** (a ticket board). The form for a connection of your own then does not ask for an environment.
 
 ### Changed
 
@@ -45,8 +48,13 @@ To see which version you have: `harness --version`.
 - **Change the setup is four cards:** the short command, You, From the company (optional, with **Code repositories**), Local. **Finish setup** is below. A language you choose applies at once.
 - A test that never reached the system keeps what you typed as "saved, not tested yet"; a test that got no answer in time counts as not reaching it ("saved, not tested yet: no answer"); a wrong sign-in is not kept. `harness doctor` names the connections with no sign-in in one warning. Enter counts only the connections of packs that are on.
 - The pop of **linked items** says that only the tickets linked when you open them are opened; a ticket the agent links by itself still asks you.
-- The code of a requirement, a plan or a promote is six capitals, like the code of a held call (an old eight-character code still works). To ask for approval, the agent names the button of the task page, not a command.
+- The code of a requirement, a plan or a promote is six capitals, like the code of a held call. To ask for approval, the agent names the button of the task page, not a command.
 - The Terminal window that a button opened closes itself 2.5 seconds after the command ended well. Chinese texts name a button as the screen does.
+- The form for a connection of your own has no kind chosen for you. It shows only **Kind**, **Name** and **What it is for** until you pick one.
+- The line at the start of a chat and `harness connections find` count and list every connection. A connection VS Code was not opened with is marked: it works through `harness as <name> -- <command>`.
+- Chinese texts name the kind of a call in Chinese only (写, not 写（write）). The English word stays in the hover of the card and in the logs.
+- Every English label of a board button starts with a capital (**Approve plan**, **Confirm requirement**, **Pause**, **Send to agent**).
+- The skill `harness-rookie-wondering` says you approve the plan, the requirement and the promote with the buttons on the task page.
 
 ### Fixed
 
@@ -55,6 +63,7 @@ To see which version you have: `harness --version`.
 
 ### Retired
 
+- **The old confirmation code of eight characters.** The code is six characters; an old page that still sends eight is refused: press the button again.
 - **The agent closing a look or a ticket chore itself.** It delivers them now; you accept and close.
 - **The second click after an approval** ("tell the agent to go on") for the requirement, the plan and the promote, when the chat can take the message.
 - **The Tools window with two tabs.** Local, the connection rows and Tool packs replace it.

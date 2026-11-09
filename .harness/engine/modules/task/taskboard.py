@@ -213,6 +213,30 @@ def opened_marks(data: Dict[str, Any]) -> List[str]:
     return marks
 
 
+_link_views: Dict[Tuple[str, Tuple[str, ...]], Tuple[float, List[Dict[str, str]]]] = {}  # (root, the refs of a task) -> (when, their views): the list asks every few seconds
+LINK_VIEW_S = 30
+
+
+def link_marks(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
+    """The items of other tools the task is linked to (1.7.38): `{ref, type, id, label, url}` for each, as the task page draws its chips. The list and the card of the lobby show them as one small icon.
+    Nothing for a task with no link; a tool pack that cannot be read leaves the text of each link and no address. Kept for a moment: it reads the packs and the connections."""
+    refs = tuple(str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref"))
+    if not refs:
+        return []
+    key = (str(root), refs)
+    kept = _link_views.get(key)
+    if kept and time.time() - kept[0] < LINK_VIEW_S:
+        return kept[1]
+    try:
+        from core import toolpacks
+
+        views = [toolpacks.link_view(root, ref) for ref in refs]
+    except Exception:  # noqa: BLE001 - a broken tool pack: the links show as text, with no address
+        views = [{"ref": ref, "type": ref.split(":", 1)[0], "id": ref.split(":", 1)[-1], "label": "", "url": "", "toolpack": ""} for ref in refs]
+    _link_views[key] = (time.time(), views)
+    return views
+
+
 def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (), rewrite: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
     """The rows of the board, each with its numbers, the page of the task (written over the one of before) and its actions.
     A task whose numbers cannot be worked out is listed without them. With `everything`, the newest closed tasks come
@@ -241,9 +265,11 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         if task_ops.req_placeholders(root, row["task"]):  # REQ.md still holds the template's text (1.7.22): nothing to confirm yet, in any tier
             row["actions"] = [item for item in row["actions"] if item["action"] != "confirm-req"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
-        row["open_conns"] = opened_marks(tasks.read(root, row["task"]) or {}) if row["status"] == "open" else []  # what the person opened for the task (1.7.38: connections, and the linked items): a mark under the name
+        data = tasks.read(root, row["task"]) or {}
+        row["open_conns"] = opened_marks(data) if row["status"] == "open" else []  # what the person opened for the task (1.7.38: connections, and the linked items): a mark under the name
+        row["links"] = link_marks(root, data)  # the items of other tools the task is linked to (1.7.38): a small link icon in the list and on the card of the lobby, the tip lists them
         if row["status"] == "open":
-            row["sub"] = tasksub.from_hooklog(root, tasks.read(root, row["task"]) or {})  # the last tool call of the hook log; a board served with VS Code replaces it with the chat's own line
+            row["sub"] = tasksub.from_hooklog(root, data)  # the last tool call of the hook log; a board served with VS Code replaces it with the chat's own line
         key = (str(root), row["task"])
         kept = _closed.get(key) if row["status"] == "closed" else None
         if kept and kept[0] == row["updated_at"] and (root / common.REPORTS_DIR / kept[2]).is_file():

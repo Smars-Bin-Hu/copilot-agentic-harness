@@ -193,7 +193,7 @@ class DeliveredWithAnOpenRequirementTests(AcceptCase):
         import io
 
         req = self.task / "REQ.md"
-        code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+        code = hashlib.sha256(req.read_bytes()).hexdigest()[:6]
         task_ops.confirm_req(self.root, TASK, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
         data = self.data()
         self.assertEqual(data["waiting"]["why"], "accept")

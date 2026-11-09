@@ -104,15 +104,24 @@ def commands(command: str) -> List[str]:
     return out
 
 
+MAX_SCRIPTS = 4  # how many script files of one line the card shows whole
+
+
 def layout(command: str, folder: Optional[Path] = None, root: Optional[Path] = None, cwd: str = "") -> Dict[str, Any]:
-    """The lines of a command for the small window: `{program, lines: [{kind, text, value?}], script?}`. `kind`: program, option (with its value), flag (no value), block (a long quoted
-    value on its own), arg (a bare value). `script`: a file the command names that is in `folder` (the task), with its text (capped) and its line count. 1.7.38: a relative path is looked for
-    where the agent's terminal was (`cwd`), then from the root of the repository (`root`, where its terminal starts), then in the task folder (`core.pinfiles.find`)."""
+    """The lines of a command for the small window: `{program, lines: [{kind, text, value?}], script?, scripts}`. `kind`: program, option (with its value), flag (no value), block (a long quoted
+    value on its own), arg (a bare value). `scripts`: every file the command names that is in `folder` (the task), each with its text (capped) and its line count, in the order of the line (a line
+    that names two `-i` files shows both, 1.7.38); `script` is the first. 1.7.38: a relative path is looked for where the agent's terminal was (`cwd`), then from the root of the repository (`root`, where
+    its terminal starts), then in the task folder (`core.pinfiles.find`)."""
     found = tokens(command)
     if not found:
-        return {"program": "", "lines": [], "script": None}
+        return {"program": "", "lines": [], "script": None, "scripts": []}
     lines: List[Dict[str, Any]] = [{"kind": "program", "text": found[0]["text"]}]
-    script = None
+    scripts: List[Dict[str, Any]] = []
+
+    def keep(named: Optional[Dict[str, Any]]) -> None:
+        if named and len(scripts) < MAX_SCRIPTS and all(named["path"] != one["path"] for one in scripts):
+            scripts.append(named)
+
     index = 1
     while index < len(found):
         item = found[index]
@@ -128,30 +137,30 @@ def layout(command: str, folder: Optional[Path] = None, root: Optional[Path] = N
             nxt = None  # an option at the end of a command takes no value from the next one
         if item["text"].startswith("-") and not item["quoted"] and len(item["text"]) > 1:
             if nxt is not None and (nxt["quoted"] or not nxt["text"].startswith("-") or nxt["text"] == "-1"):
-                named = _script_in(folder, nxt, script, root, cwd, command)  # a quoted path as long as a query is still a path (C12 N4): the file is shown, and the path stays a value, not a block of text
+                named = _script_in(folder, nxt, root, cwd, command)  # a quoted path as long as a query is still a path (C12 N4): the file is shown, and the path stays a value, not a block of text
                 if nxt["quoted"] and (len(nxt["text"]) >= LONG or "\n" in nxt["text"]) and named is None:
                     lines.append({"kind": "option", "text": item["text"], "value": ""})
                     lines.append({"kind": "block", "text": nxt["text"]})
                 else:
                     lines.append({"kind": "option", "text": item["text"], "value": nxt["text"], **({"quoted": True} if nxt["quoted"] else {})})  # quoted: the body of the call when there is no block (a short query)
-                    script = script or named
+                    keep(named)
                 index += 2
                 continue
             lines.append({"kind": "flag", "text": item["text"]})
         else:
-            named = _script_in(folder, item, script, root, cwd, command)
+            named = _script_in(folder, item, root, cwd, command)
             if item["quoted"] and (len(item["text"]) >= LONG or "\n" in item["text"]) and named is None:
                 lines.append({"kind": "block", "text": item["text"]})
             else:
                 lines.append({"kind": "arg", "text": item["text"], **({"quoted": True} if item["quoted"] else {})})
-                script = script or named
+                keep(named)
         index += 1
-    return {"program": found[0]["text"], "lines": lines, "script": script}
+    return {"program": found[0]["text"], "lines": lines, "script": scripts[0] if scripts else None, "scripts": scripts}
 
 
-def _script_in(folder: Optional[Path], token: Dict[str, Any], found: Optional[Dict[str, Any]], root: Optional[Path], cwd: str, command: str) -> Optional[Dict[str, Any]]:
-    """The file this token names, when no script was found yet on the line and the token can be a path (one line, no operator)."""
-    if found is not None or folder is None or token.get("op") or "\n" in token["text"]:
+def _script_in(folder: Optional[Path], token: Dict[str, Any], root: Optional[Path], cwd: str, command: str) -> Optional[Dict[str, Any]]:
+    """The file this token names, when the token can be a path (one line, no operator)."""
+    if folder is None or token.get("op") or "\n" in token["text"]:
         return None
     return script_of(folder, token["text"], root, cwd, command)
 

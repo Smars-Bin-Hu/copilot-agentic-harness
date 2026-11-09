@@ -494,7 +494,7 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
     def test_confirming_the_requirement_wakes_the_agent(self) -> None:
         self.write_req()
         self.stopped()
-        code = hashlib.sha256((self.task / "REQ.md").read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:8]
+        code = hashlib.sha256((self.task / "REQ.md").read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:6]
         done = self.board.act("confirm-req", NAME, "act", code=code)
         self.assertEqual(done["agent"], "message")
         self.assertEqual([item["text"] for item in self.link.sent], ["Requirement confirmed (REQ.md). Go on."])
@@ -517,7 +517,7 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.dev("repo_b/src/a.sql", "select 1, 2;\n")
         self.run_cli("task", "promote", "--dry-run")
         self.stopped()
-        done = self.board.act("approve-promote", NAME, "act", code=self.data()["promote"]["plan_sha256"][:8])
+        done = self.board.act("approve-promote", NAME, "act", code=self.data()["promote"]["plan_sha256"][:6])
         self.assertEqual(done["agent"], "message")
         self.assertIn("Promote (write-back repo) approved", self.link.sent[-1]["text"])
 

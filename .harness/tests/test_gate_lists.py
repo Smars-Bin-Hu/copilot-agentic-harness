@@ -108,7 +108,7 @@ class PassAskRefuseTests(ListedCase):
 
     def test_one_statement_off_the_list_holds_the_call_and_the_card_says_what_it_is(self) -> None:
         reason = self.held(f'{SERVER} -Q "SELECT 1; UPDATE dbo.orders SET a = 1 WHERE id = 3"')
-        self.assertIn("write", reason)
+        self.assertIn("「写」", reason)  # the tests run in Chinese: the kind of a call is the word of the board only, 写 (C13 D5), not 写（write）
         action, decision = self.classify(f'{SERVER} -Q "SELECT 1; UPDATE dbo.orders SET a = 1 WHERE id = 3"')
         self.assertEqual((action.zone, action.verb, decision), ("write", "write", "outbox"))
         action, _ = self.classify(f'{SERVER} -Q "SELECT a INTO b FROM c"')

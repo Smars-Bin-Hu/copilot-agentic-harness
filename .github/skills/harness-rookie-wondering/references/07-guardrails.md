@@ -45,7 +45,7 @@ When the same refusal keeps coming up (`circuit_breaker.repeat_limit`, 3 times b
 
 ### 7.6 How refusal reasons are written
 
-Every refusal is in the message table (`core/messages.en.json`, `core/messages.zh.json`): it says why, and gives the next step. For a write to `DEV/` before the plan is approved, for example, the reason tells the agent to write `PLAN.md`, stop, and ask the user to run `task approve-plan` in the terminal. Having read it, the agent knows the next step and does not get stuck.
+Every refusal is in the message table (`core/messages.en.json`, `core/messages.zh.json`): it says why, and gives the next step. For a write to `DEV/` before the plan is approved, for example, the reason tells the agent to write `PLAN.md`, stop, and ask the user to read it and press **Approve plan** on the task page. Having read it, the agent knows the next step and does not get stuck.
 
 ## Hands on
 

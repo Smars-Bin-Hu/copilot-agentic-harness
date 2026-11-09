@@ -3739,5 +3739,10 @@
   "ready.p.identity.short": "VS Code 没带 {n} 个连接的身份（{names}）：agent 走 harness as。点“{@ready.vs.identities}”可以带上。",
   "ready.p.identity.short.one": "VS Code 没带 {names} 的身份：agent 走 harness as。点“{@ready.vs.identities}”可以带上。",
   "board.enter.sys.identity": "VS Code 没带这个身份：agent 走 harness as。点“{@ready.vs.identities}”可以带上。",
-  "doctor.vscode.settings": "正在运行的 VS Code 不是带着这份副本的设置启动的（缺：{missing}）。在看板（`harness task board`）上点“{@ready.vs.restart}”：重启后就带上了。在此之前，agent 的命令可能找不到工具或证书。"
+  "doctor.vscode.settings": "正在运行的 VS Code 不是带着这份副本的设置启动的（缺：{missing}）。在看板（`harness task board`）上点“{@ready.vs.restart}”：重启后就带上了。在此之前，agent 的命令可能找不到工具或证书。",
+  "connections.own.kind.first": "先选连接的种类。",
+  "connections.away.context": "其中 {n} 个不在这个窗口里：VS Code 打开时没带它们。`harness connections find` 会标出它们。这些连接的命令要这样运行：`harness as <名字> -- <命令>`。",
+  "connections.find.away": "[不在这个窗口里：harness as {alias} -- <命令>]",
+  "desk.outbox.systems": "系统",
+  "board.status.links": "关联的工单：{n}"
 }

@@ -122,8 +122,8 @@ class TaskCase(TargetCase):
     def plan_code(self, task: str = TASK, with_req: bool = False) -> str:
         if with_req:
             text = (self.root / task / "REQ.md").read_text(encoding="utf-8", errors="replace")
-            return task_ops.plan_digest_with(text, tasks.plan_digest(self.root, task))[:8]
-        return tasks.plan_digest(self.root, task)[:8]
+            return task_ops.plan_digest_with(text, tasks.plan_digest(self.root, task))[:6]
+        return tasks.plan_digest(self.root, task)[:6]
 
     def approve_plan(self, code: Optional[str] = None, out: Any = None, task: str = TASK, with_req: Optional[bool] = None) -> Dict[str, Any]:
         """A plan stands on a confirmed requirement (1.5.30): by default the requirement is written and confirmed with the plan, one code."""
@@ -153,7 +153,7 @@ class TaskCase(TargetCase):
         return self.run_cli("task", "fetch", "--task", task, *specs, ok=ok)
 
     def approve_promote(self, code: Optional[str] = None, out: Any = None, task: str = TASK) -> Dict[str, Any]:
-        typed = code if code is not None else self.data(task)["promote"].get("plan_sha256", "")[:8]
+        typed = code if code is not None else self.data(task)["promote"].get("plan_sha256", "")[:6]
         return task_ops.approve_promote(self.root, task, reader=lambda _prompt: typed, interactive=True, out=out or io.StringIO())
 
     def promoted(self) -> Dict[str, Any]:

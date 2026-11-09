@@ -643,7 +643,7 @@ class DeskTests(ServeCase):
         cookie = self.pair()
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
         self.assertEqual(status, 200, data)
-        code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+        code = hashlib.sha256(req.read_bytes()).hexdigest()[:6]
         self.assertIn(code[:6].upper(), data["result"]["ask"])
         self.assertEqual(task_ops.req_state(self.root, TASK), "open")  # a look confirms nothing
         self.assertEqual(self.request("POST", "/api/act", {**body, "code": "00000000"}, cookie=cookie)[0], 409)
@@ -690,7 +690,7 @@ class DeskTests(ServeCase):
         (self.task / "PLAN.md").unlink(missing_ok=True)
         req = self.task / "REQ.md"
         self.fill_req(req)
-        code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+        code = hashlib.sha256(req.read_bytes()).hexdigest()[:6]
         task_ops.confirm_req(self.root, TASK, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
         desk = taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))
         self.assertEqual(desk["waiting_why"], "go-req")
@@ -711,7 +711,7 @@ class DeskTests(ServeCase):
         def reader(_asked: str) -> str:  # the person types the right code of the version they read; then the agent edits the file
             import hashlib
 
-            code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+            code = hashlib.sha256(req.read_bytes()).hexdigest()[:6]
             req.write_text(req.read_text(encoding="utf-8") + "\nMore.\n", encoding="utf-8")
             return code
 
@@ -789,19 +789,19 @@ class DeskTests(ServeCase):
     def test_a_decision_on_the_checks_and_a_recovery_leave_the_same_mark(self) -> None:
         from modules.task import taskreview, tasksnap
 
-        code = (tasksnap.results_digest(self.root, TASK) or "0" * 64)[:8]
+        code = (tasksnap.results_digest(self.root, TASK) or "0" * 64)[:6]
         taskreview.extend(self.root, TASK, 2, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
         self.assertEqual(self.data()["waiting"]["why"], "go-review")  # the plan of this case is not approved: it would be named first
         self.prompt("go on")
         with task_ops.locked(self.root, TASK) as data:
             data["promote"] = {"state": "partial", "plan_sha256": "ab" * 32, "branch": "feature/job1", "recovery": [], "recovery_steps": []}
-        task_ops.recover(self.root, TASK, reader=lambda _prompt: "abababab", interactive=True, out=io.StringIO())
+        task_ops.recover(self.root, TASK, reader=lambda _prompt: "ababab", interactive=True, out=io.StringIO())
         self.assertEqual(self.data()["waiting"]["why"], "go-recover")
 
     def test_an_approval_leaves_a_mark_until_the_next_prompt_and_the_page_says_what_to_tell_the_agent(self) -> None:
         confirm_requirement(self.root, TASK)
         digest = tasks.plan_digest(self.root, TASK)
-        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
+        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:6], interactive=True, out=io.StringIO())
         desk = taskdesk.desk(self.root, "job1", ())
         self.assertEqual((desk["waiting_why"], [item["action"] for item in desk["actions"]]), ("go-plan", ["pause"]))  # no button is the point: the word is to the agent
         self.assertEqual(self.data()["waiting"]["why"], "go-plan")
@@ -813,7 +813,7 @@ class DeskTests(ServeCase):
         self.assertEqual(taskdesk.desk(self.root, "job1", ())["plan_approval"], {"approved": False, "at": "", "code": "", "changed": False})
         confirm_requirement(self.root, TASK)
         digest = tasks.plan_digest(self.root, TASK)
-        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
+        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:6], interactive=True, out=io.StringIO())
         found = taskdesk.desk(self.root, "job1", ())["plan_approval"]
         self.assertEqual((found["approved"], found["code"], found["changed"]), (True, approval.code_of(digest), False))
         self.assertEqual(found["at"], self.data()["plan"]["approved_at"])

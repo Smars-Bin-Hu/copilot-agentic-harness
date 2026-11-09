@@ -267,7 +267,7 @@ class SendCase(ServeCase):
         import io
 
         confirm_requirement(self.root, TASK)
-        code = tasks.plan_digest(self.root, TASK)[:8]
+        code = tasks.plan_digest(self.root, TASK)[:6]
         task_ops.approve_plan(self.root, TASK, reader=lambda _asked: code, interactive=True, out=io.StringIO())
         return code
 

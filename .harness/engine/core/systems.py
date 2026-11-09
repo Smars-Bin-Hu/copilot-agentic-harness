@@ -272,6 +272,15 @@ def reach(systems: Dict[str, Any], run: Callable[[str], Tuple[Optional[int], str
     return found
 
 
+def verb_word(verb: str) -> str:
+    """The kind of a call as a person reads it: the protocol word in English (`write`); in Chinese the word of the board only (`写`). The English word stays in hovers and logs."""
+    from . import messages
+    if messages.language() == "en":
+        return verb
+    found = messages.text(f"desk.outbox.verb.{verb}")
+    return verb if found == f"desk.outbox.verb.{verb}" else found
+
+
 def place(system: str, env: str) -> str:
     """Where a call goes, for a sentence: `finance (IST)`; a system with no environment is just its name (1.7.21)."""
     return system if not env or env == "none" else f"{system} ({env})"

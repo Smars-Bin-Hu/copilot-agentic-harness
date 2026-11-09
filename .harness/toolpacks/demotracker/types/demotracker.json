@@ -1,6 +1,7 @@
 {
   "type": "demotracker",
   "label": "Demo tracker",
+  "env": "none",
   "cli": [
     "demotracker"
   ],

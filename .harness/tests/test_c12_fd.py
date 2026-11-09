@@ -104,7 +104,7 @@ class ScriptFileTests(TaskCase):
 
     def test_a_script_that_writes_is_held_and_a_script_of_reads_runs(self) -> None:
         update = self.script("UPDATE dbo.orders SET status = 1 WHERE id = 3;\n", "u.sql")
-        self.assertIn("write", self.held(f"{SERVER} -i {update}"))
+        self.assertIn("「写」", self.held(f"{SERVER} -i {update}"))  # the tests run in Chinese: 写 only (C13 D5)
         read = self.script("-- a look\nUSE AcmeDW;\nGO\nSET NOCOUNT ON;\nSELECT TOP 5 * FROM dbo.orders;\n", "r.sql")
         self.assertEqual(self.term(f"{SERVER} -i {read}"), {})
 

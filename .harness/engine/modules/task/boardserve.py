@@ -241,7 +241,7 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
                      "who": str((seen.get(f"{alias}:{server.get('env', '')}") or {}).get("who") or ""),
                      "untested": bool(saved) and reached == reach.UNKNOWN and (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("why") in (conn_core.UNTESTED, conn_core.UNTESTED_SLOW),
                      "untested_why": "no-answer" if bool(saved) and reached == reach.UNKNOWN and (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("why") == conn_core.UNTESTED_SLOW else ""})  # 1.7.38: `who` is the name a passed test answered with (a token has no account of its own to show); `untested`: kept, and no test has reached the system since
-    kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
+    kinds_out = {name: {"label": kind.get("label", name), "env": kind.get("env") or "", "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}
     return {"connections": rows, "signins": conn_core.signins(root), "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
 

@@ -91,6 +91,8 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
     out = []
     if kind.get("via", "cli") not in VIAS:
         out.append(f"types.{name}: `via` is one of {', '.join(VIAS)}")
+    if kind.get("env") not in (None, "none"):  # 1.7.38: `"env": "none"` says the type has no environments (a ticket board)
+        out.append(f"types.{name}: `env` is `none` (a type with no environments), or left out")
     if not isinstance(kind.get("fields", {}), dict) or (kind.get("via") != "mcp" and not kind.get("fields")):
         out.append(f"types.{name}: `fields` names what a connection of this type needs (host, port, org, ...)")
     if kind.get("via") == "mcp":
@@ -486,18 +488,22 @@ def widen(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def calls(root: Path) -> List[Dict[str, str]]:
+def calls(root: Path, every: bool = False) -> List[Dict[str, Any]]:
     """How the agent reaches each server: `[{alias, env, call}]`, `call` being the server's test command (no password in it), with `harness as <alias> --`
-    before it when this window reaches the server through the prefix. Only the servers the window was opened with, when it was opened from the board."""
+    before it when this window reaches the server through the prefix. Only the servers the window was opened with, when it was opened from the board. With `every` (1.7.38) the others
+    too, each with `away: True` and the prefix: `harness as` runs any connection that has a saved identity, whether or not the window was opened with it."""
     known, env, opened = types(root), read_env(root), state(root)
     wrapped, held = set(opened.get("wrap") or []), set(opened.get("direct") or []) | set(opened.get("wrap") or [])
     out = []
     for alias, server in listed(root).items():
         kind = known.get(str(server.get("type")))
-        if not kind or kind.get("via") == "mcp" or type_problems(kind) or server.get("env") not in ENVS or (held and alias not in held):
+        if not kind or kind.get("via") == "mcp" or type_problems(kind) or server.get("env") not in ENVS:
+            continue
+        away = bool(held) and alias not in held
+        if away and not every:
             continue
         call = command(kind, server, identity_of(env, alias, kind, server), alias)
-        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped else call})
+        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped or away else call, **({"away": True} if away else {})})
     return out
 
 
@@ -566,9 +572,14 @@ FIND_LIMIT = 5
 
 
 def window_aliases(root: Path) -> List[str]:
-    """The connections this chat can use: the ones `calls` gives. Layer 0 (the kinds and counts at the start of a chat) and layer 1 (`find`) both read this list, so they agree (1.7.38, C12 TB-07):
-    a connection signed in after VS Code was opened from the board is in neither."""
-    return [one["alias"] for one in calls(root)]
+    """Every connection the agent may reach (1.7.38, C12 FB-3): the ones this window was opened with and the others, which work through `harness as`. Layer 0 (the kinds and counts at the start of
+    a chat) and layer 1 (`find`) both read this list, so they agree (C12 TB-07); `away_aliases` says which are not in the window."""
+    return [one["alias"] for one in calls(root, every=True)]
+
+
+def away_aliases(root: Path) -> List[str]:
+    """The connections VS Code was not opened with (it was opened from the board, and these were left out, or signed in after): they are reached with `harness as <alias> -- <command>`."""
+    return [one["alias"] for one in calls(root, every=True) if one.get("away")]
 
 
 def find(root: Path, text: str, limit: int = FIND_LIMIT, aliases: Optional[List[str]] = None) -> Dict[str, Any]:

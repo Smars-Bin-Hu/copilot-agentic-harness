@@ -145,10 +145,10 @@ const Lobby = (function () {
       const row = entry.row, href = options.href(row);
       const served = typeof SERVE !== "undefined" && DATA.serve;
       card.setAttribute("aria-label", t("board.status.card.label", {name: row.name}));
-      put("head", JSON.stringify([row.name, row.kind, row.status, href, served && row.status === "open" ? row.chat || null : null]), () => [
+      put("head", JSON.stringify([row.name, row.kind, row.status, href, served && row.status === "open" ? row.chat || null : null, row.links || null]), () => [
         kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
         href ? h("a", {class: "lb-name", href, title: row.name}, row.name) : h("span", {class: "lb-name", title: row.name}, row.name),
-        served && row.status === "open" ? SERVE.vsButton(row.chat) : null]);
+        served && row.status === "open" ? SERVE.vsButton(row.chat) : null, Status.links(row.links)]);  // a small link icon when the task is linked to tickets (1.7.38)
       put("state", JSON.stringify([stateOf(row, liveNow), row.waiting, row.waiting_why, row.unheld_s, row.warn || []]), () => {
         const tag = stateTag(row, liveNow);
         const warn = row.warn && row.warn.length ? h("span", {class: "tag warn", title: row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n"), "aria-label": t("board.warn.label")}, "⚠") : null;

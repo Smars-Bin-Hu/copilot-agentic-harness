@@ -38,7 +38,7 @@ class PlanAndRunTests(DeleteCase):
         self.dry_run(request_id)
         screen = io.StringIO()
         plan = self.request(request_id)["promote"]["plan_sha256"]
-        task_ops.approve_promote(self.root, request_id, reader=lambda _prompt: plan[:8], interactive=True, out=screen)
+        task_ops.approve_promote(self.root, request_id, reader=lambda _prompt: plan[:6], interactive=True, out=screen)
         text = screen.getvalue()
         self.assertIn("delete", text)
         self.assertIn("会被删除", text)

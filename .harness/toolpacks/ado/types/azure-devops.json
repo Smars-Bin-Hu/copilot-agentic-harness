@@ -1,6 +1,7 @@
 {
   "type": "azure-devops",
   "label": "Azure DevOps",
+  "env": "none",
   "cli": [
     "ado"
   ],

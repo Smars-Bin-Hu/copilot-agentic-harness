@@ -209,7 +209,7 @@ def confirm_requirement(root: Path, task: str, text: str = "给 a.sql 加一列�
     for mark in ("<One or two paragraphs", "<一两段"):
         body = body.replace(mark, text + " ")
     path.write_text(body, encoding="utf-8")
-    code = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:8]
+    code = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:6]
     task_ops.confirm_req(root, task, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
 
 

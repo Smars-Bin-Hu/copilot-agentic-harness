@@ -11,12 +11,13 @@ from pathlib import Path
 from typing import List, Set
 
 _LISTS = re.compile(r'"(?:cli|programs)"\s*:\s*(\[[^\]]*\]|"[^"]*")')
+_OPEN_LISTS = re.compile(r'"(?:cli|programs)"\s*:\s*\[((?:\s*"[^"]*"\s*,?)*)')  # a list the file ends in the middle of (`"cli": ["sqlcmd"` and nothing more): the words it has
 _STRINGS = re.compile(r'"([^"\\]+)"')
 _WORD = re.compile(r"[^\s;&|(){}<>`'\"=,:$]+")
 _PATTERNS = re.compile(r'"pattern"\s*:\s*"((?:[^"\\]|\\.)*)"')
 
 
-def _folders(root: Path) -> List[Path]:
+def folders(root: Path) -> List[Path]:
     """Every folder a tool pack may be in: the factory's, the company's, and the ones added on this computer."""
     found: List[Path] = []
     try:
@@ -36,6 +37,14 @@ def _folders(root: Path) -> List[Path]:
     return found
 
 
+def cli_words(text: str) -> List[str]:
+    """The words of every `cli` and `programs` list in a text that may not be valid JSON, in lower case."""
+    names: Set[str] = set()
+    for found in _LISTS.findall(text or "") + _OPEN_LISTS.findall(text or ""):
+        names.update(word.lower() for word in _STRINGS.findall(found) if word.strip())
+    return sorted(names)
+
+
 def _text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8-sig", errors="replace")
@@ -47,7 +56,7 @@ def programs(root: Path) -> Set[str]:
     """The programs the tool packs and the tools policy name, in lower case, read as plain text (see the top of this file)."""
     files: List[Path] = []
     names: Set[str] = set()
-    for folder in _folders(root):
+    for folder in folders(root):
         try:
             files += [folder / "toolpack.json", folder / "rules.json"] + sorted((folder / "types").glob("*.json"))
             for one in sorted((folder / "bin").iterdir()) if (folder / "bin").is_dir() else []:
@@ -60,8 +69,7 @@ def programs(root: Path) -> Set[str]:
     except OSError:
         pass
     for path in files:
-        for found in _LISTS.findall(_text(path)):
-            names.update(word.lower() for word in _STRINGS.findall(found) if word.strip())
+        names.update(cli_words(_text(path)))
     names.discard("")
     return names
 
@@ -95,7 +103,7 @@ def _base(word: str) -> str:
 def names_tool(root: Path, tool: str) -> str:
     """The tool pack whose MCP tool rules match this tool name (read as plain text from `toolpack.json`), or empty."""
     try:
-        for folder in _folders(root):
+        for folder in folders(root):
             raw = _text(folder / "toolpack.json")
             if '"mcp"' not in raw:
                 continue

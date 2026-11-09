@@ -5,6 +5,12 @@
   "cli": [
     "ado"
   ],
+  "free": [
+    "--help",
+    "-h",
+    "--version",
+    "version"
+  ],
   "fields": {
     "org": {
       "label": "Organization",

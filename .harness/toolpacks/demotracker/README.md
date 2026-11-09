@@ -5,7 +5,7 @@ A made-up ticket board, so you can try the whole path with nothing to sign up fo
 ```text
 demotracker/
   toolpack.json               name, version, what it needs (the program), a link type (demo:<id>), MCP tool rules
-  types/demotracker.json      the connection type: its field (project), its own sign-in, its test, the gate's verbs and rules
+  types/demotracker.json      the connection type: its field (project), its own sign-in, its test, the gate's verbs and rules, `free` (the words that only print help: with no connection at all every other call of `demotracker` is refused)
   skills/demotracker-ticket   the skill the agent reads: MCP tools where they are, the program otherwise
   bin/demotracker             the program (tickets in ~/.demotracker.json); bin/demotracker-mcp: the same board as an MCP server
   mcp.json                    that MCP server for VS Code: added only where MCP is allowed

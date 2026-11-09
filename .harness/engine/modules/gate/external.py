@@ -773,25 +773,53 @@ def _pin_owner(systems: Dict[str, Any], pinned: List[str], args: List[str]) -> T
     return name, (seen if name is not None else pin.Pinned("unknown", seen.value, seen.canon, seen.option))
 
 
-def _unpinned(systems: Dict[str, Any], pinned: List[str], seen: pin.Pinned, tokens: List[str], start: int, ctx: "_Ctx", variables: Dict[str, str]) -> Optional[Action]:
-    """The refusal of a call of a pinned program that reaches no connection the gate can name (1.7.38, C13 F2). The refuse list of the type is read first, so a `DROP` is never decided by the server: the refusal then says
-    both. A call that only asks for help (`sqlcmd -?`) reaches nothing: None, it passes when the refuse list has nothing."""
-    first = systems[pinned[0]]
+def _caught(first: Dict[str, Any], name: str, tokens: List[str], start: int, ctx: "_Ctx", variables: Dict[str, str]) -> Optional[Action]:
+    """The refusal of the refuse list of a type, when the call holds a statement on it (the lists are read whatever else is wrong with the call: a `DROP` is never decided by the server); None when it holds none."""
     args = tokens[start + 1:]
     text = " ".join(tokens)
-    program = _program(tokens[start])
-    call = " ".join([program] + args)
+    call = " ".join([_program(tokens[start])] + args)
     caught: Optional[Action] = None
     if first.get("reads"):
-        zoned = _by_lists(first, pinned[0], "none", "", text, call, args, ctx, tokens[:start] + [f"{key}={value}" for key, value in variables.items()])
+        zoned = _by_lists(first, name, "none", "", text, call, args, ctx, tokens[:start] + [f"{key}={value}" for key, value in variables.items()])
         caught = zoned if zoned.zone == statements.REFUSE else None
     if caught is None and (first.get("refuse") or first.get("reads")):  # a statement the gate does not cut (`sqlcmd query "DROP TABLE t"`): its words are read as one text
         entry = statements.refuse_entry(first, " ".join(args))
         if entry:
-            caught = Action(pinned[0], "none", DESTROY, "", text, zone=statements.REFUSE, note=_short(" ".join(args)), reason=messages.pick(entry.get("reason") or ""))
+            caught = Action(name, "none", DESTROY, "", text, zone=statements.REFUSE, note=_short(" ".join(args)), reason=messages.pick(entry.get("reason") or ""))
+    return caught
+
+
+def _unpinned(systems: Dict[str, Any], pinned: List[str], seen: pin.Pinned, tokens: List[str], start: int, ctx: "_Ctx", variables: Dict[str, str]) -> Optional[Action]:
+    """The refusal of a call of a pinned program that reaches no connection the gate can name (1.7.38, C13 F2). The refuse list of the type is read first, so a `DROP` is never decided by the server: the refusal then says
+    both. A call that only asks for help (`sqlcmd -?`) reaches nothing: None, it passes when the refuse list has nothing."""
+    caught = _caught(systems[pinned[0]], pinned[0], tokens, start, ctx, variables)
     if seen.state == pin.FREE:
         return caught
-    return Action("", "none", DESTROY, (seen.value or program)[:120], text, call=call, why=seen.state, zone="unpinned", option=seen.option, note=caught.note if caught else "", reason=caught.reason if caught else "", file=caught.file if caught else "", file_why=caught.file_why if caught else "")
+    program = _program(tokens[start])
+    call = " ".join([program] + tokens[start + 1:])
+    return Action("", "none", DESTROY, (seen.value or program)[:120], " ".join(tokens), call=call, why=seen.state, zone="unpinned", option=seen.option, note=caught.note if caught else "", reason=caught.reason if caught else "", file=caught.file if caught else "", file_why=caught.file_why if caught else "")
+
+
+def _free(info: Dict[str, Any], args: List[str]) -> bool:
+    """Does the call only print help or the version (`free` of the type: `--help`, `-?`)? Such a call reaches no one. A type with a `pin` also needs that no server is named (`sqlcmd -S x --help` is judged like any call with a server)."""
+    words = [str(one) for one in info.get("free") or []]
+    if not words or not any(word in words for word in args):
+        return False
+    return pin.read(dict(info["pin"], free=words), args).state == pin.FREE if isinstance(info.get("pin"), dict) else True
+
+
+def _unconnected(system: Dict[str, Any], name: str, tokens: List[str], start: int, ctx: "_Ctx", variables: Dict[str, str]) -> Optional[Action]:
+    """The refusal of a call of a program that a tool pack declares and no connection lists (1.7.38, C13 F2b): the computer has no connection of its type, so there is no place the call could be judged for. The refuse
+    list is read first and its reason comes with the refusal; a call that only prints help or the version (`free`) passes when the refuse list has nothing."""
+    info = system["noconn"]
+    program = _program(tokens[start])
+    caught = _caught(system, name, tokens, start, ctx, variables)
+    if _free(info, tokens[start + 1:]):
+        return None if caught is None else Action("", "none", DESTROY, program, " ".join(tokens), call=" ".join([program] + tokens[start + 1:]), zone="blocked",
+                                                  reason=messages.text("gate.external.noconn.refused", statement=caught.note, reason=caught.reason))
+    also = messages.text("gate.external.noconn.also", statement=caught.note, reason=caught.reason) if caught is not None else ""
+    return Action("", "none", DESTROY, program, " ".join(tokens), call=" ".join([program] + tokens[start + 1:]), zone="blocked",
+                  reason=messages.text("gate.external.noconn", program=program, type=info.get("type") or "", also=also))
 
 
 def _code_blocked(tokens: List[str], ctx: "_Ctx") -> Optional[Action]:
@@ -868,6 +896,11 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             found.append(blocked)
         if name is not None and _program(tokens[start]) in ctx.quiet and (not addresses_fit(systems[name], " ".join(tokens[start + 1:])) or _cut_short(tokens[start + 1:], ctx.line)):
             name = None  # a program that only an address makes a call (curl) names an address that is not the system's: the system does not own it (nor a call whose end the line cut off: below)
+        if name is not None and systems[name].get("noconn"):  # 1.7.38 (C13 F2b): a program a tool pack declares and no connection lists
+            held = _unconnected(systems[name], name, tokens, start, ctx, variables)
+            if held is not None:
+                found.append(held)
+            continue
         if name is not None:
             system = systems[name]
             line = " ".join(tokens)  # the environment settings in front of the program say something too

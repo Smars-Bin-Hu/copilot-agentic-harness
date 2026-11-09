@@ -370,6 +370,84 @@ def broken_systems(root: Path) -> Dict[str, Any]:
     return out
 
 
+NO_CONNECTION = "no-connection-"  # the name of a system made for a program that no connection of its type lists (`unconnected`)
+
+
+def _free_words(kind: Dict[str, Any]) -> List[str]:
+    """The words of a type that only print help or the version (`free` of the type; `pin.free` for a type with a `pin`): a call with one reaches no server."""
+    given = kind.get("free")
+    if given is None and isinstance(kind.get("pin"), dict):
+        given = kind["pin"].get("free")
+    return [str(one) for one in given if isinstance(one, str) and one] if isinstance(given, list) else []
+
+
+def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
+    """(1.7.38, C13 F2b) For the gate: the systems of the programs that a tool pack declares and no system lists. A connection makes a system (`derived`); a computer with no connection of a type has no system for its program,
+    so a call of it was judged by no one and passed (`sqlcmd -S x -Q "UPDATE ..."` with the connection list empty). Now every pack this computer knows is read, on or off (the factory's, the company's, the folders added
+    here): the `cli` of each type it brings, and the `rules.json` systems of a pack that is off and guards no connection (a pack that is off still guards what it names). A program no system lists gets one made here, named
+    `no-connection-<type>`, with `noconn` (the type, its help-only words `free`, its `pin`) and the lists of the type, so the gate refuses the call with the way (no connection for it: the user adds one) and still reads the
+    refuse list first. A file that cannot be read is a `broken-<pack>` system: its programs are read from the text and held. The result is for the gate only: it is not part of the tools policy, so `tools check`
+    and the board do not show it. `{}` when there is nothing to add."""
+    from . import govern, toolpacks
+
+    have = {program for system in (systems or {}).values() if isinstance(system, dict) for program in outside.clis(system)}
+    taken = set(systems or {})
+    out: Dict[str, Any] = {}
+
+    def fresh(key: str) -> str:
+        while key in taken or key in out:
+            key += "_"
+        return key
+
+    def hold(pack: str, file: str, problem: Any, names: List[str]) -> None:
+        names = [one for one in names if one not in have]
+        if names:
+            out[fresh(f"broken-{pack}")] = {"reach": {"cli": names}, "env": "none", "toolpack": pack, "broken": f"{pack}: {file}: {' '.join(str(problem).split())}"[:400]}
+            have.update(names)
+
+    guarded = set(toolpacks.guarded(root))
+    for folder in govern.folders(root):
+        pack = folder.name
+        for path in sorted((folder / toolpacks.TYPES).glob("*.json")) if (folder / toolpacks.TYPES).is_dir() else []:
+            try:
+                text = path.read_text(encoding="utf-8-sig", errors="replace")
+            except OSError as error:
+                hold(pack, f"{toolpacks.TYPES}/{path.name}", error, [])
+                continue
+            try:
+                kind = json.loads(text)
+            except ValueError as error:
+                hold(pack, f"{toolpacks.TYPES}/{path.name}", error, govern.cli_words(text))
+                continue
+            cli = kind.get("cli") if isinstance(kind, dict) else None
+            programs = [str(one).lower() for one in ([cli] if isinstance(cli, str) else cli if isinstance(cli, list) else []) if isinstance(one, str) and one]
+            programs = [one for one in dict.fromkeys(programs) if one not in have]
+            if not programs:
+                continue
+            system: Dict[str, Any] = {"reach": {"cli": programs}, "env": "none", "toolpack": pack,
+                                      "noconn": {"type": str(kind.get("type") or path.stem), "free": _free_words(kind), "pin": kind["pin"] if isinstance(kind.get("pin"), dict) else None}}
+            for key in ("verbs", "reads", "writes", "refuse", "input"):  # what the refuse list needs to read the statements of the call
+                if kind.get(key) is not None:
+                    system[key] = kind[key]
+            out[fresh(NO_CONNECTION + str(system["noconn"]["type"]))] = system
+            have.update(programs)
+        if pack in guarded or not (folder / toolpacks.RULES).is_file():
+            continue  # a pack the gate reads already has its rules in the policy (`rules_layer`)
+        listed, problems = toolpacks._pack_rules(folder)  # noqa: SLF001 - the same reading `rules_layer` does
+        if problems:
+            try:
+                names = govern.cli_words((folder / toolpacks.RULES).read_text(encoding="utf-8-sig", errors="replace"))
+            except OSError:
+                names = []
+            hold(pack, toolpacks.RULES, problems[0], names)
+            continue
+        for key, spec in listed.items():
+            if isinstance(spec, dict) and fresh(key) == key:
+                out[key] = dict(spec, toolpack=pack)
+                have.update(outside.clis(spec))
+    return out
+
+
 def unset_fields(root: Path) -> List[Dict[str, Any]]:
     """The company's connections whose type has a field it needs (no `default`, not `optional`) that the connection leaves empty (1.7.30): `[{alias, type, fields}]`.
     A connection of a type no active pack brings is not asked about here."""

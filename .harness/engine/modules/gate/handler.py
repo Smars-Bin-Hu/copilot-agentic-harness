@@ -189,14 +189,15 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     """
     try:
         systems = ctx.policy("tools").get("systems") or {}
-        if not systems:
-            return None
-        invalid = external.validate(systems)
+        invalid = external.validate(systems) if systems else []
         if invalid:  # 1.7.38 (C13 F2): a list the gate cannot trust judges nothing, so a line that names a program a tool pack governs is refused (the old way passed every call)
             return failclosed.refusal(ctx.root, event.command, invalid[0], "invalid")
+        bare = connections.unconnected(ctx.root, systems)  # 1.7.38 (C13 F2b): the programs a tool pack declares that no connection lists: a call of one is refused, it names no place to be judged for
+        if not systems and not bare:
+            return None
         task = ctx.state.get("active_task")
-        every = external.classify(event.command, systems, unseen=True, root=ctx.root, cwd=event.cwd or "", folder=(ctx.root / str(task)) if task else None)
-        results = [_judge_one(event, ctx, systems, action, decision) for action, decision in every]
+        every = external.classify(event.command, {**systems, **bare}, unseen=True, root=ctx.root, cwd=event.cwd or "", folder=(ctx.root / str(task)) if task else None)
+        results = [_judge_one(event, ctx, {**systems, **bare}, action, decision) for action, decision in every]
     except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2): the gate failed on this line: refused when the line names a program a tool pack governs, as before (no opinion) when it names none
         return failclosed.refusal(ctx.root, event.command, error)
     if not results:
@@ -208,6 +209,7 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
         if external.DECISIONS.index(item["decision"]) > external.DECISIONS.index(best["decision"]):
             best = item
     best["offers"] = _offers([item["offer"] for item in stopped if item.get("offer")])
+    best["hint"] = (({**systems, **bare}).get(best["action"].system) or {}).get("hint")  # what to do instead: the system may be one made for a pack that is off, which the tools policy does not list
     return best
 
 
@@ -392,7 +394,7 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_refused if action.zone == "refuse" else rules.external_denied_file if action.file_why == "destroy" else rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
     if decision == external.DENY and not action.zone and not action.file_why:  # 1.7.38 (D1-7): a system may say what to do instead of the refused call (`hint`)
-        hint = ((ctx.policy("tools").get("systems") or {}).get(action.system) or {}).get("hint")
+        hint = judged.get("hint") or ((ctx.policy("tools").get("systems") or {}).get(action.system) or {}).get("hint")
         if hint:
             reason = rules.external_denied(action, command, hint)
     return Decision(permission="deny", reason=reason, facts=facts)

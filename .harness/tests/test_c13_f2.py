@@ -561,7 +561,7 @@ class FaultInjectionTests(SqlCase):
     def test_a_failure_in_the_handler_refuses_a_governed_call_and_leaves_local_work(self) -> None:
         for target in ("modules.gate.external.classify", "modules.gate.handler._judge_one", "modules.gate.handler.check_external", "modules.gate.handler.check_wrapped", "modules.gate.handler.check_terminal",
                        "modules.gate.handler.judge_external", "modules.gate.handler.settle_opened", "modules.gate.handler.external_facts", "modules.gate.handler.asks_board", "modules.gate.handler.check_secrets",
-                       "core.config.load_policy", "core.connections.listed"):
+                       "core.config.load_policy", "core.connections.listed", "core.connections.unconnected"):
             self.closed(self.inject(target, self.event(self.GOVERNED)), target)
             for line in self.LOCAL:
                 self.assertEqual(self.inject(target, self.event(line)), {}, (target, line))
@@ -622,6 +622,139 @@ class FaultInjectionTests(SqlCase):
         self.closed(self.inject("core.toolpacks.mcp_verb", raw), "mcp")
         other = self.event("", tool="mcp_other_tool", given={"id": 1})
         self.assertEqual(self.inject("core.toolpacks.mcp_verb", other), {})  # a tool no pack names: left as it was
+
+
+class NoConnectionCase(AdoCase):
+    """F2b spot 1: the three sample packs, and the connection list as a test says (no connection at all by default). `AdoCase.answer` says allow, ask (held on a card) or refuse (no card)."""
+
+    CONNECTIONS: Dict[str, Any] = {}
+
+    def setUp(self) -> None:
+        super().setUp()
+        use_packs(self.root, "sqlserver", "ado", "demotracker")
+        self.put(self.CONNECTIONS)
+
+    def put(self, connections: Dict[str, Any]) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": connections}), encoding="utf-8")
+
+    def turn_off(self) -> None:
+        (self.root / "knowledge-base/company/tools/packs.json").write_text(json.dumps({"use": []}), encoding="utf-8")
+
+    def refused_how(self, line: str) -> str:
+        before = self.waiting()
+        out = self.call(line)
+        self.assertEqual(out.get("permissionDecision"), "deny", line)
+        self.assertEqual(self.waiting(), before, f"refused, nothing to approve: {line}")
+        self.assertIn(HOW, out["permissionDecisionReason"], line)  # the way: look for a connection, then ask the user to add one
+        return out["permissionDecisionReason"]
+
+    def refused_with(self, line: str, text: str) -> None:
+        out = self.call(line)
+        self.assertEqual(out.get("permissionDecision"), "deny", line)
+        self.assertIn(text, out["permissionDecisionReason"], line)
+
+
+UNCONNECTED = (
+    'sqlcmd -S localhost,14332 -C -Q "UPDATE t SET a = 1 WHERE b = 2"', 'sqlcmd -S localhost,14332 -C -Q "SELECT 1"', 'sqlcmd -S localhost,14332 -C -Q "DROP TABLE t"', "sqlcmd -S localhost,14332 -C -i x.sql",
+    'sqlcmd -S "$SRV" -Q "SELECT 1"', 'sqlcmd -Q "SELECT 1"', 'SQLCMDSERVER=localhost,14332 sqlcmd -Q "SELECT 1"', 'sqlcmd query "select 1"', 'env sqlcmd -S localhost,14332 -Q "SELECT 1"',
+    'time sqlcmd -S localhost,14332 -Q "SELECT 1"', '/opt/homebrew/bin/sqlcmd -S localhost,14332 -Q "SELECT 1"', 'sqlcmd.exe -S localhost,14332 -Q "SELECT 1"', "SQLCMD -S localhost,14332 -Q 'select 1'",
+    'bash -c \'sqlcmd -S localhost,14332 -Q "SELECT 1"\'', 'sqlcmd -S localhost,14332 -Q "SELECT 1" | head', 'cd /tmp && sqlcmd -S localhost,14332 -Q "SELECT 1"', 'harness as acmedw-dev -- sqlcmd -S localhost,14332 -Q "SELECT 1"',
+    "ado items", "ado item 5", "ado comment 5 --text hi", "ado --conn ado me", "ado --json items", "/usr/local/bin/ado items", "ado.cmd items",
+    "demotracker --project DEMO get T-1", "demotracker --project DEMO set-state T-1 done", "demotracker --project OTHER delete T-1", "demotracker get T-1",
+)
+FREE_CALLS = ("sqlcmd -?", "sqlcmd --help", "sqlcmd --version", "ado --help", "ado -h", "ado --version", "ado version", "ado items --help", "demotracker --help", "demotracker -h", "demotracker --version")
+LOCAL_CALLS = ("ls", "git status", "python3 -m unittest", "which sqlcmd", "command -v ado", "echo sqlcmd", "grep -rn sqlcmd .", "git log -S sqlcmd", "cat notes.txt", "harness connections find dev", "az --version", "az login",
+               "az account show", "az group list", "python3 -c \"print(1)\"", "bash -c 'ls -la'", "echo 'sqlcmd -S x -Q \"DROP TABLE t\"' > .workspace/sandbox/tasks/job1/notes.md")
+
+
+class NoConnectionTests(NoConnectionCase):
+    """F2b spot 1: a program that a tool pack declares is governed even when the computer has no connection of its type. It was judged by no one (a connection makes the system that judges), so `sqlcmd -S x -Q "UPDATE ..."`
+    passed with an empty connection list. Now the call is refused, with the way: look for a connection, ask the user to add one."""
+
+    def test_an_empty_connection_list_refuses_every_call_of_the_programs_of_the_types(self) -> None:
+        for line in UNCONNECTED:
+            self.refused_how(line)
+
+    def test_the_reason_names_the_program_and_the_type(self) -> None:
+        reason = self.refused_how('sqlcmd -S localhost,14332 -C -Q "SELECT 1"')
+        self.assertIn(messages.text("gate.external.noconn", program="sqlcmd", type="sqlserver", also="").split("\n")[0], reason)
+        self.assertIn("`azure-devops`", self.refused_how("ado items"))
+        self.assertIn("`demotracker`", self.refused_how("demotracker --project DEMO get T-1"))
+
+    def test_the_refuse_list_is_read_first_and_its_reason_comes_with_the_refusal(self) -> None:
+        reason = self.refused_how('sqlcmd -S localhost,14332 -C -Q "DROP TABLE t"')
+        self.assertIn("`DROP TABLE t`", reason)
+        self.assertIn(messages.text("gate.external.noconn.also", statement="DROP TABLE t", reason="").strip().split("`")[0].strip(), reason)
+        out = self.call('sqlcmd --help -Q "DROP TABLE t"')  # help needs no connection; the DROP still has its refusal, and nothing is said about a connection
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("`DROP TABLE t`", out["permissionDecisionReason"])
+        self.assertNotIn(HOW, out["permissionDecisionReason"])
+
+    def test_a_call_that_only_prints_help_or_the_version_needs_no_connection(self) -> None:
+        self.check("allow", list(FREE_CALLS))
+        self.refused_how('sqlcmd -S localhost,14332 --help -Q "SELECT 1"')  # a server on the line: judged as a call that names one
+
+    def test_plain_local_work_and_the_lines_that_only_talk_about_a_program_stay_free(self) -> None:
+        self.check("allow", list(LOCAL_CALLS))
+
+    def test_other_connection_types_do_not_open_the_rest(self) -> None:
+        self.put({"ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "url": "https://localhost:18443"}})
+        for line in (l for l in UNCONNECTED if l.startswith(("sqlcmd", "SQLCMD", "demotracker", "env sqlcmd", "time sqlcmd", "/opt", "bash -c", "cd /tmp", "SQLCMDSERVER", "harness as"))):
+            self.refused_how(line)
+        self.check("allow", ["ado items", "ado item 5", "ado --version"] + list(FREE_CALLS) + list(LOCAL_CALLS))  # the connection of its own type owns its program, as before
+
+    def test_a_connection_of_the_type_brings_the_old_judgement_back(self) -> None:
+        self.put({"acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"}})
+        self.check("allow", ['sqlcmd -S localhost,14332 -C -Q "SELECT 1"', 'sqlcmd -S LOCALHOST,14332 -C -Q "select 1"'])
+        self.check("ask", ['sqlcmd -S localhost,14332 -C -Q "UPDATE t SET a = 1 WHERE b = 2"'])
+        self.refused_how('sqlcmd -S otherhost,1433 -C -Q "SELECT 1"')  # a server that is no connection: the pin refuses it, as before
+        self.refused_how('sqlcmd -C -Q "SELECT 1"')
+
+    def test_packs_that_are_off_still_govern_what_they_name(self) -> None:
+        self.turn_off()
+        for line in UNCONNECTED:
+            self.refused_how(line)
+        self.check("allow", list(FREE_CALLS) + list(LOCAL_CALLS))
+        out = self.call("az rest --method delete --url https://dev.azure.com/acme/_apis/x")  # the rules of the pack, off and with no connection
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("`ado`", out["permissionDecisionReason"])
+        self.check("refuse", ["az repos delete --id x --yes", "curl -X DELETE https://dev.azure.com/acme/_apis/x"])
+        self.check("ask", ["az rest --method post --url https://dev.azure.com/acme/_apis/x"])
+        self.check("allow", ["az devops project list", "az rest --method get --url https://dev.azure.com/acme/_apis/x"])
+        self.refused_with("bcp dbo.t out f.csv -S x -T", "SQL Server")
+
+    def test_a_program_a_pack_lists_by_rules_is_governed_with_no_connection_too(self) -> None:
+        self.check("refuse", ["bcp dbo.t out f.csv -S localhost,14332 -T", 'pwsh -c "Invoke-Sqlcmd -Query \'select 1\'"', "usql mssql://x", "isql -v dsn", 'python3 -c "import pyodbc"'])
+
+    def test_a_pack_file_that_cannot_be_read_holds_the_programs_of_a_pack_that_is_off(self) -> None:
+        self.turn_off()
+        (self.root / ".harness/toolpacks/sqlserver/types/sqlserver.json").write_text('{ "type": "sqlserver", "cli": ["sqlcmd" ', encoding="utf-8")
+        out = self.call('sqlcmd -S localhost,14332 -Q "SELECT 1"')
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("sqlserver.json", out["permissionDecisionReason"])
+        (self.root / ".harness/toolpacks/ado/rules.json").write_text('{ "systems": { "x": {"reach": {"cli": ["az"], "when": "(" ', encoding="utf-8")
+        out = self.call("az repos delete --id x --yes")
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("rules.json", out["permissionDecisionReason"])
+        self.check("allow", list(LOCAL_CALLS)[:5])
+        self.check("ask", ["az --version"])  # as for a pack that is on (G-1): every call of a program the faulty file names waits for the person
+
+    def test_a_repository_with_no_pack_at_all_is_left_alone(self) -> None:
+        import shutil
+
+        shutil.rmtree(self.root / ".harness/toolpacks")
+        self.check("allow", ["sqlcmd -S localhost,14332 -Q 'SELECT 1'", "ado items", "az repos delete --id x --yes"] + list(LOCAL_CALLS))  # no pack on this computer names them
+
+    def test_the_doctor_and_the_tools_policy_do_not_list_the_made_systems(self) -> None:
+        systems = config.load_policy(self.root, "tools")["systems"]
+        self.assertFalse([name for name in systems if name.startswith(connections.NO_CONNECTION)])
+        made = connections.unconnected(self.root, systems)
+        self.assertEqual(sorted(made), ["no-connection-azure-devops", "no-connection-demotracker", "no-connection-sqlserver"])
+        self.assertEqual(made["no-connection-sqlserver"]["noconn"]["free"], ["-?", "--help", "--version"])  # from the `pin` of the type
+        self.assertEqual(made["no-connection-azure-devops"]["noconn"]["free"], ["--help", "-h", "--version", "version"])
+        self.put({"acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"}})
+        systems = config.load_policy(self.root, "tools")["systems"]
+        self.assertNotIn("no-connection-sqlserver", connections.unconnected(self.root, systems))  # a system lists sqlcmd: nothing is made for it
 
 
 class HarnessCloseTests(BothCase):

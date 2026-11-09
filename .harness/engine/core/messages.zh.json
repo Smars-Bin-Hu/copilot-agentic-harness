@@ -3701,5 +3701,7 @@
   "accept.status.promoted": "做完：已 promote，{date} 由看板关闭",
   "accept.status.delivered": "{date} 已交付：等用户在看板上验收",
   "desk.live.approval": "等你批准",
-  "connections.own.kind.first": "先选连接的种类。"
+  "connections.own.kind.first": "先选连接的种类。",
+  "connections.away.context": "其中 {n} 个不在这个窗口里：VS Code 打开时没带它们。`harness connections find` 会标出它们。这些连接的命令要这样运行：`harness as <名字> -- <命令>`。",
+  "connections.find.away": "[不在这个窗口里：harness as {alias} -- <命令>]"
 }

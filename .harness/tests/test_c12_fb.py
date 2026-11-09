@@ -425,20 +425,27 @@ class FindByEnvironmentTests(FindCase):
     def test_a_word_that_is_not_an_environment_of_the_harness_filters_nothing(self) -> None:
         self.assertEqual(self.names("sales uat"), ["orders-dev", "orders-ist"])
 
-    def test_the_line_at_the_start_of_a_chat_and_find_see_the_same_connections(self) -> None:
-        """A connection that is not in the window (signed in after VS Code was opened from the board) is in neither layer: the line said 3 SQL Server, and `find` found 4."""
+    def test_the_line_at_the_start_of_a_chat_and_find_see_the_same_connections_all_of_them(self) -> None:
+        """C12 FB-3: a connection that is not in the window (signed in after VS Code was opened from the board) counts and is found, marked: it works through `harness as`."""
         self.company(dict(LISTED, **{"orders-prod": {"type": "sqlserver", "env": "prod", "host": "localhost", "port": "14333", "auth": "sql", "about": "Sales orders, production"}}))
         path = self.root / connections.STATE_FILE
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"direct": ["orders-dev", "orders-ist", "hr-dev", "ado"], "wrap": []}), encoding="utf-8")
-        self.assertEqual(sorted(connections.window_aliases(self.root)), ["ado", "hr-dev", "orders-dev", "orders-ist"])
-        self.assertIn("3 SQL Server", self.start())
-        done = self.cli("connections", "find", "sales", "prod")
-        self.assertIn(messages.text("connections.find.none", words="sales prod", n=4), done.stdout)
-        self.assertNotIn("orders-prod", self.cli("connections", "find", "sales").stdout)
-        path.unlink()  # a window that was not opened from the board carries every connection: the line counts them all, and so does find
-        self.assertIn("4 SQL Server", self.start())
-        self.assertIn("orders-prod", self.cli("connections", "find", "sales", "prod").stdout)
+        self.assertEqual(sorted(connections.window_aliases(self.root)), ["ado", "hr-dev", "orders-dev", "orders-ist", "orders-prod"])
+        self.assertEqual(connections.away_aliases(self.root), ["orders-prod"])
+        told = self.start()
+        self.assertIn("4 SQL Server", told)
+        self.assertIn(messages.text("connections.away.context", n=1), told)
+        self.assertNotIn("orders-prod", told, "layer 0 names no connection")
+        done = self.cli("connections", "find", "sales", "prod").stdout
+        self.assertIn(messages.text("connections.find.away", alias="orders-prod"), done)
+        self.assertEqual(done.count(messages.text("connections.find.away", alias="orders-prod")), 1, "only the one that is not in the window is marked")
+        self.assertNotIn(messages.text("connections.find.away", alias="orders-dev"), self.cli("connections", "find", "sales", "dev").stdout)
+        path.unlink()  # a window that was not opened from the board carries every connection: the line counts them all, nothing is marked
+        told = self.start()
+        self.assertIn("4 SQL Server", told)
+        self.assertNotIn(messages.text("connections.away.context", n=1), told)
+        self.assertNotIn(messages.text("connections.find.away", alias="orders-prod"), self.cli("connections", "find", "sales", "prod").stdout)
 
     def test_when_more_than_one_fits_the_agent_is_told_not_to_preselect_prod(self) -> None:
         text = self.cli("connections", "find", "sales", "orders").stdout

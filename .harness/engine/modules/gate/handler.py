@@ -449,7 +449,7 @@ def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if not text:
         return None
     try:
-        found = [one for one in connections.calls(ctx.root) if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(one['alias'])}(?![A-Za-z0-9_-])", text, re.IGNORECASE)]
+        found = [one for one in connections.calls(ctx.root, every=True) if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(one['alias'])}(?![A-Za-z0-9_-])", text, re.IGNORECASE)]
     except Exception:  # noqa: BLE001 - a reminder must not get in the way
         return None
     if not found:
@@ -473,7 +473,7 @@ def first_reach(event: HookEvent, ctx: Context) -> Optional[Decision]:
         fresh = [name for name in names if name not in told]
         if not fresh:
             return None
-        calls_of = {one["alias"]: one for one in connections.calls(ctx.root)}
+        calls_of = {one["alias"]: one for one in connections.calls(ctx.root, every=True)}
         told.extend(fresh)
         lines = [named_line(ctx, calls_of.get(name) or {"alias": name, "env": str(known[name].get("env") or ""), "call": ""}) for name in fresh]
         return Decision(context=rules.say("connections.first.context", names=", ".join(fresh), lines="\n".join(lines)))
@@ -584,14 +584,18 @@ def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any
 
 
 def wrapped_context(ctx: Context) -> Optional[Decision]:
-    """At the start of a chat: one line with the kinds of connection and how many of each (1.7.38; before it listed every name), and which go through `harness as`.
+    """At the start of a chat: one line with the kinds of connection and how many of each (1.7.38; before it listed every name), all of them (C12 FB-3), and which go through `harness as`:
+    the ones the window holds by the prefix, and how many the window was not opened with (they work through the prefix too; `harness connections find` marks them).
     The connection a task needs is found with `harness connections find` (layer 1); its details come when a prompt names it (`named_servers`) or at the first call that reaches it (`first_reach`)."""
     try:
-        found = connections.calls(ctx.root)
+        found = connections.calls(ctx.root, every=True)
     except Exception:  # noqa: BLE001 - a server list that cannot be read must not stop the chat
         found = []
     wrapped = connections.state(ctx.root).get("wrap") or []
     parts = [rules.say("connections.kinds.context", kinds=connections.kind_counts(ctx.root, [one["alias"] for one in found]))] if found else []  # layer 0 (1.7.38): kinds and counts, not names
+    away = [one for one in found if one.get("away")]
+    if away:
+        parts.append(rules.say("connections.away.context", n=len(away)))
     if wrapped:
         parts.append(rules.say("connections.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
     try:

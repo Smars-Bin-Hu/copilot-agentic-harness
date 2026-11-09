@@ -8,6 +8,7 @@ from pathlib import Path
 import support  # noqa: F401 - the engine on sys.path
 from support import HarnessTestCase
 
+from test_connection_find import FindCase
 from test_connections import KIND, ConnectionsCase
 
 from core import connections, messages, systems
@@ -71,6 +72,39 @@ class OwnConnectionFormTests(ConnectionsCase):
         self.assertIn('envField.hidden = noEnv', source)
         self.assertIn('spec.env === "none"', source)
         self.assertIn(".sv-field[hidden]{display:none}", (WEB / "setup.css").read_text(encoding="utf-8"))
+
+
+class AllConnectionsTests(FindCase):
+    """C12 FB-3: every connection counts and is found; the ones VS Code was not opened with are marked and run through `harness as`."""
+
+    OPENED = {"direct": ["orders-dev"], "wrap": []}
+
+    def opened(self) -> None:
+        import json
+
+        path = self.root / connections.STATE_FILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self.OPENED), encoding="utf-8")
+
+    def test_the_calls_of_the_connections_the_window_was_not_opened_with_go_through_harness_as(self) -> None:
+        self.opened()
+        window = {one["alias"]: one for one in connections.calls(self.root)}
+        every = {one["alias"]: one for one in connections.calls(self.root, every=True)}
+        self.assertEqual(sorted(window), ["orders-dev"])
+        self.assertEqual(sorted(every), ["ado", "hr-dev", "orders-dev", "orders-ist"])
+        self.assertTrue(every["hr-dev"]["call"].startswith("harness as hr-dev -- "))
+        self.assertNotIn("away", every["orders-dev"])
+        self.assertEqual(connections.away_aliases(self.root), ["orders-ist", "hr-dev", "ado"])
+
+    def test_a_prompt_that_names_one_of_them_gets_its_details_with_the_prefix(self) -> None:
+        self.opened()
+        said = self.prompt("look at hr-dev please")
+        self.assertIn("- hr-dev (DEV): SQL Server", said)
+        self.assertIn("harness as hr-dev --", said)
+
+    def test_a_window_opened_with_nothing_said_marks_nothing(self) -> None:
+        self.assertEqual(connections.away_aliases(self.root), [])
+        self.assertNotIn(messages.text("connections.away.context", n=1), self.start())
 
 
 if __name__ == "__main__":

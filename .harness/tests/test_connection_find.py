@@ -141,8 +141,9 @@ class LayerZeroTests(FindCase):
         (self.root / connections.STATE_FILE).write_text(json.dumps({"direct": ["orders-ist"], "wrap": ["orders-dev"]}), encoding="utf-8")
         told = self.start()
         self.assertIn("harness as orders-dev --", told)
-        self.assertEqual(self.line(told), messages.text("connections.kinds.context", kinds="2 SQL Server"), "only the connections this window was opened with are counted")
-        self.assertNotIn("hr-dev", told)
+        self.assertEqual(self.line(told), messages.text("connections.kinds.context", kinds="3 SQL Server, 1 Azure DevOps"), "every connection is counted (1.7.38, C12 FB-3)")
+        self.assertIn(messages.text("connections.away.context", n=2), told, "the two the window was opened without (hr-dev and the ticket board) are said as a count")
+        self.assertNotIn("hr-dev", told, "layer 0 names no connection that is not wrapped")
 
 
 class LayerTwoTests(FindCase):

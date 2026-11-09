@@ -4,7 +4,8 @@ An approval is for one command line. A line like `sqlcmd -i DEV/_manual/load.sql
 files in the task folder that the line names held at the time the person approved (the person read them on the card). When the line is run, every file is read again; a file that is not what was
 approved, or a file that has appeared since, is a change: the approval is not used, and the call is held anew.
 
-Only files inside the task folder count: it is where the agent writes, and where the card finds a file to show. A file elsewhere is not pinned (and is not shown).
+Files inside the task folder count: it is where the agent writes, and where the card finds a file to show. 1.7.38 (C13 FB-5): so do files inside a target repository (`source/repos/<name>/...`):
+a script the line names there is shown on the card and in View, and pinned the same way (its key is `repo:<name>/<path in the repository>`). A file anywhere else is not pinned (and is not shown).
 Stdlib only: the gate, the board and the CLI all use it.
 """
 
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -70,11 +72,49 @@ def locate(value: str, root: Path, folder: Path, cwd: str = "", command: str = "
     return None
 
 
+_HOMES: Dict[str, tuple] = {}  # root -> (taken at, the policy files' times, {name: folder}): a card looks at every word of a command, and the list of repositories is the same for all of them
+HOMES_SECONDS = 3
+
+
+def repo_homes(root: Path) -> Dict[str, Path]:
+    """`{name: folder}` of the target repositories (`core.targets`): where a script of the line may be, besides the task folder. Empty when there are none or the policy cannot be read.
+    Kept for a few seconds, and again at once when a target policy file changes."""
+    key = str(root)
+    try:
+        stamps = tuple(sorted((item.name, item.stat().st_mtime_ns) for item in (Path(root) / ".harness" / "policies").glob("target*.json")))
+    except OSError:
+        stamps = ()
+    kept = _HOMES.get(key)
+    if kept is not None and kept[1] == stamps and time.monotonic() - kept[0] < HOMES_SECONDS:
+        return kept[2]
+    try:
+        from . import targets
+
+        found = {name: repo.path.resolve() for name, repo in targets.load(Path(root)).repos.items()}
+    except Exception:  # noqa: BLE001 - a look at the repositories must not stop a card or a hook
+        found = {}
+    _HOMES[key] = (time.monotonic(), stamps, found)
+    return found
+
+
+def home_of(path: Path, folder: Path, root: Path) -> Optional[str]:
+    """Where the file lies: `""` for the task folder, the name of the target repository it is in, None for anywhere else."""
+    try:
+        if folder.resolve() in path.parents:
+            return ""
+        for name, home in repo_homes(root).items():
+            if home in path.parents:
+                return name
+    except (OSError, ValueError, RuntimeError):
+        return None
+    return None
+
+
 def find(value: str, root: Path, folder: Path, cwd: str = "", command: str = "") -> Optional[Path]:
-    """The file `value` names, when it is a file inside the task folder; else None (a file outside the task is not ours to pin or to show)."""
+    """The file `value` names, when it is a file inside the task folder or inside a target repository (1.7.38, C13 FB-5); else None (a file elsewhere is not ours to pin or to show)."""
     try:
         path = locate(value, root, folder, cwd, command)
-        return path if path is not None and folder.resolve() in path.parents else None
+        return path if path is not None and home_of(path, folder, root) is not None else None
     except (OSError, ValueError, RuntimeError):
         return None
 
@@ -96,7 +136,8 @@ def digest(path: Path) -> str:
 
 
 def pins(command: str, root: Path, task: str, cwd: str = "") -> Dict[str, str]:
-    """`{path from the task folder: sha256}` of every file inside the task folder that the line names. Empty for a line that names none, and when the task has no folder."""
+    """`{key: sha256}` of every file inside the task folder or a target repository that the line names. The key is the path from the task folder, or `repo:<name>/<path in the repository>`.
+    Empty for a line that names none, and when the task has no folder."""
     if not task:
         return {}
     folder = root / task
@@ -104,13 +145,18 @@ def pins(command: str, root: Path, task: str, cwd: str = "") -> Dict[str, str]:
         return {}
     out: Dict[str, str] = {}
     inside = folder.resolve()
+    homes = repo_homes(root)
     for word in words(command):
         path = find(word, root, folder, cwd, command)
         if path is None:
             continue
         try:
-            key = path.relative_to(inside).as_posix()
-            if key not in out and len(out) < MAX_FILES:
+            if inside in path.parents:
+                key = path.relative_to(inside).as_posix()
+            else:
+                name = next((name for name, home in homes.items() if home in path.parents), "")
+                key = f"repo:{name}/{path.relative_to(homes[name]).as_posix()}" if name else ""
+            if key and key not in out and len(out) < MAX_FILES:
                 out[key] = digest(path)
         except (OSError, ValueError):
             continue

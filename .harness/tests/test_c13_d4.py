@@ -3,6 +3,7 @@ One class or more for each item; the name of the item is in the class doc."""
 
 from __future__ import annotations
 
+import io
 import json
 import unittest
 from pathlib import Path
@@ -10,9 +11,9 @@ from pathlib import Path
 import support  # noqa: F401 - the engine on sys.path
 from support import REPO
 
-from core import approvals, config, connections, messages, readyitems, toolpacks
+from core import approvals, config, connections, messages, outbox, pinfiles, readyitems, toolpacks
 from modules.gate import external
-from modules.task import taskdesk
+from modules.task import cmdview, taskdesk
 from taskcase import NAME, TASK
 from test_gate_lists import SERVER, ListedCase
 
@@ -112,6 +113,60 @@ class BrokenPackTests(ListedCase):
         for key in ("gate.external.broken", "desk.outbox.zone.broken", "desk.outbox.zone.broken.tip", "doctor.toolpacks.broken", "ready.p.broken", "ready.p.broken.short", "ready.packs.broken"):
             for language in ("en", "zh"):
                 self.assertTrue(messages.table(language).get(key), (key, language))
+
+
+class RepoScriptTests(ListedCase):
+    """FB-5: a script a command names is shown on the card and in View, and pinned to what the person saw, in the task folder and in a target repository alike."""
+
+    SCRIPT = "source/repos/repo_b/src/load.sql"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.file = self.repo_b / "src" / "load.sql"
+        self.file.write_text("UPDATE t SET a = 1 WHERE id = 3;\n", encoding="utf-8")
+        self.line = f"{SERVER} -i {self.SCRIPT}"
+
+    def code(self) -> str:
+        return approvals.pending(self.root, 10, file=approvals.ACTIONS)[0]["code"]
+
+    def test_the_card_shows_the_script_of_a_repository_and_pins_it(self) -> None:
+        self.held(self.line)
+        card = taskdesk.outbox_view(self.root, TASK)[0]
+        self.assertIsNotNone(card["layout"]["script"])
+        self.assertEqual(card["layout"]["script"]["path"], self.SCRIPT)
+        self.assertIn("UPDATE t SET a = 1", card["layout"]["script"]["text"])
+        self.assertEqual(list(card["seen"]), ["repo:repo_b/src/load.sql"])
+
+    def test_an_absolute_path_and_a_path_from_another_folder_are_found_too(self) -> None:
+        for line, cwd in ((f"{SERVER} -i {self.file}", ""), (f"{SERVER} -i src/load.sql", str(self.repo_b)), (f"cd source/repos/repo_b && {SERVER} -i src/load.sql", "")):
+            found = cmdview.layout(line, self.root / TASK, self.root, cwd)["script"]
+            self.assertIsNotNone(found, line)
+            self.assertEqual(list(pinfiles.pins(line, self.root, TASK, cwd)), ["repo:repo_b/src/load.sql"], line)
+
+    def test_a_file_that_is_in_neither_place_is_not_shown_or_pinned(self) -> None:
+        (self.root / "elsewhere.sql").write_text("select 1;\n", encoding="utf-8")
+        self.assertIsNone(cmdview.layout(f"{SERVER} -i elsewhere.sql", self.root / TASK, self.root, "")["script"])
+        self.assertEqual(pinfiles.pins(f"{SERVER} -i elsewhere.sql", self.root, TASK), {})
+
+    def test_a_script_changed_between_view_and_approve_is_not_approved(self) -> None:
+        self.held(self.line)
+        card = taskdesk.outbox_view(self.root, TASK)[0]
+        self.file.write_text("UPDATE t SET a = 2 WHERE id = 4;\n", encoding="utf-8")
+        with self.assertRaises(outbox.FileChanged) as caught:
+            outbox.approve_action(self.root, reader=lambda _asked: self.code(), interactive=True, out=io.StringIO(), seen={"code": card["code"], "files": card["seen"]})
+        self.assertEqual(caught.exception.files, ["repo:repo_b/src/load.sql"])
+
+    def test_the_approved_command_does_not_run_when_the_script_changed_after_the_approval(self) -> None:
+        self.held(self.line)
+        outbox.approve_action(self.root, reader=lambda _asked: self.code(), interactive=True, out=io.StringIO())
+        self.file.write_text("UPDATE t SET a = 2 WHERE id = 4;\n", encoding="utf-8")
+        reason = self.term(self.line).get("permissionDecisionReason", "")
+        self.assertIn("repo:repo_b/src/load.sql", reason)
+
+    def test_the_approved_command_runs_while_the_script_is_the_same(self) -> None:
+        self.held(self.line)
+        outbox.approve_action(self.root, reader=lambda _asked: self.code(), interactive=True, out=io.StringIO())
+        self.runs(self.line)
 
 
 if __name__ == "__main__":

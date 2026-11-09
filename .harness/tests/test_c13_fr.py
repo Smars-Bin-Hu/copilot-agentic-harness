@@ -369,6 +369,7 @@ class IntegrityTests(unittest.TestCase):
         path = self.root / relative
         before = path.read_bytes() if path.exists() else None
         self.addCleanup(lambda: path.write_bytes(before) if before is not None else path.unlink(missing_ok=True))
+        path.parent.mkdir(parents=True, exist_ok=True)  # a copy made from git has no `__pycache__`
         path.write_text(text if before is None else before.decode("utf-8") + text, encoding="utf-8")
         return path
 

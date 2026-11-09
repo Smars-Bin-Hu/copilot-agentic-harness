@@ -52,9 +52,12 @@ class GuardFailed(Exception):
     """A module of the guardrails raised on a PreToolUse call: the call cannot be judged, so it does not pass (`main` answers with `emergency`)."""
 
 
+GUARDS_FOR = {"task": lambda event: event.tool_kind == "subagent"}  # (1.7.38, FR-8) on PreToolUse the task module refuses only a subagent call: when it fails, those are refused and every other command and write of the session goes on (logged). The gate, failing, stops the whole call (`GuardFailed`)
+
+
 def run_modules(root: Path, event: HookEvent, ctx: Context, names: List[str], guards: Optional[set] = None) -> Tuple[List[Tuple[str, Decision]], List[str], Dict[str, Any]]:
     """Call each module. A module that raises has no opinion and its state changes are rolled back, except a module of the guardrails (`guards`: those the registry marks `H`) on a PreToolUse call: it cannot judge
-    the call, so the call does not pass (`GuardFailed`, 1.7.38, C13 FR 16).
+    the call, so the call does not pass (`GuardFailed`, 1.7.38, C13 FR 16). A module named in GUARDS_FOR refuses only the calls it judges (FR-8).
 
     Returns what each module decided (with its name), the modules that ran, and the facts they report for the log."""
     sources: List[Tuple[str, Decision]] = []
@@ -70,11 +73,14 @@ def run_modules(root: Path, event: HookEvent, ctx: Context, names: List[str], gu
             log_error(root, f"module:{name}:{event.event}", error)
             ctx.state.clear()
             ctx.state.update(snapshot)
-            if name in (guards or ()):
-                if event.event == "PreToolUse":
-                    raise GuardFailed(f"module {name}: {where(error)}") from error
-                facts.setdefault("guard_failed", f"module {name}: {where(error)}")  # another event: nothing is refused, and `process` tells the agent
             decision = None
+            if name in (guards or ()):
+                if event.event == "PreToolUse" and name not in GUARDS_FOR:
+                    raise GuardFailed(f"module {name}: {where(error)}") from error
+                if event.event == "PreToolUse" and GUARDS_FOR[name](event):
+                    decision = Decision(permission="deny", reason=_say(root, "hook.module_failed", f"module {name}: {where(error)}"), facts={"kind": "engine"})  # FR-8: only the calls this module judges are refused
+                elif event.event != "PreToolUse":
+                    facts.setdefault("guard_failed", f"module {name}: {where(error)}")  # another event: nothing is refused, and `process` tells the agent
         if decision is not None:
             sources.append((name, decision))
             facts.update(decision.facts)

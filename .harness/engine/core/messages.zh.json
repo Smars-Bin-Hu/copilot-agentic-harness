@@ -3621,6 +3621,7 @@
   "board.held.of": "属于任务 {task}",
   "board.held.notask": "没有任务",
   "hook.emergency": "Harness 的 engine 判断不了，所以修好之前，不允许运行命令，也不允许改文件：{why}\n你仍然可以读。告诉用户哪里坏了，不要自己去修，也不要绕开。用户从这份 harness 来的 zip 里把文件放回去，再用 `harness doctor` 检查。",
+  "hook.module_failed": "harness 的 task 部分出错了，现在不能启动子 agent：{why}\n其他工作照常。告诉用户出了什么错，不要自己去修。用户用 `harness doctor` 检查。",
   "hook.integrity": "有 guardrail 文件和用户接受时不一样：{why}\n用户看过之前，不允许运行命令，也不允许改文件。你仍然可以读。告诉用户哪些文件变了，不要自己去修，也不要绕开。如果是用户有意改的，用户在自己的终端运行 `harness doctor --accept` 接受。如果不是，用户从这份 harness 来的 zip 里把文件放回去。",
   "hook.integrity.upgrade": "这个文件夹里放进了新版本的 harness，而看板在这之后还没有启动过：{why}\n看板接受新版本之前，不允许运行命令，也不允许改文件。你仍然可以读。告诉用户启动看板（Start Harness，或 `harness task board`）：看板启动时会接受新版本。不要自己去修，也不要绕开。",
   "hook.busy": "harness 正忙着处理这个会话的另一个调用，没能判断：{why}\n请把同一个调用再运行一次。",

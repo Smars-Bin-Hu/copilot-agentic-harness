@@ -592,6 +592,14 @@ class FaultInjectionTests(SqlCase):
         self.assertEqual(out.get("permissionDecision"), "deny", label)
         self.assertIn("injected fault", out.get("permissionDecisionReason", ""), label)  # it says what failed
 
+    def test_a_failure_of_the_task_module_holds_only_a_subagent_call(self) -> None:
+        """FR-8: on PreToolUse the task module judges only a subagent call, so its failure refuses those and lets every command and write of the session go on."""
+        target = "modules.task.handle"
+        for line in ("ls", "git status", f"{SERVER} {READ}"):
+            self.assertNotIn("injected fault", self.inject(target, self.event(line)).get("permissionDecisionReason", ""), line)
+        self.assertNotEqual(self.inject(target, self.event("", tool="create_file", given={"filePath": str(self.root / TASK / "notes.txt"), "content": "x"})).get("permissionDecision"), "deny", "a write in the task folder")
+        self.closed(self.inject(target, json.dumps(dict(pre_tool(SESSION, "Agent", {"subagent_type": "reviewer", "prompt": "x"}), cwd=str(self.root)))), "subagent")
+
     def test_a_failure_in_the_handler_refuses_a_governed_call_and_leaves_local_work(self) -> None:
         for target in ("modules.gate.external.classify", "modules.gate.handler._judge_one", "modules.gate.handler.check_external", "modules.gate.handler.check_wrapped", "modules.gate.handler.check_terminal",
                        "modules.gate.handler.judge_external", "modules.gate.handler.settle_opened", "modules.gate.handler.external_facts", "modules.gate.handler.asks_board", "modules.gate.handler.check_secrets",

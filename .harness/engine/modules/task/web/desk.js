@@ -1220,8 +1220,8 @@
   const ZONE_WORDS = {ask: ["desk.outbox.zone.ask", "desk.outbox.zone.ask.tip"], write: ["desk.outbox.zone.write", "desk.outbox.zone.write.tip"], broken: ["desk.outbox.zone.broken", "desk.outbox.zone.broken.tip"]};  // why a held call waits: word and hover
   const tailPath = (path, max) => (path.length <= max ? path : "\u2026" + path.slice(1 - max));  // a long path keeps its end, where the file name is; the whole path is on hover
   const scriptsOf = (item) => (item.layout ? item.layout.scripts || (item.layout.script ? [item.layout.script] : []) : []);  // every file the line names and the task holds (1.7.38: two `-i` files show both)
-  const zoneFact = (zone, note, system, env) => (ZONE_WORDS[zone] ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.zone")), system ? [h("b", null, system), env && env !== "none" ? [" ", tag(env, "hot")] : null, " "] : null,
-    h("span", {class: "unnamed", title: t(ZONE_WORDS[zone][1], {what: note || "-"})}, t(ZONE_WORDS[zone][0]), " ", h("span", {class: "why"}, "?"))) : null);
+  const zoneFact = (zone, note, system, env, why) => (ZONE_WORDS[zone] ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.zone")), system ? [h("b", null, system), env && env !== "none" ? [" ", tag(env, "hot")] : null, " "] : null,
+    h("span", {class: "unnamed", title: t(ZONE_WORDS[zone][1], {what: note || "-"}) + (why && zone === "ask" ? "\n" + t("desk.outbox.zone.why", {why}) : "")}, t(ZONE_WORDS[zone][0]), " ", h("span", {class: "why"}, "?"))) : null);  // the statement as it was written, and, when the type says it, what is wrong with it (F3 U2)
   const systemFact = (system, env) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, system), env && env !== "none" ? [" ", tag(env, "hot")] : null);
   function callFacts(item) {
     const verb = known("desk.outbox.verb." + item.verb, item.verb);
@@ -1233,7 +1233,7 @@
       reaches ? h("span", {class: "tk-fact tk-systems"}, h("span", {class: "k"}, t("desk.outbox.systems")), reaches.map((one, index) => [index ? " " : "", h("b", null, one.system), one.env && one.env !== "none" ? [" ", tag(one.env, "hot")] : null])) : systemFact(item.system, item.env),
       ...(many ? [] : factList(item.facts)),
       many ? null : factSpan(t("desk.outbox.target"), item.target),
-      ...(holds ? holds.map((hold) => zoneFact(hold.zone, hold.note, hold.system, hold.env)) : [zoneFact(item.zone, item.zone_note)]),  // 1.7.38: why a call of a type with lists waits; a line on more than one system says why for each part (F1 M6)
+      ...(holds ? holds.map((hold) => zoneFact(hold.zone, hold.note, hold.system, hold.env)) : [zoneFact(item.zone, item.zone_note, "", "", item.why)]),  // 1.7.38: why a call of a type with lists waits; a line on more than one system says why for each part (F1 M6)
       ...scriptsOf(item).map((script) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", {class: "tk-path", title: script.path}, tailPath(script.path, window.innerWidth < 560 ? 24 : 44)), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: script.lines})))));  // the end of the path: two scripts of one folder differ there (F1 M3)
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
@@ -1415,7 +1415,7 @@
     const chat = served() && !desk.past ? desk.chat : null;
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed", answer: (desk.outbox || []).some((item) => item.agent === "wait")});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), gates: ((desk.trace && desk.trace.entries) || []).filter((entry) => entry.kind === "gate" && !entry.source && entry.command).slice(-60).map((entry) => ({command: entry.command, how: entry.decision === "held" ? "held" : "refused", reason: entry.reason || "", at: entry.at})), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed", answer: (desk.outbox || []).some((item) => item.agent === "wait")});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }

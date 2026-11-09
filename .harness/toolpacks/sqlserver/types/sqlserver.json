@@ -180,6 +180,19 @@
     "port": "(?:-S|--server)(?:\\s+|=)\"?[^\\s,\"]+,(\\d+)",
     "database": "(?:-d|--database-name)(?:\\s+|=)(\\S+)"
   },
+  "say": [
+    {
+      "pattern": "^(?!.*\\bwhere\\b)(?=.*\\b(?:update\\s+[\\w.\\[\\]#@]+\\s+set|delete\\s+from)\\b)",
+      "text": {
+        "en": "UPDATE or DELETE with no WHERE",
+        "zh": "没有 WHERE 的 UPDATE 或 DELETE"
+      },
+      "why": {
+        "en": "It has no WHERE, so it would change every row of the table.",
+        "zh": "它没有 WHERE，会改动表里的每一行。"
+      }
+    }
+  ],
   "open": {
     "dev": "all",
     "ist": "all",

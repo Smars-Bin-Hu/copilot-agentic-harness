@@ -14,7 +14,7 @@ import shutil
 import stat
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import config, logs, messages, repo_paths, targets, tasks
 from core.logs import read_lines, read_session
@@ -394,3 +394,18 @@ def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
     if len(refusals) > LOG_ROWS:
         lines.append(say("log.refusals.more", count=len(refusals) - LOG_ROWS))
     return lines
+
+
+PAIRED_EVENTS = re.compile(r"^(.+): (on|off|agent|person)$")  # the notes `allow-env`, `link` and `test-runner` write: a name, a colon and a state
+
+
+def plain_event(what: str, detail: str) -> Tuple[str, str]:
+    """The key of the line of the Task Record and its detail in words a person reads (1.7.38, F3 U5): `allow-env`, `link` and `test-runner` wrote `name: state`, and the page showed that with the internal word as its label.
+    Now the state is in the label and only the name stays in the detail; the linked items, which are not a connection, have their own label. Anything else is left as it was."""
+    found = PAIRED_EVENTS.match(detail) if what in ("allow-env", "link", "test-runner") else None
+    if not found:
+        return f"event.{what}", detail
+    name, state = found.group(1), found.group(2)
+    if what == "allow-env" and name == "links":  # tasklife.LINKS: the items the task is linked to, not a connection
+        return f"event.allow-env.links.{state}", ""
+    return f"event.{what}.{state}", name

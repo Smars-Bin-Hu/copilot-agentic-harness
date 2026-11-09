@@ -3795,5 +3795,19 @@
   "ready.p.held.short.one": "1 held: faulty tool pack.",
   "board.enter.cs.held": "Its tool pack has a faulty file. The gate holds its calls.",
   "board.enter.sys.state.held": "held",
-  "board.enter.sys.held.reason": "Its tool pack has a faulty file: {fault} The gate holds its calls."
+  "board.enter.sys.held.reason": "Its tool pack has a faulty file: {fault} The gate holds its calls.",
+  "event.allow-env.on": "the person opened a connection to the agent",
+  "event.allow-env.off": "a connection was closed to the agent",
+  "event.allow-env.links.on": "the person opened the linked items to the agent",
+  "event.allow-env.links.off": "the linked items were closed to the agent",
+  "event.link.on": "an item was linked to the task",
+  "event.link.off": "an item was unlinked from the task",
+  "event.test-runner.agent": "the person let the agent run a test",
+  "event.test-runner.person": "the person took a test back to run it",
+  "event.void": "held calls",
+  "desk.live.held.past": "Held by the gate",
+  "desk.live.held.tag": "held",
+  "desk.live.refused": "Refused by the gate",
+  "desk.live.refused.tag": "refused",
+  "desk.outbox.zone.why": "Why: {why}"
 }

@@ -399,10 +399,14 @@ def mark_waiting(ctx: Context, data: Dict[str, Any], stopped: bool) -> None:
     """The board's mark (M12-1): the agent of this task stopped, so the person is next. Never in the way of the hook."""
     from core.paths import utc_now
 
+    from core import outbox
+
     from . import tasklife
 
     try:
         tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "accept" if data.get("deliver") else "stopped"} if stopped else None)  # delivered, then stopped: the person accepts (1.7.38)
+        if stopped and data.get("deliver"):
+            outbox.agent_left(ctx.root, data["task"])  # a call held between the delivery and the stop that the agent never waited on: left behind now (F3 U4)
     except Exception:  # noqa: BLE001 - the mark is for a list; losing it must not turn a Stop into an error
         pass
 

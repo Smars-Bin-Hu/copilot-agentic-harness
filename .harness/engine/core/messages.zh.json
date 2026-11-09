@@ -3795,5 +3795,19 @@
   "ready.p.held.short.one": "1 个被扣下：工具包有错。",
   "board.enter.cs.held": "它的工具包有文件出错。gate 扣下它的调用。",
   "board.enter.sys.state.held": "被扣下",
-  "board.enter.sys.held.reason": "它的工具包有文件出错：{fault} gate 扣下它的调用。"
+  "board.enter.sys.held.reason": "它的工具包有文件出错：{fault} gate 扣下它的调用。",
+  "event.allow-env.on": "用户把一个连接开放给 agent",
+  "event.allow-env.off": "一个连接对 agent 关闭了",
+  "event.allow-env.links.on": "用户把关联的工单开放给 agent",
+  "event.allow-env.links.off": "关联的工单对 agent 关闭了",
+  "event.link.on": "任务关联了一个工单",
+  "event.link.off": "任务取消了一个关联的工单",
+  "event.test-runner.agent": "用户让 agent 来跑测试",
+  "event.test-runner.person": "用户把测试收回自己跑",
+  "event.void": "被扣下的调用",
+  "desk.live.held.past": "被 gate 扣下",
+  "desk.live.held.tag": "已扣下",
+  "desk.live.refused": "被 gate 拒绝",
+  "desk.live.refused.tag": "被拒",
+  "desk.outbox.zone.why": "原因：{why}"
 }

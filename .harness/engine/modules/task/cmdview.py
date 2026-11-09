@@ -242,6 +242,20 @@ def say_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
     return ""
 
 
+def why_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
+    """Why the call waits, in the words of the first `say` rule that matches and has a `why` (1.7.38, F3 U2): a type may say, next to a card's title, what is wrong with the statement (it has no WHERE).
+    Empty when the type says none. The language is the one set now, as for `text`."""
+    for rule in rules or []:
+        if not isinstance(rule, dict) or not rule.get("why"):
+            continue
+        try:
+            if re.search(str(rule.get("pattern")), args, re.IGNORECASE):
+                return _in_language(rule.get("why"))[:SAY_CHARS].strip()
+        except (re.error, AttributeError):
+            continue
+    return ""
+
+
 def _shell_value(text: str, quote: str) -> str:
     r"""What the shell passes on for a value written between these quotes (1.7.25): in double quotes `\\` is a backslash, `\"` a quote, `\$` a dollar, a backtick after a backslash a backtick, any other
     backslash stays as it is; in single quotes everything stays; with no quote a backslash is dropped and the character after it stays."""

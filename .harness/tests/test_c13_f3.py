@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
+import subprocess
 import threading
 import unittest
 from pathlib import Path
@@ -16,10 +19,11 @@ import support  # noqa: F401 - the engine on sys.path
 from support import REPO, HarnessTestCase
 
 from core import approvals, company, messages, outbox
-from modules.task import boardserve, ready, taskhtml
+from modules.task import boardserve, common, ready, task as task_ops, task_report, taskdesk, tasklife, taskhtml
 from taskcase import NAME, SESSION, TASK, TaskCase
 from test_board_enter import StubLink, UP, clean, item as enter_item, settled
 from test_boardserve import free_port
+from test_accept import AcceptCase
 from test_company import CompanyCase, put, set_prefix
 
 WEB = taskhtml.WEB
@@ -131,6 +135,174 @@ class UpgradeDocsTests(unittest.TestCase):
         self.assertIn("AGENTS.md", self.upgrade)
         self.assertIn(".github/copilot-instructions.md", self.upgrade)
         self.assertIn("back up", self.upgrade.lower())
+
+
+class CallHeldWithTheDeliveryTests(AcceptCase):
+    """U4 (C12 TB-03): the agent delivers and stops. A call held in the same step as the delivery (it ran a moment after `task deliver`, so the delivery did not see it) is one the agent did not wait on: it is left behind when
+    the agent stops, and the head of the page is "to accept" with Accept and close at once, not "an outside call waits for your approval" for the two minutes of grace. A call the agent waits on is never left."""
+
+    COMMAND = 'sqlcmd -S acmedw -Q "UPDATE t SET a = 1 WHERE id = 3"'
+
+    def hold(self, command: str = COMMAND, wait: str = "") -> str:
+        action = SimpleNamespace(system="acmedw-dev", env="dev", verb="write", target="", named=True, zone="", note="")
+        code = approvals.request(self.root, "vscode", SESSION, command, 10, file=approvals.ACTIONS, extra=outbox.entry_extra(action, TASK))
+        if wait:
+            approvals.wait_mark(self.root, code, wait, 10, file=approvals.ACTIONS)
+        return code
+
+    def test_a_call_held_after_the_delivery_and_before_the_stop_is_left_when_the_agent_stops(self) -> None:
+        self.new(kind="rca")
+        self.run_cli("task", "deliver", "--task", NAME, "--summary", "done")
+        code = self.hold()  # in the same step: held a moment after `task deliver` ran
+        entry = approvals.find(self.root, code, 10, file=approvals.ACTIONS)
+        self.assertEqual(outbox.agent_place(entry), "ended", "the grace: the agent may still start its wait")
+        self.stop()
+        self.assertEqual(outbox.agent_place(approvals.find(self.root, code, 10, file=approvals.ACTIONS)), "away")
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "accept")
+        desk = taskdesk.desk(self.root, NAME, ("accept", "close", "approve-action"))
+        self.assertEqual(desk["waiting_why"], "accept")
+        self.assertIn("accept", [item["action"] for item in desk["actions"]])
+        self.assertTrue(desk["outbox"][0]["moved_on"], "the card stays: the person may still approve or dismiss it")
+
+    def test_a_call_the_agent_waits_on_is_not_left_when_it_stops(self) -> None:
+        self.new(kind="rca")
+        self.run_cli("task", "deliver", "--task", NAME, "--summary", "done")
+        code = self.hold(wait="running")
+        self.stop()
+        self.assertEqual(outbox.agent_place(approvals.find(self.root, code, 10, file=approvals.ACTIONS)), "wait")
+        self.assertNotEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "accept")
+
+    def test_a_stop_with_nothing_delivered_leaves_no_call_behind(self) -> None:
+        self.new(kind="rca")
+        code = self.hold()
+        self.stop()
+        self.assertEqual(outbox.agent_place(approvals.find(self.root, code, 10, file=approvals.ACTIONS)), "ended", "the agent stopped but delivered nothing: the existing grace holds")
+
+
+class TaskRecordWordsTests(AcceptCase):
+    """U5: the Task Record says what happened in words: `allow-env`, `link` and `test-runner` wrote `name: state`, and the page showed them with the internal word and the raw state."""
+
+    def lines(self) -> List[Dict[str, Any]]:
+        return taskdesk.history(self.data())
+
+    def note(self, what: str, detail: str) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            task_ops.note(data, what, detail)
+
+    def test_opening_a_connection_is_told_in_words_with_only_the_name_in_the_detail(self) -> None:
+        self.new(kind="rca")
+        self.note("allow-env", "acmedw-dev: on")
+        found = [line for line in self.lines() if line["what"] == "allow-env"]
+        self.assertEqual(len(found), 1, self.data()["events"])
+        self.assertEqual(found[0]["label"], messages.text("event.allow-env.on"))
+        self.assertEqual(found[0]["detail"], "acmedw-dev")
+        self.assertEqual(found[0]["mark"], "open")
+        self.assertNotIn(": on", found[0]["detail"])
+
+    def test_the_words_are_in_both_languages_and_the_linked_items_have_their_own(self) -> None:
+        both_languages(self, "event.allow-env.on", "event.allow-env.off", "event.allow-env.links.on", "event.allow-env.links.off", "event.link.on", "event.link.off", "event.test-runner.agent", "event.test-runner.person", "event.void")
+        for state in ("on", "off"):
+            self.assertEqual(common.plain_event("allow-env", f"links: {state}"), (f"event.allow-env.links.{state}", ""))
+        self.assertEqual(common.plain_event("link", "ado:300104: on"), ("event.link.on", "ado:300104"))
+        self.assertEqual(common.plain_event("test-runner", "DEV: person"), ("event.test-runner.person", "DEV"))
+
+    def test_other_lines_are_left_as_they_were(self) -> None:
+        self.assertEqual(common.plain_event("start", "x: on"), ("event.start", "x: on"))
+        self.assertEqual(common.plain_event("allow-env", "no state here"), ("event.allow-env", "no state here"))
+
+    def test_no_line_of_the_record_is_left_with_an_internal_word_as_its_label(self) -> None:
+        text = (REPO / ".harness" / "engine" / "modules" / "task" / "tasklife.py").read_text(encoding="utf-8") + (REPO / ".harness" / "engine" / "modules" / "task" / "testrecord.py").read_text(encoding="utf-8") + (REPO / ".harness" / "engine" / "modules" / "task" / "task.py").read_text(encoding="utf-8")
+        used = set(re.findall(r'note\([a-z_]+, "([a-z-]+)"', text))
+        table = messages.table("en")
+        bare = sorted(what for what in used if f"event.{what}" not in table and f"event.{what}.on" not in table and f"event.{what}.agent" not in table)
+        self.assertEqual(bare, [], "an event whose label is its own name: write words for it")
+
+    def test_the_markdown_report_uses_the_same_words(self) -> None:
+        self.new(kind="rca")
+        self.note("allow-env", "acmedw-dev: on")
+        text = task_report.render(self.root, TASK, self.data())
+        self.assertIn(messages.text("event.allow-env.on"), text)
+        self.assertNotIn("acmedw-dev: on", text)
+
+
+class LiveWordsTests(unittest.TestCase):
+    """U7: the Live tab does not paint a call the gate held or refused as a failed call: the page reads the gate's record (the hook log in `desk.trace`) and shows a held one amber and a refused one as a ring, each with the gate's reason on hover;
+    a call that really failed stays red."""
+
+    def setUp(self) -> None:
+        web = REPO / ".harness" / "engine" / "modules" / "task" / "web"
+        self.live = (web / "live.js").read_text(encoding="utf-8")
+        self.desk = (web / "desk.js").read_text(encoding="utf-8")
+        self.css = (web / "live.css").read_text(encoding="utf-8")
+
+    def test_the_page_gives_the_live_tab_the_gate_record_of_the_task(self) -> None:
+        start = self.desk.index("LIVE.config({")
+        config = self.desk[start:start + 900]
+        self.assertIn('entry.kind === "gate"', config)
+        self.assertIn("gates:", config)
+        self.assertIn("!item.moved_on", config, "a call the agent waits on still blinks; one it moved on from is read from the record")
+
+    def test_a_held_call_is_amber_a_refused_one_is_a_ring_and_both_say_what_the_gate_said(self) -> None:
+        for word in ('"past"', '"refused"', "desk.live.held.past", "desk.live.refused", "desk.live.refused.tag", "desk.live.held.tag"):
+            self.assertIn(word, self.live)
+        self.assertIn(".fi-tool.is-held .dot", self.css)
+        self.assertIn(".fi-tool.is-refused .dot", self.css)
+        self.assertIn("rec.say.title = why ?", self.live, "the reason is on hover")
+        both_languages(self, "desk.live.held.past", "desk.live.held.tag", "desk.live.refused", "desk.live.refused.tag")
+
+    def test_only_a_failed_call_with_a_command_can_be_read_from_the_record(self) -> None:
+        body = self.live[self.live.index("function markGates("):self.live.index("function paint(")]
+        self.assertIn('item.st !== "fail"', body)
+        self.assertIn("used.has(at)", body, "each row of the record explains one call")
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_pairing_of_calls_and_rows_in_the_page_code(self) -> None:
+        """The two functions are run as the page has them: a row of the record explains one failed call, by command and by time; a later call of the same command that failed for real stays red."""
+        start = self.live.index("const flat =")
+        end = self.live.index("function paint(")
+        code = self.live[start:end]
+        script = "const st = {held: [], approved: [], gates: [], marks: new Map()};\n" + code + """
+st.gates = [{command: 'sqlcmd -S a -Q "drop table t"', how: 'refused', reason: 'never', ms: 1000}, {command: 'ado comment 1', how: 'held', reason: 'waits', ms: 5000}];
+const items = [
+  {id: 'a', k: 'tool', st: 'fail', target: 'sqlcmd -S a -Q "drop table t"', t0: 1200},
+  {id: 'b', k: 'tool', st: 'fail', target: 'ado comment 1', t0: 5100},
+  {id: 'c', k: 'tool', st: 'fail', target: 'ado comment 1', t0: 90000},
+  {id: 'd', k: 'tool', st: 'done', target: 'ado comment 1', t0: 5200},
+  {id: 'e', k: 'tool', st: 'fail', target: 'ls', t0: 1}];
+st.marks = markGates(items);
+console.log(JSON.stringify([...st.marks].map(([id, row]) => [id, row.how])), isHeld(items[0]), isHeld(items[1]), JSON.stringify(isHeld(items[2])), JSON.stringify(isHeld(items[3])), JSON.stringify(isHeld(items[4])));
+"""
+        done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=30)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.strip(), '[["a","refused"],["b","held"]] refused past "" "" ""')
+
+
+class AskReasonTests(unittest.TestCase):
+    """U2: the card of a held statement says what is wrong with it, in the words of the type (`why` of a `say` rule), and the hover shows the statement as written."""
+
+    def kind(self) -> Dict[str, Any]:
+        return json.loads((REPO / ".harness" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json").read_text(encoding="utf-8"))
+
+    def test_an_update_or_delete_with_no_where_says_so_and_one_with_a_where_says_nothing(self) -> None:
+        kind = self.kind()
+        for call in ('sqlcmd -S s -Q "UPDATE dbo.t SET note = \'x\'"', 'sqlcmd -S s -Q "DELETE FROM dbo.t"', 'sqlcmd -S s -Q "update dbo.t set a = 1"'):
+            found = taskdesk.call_words(call, kind, Path("/nowhere"))
+            self.assertIn("WHERE", found["why"], call)
+            self.assertTrue(found["say"], call)
+        for call in ('sqlcmd -S s -Q "UPDATE dbo.t SET a = 1 WHERE id = 3"', 'sqlcmd -S s -Q "SELECT 1"', 'sqlcmd -S s -Q "DELETE FROM dbo.t WHERE id = 1"'):
+            self.assertEqual(taskdesk.call_words(call, kind, Path("/nowhere"))["why"], "", call)
+
+    def test_the_type_with_the_rule_is_still_valid_and_a_type_without_a_why_has_none(self) -> None:
+        from core import connections
+
+        kind = self.kind()
+        self.assertEqual(connections.type_problems(dict(kind, toolpack="sqlserver")), [])
+        self.assertEqual(taskdesk.call_words("x -S s -Q 'UPDATE t SET a = 1'", {"say": [{"pattern": "UPDATE", "text": "an update"}]}, Path("/nowhere"))["why"], "")
+
+    def test_the_page_puts_the_reason_under_the_statement_in_the_hover(self) -> None:
+        desk = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('t("desk.outbox.zone.why", {why})', desk)
+        both_languages(self, "desk.outbox.zone.why")
 
 
 if __name__ == "__main__":

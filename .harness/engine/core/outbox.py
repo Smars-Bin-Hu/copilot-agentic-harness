@@ -183,6 +183,7 @@ def agent_place(item: Dict[str, Any], now: Optional[float] = None) -> str:
 
 def agent_left(root: Path, task: str) -> int:
     """The agent delivered the work of this task and stops (1.7.38, C12 TB-03): a held call it never started a wait on is a call it went on without, at once, not after the grace of `START_GRACE_S`.
+    Called when it delivers and again when it stops after delivering (F3 U4: a call held in the same step as the delivery, a moment after `task deliver` ran, was left out of the first and had two minutes of grace).
     A call it waits on, or ended its turn on, is left as it is. How many calls were marked."""
     count = 0
     try:

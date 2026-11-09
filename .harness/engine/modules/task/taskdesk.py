@@ -179,7 +179,7 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
         said = cmdview.say_of(args, rules)
         body = cmdview.body_of(args, system.get("body"), folder, root)
         if said:
-            parts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body, "at": text})  # by command, not by the word `ado` (a `--conn ado` is no second write)
+            parts.append({"say": said, "why": cmdview.why_of(args, rules), "facts": cmdview.facts(text, system.get("show")), "body": body, "at": text})  # by command, not by the word `ado` (a `--conn ado` is no second write)
         if body:
             texts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body, "at": text})
     if len(texts) > 1 and len(texts) > len(parts):
@@ -194,12 +194,12 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
     for part in parts:
         part.pop("at", None)
     if parts:
-        return {"say": parts[0]["say"], "says": [part["say"] for part in parts if part["say"]], "writes": len(parts), "facts": parts[0]["facts"] if len(parts) == 1 else {}, "body": parts[0]["body"], **({"parts": parts} if len(parts) > 1 else {})}
+        return {"say": parts[0]["say"], "why": parts[0].get("why", "") if len(parts) == 1 else "", "says": [part["say"] for part in parts if part["say"]], "writes": len(parts), "facts": parts[0]["facts"] if len(parts) == 1 else {}, "body": parts[0]["body"], **({"parts": parts} if len(parts) > 1 else {})}
     args = cmdview.args_of(command, programs)
     body = cmdview.body_of(args, system.get("body"), folder, root)
     if body and len(texts) == 1:
         body = _whose(texts[0]["body"], texts[0]["at"], command, listed)
-    return {"say": "", "says": [], "writes": 0, "facts": cmdview.facts(command, system.get("show")), "body": body}
+    return {"say": "", "why": "", "says": [], "writes": 0, "facts": cmdview.facts(command, system.get("show")), "body": body}
 
 
 def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
@@ -373,6 +373,8 @@ def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         detail = taskinsight.SESSION_IN_DETAIL.sub(lambda found: say("task.note.session", session_id=found.group(1)), str(event.get("detail", "")))
         mark, key = standout(what, detail)
+        if what in ("allow-env", "link", "test-runner"):
+            key, detail = common.plain_event(what, detail)
         label = say(key) if key in messages.table(messages.language()) else what
         out.append({"at": event.get("at", ""), "round": event.get("round", 1), "what": what, "label": label, "detail": detail, "via": "", "mark": mark})
     out.reverse()

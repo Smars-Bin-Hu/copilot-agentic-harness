@@ -61,6 +61,18 @@ def _unreadable(tokens: List[str], at: int) -> bool:
     return False
 
 
+def _own_words(args: List[str]) -> List[str]:
+    """The words of the harness itself: all of them, but for `harness as <connection> -- <command>` (in any shape `external.as_run` reads: the options of the harness before `as`, the `--` before the alias or after it, no `--`):
+    the command after the connection is not a harness command, it is read in its own right (`nested`), as the same words are without the prefix (1.7.38, C13 FR2 1, FR3)."""
+    words = [item for item in args if item != JSON_FLAG]
+    sub = external._harness_sub(words)  # noqa: SLF001
+    if sub is None or sub[1] != "as":
+        return args
+    rest = words[sub[0] + 1:]
+    at = next((index for index, word in enumerate(rest) if not word.startswith("-")), None)
+    return words[: sub[0] + 1 + at + 1] if at is not None else args
+
+
 def calls(command: str) -> Tuple[List[str], str]:
     """`(the harness calls of the line as `harness <words>`, the first segment whose call cannot be read or "")`."""
     found: List[str] = []
@@ -84,7 +96,7 @@ def calls(command: str) -> Tuple[List[str], str]:
             args = _harness_args(tokens, at)
             if args is None:
                 continue
-            own = args[:3] if len(args) > 3 and args[0].lower() == "as" and args[2] == "--" else args  # 1.7.38 (C13 FR2 1): the command after `harness as <connection> --` is not a harness command: it is read in its own right (`nested`), as the same words are without the prefix
+            own = _own_words(args)
             if any("$" in item or "`" in item for item in own):
                 return found, " ".join(tokens)[:200]
             found.append("harness " + " ".join(item for item in args if item != JSON_FLAG))

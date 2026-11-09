@@ -720,7 +720,7 @@ def _line_writer(line: str, inputs: List[str], ctx: "_Ctx", allowed: set, depth:
             if inner is None or depth >= MAX_DEPTH or _line_writer(inner, inputs, ctx, allowed, depth + 1):
                 return shown
             continue
-        if name == "harness" or _name(head) == "cli.py":
+        if _starts_cli(args, at):
             wrapped, waited = as_run(args), _wait_run(args)
             inner = wrapped[1] if wrapped else waited
             if inner is not None and (depth >= MAX_DEPTH or _line_writer(inner, inputs, ctx, allowed, depth + 1)):
@@ -1425,26 +1425,86 @@ def _hidden_in_line(segments: List[List[str]], text: str, programs: Dict[str, Li
         found.append(_hidden("pipe", text[:200]))
 
 
+JSON_FLAG = "--json"  # the one option the command line takes anywhere: `cli.py` takes it away before it reads the other words
+_CLI_MODULES = ("cli", "engine.cli", ".harness.engine.cli")
+
+
+def _harness_words(tokens: List[str]) -> Optional[Tuple[int, List[str]]]:
+    """`(where the harness command line starts in this segment, the words after it without `--json`)`: `harness`, `harness.cmd`, `.harness/bin/harness`, `cli.py`, `python3 .harness/engine/cli.py`, `python3 -m cli`; else None. The
+    word may stand after any wrapper (`setsid harness as`, `nohup`, `env X=1`), but not among the words of a program that only reads them (`echo harness as x`, `grep harness as notes`): that is no call."""
+    for index, token in enumerate(tokens):
+        if _program(token) == "harness" or _name(token) == "cli.py" or (_is_interpreter(token) and _starts_cli(tokens, index)):
+            at = _head_index(tokens)
+            if at is not None and at < index and _data_only(tokens, at):
+                return None
+            if _is_interpreter(token) and not (_program(token) == "harness" or _name(token) == "cli.py"):
+                _kind, module = _interp(tokens, index)
+                return index, [word for word in tokens[(module or index) + 1:] if word != JSON_FLAG]
+            return index, [word for word in tokens[index + 1:] if word != JSON_FLAG]
+    return None
+
+
+def _starts_cli(tokens: List[str], at: int) -> bool:
+    """Does the command at `tokens[at]` start the command line of the harness (`harness`, `cli.py`, `python3 .harness/engine/cli.py`, `python3 -m cli`)?"""
+    if _is_harness(tokens, at):
+        return True
+    if _is_interpreter(tokens[at]):
+        kind, index = _interp(tokens, at)
+        return kind == "module" and index is not None and index < len(tokens) and tokens[index].lower() in _CLI_MODULES
+    return False
+
+
+def _harness_sub(words: List[str]) -> Optional[Tuple[int, str]]:
+    """`(where the sub-command is, the sub-command)`: the first word that is no option. `cli.py` is `argparse`: the options of the harness (`--short`, `--sh`, `--version`, `-h`, `--`) may stand before it, in any spelling of a start of
+    them, so every word that starts with `-` is skipped (1.7.38, C13 FR3: it was only the word right after `harness`)."""
+    for index, word in enumerate(words):
+        if not word.startswith("-"):
+            return index, word.lower()
+    return None
+
+
 def as_run(tokens: List[str]) -> Optional[Tuple[str, str]]:
-    """(alias, the command) when this segment is `harness as <alias> -- <command>` (1.7.10); else None."""
-    head = [index for index, token in enumerate(tokens) if _program(token) == "harness" or _name(token) == "cli.py"]
-    if not head or len(tokens) < head[0] + 5 or tokens[head[0] + 1].lower() != "as" or tokens[head[0] + 3] != "--":
+    """(alias, the command) when this segment is `harness as <alias> -- <command>` (1.7.10); else None. Read as the command line does (`cli.py` uses argparse): with or without the `--`, the `--` before the alias, options of the harness
+    before `as`, `python3 .harness/engine/cli.py`, `python3 -m cli`, in front of anything (`env X=1`, `bash -c`), and `--json` anywhere is taken away before the program sees its words (1.7.38, C13 FR3). The command is read more
+    freely than it runs, never less: a shape that fails when it runs is still judged as the call it would have been."""
+    found = _harness_words(tokens)
+    if found is None:
         return None
-    settings = [item for item in tokens[: head[0]] if _is_environment(item)]  # `SQLCMDINI=x harness as ...`: the settings stand before the program the command runs, as they do without the prefix
-    return tokens[head[0] + 2], " ".join(shlex_quote(item) for item in settings + tokens[head[0] + 4:])  # 1.7.38 (C13 FR2 1): as the program is given its words (`run_as` joins them with quotes): a statement with a `;` or a space in one word stays one word
+    head, words = found
+    sub = _harness_sub(words)
+    if sub is None or sub[1] != "as":
+        return None
+    rest = words[sub[0] + 1:]
+    at = next((index for index, word in enumerate(rest) if not word.startswith("-")), None)
+    if at is None:
+        return None
+    command = rest[at + 1:]
+    while command and command[0] == "--":  # argparse takes one `--` away and `run_as` another, and which of them does it depends on the Python: every `--` in front of the command is
+        command = command[1:]
+    settings = [item for item in tokens[:head] if _is_environment(item)]  # `SQLCMDINI=x harness as ...`: the settings stand before the program the command runs, as they do without the prefix
+    return rest[at], " ".join(shlex_quote(item) for item in settings + command)  # 1.7.38 (C13 FR2 1): as the program is given its words (`run_as` joins them with quotes): a statement with a `;` or a space in one word stays one word
+
+
+_WAIT_RUN_OPTIONS = ("--r", "--ru", "--run")  # argparse takes a start of an option that no other option starts with
 
 
 def _wait_run(tokens: List[str]) -> Optional[str]:
-    """The command `harness wait --run` is given, when this segment is such a call (`harness`, `harness.cmd` or `cli.py`, then `wait`); else None."""
-    head = [index for index, token in enumerate(tokens) if _program(token) == "harness" or _name(token) == "cli.py"]
-    if not head or len(tokens) <= head[0] + 1 or tokens[head[0] + 1].lower() != "wait":
+    """The command(s) `harness wait` is given with `--run`, one to a line, when this segment is such a call (`harness`, `harness.cmd`, `cli.py`, with the options of the harness before `wait`, `--run=<command>`, `--ru`, the
+    option twice: the program runs the last one, the gate reads all of them); else None."""
+    found = _harness_words(tokens)
+    if found is None:
         return None
-    for index, token in enumerate(tokens):
-        if token == "--run" and index + 1 < len(tokens):
-            return tokens[index + 1]
-        if token.startswith("--run="):
-            return token[len("--run="):]
-    return None
+    sub = _harness_sub(found[1])
+    if sub is None or sub[1] != "wait":
+        return None
+    rest = found[1][sub[0] + 1:]
+    values: List[str] = []
+    for index, word in enumerate(rest):
+        if word in _WAIT_RUN_OPTIONS and index + 1 < len(rest):
+            values.append(rest[index + 1])
+        else:
+            values.extend(word[len(option) + 1:] for option in _WAIT_RUN_OPTIONS if word.startswith(option + "="))
+    return "\n".join(values) if values else None
 
 
 def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: Optional[Any] = None, cwd: str = "", folder: Optional[Any] = None) -> List[Tuple[Action, str]]:

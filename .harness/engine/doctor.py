@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import ahp, clip, company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
+from core import ahp, clip, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -275,7 +275,18 @@ def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -
             module.validate_policy(config.load_policy(root, policy_name))
             report.ok(say("doctor.policy.ok", name=policy_name))
         except Exception as error:
-            report.error(say("doctor.policy.bad", name=policy_name, error=error))
+            diagnose = getattr(module, "diagnose", None)
+            readable = True
+            if policy_name == "gate" and callable(diagnose):  # 1.7.38 (C13 F2c): a policy the gate cannot read (it runs on its built-in copy then): which file, what is wrong, and what the gate does meanwhile
+                try:
+                    module.validate_policy(config.load_policy(root, policy_name), floor=False)
+                except Exception:  # noqa: BLE001
+                    readable = False
+            if not readable:
+                file, problem = diagnose(root, error)
+                report.error(say("doctor.gate.policy_bad", file=file, error=problem))
+            else:
+                report.error(say("doctor.policy.bad", name=policy_name, error=error))
 
 
 def check_unseen(report: Report, root: Path) -> None:
@@ -625,6 +636,9 @@ def check_toolpacks(report: Report, root: Path) -> None:
         for one in toolpacks.faults(root):  # 1.7.38 (G-1): a faulty file makes the gate hold every call of the pack's programs; it is an error, not a quiet gap
             for fault in one["faults"]:
                 report.error(say("doctor.toolpacks.unreadable" if fault.get("unreadable") else "doctor.toolpacks.broken", pack=one["pack"], file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(one["programs"]) or "-"))
+        held = connections.broken_systems(root)  # 1.7.38 (C13 F2): a connection list that cannot be read holds every program of the connection types: an error, not a quiet gap
+        for fault in connections.faults(root):
+            report.error(say("doctor.connections.broken", file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(sorted({one for system in held.values() for one in system["reach"]["cli"]})) or "-"))
         names = sorted(toolpacks.active(root))
         if names:
             report.ok(say("doctor.toolpacks.on", names=", ".join(names)))
@@ -754,7 +768,15 @@ def check_targets(report: Report, root: Path) -> None:
     try:
         found = targets.load(root)
     except Exception as error:
-        report.error(say("doctor.target.policy_bad", error=error))
+        file, problem = targets.diagnose(root, error)  # 1.7.38 (C13 F2b): which file, and what is wrong
+        report.error(say("doctor.target.policy_bad", file=file, error=problem))
+        kb = targets.kb_fault(root)  # 1.7.38 (C13 F2c): the list of knowledge bases is unreadable too, so the company packs in one registered elsewhere are not seen: the programs the gate still found in the text of the files are named
+        try:
+            held = sorted({word for item in govern.kb_systems(root).values() for word in item["reach"]["cli"]}) if kb else []
+        except Exception:  # noqa: BLE001 - the line about the target policy above says the file; this one only names programs
+            held = []
+        if held:
+            report.error(say("doctor.target.kb_bad", file=kb[0], error=kb[1], held=say("doctor.target.kb_held", programs=", ".join(held))))
         return
     if not found.configured:
         report.ok(say("doctor.target.none"))

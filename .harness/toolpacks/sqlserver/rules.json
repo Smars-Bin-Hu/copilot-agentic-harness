@@ -1,0 +1,26 @@
+{
+  "systems": {
+    "sqlserver-other": {
+      "reach": {
+        "cli": [
+          "bcp",
+          "invoke-sqlcmd",
+          "isql",
+          "usql",
+          "mssql-cli"
+        ],
+        "code": [
+          "pyodbc",
+          "pymssql",
+          "mssql",
+          "tedious"
+        ]
+      },
+      "env": "none",
+      "blocked": {
+        "en": "The gate cannot judge this program: it reaches a SQL Server with no connection and no lists. Use `sqlcmd` with a connection (`harness connections find <words>`): the gate judges that, and a person can approve it.",
+        "zh": "gate 判断不了这个程序：它不经过连接、也不看清单就连上 SQL Server。请用 `sqlcmd` 和连接（`harness connections find <词>`）：gate 判断得了它，需要时用户也能批准。"
+      }
+    }
+  }
+}

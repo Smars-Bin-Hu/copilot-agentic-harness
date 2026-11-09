@@ -269,11 +269,12 @@ class GateExternalTests(HarnessTestCase):
         self.configure(SYSTEMS)
         self.assertEqual(self.term("cloudctl --sub dev list && cloudctl delete x")["permissionDecision"], "deny")
 
-    def test_a_list_that_does_not_validate_is_ignored_and_tools_check_says_why(self) -> None:
+    def test_a_list_that_does_not_validate_refuses_its_programs_and_tools_check_says_why(self) -> None:
         broken = copy.deepcopy(SYSTEMS)
         broken["cloud"]["verbs"].append({"pattern": "(", "verb": "read"})
         self.configure(broken)
-        self.assertEqual(self.term("cloudctl delete x"), {})  # a hook that fails itself must not hurt normal work
+        self.assertEqual(self.term("cloudctl delete x")["permissionDecision"], "deny")  # 1.7.38 (C13 F2): turned over: the list was ignored and the call passed; a gate that cannot judge a call of a listed program does not pass it
+        self.assertEqual(self.term("ls"), {})  # a command that names no listed program is as free as before
         completed = self.cli("tools", "check")
         self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
         self.assertIn("bad pattern", completed.stdout)
@@ -491,7 +492,7 @@ class SamplePackTests(unittest.TestCase):
         listed = json.loads((examples / "connections.json").read_text(encoding="utf-8"))["connections"]
         (root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {name: item for name, item in listed.items() if item["type"] == "sqlserver"}}), encoding="utf-8")
         systems = config.load_policy(root, "tools")["systems"]  # each connection of the sample is a system (1.7.10)
-        self.assertEqual(sorted(systems), ["orders-dev", "orders-ist", "orders-qat"])
+        self.assertEqual(sorted(systems), ["orders-dev", "orders-ist", "orders-qat", "sqlserver-other"])  # the last is the pack's own (1.7.38, C13 F2): the programs that reach a SQL Server with no connection are refused
         self.assertEqual(external.validate(systems), [])
         verb = lambda query: external.classify(f'sqlcmd -S sql-dev.example.local,1433 -E -Q "{query}"', systems)[0][0].verb  # noqa: E731
         self.assertEqual(external.classify('sqlcmd -S sql-ist.example.local -E -Q "SELECT 1"', systems)[0][0].system, "orders-ist")  # the default port may be left out

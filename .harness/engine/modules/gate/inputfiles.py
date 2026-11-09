@@ -33,6 +33,7 @@ class Found:
     items: List[statements.Statement] = field(default_factory=list)  # the statements of the text and of every file, in order (a sqlcmd line of `include` that was followed is not one)
     files: Dict[str, str] = field(default_factory=dict)  # the file each statement came from (by its text): to name it in a refusal
     sources: int = 0  # how many texts and files the call gave: 0 means the program reads what it is given on its input, and the gate sees none of it
+    named: List[str] = field(default_factory=list)  # every script file the call reads: the ones it names (`-i a.sql`) and the ones they include (1.7.38, C13 F2: no other command of the line may change them)
     unsure: str = ""  # a text that holds a shell variable or a command substitution (`$X`, `$(...)`, a backtick): the shell fills it in before the program sees it
 
 
@@ -142,6 +143,8 @@ def read(system: Dict[str, Any], args: List[str], root: Optional[Path], folder: 
             found.files.setdefault(item.text, name)
 
     def visit(name: str, depth: int) -> None:
+        if name not in found.named:
+            found.named.append(name)  # a file a script includes counts as a file the call reads
         path = pinfiles.locate(name, root, folder, cwd, command) if root is not None else None
         if path is None or depth > MAX_DEPTH or len(seen) >= MAX_FILES:
             return unread(name)

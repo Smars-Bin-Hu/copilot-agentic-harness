@@ -80,6 +80,21 @@ def company_path(root: Path, name: str) -> Path:
     return policies_dir(root) / f"{name}{COMPANY_SUFFIX}"
 
 
+def _hold(root: Path, found: Dict[str, Any], who: str, error: BaseException) -> Dict[str, Any]:
+    """(1.7.38, C13 F2) A part of the systems list could not be made (`who`): the programs that the tool packs and the tools policy name are held (one `broken-` system owns them all) and the card says what failed.
+    Left out, those programs would be judged by nobody and pass. The names are read as plain text (`govern.programs`): none of the code that failed is used. Never raises."""
+    try:
+        from . import govern
+
+        names = sorted(govern.programs(root))
+        if names:
+            text = f"{who}: {type(error).__name__}: {' '.join(str(error).split())}"[:400]
+            return dict(found, systems={**(found.get("systems") or {}), f"broken-{who}": {"reach": {"cli": names}, "env": "none", "broken": text}})
+    except Exception:  # noqa: BLE001 - the last net
+        pass
+    return found
+
+
 def load_policy(root: Path, name: str) -> Dict[str, Any]:
     found = read_json(policies_dir(root) / f"{name}.json")
     for suffix in LAYERS:
@@ -88,8 +103,8 @@ def load_policy(root: Path, name: str) -> Dict[str, Any]:
                 from . import toolpacks
 
                 found = deep_merge(found, toolpacks.rules_layer(root))
-            except Exception:  # noqa: BLE001 - a broken tool pack must not take the other systems away; `tool pack check` reports it
-                pass
+            except Exception as error:  # noqa: BLE001 - a broken tool pack must not take the other systems away; `tool pack check` reports it. 1.7.38 (C13 F2): its programs are held, not left unjudged
+                found = _hold(root, found, "toolpacks", error) if isinstance(found, dict) else found
         path = policies_dir(root) / f"{name}{suffix}"
         if path.exists():
             found = deep_merge(found, read_json(path))
@@ -102,16 +117,32 @@ def load_policy(root: Path, name: str) -> Dict[str, Any]:
                 found = dict(found, systems={**made, **(found.get("systems") or {})})
             if found.get("systems"):  # 1.7.38: a system that also guards the hosts of the connections (`reach.also`)
                 found = dict(found, systems=connections.widen(root, found["systems"]))
-        except Exception:  # noqa: BLE001 - a broken server list must not take the gate's hand-written systems away; doctor reports it
-            pass
+        except Exception as error:  # noqa: BLE001 - a broken server list must not take the gate's hand-written systems away; doctor reports it. 1.7.38 (C13 F2): the programs of the connection types are held below, never left unjudged
+            found = _hold(root, found, "connections", error)
+        try:  # 1.7.38 (C13 F2): a connection list that cannot be read (bad JSON, wrong shape): the programs of the packs that bring a connection type are held
+            from . import connections
+
+            held = connections.broken_systems(root)
+            if held:
+                found = dict(found, systems={**(found.get("systems") or {}), **held})
+        except Exception as error:  # noqa: BLE001 - see above
+            found = _hold(root, found, "connection-list", error)
         try:  # 1.7.38 (G-1): a tool pack with a faulty file: every call of its programs is held, never left unjudged
             from . import toolpacks
 
             held = toolpacks.broken_systems(root)
             if held:
                 found = dict(found, systems={**(found.get("systems") or {}), **held})
-        except Exception:  # noqa: BLE001 - a broken pack must not take the other systems away; doctor reports it
-            pass
+        except Exception as error:  # noqa: BLE001 - a broken pack must not take the other systems away; doctor reports it. 1.7.38 (C13 F2): its programs are held
+            found = _hold(root, found, "toolpack-files", error)
+        try:  # 1.7.38 (C13 F2c): the list of knowledge bases cannot be read, so the company packs in a knowledge base registered elsewhere are not seen: the ones the text of the files still names are held
+            from . import govern
+
+            held = govern.kb_systems(root)
+            if held:
+                found = dict(found, systems={**(found.get("systems") or {}), **held})
+        except Exception as error:  # noqa: BLE001 - see above
+            found = _hold(root, found, "knowledge-bases", error)
     return found
 
 

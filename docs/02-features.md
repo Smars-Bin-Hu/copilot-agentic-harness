@@ -362,4 +362,4 @@ The docs, rules and skills of the repository are in English only. A task made in
 
 ## How the hooks are wired in
 
-Every hook event goes through the same entry, [hook.py](../.harness/engine/hook.py). It reads what the platform sends into one common event, hands it to the modules, and merges the results. The list of modules and their switches are in [registry.json](../.harness/registry.json). When the hook itself fails, it lets the call through and writes to `hook-errors.jsonl`, so normal work is not hurt.
+Every hook event goes through the same entry, [hook.py](../.harness/engine/hook.py). It reads what the platform sends into one common event, hands it to the modules, and merges the results. The list of modules and their switches are in [registry.json](../.harness/registry.json). When the hook itself fails, local work goes on and the error goes to `hook-errors.jsonl`; a call to a program of a tool pack is refused instead ([05 Design](05-design.md#when-the-hook-fails-itself)).

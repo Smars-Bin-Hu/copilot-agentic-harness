@@ -5,6 +5,11 @@
   "cli": [
     "demotracker"
   ],
+  "free": [
+    "--help",
+    "-h",
+    "--version"
+  ],
   "fields": {
     "project": {
       "label": "Project",

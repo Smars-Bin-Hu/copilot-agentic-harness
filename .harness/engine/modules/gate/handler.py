@@ -20,13 +20,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 import re
 
-from core import calls, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
+from core import calls, govern, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
 from core import systems as systems_mod
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, external, gitcmd, outbox, rules, terminal
+from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, targetfault, terminal
+from . import policy as gate_policy
 from .policy import POLICY_NAME, Compiled, validate_policy
 
 NAME = "gate"
@@ -103,7 +104,15 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     git = gitcmd.classify(event.command) if guard_git else gitcmd.Verdict()
     if git.kind == gitcmd.NEVER:
         return Decision(permission="deny", reason=rules.git_never(git.why, gitcmd.collapse(event.command)))
+    said = harnesscmd.check(event.command, compiled)  # 1.7.38 (C13 F2): the harness commands only a person may run, read as the shell reads them (a quote, a variable, `xargs`, `python -m cli` hide nothing)
+    if said:
+        return Decision(permission="deny", reason=said)
     verdict = terminal.check(event.command, compiled, network_judged(ctx))
+    if verdict is None or verdict[0] != "deny":  # 1.7.38 (C13 F2): a command string a shell is given (`pwsh -Command '...'`, `bash -c '...'`) goes through the same rules as a bare line; the strictest answer stands
+        for inner in external.nested(event.command):
+            found = terminal.check(inner, compiled, network_judged(ctx))
+            if found is not None and (verdict is None or (found[0] == "deny" and verdict[0] != "deny")):
+                verdict = found
     if verdict is not None and verdict[0] == "deny":
         return Decision(permission="deny", reason=rules.terminal_denied(verdict[1]))
     port = asks_board(ctx, event.command)
@@ -184,13 +193,19 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     """
     try:
         systems = ctx.policy("tools").get("systems") or {}
-        if not systems or external.validate(systems):
+        invalid = external.validate(systems) if systems else []
+        if invalid:  # 1.7.38 (C13 F2): a list the gate cannot trust judges nothing, so a line that names a program a tool pack governs is refused (the old way passed every call)
+            return failclosed.refusal(ctx.root, event.command, invalid[0], "invalid")
+        govern.remember(ctx.root)  # 1.7.38 (C13 F2c): a note for the day the list of knowledge bases cannot be read
+        bare = connections.unconnected(ctx.root, systems)  # 1.7.38 (C13 F2b): the programs a tool pack declares that no connection lists: a call of one is refused, it names no place to be judged for
+        if not systems and not bare:
             return None
         task = ctx.state.get("active_task")
-        every = external.classify(event.command, systems, unseen=True, root=ctx.root, cwd=event.cwd or "", folder=(ctx.root / str(task)) if task else None)
-        results = [_judge_one(event, ctx, systems, action, decision) for action, decision in every]
-    except Exception:  # noqa: BLE001 - see above
-        return None
+        scanned = bool(systems) or any(not item.get("direct_only") for item in bare.values())  # 1.7.38 (C13 F2c): the names in scripts and words of the line are read only when a system the gate reads is there; the programs of a pack that is off and that no connection uses are refused when called directly, nothing more
+        every = external.classify(event.command, {**systems, **bare}, unseen=scanned, root=ctx.root, cwd=event.cwd or "", folder=(ctx.root / str(task)) if task else None)
+        results = [_judge_one(event, ctx, {**systems, **bare}, action, decision) for action, decision in every]
+    except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2): the gate failed on this line: refused when the line names a program a tool pack governs, as before (no opinion) when it names none
+        return failclosed.refusal(ctx.root, event.command, error)
     if not results:
         return None
     stopped = [item for item in results if not item["passes"]]
@@ -206,6 +221,7 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     best["offers"] = _offers(offers)
     if len(stopped) > 1:  # why each part of the line is held (the card names each system and says why)
         best["holds"] = [{"system": item["action"].system, "env": item["action"].env, "zone": getattr(item["action"], "zone", ""), "note": getattr(item["action"], "note", ""), "opens": bool(item.get("offer"))} for item in stopped]
+    best["hint"] = (({**systems, **bare}).get(best["action"].system) or {}).get("hint")  # what to do instead: the system may be one made for a pack that is off, which the tools policy does not list
     return best
 
 
@@ -229,6 +245,8 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     how = "allow" if passes else ""  # what let it through (core.calls): the evidence says it (1.7.9)
     if action.unseen:  # a command whose program the gate cannot read: it may be a listed one, so it is held, whatever the task allows
         return {"action": action, "decision": decision, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unseen": True}
+    if action.zone in ("unpinned", "blocked"):  # 1.7.38 (C13 F2): a call that reaches no connection the gate can name, or a program it cannot judge: refused, nothing to approve
+        return {"action": action, "decision": external.DENY, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "refused": action.zone}
     if action.why == "command":  # the pack's own program has no such command (1.7.38): nothing to approve, nothing runs
         return {"action": action, "decision": external.DENY, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unknown": action.target}
     if event.agent_type.strip():  # a subagent (the reviewer, the mapper) reads only: the person's leave (a plan, a grant, an open connection, an approval) is the main agent's, never its own (1.7.9)
@@ -272,8 +290,8 @@ def check_mcp(event: HookEvent, ctx: Context) -> Optional[Decision]:
         from core import toolpacks
 
         found = toolpacks.mcp_verb(ctx.root, event.tool_name)
-    except Exception:  # noqa: BLE001 - a broken tool pack must not stop a tool call
-        return None
+    except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2): a tool pack that cannot be read must not let its own MCP tool through: refused when the tool is one the packs' files name, left as it was when none does
+        return failclosed.decision(ctx.root, event, error)
     if not found:
         return None
     facts = {"external": {"system": found["toolpack"], "env": "none", "verb": found["verb"], "target": event.tool_name, "mcp": True}}
@@ -382,6 +400,10 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
             return Decision(permission="deny", reason=rules.too_many_waiting(), facts=dict(facts, kind="external-too-many"))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft, offers, changed), facts=dict(facts, kind="external-outbox", **({"changed": changed} if changed else {})))
+    if judged.get("refused") == "unpinned":
+        return Decision(permission="deny", reason=rules.external_unpinned(action, command), facts=dict(facts, kind="external-unpinned"))
+    if judged.get("refused") == "blocked":
+        return Decision(permission="deny", reason=rules.external_blocked(action, command), facts=dict(facts, kind="external-blocked"))
     if judged.get("unseen"):
         named = action.target if action.unseen else ""
         key = {"file": "gate.external.unreadable_file", "encoded": "gate.external.encoded"}.get(action.why) or ("gate.external.unreadable" if named else "gate.external.unseen")
@@ -393,7 +415,7 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_refused if action.zone == "refuse" else rules.external_denied_file if action.file_why == "destroy" else rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
     if decision == external.DENY and not action.zone and not action.file_why:  # 1.7.38 (D1-7): a system may say what to do instead of the refused call (`hint`)
-        hint = ((ctx.policy("tools").get("systems") or {}).get(action.system) or {}).get("hint")
+        hint = judged.get("hint") or ((ctx.policy("tools").get("systems") or {}).get(action.system) or {}).get("hint")
         if hint:
             reason = rules.external_denied(action, command, hint)
     return Decision(permission="deny", reason=reason, facts=facts)
@@ -401,15 +423,19 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
 
 def _changed_files(ctx: Context, event: HookEvent, minutes: int) -> List[str]:
     """The files this command names, inside its task, that are not as they were when the person approved it: changed, gone, or new (`core.pinfiles`). Empty when no approval is waiting for the command,
-    when it was approved with no files kept (before 1.7.38), or when all are the same. Never raises: a read that fails says nothing changed, as before."""
+    when it was approved with no files kept (before 1.7.38), or when all are the same. Never raises. A read of the files that fails (1.7.38, C13 F2) says they changed: the approval is for the files as the person saw them,
+    and a gate that cannot tell does not let the call through on it; the card is asked again."""
     try:
         text = approvals.collapse(event.command)
         entry = next((item for item in approvals.approved(ctx.root, event.session_id, minutes, file=approvals.ACTIONS) if item.get("command") == text), None)
         if entry is None or entry.get("files") is None:
             return []
+    except Exception:  # noqa: BLE001 - nothing approved can be found: there is nothing to compare, and the approval is not used either
+        return []
+    try:
         return pinfiles.changed(entry["files"], pinfiles.pins(event.command, ctx.root, str(entry.get("task") or ""), event.cwd or str(entry.get("cwd") or "")))
     except Exception:  # noqa: BLE001 - see above
-        return []
+        return ["?"]
 
 
 def settle_opened(ctx: Context, command: str) -> None:
@@ -525,11 +551,16 @@ def asks_board(ctx: Context, text: str) -> int:
 
 
 def load_targets(ctx: Context) -> Optional[targets.Targets]:
-    """The target repositories. A broken target.json gives None: the `.git` floor still holds, and doctor reports it."""
+    """The target repositories. A target policy that cannot be read gives None (`read_targets` says why): the `.git` floor still holds, a write that may reach a target is refused (`targetfault`, 1.7.38 F2b), and doctor reports it."""
+    return read_targets(ctx)[0]
+
+
+def read_targets(ctx: Context) -> Tuple[Optional[targets.Targets], Optional[BaseException]]:
+    """`(targets, None)`, or `(None, the error)` when the target policy cannot be read or is not valid: the gate does not know where the target repositories are then."""
     try:
-        return targets.load(ctx.root)
-    except Exception:  # noqa: BLE001 - the gate must not fail on a bad target.json
-        return None
+        return targets.load(ctx.root), None
+    except Exception as error:  # noqa: BLE001 - the gate must not fail on a bad target.json; it refuses what may write into a target instead (targetfault)
+        return None, error
 
 
 def watch_reach(event: HookEvent, ctx: Context) -> None:
@@ -606,11 +637,18 @@ def owned_names(event: HookEvent, ctx: Context) -> set:
 
 def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any]]) -> Optional[Decision]:
     """A server whose identity this window does not hold is reached through `harness as <alias> --` (1.7.10): a call without it, or with another alias, is refused with the line to run."""
-    if not judged:
+    if not judged or judged["action"].zone in ("unpinned", "blocked"):
         return None
     alias = judged["action"].system
     wrapped = set(connections.state(ctx.root).get("wrap") or [])
     given = next((found for found in (external.as_run(tokens) for tokens in gitcmd.split_segments(event.command)) if found), None)
+    if given and given[0] != alias and alias not in connections.listed(ctx.root):  # 1.7.38 (C13 F2, U1): a system of a tool pack (`ado-web`) is no connection: the text names the connections that own it, never the system
+        owners = connections.serving(ctx.root, (ctx.policy("tools").get("systems") or {}).get(alias) or {})
+        if given[0] in owners:
+            return Decision(permission="deny", reason=rules.say("gate.connections.wrap.web", given=given[0]), facts={"kind": "wrap"})
+        if owners:
+            return Decision(permission="deny", reason=rules.say("gate.connections.wrap.other", given=given[0], alias=" or ".join(owners)), facts={"kind": "wrap"})
+        return Decision(permission="deny", reason=rules.say("gate.connections.wrap.none", given=given[0]), facts={"kind": "wrap"})
     if given and given[0] != alias:
         return Decision(permission="deny", reason=rules.say("gate.connections.wrap.other", given=given[0], alias=alias), facts={"kind": "wrap"})
     if alias in wrapped and not given:
@@ -646,6 +684,17 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
 
 
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """The gate. When the whole handler raises (hook.py then counts the gate as having no opinion, and the call goes through), a call to a program or an MCP tool of a tool pack is refused instead (1.7.38, C13 F2)."""
+    try:
+        return _handle(event, ctx)
+    except Exception as error:  # noqa: BLE001 - see above; everything else is left as it was: the error is raised again
+        refused = failclosed.decision(ctx.root, event, error)
+        if refused is not None:
+            return refused
+        raise
+
+
+def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.event == "SessionStart" or (event.event in ("PostToolUse", "PostToolUseFailure") and event.tool_kind == "terminal"):
         watch_reach(event, ctx)
         return wrapped_context(ctx) if event.event == "SessionStart" else first_reach(event, ctx)
@@ -668,10 +717,33 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
             return refused
     if event.event != "PreToolUse" or event.tool_kind not in WRITE_KINDS + ("terminal",):
         return None
-    policy = ctx.policy(POLICY_NAME)
-    validate_policy(policy, floor=False)
-    found = load_targets(ctx)
-    compiled = Compiled(policy, [(repo.name, repo.path, repo.refused_paths) for repo in found.repos.values()] if found else None, admin=ctx.admin)
+    found, unreadable = read_targets(ctx)
+    repos = [(repo.name, repo.path, repo.refused_paths) for repo in found.repos.values()] if found else None
+    broken: Optional[BaseException] = None
+    try:
+        policy = ctx.policy(POLICY_NAME)
+        validate_policy(policy, floor=False)
+        compiled = Compiled(policy, repos, admin=ctx.admin)
+    except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2c): the gate's own policy cannot be read: it runs on a built-in copy of the shipped one, and a write that is not inside the task folder and a git write are refused (`fallback`)
+        broken = error
+        policy = builtin.policy()
+        compiled = Compiled(policy, repos, admin=ctx.admin)
+    decided = _handle_call(event, ctx, policy, compiled, found)
+    if broken is not None:
+        file, problem = gate_policy.diagnose(ctx.root, broken)
+        decided = fallback.refine(event, ctx, decided, file, problem, WRITE_KINDS)
+    if unreadable is not None and not (decided and decided.permission == "deny"):  # 1.7.38 (C13 F2b): the target policy cannot be read, so the gate does not know where the target repositories are: a call that may write into one does not pass
+        try:
+            file, problem = targets.diagnose(ctx.root, unreadable)
+        except Exception:  # noqa: BLE001 - a name for the text
+            file, problem = f"{targets.POLICY_NAME}.json", str(unreadable)[:200]
+        refused = targetfault.check(event, ctx, policy, WRITE_KINDS, file, problem)
+        if refused:
+            return refused
+    return decided
+
+
+def _handle_call(event: HookEvent, ctx: Context, policy: dict, compiled: Compiled, found: Optional[targets.Targets]) -> Optional[Decision]:
     if event.tool_kind == "terminal":
         # Without target repositories the harness behaves as before: only the ask rules in gate.json look at git.
         judged = judge_external(event, ctx)

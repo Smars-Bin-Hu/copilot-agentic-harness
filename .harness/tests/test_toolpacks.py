@@ -1105,7 +1105,9 @@ class FactoryPacks(ToolpackCase):
     def test_a_pack_that_is_off_still_guards_the_connections_that_use_its_type(self) -> None:
         """1.7.38: turning a pack off takes back its skills and its bin/ only; a connection of its type is still judged."""
         self.use()
-        self.assertEqual(self.term("tracker --org demo comment 7 hi"), {}, "no connection: the gate knows no tracker")
+        none = self.term("tracker --org demo comment 7 hi")  # 1.7.38 (C13 F2b): turned over. With no connection the gate used to know no tracker and passed the call; it is refused now, with the way (a pack that is off still names its programs)
+        self.assertEqual(none.get("permissionDecision"), "deny", none)
+        self.assertIn("harness connections find", none["permissionDecisionReason"])
         self.connect()
         systems = config.load_policy(self.root, "tools")["systems"]
         self.assertEqual((systems["board"]["toolpack"], systems["board"]["env"]), ("tracker", "none"))
@@ -1133,7 +1135,7 @@ class FactoryPacks(ToolpackCase):
         self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "prod read runs")
         self.connect(type="elsewhere")
         self.assertEqual(toolpacks.guard_only(self.root), {})
-        self.assertEqual(self.term("tracker --org demo comment 7 hi"), {})
+        self.assertEqual(self.term("tracker --org demo comment 7 hi").get("permissionDecision"), "deny")  # 1.7.38 (C13 F2b): turned over. A connection of another type guards nothing, and the call is refused for having no connection of its own type
         self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
 
     def test_an_own_connection_in_the_env_file_guards_an_off_pack_too(self) -> None:

@@ -86,7 +86,7 @@ def _say_text_ok(text: Any) -> bool:
 
 
 TYPE_KEYS = ("type", "label", "description", "via", "env", "fields", "auth", "test", "expect", "denied", "down", "signin_lost", "cli", "match", "command", "commands", "verbs", "target", "rules", "show", "say", "body",
-             "open", "openable", "item", "link", "input", "reads", "writes", "refuse", "toolpack")  # every top-level key of a type file (the protocol's list; `toolpack` is put in by `types` when it loads one); a key not here is a typo (1.7.38, L8)
+             "open", "openable", "item", "link", "input", "reads", "writes", "refuse", "pin", "free", "toolpack")  # every top-level key of a type file (the protocol's list; `toolpack` is put in by `types` when it loads one); a key not here is a typo (1.7.38, L8)
 
 
 def type_problems(kind: Dict[str, Any]) -> List[str]:
@@ -185,10 +185,12 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 out.append(f"types.{name}.input.{part}: bad pattern: {error}")
     if isinstance(kind.get("fields"), dict) and not all(isinstance(spec, dict) for spec in kind["fields"].values()):
         out.append(f"types.{name}.fields: each field is an object (`label`, `placeholder`, `default`, `optional`)")
+    if kind.get("free") is not None and not (isinstance(kind["free"], list) and all(isinstance(one, str) and one for one in kind["free"])):  # 1.7.38 (C13 F2c): a list of words, or left out
+        out.append(f"types.{name}.free: a list of words that only print help or the version (`[\"--help\", \"--version\"]`), or left out")
     return out + _gate_shape(kind, name)
 
 
-GATE_KEYS = ("verbs", "target", "show", "rules", "item", "link", "commands", "openable")  # keys the gate reads and that `type_problems` did not check before 1.7.38 (G-1)
+GATE_KEYS = ("verbs", "target", "show", "rules", "item", "link", "commands", "openable", "pin")  # keys the gate reads and that `type_problems` did not check before 1.7.38 (G-1)
 
 
 def _gate_shape(kind: Dict[str, Any], name: Any) -> List[str]:
@@ -306,6 +308,163 @@ def listed(root: Path, policy: Optional[Dict[str, Any]] = None) -> Dict[str, Dic
     found = company_connections(policy)
     found.update(own_connections(read_env(root), found))
     return found
+
+
+def faults(root: Path) -> List[Dict[str, str]]:
+    """(1.7.38, C13 F2) What is wrong with the connection list: `[{file, problem}]`, empty when it can be read. The three files that make it (`connections.json`, the company's `connections.company.json`, the person's
+    `connections.override.json`) are read one by one: a file that is not JSON, or not an object, a `connections` that is not an object, a connection that is not an object or has no `type`, a `type` that is not text, an `env`
+    that is not one of `ENVS`, and the layers that cannot be merged. It used to be swallowed (`config.policy_or_empty`): a list that could not be read had no connections, so none of their programs were judged. Now the gate holds
+    every program of the tool packs that bring a connection type (`broken_systems`) and `harness doctor` says which file is wrong."""
+    from . import config
+    from .paths import policies_dir
+
+    found: List[Dict[str, str]] = []
+    for name in [f"{POLICY}.json"] + [f"{POLICY}{suffix}" for suffix in config.LAYERS]:
+        path = policies_dir(root) / name
+        if not path.exists():
+            if name == f"{POLICY}.json":
+                found.append({"file": name, "problem": "the file is missing"})
+            continue
+        try:
+            data = config.read_json(path)
+        except (OSError, ValueError) as error:
+            found.append({"file": name, "problem": str(error)})
+            continue
+        if not isinstance(data, dict):
+            found.append({"file": name, "problem": "the file is an object"})
+            continue
+        listed_here = data.get("connections")
+        if listed_here is None:
+            continue
+        if not isinstance(listed_here, dict):
+            found.append({"file": name, "problem": "`connections` is an object"})
+            continue
+        for alias, item in listed_here.items():
+            if not isinstance(item, dict):
+                found.append({"file": name, "problem": f"connection {alias}: an object is needed"})
+            elif not isinstance(item.get("type"), str) or not item.get("type"):
+                found.append({"file": name, "problem": f"connection {alias}: `type` is the name of a connection type"})
+            elif item.get("env") not in ENVS:
+                found.append({"file": name, "problem": f"connection {alias}: `env` is one of {', '.join(ENVS)}"})
+    if not found:
+        try:
+            config.load_policy(root, POLICY)  # the layers must merge too
+        except Exception as error:  # noqa: BLE001 - a fault is a fault, whatever it raises
+            found.append({"file": f"{POLICY}*.json", "problem": f"{type(error).__name__}: {error}"})
+    return found
+
+
+def broken_systems(root: Path) -> Dict[str, Any]:
+    """(1.7.38, C13 F2) For the gate: when the connection list cannot be read (`faults`), one system for each tool pack that brings a connection type, named `broken-<pack>`, that owns every program of those types.
+    Every call of them is held for the person, and the card says which file is wrong and how. Which pack a connection used cannot be known when the list is unreadable, so every pack with a type counts, on or off.
+    The packs whose files are right do not matter: the list is what names the connection a call reaches. `{}` when the list is fine."""
+    problems = faults(root)
+    if not problems:
+        return {}
+    from . import toolpacks
+
+    first = problems[0]
+    more = f" (+{len(problems) - 1})" if len(problems) > 1 else ""
+    out: Dict[str, Any] = {}
+    for name, item in toolpacks.listed(root).items():
+        programs: List[str] = []
+        folder = item["folder"] / toolpacks.TYPES
+        for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+            try:
+                found = json.loads(path.read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                continue
+            cli = found.get("cli") if isinstance(found, dict) else None
+            programs += [str(one).lower() for one in ([cli] if isinstance(cli, str) else cli if isinstance(cli, list) else []) if isinstance(one, str) and one]
+        if programs:
+            out[f"broken-{name}"] = {"reach": {"cli": sorted(set(programs))}, "env": "none", "toolpack": name, "broken": f"{name}: {first['file']}: {first['problem']}{more}"[:400]}
+    return out
+
+
+NO_CONNECTION = "no-connection-"  # the name of a system made for a program that no connection of its type lists (`unconnected`)
+DIRECT_ONLY = "direct_only"  # (1.7.38, C13 F2c) on a system `unconnected` makes for a pack that is off and that no connection uses: the gate refuses a direct call of its programs, and does not take their names in a script or a word of a line for a call
+
+
+def _free_words(kind: Dict[str, Any]) -> Tuple[List[str], bool]:
+    """`(words, default)`: the words of a type that only print help or the version (`free` of the type; `pin.free` for a type with a `pin`): a call with one reaches no server. A type that declares none
+    gets `DEFAULT_FREE` (1.7.38, C13 F2c; `default` is True: the call must be made of these words and nothing else); `"free": []` declares none and turns it off."""
+    given = kind.get("free")
+    if given is None and isinstance(kind.get("pin"), dict):
+        given = kind["pin"].get("free")
+    if given is None:
+        return list(outside.DEFAULT_FREE), True
+    return ([str(one) for one in given if isinstance(one, str) and one] if isinstance(given, list) else []), False
+
+
+def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
+    """(1.7.38, C13 F2b) For the gate: the systems of the programs that a tool pack declares and no system lists. A connection makes a system (`derived`); a computer with no connection of a type has no system for its program,
+    so a call of it was judged by no one and passed (`sqlcmd -S x -Q "UPDATE ..."` with the connection list empty). Now every pack this computer knows is read, on or off (the factory's, the company's, the folders added
+    here): the `cli` of each type it brings, and the `rules.json` systems of a pack that is off and guards no connection (a pack that is off still guards what it names). A program no system lists gets one made here, named
+    `no-connection-<type>`, with `noconn` (the type, its help-only words `free`, its `pin`) and the lists of the type, so the gate refuses the call with the way (no connection for it: the user adds one) and still reads the
+    refuse list first. A file that cannot be read is a `broken-<pack>` system: its programs are read from the text and held. The result is for the gate only: it is not part of the tools policy, so `tools check`
+    and the board do not show it. `{}` when there is nothing to add."""
+    from . import govern, toolpacks
+
+    have = {program for system in (systems or {}).values() if isinstance(system, dict) for program in outside.clis(system)}
+    taken = set(systems or {})
+    out: Dict[str, Any] = {}
+
+    def fresh(key: str) -> str:
+        while key in taken or key in out:
+            key += "_"
+        return key
+
+    guarded = set(toolpacks.guarded(root))
+
+    def hold(pack: str, file: str, problem: Any, names: List[str]) -> None:
+        names = [one for one in names if one not in have]
+        if names:
+            out[fresh(f"broken-{pack}")] = dict({"reach": {"cli": names}, "env": "none", "toolpack": pack, "broken": f"{pack}: {file}: {' '.join(str(problem).split())}"[:400]}, **({} if pack in guarded else {DIRECT_ONLY: True}))
+            have.update(names)
+
+    for folder in govern.folders(root):
+        pack = folder.name
+        for path in sorted((folder / toolpacks.TYPES).glob("*.json")) if (folder / toolpacks.TYPES).is_dir() else []:
+            try:
+                text = path.read_text(encoding="utf-8-sig", errors="replace")
+            except OSError as error:
+                hold(pack, f"{toolpacks.TYPES}/{path.name}", error, [])
+                continue
+            try:
+                kind = json.loads(text)
+            except ValueError as error:
+                hold(pack, f"{toolpacks.TYPES}/{path.name}", error, govern.cli_words(text))
+                continue
+            cli = kind.get("cli") if isinstance(kind, dict) else None
+            programs = [str(one).lower() for one in ([cli] if isinstance(cli, str) else cli if isinstance(cli, list) else []) if isinstance(one, str) and one]
+            programs = [one for one in dict.fromkeys(programs) if one not in have]
+            if not programs:
+                continue
+            words, default = _free_words(kind)
+            system: Dict[str, Any] = {"reach": {"cli": programs}, "env": "none", "toolpack": pack,
+                                      "noconn": {"type": str(kind.get("type") or path.stem), "free": words, "default": default, "pin": kind["pin"] if isinstance(kind.get("pin"), dict) else None}}
+            for key in ("verbs", "reads", "writes", "refuse", "input"):  # what the refuse list needs to read the statements of the call
+                if kind.get(key) is not None:
+                    system[key] = kind[key]
+            if pack not in guarded:
+                system[DIRECT_ONLY] = True  # the pack is off and no connection uses it: a call of its program is refused; its name in a script or a word of a line is not read (1.7.38, C13 F2c)
+            out[fresh(NO_CONNECTION + str(system["noconn"]["type"]))] = system
+            have.update(programs)
+        if pack in guarded or not (folder / toolpacks.RULES).is_file():
+            continue  # a pack the gate reads already has its rules in the policy (`rules_layer`)
+        listed, problems = toolpacks._pack_rules(folder)  # noqa: SLF001 - the same reading `rules_layer` does
+        if problems:
+            try:
+                names = govern.cli_words((folder / toolpacks.RULES).read_text(encoding="utf-8-sig", errors="replace"))
+            except OSError:
+                names = []
+            hold(pack, toolpacks.RULES, problems[0], names)
+            continue
+        for key, spec in listed.items():
+            if isinstance(spec, dict) and fresh(key) == key:
+                out[key] = dict(spec, toolpack=pack, **{DIRECT_ONLY: True})
+                have.update(outside.clis(spec))
+    return out
 
 
 def unset_fields(root: Path) -> List[Dict[str, Any]]:
@@ -448,7 +607,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
             chosen = (server.get(key) or kind.get(key)) if key == "rules" else kind.get(key)  # the connection's own rules win, else the type's (1.7.21)
             if chosen:
                 system[key] = chosen
-        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse"):
+        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse", "pin"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
         system["open"] = connection_scope(kind, server)
@@ -515,6 +674,18 @@ def _carried(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, s
 def window_known(root: Path) -> bool:
     """Is there a record of the last VS Code the board started (`state`)? Without it nobody knows what the window carries: a VS Code the person started by hand, or before the board's first start (1.7.38, F1 M8)."""
     return bool(state(root))
+
+
+def serving(root: Path, system: Dict[str, Any]) -> List[str]:
+    """The connections a system that is not a connection belongs to (1.7.38, C13 F2 U1): a tool pack's own system (`ado-web`, a web call to an Azure DevOps address) is reached with the identity of a connection of its type
+    (`reach.also.type`), or else of the tool pack that wrote it. `[]` when it is no one's."""
+    try:
+        kinds, servers = types(root, guard=True), listed(root)
+        wanted = str(((system.get("reach") or {}).get("also") or {}).get("type") or "")
+        pack = str(system.get("toolpack") or "")
+        return [alias for alias, server in servers.items() if (wanted and server.get("type") == wanted) or (not wanted and pack and str((kinds.get(str(server.get("type"))) or {}).get("toolpack") or "") == pack)]
+    except Exception:  # noqa: BLE001 - a name for the text; the call is refused either way
+        return []
 
 
 def calls(root: Path, every: bool = False) -> List[Dict[str, Any]]:

@@ -28,9 +28,9 @@ A prompt may leave things out or be unclear, and the requirement changes over se
 
 A pop-up can be switched off with "allow for this session"; a code in the terminal cannot. And the agent cannot type for a person.
 
-### 15.5 Why the hook lets a call through when it fails
+### 15.5 Why local work passes when the hook fails, and a call to an outside system does not
 
-The hook runs before every tool call, and hurting normal work costs more than missing a stop. When it fails itself, it lets the call through and logs it, and setup problems are left to `doctor`. On the platform's side, a failed start counts as a refusal and a timeout as a pass: those are the platform's rules.
+The hook runs before every tool call, and hurting normal work costs more than missing a stop. So when it fails itself, local work passes and the error is logged; setup problems are left to `doctor`. The one exception is the gate's own policy: when `gate.json` cannot be read, the gate runs on a built-in copy of the shipped rules and also refuses a write outside the task folder and a git write (docs/12). A call to a program of a tool pack reaches a system outside: a gate that cannot judge it does not let it pass (`AGENTS.md`, Core limits). On the platform's side, a failed start counts as a refusal and a timeout as a pass: those are the platform's rules.
 
 ### 15.6 Why only Copilot (SDK) sessions are supported
 

@@ -106,7 +106,9 @@ class UnreadablePackTests(English, ListedCase):
         (self.root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {}}), encoding="utf-8")
         self.spoil()
         self.assertEqual([one["pack"] for one in toolpacks.faults(self.root)], [])
-        self.runs('sqlcmd -S elsewhere -Q "SELECT 1"')
+        reason = self.refused('sqlcmd -S elsewhere -Q "SELECT 1"')  # merged with C13 F2: a program a type declares with no connection of its type is refused (no card, no hold); it is not held for the faulty file
+        self.assertNotIn("toolpack.json", reason)
+        self.runs("ls")
 
     def test_a_pack_that_is_off_but_whose_type_a_connection_uses_is_still_held(self) -> None:
         (self.root / "knowledge-base" / "company" / "tools" / "packs.json").write_text(json.dumps({"use": []}), encoding="utf-8")

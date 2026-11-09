@@ -36,7 +36,24 @@ PROBE_OUTPUT = 4000  # what is kept of a probe's output, for the pattern
 DEFAULT_RULES = {READ: ALLOW, WRITE: OUTBOX, EXEC: HUMAN, DESTROY: DENY}
 PROD_RULES = {READ: ALLOW, WRITE: DENY, EXEC: DENY, DESTROY: DENY}
 
+# (1.7.38, C13 F2c) The words that only print help or the version, for a type that declares none (`free`, or `pin.free`): a call whose arguments are these words and nothing else reaches no one. A type that wants more
+# (`items --help`) declares its own; `"free": []` turns the default off.
+DEFAULT_FREE = ("--help", "-h", "-?", "--version")
+
 _NAME = r"^[a-z][a-z0-9_-]*$"
+_WORDS = {"type": "array", "items": {"type": "string", "minLength": 1}}
+PIN_SCHEMA = {  # 1.7.38 (C13 F2): see modules/gate/pin.py
+    "type": "object",
+    "properties": {
+        "options": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "fold": {"type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}}},
+        "other": _WORDS,
+        "free": _WORDS,
+        "subcommand": {"type": "boolean"},
+    },
+    "required": ["options"],
+    "additionalProperties": False,
+}
 _RULE_SET = {"type": "object", "properties": {verb: {"type": "string", "enum": list(DECISIONS)} for verb in VERBS}, "additionalProperties": False}
 _PATTERN_RULE = {"type": "object", "required": ["pattern"], "properties": {"pattern": {"type": "string", "minLength": 1}}}
 SYSTEMS_SCHEMA = {
@@ -51,6 +68,7 @@ SYSTEMS_SCHEMA = {
                     "cli": {"type": ["string", "array"], "items": {"type": "string", "minLength": 1}},
                     "by_address": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: programs (`curl`) that are a call of this system only when their arguments match `when`; any other use of the program is not the system's, and its name alone holds nothing
                     "when": {"type": "string", "minLength": 1},
+                    "code": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38 (C13 F2): words that name this system in the code a one-liner interpreter runs (`python3 -c`, `node -e`); needs `blocked`
                     "also": {"type": "object", "required": ["type", "field"], "properties": {"type": {"type": "string", "minLength": 1}, "field": {"type": "string", "minLength": 1}}, "additionalProperties": False},  # 1.7.38: the hosts that the connections of this type have in this field are part of `when`
                 },
                 "additionalProperties": False,
@@ -91,6 +109,8 @@ SYSTEMS_SCHEMA = {
             },
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
             "hint": {"type": ["string", "object"], "minLength": 1},  # 1.7.38 (D1-7): what a refusal tells the agent to do instead (a string, or {"en": ..., "zh": ...}): `ado` for a delete sent to Azure DevOps by hand
+            "pin": PIN_SCHEMA,  # 1.7.38 (C13 F2): how a call of this program names the connection it reaches (modules/gate/pin.py): a call that cannot be pinned to one connection is refused
+            "blocked": {"type": ["string", "object"], "minLength": 1},  # 1.7.38 (C13 F2): a program (or code) the gate cannot judge: every call of it is refused with this text (a string, or {"en": ..., "zh": ...}), which says what to do instead
             "broken": {"type": "string", "minLength": 1},  # 1.7.38 (G-1): written by the harness for a tool pack whose type file or rules file is faulty: what is wrong. Every call of the programs it lists is held (it owns them before any other system)
             "openable": {"type": "boolean"},
             "open": {"type": "string", "enum": list(OPEN_SCOPES)},  # 1.7.38: how far Open to the agent goes for this system; see `open_scope`
@@ -131,7 +151,7 @@ def validate(systems: Any) -> List[str]:
     for name, system in systems.items():
         if not re.match(_NAME, name):
             errors.append(f"systems.{name}: a name is lower case letters, digits, - and _, and starts with a letter")
-        if not clis(system) and not by_address(system):
+        if not clis(system) and not by_address(system) and not (system.get("reach") or {}).get("code"):
             errors.append(f"systems.{name}.reach: give at least one program in `cli`")
         given = system.get("input")
         if isinstance(given, dict) and not (given.get("options") or given.get("text")):
@@ -141,11 +161,14 @@ def validate(systems: Any) -> List[str]:
         when = (system.get("reach") or {}).get("when")
         if by_address(system) and not when:
             errors.append(f"systems.{name}.reach: `by_address` needs a `when` that names the address")
+        if (system.get("reach") or {}).get("code") and not system.get("blocked"):
+            errors.append(f"systems.{name}.reach: `code` names words that a one-liner interpreter must not run: give `blocked`, the text that says what to do instead")
         for program in clis(system) if not when and not system.get("broken") else ():
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
         patterns = [("target", system.get("target") or ""), ("command", system.get("command") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or ""), ("input.include", (system.get("input") or {}).get("include") or ""), ("input.unjudged", (system.get("input") or {}).get("unjudged") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"item[{index}]", value) for index, value in enumerate([system["item"]] if isinstance(system.get("item"), str) else (system.get("item") or [])) if isinstance(value, str)] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs", "say", "body") for index, item in enumerate(system.get(key) or [])]
+        patterns += [(f"pin.fold[{index}]", str(step[0])) for index, step in enumerate((system.get("pin") or {}).get("fold") or []) if isinstance(step, list) and step]
         for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)

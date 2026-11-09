@@ -304,6 +304,16 @@ def certificate_missing(root: Path) -> bool:
 
 
 def connections_item(root: Path) -> Dict[str, Any]:
+    try:
+        broken = conn_core.faults(root)  # 1.7.38 (C13 FR 3): a list that cannot be read has no connections to count: the row is red and names the file, not "none"
+    except Exception:  # noqa: BLE001 - a note must not break the screen
+        broken = []
+    if broken:
+        first = broken[0]
+        fix = fix_tools("connections", say("board.enter.t.connections"))
+        more = f" (+{len(broken) - 1})" if len(broken) > 1 else ""
+        problem = {"key": "connlist", "text": say("ready.p.connlist", file=first["file"]) + more, "why": str(first["problem"])[:240], "short": say("ready.p.connlist.short", file=first["file"], problem=str(first["problem"])[:240]), "fix": fix}
+        return item("connections", "red", say("ready.conn.broken"), fix, [], [problem])
     out = connections_counted(root)
     off = connections_off(root)
     if off:  # the hover says how many more there are (Q22); the screen and the problems count the others only

@@ -162,5 +162,56 @@ class BrokenRefuseListFirstTests(ListedCase):
         self.held(f"{SERVER} {WRITE}")
 
 
+class BrokenConnectionListTests(ListedCase):
+    """Item 3 (RA N1) and item 19: a connection list that cannot be read is told as that: the Enter row is red and names the file, the Connections window offers no Forget, `connections find` does not say there is none."""
+
+    def spoil(self) -> None:
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text("{ broken", encoding="utf-8")
+
+    def save_identity(self) -> None:
+        from core import connections
+
+        connections.write_env(self.root, {connections.env_key("acmedw-dev", "account"): "acme_user", connections.env_key("acmedw-dev", "password"): "pw"})
+
+    def test_the_enter_row_is_red_and_names_the_file(self) -> None:
+        from core import readyitems
+
+        before = readyitems.connections_item(self.root)
+        self.assertNotEqual(before["state"], "red")
+        self.spoil()
+        found = readyitems.connections_item(self.root)
+        self.assertEqual(found["state"], "red")
+        self.assertIn("connections.company.json", found["problems"][0]["text"])
+        self.assertTrue(found["problems"][0]["why"], "the error of the file")
+        self.assertIn("connections.company.json", found["problems"][0]["short"])
+        self.assertNotEqual(found["detail"], messages.text("ready.none"), "not `none`: the connections are there")
+
+    def test_the_window_says_the_list_cannot_be_read_and_offers_no_forget(self) -> None:
+        self.save_identity()
+        self.assertEqual([one["name"] for one in boardserve.servers_view(self.root, False)["signins"]["orphans"]], [], "the list is fine and knows the connection")
+        self.spoil()
+        view = boardserve.servers_view(self.root, False)
+        self.assertEqual(view["signins"]["orphans"], [], "a sign-in is not left over when the list cannot be read: nothing to Forget")
+        self.assertIn("connections.company.json", view["list_fault"]["text"])
+        self.assertTrue(view["list_fault"]["problem"])
+        self.assertNotIn("no longer", view["list_fault"]["text"])
+        script = (WEB / "servers.js").read_text(encoding="utf-8")
+        self.assertIn("found.list_fault", script)
+
+    def test_find_names_the_file_and_does_not_say_there_is_no_connection(self) -> None:
+        from modules.gate import commands
+
+        self.spoil()
+        text = commands.servers_find(self.root, ["acme"])["_text"]
+        self.assertIn("connections.company.json", text)
+        self.assertNotIn(messages.text("connections.find.empty"), text)
+        self.assertIn("Expecting property name", text, "the fault of the file")
+        for language in ("en", "zh"):
+            self.assertTrue(messages.table(language).get("connections.find.fault"))
+
+    def test_the_words_exist_in_both_languages(self) -> None:
+        both_languages(self, "ready.p.connlist", "ready.p.connlist.short", "ready.conn.broken", "connections.list_fault", "connections.find.fault")
+
+
 if __name__ == "__main__":
     unittest.main()

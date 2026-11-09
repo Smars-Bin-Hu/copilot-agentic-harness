@@ -315,7 +315,7 @@ const SERVERS = (function () {
       out.disabled = !found.connections.some((row) => row.own);
       out.title = out.disabled ? t("connections.export.none") : t("connections.export.tip");
       const rows = found.connections.slice().sort((a, b) => a.type_label.localeCompare(b.type_label) || ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
-      list.replaceChildren(...(rows.length ? rows.map((row) => connRow(row, found, env)) : [h("p", {class: "sub tl-pad"}, t("connections.empty"))]), ...found.signins.orphans.map((item) => orphanRow(item, redraw)));
+      list.replaceChildren(...(found.list_fault ? [h("p", {class: "bad tl-pad", "data-fault": "connections"}, found.list_fault.text)] : []), ...(rows.length ? rows.map((row) => connRow(row, found, env)) : found.list_fault ? [] : [h("p", {class: "sub tl-pad"}, t("connections.empty"))]), ...found.signins.orphans.map((item) => orphanRow(item, redraw)));  // a list that cannot be read: the fault first, and no sign-in is offered to forget (1.7.38, C13 FR 3)
       if (JSON.stringify(Object.keys(found.types)) !== JSON.stringify(kinds)) { kinds = Object.keys(found.types); addBox.replaceChildren(h("h4", {class: "mc-h"}, t("connections.own.add")), ownForm(found.types, redraw, env.go)); }
       if (ctx.arrived) ctx.arrived();
     }, (error) => { list.replaceChildren(h("p", {class: "bad tl-pad"}, error.message)); });

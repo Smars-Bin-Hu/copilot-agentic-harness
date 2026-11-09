@@ -1126,7 +1126,7 @@ def signins(root: Path) -> Dict[str, Any]:
                      "reach": line.get("state", "")})
     stems = {env_key(alias, "") for alias in servers}
     orphans: Dict[str, str] = {}
-    for key, value in env.items():
+    for key, value in env.items() if not faults(root) else []:  # (1.7.38, C13 FR 3) a list that cannot be read has no connections: a sign-in is not "left over" then, and the window offers no Forget
         if key.startswith(PREFIX) and key.endswith(tuple("_" + one.upper() for one in IDENTITY_FIELDS)):
             stem = key[: key.rindex("_") + 1]
             if stem not in stems:

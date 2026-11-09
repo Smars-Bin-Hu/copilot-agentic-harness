@@ -222,6 +222,12 @@ def servers_find(root: Path, words: List[str]) -> Dict[str, Any]:
     away, unknown = connections.away_aliases(root), connections.unknown_aliases(root)
     found = connections.find(root, text, aliases=window) if text else {"matches": [], "total": 0, "all": len(window), "envs": []}
     if not found["all"]:
+        try:
+            broken = connections.faults(root)  # 1.7.38 (C13 FR 3): a list that cannot be read is not an empty list: say the file and the fault, so the agent tells the user and does not wait for connections to be set up
+        except Exception:  # noqa: BLE001 - the answer below is still true
+            broken = []
+        if broken:
+            return {"_text": say("connections.find.fault", file=broken[0]["file"], problem=" ".join(str(broken[0]["problem"]).split())[:240]), "exit_code": 1}
         return {"_text": say("connections.find.empty")}
     if not text:
         return {"_text": say("connections.find.words")}

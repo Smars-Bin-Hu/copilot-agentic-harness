@@ -142,5 +142,36 @@ class RetestHolesTests(ShippedCase):
         self.assertEqual(self.answer(self.q(SERVER, text)), "pass")
 
 
+class FedThroughAnotherProgramTests(ShippedCase):
+    """C13 S5 (person: hold them all): text or a script given to a shell or an interpreter that stands behind another program (`harness as`, a wrapper the gate does not know, `find -exec`, `xargs`, `parallel`,
+    a git `!` alias) is read as at the head, or held when the gate cannot see it. Here the text drops a real table on QAT: it never passes."""
+
+    DROP = "sqlcmd -S localhost,14330 -C -d AcmeDW -Q 'DROP TABLE dbo.real'"
+
+    def answer(self, command: str) -> str:
+        before = self.pending()
+        out = self.term(command)
+        return "pass" if out.get("permissionDecision") != "deny" else "held" if self.pending() > before else "refused"
+
+    def test_none_of_the_forms_of_the_retest_passes(self) -> None:
+        script = self.script(self.DROP + "\n", "x.sh")
+        listed = self.script(script + "\n", "list.txt")
+        doc = f"<<'EOF'\n{self.DROP}\nEOF"
+        rows = [f"harness as acmedw-dev -- sh {doc}", f"harness as acmedw-dev -- bash -s {doc}", f"harness as acmedw-dev -- python3 {doc}", f"harness as acmedw-dev sh {doc}",
+                f"env X=1 harness as acmedw-dev -- sh {doc}", f"echo \"{self.DROP}\" | harness as acmedw-dev -- sh", f"printf '%s' \"{self.DROP}\" | harness as acmedw-dev -- bash",
+                f"harness as acmedw-dev -- bash < {script}", f"harness as acmedw-dev -- bash <(cat {script})", f"harness as acmedw-dev -- make -f - {doc.replace(self.DROP, 'all:' + chr(10) + chr(9) + self.DROP)}",
+                f"stdbuf -o0 sh {doc}", f"setsid sh {doc}", f"flock /tmp/l sh {doc}", f"caffeinate sh {doc}", f"unbuffer sh {doc}", f"strace -f sh {doc}", f"uv run sh {doc}", f"poetry run bash {doc}",
+                f"script -q /dev/null sh {doc}", f"find {script.rsplit('/', 1)[0]} -name x.sh -exec bash {{}} \\;", f"find . -name x.sh -exec sh {{}} +", f"xargs -a {listed} bash",
+                f"parallel bash ::: {script}", f"git -c alias.x='!bash {script}' x"]
+        wrong = [(row, self.answer(row)) for row in rows]
+        self.assertEqual([item for item in wrong if item[1] == "pass"], [])
+
+    def test_normal_commands_behind_other_programs_still_run(self) -> None:
+        tool = self.script("print('hello')\n", "tool.py")
+        for row in (f"uv run python {tool}", "poetry run pytest -q", "find . -name '*.py' -exec python3 -m py_compile {} \\;", "stdbuf -o0 ls -la", "git log -1",
+                    "echo bash", "grep -n bash notes.txt", "xargs -n1 echo < /dev/null", "setsid ls", "timeout 5 python3 -c 'print(1)'"):
+            self.assertEqual(self.answer(row), "pass", row)
+
+
 if __name__ == "__main__":
     unittest.main()

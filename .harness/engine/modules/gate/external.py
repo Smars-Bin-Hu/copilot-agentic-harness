@@ -375,13 +375,25 @@ def _xargs_runs_code(tokens: List[str]) -> bool:
     return False
 
 
+def _inner_interpreters(tokens: List[str]) -> List[int]:
+    """(1.7.38, C13 S5) Where a shell or an interpreter stands among the words of a command that is not one itself and does not only read (`harness as x -- sh`, `stdbuf -o0 bash`, `flock f sh`, `uv run python`,
+    `find . -exec bash {} ;`, `xargs -a list bash`): the program the head starts runs it, with the input of the line or with words the gate does not see. Any wrapper the gate does not know counts."""
+    at = _head_index(tokens)
+    if at is None or _is_interpreter(tokens[at]) or (_data_only(tokens, at) and _program(tokens[at]) != "harness"):  # `harness as`, `harness wait --run`, `harness task run` start a program
+        return []
+    return [index for index in range(at + 1, len(tokens)) if _is_interpreter(tokens[index])]
+
+
 def _feeds_code(tokens: List[str]) -> bool:
-    """Does this command run what it is given on its input (a shell or an interpreter with no script and no code in the line, `xargs` with a program to be named)?"""
+    """Does this command run what it is given on its input (a shell or an interpreter with no script and no code in the line, `xargs` with a program to be named)? The interpreter may stand behind a program the gate
+    does not know (1.7.38, C13 S5: `harness as x -- sh <<EOF`, `stdbuf -o0 sh`): the line is read as if it stood at the head."""
     at = _head_index(tokens)
     if at is None:
         return False
     if _is_interpreter(tokens[at]):  # a shell with no code in the line reads its input: `cmd`, `fish`, `ksh` too (1.7.38, C13 FR3)
         return _interp(tokens, at)[0] == "stdin"
+    if any(_interp(tokens, index)[0] == "stdin" for index in _inner_interpreters(tokens)):
+        return True
     return _xargs_runs_code(tokens)
 
 
@@ -849,7 +861,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
     text, bodies = _heredocs(join_lines(text))
     segments = split_segments(text)
     names = [program for program in programs if program not in ctx.quiet and program not in ctx.direct]
-    feeds = ctx.hold and (any(_feeds_code(_without_redirects(tokens)) for tokens in segments) or ("<(" in text and any(_head_name(tokens) in ("source", ".") or _head_is_interpreter(tokens) for tokens in segments)))
+    feeds = ctx.hold and (any(_feeds_code(_without_redirects(tokens)) for tokens in segments) or ("<(" in text and any(_head_name(tokens) in ("source", ".") or _head_is_interpreter(tokens) or _inner_interpreters(tokens) for tokens in segments)))
     if ctx.hold:
         _hidden_in_line(segments, text, programs, feeds, found)
         _text_runners(text, bodies, names, ctx, found)  # 1.7.38 (C13 FR 20): a runner of text (make, tclsh, m4, crontab, at...) whose text names a governed program
@@ -961,6 +973,8 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             continue
         wrapped = as_run(tokens)
         if wrapped is not None and depth < MAX_DEPTH:  # `harness as <alias> -- <command>` (1.7.10): the command inside is the call
+            if ctx.hold:
+                _account(tokens, raw, names, feeds, ctx, found, files_only=True)  # (1.7.38, C13 S5) the files the line gives that command on its input (`harness as x -- bash < x.sh`) are the line's, not the command's
             before, ctx.as_alias = ctx.as_alias, wrapped[0]
             try:
                 _scan(wrapped[1], systems, programs, depth + 1, found, variables, ctx)
@@ -1140,6 +1154,8 @@ def _text_runners(text: str, bodies: List[Tuple[str, bool]], names: List[str], c
         if _program(tokens[at]) in _CD_HEADS:
             folders = _after_cd(folders, tokens, at)
             continue
+        if _program(tokens[at]) in _RUN_WRAPPERS:  # (1.7.38, C13 S5) `harness as x -- make -f - <<EOF`, `stdbuf -o0 make ...`: the runner behind a program that only starts it
+            at = next((index for index in range(at + 1, len(tokens)) if _program(tokens[index]) in TEXT_RUNNERS), at)
         runner, words = _runner_of(tokens, at)
         if runner not in TEXT_RUNNERS:
             continue
@@ -1187,7 +1203,7 @@ def _encoded(tokens: List[str]) -> bool:
     return at is not None and shellwords.encoded(tokens, at)
 
 
-def _account(tokens: List[str], raw: List[str], names: List[str], feeds: bool, ctx: _Ctx, found: List[Action]) -> None:
+def _account(tokens: List[str], raw: List[str], names: List[str], feeds: bool, ctx: _Ctx, found: List[Action], files_only: bool = False) -> None:
     """The rule of 1.7.25: every word of the line that is the name of an outside system's program must be accounted for. It is the program of a command that was judged (the caller
     went on), or an argument of a program that only reads (`READ_ONLY_PROGRAMS`). Anything else is held: the gate cannot tell what the program that has the name among its words
     will do with it. The files that the line runs or gives to an interpreter are read the same way (`_file_state`)."""
@@ -1202,13 +1218,13 @@ def _account(tokens: List[str], raw: List[str], names: List[str], feeds: bool, c
     if _encoded(tokens):
         hold("", "encoded")
         return
-    data = _data_only(tokens, at) and not feeds
+    data = (_data_only(tokens, at) and not feeds) or files_only  # `files_only`: the outer words of `harness as` (C13 S5): the command inside is judged on its own
     if not data:
         hit = _mentioned(" ".join(tokens), names)
         if hit:
             hold(hit)
             return
-    for path in _runs_files(tokens, at, raw, feeds):
+    for path in (_input_files(raw) if files_only else _runs_files(tokens, at, raw, feeds)):  # the outer words of `harness as`: only the files the line gives on the input (the head is the harness itself)
         maybe = path.startswith("?")
         path = path[1:] if maybe else path
         state, program = _file_state(path, names, ctx)
@@ -1246,11 +1262,34 @@ def _runs_files(tokens: List[str], at: int, raw: List[str], feeds: bool) -> List
         files.append(head)
     if _is_interpreter(head) and _interp(tokens, at)[0] == "stdin":
         files.extend(_input_files(raw))
+    for index in _inner_interpreters(tokens):  # (1.7.38, C13 S5) an interpreter behind another program: its script is read as at the head; one the gate cannot see is held
+        kind, where = _interp(tokens, index)
+        if kind == "stdin":
+            files.extend(_input_files(raw))
+            if name in _FEEDERS:
+                files.append(_UNSEEN)  # `xargs -a list bash`, `parallel bash ::: ...`, `find -exec bash`: the program gives the interpreter words the line does not show
+        elif kind == "script" and where is not None and where < len(tokens):
+            script = tokens[where]
+            files.append(_UNSEEN if script in ("{}", ":::", "::::") or script.startswith("$") else script)
+    for index, item in enumerate(tokens):  # (C13 S5) `xargs -a list bash`: xargs is a wrapper to the gate, so the interpreter it starts with words of its own may not be the head
+        if _program(item) in _FEEDERS and _UNSEEN not in files:
+            for later in range(index + 1, len(tokens)):
+                if _is_interpreter(tokens[later]):
+                    kind, where = _interp(tokens, later)
+                    if kind == "stdin" or (kind == "script" and where is not None and where < len(tokens) and (tokens[where] in ("{}", ":::", "::::") or tokens[where].startswith("$"))):
+                        files.append(_UNSEEN)
+                    break
+    if any(_GIT_SHELL_ALIAS.match(item) for item in tokens):
+        files.append(_UNSEEN)  # `git -c alias.x='!bash x.sh' x`: git runs the text after `!` as a shell command
     if feeds and name in _READERS:
         files.extend(item for item in tokens[at + 1:] if not item.startswith("-"))
     return files
 
 
+_RUN_WRAPPERS = frozenset("harness stdbuf setsid script flock caffeinate unbuffer strace ltrace chrt ionice taskset sg su runuser doas poetry uv pipenv".split())  # (C13 S5) programs that start the program named after them
+_FEEDERS = frozenset(["xargs", "parallel", "find", "fd", "rush"])  # (C13 S5) programs that give the program they start words of their own
+_UNSEEN = "<words the line does not show>"  # (C13 S5) a file that is never there: the call is held as one whose script the gate cannot read
+_GIT_SHELL_ALIAS = re.compile(r"^alias\.[^=\s]+=\s*!", re.IGNORECASE)
 _EXEC_WORDS = re.compile(r"(?<![\w.])(?:exec|eval|compile|execfile|dofile|loadfile|require|source)\s*\(|\b(?:run_path|run_module|import_module|__import__|importlib|runpy|Invoke-Expression|iex|vm\.run\w+)\b|\bnew\s+Function\b", re.IGNORECASE)  # code that runs what it loads
 _CODE_FILE = re.compile(r"""(?:\bopen|\brun_path|\bexecfile|\breadFileSync|\breadFile|\brequire|\bdofile|\bloadfile|\bGet-Content|\bgc|\bImport-Module)\s*\(?\s*(?:[A-Za-z_]+\s*=\s*)?['"]([^'"\n]{1,300})['"]""", re.IGNORECASE)
 
@@ -1354,14 +1393,15 @@ def _hidden_in_line(segments: List[List[str]], text: str, programs: Dict[str, Li
                 found.append(_hidden("start", call, program=named))
                 return
     shells = [tokens for tokens in segments if _head_index(tokens) is not None and _is_interpreter(tokens[_head_index(tokens)]) and _family(tokens[_head_index(tokens)]) in ("shell", "power", "cmd")]  # a shell, not python or node: what a program prints and a python reads is data to a person's eyes (K5)
-    if feeds and any(_interp(tokens, _head_index(tokens))[0] == "stdin" for tokens in shells):
+    inner = [(tokens, index) for tokens in segments for index in _inner_interpreters(tokens) if _family(tokens[index]) in ("shell", "power", "cmd")]  # C13 S5: `| harness as x -- sh`, `| stdbuf -o0 bash`
+    if feeds and (any(_interp(tokens, _head_index(tokens))[0] == "stdin" for tokens in shells) or any(_interp(tokens, index)[0] == "stdin" for tokens, index in inner)):
         for tokens in segments:
             at = _head_index(tokens)
             if at is None or _feeds_code(_without_redirects(tokens)) or _program(tokens[at]) in VISIBLE or all(_is_environment(item) for item in tokens):
                 continue
             found.append(_hidden("pipe", " ".join(tokens)))
             return
-    if feeds and "<(" in text and (shells or any(_head_name(tokens) in ("source", ".") for tokens in segments)):
+    if feeds and "<(" in text and (shells or inner or any(_head_name(tokens) in ("source", ".") for tokens in segments)):
         found.append(_hidden("pipe", text[:200]))
 
 

@@ -957,7 +957,7 @@ def shown(lines: List[str]) -> str:
 
 def check_integrity(report: Report, root: Path) -> None:
     """(1.7.38, C13 FR 17a) The guardrail files against the list the person accepted (`integrity.py`): an error naming the files that are not as accepted (the hook refuses commands and writes meanwhile), and what to do: start the
-    board when a new version was put in, `harness doctor --accept` or put the files back when the same version changed. When nothing was accepted yet, a note; a warning when the list cannot be kept at all."""
+    board when a new version was put in, `harness doctor --accept` or put the files back when the same version changed. When nothing was accepted yet, or the list was deleted or cannot be read, a warning (C13 RE-A L1); also when the list cannot be kept at all."""
     try:
         import integrity
 
@@ -967,7 +967,8 @@ def check_integrity(report: Report, root: Path) -> None:
             if fault:
                 report.warn(say("doctor.integrity.unwritable", folder=str(integrity.home_dir() or ""), error=fault))  # FR2 5: not a list nobody made yet: one that cannot be made
             else:
-                report.ok(say("doctor.integrity.none"))  # a note, not a warning: a copy nobody started the board in has none yet
+                path = integrity.list_path(root)
+                report.warn(say("doctor.integrity.broken", path=str(path)) if path is not None and path.exists() else say("doctor.integrity.none"))  # (1.7.38, C13 RE-A L1) a warning: nothing checks the guardrail files, whether no list was made yet or it was deleted or broken
             return
         found = integrity.changes(root, listed)
         if found:

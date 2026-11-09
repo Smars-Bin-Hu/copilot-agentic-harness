@@ -472,7 +472,15 @@ class IntegrityTests(unittest.TestCase):
         doctor.check_integrity(report, self.root)
         self.assertTrue(any("doctor --accept" in line for line in report.lines), report.lines)  # nothing accepted yet: said, and no error
         self.assertFalse(any(line.startswith("[ERROR]") for line in report.lines), report.lines)
+        self.assertTrue(any(line.startswith("[WARN]") for line in report.lines), report.lines)  # C13 RE-A L1: nothing checks the files: a warning, not OK
         self.integrity.accept(self.root)
+        path = self.integrity.list_path(self.root)
+        good = path.read_text(encoding="utf-8")
+        path.write_text("{ broken", encoding="utf-8")
+        report = doctor.Report()
+        doctor.check_integrity(report, self.root)
+        self.assertTrue(any(line.startswith("[WARN]") and str(path) in line for line in report.lines), report.lines)  # a list that cannot be read: named
+        path.write_text(good, encoding="utf-8")
         report = doctor.Report()
         doctor.check_integrity(report, self.root)
         self.assertTrue(any(line.startswith("[OK]") for line in report.lines), report.lines)

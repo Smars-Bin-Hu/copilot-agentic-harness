@@ -1848,6 +1848,7 @@
   "doctor.company.failed": "Could not check the company content: {error}.",
   "doctor.integrity.ok": "Guardrail files: {n} files are as you accepted them.",
   "doctor.integrity.none": "Guardrail files: no list of them was accepted yet, so nothing checks that they are unchanged. Start the board once, or run `harness doctor --accept`.",
+  "doctor.integrity.broken": "Guardrail files: the accepted list {path} cannot be read, so nothing checks that they are unchanged. Run `harness doctor --accept` in your own terminal to make it again.",
   "doctor.integrity.changed": "Guardrail files: {n} are not as you accepted them: {files}. Meanwhile the hook refuses every command and every write of the agent. If you changed them on purpose, run `harness doctor --accept` in your terminal. If not, put the files back from the zip this copy came from.",
   "doctor.integrity.upgrade": "Guardrail files: this copy is now version {now} and the files you accepted are version {was}: {n} files differ: {files}. Meanwhile the hook refuses every command and every write of the agent. Start the board: it accepts the new version when it starts.",
   "doctor.integrity.changed.board": "Guardrail files: {n} are not as you accepted them: {files}. Meanwhile the hook refuses every command and every write of the agent. If you changed them on purpose, accept them in your own terminal (the doctor has an option for it). If not, put the files back from the zip this copy came from.",

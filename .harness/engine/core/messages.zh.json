@@ -1848,6 +1848,7 @@
   "doctor.company.failed": "无法检查公司内容：{error}。",
   "doctor.integrity.ok": "护栏文件：{n} 个文件都和你接受的一样。",
   "doctor.integrity.none": "护栏文件：还没有接受过它们的清单，所以没有任何东西在检查它们有没有被改过。请启动一次看板，或者运行 `harness doctor --accept`。",
+  "doctor.integrity.broken": "护栏文件：接受过的清单 {path} 读不出来，所以没有任何东西在检查它们有没有被改过。请在你自己的终端运行 `harness doctor --accept` 重新生成。",
   "doctor.integrity.changed": "Guardrail 文件：有 {n} 个和你接受时不一样：{files}。在此期间 Hook 会拒绝 agent 的每条命令和每次写入。如果是你自己改的，在你的终端运行 `harness doctor --accept`。如果不是，就从这份副本来的 zip 里把这些文件放回去。",
   "doctor.integrity.upgrade": "Guardrail 文件：这份副本现在是 {now} 版，你接受的文件是 {was} 版：有 {n} 个文件不同：{files}。在此期间 Hook 会拒绝 agent 的每条命令和每次写入。启动看板：看板启动时会接受新版本。",
   "doctor.integrity.changed.board": "Guardrail 文件：有 {n} 个和你接受时不一样：{files}。在此期间 Hook 会拒绝 agent 的每条命令和每次写入。如果是你自己改的，在你自己的终端里接受它们（doctor 有一个选项管这个）。如果不是，就从这份副本来的 zip 里把这些文件放回去。",

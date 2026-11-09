@@ -1242,7 +1242,7 @@
     if (!body) return null;
     if (body.missing) return h("div", {class: "tk-call-body missing"}, h("p", {class: "bad"}, t("desk.outbox.body.missing", {path: body.path, dismiss: t("desk.outbox.dismiss")})));
     return h("div", {class: "tk-call-body"},
-      h("div", {class: "tk-body-h"}, h("b", null, body.label || t("desk.outbox.body")), " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
+      h("div", {class: "tk-body-h"}, h("b", null, body.label || t("desk.outbox.body")), body.system ? [" ", h("b", null, body.system), body.env && body.env !== "none" ? [" ", tag(body.env, "hot")] : null] : null, " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
       h("pre", {class: "tk-body-text", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null);
   }
   const rawFold = (item) => h("details", {class: "tk-raw"}, h("summary", null, t("desk.outbox.raw")), h("pre", {class: "cmd-script one"}, item.command));

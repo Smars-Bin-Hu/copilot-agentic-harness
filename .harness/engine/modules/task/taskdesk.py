@@ -157,6 +157,14 @@ def reached(command: str, listed: Optional[Dict[str, Any]]) -> List[Dict[str, st
     return out
 
 
+def _whose(body: Any, text: str, command: str, listed: Optional[Dict[str, Any]]) -> Any:
+    """The one text of a line that reaches more than one system (a script on one, a statement on the other) says whose it is: `system` and `env` in its body (1.7.38)."""
+    if not isinstance(body, dict) or len(reached(command, listed)) < 2:
+        return body
+    there = system_of(text, listed or {})
+    return dict(body, system=there["system"], env=there["env"]) if there else body
+
+
 def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optional[Path] = None, listed: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none.
     1.7.38: a held line of several writes has one part for each (`parts`: `{say, facts, body, system?}`), cut where the line is cut outside quotes, so a card can say every write on a line of its own with its own facts;
@@ -181,12 +189,17 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
             there = reached(part["at"], listed)
             if there:
                 part.update(system=there[0]["system"], env=there[0]["env"])
+    if len(parts) == 1:
+        parts[0]["body"] = _whose(parts[0]["body"], parts[0]["at"], command, listed)
     for part in parts:
         part.pop("at", None)
     if parts:
         return {"say": parts[0]["say"], "says": [part["say"] for part in parts if part["say"]], "writes": len(parts), "facts": parts[0]["facts"] if len(parts) == 1 else {}, "body": parts[0]["body"], **({"parts": parts} if len(parts) > 1 else {})}
     args = cmdview.args_of(command, programs)
-    return {"say": "", "says": [], "writes": 0, "facts": cmdview.facts(command, system.get("show")), "body": cmdview.body_of(args, system.get("body"), folder, root)}
+    body = cmdview.body_of(args, system.get("body"), folder, root)
+    if body and len(texts) == 1:
+        body = _whose(texts[0]["body"], texts[0]["at"], command, listed)
+    return {"say": "", "says": [], "writes": 0, "facts": cmdview.facts(command, system.get("show")), "body": body}
 
 
 def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:

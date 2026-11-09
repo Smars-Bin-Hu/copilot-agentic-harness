@@ -167,11 +167,11 @@ def _what(action: Any, key: str) -> str:
     return say(f"{key}.what", place=place_, verb=_verb(action.verb))
 
 
-def too_many_waiting() -> str:
-    """(1.7.38, C13 M1) A new call is not held because too many wait for the person already: one line that tells the agent to stop and the user to handle them first."""
+def too_many_waiting(n: object = None) -> str:
+    """(1.7.38, C13 M1) A new call is not held because too many wait for the person already: one line that tells the agent to stop and the user to handle them first. `n`: the limit that was reached (of the task, or of all tasks)."""
     from core import approvals
 
-    return say("gate.approvals.too_many", n=approvals.MAX_PENDING)
+    return say("gate.approvals.too_many", n=n or approvals.MAX_PENDING)
 
 
 def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None, changed: Any = None) -> str:

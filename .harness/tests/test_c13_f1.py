@@ -287,6 +287,21 @@ class WaitingCallsAreKeptTests(HarnessTestCase):
         self.assertEqual(self.ask(5), codes[5], "the same command in the same session keeps its code")
         self.assertEqual(len(approvals.pending(self.root, 10, now=1000 + 300, file=approvals.ACTIONS)), approvals.MAX_PENDING)
 
+    def test_one_full_task_does_not_stop_another_task_or_a_git_approval(self) -> None:
+        for number in range(approvals.MAX_PENDING):
+            self.ask(number, "busy")
+        with self.assertRaises(approvals.TooManyWaiting):
+            self.ask(9999, "busy")
+        self.assertTrue(self.ask(10000, "quiet"), "R-1: the limit is per task, so the quiet task still holds its call")
+        self.assertTrue(approvals.request(self.root, "vscode", "git-session", "git push", 10, now=1500.0, file=approvals.ACTIONS), "a call with no task counts for its session")
+
+    def test_all_tasks_together_are_bounded_too(self) -> None:
+        entries = [{"code": f"P{n}", "state": "pending", "session_id": f"s{n}", "command": f"c{n}", "task": f"t{n % 20}", "at": 1000.0} for n in range(approvals.MAX_PENDING_ALL)]
+        approvals._write(self.root, entries, approvals.ACTIONS)
+        with self.assertRaises(approvals.TooManyWaiting) as caught:
+            self.ask(1, "new")
+        self.assertEqual(str(caught.exception), str(approvals.MAX_PENDING_ALL))
+
     def test_the_text_for_the_agent_exists_in_both_languages_and_says_what_to_do(self) -> None:
         both_languages(self, "gate.approvals.too_many")
         self.assertIn(str(approvals.MAX_PENDING), messages.text("gate.approvals.too_many", n=approvals.MAX_PENDING))
@@ -297,12 +312,19 @@ class TooManyWaitingAtTheGateTests(English, ListedCase):
 
     def test_the_call_is_not_held_and_the_agent_is_told_to_have_the_user_handle_the_waiting_ones(self) -> None:
         for number in range(approvals.MAX_PENDING):
-            approvals.request(self.root, "vscode", f"s{number}", f"cmd {number}", 10, file=approvals.ACTIONS, extra={"task": "other"})
+            approvals.request(self.root, "vscode", f"s{number}", f"cmd {number}", 10, file=approvals.ACTIONS, extra={"task": TASK})
         before = self.pending()
         reason = self.refused(f'{SERVER} -Q "UPDATE t SET a = 1 WHERE b = 2"')
         self.assertIn(str(approvals.MAX_PENDING), reason)
         self.assertIn("handle", reason)
         self.assertEqual(self.pending(), before, "nothing new waits, nothing old is gone")
+
+    def test_another_task_that_is_full_does_not_stop_this_one(self) -> None:
+        for number in range(approvals.MAX_PENDING):
+            approvals.request(self.root, "vscode", f"s{number}", f"cmd {number}", 10, file=approvals.ACTIONS, extra={"task": "other"})
+        before = self.pending()
+        self.held(f'{SERVER} -Q "UPDATE t SET a = 1 WHERE b = 2"')
+        self.assertEqual(self.pending(), before + 1, "R-1: this task's call is held, though another task has 200 waiting")
 
 
 class AcceptListsEveryCallTests(AcceptCase):

@@ -136,8 +136,8 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
             return None  # the person read this command and approved it
         try:
             code = approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes)
-        except approvals.TooManyWaiting:
-            return Decision(permission="deny", reason=rules.too_many_waiting(), facts={"kind": "git-too-many"})
+        except approvals.TooManyWaiting as full:
+            return Decision(permission="deny", reason=rules.too_many_waiting(str(full)), facts={"kind": "git-too-many"})
         return Decision(permission="deny", reason=rules.git_needs_approval(git.why, gitcmd.collapse(event.command), code, minutes), facts={"kind": "git-approval"})
     if verdict is None:
         return None
@@ -405,8 +405,8 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         cwd = event.cwd or ""
         try:
             code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes, offers, cwd, holds) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task, offers, cwd, holds))
-        except approvals.TooManyWaiting:  # 1.7.38, C13 M1: no older card is dropped to make room; this call is not held, and the agent is told why
-            return Decision(permission="deny", reason=rules.too_many_waiting(), facts=dict(facts, kind="external-too-many"))
+        except approvals.TooManyWaiting as full:  # 1.7.38, C13 M1: no older card is dropped to make room; this call is not held, and the agent is told why
+            return Decision(permission="deny", reason=rules.too_many_waiting(str(full)), facts=dict(facts, kind="external-too-many"))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft, offers, changed), facts=dict(facts, kind="external-outbox", **({"changed": changed} if changed else {})))
     if judged.get("refused") == "unpinned":

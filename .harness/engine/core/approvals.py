@@ -19,7 +19,8 @@ from .state import atomic_write, state_lock
 FILE = "git-approvals.json"
 ACTIONS = "action-approvals.json"
 MAX_ENTRIES = 50  # the file keeps this many entries, when it can: it drops only what no longer waits (below)
-MAX_PENDING = 200  # (1.7.38, C13 M1) calls that wait for the person, all tasks together: the next one is refused, never an older one dropped
+MAX_PENDING = 200  # (1.7.38, C13 M1, R-1) calls that wait for the person, per task (per session when the call has no task): the next one is refused, never an older one dropped
+MAX_PENDING_ALL = 2000  # (1.7.38, R-1) all tasks together, so the file cannot grow without end: one task that fills its share does not stop the others
 DEFAULT_MINUTES = 10
 
 
@@ -93,6 +94,12 @@ def _code(session_id: str, command: str, at: float) -> str:
     return hashlib.sha256(f"{session_id}\n{command}\n{at}".encode("utf-8")).hexdigest()[:6].upper()
 
 
+def _owner(item: Dict[str, Any], session_id: str) -> str:
+    """Whose share of MAX_PENDING a waiting call takes: its task, or its session when it has none (a git approval) (1.7.38, R-1)."""
+    task = item.get("task")
+    return f"task:{task}" if isinstance(task, str) and task else f"session:{session_id}"
+
+
 def request(
     root: Path, surface: str, session_id: str, command: str, limit_minutes: int, now: Optional[float] = None,
     file: str = FILE, extra: Optional[Dict[str, Any]] = None,
@@ -111,7 +118,11 @@ def request(
                     item.update(missing)
                     _write(root, entries, file)
                 return item["code"]
-        if sum(1 for item in entries if item.get("state") == "pending") >= MAX_PENDING:
+        waiting = [item for item in entries if item.get("state") == "pending"]
+        owner = _owner(extra or {}, session_id)
+        if len(waiting) >= MAX_PENDING_ALL:
+            raise TooManyWaiting(str(MAX_PENDING_ALL))
+        if sum(1 for item in waiting if _owner(item, item.get("session_id", "")) == owner) >= MAX_PENDING:
             raise TooManyWaiting(str(MAX_PENDING))
         taken = {item["code"] for item in entries}
         code = _code(session_id, text, now)

@@ -7,7 +7,8 @@ A tool pack type that takes its target on the command line (`sqlcmd -S host,port
                for `host,port`, a dot at the end of the host, zeros in front of the port, the default port when none is given). Nothing else is folded and nothing is ever looked up in a name server
   other        options that choose the target in a way the gate cannot read (`-D`: the server name is a data source name)
   subcommand   true: a first word that is not an option is a subcommand of the program (`sqlcmd query "..."`): it runs on a target the line does not show
-  free         options that only print help (`-?`, `--help`): such a call reaches nothing
+  free         options that only print help (`-?`, `--help`): such a call reaches nothing. A pin that has no `free` takes `DEFAULT_FREE` (`--help`, `-h`, `-?`, `--version`), and then only a call made of those words and nothing else
+               is free (1.7.38, C13 F2c); `"free": []` turns it off
 
 A call is pinned when exactly one option names a target, its value can be read and, folded, is the address of a connection (the caller matches it). Everything else is not pinned, and the gate does not
 guess: the call is refused, with the way to a connection (`harness connections find`). Stdlib only.
@@ -18,6 +19,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+
+from core.systems import DEFAULT_FREE  # noqa: F401 - the words a pin with no `free` takes
 
 OK, NONE, MANY, UNREAD, WORD, OTHER, FREE = "ok", "none", "many", "unread", "word", "other", "free"
 _UNREADABLE = re.compile(r"[$`*?~{}]|%\w+%")  # the shell or the program fills these in: the gate sees the words, not the place they name
@@ -76,6 +79,8 @@ def read(pin: Dict[str, Any], args: List[str]) -> Pinned:
            for word in args for item in other):
         return Pinned(OTHER, option=shown)
     given = _values(args, options)
+    if pin.get("free") is None and args and all(word in DEFAULT_FREE for word in args):  # 1.7.38 (C13 F2c): the type declares no help words: the protocol's own, and nothing else on the line (no option, no value: nothing names a target)
+        return Pinned(FREE, option=shown)
     free = [str(item) for item in pin.get("free") or []]
     if given is not None and not given and free and any(word in free for word in args):
         return Pinned(FREE, option=shown)

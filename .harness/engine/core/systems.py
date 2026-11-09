@@ -36,6 +36,10 @@ PROBE_OUTPUT = 4000  # what is kept of a probe's output, for the pattern
 DEFAULT_RULES = {READ: ALLOW, WRITE: OUTBOX, EXEC: HUMAN, DESTROY: DENY}
 PROD_RULES = {READ: ALLOW, WRITE: DENY, EXEC: DENY, DESTROY: DENY}
 
+# (1.7.38, C13 F2c) The words that only print help or the version, for a type that declares none (`free`, or `pin.free`): a call whose arguments are these words and nothing else reaches no one. A type that wants more
+# (`items --help`) declares its own; `"free": []` turns the default off.
+DEFAULT_FREE = ("--help", "-h", "-?", "--version")
+
 _NAME = r"^[a-z][a-z0-9_-]*$"
 _WORDS = {"type": "array", "items": {"type": "string", "minLength": 1}}
 PIN_SCHEMA = {  # 1.7.38 (C13 F2): see modules/gate/pin.py

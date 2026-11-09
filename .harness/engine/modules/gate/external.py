@@ -802,8 +802,11 @@ def _unpinned(systems: Dict[str, Any], pinned: List[str], seen: pin.Pinned, toke
 
 
 def _free(info: Dict[str, Any], args: List[str]) -> bool:
-    """Does the call only print help or the version (`free` of the type: `--help`, `-?`)? Such a call reaches no one. A type with a `pin` also needs that no server is named (`sqlcmd -S x --help` is judged like any call with a server)."""
+    """Does the call only print help or the version (`free` of the type: `--help`, `-?`)? Such a call reaches no one. A type with a `pin` also needs that no server is named (`sqlcmd -S x --help` is judged like any call with a server).
+    A type that declares no `free` has the default words (`systems.DEFAULT_FREE`), and a call of nothing but those."""
     words = [str(one) for one in info.get("free") or []]
+    if info.get("default"):  # 1.7.38 (C13 F2c): the words the protocol gives a type that declares none: the call is made of them and nothing else, so no argument names a target
+        return bool(args) and all(word in words for word in args)
     if not words or not any(word in words for word in args):
         return False
     return pin.read(dict(info["pin"], free=words), args).state == pin.FREE if isinstance(info.get("pin"), dict) else True

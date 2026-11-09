@@ -176,6 +176,8 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 out.append(f"types.{name}.input.{part}: bad pattern: {error}")
     if isinstance(kind.get("fields"), dict) and not all(isinstance(spec, dict) for spec in kind["fields"].values()):
         out.append(f"types.{name}.fields: each field is an object (`label`, `placeholder`, `default`, `optional`)")
+    if kind.get("free") is not None and not (isinstance(kind["free"], list) and all(isinstance(one, str) and one for one in kind["free"])):  # 1.7.38 (C13 F2c): a list of words, or left out
+        out.append(f"types.{name}.free: a list of words that only print help or the version (`[\"--help\", \"--version\"]`), or left out")
     return out + _gate_shape(kind, name)
 
 
@@ -374,12 +376,15 @@ NO_CONNECTION = "no-connection-"  # the name of a system made for a program that
 DIRECT_ONLY = "direct_only"  # (1.7.38, C13 F2c) on a system `unconnected` makes for a pack that is off and that no connection uses: the gate refuses a direct call of its programs, and does not take their names in a script or a word of a line for a call
 
 
-def _free_words(kind: Dict[str, Any]) -> List[str]:
-    """The words of a type that only print help or the version (`free` of the type; `pin.free` for a type with a `pin`): a call with one reaches no server."""
+def _free_words(kind: Dict[str, Any]) -> Tuple[List[str], bool]:
+    """`(words, default)`: the words of a type that only print help or the version (`free` of the type; `pin.free` for a type with a `pin`): a call with one reaches no server. A type that declares none
+    gets `DEFAULT_FREE` (1.7.38, C13 F2c; `default` is True: the call must be made of these words and nothing else); `"free": []` declares none and turns it off."""
     given = kind.get("free")
     if given is None and isinstance(kind.get("pin"), dict):
         given = kind["pin"].get("free")
-    return [str(one) for one in given if isinstance(one, str) and one] if isinstance(given, list) else []
+    if given is None:
+        return list(outside.DEFAULT_FREE), True
+    return ([str(one) for one in given if isinstance(one, str) and one] if isinstance(given, list) else []), False
 
 
 def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
@@ -426,8 +431,9 @@ def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
             programs = [one for one in dict.fromkeys(programs) if one not in have]
             if not programs:
                 continue
+            words, default = _free_words(kind)
             system: Dict[str, Any] = {"reach": {"cli": programs}, "env": "none", "toolpack": pack,
-                                      "noconn": {"type": str(kind.get("type") or path.stem), "free": _free_words(kind), "pin": kind["pin"] if isinstance(kind.get("pin"), dict) else None}}
+                                      "noconn": {"type": str(kind.get("type") or path.stem), "free": words, "default": default, "pin": kind["pin"] if isinstance(kind.get("pin"), dict) else None}}
             for key in ("verbs", "reads", "writes", "refuse", "input"):  # what the refuse list needs to read the statements of the call
                 if kind.get(key) is not None:
                     system[key] = kind[key]

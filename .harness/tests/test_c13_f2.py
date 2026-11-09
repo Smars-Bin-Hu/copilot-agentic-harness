@@ -815,6 +815,77 @@ class OffPackTests(NoConnectionCase):
         self.refused_how("sqlcmd -S localhost,14332 -Q 'SELECT 1'")  # no connection for the pack that is still off
 
 
+class DefaultFreeTests(NoConnectionCase):
+    """F2c item 2 (F2b-6 #2): a type that declares no `free` words still lets `--help`, `-h`, `-?` and `--version` through, and only a call made of those words and nothing else (no argument names a target). A type that
+    declares its own words keeps them; `"free": []` turns the default off."""
+
+    DEFAULT = ("--help", "-h", "-?", "--version")
+
+    def edit_type(self, pack: str, name: str, change) -> None:
+        path = self.root / ".harness/toolpacks" / pack / "types" / f"{name}.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        change(data)
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    def declare_none(self) -> None:
+        self.edit_type("demotracker", "demotracker", lambda data: data.pop("free"))
+        self.edit_type("ado", "azure-devops", lambda data: data.pop("free"))
+        self.edit_type("sqlserver", "sqlserver", lambda data: data["pin"].pop("free"))
+
+    def test_the_default_words_pass_for_a_type_that_declares_none_with_no_connection(self) -> None:
+        self.declare_none()
+        for program in ("demotracker", "ado", "sqlcmd"):
+            self.check("allow", [f"{program} {word}" for word in self.DEFAULT] + [f"{program} --help --version", f"/usr/local/bin/{program} -h"])
+
+    def test_never_with_another_argument_that_names_a_target(self) -> None:
+        self.declare_none()
+        for program in ("demotracker", "ado", "sqlcmd"):
+            for tail in ("", "--help items 5", "--help --org acme", "--help --project DEMO", "--help -S localhost,14332", "--help http://x", "--help -Q 'SELECT 1'", "-h get T-1", "--version --conn ado", "-? localhost", "--help $X",
+                         "--help; " + program + " items"):
+                line = f"{program} {tail}".strip()
+                self.refused_how(line)
+
+    def test_a_type_that_declares_words_keeps_them(self) -> None:
+        self.edit_type("demotracker", "demotracker", lambda data: data.update(free=["--usage"]))
+        self.check("allow", ["demotracker --usage", "demotracker get --usage"])  # declared words: as in F2b, any call that holds one
+        self.refused_how("demotracker --help")  # the default words are not added to a declared list
+        self.refused_how("demotracker -h")
+
+    def test_an_empty_list_turns_the_default_off(self) -> None:
+        self.edit_type("demotracker", "demotracker", lambda data: data.update(free=[]))
+        self.refused_how("demotracker --help")
+        self.refused_how("demotracker --version")
+
+    def test_a_refuse_list_is_still_read_for_a_default_help_call(self) -> None:
+        self.declare_none()
+        out = self.call('sqlcmd --help -Q "DROP TABLE t"')
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("`DROP TABLE t`", out["permissionDecisionReason"])
+
+    def test_with_a_connection_a_pin_that_declares_none_lets_the_default_words_through(self) -> None:
+        self.declare_none()
+        self.put({"acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"}})
+        self.check("allow", [f"sqlcmd {word}" for word in self.DEFAULT])  # before F2c: refused as unpinned (no server named)
+        self.refused_how("sqlcmd --help -S otherhost,1433")
+        self.refused_how('sqlcmd --help -Q "SELECT 1"')
+        self.refused_how("sqlcmd -h -1 -Q 'select 1'")  # `-h` is sqlcmd's headers option with a value: more than the default words
+        self.check("allow", ['sqlcmd -S localhost,14332 -C -Q "SELECT 1"'])
+
+    def test_a_type_with_a_free_that_is_not_a_list_is_a_type_problem(self) -> None:
+        for bad in ("--help", {"a": 1}, [1], [""]):
+            self.assertTrue([text for text in connections.type_problems({"type": "x", "cli": ["x"], "fields": {"a": {}}, "auth": {"a": {"identity": "none"}}, "test": "x", "free": bad}) if ".free" in text], bad)
+        self.assertFalse([text for text in connections.type_problems({"type": "x", "cli": ["x"], "fields": {"a": {}}, "auth": {"a": {"identity": "none"}}, "test": "x", "free": ["--help"]}) if ".free" in text])
+
+    def test_the_words_of_the_shipped_types_are_unchanged(self) -> None:
+        made = connections.unconnected(self.root, config.load_policy(self.root, "tools")["systems"])
+        self.assertEqual({name: (item["noconn"]["free"], item["noconn"]["default"]) for name, item in made.items()},
+                         {"no-connection-azure-devops": (["--help", "-h", "--version", "version"], False), "no-connection-demotracker": (["--help", "-h", "--version"], False), "no-connection-sqlserver": (["-?", "--help", "--version"], False)})
+        self.declare_none()
+        made = connections.unconnected(self.root, config.load_policy(self.root, "tools")["systems"])
+        self.assertEqual({item["noconn"]["default"] for item in made.values()}, {True})
+        self.assertEqual({tuple(item["noconn"]["free"]) for item in made.values()}, {self.DEFAULT})
+
+
 class UnreadableTargetTests(TaskCase):
     """F2b spot 2: a target policy that cannot be read does not mean "no target repositories". The gate does not know where they are, so it takes every git repository other than this one for one: a write into it and a
     git command that writes there are refused, with the file and what is wrong. Work in the task folder, reads and the harness folder's own git stay free. `harness doctor` says ERROR."""

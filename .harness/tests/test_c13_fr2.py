@@ -6,6 +6,7 @@ ones the connection that is named changes (a faulty list or pack: the prefix is 
 
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from typing import Any, Dict, List
@@ -14,6 +15,7 @@ import support  # noqa: F401 - the engine on sys.path
 import test_c13_f2 as f2
 import test_gate_lists as lists
 import test_gate_redteam as redteam
+from support import use_packs
 from taskcase import TASK
 
 from core import messages
@@ -214,11 +216,19 @@ class HomeFolderTests(lists.ListedCase):
     def setUp(self) -> None:
         super().setUp()
         import os
+        import tempfile
         from pathlib import Path
+        from unittest import mock
 
-        self.home = Path(os.environ["HOME"]) / ".copilot-harness"
-        self.lists_dir = Path(os.environ["HARNESS_INTEGRITY_DIR"])
-        self.env["HOME"] = os.environ["HOME"]
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        home = Path(temporary.name).resolve()
+        self.home = home / ".copilot-harness"
+        self.lists_dir = home / "custom-lists"  # the folder `HARNESS_INTEGRITY_DIR` names: not in the home folder
+        patch = mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home), "HARNESS_INTEGRITY_DIR": str(self.lists_dir)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.env.update({"HOME": str(home), "USERPROFILE": str(home), "HARNESS_INTEGRITY_DIR": str(self.lists_dir)})
         self.target = str(self.lists_dir / "0123456789abcdef.json")
         self.in_home = str(self.home / "integrity" / "0123456789abcdef.json")
 
@@ -299,6 +309,101 @@ class HomeFolderTests(lists.ListedCase):
         done = integrity.accept(self.root)
         self.assertTrue(done.get("ok", True) is not False)
         self.assertTrue(integrity.list_path(self.root).is_file())
+
+
+class BuildToolTests(lists.ListedCase):
+    """RC-B S2 (item 2): `cd <dir> && make`, `make -C dir`, `make --directory=dir`, `cd dir && just|rake|ninja|npm run` read the file of the folder they run in, not only the folder of the terminal. A build tool reads its default file
+    and the file `-f` names like a script: a governed program named in it is refused with the way (run the program itself); a file that cannot be read holds the line. Normal use (`make test`, `npm run build`) is not touched."""
+
+    DROP = 'sqlcmd -S localhost,14332 -C -d AcmeDW -Q "DROP TABLE dbo.t"'
+
+    def setUp(self) -> None:
+        super().setUp()
+        use_packs(self.root, "sqlserver", "ado")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"},
+            "ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "url": "https://localhost:18443"}}}), encoding="utf-8")
+        self.mk = f"{TASK}/mk2"
+        drop = self.DROP
+        for name, text in {
+            "Makefile": f"all:\n\t{drop}\n", "Makefile.alt": f"all:\n\t{drop}\n", "justfile": f"all:\n    {drop}\n", "Rakefile": f"task :a do\n  sh '{drop}'\nend\n",
+            "build.ninja": f"rule r\n  command = {drop}\nbuild a: r\n", "Taskfile.yml": f"version: 3\ntasks:\n  a:\n    cmds:\n      - {drop}\n", "tasks.py": f"from invoke import task\n@task\ndef a(c):\n    c.run('{drop}')\n",
+            "noxfile.py": f"import nox\n@nox.session\ndef a(s):\n    s.run('sh', '-c', '{drop}')\n", "gulpfile.js": f"exports.a = () => require('child_process').exec('{drop}')\n",
+            "package.json": json.dumps({"scripts": {"build": "tsc", "deploy": drop, "test": "npm run deploy", "pretest": "echo hi", "lint": "eslint .", "other": "node x.js"}}),
+        }.items():
+            self.put(f"{self.mk}/{name}", text)
+        self.put(f"{TASK}/ok/Makefile", "all:\n\techo build\ntest:\n\techo ok\n")
+        self.put(f"{TASK}/ok/package.json", json.dumps({"scripts": {"build": "tsc", "deploy": drop}}))
+        self.put(f"{TASK}/inc/Makefile", "include sub.mk\nall:\n\techo hi\n")
+        self.put(f"{TASK}/inc/sub.mk", f"x:\n\t{drop}\n")
+        self.put(f"{TASK}/ref/Makefile", "all:\n\tbash run.sh\n")
+        self.put(f"{TASK}/ref/run.sh", f"{drop}\n")
+
+    def put(self, name: str, text: str) -> None:
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def refused_runner(self, command: str, program: str = "sqlcmd") -> str:
+        reason = self.refused(command)
+        self.assertIn("会运行", reason, command)  # the tests run in Chinese: `X` runs ...
+        self.assertIn(program, reason, command)
+        return reason
+
+    def test_the_folder_a_cd_or_an_option_names_is_looked_in_for_the_default_file(self) -> None:
+        d = self.mk
+        for command in (f"cd {d} && make", f"make -C {d}", f"make --directory={d}", f"make --directory {d} all", f"make -C {TASK} -C mk2", f"make -C{d}", f"cd {TASK} && cd mk2 && make", f"pushd {d} && make", f"(cd {d} && make)",
+                        f"bash -c 'cd {d} && make'", f"cd {d} && gmake", f"cd {d}; make test", f"time make -C {d}", f"cd {d} && just", f"just --working-directory {d}", f"just -d {d}", f"cd {d}; rake", f"rake -C {d}",
+                        f"ninja -C {d}", f"cd {d} && ninja", f"cd {d} && task", f"task -d {d}", f"cd {d} && inv a", f"cd {d} && invoke a", f"cd {d} && python3 -m invoke a", f"cd {d} && nox", f"cd {d} && python3 -m nox -s a",
+                        f"cd {d} && gulp"):
+            self.refused_runner(command)
+
+    def test_the_file_a_f_option_names_is_read_from_the_folder_it_is_looked_for_in(self) -> None:
+        d = self.mk
+        for command in (f"cd {d} && make -f Makefile.alt", f"make -f {d}/Makefile.alt", f"make -C {d} -f Makefile.alt", f"cd {d} && gmake --file=Makefile.alt", f"cd {d} && make --makefile Makefile.alt a",
+                        f"just --justfile {d}/justfile", f"cd {d} && just -f justfile", f"rake -f {d}/Rakefile", f"ninja -f {d}/build.ninja", f"task --taskfile {d}/Taskfile.yml", f"task -t {d}/Taskfile.yml"):
+            self.refused_runner(command)
+
+    def test_a_script_of_package_json_that_the_command_runs_is_read(self) -> None:
+        d = self.mk
+        for command in (f"cd {d} && npm run deploy", f"cd {d} && npm run-script deploy", f"cd {d} && npm test", f"npm --prefix {d} run deploy", f"npm run deploy --prefix {d}", f"npm -C {d} test", f"cd {d} && yarn deploy",
+                        f"cd {d} && yarn run deploy", f"yarn --cwd {d} deploy", f"cd {d} && pnpm run deploy", f"pnpm -C {d} run deploy", f"cd {d} && bun run deploy", f"cd {d} && npm run $SCRIPT"):
+            self.refused_runner(command)
+
+    def test_what_the_file_does_not_run_is_not_read(self) -> None:
+        d = self.mk
+        for command in (f"cd {d} && npm run build", f"cd {d} && npm run lint", f"cd {d} && npm run other", f"cd {d} && yarn build", f"cd {d} && pnpm run lint", f"cd {d} && npm ls", f"cd {d} && npm run", f"cd {d} && npm --version"):
+            self.runs(command)
+
+    def test_an_included_file_and_a_script_the_file_runs_are_read_too(self) -> None:
+        for command in (f"cd {TASK}/inc && make", f"make -C {TASK}/inc", f"cd {TASK}/ref && make", f"make -C {TASK}/ref all"):
+            self.refused_runner(command)
+
+    def test_the_refusal_names_the_file_and_the_way(self) -> None:
+        reason = self.refused_runner(f"cd {self.mk} && make")
+        self.assertIn(f"{self.mk}/Makefile", reason)
+
+    def test_normal_use_runs(self) -> None:
+        for command in (f"cd {TASK}/ok && make", f"cd {TASK}/ok && make test", f"make -C {TASK}/ok", f"make -C {TASK}/ok test", f"cd {TASK}/ok && npm run build", f"cd {TASK}/ok && npm test", f"npm --prefix {TASK}/ok run build",
+                        f"cd {TASK}/ok && yarn build", "make", "make test", "npm run build", "npm test", "ninja --version", "just --list", "make -n", "cd /tmp && make", "make -C /nonexistent"):
+            self.runs(command)
+
+    def test_a_file_that_cannot_be_read_holds_the_line_when_a_pack_is_on(self) -> None:
+        self.put(f"{TASK}/big/Makefile", "all:\n\techo " + "x" * (210 * 1024) + "\n")
+        out = self.term(f"cd {TASK}/big && make")
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn(f"{TASK}/big/Makefile", out["permissionDecisionReason"])
+        self.assertIn("200 KB", out["permissionDecisionReason"])  # the words of every file the gate cannot read
+
+    def test_the_table_of_the_tools_is_the_one_the_gate_reads(self) -> None:
+        from modules.gate import buildtools, external
+
+        for name in ("make", "gmake", "just", "rake", "ninja", "npm", "pnpm", "yarn", "npx", "task", "invoke"):
+            self.assertIn(name, external.TEXT_RUNNERS, name)
+        self.assertIn("Makefile", buildtools.TOOLS["make"]["files"])
+        self.assertIn("-C", buildtools.TOOLS["make"]["dir"])
+        self.assertIn("python3 -m invoke", "python3 -m " + "invoke")
+        self.assertEqual(buildtools.MODULES["invoke"], "invoke")
 
 
 if __name__ == "__main__":

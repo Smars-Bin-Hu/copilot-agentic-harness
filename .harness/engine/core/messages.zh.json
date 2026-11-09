@@ -3770,6 +3770,7 @@
   "gate.external.hidden.pipe": "这一行把文字通过管道交给 shell 或解释器（或者用了 `source <( ... )`），gate 读不到那段文字，比如 `base64 -d | sh`。把命令本身写明白，直接写在这一行里，一次一条。",
   "gate.external.hidden.start": "`Start-Process {program}` 把 `{program}` 的调用藏了起来，而 gate 要判断这个程序。直接运行 `{program}`，写明白在这一行里。",
   "gate.external.hidden.runner": "`{runner}` 会运行文本，而交给它的文本里出现了 `{program}`，那是 gate 要判断的程序（在命令行里、here-document 里、管道送进去的内容里，或它运行的文件里）。gate 判断不了 runner 拿它做什么。请直接运行 `{program}`，把命令写在行里，一次一条。",
+  "gate.external.hidden.runner_file": "`{runner}` 会运行文件 `{file}`，而这个文件里点名了 `{program}`，一个 gate 判断的程序。gate 不判断 runner 拿它做什么。直接运行 `{program}` 本身，写在命令行里，一次一条命令。",
   "gate.external.failed": "gate 在判断 `{program}` 的调用时出了错（{error}），所以不放行。告诉用户：`harness doctor` 会说明哪里有问题。",
   "gate.external.invalid": "外部系统的清单有错（{error}），gate 没法判断 `{program}` 的调用，所以不放行。告诉用户：`harness doctor` 和 `harness tools check` 会说明哪里有问题。",
   "gate.external.noconn": "没有登记 `{program}`（类型 `{type}`）的连接。gate 只放行用户登记过的连接的调用。{also}\n用 `harness connections find <词>` 看有没有。没有合适的，就停下来请用户添加一个连接。",

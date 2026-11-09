@@ -35,7 +35,7 @@ from core.systems import (  # noqa: F401 - the names the handler, doctor and the
     ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, by_address, clis, reach, run_probe, validate, warnings,
 )
 
-from . import pin
+from . import buildtools, pin
 from .gitcmd import LEADING_KEYWORDS, MAX_DEPTH, READ_ONLY as READ_ONLY_GIT, SEPARATORS, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
 
 
@@ -528,7 +528,7 @@ class _Ctx:
         self.code: List[Tuple[Any, str]] = []  # (pattern of the words, system) of the systems that name `reach.code`: words a one-liner interpreter must not run (1.7.38, C13 F2)
 
 
-def _file_state(path: str, names: List[str], ctx: _Ctx) -> Tuple[str, str]:
+def _file_state(path: str, names: List[str], ctx: _Ctx, folders: Optional[List[str]] = None) -> Tuple[str, str]:
     """Read a file a command line runs (1.7.25). `("names", program)`: a listed program is a word in it. `("ok", "")`: it names none, is a binary, or is the harness's own engine or
     tests. `("missing", "")`: there is no such file. `("unreadable", "")`: too big (over 200 KB) or not readable."""
     if not path or path.startswith(("-", "$")) or "$(" in path:
@@ -538,7 +538,7 @@ def _file_state(path: str, names: List[str], ctx: _Ctx) -> Tuple[str, str]:
     if re.search(r"(?:^|[\\/])\.harness[\\/](?:engine|tests)[\\/]", path):
         return "ok", ""  # the harness's own program and tests: the gate guards them in other ways
     root = os.path.realpath(str(ctx.root)) if ctx.root is not None else ""
-    bases = [os.path.join(ctx.cwd or ".", item) for item in reversed(ctx.dirs)] + [ctx.cwd or "", root or "."]
+    bases = list(folders or []) + [os.path.join(ctx.cwd or ".", item) for item in reversed(ctx.dirs)] + [ctx.cwd or "", root or "."]
     for base in bases:
         full = os.path.normpath(os.path.join(base or ".", os.path.expanduser(path.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", path) else path)))
         if not os.path.isfile(full):
@@ -1062,6 +1062,7 @@ TEXT_RUNNERS = {
     "ed": (), "ex": (), "vi": (), "vim": (), "nvim": (), "emacs": (), "osascript": (), "cscript": (), "wscript": (), "mshta": (), "sqlite3": (), "psql": (), "gdb": (), "lldb": (), "ftp": (), "sftp": (), "telnet": (), "nc": (), "ncat": (),
     "cmake": (), "scons": (), "gradle": (), "mvn": (), "ant": (), "npm": (), "npx": (), "yarn": (), "pnpm": (), "swift": (), "go": (), "dotnet": (), "groovy": (), "scala": (), "kotlin": (), "deno": (), "bun": (), "tsx": (), "ts-node": (),
 }
+TEXT_RUNNERS.update({name: tuple(spec.get("files") or ()) for name, spec in buildtools.TOOLS.items()})  # (1.7.38, C13 FR2 2) the build tools: their default files are read in the folder the line is in (`buildtools.py`)
 POSITIONAL_PROGRAM = frozenset("tclsh wish expect m4 lua luajit php julia rscript r crontab osascript cscript wscript mshta".split())  # a file word given to these is the text they run (to `awk`, `vim` and the build tools it is data or a target)
 _FILE_OPTIONS = ("-f", "--file", "--makefile", "--justfile", "-file", "-c")  # the option that names the file to run (`make -f x`, `at -f x`)
 
@@ -1141,20 +1142,74 @@ def _runner_files(name: str, args: List[str]) -> List[str]:
     return [item for item in files if item not in ("-", "/dev/stdin", "")] or (list(TEXT_RUNNERS.get(name, ())) if not any(item in _FILE_OPTIONS for item in args) else [])
 
 
+_CD_HEADS = frozenset(["cd", "pushd", "chdir", "set-location", "sl", "push-location"])
+
+
+def _after_cd(folders: List[str], tokens: List[str], at: int) -> List[str]:
+    """The folders a line can be in after a `cd`: the ones before (the `cd` may fail) and each of them moved by the target. A target made at run time (`cd $X`, `cd -`) moves nothing."""
+    words = [item for item in tokens[at + 1:] if item.lower() not in ("/d", "-l", "-p", "-e", "--")]
+    target = words[0] if words else "~"
+    if target.startswith(("$", "%", "-")) or "$(" in target or "`" in target:
+        return folders
+    moved = [buildtools._join(base, target) for base in folders]  # noqa: SLF001
+    return list(dict.fromkeys(folders + moved))[:40]
+
+
+def _start_folders(ctx: "_Ctx") -> List[str]:
+    """The folders a command of the line can run in before the line changes any: the folder of the terminal and the root, moved by the `cd` the earlier commands of the line made (`ctx.dirs`)."""
+    first = [os.path.abspath(ctx.cwd or ".")]
+    if ctx.root is not None:
+        first.append(os.path.realpath(str(ctx.root)))
+    folders = list(dict.fromkeys(first))
+    for target in ctx.dirs:
+        folders = _after_cd(folders, ["cd", target], 0)
+    return folders
+
+
+def _runner_of(tokens: List[str], at: int) -> Tuple[str, List[str]]:
+    """`(the runner, the words it is given)`: the program, or the tool a `python3 -m <module>` starts (`invoke`, `tox`, `nox`...)."""
+    if _is_interpreter(tokens[at]):
+        kind, index = _interp(tokens, at)
+        if kind == "module" and index is not None and index < len(tokens):
+            tool = buildtools.MODULES.get(tokens[index].split(".")[0].lower())
+            if tool:
+                return tool, tokens[index + 1:]
+    return _program(tokens[at]), tokens[at + 1:]
+
+
+def _shown_path(path: str, ctx: "_Ctx") -> str:
+    """A file as the words of a refusal name it: from the root of the repository when it is inside it."""
+    try:
+        root = os.path.realpath(str(ctx.root)) if ctx.root is not None else ""
+        real = os.path.realpath(path.split(" (script ")[0])
+        if root and os.path.commonpath([real, root]) == root:
+            return os.path.relpath(real, root).replace("\\", "/") + (" (script " + path.split(" (script ", 1)[1] if " (script " in path else "")
+    except (ValueError, OSError):
+        pass
+    return path
+
+
 def _text_runners(text: str, bodies: List[Tuple[str, bool]], names: List[str], ctx: "_Ctx", found: List[Action]) -> None:
     """The rule for a runner (`TEXT_RUNNERS`): what it is given to run (its own words, the text piped into it and the here-documents of that, the file it is told to run or finds itself) is read, and a governed program named
-    in it makes the line refused, with the way (run the program itself). One refusal for the line."""
+    in it makes the line refused, with the way (run the program itself). One refusal for the line. A build tool (`buildtools.py`: make, just, rake, ninja, task, npm run...) finds a file in the folder it runs in: the folder
+    of the terminal, a folder of a `cd` that came before in the line, `-C dir`; the file is read there. A file of it that cannot be read holds the line."""
+    if not names:
+        return
     pairs = _segments_with_operators(text)
     owner: List[List[str]] = []  # the here-documents of each command, in the order the shell takes them
     queue = list(bodies)
     for _how, tokens in pairs:
         count = sum(1 for item in tokens if item.startswith("<<") and not item.startswith("<<<"))
         owner.append([queue.pop(0)[0] for _ in range(min(count, len(queue)))])
+    folders = _start_folders(ctx)
     for index, (_how, tokens) in enumerate(pairs):
         at = _head_index(tokens)
         if at is None:
             continue
-        runner = _program(tokens[at])
+        if _program(tokens[at]) in _CD_HEADS:
+            folders = _after_cd(folders, tokens, at)
+            continue
+        runner, words = _runner_of(tokens, at)
         if runner not in TEXT_RUNNERS:
             continue
         given = [" ".join(tokens[at + 1:])] + owner[index]
@@ -1163,15 +1218,26 @@ def _text_runners(text: str, bodies: List[Tuple[str, bool]], names: List[str], c
             back -= 1
             given += [" ".join(pairs[back][1])] + owner[back]
         hit = _mentioned("\n".join(given), names)
-        if not hit:
+        shown, unread = "", ""
+        if not hit and runner in buildtools.TOOLS:
+            read = buildtools.collect(runner, words, folders)
+            for path, body in read.texts:
+                program = _mentioned(body, names)
+                if program:
+                    hit, shown = program, _shown_path(path, ctx)
+                    break
+            unread = read.unreadable[0] if read.unreadable and not hit else ""
+        elif not hit:
             for path in _runner_files(runner, tokens[at + 1:]):
-                state, program = _file_state(path, names, ctx)
+                state, program = _file_state(path, names, ctx, folders)
                 if state == "names":
-                    hit = program
+                    hit, shown = program, path
                     break
         if hit:
-            found.append(_hidden("runner", " ".join(tokens), program=hit, runner=runner))
+            found.append(_hidden("runner_file" if shown else "runner", " ".join(tokens), program=hit, runner=runner, file=shown))
             return
+        if unread:
+            found.append(Action("", "none", WRITE, _shown_path(unread, ctx), " ".join(tokens), named=False, call=" ".join(tokens), unseen=True, why="file"))
 
 
 def _head_name(tokens: List[str]) -> str:

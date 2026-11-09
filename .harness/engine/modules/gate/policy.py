@@ -120,6 +120,7 @@ class Compiled:
         self.guard_writes = [
             (re.compile(expand(rule["pattern"], guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"]
+            if not rule.get("inline")  # the code of an inline script is read by `scriptcheck.py` for guardrail paths: it writes to one only when the target of a write is one (1.7.38, C13 FR2 3)
         ]
         # Files only the CLI writes (a task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the reports). Same write patterns as for guardrail files.
         self.owned = list(policy.get("cli_owned_paths", []))

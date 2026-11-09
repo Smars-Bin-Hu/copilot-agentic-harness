@@ -1304,7 +1304,9 @@ def _runs_files(tokens: List[str], at: int, raw: List[str], feeds: bool) -> List
         if kind == "script" and index is not None and index < len(tokens):
             files.append(tokens[index])
         elif kind == "code" and index is not None:
-            files.extend("?" + one for one in _code_files(" ".join(tokens[index + 1:])))  # `python3 -c "exec(open('x.py').read())"`: the file is the program (1.7.38, C13 FR 20). A `?` says it may be data: no file, or none the gate can read, is no reason to hold the line
+            code = " ".join(tokens[index + 1:])
+            if _EXEC_WORDS.search(code):  # (1.7.38, C13 FR2 3) a file the code only reads (`print(open('notes.md').read())`) is data; it is a program when the code runs what it loads
+                files.extend("?" + one for one in _code_files(code))  # `python3 -c "exec(open('x.py').read())"`: the file is the program (1.7.38, C13 FR 20). A `?` says it may be data: no file, or none the gate can read, is no reason to hold the line
     elif name in ("source", ".") and at + 1 < len(tokens):
         files.append(tokens[at + 1])
     elif name in READ_ONLY_PROGRAMS or _is_harness(tokens, at):
@@ -1318,6 +1320,7 @@ def _runs_files(tokens: List[str], at: int, raw: List[str], feeds: bool) -> List
     return files
 
 
+_EXEC_WORDS = re.compile(r"(?<![\w.])(?:exec|eval|compile|execfile|dofile|loadfile|require|source)\s*\(|\b(?:run_path|run_module|import_module|__import__|importlib|runpy|Invoke-Expression|iex|vm\.run\w+)\b|\bnew\s+Function\b", re.IGNORECASE)  # code that runs what it loads
 _CODE_FILE = re.compile(r"""(?:\bopen|\brun_path|\bexecfile|\breadFileSync|\breadFile|\brequire|\bdofile|\bloadfile|\bGet-Content|\bgc|\bImport-Module)\s*\(?\s*(?:[A-Za-z_]+\s*=\s*)?['"]([^'"\n]{1,300})['"]""", re.IGNORECASE)
 
 

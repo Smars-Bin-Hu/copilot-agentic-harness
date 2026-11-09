@@ -91,6 +91,7 @@ _JSON = r'''
     "pattern": "{cmd}git\\s+(?:checkout|restore|rm|mv|apply|stash|reset)\\b[^;&|\\n]*{guard}"
    },
    {
+    "inline": true,
     "why": {
      "en": "it rewrites one with an inline script",
      "zh": "\u7528\u5185\u8054\u811a\u672c\u6539\u5199"

@@ -76,6 +76,7 @@
         "pattern": "{cmd}git\\s+(?:checkout|restore|rm|mv|apply|stash|reset)\\b[^;&|\\n]*{guard}"
       },
       {
+        "inline": true,
         "why": {
           "en": "it rewrites one with an inline script",
           "zh": "用内联脚本改写"

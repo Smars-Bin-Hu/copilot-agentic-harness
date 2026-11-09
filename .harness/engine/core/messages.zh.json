@@ -3605,7 +3605,7 @@
   "hook.emergency": "harness 引擎无法判断，所以修好之前，不允许运行命令，也不允许改任何文件：{why}\n你仍然可以读文件。把出了什么问题告诉用户，不要自己去修，也不要绕开。用户在自己的终端里修（比如先 `git status`，再用 `git checkout -- <文件>` 把文件放回去）。",
   "hook.integrity": "有一个护栏文件和用户接受的不一样了：{why}\n用户看过之前，不允许运行命令，也不允许改任何文件。你仍然可以读文件。告诉用户哪些文件变了，不要自己去修，也不要绕开。用户把文件放回去（比如 `git checkout -- <文件>`）；如果这个改动是对的，用户在自己的终端里运行 `harness doctor --accept` 来接受它。",
   "hook.busy": "harness 正忙着处理这个会话的另一个调用，没能判断：{why}\n请把同一个调用再运行一次。",
-  "gate.script.refused": "已拒绝：脚本 `{file}` 里写到了护栏路径（`{path}`），并且有写入动作（`{write}`）。改护栏的脚本就是绕开护栏的办法。不要运行它，也不要把它拆开。告诉用户要改什么、为什么：用户来改，或者为一个会话开 admin 模式（`harness admin on`）。",
+  "gate.script.refused": "已拒绝：脚本 `{file}` 写到了护栏路径（`{path}`）：`{write}`。改护栏的脚本就是绕开护栏的办法。不要运行它，也不要把它拆开。告诉用户要改什么、为什么：用户来改，或者为一个会话开 admin 模式（`harness admin on`）。",
   "connections.find.words": "说出要找什么：`harness connections find <词>`，例如系统和环境。",
   "connections.find.many": "有 {n} 个对得上。如果不止一个可能是要找的，问用户是哪个；绝不要猜。可以加更多词再运行一次 `harness connections find`。",
   "connections.find.one": "只有一个对得上。如果任务或用户说的是别的环境，那就不是它：去问。",

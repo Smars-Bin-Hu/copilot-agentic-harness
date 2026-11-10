@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.39 (2026-11-10)
+
+### Fixed
+
+- **The harness starts again on Python 3.9, 3.10 and 3.11.** In 1.7.38 one line of `core/company.py` held a backslash inside an f-string expression, which only Python 3.12 and later read; on an older Python the file did not load, and the harness failed at its start (`harness.cmd` on a work computer). The line is written the old way. A new test reads every Python file the repository ships and refuses what only Python 3.12 reads inside an f-string (a backslash, a comment or a line break in an expression, the f-string's own quote reused in it), so a file written on 3.12 that would not load on 3.9 fails the tests. The test suite also passes on Python 3.9 itself.
+
 ## 1.7.38 (2026-11-09)
 
 ### Added

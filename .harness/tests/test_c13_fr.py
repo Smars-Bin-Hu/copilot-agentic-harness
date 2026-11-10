@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -461,7 +462,7 @@ class IntegrityTests(unittest.TestCase):
         registry = self.root / ".harness" / "registry.json"
         before = registry.read_text(encoding="utf-8")
         self.addCleanup(registry.write_text, before, encoding="utf-8")
-        registry.write_text(before.replace('"version": "1.7.38"', '"version": "1.7.39"', 1), encoding="utf-8")
+        registry.write_text(re.sub(r'"version": "(\d+)\.(\d+)\.(\d+)"', lambda hit: f'"version": "{hit.group(1)}.{hit.group(2)}.{int(hit.group(3)) + 1}"', before, count=1), encoding="utf-8")  # the next version, whatever the current one is
         self.assertEqual(self.integrity.accept_on_start(self.root), "made", "another version: an upgrade by the documented steps")
         self.assertEqual(self.integrity.problem(self.root), "")
 

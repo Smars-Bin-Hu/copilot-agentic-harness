@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.7.38",
-  "released": "2026-11-09",
+  "version": "1.7.39",
+  "released": "2026-11-10",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -250,6 +250,7 @@
         ".harness/tests/test_c13_fr2.py",
         ".harness/tests/test_c13_fr3.py",
         ".harness/tests/test_c13_sql.py",
+        ".harness/tests/test_old_python.py",
         ".harness/tests/test_statements.py",
         ".harness/tests/test_gate_lists.py",
         ".harness/tests/test_gate_sqlserver.py",

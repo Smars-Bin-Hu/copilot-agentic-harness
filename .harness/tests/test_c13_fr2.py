@@ -720,7 +720,9 @@ class LauncherTests(unittest.TestCase):
         self.assertLess(len(text.splitlines()), 80)
         tree = ast.parse(text)
         imported = {alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} | {node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module}
-        self.assertLessEqual(imported, set(sys.stdlib_module_names))
+        for name in imported:  # the standard library only (`sys.stdlib_module_names` is Python 3.10 or later: the spec of the module is looked at instead)
+            spec = importlib.util.find_spec(name)
+            self.assertTrue(name in sys.builtin_module_names or (spec is not None and spec.origin is not None and "site-packages" not in spec.origin), name)
         sys.path.insert(0, str(self.repo / ".harness" / "engine"))
         import hook
 
@@ -878,7 +880,7 @@ class IntegrityWordsTests(unittest.TestCase):
 
     def new_version(self) -> None:
         text = self.original[".harness/registry.json"]
-        (self.root / ".harness" / "registry.json").write_text(text.replace('"version": "1.7.38"', '"version": "1.7.39"'), encoding="utf-8")
+        (self.root / ".harness" / "registry.json").write_text(re.sub(r'"version": "(\d+)\.(\d+)\.(\d+)"', lambda hit: f'"version": "{hit.group(1)}.{hit.group(2)}.{int(hit.group(3)) + 1}"', text, count=1), encoding="utf-8")  # the next version, whatever the current one is
         self.change_a_file()
 
     def test_a_new_version_says_start_the_board_and_not_git(self) -> None:

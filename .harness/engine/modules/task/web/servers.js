@@ -370,7 +370,8 @@ const SERVERS = (function () {
     const closing = h("p", {class: "sub sv-plan", hidden: ""}, t("connections.open.restart.note"));  // with `before`: a VS Code that is open is closed first, the normal way
     const go = h("button", {type: "button", class: "act hot", disabled: ""}, t(before ? "connections.open.restart" : "connections.open.go"));
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-    const view = SERVE.dialog([h("h2", null, t("connections.open.title")), h("p", {class: "sub"}, t("connections.open.lead")), h("div", {class: "win-body"}, list, said, running, closing), h("div", {class: "row win-foot"}, go, close)]);
+    const primaryNote = h("p", {class: "sub sv-plan", hidden: ""}, t("connections.primary.note"));  // (1.7.39) shown with the "window's account" choice: one Windows account per window, what `harness as` does for the others
+    const view = SERVE.dialog([h("h2", null, t("connections.open.title")), h("p", {class: "sub"}, t("connections.open.lead")), h("div", {class: "win-body"}, list, primaryNote, said, running, closing), h("div", {class: "row win-foot"}, go, close)]);
     view.box.classList.add("wide", "sv-win");
     let rows = [], picked = kept("chosen", null), primary = kept("primary", ""), found0 = null;
     const marks = {};
@@ -407,6 +408,7 @@ const SERVERS = (function () {
         return h("label", {class: "sv-line sv-pick", title: [row.label, row.type_label + " · " + row.auth_label, where(row)].filter(Boolean).join("\n")},
           box, envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.account), star ? h("span", {class: "sv-primary"}, star, t("connections.primary")) : null, marks[row.alias]);
       }) : [h("p", {class: "sub"}, t("connections.open.nothing"))]));
+      primaryNote.hidden = windowsAccounts.length < 2;
       running.hidden = !found.vscode_open || Boolean(before);
       closing.hidden = !found.vscode_open || !before;
       replan();

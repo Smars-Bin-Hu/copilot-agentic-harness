@@ -2921,6 +2921,7 @@
   "connections.plan.wrap": "{n} reached with the identity saved here, not the window's: the agent is told at the start of each chat.",
   "connections.primary": "window's account",
   "connections.primary.tip": "The Windows account this window holds itself; for the other Windows accounts the agent uses the identities saved here.",
+  "connections.primary.note": "One Windows account per window: pick it with \"window's account\". The other ticked connections still work: the agent uses `harness as <name>` for them, which runs that one command with the connection's saved identity, without restarting VS Code. If they all use the same account, pick any.",
   "connections.open.started": "VS Code is opening with {n} identities. Open a chat there: its first step checks each connection.",
   "connections.close": "Close",
   "connections.own.kind": "Kind",

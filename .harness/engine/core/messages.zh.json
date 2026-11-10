@@ -2921,6 +2921,7 @@
   "connections.plan.wrap": "{n} 个用这里保存的身份连，不用窗口自己的：每个 chat 开始时会告诉 agent。",
   "connections.primary": "窗口账户",
   "connections.primary.tip": "这个窗口自己带的 Windows 账户；其他 Windows 账户，agent 用这里保存的身份。",
+  "connections.primary.note": "每个 VS Code 窗口仅能承载一个 Windows 账号身份，请通过“window's account”指定。其余已勾选的连接仍可使用，agent 将通过 `harness as <连接名>` 以对应身份访问：该命令仅以这个连接保存的身份运行当前这一条命令，无需重启 VS Code。若各连接使用同一账号，任选其一即可。",
   "connections.open.started": "VS Code 正在带着 {n} 个身份打开。在那里开一个 chat：它的第一步会检查每个连接。",
   "connections.close": "关闭",
   "connections.own.kind": "类型",

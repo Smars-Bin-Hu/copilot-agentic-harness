@@ -16,6 +16,7 @@ To see which version you have: `harness --version`.
 
 - **A test with a Windows account says what went wrong.** A SQL Server connection tested with a Windows account (network credentials, as `runas /netonly`) that ended with "no message" now says whether the shell it starts did not run, the wait for it failed (with the Windows error), or what the command answered. A test whose command printed nothing names the command (secrets hidden) and its exit code.
 - **`az` can be put in place before a connection uses it.** The Local window lists the program of a sign-in way a pack that is on offers (`az` of az login of the ado pack), with the field for its folder, so the pack card's *Local* link leads to a row. Programs also has a field to add the folder of any other program.
+- **Sign in on Windows says where its window may be.** Started from the board, the sign-in window of `az login` (and the two-step check that follows it) can open behind the browser; the sign-in then seems to hang. The board's terminal now says so before it starts.
 - **Test it in Get ready shows the drawn letters of `harness --version` again, in the colours of the terminal** (cyan to pink, as in 1.6; 1.7.38 had left them out).
 
 ## 1.7.39 (2026-11-10)

@@ -2807,6 +2807,7 @@
   "connections.tool.login": "Sign in",
   "connections.env.none": "No environment",
   "connections.login.none": "`{alias}` has no sign-in of its own to run",
+  "connections.login.window": "A sign-in window opens. If you do not see it, look on the taskbar: it may be behind the browser. A two-step check sent to your phone also shows a step in that window.",
   "connections.login.blocked": "{program} is on this computer, but it has no permission to run: {path}. Run `chmod +x {path}`, or ask the owner of the pack to make the package again.",
   "connections.login.missing": "{program} is not on this computer (not on the PATH VS Code will get): install it, then press {@connections.signin} again.",
   "connections.login.after": "Signed in. In {@tools.conn.title}, press {@connections.test} for `{alias}`: it keeps the account when the test passes.",

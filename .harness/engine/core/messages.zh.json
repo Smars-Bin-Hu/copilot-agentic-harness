@@ -2807,6 +2807,7 @@
   "connections.tool.login": "登录",
   "connections.env.none": "不分环境",
   "connections.login.none": "`{alias}` 没有自己的登录命令可以运行",
+  "connections.login.window": "会打开一个登录窗口。如果看不到，看一下任务栏：它可能在浏览器后面。手机收到两步验证时，那个窗口里也会有一步要做。",
   "connections.login.blocked": "{program} 在这台电脑上，但没有运行权限：{path}。请运行 `chmod +x {path}`，或请包的所有者重新打包。",
   "connections.login.missing": "这台电脑上没有 {program}（VS Code 拿到的 PATH 里没有）：装上后再点“{@connections.signin}”。",
   "connections.login.after": "登录好了。在“{@tools.conn.title}”里给 `{alias}` 点“{@connections.test}”：测试通过就会保存这个账户。",

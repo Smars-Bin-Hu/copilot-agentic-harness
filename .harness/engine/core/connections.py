@@ -1044,6 +1044,8 @@ def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple
         program = shlex.split(line, posix=os.name != "nt")[0]
         no_run = toolpacks.blocked(program, path)
         return 126 if no_run else 127, say("connections.login.blocked" if no_run else "connections.login.missing", program=program, path=no_run)
+    if sys.platform == "win32":
+        print(say("connections.login.window"), flush=True)  # (1.7.39, Windows) the sign-in window, or its two-step check, may open behind the browser: the person waits on a window they cannot see
     return subprocess.run(line, shell=True, cwd=str(root), env={**os.environ, **launch}).returncode, ""  # noqa: S602 - the kind's own sign-in, started by the person
 
 

@@ -114,3 +114,18 @@ class LayersOfATest(ConnectionsCase):
                 self.assertIn("connections.layer." + key, table, (lang, key))
             for step in STEPS:
                 self.assertIn("connections.step." + step, table)
+
+
+class NetonlyToldTests(ConnectionsCase):
+    """1.7.39 (Windows): a test with a Windows account (network credentials) that printed nothing is told apart: the shell never ran, the wait failed, or the command answered."""
+
+    def test_each_case_says_what_happened(self) -> None:
+        from core import netonly
+
+        self.assertIn("did not run", netonly.told(1, "", 0)[1])
+        self.assertEqual(netonly.told(259, "", 0)[0], 259)
+        self.assertIn("still running", netonly.told(259, "", 0)[1])
+        self.assertEqual(netonly.told(1, netonly.MARK + "\r\nLogin failed for user 'x'.", 0), (1, "Login failed for user 'x'."))
+        self.assertEqual(netonly.told(0, netonly.MARK + "\r\nTESTBNS\\me", 0), (0, "TESTBNS\\me"))
+        self.assertEqual(netonly.told(0, "", netonly.WAIT_FAILED, 5), (None, "could not wait for the process started with these credentials (Windows error 5)"))
+        self.assertNotEqual(netonly.told(0, "", 0)[0], 0, "a shell that wrote nothing never passes as ok")

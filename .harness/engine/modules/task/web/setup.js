@@ -385,7 +385,9 @@ const SETUP = (function () {
         const parts = [];
         if (found.why) parts.push(h("p", {class: "su-note bad"}, found.why));
         if (found.output) {
-          parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, found.output.replace(/^\n+/, "")));  // the drawn letters too (1.7.39, the person: they drew well; 1.7.38 had left them out)
+          const lines = found.output.replace(/^\n+/, "").split("\n");
+          const size = found.ok ? lines.findIndex((line) => !/[\u2500-\u259f]/.test(line)) : 0;  // the drawn letters come first: painted with the gradient of the terminal (1.6.69; back in 1.7.39, the person)
+          parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, size > 0 ? h("span", {class: "su-art"}, lines.slice(0, size).join("\n")) : null, lines.slice(Math.max(size, 0)).join("\n")));
         }
         if (found.python) parts.push(h("p", {class: "su-warn"}, found.python));
         testOut.replaceChildren(...parts);

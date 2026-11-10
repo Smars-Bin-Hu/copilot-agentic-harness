@@ -17,7 +17,6 @@ from typing import Dict, Optional, Tuple
 LOGON_NETCREDENTIALS_ONLY = 0x2
 CREATE_UNICODE_ENVIRONMENT = 0x400
 CREATE_NO_WINDOW = 0x08000000
-DETACHED_PROCESS = 0x8
 WAIT_TIMEOUT = 0x102
 INFINITE = 0xFFFFFFFF
 
@@ -120,7 +119,7 @@ def start(account: str, password: str, argv: list, cwd: Path, extra_env: Optiona
     """Start a program (VS Code) with these network credentials and do not wait. Every process it starts has them too."""
     if not available():
         return False
-    info = _create(account, password, subprocess.list2cmdline(argv), cwd, extra_env or {}, DETACHED_PROCESS)
+    info = _create(account, password, subprocess.list2cmdline(argv), cwd, extra_env or {}, CREATE_NO_WINDOW)  # (1.7.39) DETACHED_PROCESS is not a flag CreateProcessWithLogonW takes: Windows answered 87, the parameter is wrong. CREATE_NO_WINDOW, as `run` uses: no console for `cmd.exe /c code.cmd`
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
     kernel.CloseHandle(ctypes.c_void_p(info.hProcess))
     kernel.CloseHandle(ctypes.c_void_p(info.hThread))

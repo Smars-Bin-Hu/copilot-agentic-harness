@@ -1272,8 +1272,11 @@ def launch(root: Path, chosen: List[str], primary: str, code_argv: List[str]) ->
     argv = (["cmd.exe", "/c", *code_argv] if os.name == "nt" and str(code_argv[0]).lower().endswith((".cmd", ".bat")) else code_argv)
     if planned["primary"]:
         identity = identity_of(env, planned["primary"], known[servers[planned["primary"]]["type"]])
-        if not netonly.start(identity["account"], identity["password"], argv, root, extra):
-            return {**planned, "started": False, "why": say("connections.netonly.windows")}
+        try:
+            if not netonly.start(identity["account"], identity["password"], argv, root, extra):
+                return {**planned, "started": False, "why": say("connections.netonly.windows")}
+        except OSError as error:  # (1.7.39) Windows refused to start VS Code with the account: said in words, with its number
+            return {**planned, "started": False, "why": say("connections.netonly.failed", account=identity["account"], error=" ".join(str(error).split())[:200])}
     else:
         subprocess.Popen(argv, cwd=str(root), env={**os.environ, **extra}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,  # noqa: S603
                          start_new_session=os.name != "nt", close_fds=True)

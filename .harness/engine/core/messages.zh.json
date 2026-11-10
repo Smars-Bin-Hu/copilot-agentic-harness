@@ -2753,6 +2753,7 @@
   "connections.test.missing": "这台电脑上没有 {program}（不在 PATH 里）：装上后再测。",
   "connections.test.blocked": "{program} 在这台电脑上，但没有运行权限：{path}。请运行 `chmod +x {path}`，或请包的所有者重新打包。",
   "connections.netonly.windows": "Windows 账户只能在 Windows 上用来打开 VS Code。",
+  "connections.netonly.failed": "Windows 没能用账号 {account} 启动 VS Code：{error}。VS Code 已关闭：点 Open VS Code 可以不带身份打开它，并把这个错误告诉 harness 的维护人。",
   "connections.as.other": "harness as {alias} 只跑 {alias} 自己的命令（它的程序、指向那个连接）：这一条不是。照那个连接写命令，或者别的连接就不要加前缀。",
   "connections.as.none": "{alias} 还没有保存身份：由人在“{@tools.conn.title}”里登录。",
   "gate.connections.secret": "已拒绝：这会把人在连接上的身份露出来（.harness/.env、带密码的变量，或者整个环境）。永远不要读或打印它们。要连连接，直接跑它的命令：身份已经在了，或者用 harness as <别名> -- <命令>。",

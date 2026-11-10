@@ -129,3 +129,19 @@ class NetonlyToldTests(ConnectionsCase):
         self.assertEqual(netonly.told(0, netonly.MARK + "\r\nTESTBNS\\me", 0), (0, "TESTBNS\\me"))
         self.assertEqual(netonly.told(0, "", netonly.WAIT_FAILED, 5), (None, "could not wait for the process started with these credentials (Windows error 5)"))
         self.assertNotEqual(netonly.told(0, "", 0)[0], 0, "a shell that wrote nothing never passes as ok")
+
+
+class NetonlyStartTests(ConnectionsCase):
+    """1.7.39 (Windows): VS Code is started with an account with flags CreateProcessWithLogonW takes (DETACHED_PROCESS made it answer 87, a wrong parameter)."""
+
+    def test_the_start_uses_create_no_window(self) -> None:
+        from unittest import mock
+
+        from core import netonly
+
+        info = netonly._ProcessInfo()
+        with mock.patch.object(netonly, "available", return_value=True), mock.patch.object(netonly, "_create", return_value=info) as made, \
+                mock.patch.object(netonly.ctypes, "WinDLL", create=True):
+            self.assertTrue(netonly.start("DOM\\me", "pw", ["code.exe", "C:\\x"], self.root))
+        self.assertEqual(made.call_args[0][5], netonly.CREATE_NO_WINDOW)
+        self.assertFalse(hasattr(netonly, "DETACHED_PROCESS"))

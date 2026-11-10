@@ -2753,6 +2753,7 @@
   "connections.test.missing": "{program} is not on this computer (not on the PATH): install it, then test again.",
   "connections.test.blocked": "{program} is on this computer, but it has no permission to run: {path}. Run `chmod +x {path}`, or ask the owner of the pack to make the package again.",
   "connections.netonly.windows": "A Windows account opens VS Code on Windows only.",
+  "connections.netonly.failed": "Windows did not start VS Code with the account {account}: {error}. VS Code is closed: press Open VS Code to open it without identities, and tell the harness team this error.",
   "connections.as.other": "harness as {alias} runs only the commands of {alias} (its own program, aimed at that connection): this one is not. Write the command for that connection, or leave the prefix out for another one.",
   "connections.as.none": "No identity is saved for {alias}: the person signs in to it in {@tools.conn.title}.",
   "gate.connections.secret": "Refused: this would show a person's identity for a connection (.harness/.env, a variable that carries a password, or the whole environment). Never read or print them. To reach a connection, run its command: the identity is already there, or use harness as <alias> -- <command>.",

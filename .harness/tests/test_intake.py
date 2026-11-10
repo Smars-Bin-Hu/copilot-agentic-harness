@@ -74,8 +74,9 @@ NUMBERING = ('<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:va
 def xlsx(sheets: List[dict], strings: Optional[List[str]] = None, styles: str = "", date1904: bool = False, extra: Optional[Dict[str, bytes]] = None) -> bytes:
     """`sheets`: `{name, state, rows: xml of the <row> elements, merges: [refs], cols: xml}`."""
     ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
-    workbook = f'<workbook {ns}><workbookPr{" date1904=\"1\"" if date1904 else ""}/><sheets>' + "".join(
-        f'<sheet name="{item["name"]}" sheetId="{index}"{" state=\"" + item["state"] + "\"" if item.get("state") else ""} r:id="rId{index}"/>' for index, item in enumerate(sheets, 1)) + "</sheets></workbook>"
+    date = ' date1904="1"' if date1904 else ""  # outside the f-strings: Python before 3.12 refuses a backslash there
+    workbook = f'<workbook {ns}><workbookPr{date}/><sheets>' + "".join(
+        f'<sheet name="{item["name"]}" sheetId="{index}"' + (' state="' + item["state"] + '"' if item.get("state") else "") + f' r:id="rId{index}"/>' for index, item in enumerate(sheets, 1)) + "</sheets></workbook>"
     rels = f"<Relationships {RELS}>" + "".join(f'<Relationship Id="rId{index}" Type="x/worksheet" Target="worksheets/sheet{index}.xml"/>' for index in range(1, len(sheets) + 1)) + "</Relationships>"
     parts = {"xl/workbook.xml": workbook.encode(), "xl/_rels/workbook.xml.rels": rels.encode()}
     for index, item in enumerate(sheets, 1):

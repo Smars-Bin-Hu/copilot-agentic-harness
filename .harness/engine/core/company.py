@@ -510,7 +510,8 @@ def found_in_place(root: Path) -> List[str]:
 def skill_trouble(folder: Path, word: str) -> str:
     """Why a company skill would not reach a colleague, with its name; "" when it would."""
     why = say("company.why.prefix", word=word) if not folder.name.startswith(word + "-") else next(iter(skillcheck.check(folder, word)["errors"]), "")
-    return f"{folder.name}: {why.rstrip('. \u3002')}" if why else ""  # the message that holds the list ends with its own full stop
+    stops = ". \u3002"  # a full stop in English and in Chinese; outside the f-string: Python before 3.12 refuses a backslash there
+    return f"{folder.name}: {why.rstrip(stops)}" if why else ""  # the message that holds the list ends with its own full stop
 
 
 def changed_lines(status: bytes) -> List[str]:

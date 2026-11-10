@@ -575,7 +575,7 @@ class DoctorTests(unittest.TestCase):
         self.write_log([self.call()])  # the hook has run: no warning about that either
         result = self.doctor()
         self.assertIn("会被加载（applyTo 是 **）", result.stdout)
-        self.assertEqual([line for line in result.stdout.splitlines() if "[WARN]" in line and "git 仓库" not in line and "护栏文件" not in line], [])  # the not-git warning and the integrity warning (a test copy has no accepted list, C13 RE-A L1) are other tests
+        self.assertEqual([line for line in result.stdout.splitlines() if "[WARN]" in line and "git 仓库" not in line and "护栏文件" not in line and "可选的 Python 包" not in line], [])  # the not-git warning, the integrity warning (a test copy has no accepted list, C13 RE-A L1) and the optional packages (they depend on the Python that runs the test) are other tests
 
     def test_instructions_linked_from_agents_md_are_loaded(self) -> None:
         self.kb({"README.md": "# KB\n", "a.md": "text\n"})

@@ -582,6 +582,12 @@ def delivery(kind: Dict[str, Any], server: Dict[str, Any]) -> Dict[str, Any]:
     return {"identity": auth.get("identity", "env"), "env": dict(auth.get("env") or {})}
 
 
+def login_flags(platform: str = "") -> int:
+    """(1.7.39, Windows) A sign-in gets a console window of its own. The board starts it from a process with no window, and the sign-in window of Windows (WAM) hangs its next
+    step, a two-step verification, on the window of the program that asked: with none it never showed and the sign-in waited for ever. Elsewhere: no flags."""
+    return 0x10 if (platform or sys.platform) == "win32" else 0  # CREATE_NEW_CONSOLE
+
+
 def way_settings(kind: Dict[str, Any], server: Dict[str, Any]) -> Dict[str, str]:
     """(1.7.39) `auth.<way>.settings`: environment variables the type sets for the sign-in and the test of this way (az: no question after the account is picked, which waits for a key
     no window of the board can give)."""
@@ -1055,7 +1061,7 @@ def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple
         program = shlex.split(line, posix=os.name != "nt")[0]
         no_run = toolpacks.blocked(program, path)
         return 126 if no_run else 127, say("connections.login.blocked" if no_run else "connections.login.missing", program=program, path=no_run)
-    return subprocess.run(line, shell=True, cwd=str(root), env={**os.environ, **launch, **way_settings(kind, server)}).returncode, ""  # noqa: S602 - the kind's own sign-in, started by the person
+    return subprocess.run(line, shell=True, cwd=str(root), env={**os.environ, **launch, **way_settings(kind, server)}, creationflags=login_flags()).returncode, ""  # noqa: S602 - the kind's own sign-in, started by the person
 
 
 def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, Any]] = None, who: str = "") -> None:

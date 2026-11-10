@@ -141,3 +141,8 @@ class WaySettingsTests(ConnectionsCase):
         self.assertEqual(connections.type_problems(kind), [])
         bad = dict(kind, auth=dict(kind["auth"], signin=dict(kind["auth"]["signin"], settings={"not a name": 1})))
         self.assertTrue(any(".settings" in item for item in connections.type_problems(bad)))
+
+    def test_a_sign_in_gets_a_console_of_its_own_on_windows(self) -> None:
+        self.assertEqual(connections.login_flags("win32"), 0x10)  # CREATE_NEW_CONSOLE: the two-step verification of Windows hangs on a window
+        self.assertEqual(connections.login_flags("darwin"), 0)
+        self.assertEqual(connections.login_flags("linux"), 0)

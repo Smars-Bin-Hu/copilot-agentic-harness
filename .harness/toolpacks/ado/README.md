@@ -1,4 +1,4 @@
-# ado: an Azure DevOps tool pack (0.4.13)
+# ado: an Azure DevOps tool pack (0.4.14)
 
 The agent works with Azure DevOps through this pack's own program, `ado` (`bin/ado`, Python's standard library only; on Windows `bin/ado.cmd`): one plain command per thing to do, so it never builds an `az rest` call. `ado` reads the server, org and project from the harness connection, signs in with the Azure CLI (`az login`, once) or a personal access token, and sends its requests with the proxy and the CA bundle VS Code was started with.
 
@@ -22,6 +22,8 @@ There is no delete. A write to a work item the task is not linked to is refused;
 4. Try: "read ado:<id>", then "comment on it: checked" - the comment waits on the task page.
 
 `rules.json` holds (0.4.12: every `=` spelling of the method is read, `--method=delete`, `-m=delete`, `--http-method=delete`; `az repos` and `az artifacts` are judged like `az devops`; the header `X-HTTP-Method-Override` counts as the method for `az rest`, `curl`, `wget` and the PowerShell programs; `az rest --output-file` asks like `curl -o`; a `pwsh -Command` text is judged as the same text written alone) `ado-web` (0.4.11: `wget`, `Invoke-WebRequest`, `Invoke-RestMethod`, `iwr` and `irm` to the same addresses: a read runs, `-Method` or `--method` other than get, a body or a file to send is held, a delete is refused and the agent is told to use `ado`; one that saves to a file, or `wget` that does not print with `-O -`, asks), `ado-curl` (0.4.9: a `curl` to the same addresses is judged like `az rest`: a read runs, a post, put, patch or a body is held, a delete is refused; a `curl` to any other address, or one that saves to a file with `-o`, asks as before; 0.4.10: the held card shows what `-d`, `--data*`, `-F` and `--json` send), `ado-any` (an `az rest` call to any Azure DevOps address: `dev.azure.com`, `*.visualstudio.com`, and the `url` of each connection of this type; a delete is refused, a post or put is held) and `ado-az` (`az devops`, `az boards`, `az pipelines`, `az repos`, `az artifacts`: `show`, `list`, `query` and a GET `invoke` run; anything else is held; a delete is refused), for the day the agent reaches for `az` anyway.
+
+0.4.14: Sign in on the board no longer hangs after the account is picked: the az login of this pack runs with `AZURE_CORE_LOGIN_EXPERIENCE_V2=off`, so az does not ask for a subscription and wait for a key no window of the board can give (`auth.signin.settings`, harness 1.7.39).
 
 0.4.13: an option `ado` does not have before the command (an agent that read the connection's `url` wrote `--url`) is named in one line, with the options there are, instead of argparse's `invalid choice`.
 

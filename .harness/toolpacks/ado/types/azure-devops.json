@@ -35,7 +35,10 @@
       "needs": [
         "az"
       ],
-      "login": "az login --allow-no-subscriptions"
+      "login": "az login --allow-no-subscriptions",
+      "settings": {
+        "AZURE_CORE_LOGIN_EXPERIENCE_V2": "off"
+      }
     },
     "token": {
       "identity": "token",

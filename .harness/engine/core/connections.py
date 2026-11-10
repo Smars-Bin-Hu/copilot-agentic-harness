@@ -113,6 +113,8 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
             out.append(f"types.{name}.auth.{mode}: `identity` is one of {', '.join(IDENTITIES)}")
         elif auth.get("needs") is not None and (not isinstance(auth["needs"], list) or not all(isinstance(one, str) and re.match(r"^[\w.\-]+$", one) for one in auth["needs"])):
             out.append(f"types.{name}.auth.{mode}.needs: a list of program names")
+        elif auth.get("settings") is not None and (not isinstance(auth["settings"], dict) or not all(isinstance(key, str) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key) and isinstance(value, str) for key, value in auth["settings"].items())):
+            out.append(f"types.{name}.auth.{mode}.settings: environment variables and their values, for the sign-in and the test of this way")
     if not test_command(kind):
         out.append(f"types.{name}: `test` is the command that tests the way in (or {{\"command\": ..., \"timeout\": seconds}})")
     if isinstance(kind.get("test"), dict):
@@ -580,6 +582,15 @@ def delivery(kind: Dict[str, Any], server: Dict[str, Any]) -> Dict[str, Any]:
     return {"identity": auth.get("identity", "env"), "env": dict(auth.get("env") or {})}
 
 
+def way_settings(kind: Dict[str, Any], server: Dict[str, Any]) -> Dict[str, str]:
+    """(1.7.39) `auth.<way>.settings`: environment variables the type sets for the sign-in and the test of this way (az: no question after the account is picked, which waits for a key
+    no window of the board can give)."""
+    modes = kind.get("auth") or {}
+    auth = modes.get(server.get("auth") or next(iter(modes), "")) or {}
+    found = auth.get("settings") if isinstance(auth, dict) else None
+    return {str(key): str(value) for key, value in found.items()} if isinstance(found, dict) else {}
+
+
 def variables(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str]) -> Dict[str, str]:
     """The environment variables that carry this identity (`env` and `keyfile` delivery)."""
     how = delivery(kind, server)
@@ -872,7 +883,7 @@ def run_with(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, s
     """Run a command line with this identity: in the environment (env, keyfile) or with Windows network credentials (netonly). `launch`: what VS Code is
     started with (tool folders, CA bundle, 1.7.11), so a test finds what the agent will."""
     how = delivery(kind, server)
-    extra = {**(launch or {}), **(connection_env(alias, kind, server, identity) if alias else {}), **variables(kind, server, identity)}
+    extra = {**(launch or {}), **way_settings(kind, server), **(connection_env(alias, kind, server, identity) if alias else {}), **variables(kind, server, identity)}
     if how["identity"] == "netonly":
         if not identity.get("account") or not identity.get("password"):
             return None, say("connections.test.no_identity")
@@ -1044,7 +1055,7 @@ def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple
         program = shlex.split(line, posix=os.name != "nt")[0]
         no_run = toolpacks.blocked(program, path)
         return 126 if no_run else 127, say("connections.login.blocked" if no_run else "connections.login.missing", program=program, path=no_run)
-    return subprocess.run(line, shell=True, cwd=str(root), env={**os.environ, **launch}).returncode, ""  # noqa: S602 - the kind's own sign-in, started by the person
+    return subprocess.run(line, shell=True, cwd=str(root), env={**os.environ, **launch, **way_settings(kind, server)}).returncode, ""  # noqa: S602 - the kind's own sign-in, started by the person
 
 
 def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, Any]] = None, who: str = "") -> None:

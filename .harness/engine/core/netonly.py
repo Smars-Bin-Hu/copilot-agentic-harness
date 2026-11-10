@@ -68,15 +68,37 @@ def _create(account: str, password: str, command_line: str, cwd: Path, extra_env
     return info
 
 
+MARK = "harness-netonly-started"  # (1.7.39) the first line the started shell writes: without it, the shell never ran
+WAIT_FAILED = 0xFFFFFFFF
+STILL_ACTIVE = 259
+
+
+def told(code: int, text: str, waited: int, error: int = 0) -> Tuple[Optional[int], str]:
+    """(1.7.39, Windows) What a run with network credentials says, from the exit code, the file the shell wrote and the wait: a run that printed nothing is told apart from a shell
+    that never started and from a wait that failed, so the test names the step that broke instead of "no message"."""
+    if waited == WAIT_FAILED:
+        return None, f"could not wait for the process started with these credentials (Windows error {error})"
+    if waited == WAIT_TIMEOUT:
+        return None, ""
+    if MARK not in text:
+        return (code or 1), f"the shell started with these credentials did not run (exit code {code}{', still running' if code == STILL_ACTIVE else ''}): nothing was written to its output file"
+    return code, text.split(MARK, 1)[1].lstrip("\r\n ")
+
+
 def run(account: str, password: str, command: str, cwd: Path, extra_env: Optional[Dict[str, str]] = None, timeout: float = 60.0) -> Tuple[Optional[int], str]:
     """Run a shell command with these network credentials and wait: (exit code, what it printed). (None, why) when it could not start or took too long."""
     if not available():
         return None, "network credentials (runas /netonly) exist on Windows only"
-    out = Path(tempfile.mkstemp(prefix="harness-as-", suffix=".txt")[1])
+    handle, name = tempfile.mkstemp(prefix="harness-as-", suffix=".txt")
+    os.close(handle)  # (1.7.39) the file is the shell's to write: this process keeps no handle on it
+    out = Path(name)
     try:
-        info = _create(account, password, f'cmd.exe /d /s /c "{command} > "{out}" 2>&1"', cwd, extra_env or {}, CREATE_NO_WINDOW)
+        info = _create(account, password, f'cmd.exe /d /s /c "(echo {MARK}& {command}) > "{out}" 2>&1"', cwd, extra_env or {}, CREATE_NO_WINDOW)
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+        kernel.WaitForSingleObject.restype = ctypes.c_ulong  # WAIT_FAILED is 0xFFFFFFFF, not -1
         waited = kernel.WaitForSingleObject(ctypes.c_void_p(info.hProcess), int(timeout * 1000))
+        error = ctypes.get_last_error() if waited == WAIT_FAILED else 0  # type: ignore[attr-defined]
         code = ctypes.c_ulong(0)
         kernel.GetExitCodeProcess(ctypes.c_void_p(info.hProcess), ctypes.byref(code))
         kernel.CloseHandle(ctypes.c_void_p(info.hProcess))
@@ -84,7 +106,7 @@ def run(account: str, password: str, command: str, cwd: Path, extra_env: Optiona
         text = out.read_bytes().decode("utf-8", errors="replace") if out.exists() else ""
         if waited == WAIT_TIMEOUT:
             return None, f"no answer in {int(timeout)} s"
-        return int(code.value), text
+        return told(int(code.value), text, waited, error)
     except OSError as error:
         return None, f"could not start with these credentials: {error}"
     finally:

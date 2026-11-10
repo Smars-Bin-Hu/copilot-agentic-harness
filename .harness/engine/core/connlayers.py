@@ -53,7 +53,7 @@ def _layers(**marks: str) -> Dict[str, str]:
     return {step: marks.get(step, SKIP) for step in STEPS}
 
 
-def classify(kind: Dict[str, Any], server: Dict[str, Any], alias: str, state: str, output: str, how: str, identity: Dict[str, str], *, why: str = "", program: str = "", timeout: int = 0, blocked: str = "") -> Dict[str, Any]:
+def classify(kind: Dict[str, Any], server: Dict[str, Any], alias: str, state: str, output: str, how: str, identity: Dict[str, str], *, why: str = "", program: str = "", timeout: int = 0, blocked: str = "", code: Any = None, line: str = "") -> Dict[str, Any]:
     """`{steps, broken, text, link}` of a test that did not pass. `state` is the word of `judge` (denied, down, failed) or `missing`; `how` the identity way
     (`tool`, `env`, `netonly`, `keyfile`, `token`); `identity` what the test ran with; `why` the word of `judge`; `program` the program that is not found; `timeout` the seconds a timed-out test was given.
     `blocked`: the place of the program when it is there but has no run bit. `link` names the part of the Local window that helps (`{part, focus}`), or is empty."""
@@ -84,7 +84,11 @@ def classify(kind: Dict[str, Any], server: Dict[str, Any], alias: str, state: st
         if PROXY.search(output or ""):
             return _out(_layers(program=OK, signin=OK if have_credential else UNKNOWN, access=UNKNOWN, address=BAD), "address", "address.proxy", {"address": address}, {"part": "network", "focus": ""})
         return _out(_layers(program=OK, signin=OK if have_credential else UNKNOWN, access=UNKNOWN, address=BAD), "address", "address", {"address": address}, None)
-    first = clip.words(next((line.strip() for line in (output or "").splitlines() if line.strip()), ""), 160)
+    first = clip.words(next((text.strip() for text in (output or "").splitlines() if text.strip()), ""), 160)
+    if not first and line:  # (Windows, 1.7.39) the command printed nothing: name it and its exit code, so the person can run it in a terminal and see
+        from . import redact
+
+        return _out(_layers(program=OK, signin=UNKNOWN, access=UNKNOWN, address=UNKNOWN), "", "silent", {"command": clip.words(redact.text(line), 160), "code": "-" if code is None else code}, None)
     return _out(_layers(program=OK, signin=UNKNOWN, access=UNKNOWN, address=UNKNOWN), "", "error", {"first": first or say("connections.layer.nothing")}, None)
 
 

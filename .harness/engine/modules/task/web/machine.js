@@ -53,7 +53,19 @@ const MACHINE = (function () {
       x.addEventListener("click", () => { ask("paths", {paths: state.paths.filter((one) => one.path !== item.path).map((one) => one.path)}).then(repaint, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
       return h("span", {class: "mc-dir " + (item.found ? "ok" : "bad"), title: item.found ? (item.programs.join("\n") || "-") : t("machine.paths.gone")}, (item.found ? "" : "✗ ") + item.path, " ", x);
     });
-    return [...rows, ...(rec.error ? [h("span", {class: "bad", title: rec.error}, t("machine.recipe.bad", {error: rec.error}))] : []),
+    // Any other program (1.7.39, Windows: `az` before a connection asks for it): the folder it is in, added to the folders VS Code is started with
+    const more = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", "aria-label": t("machine.paths.add.ph"), placeholder: t("machine.paths.add.ph"), title: t("machine.paths.add.tip")});
+    const addBtn = h("button", {type: "button", class: "act", title: t("machine.paths.add.tip")}, t("machine.paths.add"));
+    const addGo = () => {
+      const value = more.value.trim();
+      if (!value) return;
+      addBtn.disabled = true; said.replaceChildren();
+      ask("paths", {paths: [...state.paths.map((one) => one.path), value]}).then(repaint, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { addBtn.disabled = false; });
+    };
+    addBtn.addEventListener("click", addGo);
+    more.addEventListener("keydown", (event) => { if (isEnter(event)) addGo(); });
+    const addRow = h("div", {class: "tl-prog", "data-focus": "prog:+"}, h("div", {class: "tl-prow"}, more, addBtn));
+    return [...rows, addRow, ...(rec.error ? [h("span", {class: "bad", title: rec.error}, t("machine.recipe.bad", {error: rec.error}))] : []),
       ...general.map((item) => h("span", {class: "mc-dir hint", tabindex: "0", title: t("machine.recipe.folder.tip", {label: item.label, hint: item.hint || "-"})}, h("b", null, item.label), item.hint ? " — " + item.hint : "")),
       added.length ? h("div", {class: "mc-added"}, h("span", {class: "sub"}, t("machine.paths.added"), " "), ...added) : null].filter(Boolean);
   }

@@ -89,6 +89,11 @@ class LayersOfATest(ConnectionsCase):
         weird = connlayers.classify(KIND, {"host": "db1"}, "db-dev", "failed", "something odd", "env", {"account": "a"})
         self.assertEqual((weird["broken"], weird["key"]), ("", "error"))
         self.assertIn("something odd", weird["text"])
+        silent = connlayers.classify(KIND, {"host": "db1"}, "db-dev", "failed", "", "tool", {}, code=1, line="az account show --token Bearer abcdefghijklmnopqrstuvwxyz0123456789")
+        self.assertEqual((silent["broken"], silent["key"]), ("", "silent"))  # (Windows) printed nothing: the command and its exit code, a secret hidden
+        self.assertIn("az account show", silent["text"])
+        self.assertIn("1", silent["text"])
+        self.assertNotIn("abcdefghijklmnopqrstuvwxyz0123456789", silent["text"])
 
     def test_a_windows_account_is_typed_first_and_nothing_is_run_without_it(self) -> None:
         self.company({"db-win": {"type": "fakedb", "env": "dev", "auth": "win", "host": "db1", "port": "5000"}})
@@ -105,7 +110,22 @@ class LayersOfATest(ConnectionsCase):
         core = Path(connlayers.__file__).resolve().parent
         for lang in ("en", "zh"):
             table = json.loads((core / f"messages.{lang}.json").read_text(encoding="utf-8"))
-            for key in ("program", "signin.none", "signin.token", "signin.tool", "access.tool", "access.typed", "access.token", "denied.unsure", "answer", "address", "address.cert", "address.proxy", "timeout", "error"):
+            for key in ("program", "signin.none", "signin.token", "signin.tool", "access.tool", "access.typed", "access.token", "denied.unsure", "answer", "address", "address.cert", "address.proxy", "timeout", "error", "silent"):
                 self.assertIn("connections.layer." + key, table, (lang, key))
             for step in STEPS:
                 self.assertIn("connections.step." + step, table)
+
+
+class NetonlyToldTests(ConnectionsCase):
+    """1.7.39 (Windows): a test with a Windows account (network credentials) that printed nothing is told apart: the shell never ran, the wait failed, or the command answered."""
+
+    def test_each_case_says_what_happened(self) -> None:
+        from core import netonly
+
+        self.assertIn("did not run", netonly.told(1, "", 0)[1])
+        self.assertEqual(netonly.told(259, "", 0)[0], 259)
+        self.assertIn("still running", netonly.told(259, "", 0)[1])
+        self.assertEqual(netonly.told(1, netonly.MARK + "\r\nLogin failed for user 'x'.", 0), (1, "Login failed for user 'x'."))
+        self.assertEqual(netonly.told(0, netonly.MARK + "\r\nTESTBNS\\me", 0), (0, "TESTBNS\\me"))
+        self.assertEqual(netonly.told(0, "", netonly.WAIT_FAILED, 5), (None, "could not wait for the process started with these credentials (Windows error 5)"))
+        self.assertNotEqual(netonly.told(0, "", 0)[0], 0, "a shell that wrote nothing never passes as ok")

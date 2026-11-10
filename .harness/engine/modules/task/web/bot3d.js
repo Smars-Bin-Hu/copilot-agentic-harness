@@ -129,10 +129,11 @@ void main() {
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     const at = (name) => gl.getUniformLocation(program, name);
     const place = {size: at("size"), turn: at("turn"), nod: at("nod"), arm: at("arm"), look: at("look"), blink: at("blink"), glow: at("glow"), body: at("cBody"), head: at("cHead"), line: at("cLine"), visor: at("cVisor"), light: at("cLight")};
-    let scale = 1, last = "", gone = false, stamp = 0, frames = 0, spent = 0;
+    let last = "", gone = false;
     canvas.addEventListener("webglcontextlost", () => { gone = true; box.classList.add("flat"); });
     function fit() {
-      const dpr = Math.min(devicePixelRatio || 1, 2) * scale, width = Math.round(canvas.clientWidth * dpr), height = Math.round(canvas.clientHeight * dpr);
+      // Always full pixels: a busy computer turns the robot more slowly, never blurs it (1.7.41).
+      const dpr = Math.min(devicePixelRatio || 1, 2), width = Math.round(canvas.clientWidth * dpr), height = Math.round(canvas.clientHeight * dpr);
       if (!width || !height || (canvas.width === width && canvas.height === height)) return;
       canvas.width = width;
       canvas.height = height;
@@ -150,22 +151,12 @@ void main() {
       set(place.light, "--c", [.2, .75, .45]);
       last = "";
     }
-    // A slow computer draws fewer pixels and the robot goes on turning.
-    function pace(now) {
-      if (stamp && now - stamp < 250) { spent += now - stamp; frames++; }
-      stamp = now;
-      if (frames < 60) return;
-      if (spent / frames > 40 && scale > .5) { scale *= .75; fit(); }
-      else if (spent / frames < 20 && scale < 1) { scale = Math.min(1, scale / .75); fit(); }  // the computer is free again (a test run or a build ended): the pixels come back (1.7.35)
-      frames = spent = 0;
-    }
-    function draw(view, now) {
+    function draw(view) {
       if (gone) return;
       fit();
       const key = [view.yaw, view.pitch, view.headYaw, view.headPitch, view.roll, view.arm, view.eyeX, view.eyeY, view.blink, view.glow].map((value) => value.toFixed(3)).join();
       if (key === last || !canvas.width) return;
       last = key;
-      pace(now);
       gl.uniformMatrix3fv(place.turn, false, turning(view.yaw, view.pitch, 0));
       gl.uniformMatrix3fv(place.nod, false, turning(view.headYaw, view.headPitch, view.roll));
       gl.uniform2f(place.arm, Math.cos(view.arm), -Math.sin(view.arm));

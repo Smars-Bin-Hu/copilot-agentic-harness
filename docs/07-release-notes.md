@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## Unreleased (on main after 1.7.40)
+
+### Changed
+
+- The robot on the Enter screen stays sharp when the computer is busy. Before, slow frames made it draw fewer pixels, so it went blurry during a test run or a build. Now it may turn more slowly, but it is never blurred.
+
 ## 1.7.40 (2026-11-10)
 
 Windows fixes from the first days on a work computer.

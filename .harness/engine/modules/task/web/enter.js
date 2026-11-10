@@ -158,7 +158,7 @@
     pose.arm += ((bot.classList.contains("you") ? 2.6 + Math.sin(now / 130) * .3 : 0) - pose.arm) * .14;
     const shut = now % 5000 > 4780 ? .12 : 1;
     solid.draw({yaw: angle((turning ? SPACE.ay * 3.2 : 0) + Math.sin(now / 2100) * 2.5), pitch: angle((turning ? -SPACE.ax * 2 : 0) + 2), headYaw: pose.nx * .22, headPitch: pose.ny * .14 + pose.sleep * .16, roll: -pose.nx * .1 - pose.sleep * .07,
-      arm: pose.arm, eyeX: pose.nx * 2.6, eyeY: -pose.ny * 2, blink: (1 - pose.sleep) * shut + pose.sleep * .1, glow: 1 - pose.sleep}, now);
+      arm: pose.arm, eyeX: pose.nx * 2.6, eyeY: -pose.ny * 2, blink: (1 - pose.sleep) * shut + pose.sleep * .1, glow: 1 - pose.sleep});
   }
   let sayTimer = 0, clicks = 0;
   const wake = () => { if (bot.classList.contains("awake")) return; bot.classList.add("awake"); if (solid) solid.colours(); };

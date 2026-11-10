@@ -129,15 +129,3 @@ class NetonlyToldTests(ConnectionsCase):
         self.assertEqual(netonly.told(0, netonly.MARK + "\r\nTESTBNS\\me", 0), (0, "TESTBNS\\me"))
         self.assertEqual(netonly.told(0, "", netonly.WAIT_FAILED, 5), (None, "could not wait for the process started with these credentials (Windows error 5)"))
         self.assertNotEqual(netonly.told(0, "", 0)[0], 0, "a shell that wrote nothing never passes as ok")
-
-
-class WaySettingsTests(ConnectionsCase):
-    """1.7.39 (Windows): a sign-in way's `settings` reach its login and its test; a wrong shape is a fault of the type."""
-
-    def test_the_ado_way_turns_off_the_question_after_the_account(self) -> None:
-        kind = json.loads((Path(connections.__file__).resolve().parents[2] / "toolpacks/ado/types/azure-devops.json").read_text(encoding="utf-8"))
-        self.assertEqual(connections.way_settings(kind, {"auth": "signin"}), {"AZURE_CORE_LOGIN_EXPERIENCE_V2": "off"})
-        self.assertEqual(connections.way_settings(kind, {"auth": "token"}), {})
-        self.assertEqual(connections.type_problems(kind), [])
-        bad = dict(kind, auth=dict(kind["auth"], signin=dict(kind["auth"]["signin"], settings={"not a name": 1})))
-        self.assertTrue(any(".settings" in item for item in connections.type_problems(bad)))

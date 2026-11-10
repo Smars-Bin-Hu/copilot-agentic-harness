@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 QUIT_WAIT = 30.0  # seconds a VS Code is given to quit (a window may ask about a file)
 POLL = 0.5
-SETTLE = 1.0  # a pause between "it has gone" and "open it": the host's socket and the window state are let go
+SETTLE = 3.0 if sys.platform.startswith("win") else 1.0  # a pause between "it has gone" and "open it": the host's socket and the window state are let go; on Windows the windows go before the process ends (1.7.41)
 ASK_SECONDS = 15  # the quit command itself
 NAMES = 3  # chats named in the note of a quit that did not end
 

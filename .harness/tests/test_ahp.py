@@ -313,5 +313,22 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(state["turns"][-1]["state"], "complete")
 
 
+class SlowCodeCommandTests(unittest.TestCase):
+    """1.7.41: a `code` command that does not answer in time is a busy computer or a VS Code still starting. The link tries again and the screen waits; it is not "start the board again"."""
+
+    def test_a_timeout_is_cli_slow_and_a_broken_command_is_cli_failed(self) -> None:
+        import subprocess
+
+        from core import ahp
+        with mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("code", 25)):
+            with self.assertRaises(ahp.NotReady) as caught:
+                ahp.run_code("code", ["agent", "endpoints"])
+        self.assertEqual(caught.exception.why, "cli-slow")
+        with mock.patch("subprocess.run", side_effect=OSError("gone")):
+            with self.assertRaises(ahp.NotReady) as caught:
+                ahp.run_code("code", ["agent", "endpoints"])
+        self.assertEqual(caught.exception.why, "cli-failed")
+
+
 if __name__ == "__main__":
     unittest.main()

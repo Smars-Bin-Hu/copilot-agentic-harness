@@ -14,6 +14,8 @@ To see which version you have: `harness --version`.
 
 ### Changed
 
+- Restart VS Code on Windows: the board counts a VS Code as open only when a `Code.exe` has a window. Before, the `code` command itself and helpers left behind also counted, so the board said "VS Code did not quit" when no VS Code was open, and did not open it.
+- A `code` command that does not answer in time (a busy computer, or a VS Code still starting) is now a wait: the Enter screen says the board keeps trying. Before, it said to start the board again, though the board was already trying again.
 - The robot on the Enter screen stays sharp when the computer is busy. Before, slow frames made it draw fewer pixels, so it went blurry during a test run or a build. Now it may turn more slowly, but it is never blurred.
 
 ## 1.7.40 (2026-11-10)

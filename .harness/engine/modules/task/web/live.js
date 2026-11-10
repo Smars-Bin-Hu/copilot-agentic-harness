@@ -11,7 +11,7 @@ const LIVE = (function () {
   const NS = "http://www.w3.org/2000/svg";
   const EVERY = 1000;  // ms between two answers and the next question
   const SLOW = 3000;  // after a failed one
-  const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
+  const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "cli-slow", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
 
   const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], gates: [], marks: new Map(), listeners: [], needs: [], started: "", answer: false};
 

@@ -464,10 +464,56 @@ def windows_without_settings(root: Path, endpoints: Optional[Callable[[], List[A
         return []
 
 
-def vscode_running(run: Callable[..., Any] = subprocess.run, platform: str = sys.platform) -> bool:
-    """Is a VS Code running on this computer? macOS and Linux: `pgrep`; Windows: one `tasklist`. A start that finds one running gives it no environment."""
+def code_windows() -> Optional[bool]:
+    """Windows: is a visible window owned by a `Code.exe`? None when it cannot be told (no ctypes, a call refused). No process is started: one is slow on a work computer (1.7.41).
+    A `Code.exe` with no window is not a VS Code the person has open: the `code` command itself (`code agent endpoints`, run by the board's link) and helpers left by a VS Code that ended run as `Code.exe` too,
+    and `tasklist` counted them, so the board said "VS Code did not quit" while no VS Code was open."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32, kernel32 = ctypes.WinDLL("user32", use_last_error=True), ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        user32.IsWindowVisible.argtypes = [wintypes.HWND]
+        callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        owners: set = set()
+
+        def each(hwnd: Any, _: Any) -> bool:
+            if user32.IsWindowVisible(hwnd):
+                pid = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                owners.add(pid.value)
+            return True
+
+        if not user32.EnumWindows(callback(each), 0):
+            return None
+        for pid in owners:
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                continue
+            try:
+                size = wintypes.DWORD(1024)
+                name = ctypes.create_unicode_buffer(size.value)
+                if kernel32.QueryFullProcessImageNameW(handle, 0, name, ctypes.byref(size)) and name.value.replace("/", "\\").rsplit("\\", 1)[-1].lower() == "code.exe":
+                    return True
+            finally:
+                kernel32.CloseHandle(handle)
+        return False
+    except Exception:  # noqa: BLE001 - not told: the caller falls back to tasklist
+        return None
+
+
+def vscode_running(run: Callable[..., Any] = subprocess.run, platform: str = sys.platform, windows: Optional[Callable[[], Optional[bool]]] = None) -> bool:
+    """Is a VS Code open on this computer? macOS and Linux: `pgrep`. Windows: a visible window of `Code.exe` (`code_windows`); only when that cannot be told, one `tasklist`. A start that finds one running gives it no environment."""
     try:
         if platform.startswith("win"):
+            seen = (windows or code_windows)()
+            if seen is not None:
+                return seen
             done = run(["tasklist", "/FI", "IMAGENAME eq Code.exe", "/NH"], capture_output=True, text=True, timeout=10)
             return "Code.exe" in (done.stdout or "")
         pattern = "Visual Studio Code.app" if platform == "darwin" else "/code"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import os
 import stat
+import sys
 from pathlib import Path
 from typing import List, Tuple
 from unittest import mock
@@ -298,6 +299,20 @@ class WhatVsCodeGot(LaunchEnvCase):
         def broken(*a, **k):
             raise OSError("no pgrep")
         self.assertFalse(launchenv.vscode_running(run=broken, platform="darwin"))
+
+    def test_on_windows_only_a_code_exe_with_a_window_is_an_open_vs_code(self) -> None:
+        """1.7.41: the `code` command and helpers left behind run as Code.exe with no window; tasklist counted them, and the board said "VS Code did not quit" while none was open."""
+        class Done:
+            returncode, stdout = 0, "Code.exe  1234 Console"
+        asked = []
+        def tasklist(*a, **k):
+            asked.append(a)
+            return Done()
+        self.assertFalse(launchenv.vscode_running(run=tasklist, platform="win32", windows=lambda: False), "Code.exe processes, no window: not open")
+        self.assertTrue(launchenv.vscode_running(run=tasklist, platform="win32", windows=lambda: True))
+        self.assertEqual(asked, [], "no process is started when the windows can be read")
+        self.assertTrue(launchenv.vscode_running(run=tasklist, platform="win32", windows=lambda: None), "windows not readable: tasklist, as before")
+        self.assertIsNone(launchenv.code_windows() if sys.platform != "win32" else None, "away from Windows it cannot be told")
 
 
 PS_LINE = ("/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US "

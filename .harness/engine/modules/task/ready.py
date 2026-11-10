@@ -46,7 +46,7 @@ ENV_KEEP = 10.0  # seconds the answer "was this VS Code started with the setting
 BUTTON_HOLD = 12.0  # seconds a changed answer of "a VS Code runs" must stand before the button changes its words (1.7.38: helper processes that come and go made it jump between Open and Restart)
 REASON_MAX = 300
 # What the link says (`vslink.status()["why"]`) -> the state of the VS Code line. A host that is still starting, or a connection that dropped, is told as waiting: it comes back by itself.
-WAITING = ("starting", "lost", "error")
+WAITING = ("starting", "lost", "error", "cli-slow")
 STUCK = ("off", "no-cli", "cli-failed", "many")  # nothing the person can do by opening VS Code
 
 

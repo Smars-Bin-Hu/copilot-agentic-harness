@@ -47,7 +47,7 @@ class AhpError(Exception):
 
 
 class NotReady(AhpError):
-    """No connection yet. `why`: `no-cli` (no `code` command found), `cli-failed`, `none` (no endpoint: VS Code is not open, or still starting), `many` (several windows, none is ours)."""
+    """No connection yet. `why`: `no-cli` (no `code` command found), `cli-failed`, `cli-slow` (it did not answer in time: tried again), `none` (no endpoint: VS Code is not open, or still starting), `many` (several windows, none is ours)."""
 
     def __init__(self, why: str, text: str = "") -> None:
         super().__init__(text or why)
@@ -108,6 +108,8 @@ def run_code(code: str, arguments: List[str], timeout: float = CLI_TIMEOUT, extr
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
         done = subprocess.run([code] + arguments, capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise NotReady("cli-slow", f"no answer in {timeout:g} s") from None  # a busy computer, or a VS Code that is still starting: the link tries again, the person waits (1.7.41)
     except (OSError, subprocess.SubprocessError) as error:
         raise NotReady("cli-failed", type(error).__name__) from None
     if done.returncode != 0:

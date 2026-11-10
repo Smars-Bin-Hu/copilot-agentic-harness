@@ -325,7 +325,7 @@ class ReadinessTests(TaskCase):
         self.assertIn("        board.ready.start_doctor()  # the Enter screen waits for it", source)  # only without `ready`: the tests start no doctor of their own
 
     def test_vscode_states(self) -> None:
-        cases = {"none": ("fail", True), "off": ("fail", False), "no-cli": ("fail", False), "cli-failed": ("fail", False), "many": ("fail", False), "starting": ("wait", True), "lost": ("wait", True), "error": ("wait", True)}
+        cases = {"none": ("fail", True), "off": ("fail", False), "no-cli": ("fail", False), "cli-failed": ("fail", False), "many": ("fail", False), "starting": ("wait", True), "lost": ("wait", True), "error": ("wait", True), "cli-slow": ("wait", True)}
         for why, (state, can_open) in cases.items():
             found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why}), clean))
             self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"], line(found, "vscode")["open"]), (state, why, can_open), why)
@@ -683,7 +683,7 @@ class PageTests(unittest.TestCase):
         names = {key for key in en if key.startswith(("board.enter.", "board.ready.", "board.vs.restart.", "ready.", "restart."))}
         self.assertEqual(names, {key for key in zh if key.startswith(("board.enter.", "board.ready.", "board.vs.restart.", "ready.", "restart."))})
         # the keys the screen builds from a check (board.enter.m.<id>.<why>, d.<id>.ok ...) exist for every state the server can give
-        for why in ("none", "starting", "lost", "error", "off", "no-cli", "cli-failed", "many"):
+        for why in ("none", "starting", "lost", "error", "off", "no-cli", "cli-failed", "cli-slow", "many"):
             self.assertIn(f"board.enter.m.vscode.{why}", en)
         for why in ("provider", "client", "nomodel"):
             self.assertIn(f"board.enter.m.copilot.{why}", en)

@@ -12,6 +12,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/instructions/` | Rules by topic: `agents`, `skills`, `workspace` (reading and writing in `.workspace/`), `knowledgebase` (how to read the knowledge base for a task, keep it true, and write it in the standard form) |
 | `LICENSE`, `NOTICE` | Apache License 2.0 and the copyright notice. They are guardrail files |
 | `.harness/standards/code-standards.md` | The code standards when the knowledge base has none in `company/standards/`; ships without a rule. Read by `generic-code-standards` |
+| `.harness/engine/core/boardperson.py` | A `harness` command typed in the board's Terminal window counts as the person's (1.7.39): a one-time code the board gives it, its fingerprint kept in the folder of the guardrail lists; `approval.terminal_person()` takes it as the keyboard |
 | `.harness/engine/core/company.py` | The company's own content in `<knowledge base>/company/`: standards, skills, instructions (any number: `<word>-<name>.instructions.md`) (`harness company sync`, `pack`, `update`; `folder_update`: a git pull from a Folder, listed first). The harness copies stay clean |
 | `.workspace/README.md` | The layout of the work area, and what the gate can and cannot guard |
 

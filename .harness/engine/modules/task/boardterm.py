@@ -23,7 +23,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
-from core import config, launchenv, messages, paths
+from core import boardperson, config, launchenv, messages, paths
 from core.paths import utc_now
 
 from . import taskrun
@@ -64,6 +64,16 @@ def words_of(line: Any) -> List[str]:
     return words[1:]
 
 
+def runs_harness(line: str) -> bool:
+    """Does the line start a harness command (the gate's reading of a line: `harness ...`, `cli.py`, through a wrapper)? Only such a line gets a code from the board: any other command needs none."""
+    try:
+        from modules.gate import harnesscmd
+
+        return bool(harnesscmd.calls(line)[0])
+    except Exception:  # noqa: BLE001 - no code is the safe side: the command runs as before
+        return False
+
+
 class Job:
     def __init__(self, line: str, process: "subprocess.Popen[bytes]", cwd: str = "") -> None:
         self.id = uuid.uuid4().hex[:12]
@@ -72,6 +82,7 @@ class Job:
         self.progress: Dict[str, Any] = {}
         self.text, self.dropped, self.code = "", 0, None  # type: ignore[assignment]
         self.ended = False
+        self.person = ""  # the one-time code the board gave this command (1.7.39, `boardperson`)
 
     def add(self, text: str) -> None:
         self.last = time.monotonic()
@@ -126,12 +137,16 @@ class Terminal:
         extra: Dict[str, Any] = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {"start_new_session": True}
         base = {**os.environ, **launchenv.extra(self.root)}  # the tool folders and CA bundle VS Code gets (1.7.11): a tool found there is found here
         path_key = next((key for key in base if key.upper() == "PATH"), "PATH")
+        person = boardperson.issue() if runs_harness(text) else ""  # (1.7.39) a harness command typed here is the person's: a one-time code it uses when it asks whether a person runs it
         try:
             process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                       env={**base, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "HARNESS_PROGRESS": "1", path_key: str(engine / "bin") + os.pathsep + base.get(path_key, "")}, **extra)
+                                       env={**base, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "HARNESS_PROGRESS": "1", path_key: str(engine / "bin") + os.pathsep + base.get(path_key, ""),
+                                            **({boardperson.ENV: person} if person else {})}, **extra)
         except OSError as error:
+            boardperson.drop(person)
             raise CommandError(say("term.refused.start", error=error)) from None
         job = Job(text, process, str(cwd))
+        job.person = person
         with self.lock:
             self.jobs[job.id] = job
             done = [item.id for item in self.jobs.values() if item.ended]
@@ -169,6 +184,7 @@ class Terminal:
         reader.join(taskrun.DRAIN_SECONDS)  # a command that left a child holding its output has still ended
         with self.lock:
             job.code, job.ended = code, True
+        boardperson.drop(job.person)  # used or not, the code goes with the command
 
     def note(self, line: str) -> None:
         try:

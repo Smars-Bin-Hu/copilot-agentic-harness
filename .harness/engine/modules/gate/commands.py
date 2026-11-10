@@ -43,7 +43,7 @@ def approve(
     """Show the git commands waiting for a person, then approve the one whose code is typed. Terminal only, like `approve-promote`."""
     out = out or sys.stdout
     if interactive is None:
-        interactive = sys.stdin.isatty() and sys.stdout.isatty()
+        interactive = approval.terminal_person()
     if not interactive:
         raise CommandError(say("gate.approve.terminal_only"))
     minutes = approvals.minutes(config.load_policy(root, POLICY_NAME))

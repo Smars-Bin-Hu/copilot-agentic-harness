@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional
 import sys
 from typing import Callable, List
 
-from . import approvals, config, messages, pinfiles
+from . import approval, approvals, config, messages, pinfiles
 from .paths import utc_now
 from .systems import place, verb_word
 
@@ -272,7 +272,7 @@ def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, int
     now, nothing is approved and the person is asked to read them again: what is approved and pinned is what was read, not what stood there a moment later."""
     out = out or sys.stdout
     if interactive is None:
-        interactive = sys.stdin.isatty() and sys.stdout.isatty()
+        interactive = approval.terminal_person()
     if not interactive:
         raise ValueError(say("gate.action.terminal_only"))
     minutes = approvals.minutes(config.load_policy(root, GATE_POLICY))
@@ -468,7 +468,7 @@ def dismiss_action(root: Path, code: str, interactive: Optional[bool] = None, re
     """The person says no to a held call (the board, 1.7.7): the entry goes, the draft says dismissed. Nothing is run. `reason` (1.7.38, one of REASONS, or none) and `note` (a line, for the two reasons
     that take one) are what the agent is told: at once by its wait on the code, else by a message from the board when it has a reason (the board decides; `agent` says where the agent stood)."""
     if interactive is None:
-        interactive = sys.stdin.isatty() and sys.stdout.isatty()
+        interactive = approval.terminal_person()
     if not interactive:
         raise ValueError(say("gate.action.terminal_only"))
     reason = str(reason or "").strip()

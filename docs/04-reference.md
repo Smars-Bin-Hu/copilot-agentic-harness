@@ -6,6 +6,8 @@ Written from the code. For all the arguments of a command use `--help`. The `har
 
 What a command prints: text on a terminal, JSON on a pipe (a script, a redirect). `--json`, anywhere on the line, always prints JSON. The commands only a person may run (`task pause`, `task confirm-req`, `task approve-plan` and the like) always print text. `output.format` in `cli.json` changes the default.
 
+A command only a person may run needs a terminal with a keyboard and a screen, or the board's **Terminal** window (1.7.39): the board knows you by the paired browser, and gives each `harness` command typed there a one-time code that stands for the keyboard. A command that then asks you to type a code (`approve-action`, `admin on`) cannot get one there: use the button on the board, or your own terminal. An agent has no paired browser, so it gets no code.
+
 ### For people
 
 | Command | What it does |

@@ -488,6 +488,7 @@
   "approval.person_only": "{name} 只能由用户在自己的终端里手动运行。agent 不能运行它，管道和脚本也不行。",
   "approval.person_only.typed": "{name} 只能由用户在自己的终端里手动运行，要打字确认。agent 不能运行它，管道和脚本也不行。",
   "approval.ask": "{question}，输入 {code}（其他任何输入都是取消）：",
+  "approval.no_input": "这条命令要你再输入一个确认码，而看板的终端窗口没法输入。请用看板上的按钮，或在你自己的终端里运行。",
   "breaker.stop": "被拒：{reason}\n同一个拒绝已出现 {count} 次。停止重试，不要换个办法绕过。告诉用户被什么拦住了，等用户决定。",
   "cli.version.unreadable": "harness: 读不到版本号：{error}",
   "target.unknown": "没有叫 `{name}` 的目标仓库。已知的仓库：{known}。",

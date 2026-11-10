@@ -178,3 +178,62 @@ class PageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BoardPersonTests(unittest.TestCase):
+    """1.7.39: a harness command typed in the board's Terminal window is the person's. The board gives it a one-time code; the command uses it the first time it asks whether a person runs it."""
+
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        (self.root / ".harness" / "engine").mkdir(parents=True)
+        patch = mock.patch.dict("os.environ", {"HARNESS_INTEGRITY_DIR": str(self.root / "lists")})
+        patch.start()
+        self.addCleanup(patch.stop)
+        from core import boardperson
+
+        self.bp = boardperson
+        self.addCleanup(setattr, boardperson, "_used", False)
+
+    def test_a_code_works_once_and_not_after_its_time(self) -> None:
+        import os
+
+        token = self.bp.issue()
+        self.assertTrue(token)
+        with mock.patch.dict(os.environ, {self.bp.ENV: token}):
+            self.assertTrue(self.bp.use())
+            self.assertNotIn(self.bp.ENV, os.environ, "the programs it starts do not inherit it")
+        self.bp._used = False
+        with mock.patch.dict(os.environ, {self.bp.ENV: token}):
+            self.assertFalse(self.bp.use(), "used once already")
+        late = self.bp.issue(now=0)
+        with mock.patch.dict(os.environ, {self.bp.ENV: late}):
+            self.assertFalse(self.bp.use(), "after SECONDS")
+        with mock.patch.dict(os.environ, {self.bp.ENV: "made-up"}):
+            self.assertFalse(self.bp.use(), "a code the board did not make")
+        self.assertFalse(self.bp.use(), "no code")
+
+    def test_the_board_terminal_vouches_for_a_harness_command_and_no_other(self) -> None:
+        engine = REPO / ".harness" / "engine"
+        (self.root / ".harness" / "engine" / "cli.py").write_text(
+            f"import sys\nsys.path.insert(0, {str(engine)!r})\nfrom core import approval\nprint('person', approval.terminal_person(), approval.terminal_person())\n", encoding="utf-8")
+        term = boardterm.Terminal(self.root)
+        term.any_command = lambda: False  # type: ignore[method-assign]
+        self.addCleanup(term.stop_all)
+        found = RunTests.wait(self, term, term.start("harness doctor --accept")["id"])
+        self.assertIn("person True True", found["text"], "asked twice in one command: the same answer")
+        self.assertEqual(list((self.root / "lists" / "person").iterdir()), [], "the code is gone with the command")
+        self.assertFalse(boardterm.runs_harness("python3 x.py"))
+        self.assertFalse(boardterm.runs_harness("git status"))
+
+    def test_a_command_that_asks_for_a_typed_code_says_so_with_no_keyboard(self) -> None:
+        from core import approval
+
+        def eof(_prompt: str) -> str:
+            raise EOFError
+
+        with self.assertRaises(approval.Refused) as caught:
+            approval.ask("Approve", "abcdef", "no", reader=eof)
+        self.assertIn("Terminal", str(caught.exception))
+

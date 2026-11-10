@@ -93,9 +93,9 @@ class LinkTests(unittest.TestCase):
         for doc in (REPO / "docs").glob("*.md"):
             self.assertTrue(f"docs/{doc.name}" in readme, doc.name)
 
-    def test_the_thirteen_docs_exist(self) -> None:
+    def test_the_fourteen_docs_exist(self) -> None:
         names = sorted(item.name for item in (REPO / "docs").glob("*.md"))
-        self.assertEqual(len(names), 13, names)
+        self.assertEqual(len(names), 14, names)
 
 
 
@@ -105,7 +105,7 @@ class RequirementConfirmedTests(unittest.TestCase):
     def test_no_file_tells_the_agent_to_fill_it_in(self) -> None:
         self.assertIn("Only the user may change the confirmation line of `REQ.md`", text(REPO / "AGENTS.md"))
         walk = text(REPO / ".github" / "skills" / "harness-rookie-quick-start" / "references" / "walkthrough.md")
-        self.assertIn("press **confirm requirement** on the page and type the code", walk)
+        self.assertIn("press **Confirm requirement** on the page and type the code", walk)
         self.assertIn("the harness fills the confirmation line, and you never do", walk)
 
     def test_the_reviewer_does_not_fail_a_task_over_it(self) -> None:
@@ -161,7 +161,8 @@ class PathIndexTests(unittest.TestCase):
     def test_every_indexed_path_exists(self) -> None:
         paths = self.paths()
         self.assertGreater(len(paths), 15)
-        self.assertEqual([path for path in paths if not (REPO / path).exists()], [])
+        shipped_without = {"knowledge-base/"}  # the harness ships without it: the folder is made when a knowledge base is imported (C12 N1)
+        self.assertEqual([path for path in paths if path not in shipped_without and not (REPO / path).exists()], [])
 
     def test_every_shipped_skill_and_harness_folder_is_indexed(self) -> None:
         index = text(self.INDEX)

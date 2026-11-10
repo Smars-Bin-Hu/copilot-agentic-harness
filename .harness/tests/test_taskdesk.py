@@ -17,7 +17,7 @@ from test_boardserve import ServeCase
 
 from taskcase import TASK
 
-from core import messages, tasks
+from core import approval, messages, tasks
 from modules.task.common import CommandError
 from modules.task import mdtree, task as task_ops, taskboard, taskdesk
 
@@ -444,6 +444,19 @@ class DeskTests(ServeCase):
         self.assertIn("approve-plan", [item["action"] for item in desk["actions"]])
         self.assertTrue(desk["history"])
 
+    def test_the_overview_leaves_out_what_is_still_the_templates_text(self) -> None:
+        """1.7.38 (C11 T2-05): `Updated: <yyyy-mm-dd>` and the empty sections of a closed Q&A task were shown as if the agent had written them. The file is not changed."""
+        text = ("# TASK: q\n\n- **Kind**: Q&A\n- **Updated**: <yyyy-mm-dd>\n- **Status**: <in progress / done>\n- **Doing now**: <one sentence>\n- **Next step**: ship it\n\n"
+                "## Files to read\n\n<The files a new session should read>\n\n## Decided\n\n<What the user has decided>\n\n## Open questions\n\nnone\n\n## Answer\n\n1. Done <today>.\n\n```\n<kept in a code block>\n```\n")
+        (self.task / "TASK.md").write_text(text, encoding="utf-8")
+        shown = json.dumps(next(doc for doc in taskdesk.desk(self.root, "job1", ())["docs"] if doc["name"] == "TASK.md")["blocks"])
+        for gone in ("yyyy-mm-dd", "in progress / done", "one sentence", "Files to read", "Decided", "new session should read", "has decided"):
+            self.assertNotIn(gone, shown, gone)
+        for kept in ("Kind", "Next step", "ship it", "Open questions", "Answer", "Done <today>", "kept in a code block"):
+            self.assertIn(kept, shown, kept)
+        self.assertEqual((self.task / "TASK.md").read_text(encoding="utf-8"), text, "the file is as the agent left it")
+        self.assertEqual(task_ops.without_placeholders("# T\n\n## A\n\n## B\n\ntext\n"), "# T\n\n## A\n\n## B\n\ntext\n", "a section the author left empty stays")
+
     def test_autorun_on_is_offered_only_when_a_step_is_left_and_the_plan_is_approved(self) -> None:
         names = lambda: [item["action"] for item in taskdesk.desk(self.root, "job1", ("autorun on", "pause"))["actions"]]
         board = lambda: [item["action"] for row in taskboard.board_rows(self.root, False, served=("autorun on", "pause"))[0]["tasks"] for item in row["actions"]]
@@ -630,8 +643,8 @@ class DeskTests(ServeCase):
         cookie = self.pair()
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
         self.assertEqual(status, 200, data)
-        code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
-        self.assertIn(code, data["result"]["ask"])
+        code = hashlib.sha256(req.read_bytes()).hexdigest()[:6]
+        self.assertIn(code[:6].upper(), data["result"]["ask"])
         self.assertEqual(task_ops.req_state(self.root, TASK), "open")  # a look confirms nothing
         self.assertEqual(self.request("POST", "/api/act", {**body, "code": "00000000"}, cookie=cookie)[0], 409)
         self.assertEqual(self.request("POST", "/api/act", {**body, "code": code}, cookie=cookie)[0], 200)
@@ -677,7 +690,7 @@ class DeskTests(ServeCase):
         (self.task / "PLAN.md").unlink(missing_ok=True)
         req = self.task / "REQ.md"
         self.fill_req(req)
-        code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+        code = hashlib.sha256(req.read_bytes()).hexdigest()[:6]
         task_ops.confirm_req(self.root, TASK, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
         desk = taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))
         self.assertEqual(desk["waiting_why"], "go-req")
@@ -698,7 +711,7 @@ class DeskTests(ServeCase):
         def reader(_asked: str) -> str:  # the person types the right code of the version they read; then the agent edits the file
             import hashlib
 
-            code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+            code = hashlib.sha256(req.read_bytes()).hexdigest()[:6]
             req.write_text(req.read_text(encoding="utf-8") + "\nMore.\n", encoding="utf-8")
             return code
 
@@ -739,7 +752,7 @@ class DeskTests(ServeCase):
         self.assertNotIn("/task/job1", self.run_cli("task", "status", "--task", TASK)["next"])
 
     def test_every_action_is_on_the_page_by_default(self) -> None:
-        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "confirm-req"]))
+        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept", "confirm-req"]))
 
 
     def test_a_page_action_is_one_line_with_a_tag_and_the_session_note_follows_the_language(self) -> None:
@@ -776,19 +789,19 @@ class DeskTests(ServeCase):
     def test_a_decision_on_the_checks_and_a_recovery_leave_the_same_mark(self) -> None:
         from modules.task import taskreview, tasksnap
 
-        code = (tasksnap.results_digest(self.root, TASK) or "0" * 64)[:8]
+        code = (tasksnap.results_digest(self.root, TASK) or "0" * 64)[:6]
         taskreview.extend(self.root, TASK, 2, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
         self.assertEqual(self.data()["waiting"]["why"], "go-review")  # the plan of this case is not approved: it would be named first
         self.prompt("go on")
         with task_ops.locked(self.root, TASK) as data:
             data["promote"] = {"state": "partial", "plan_sha256": "ab" * 32, "branch": "feature/job1", "recovery": [], "recovery_steps": []}
-        task_ops.recover(self.root, TASK, reader=lambda _prompt: "abababab", interactive=True, out=io.StringIO())
+        task_ops.recover(self.root, TASK, reader=lambda _prompt: "ababab", interactive=True, out=io.StringIO())
         self.assertEqual(self.data()["waiting"]["why"], "go-recover")
 
     def test_an_approval_leaves_a_mark_until_the_next_prompt_and_the_page_says_what_to_tell_the_agent(self) -> None:
         confirm_requirement(self.root, TASK)
         digest = tasks.plan_digest(self.root, TASK)
-        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
+        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:6], interactive=True, out=io.StringIO())
         desk = taskdesk.desk(self.root, "job1", ())
         self.assertEqual((desk["waiting_why"], [item["action"] for item in desk["actions"]]), ("go-plan", ["pause"]))  # no button is the point: the word is to the agent
         self.assertEqual(self.data()["waiting"]["why"], "go-plan")
@@ -800,9 +813,9 @@ class DeskTests(ServeCase):
         self.assertEqual(taskdesk.desk(self.root, "job1", ())["plan_approval"], {"approved": False, "at": "", "code": "", "changed": False})
         confirm_requirement(self.root, TASK)
         digest = tasks.plan_digest(self.root, TASK)
-        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
+        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:6], interactive=True, out=io.StringIO())
         found = taskdesk.desk(self.root, "job1", ())["plan_approval"]
-        self.assertEqual((found["approved"], found["code"], found["changed"]), (True, digest[:8], False))
+        self.assertEqual((found["approved"], found["code"], found["changed"]), (True, approval.code_of(digest), False))
         self.assertEqual(found["at"], self.data()["plan"]["approved_at"])
         (self.task / "PLAN.md").write_text((self.task / "PLAN.md").read_text(encoding="utf-8") + "\nOne more step.\n", encoding="utf-8")
         found = taskdesk.desk(self.root, "job1", ())["plan_approval"]

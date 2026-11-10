@@ -10,12 +10,14 @@ alias) is a write. A script that runs git in a way no pattern sees is not caught
 
 from __future__ import annotations
 
-import posixpath
 import re
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple
 
 from core import messages
+
+from . import shellwords
+from .shellwords import name as _name  # noqa: F401 - one place for the name of a program (`/usr/bin/git`, `git.exe`): the other gate files import it from here
 
 NONE, APPROVE, NEVER = "none", "approve", "never"
 MAX_DEPTH = 3
@@ -47,9 +49,9 @@ def _named(what: str, name: str) -> str:
 # Subcommands where a lone `-f` means force. (`git tag -F`, `git config -f <file>` mean something else.)
 FORCE_SHORT = frozenset("add checkout switch branch tag mv rm fetch pull worktree submodule clean push".split())
 # Words that may stand before `git` without hiding it.
-WRAPPERS = frozenset("sudo env nohup time command exec nice timeout xargs call start watch builtin".split())
-SHELLS = frozenset("bash sh zsh dash fish pwsh powershell cmd".split())
-SHELL_FLAGS = frozenset(["-c", "-command", "/c", "-lc", "-ic", "-encodedcommand"])
+WRAPPERS = frozenset("sudo env nohup time command exec nice timeout xargs call start watch builtin busybox".split())  # `busybox sh -c '...'`: the applet is the shell (1.7.38, C13 FR3)
+SHELLS = shellwords.SHELL_NAMES | shellwords.POWER_NAMES | frozenset(["cmd"])  # the shells that are given a command line (`-c`, `-Command`, `/c`): the names are in shellwords.py
+SHELL_FLAGS = frozenset(["-c", "-command", "/c", "/k", "/r", "-lc", "-ic", "-encodedcommand", "--command", "--commands"])
 SCRIPT_RUNNERS = frozenset("python python3 py node perl ruby".split())
 SCRIPT_FLAGS = frozenset(["-c", "-e", "-r"])
 OPTIONS_WITH_VALUE = frozenset(["-c", "-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env", "--exec-path", "--attr-source"])
@@ -161,14 +163,32 @@ def split_segments(text: str) -> List[List[str]]:
     return cleaned
 
 
-def _name(token: str) -> str:
-    """`/usr/bin/git`, `C:\\Program Files\\Git\\cmd\\git.exe` and `git.exe` are all `git`."""
-    base = posixpath.basename(token.replace("\\", "/")).lower()
-    return base[:-4] if base.endswith(".exe") else base
-
-
 def _is_environment(token: str) -> bool:
     return bool(re.match(r"^[A-Za-z_]\w*=", token))
+
+
+def head_index(tokens: List[str]) -> Optional[int]:
+    """The word that starts the program of a command: the first one that is no wrapper, no environment setting, no option and no number."""
+    for index, token in enumerate(tokens):
+        if not (_name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit()):
+            return index
+    return None
+
+
+def shell_code(tokens: List[str]) -> Optional[Tuple[int, List[str]]]:
+    """`(index of the flag, the texts the shell is given as its command)` when this command starts a shell with a command line (`bash -c '...'`, `pwsh -Command ...`, `cmd /c ...`, `ksh -c`, `nu -c`); else None. The words after
+    the flag are read as `shellwords.readings` reads them: never joined with spaces and read a second time as if that were what the command line said (1.7.38, C13 FR3)."""
+    at = head_index(tokens)
+    if at is not None and shellwords.is_interpreter(tokens[at]) and shellwords.family(tokens[at]) in ("shell", "power", "cmd") and not shellwords.encoded(tokens, at):
+        kind, index = shellwords.interp(tokens, at)
+        if kind == "code" and index is not None and index + 1 < len(tokens):
+            return index, shellwords.readings(tokens[index + 1:], shellwords.family(tokens[at]))
+    shell_at = next((i for i, item in enumerate(tokens) if _name(item) in SHELLS), None)
+    if shell_at is not None:
+        for i in range(shell_at + 1, len(tokens)):
+            if tokens[i].lower() in SHELL_FLAGS and i + 1 < len(tokens):
+                return i, shellwords.readings(tokens[i + 1:], shellwords.family(tokens[shell_at]))
+    return None
 
 
 def _git_start(tokens: List[str], name: str) -> Optional[int]:
@@ -294,12 +314,15 @@ def _scan(text: str, depth: int, found: List[Tuple[str, str, str]]) -> None:
         if not tokens:
             continue
         program = next((_name(item) for item in tokens if not (_name(item) in WRAPPERS or _is_environment(item) or item.startswith("-"))), "")
-        shell_at = next((i for i, item in enumerate(tokens) if _name(item) in SHELLS), None)
-        if shell_at is not None and depth < MAX_DEPTH:
-            for i in range(shell_at + 1, len(tokens)):
-                if tokens[i].lower() in SHELL_FLAGS and i + 1 < len(tokens):
-                    _scan(" ".join(tokens[i + 1:]) if len(tokens) > i + 2 else tokens[i + 1], depth + 1, found)
-                    break
+        shelled = shell_code(tokens)
+        if shelled is not None:
+            if depth < MAX_DEPTH:
+                for inner in shelled[1]:
+                    _scan(inner, depth + 1, found)
+            elif re.search(r"\b(?:git|gh)\b", " ".join(shelled[1])):
+                found.append((APPROVE, _why("deep"), line))  # nested deeper than the gate reads, and git is named: it asks, it does not pass (1.7.38, C13 FR3)
+        elif any(_name(item) in SHELLS for item in tokens):
+            continue
         elif program in SCRIPT_RUNNERS and any(item in SCRIPT_FLAGS for item in tokens) and re.search(r"\bgit\b", line):
             found.append((APPROVE, _why("inline"), line))
 
@@ -308,6 +331,9 @@ def classify(command: str) -> Verdict:
     """What the git commands in this command line need. `never` wins over `approve`; no git write at all is `none`."""
     found: List[Tuple[str, str, str]] = []
     _scan(command, 0, found)
+    plain = shellwords.dialect(command, "power")  # a PowerShell escape (`` git pu`sh ``) hides the word from the reading above: read the line with the escape taken away too (1.7.38, C13 FR3)
+    if plain:
+        _scan(plain, 0, found)
     if not found:
         return Verdict()
     never = [item for item in found if item[0] == NEVER]

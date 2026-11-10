@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from core import messages
-from core.systems import place
+from core.systems import place, verb_word
 from core.paths import cli_command
 
 
@@ -101,37 +101,97 @@ def git_needs_approval(why: str, command: str, code: str, minutes: int) -> str:
     return say("gate.git.needs_approval", why=why, git_command=command, code=code, minutes=minutes)
 
 
+def word(verb: str) -> str:
+    """The kind of a call as a person reads it: the protocol word in English (`write`); in Chinese the word of the board only (`写`)."""
+    return verb_word(verb)
+
+
 def _verb(verb: str) -> str:
-    """The verb with its article, for the English texts ("a write", "an exec"); the zh texts ignore the article."""
-    return ("an " if verb[:1] in "aeiou" else "a ") + verb
+    """The verb with its article, for the English texts ("a write", "an exec"); the zh texts have the word of the board and no article."""
+    return ("an " if verb[:1] in "aeiou" else "a ") + verb if messages.language() == "en" else word(verb)
 
 
 def external_subagent(action: Any, command: str, agent: str) -> str:
-    return say("gate.external.subagent", agent=agent, place=place(action.system, action.env), verb=action.verb, call=command)
+    return say("gate.external.subagent", agent=agent, place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
-def external_denied(action: Any, command: str) -> str:
-    """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
-    return say("gate.external.denied", place=place(action.system, action.env), verb=action.verb, call=command)
+def external_denied(action: Any, command: str, hint: Any = "") -> str:
+    """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay. `hint` (1.7.38, D1-7): the system's own words on what to do instead."""
+    text = say("gate.external.denied", place=place(action.system, action.env), verb=word(action.verb), call=command)
+    shown = messages.pick(hint) if hint else ""
+    return text + messages.gap() + shown if shown else text
+
+
+def external_denied_file(action: Any, command: str) -> str:
+    """1.7.38, C12 RC-G1: the call is refused because of what a file it reads holds (`sqlcmd -i drop.sql`): the line names the file."""
+    return say("gate.external.denied_file", place=place(action.system, action.env), verb=word(action.verb), file=action.file, call=command)
+
+
+def external_refused(action: Any, command: str) -> str:
+    """1.7.38, C12: a statement is on the refuse list of the type. The line says which one (and the file that holds it) and gives the reason the type wrote, which tells the agent the right way."""
+    key = "gate.external.refused_file" if action.file_why == "refuse" and action.file else "gate.external.refused"
+    return say(key, place=place(action.system, action.env), statement=action.note, file=action.file, reason=action.reason, call=command)
+
+
+def external_unpinned(action: Any, command: str) -> str:
+    """1.7.38 (C13 F2): the call of a program whose type pins its calls to a connection names none the gate can read. The line says what is wrong with the server; when the refuse list caught a statement too, its reason comes first."""
+    why = say(f"gate.external.unpinned.why.{action.why}", value=action.target, option=action.option)
+    if action.note:
+        key = "gate.external.unpinned_refused_file" if action.file_why == "refuse" and action.file else "gate.external.unpinned_refused"
+        return say(key, statement=action.note, file=action.file, reason=action.reason, why=why, program=action.call.split(" ", 1)[0], option=action.option, call=command)
+    if action.via and action.why == "none":  # `harness as <alias> -- sqlcmd -d x` (1.7.38, C13 FR 5): the prefix gives the sign-in, not the server
+        return say("gate.external.unpinned_as", alias=action.via, why=why, program=action.call.split(" ", 1)[0], option=action.option, call=command)
+    return say("gate.external.unpinned", why=why, program=action.call.split(" ", 1)[0], option=action.option, call=command)
+
+
+def external_blocked(action: Any, command: str) -> str:
+    """1.7.38 (C13 F2): a program, or code, that the gate cannot judge and a tool pack lists so that it is not taken for a free one: the line gives the pack's own words on what to do instead."""
+    return say("gate.external.blocked", reason=action.reason, call=command)
 
 
 def external_human(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
-    return say("gate.external.human", place=place(action.system, action.env), verb=action.verb, call=command, handoff_env="" if action.env in ("", "none") else f" --env {action.env.upper()}")
+    return say("gate.external.human", place=place(action.system, action.env), verb=word(action.verb), call=command, handoff_env="" if action.env in ("", "none") else f" --env {action.env.upper()}")
 
 
 def external_task(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
-    return say("gate.external.task", place=place(action.system, action.env), verb=action.verb, call=command)
+    return say("gate.external.task", place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
-def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str) -> str:
+def _what(action: Any, key: str) -> str:
+    """The first sentence of a held call's text: what kind of call it is. A call of a pack whose file is faulty (G-1) has no kind: the gate could not judge it (1.7.38, M5), and it must not be told as a write."""
+    place_ = place(action.system, action.env)
+    if getattr(action, "zone", "") == "broken":
+        return say(f"{key}.what.unknown", place=place_)
+    return say(f"{key}.what", place=place_, verb=_verb(action.verb))
+
+
+def too_many_waiting(n: object = None) -> str:
+    """(1.7.38, C13 M1) A new call is not held because too many wait for the person already: one line that tells the agent to stop and the user to handle them first. `n`: the limit that was reached (of the task, or of all tasks)."""
+    from core import approvals
+
+    return say("gate.approvals.too_many", n=n or approvals.MAX_PENDING)
+
+
+def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None, changed: Any = None) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
-    return say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
+    key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
+    gap = messages.gap()
+    note = say(key, file=action.file) + gap if key else ""
+    if getattr(action, "zone", "") == "broken":  # 1.7.38 (G-1): a file of the tool pack is faulty: the call waits, and the line says which file and what is wrong
+        note = say("gate.external.broken", note=action.note) + gap
+    elif not key and getattr(action, "zone", "") == "ask" and action.note:  # 1.7.38: a call of a type with lists that is on no list: it waits, and opening the connection will not pass it
+        note = say("gate.external.zone_ask", statement=action.note, place=place(action.system, action.env)) + gap
+    text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + gap if changed else "") + say("gate.external.outbox", what=_what(action, "gate.external.outbox"), call=command, code=code, minutes=minutes, where=where)
+    if offers:  # 1.7.38: the card can also open the connection for the task; the agent says so, and runs the same command again if the user does
+        buttons = messages.joined(say("gate.external.outbox.button", text=say("desk.outbox.open.items" if item.get("scope") == "items" else "desk.outbox.open", name=str(item["system"]))) for item in offers)  # the buttons as the card names them (C12 N12): a connection that opens only the linked items has its own words
+        text += gap + say("gate.external.outbox.opens", buttons=buttons)
+    return text + gap + say("gate.external.outbox.code", code=code)  # 1.7.38, C12 TB-10: the agent wrote the code in the chat: the person may then approve without reading the card first
 
 
 def external_autorun(action: Any, command: str) -> str:
-    return say("gate.external.autorun", place=place(action.system, action.env), verb=_verb(action.verb), call=command)
+    return say("gate.external.autorun", what=_what(action, "gate.external.autorun"), call=command)
 
 
 def external_approved(commands: Any) -> str:

@@ -23,7 +23,6 @@ html.has-wall .en-chk{padding:12px 14px;border-radius:14px;background:rgba(8,9,1
 html.has-wall .en-chk-l .m{background:rgba(8,9,10,.5)}
 html[data-theme="light"]:not(.has-wall) .en-chk-l .m:not(.soft){background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
 html[data-theme="light"]:not(.has-wall) .en-chk-l .m.soft{background:rgba(255,255,255,.6)}  /* a note is calm: not the amber of a line that needs you (1.7.29) */
-.en-chk-l .m.inline{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px}.en-chk-l .m.inline .en-open{margin-top:0}  /* "not checked yet" and its Check button on one line */
 .en-ref{transition:opacity .4s ease}html.en-notready .en-ref{opacity:0 !important}  /* the intro animation holds its last value, so it must be forced */  /* the list grows up into the reflection when something needs you: no reflection then (1.7.29) */
 
 /* top right: only the greeting (the search is the fixed one of shell.css, which keeps the room at the right) */
@@ -92,8 +91,7 @@ html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5
 .en-chk-l .s-ok .ck{background:var(--good-dot);opacity:1}
 .en-chk-l .s-wait .ck{background:var(--hot-dot);opacity:1;animation:enbeat 1.2s ease-in-out infinite}
 .en-chk-l .s-fail .ck{background:var(--hot-dot);opacity:1;box-shadow:0 0 0 3px var(--hot-line)}
-.en-chk-l .attn .ck{background:var(--hot-dot);opacity:1}.en-chk-l em .mk{font-weight:600}.en-chk-l em .mk.ok{color:var(--good-dot)}.en-chk-l em .mk.bad{color:var(--hot-dot)}.en-chk-l em .mk.unknown{color:var(--soft)}
-.en-chk-l [data-id="systems"] em{white-space:nowrap}.en-chk-l em.has-tip{cursor:help;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--soft)}
+.en-chk-l em.has-tip{cursor:help;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--soft)}
 .en-chk-l .s-wait em,.en-chk-l .s-fail em{color:var(--hot);opacity:1}
 .en-chk-l .s-note .t,.en-chk-l .warns .t{opacity:.82}
 .en-chk-l .m{grid-column:2/4;margin:2px 0 6px;padding:7px 10px;border-radius:8px;background:var(--hot-bg);border:1px solid var(--hot-line);color:var(--hot);font:12px/1.5 var(--sans);overflow-wrap:anywhere;word-break:break-word}
@@ -116,9 +114,10 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 .en-hint{justify-self:end;text-align:right;padding-right:56px}
 
 /* a short window: the wordmark rises and the list takes the room under it (enter.js sets --chk-max from where the wordmark ends) */
+@media (max-height:940px){.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;line-height:1.4;margin-bottom:4px}}  /* a laptop screen: a note under a row (VS Code red, a yellow one) must not be pushed under the fold (1.7.38) */
 @media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:38px}}
 @media (max-height:600px){.en-stage{padding-bottom:27vh}}
-@media (max-width:1100px){.en-ref{visibility:hidden}.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
+@media (max-width:1100px){.en-ref{visibility:hidden}.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
 
 /* the intro, under 1.5 s: the letters rise one by one, the light comes in, the list lights up */
 #enter.intro .en-word .lg{animation:enrise .75s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i)*70ms + 60ms)}
@@ -142,16 +141,94 @@ html.lite #en-fx{display:none}
 .en-chk-l .sy:focus-visible{outline:2px solid var(--en-ink);outline-offset:2px;border-radius:4px}
 .en-chk-l .sy-i{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.en-chk-l .sy-i:first-child{white-space:normal;overflow-wrap:anywhere}.en-chk-l .sy-i[hidden]{display:none}
 .en-chk-l .sy-more{font-weight:600;color:var(--en-cap)}.en-chk-l .sy-more[hidden]{display:none}
-.sy-d{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--soft)}.sy-d.ok{background:var(--good-dot)}.sy-d.down{background:var(--bad)}.sy-d.partly{background:var(--hot-dot)}.sy-d.unknown{background:var(--soft);opacity:.7}
+.sy-d{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--soft)}.sy-d.ok{background:var(--good-dot)}.sy-d.down{background:var(--bad)}.sy-d.partly,.sy-d.held{background:var(--hot-dot)}.sy-d.unknown{background:var(--soft);opacity:.7}
 .en-chk-l .m[hidden]+.sy{margin-top:0}
 .en-pop{position:fixed;z-index:400;max-width:min(720px,calc(100vw - 16px));border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--ink);box-shadow:0 14px 40px rgba(0,0,0,.28);font:12px/1.45 var(--sans)}
 .en-pop[hidden]{display:none}
-.en-pop-in{max-height:min(46vh,360px);overflow:auto;padding:6px 10px 8px;overscroll-behavior:contain}
+.en-pop-in{max-height:min(70vh,560px);overflow:auto;padding:6px 10px 8px;overscroll-behavior:contain}
+.en-pop .sy-scroll{position:sticky;bottom:-8px;margin:6px -10px -8px;padding:5px 10px 6px;background:var(--card);border-top:1px solid var(--line);color:var(--soft);font-size:11.5px}
 .en-pop table{border-collapse:collapse;width:100%}.en-pop th{position:sticky;top:0;background:var(--card);text-align:left;font-weight:600;color:var(--soft);padding:5px 10px 4px 0;white-space:nowrap}
 .en-pop td{padding:4px 10px 4px 0;vertical-align:top}.en-pop tr.first td{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child td{border-top:0}
-.en-pop .sy-n{font-weight:600;overflow-wrap:anywhere;max-width:200px}.en-pop .sy-e{white-space:nowrap}.en-pop .sy-s{white-space:nowrap}.en-pop .sy-s .sy-d{margin-right:6px}.en-pop .sy-r{overflow-wrap:anywhere;min-width:120px;max-width:260px}.en-pop .sy-t,.en-pop .sy-p{white-space:nowrap;color:var(--soft)}
+.en-pop .sy-off{margin:8px 0 0;padding-top:6px;border-top:1px solid var(--line);color:var(--soft);overflow-wrap:anywhere}
+.en-pop .sy-n{font-weight:600;overflow-wrap:anywhere;max-width:200px}.en-pop .sy-e{white-space:nowrap}.en-pop .sy-s{white-space:nowrap}.en-pop .sy-s .sy-d{margin-right:6px}.en-pop .sy-r{overflow-wrap:anywhere;min-width:120px;max-width:260px}.en-pop .sy-warn{margin-top:3px;padding:3px 6px;border-radius:5px;background:var(--hot-bg);border:1px solid var(--hot-line);color:var(--hot);font-size:11.5px;line-height:1.4}.en-pop .sy-t,.en-pop .sy-p{white-space:nowrap;color:var(--soft)}
 @media (max-width:760px){.en-pop{font-size:11.5px;width:calc(100vw - 16px)}
  .en-pop table,.en-pop tbody{display:block}.en-pop thead{display:none}  /* a block for each system: nothing is cut at the right, nothing to scroll sideways (1.7.24) */
  .en-pop tr{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 12px;padding:5px 0;border-top:1px solid var(--line)}.en-pop tr.first{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child{border-top:0}
  .en-pop td,.en-pop tr.first td{display:block;padding:0;border:0}.en-pop .sy-n{order:1;max-width:100%}.en-pop .sy-e{order:2}.en-pop .sy-s{order:3}.en-pop .sy-r{order:5;flex:1 0 100%;min-width:0;max-width:none}.en-pop .sy-t{order:6}.en-pop .sy-p{order:7}.en-pop td:empty{display:none}
  .en-pop-in{overflow-x:hidden}.en-pop .sy-n,.en-pop .sy-r{overflow-wrap:break-word;word-break:normal}.en-pop .sy-n{min-width:8ch}}
+
+@media (max-width:900px){.en-hint{justify-self:start;text-align:left}}  /* the dock lies in a row along the bottom edge: the hint keeps the left (1.7.32) */
+/* 1.7.36: three groups, a dot by level, a small line under the top word, a folded list */
+.en-chk-l li.gh{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px;font:600 10.5px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--en-cap);min-width:0}
+.en-chk-l li.gh:first-child{margin-top:0}.en-chk-l .gh-t{flex:none}.en-chk-l .gh-n{display:none;min-width:0;font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--en-ink);overflow-wrap:anywhere;opacity:.85}
+html[lang="zh"] .en-chk-l li.gh{letter-spacing:.06em;text-transform:none;font-size:11.5px}
+
+.en-chk-l li.row .m,.en-chk-l li.row .sy{grid-column:2/-1}
+.en-chk-l .l-grey .ck{background:var(--soft);opacity:.7;box-shadow:none;animation:none}.en-chk-l .l-ok .ck{background:var(--good-dot);opacity:1;box-shadow:none;animation:none}
+.en-chk-l .l-yellow .ck{background:var(--hot-dot);opacity:1;box-shadow:none;animation:none}.en-chk-l .l-red .ck{background:var(--bad);opacity:1;box-shadow:0 0 0 3px var(--bad-line);animation:none}
+.en-chk-l .l-grey em,.en-chk-l .l-ok em{color:var(--en-cap)}.en-chk-l .l-yellow em{color:var(--hot)}.en-chk-l .l-red em{color:var(--bad)}.en-chk-l li.row.s-fail.blocks em,.en-chk-l li.row.s-wait.blocks em{color:var(--hot)}
+.en-chk-l li.row[title]:not([title=""]){cursor:help}
+.en-chk-l .sy-d.partly,.en-chk-l .sy-d.held{background:var(--hot-dot)}
+
+/* 1.7.38, block B: two blocks (Harness & Local: required; From the company: optional), a tag on each head, the VS Code button beside Enter */
+.en-chk-l li.gh{align-items:center}
+.en-chk-l li.gh .ck{display:none;flex:none;width:7px;height:7px;border-radius:50%;align-self:center}
+.en-chk-l .gh-tag{margin-left:auto;flex:none;padding:1px 7px;border-radius:4px;font:600 10px var(--mono);letter-spacing:.1em;white-space:nowrap}
+.en-chk-l li.gh[data-g="required"] .gh-tag{background:var(--en-btn);color:var(--en-btn-ink)}
+.en-chk-l li.gh[data-g="optional"] .gh-tag{border:1px solid var(--line2);color:var(--en-cap)}
+html[lang="zh"] .en-chk-l .gh-tag{letter-spacing:.04em;font-size:11px}
+.en-chk-l li.gh[data-g="optional"]{margin-top:12px}
+.en-chk-l li.row{grid-template-columns:14px fit-content(46%) minmax(0,1fr)}
+.en-chk-l li.row em{grid-column:3;max-width:none;text-align:right;overflow-wrap:anywhere}
+.en-chk-l .l-grey .t{opacity:.82}
+.en-chk-l li.row.has-fix:not(.s-check) .t:hover{text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.en-chk-l .m.bad{background:var(--bad-bg);border-color:var(--bad-line);color:var(--bad)}
+html[data-theme="light"]:not(.has-wall) .en-chk-l .m.bad{background:linear-gradient(var(--bad-bg),var(--bad-bg)),rgba(255,255,255,.9)}
+.en-link{display:inline;padding:0;border:0;background:none;font:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.en-link:hover{opacity:.75}.en-link:focus-visible{outline:2px solid var(--en-ink);outline-offset:2px;border-radius:3px}
+.sy-d.none{background:transparent;border:1.5px solid var(--soft);opacity:.85}
+.en-chk-h.h-bad i{background:var(--bad)}
+.en-chk-h.h-warn i{background:var(--hot-dot)}
+/* folded: one line for each block, name and summary, a mark that it opens */
+.en-chk-l.folded{cursor:pointer}
+.en-chk-l.folded:not(.unfold):not(:hover) li.row{display:none}
+.en-chk-l.folded:not(.unfold):not(:hover) li.gh{margin:5px 0 0;font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--en-ink);gap:9px}
+.en-chk-l.folded:not(.unfold):not(:hover) li.gh .ck{display:block}
+.en-chk-l.folded:not(.unfold):not(:hover) .gh-tag{display:none}
+.en-chk-l.folded:not(.unfold):not(:hover) .gh-n{display:inline;margin-left:auto;text-align:right;color:var(--en-cap);max-width:70%}
+.en-chk-l.folded:not(.unfold):not(:hover) .gh-n::after{content:" \25b8"}
+html[lang="zh"] .en-chk-l.folded:not(.unfold):not(:hover) li.gh{font-size:12.5px}
+/* the buttons beside the pill: Open / Restart VS Code and Enter */
+.en-cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center}
+.en-vs{font:600 15px var(--sans);display:inline-flex;align-items:center;height:54px;padding:0 26px;border-radius:999px;cursor:pointer;color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);box-shadow:0 8px 22px rgba(0,0,0,.14);transition:transform .2s,box-shadow .2s;white-space:nowrap;max-width:100%}
+.en-vs[hidden]{display:none}
+.en-vs:hover:not(:disabled){transform:translateY(-2px)}
+.en-vs.hot{background:var(--en-btn);color:var(--en-btn-ink);border-color:transparent;box-shadow:0 14px 34px rgba(0,0,0,.3)}
+.en-vs:disabled{opacity:.6;cursor:default;box-shadow:none}
+.en-vs:focus-visible{outline:2px solid var(--en-ink);outline-offset:3px}
+html.has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);color:var(--en-ink);border-color:rgba(255,255,255,.3)}
+.en-foot{grid-template-columns:minmax(min(420px,100%),1fr) auto minmax(0,1fr)}
+@media (max-width:1279px){.en-hint{display:none}}
+@media (max-width:1100px){.en-cta{order:-1}.en-foot{grid-template-columns:minmax(0,1fr)}}
+.en-chk-l li.row>.ck,.en-chk-l li.row>.t,.en-chk-l li.row>em,.en-chk-l li.row>.sy{grid-row:1}.en-chk-l li.row>.m{grid-row:2}
+.en-chk-l li.row.has-names>em{display:none}
+.en-chk-l li.row .sy{grid-column:3;justify-content:flex-end;min-width:0}
+.en-chk-l li.row .sy-i:first-child{white-space:normal;overflow-wrap:anywhere}
+@media (max-width:640px){.en-chk-l li.row .sy{grid-column:2/-1;grid-row:2;justify-content:flex-start}.en-chk-l li.row.has-names>.m{grid-row:3}}
+/* 1.7.38: a window between 760 and 1000 px high: the wordmark is narrower and sits higher, so the list under it shows more lines (it showed about eight at 1440x900) */
+@media (min-width:1101px) and (min-height:761px) and (max-height:1000px){.en-stage{padding-bottom:22vh}.en-word{width:min(94vw,1700px,110vh)}.en-ref{width:min(94vw,1700px,110vh);height:calc(min(94vw,1700px,110vh)*.1)}}
+/* 1.7.38 (C12 N8): a window up to 800 high (a laptop at 1280x720 or 1366x768): the wordmark is smaller and sits higher, the rows are tighter, so the whole list (a red VS Code note and a yellow one included) is in view with no scrolling */
+@media (min-width:1101px) and (max-height:800px){.en-word{width:min(94vw,1700px,92vh)}.en-ref{width:min(94vw,1700px,92vh);height:calc(min(94vw,1700px,92vh)*.1)}.en-stage{padding-bottom:38vh}.en-chk{line-height:1.35}.en-chk-l{gap:0}.en-chk-l .m{margin-bottom:3px;padding:4px 9px}}
+/* 1.7.38: narrow window: the dock lies in a row at the foot (dock.css), so the line with the version keeps to its left and the arrow of a long list sits beside it, not under the buttons */
+@media (max-width:900px){.en-chk .en-legal{max-width:calc(100vw - 350px)}.en-chk.more::after{right:auto;left:calc(100vw - 372px)}}
+/* 1.7.38: the VS Code button has one width whatever its words are (Open, Restart, Restart with identities: wide enough for the longest on one line, C12 N9), so the list beside it does not get wider and narrower with it;
+   and the word at the right of a required line that needs the person is red, like its dot */
+@media (min-width:1101px){.en-vs{box-sizing:border-box;width:19.5em;justify-content:center;text-align:center;white-space:nowrap;line-height:1.15;padding:0 22px}}
+.en-chk-l li.row.s-fail.blocks.l-red em{color:var(--bad)}
+/* 1.7.38 (C11 T2-07): the note beside the VS Code button: a restart that waits for a window, or did not end; the button then says Try again */
+.en-cta{position:relative}
+.en-vsnote{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);width:max-content;margin:0 0 12px;max-width:min(34em,92vw);box-sizing:border-box;z-index:4;text-align:center;font:500 12.5px/1.45 var(--sans);color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);border-radius:10px;padding:6px 12px;overflow-wrap:anywhere}  /* a card: it may lie over the wordmark in a narrow window */
+.en-vsnote[hidden]{display:none}
+.en-vsnote.bad{color:var(--bad);border-color:var(--bad)}
+/* 1.7.38 (F1 U2): a phone-wide window: the pill and the list are tall, so the wordmark sits at the top, above them, not in the middle where the pill covered it */
+@media (max-width:640px){.en-stage{justify-content:flex-start;padding-top:min(15vh,110px);padding-bottom:0}.en-foot{max-height:calc(100vh - 215px);overflow-y:auto;overscroll-behavior:contain}}  /* a low window: the list scrolls under the wordmark, it never rises over it */

@@ -11,7 +11,7 @@ from unittest import mock
 
 import support  # noqa: F401 - puts the engine on the path
 
-from core import reach, systems as outside
+from core import messages, reach, systems as outside
 
 GOOD = f"{sys.executable} -c \"print('CORP\\\\me')\""
 SYSTEMS = {"sql": {"reach": {"cli": "sqlcmd"}, "env_from": [{"pattern": "dev", "env": "dev"}, {"pattern": "ist", "env": "ist"}],
@@ -44,6 +44,19 @@ class ReachTests(unittest.TestCase):
         self.assertEqual((found["dev"]["state"], found["ist"]["state"]), ("denied", "denied"))
         self.assertEqual(found["dev"]["launch"], "Start VS Code with start-vscode.cmd.")
 
+    def test_a_vscode_that_lacks_what_this_copy_sets_says_what_is_missing_and_not_that_it_was_started_without_settings(self) -> None:
+        """Retest N8: the hover said VS Code was started without this computer's settings while the agent's commands worked: it may have been started from another copy."""
+        seen = self.root / ".harness" / "runtime" / "state" / "vscode-env.json"
+        seen.parent.mkdir(parents=True)
+        seen.write_text(json.dumps({"ok": False, "missing": ["PATH /copy/tools", "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS"]}), encoding="utf-8")
+        found = reach.view(self.root, SYSTEMS)[0]
+        self.assertEqual((found["state"], found["why"]), ("denied", "vscode-env"))
+        self.assertEqual(found["launch"], messages.text("reach.vscode_env", missing="PATH /copy/tools, REQUESTS_CA_BUNDLE, SSL_CERT_FILE, \u2026"))  # a few, named
+        for language, wrong in (("en", "started without"), ("zh", "启动时没带")):
+            words = json.loads((support.ENGINE / "core" / f"messages.{language}.json").read_text(encoding="utf-8"))["reach.vscode_env"]
+            self.assertIn("{missing}", words)
+            self.assertNotIn(wrong, words, language)
+
     def test_a_call_of_the_agent_updates_the_state_without_a_probe(self) -> None:
         reach.note_call(self.root, "sql", SYSTEMS["sql"], "dev", "Sqlcmd: Error: TCP Provider: No connection could be made", False)
         self.assertEqual(self.states()["dev"][0], "denied")
@@ -63,8 +76,14 @@ class ReachTests(unittest.TestCase):
         self.assertFalse(reach.fresh(self.root, SYSTEMS, now=reach.time.time() + reach.FRESH_MINUTES * 60 + 5))  # later: probe again
 
     def test_the_launch_script_is_offered_on_windows_only_and_started_in_a_window_of_its_own(self) -> None:
-        folder = self.root / ".harness" / "toolpacks" / "sqlpack" / "launch"  # a tool pack's launch/ (1.7.17)
+        pack = self.root / ".harness" / "toolpacks" / "sqlpack"
+        folder = pack / "launch"  # a tool pack's launch/ (1.7.17)
         folder.mkdir(parents=True)
+        (pack / "toolpack.json").write_text('{"name": "sqlpack", "version": "1.0.0"}', encoding="utf-8")
+        self.assertIsNone(reach.launch_script(self.root, platform="win32"), "a factory pack the knowledge base does not name is off")
+        from support import add_path
+
+        add_path(self.root, pack)
         (folder / "start-vscode.cmd").write_text("@echo off\r\n", encoding="utf-8")
         self.assertIsNone(reach.launch_script(self.root, platform="darwin"))
         self.assertEqual(reach.launch_script(self.root, platform="win32").name, "start-vscode.cmd")

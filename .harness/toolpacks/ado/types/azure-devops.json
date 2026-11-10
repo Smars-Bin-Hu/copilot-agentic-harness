@@ -1,0 +1,238 @@
+{
+  "type": "azure-devops",
+  "label": "Azure DevOps",
+  "env": "none",
+  "cli": [
+    "ado"
+  ],
+  "free": [
+    "--help",
+    "-h",
+    "--version",
+    "version"
+  ],
+  "fields": {
+    "org": {
+      "label": "Organization",
+      "placeholder": "the name after dev.azure.com/"
+    },
+    "project": {
+      "label": "Project"
+    },
+    "url": {
+      "label": "Server address",
+      "placeholder": "https://dev.azure.com",
+      "default": "https://dev.azure.com",
+      "optional": true
+    }
+  },
+  "match": "^",
+  "command": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*([a-z][\\w-]*)",
+  "auth": {
+    "signin": {
+      "identity": "tool",
+      "label": "az login",
+      "needs": [
+        "az"
+      ],
+      "login": "az login --allow-no-subscriptions"
+    },
+    "token": {
+      "identity": "token",
+      "label": "Personal access token"
+    }
+  },
+  "test": "ado --conn {conn} me --short",
+  "call": "ado --conn {conn} <command>",
+  "expect": "^(\\S+)\\s*$",
+  "denied": "az login|AADSTS|expired|Sign in|token",
+  "signin_lost": "^ado: (?:not signed in to Azure DevOps|az is not found|this connection signs in with a token and none is saved)",
+  "down": "Max retries exceeded|Failed to establish|timed out|CERTIFICATE_VERIFY_FAILED|cannot reach",
+  "verbs": [
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:[a-z]+\\s+)?(?:--help|-h|--version)\\s*$",
+      "verb": "read"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*$",
+      "verb": "read"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:comment|update|create|link|unlink|attach)\\b",
+      "verb": "write"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:queue|cancel|retry|deploy)\\b",
+      "verb": "exec"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:version|me|item|items|comments|history|links|attachments|queries|query|tags|types|states|fields|areas|iterations|pipelines|pipeline|runs|run|why|log|artifacts|tests|changes|releases|release)\\b",
+      "verb": "read"
+    }
+  ],
+  "show": {
+    "item": "\\b(?:item|comment|update|comments|history|links|attachments|link|unlink|attach)\\s+(\\d+)",
+    "run": "\\b(?:run|why|log|artifacts|tests|changes|cancel|retry)\\s+(\\d+)",
+    "pipeline": "\\b(?:pipeline|queue)\\s+(\\S+)",
+    "release": "\\b(?:release|deploy)\\s+(\\d+)",
+    "state": "\\bupdate\\b.*?(?<![\\w-])--state[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "title": "\\b(?:update|create)\\b.*?(?<![\\w-])--title[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "assign": "\\bupdate\\b.*?(?<![\\w-])--assign[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "tag": "\\b(?:update|create)\\b.*?(?<![\\w-])--tag[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "untag": "\\bupdate\\b.*?(?<![\\w-])--untag[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "field": "\\bupdate\\b.*?(?<![\\w-])--field[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "type": "\\bcreate\\b.*?(?<![\\w-])--type[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "parent": "\\bcreate\\b.*?(?<![\\w-])--parent[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "area": "\\b(?:update|create)\\b.*?(?<![\\w-])--area[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "iteration": "\\b(?:update|create)\\b.*?(?<![\\w-])--iteration[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "branch": "\\bqueue\\b.*?(?<![\\w-])--branch[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "param": "\\bqueue\\b.*?(?<![\\w-])--param[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "var": "\\bqueue\\b.*?(?<![\\w-])--var[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "env": "\\bdeploy\\b.*?(?<![\\w-])--env[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "stage": "\\bretry\\b.*?(?<![\\w-])--stage[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)"
+  },
+  "rules": {
+    "none": {
+      "read": "allow",
+      "write": "outbox",
+      "exec": "outbox",
+      "destroy": "deny"
+    }
+  },
+  "open": "items",
+  "item": [
+    "\\bado(?:\\.cmd)?[\\\"\\']?\\s+(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:comment|update|link|unlink|attach)\\s+(\\d+)",
+    "\\bado(?:\\.cmd)?[\\\"\\']?\\s+(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:link|unlink)\\b.*?--to[\\s=]+[\\\"\\']?(\\d+)"
+  ],
+  "link": "ado",
+  "say": [
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\s+(\\d+)",
+      "text": {
+        "en": "Add a comment to work item {1}",
+        "zh": "给 work item {1} 加评论"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*update\\s+(\\d+)",
+      "text": {
+        "en": "Update work item {1}",
+        "zh": "修改 work item {1}"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*create\\b",
+      "text": {
+        "en": "Create a new work item",
+        "zh": "新建一个 work item"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*link\\s+(\\d+).*--to\\s+[\\\"']?(\\d+)",
+      "text": {
+        "en": "Link work item {1} to work item {2}",
+        "zh": "把 work item {1} 关联到 work item {2}"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*unlink\\s+(\\d+).*--to\\s+[\\\"']?(\\d+)",
+      "text": {
+        "en": "Remove the link between work items {1} and {2}",
+        "zh": "删除 work item {1} 和 {2} 之间的关联"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*attach\\s+(\\d+)",
+      "text": {
+        "en": "Attach a file to work item {1}",
+        "zh": "给 work item {1} 加附件"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*queue\\s+[\\\"']?([^\\s\\\"']+)",
+      "text": {
+        "en": "Start a run of pipeline {1}",
+        "zh": "启动 pipeline {1} 的一次 run"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*cancel\\s+(\\d+)",
+      "text": {
+        "en": "Cancel run {1}",
+        "zh": "取消 run {1}"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*retry\\s+(\\d+)",
+      "text": {
+        "en": "Run {1} again",
+        "zh": "重新跑 run {1}"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*deploy\\s+(\\d+).*--env\\s+[\\\"']?([^\\s\\\"']+)",
+      "text": {
+        "en": "Deploy release {1} to {2}",
+        "zh": "把 release {1} 部署到 {2}"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*deploy\\b(?:\\s+--\\w+\\s+\\S+)*\\s+(\\d+)",
+      "text": {
+        "en": "Deploy release {1}",
+        "zh": "部署 release {1}"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*link\\s+(\\d+)",
+      "text": {
+        "en": "Link work item {1} to another work item",
+        "zh": "把 work item {1} 关联到另一个 work item"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*unlink\\s+(\\d+)",
+      "text": {
+        "en": "Remove a link from work item {1}",
+        "zh": "删除 work item {1} 的一个关联"
+      }
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*queue\\b",
+      "text": {
+        "en": "Start a pipeline run",
+        "zh": "启动一次 pipeline run"
+      }
+    }
+  ],
+  "body": [
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\b.*?--file(?:=|\\s+)[\\\"']?([^\\s\\\"']+)",
+      "from": "file"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\b.*?--text(?:=|\\s+)\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\b.*?--text(?:=|\\s+)'([^']*)'",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\b.*?--text(?:=|\\s+)([^\\s\\\"'][^\\s]*)",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:create|update)\\b.*?--description(?:=|\\s+)\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:create|update)\\b.*?--description(?:=|\\s+)'([^']*)'",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:create|update)\\b.*?--description(?:=|\\s+)([^\\s\\\"'][^\\s]*)",
+      "from": "text"
+    }
+  ]
+}

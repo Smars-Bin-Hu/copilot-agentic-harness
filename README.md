@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.7.29-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.7.38-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -170,6 +170,7 @@ If you'd rather not read docs, the board and the lessons above are enough.
 | [10 Skills](docs/10-skills.md) | [**Which skill is for what.**](docs/10-skills.md) All 32 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
 | [11 Tool calling check](docs/11-tool-calling-check.md) | [**Before the agent reaches outside systems.**](docs/11-tool-calling-check.md) A probe folder and a list of checks for your work computer: do hooks run, can an MCP server start, do MCP, extension and terminal calls reach a hook, can a hook refuse them |
 | [12 Guardrails and the gate](docs/12-guardrails-and-gate.md) | [**What the agent may do outside, and why.**](docs/12-guardrails-and-gate.md) A guardrail, not a sandbox: what passes, what waits for you, who answers (code, not the model), the two checkpoints and what comes next |
+| [13 Tool packs and MCP servers](docs/13-tool-packs-and-mcp.md) | [**Why a tool pack and not only an MCP server.**](docs/13-tool-packs-and-mcp.md) Whether the company can use it, who holds "a write waits for the person", the skills, and the cost |
 
 ## Directory layout
 
@@ -195,13 +196,14 @@ This repository (the harness)
 │   ├── policies/                  policies; companies override with *.override.json,
 │   │                              target repositories are set in target.override.json
 │   ├── contracts/, eval/, tests/  task file templates, fixed scenarios, tests
+│   ├── toolpacks/                 factory tool packs (ado, sqlserver, demotracker); the knowledge base turns them on
 │   ├── bin/                       short commands: harness, harness.cmd; the Start Harness icon
 │   └── runtime/                   state and logs (not in git)
 ├── .workspace/
 │   ├── sandbox/tasks/<task>/      task directory: TASK.md, REQ.md, PLAN.md, results,
 │   │                              DEV/, REVIEW/, SNAPSHOT/ (not in git)
 │   └── reports/                   task reports (not in git)
-└── knowledge-base/                where the company knowledge base goes (ships empty)
+└── knowledge-base/                where the company knowledge base goes (made when you import one; not shipped)
 
 Outside the harness: target repositories (the company's code)
 <repos_root>/                      the folder set in target.override.json
@@ -221,4 +223,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.7.29 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.7.38 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

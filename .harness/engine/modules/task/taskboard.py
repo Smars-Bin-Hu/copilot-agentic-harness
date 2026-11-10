@@ -17,7 +17,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TextIO, Tuple
 
-from core import systems as outside
 from core import config, messages, tasks
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
@@ -133,6 +132,8 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
             found.append("send")
         elif row.get("waiting_why") == "stopped":
             found.append("answer")
+    if "accept" in served and row.get("waiting_why") == "accept" and not row.get("paused_since"):
+        found.append("accept")  # the agent delivered and stopped: the board closes the task on the person's word, with no message to the agent (1.7.38)
     if row.get("waiting_why") and row.get("dismiss"):
         found.append("review dismiss")  # the agent stopped after a check that did not pass: the person may say it judged wrong
     if "autorun on" in served and not row.get("autorun") and not row.get("paused_since"):
@@ -140,7 +141,7 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     found.append("resume" if row.get("paused_since") else "pause")
     if "close" in served:
         found.append("close")
-    return [{"action": action, "command": "" if action in ("send", "answer") else f"{cli_command()} approve-action" if action == "approve-action" else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
+    return [{"action": action, "command": "" if action in ("send", "answer", "accept") else f"{cli_command()} approve-action" if action == "approve-action" else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 
 def with_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], served: Tuple[str, ...] = (), root: Optional[Path] = None) -> bool:
@@ -185,20 +186,55 @@ def todo_counts(root: Path, task: str) -> Optional[Dict[str, int]]:
 
 CLOSED_SHOWN = 50  # how many closed tasks the board lists (the newest); `board.closed_shown` in task.json
 _closed: Dict[Tuple[str, str], Tuple[str, Any, str]] = {}  # a closed task does not change: its numbers and page are made once
-_written: Dict[Tuple[str, str], str] = {}  # (root, task) -> the `updated_at` of the task when a served board last wrote its page
+_written: Dict[Tuple[str, str], Any] = {}  # (root, task) -> (the `updated_at` of the task, its credits) when a served board last wrote its page
+USAGE_WAIT_S = 15 * 60  # Copilot writes the credits of a turn when the turn ends: a task the agent closed in its last turn has none yet; its numbers are not kept for this long
+
+
+def usage_pending(row: Dict[str, Any], brief: Dict[str, Any]) -> bool:
+    """A closed task whose credits Copilot's record does not hold yet (1.7.38, C11 T2-08): it was closed a moment ago, from inside the turn that is still running. Its numbers are made again at the next look."""
+    if brief.get("aiu") is not None or brief.get("source") != "copilot-events":
+        return False
+    from core import copilot_events
+
+    closed = copilot_events.seconds(row.get("updated_at"))
+    return closed is not None and time.time() - closed < USAGE_WAIT_S
 
 
 def closed_shown(root: Path) -> int:
     return config.whole((config.policy_or_empty(root, "task").get("board") or {}).get("closed_shown"), CLOSED_SHOWN)
 
 
-def reachable_envs(root: Path) -> set:
-    """The environments a listed outside system reaches (core.systems), for the mark under a task's name; empty when none is listed or the list is broken."""
+def opened_marks(data: Dict[str, Any]) -> List[str]:
+    """The connections the person opened for a task (`allow_conn`), and the linked items when those are open: the words of the mark under the task's name."""
+    found = data.get("allow_conn") if isinstance(data.get("allow_conn"), dict) else {}
+    marks = sorted(str(name) for name in found)
+    if data.get("allow_links"):
+        marks.append(say("desk.set.open.links"))
+    return marks
+
+
+_link_views: Dict[Tuple[str, Tuple[str, ...]], Tuple[float, List[Dict[str, str]]]] = {}  # (root, the refs of a task) -> (when, their views): the list asks every few seconds
+LINK_VIEW_S = 30
+
+
+def link_marks(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
+    """The items of other tools the task is linked to (1.7.38): `{ref, type, id, label, url}` for each, as the task page draws its chips. The list and the card of the lobby show them as one small icon.
+    Nothing for a task with no link; a tool pack that cannot be read leaves the text of each link and no address. Kept for a moment: it reads the packs and the connections."""
+    refs = tuple(str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref"))
+    if not refs:
+        return []
+    key = (str(root), refs)
+    kept = _link_views.get(key)
+    if kept and time.time() - kept[0] < LINK_VIEW_S:
+        return kept[1]
     try:
-        systems = config.policy_or_empty(root, "tools").get("systems") or {}
-        return set(outside.environments(systems)) if systems and not outside.validate(systems) else set()
-    except Exception:  # noqa: BLE001
-        return set()
+        from core import toolpacks
+
+        views = [toolpacks.link_view(root, ref) for ref in refs]
+    except Exception:  # noqa: BLE001 - a broken tool pack: the links show as text, with no address
+        views = [{"ref": ref, "type": ref.split(":", 1)[0], "id": ref.split(":", 1)[-1], "label": "", "url": "", "toolpack": ""} for ref in refs]
+    _link_views[key] = (time.time(), views)
+    return views
 
 
 def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (), rewrite: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
@@ -217,7 +253,6 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         result["tasks"] = [row for row in result["tasks"] if id(row) not in gone]
     use_events = taskinsight.events_allowed(root)
     problems = []
-    reaches = reachable_envs(root)
     for row in result["tasks"]:
         row["brief"], row["report"], row["actions"], row["stages"] = None, "", actions(row, tuple(served)), None
         if row["status"] == "new":
@@ -230,10 +265,11 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         if task_ops.req_placeholders(root, row["task"]):  # REQ.md still holds the template's text (1.7.22): nothing to confirm yet, in any tier
             row["actions"] = [item for item in row["actions"] if item["action"] != "confirm-req"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
-        held = (tasks.read(root, row["task"]) or {}).get("allow_env")
-        row["open_envs"] = sorted(env for env in held if env in reaches) if isinstance(held, dict) and row["status"] == "open" else []  # the environments the person opened for the task (1.7.6): a mark under the name; none without a listed system
+        data = tasks.read(root, row["task"]) or {}
+        row["open_conns"] = opened_marks(data) if row["status"] == "open" else []  # what the person opened for the task (1.7.38: connections, and the linked items): a mark under the name
+        row["links"] = link_marks(root, data)  # the items of other tools the task is linked to (1.7.38): a small link icon in the list and on the card of the lobby, the tip lists them
         if row["status"] == "open":
-            row["sub"] = tasksub.from_hooklog(root, tasks.read(root, row["task"]) or {})  # the last tool call of the hook log; a board served with VS Code replaces it with the chat's own line
+            row["sub"] = tasksub.from_hooklog(root, data)  # the last tool call of the hook log; a board served with VS Code replaces it with the chat's own line
         key = (str(root), row["task"])
         kept = _closed.get(key) if row["status"] == "closed" else None
         if kept and kept[0] == row["updated_at"] and (root / common.REPORTS_DIR / kept[2]).is_file():
@@ -243,11 +279,12 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
             info, now = insight(root, row["task"], use_events)
             row["brief"] = taskinsight.brief(info)
             page = common.task_report_file(root, task_ops.name_of(row["task"]), common.REPORT_HTML)
-            if rewrite or _written.get(key) != row["updated_at"] or not page.is_file():
+            stamp = (row["updated_at"], row["brief"].get("aiu"))
+            if rewrite or _written.get(key) != stamp or not page.is_file():
                 write_task_page(root, row["task"], info, refresh, now)
-                _written[key] = row["updated_at"]
+                _written[key] = stamp
             row["report"] = page.relative_to(root / common.REPORTS_DIR).as_posix()
-            if row["status"] == "closed":
+            if row["status"] == "closed" and not usage_pending(row, row["brief"]):
                 _closed[key] = (row["updated_at"], row["brief"], row["report"])
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away
             problems.append({"task": row["task"], "error": f"{type(error).__name__}: {error}"})

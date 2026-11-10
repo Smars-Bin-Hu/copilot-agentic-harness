@@ -125,7 +125,15 @@ def admin_switch_off(root: Path, session_id: str, surface: str = "vscode") -> Di
         was = admin_on(state)
         if "admin" in state:
             state["admin"] = {"on": False, "at": utc_now()}
-    return {"admin": False, "session_id": session_id, "was_on": was}
+    kept = ""
+    if was:  # 1.7.38 (C13 FR 17a): the person's admin session ends: what it changed in the guardrail files is accepted (the list of `integrity.py`)
+        try:
+            import integrity
+
+            kept = f"{integrity.accept(root)['files']} files"
+        except Exception:  # noqa: BLE001 - the mode is off whatever happens here; `harness doctor` says when the list is behind
+            kept = ""
+    return {"admin": False, "session_id": session_id, "was_on": was, **({"integrity": kept} if kept else {})}
 
 
 def admin_sessions(root: Path) -> List[Dict[str, Any]]:
@@ -158,7 +166,16 @@ def tools_reach(root: Path, probe: bool) -> Dict[str, Any]:
     if external.validate(listed):
         return {"envs": [], "ok": False, "next": "the list of systems has errors: run `harness tools check`"}
     if probe:
-        reach.probe_all(root, listed, lambda command: external.run_probe(command, root))
+        from core import connections as conn_core
+
+        own = set(conn_core.probe_keys(root))  # 1.7.38, C12 TB-13: the connections the board can check itself (it keeps their identity) are checked the way the board checks them: with the identity, the tool folders and the CA bundle.
+        # This run is started at the first step of a chat, in VS Code's environment, which has none of the three for a connection signed in here: it answered "failed" or "denied" and put that over the board's own "ok",
+        # and the Enter screen and the lobby said a connection did not answer a few minutes after its test had passed.
+        if own:
+            conn_core.probe_all(root)
+        rest = {name: system for name, system in listed.items() if not all(f"{name}:{env}" in own for env in reach.probes(system))}
+        if rest:
+            reach.probe_all(root, rest, lambda command: external.run_probe(command, root))
     lines = reach.view(root, listed)
     return {"envs": lines, "ok": all(line["state"] == reach.OK for line in lines)}
 
@@ -183,15 +200,64 @@ def servers_list(root: Path) -> Dict[str, Any]:
     out = []
     for alias, server in connections.listed(root).items():
         kind = known.get(str(server.get("type"))) or {}
-        saved = connections.identity_of(env, alias, kind)
+        saved = connections.identity_of(env, alias, kind, server)
         out.append({"alias": alias, "type": server.get("type"), "env": server.get("env"), "auth": server.get("auth", ""), "own": bool(server.get("own")),
                     "account": saved.get("account", ""), "saved": bool(saved), "known_kind": bool(kind),
                     "fields": {key: str(server.get(key)) for key in (kind.get("fields") or {}) if server.get(key) not in (None, "")}})
-    calls = {one["alias"]: one["call"] for one in connections.calls(root)}
+    calls = {one["alias"]: one["call"] for one in connections.calls(root, every=True)}
     for one in out:
         if one["alias"] in calls:
             one["call"] = calls[one["alias"]]
     return {"connections": out, "state": connections.state(root)}
+
+
+def _find_lines(found: Dict[str, Any], away: Optional[List[str]] = None, unknown: Optional[List[str]] = None, how_of: Optional[Dict[str, str]] = None) -> List[str]:
+    how_of = how_of or {}
+    lines = []
+    for one in found["matches"]:
+        where = "" if one["env"] in ("", "none") else f", {one['env'].upper()}"
+        about = one["about"] or one["label"]
+        mark = ("  " + say("connections.find.away", alias=one["alias"])) if away and one["alias"] in away else ("  " + say("connections.find.unknown", alias=one["alias"])) if unknown and one["alias"] in unknown else ""  # not in the window, or not known if it is: it works through `harness as` either way (1.7.38)
+        how = how_of.get(one["alias"]) or one.get("how") or ""  # 1.7.38 (C13 FR 6): how to call it, one line, so the agent does not have to find the server anywhere else
+        lines.append(f"{one['alias']}  ({one['type_label']}{where})" + (f"  {about}" if about else "") + mark)
+        if how:
+            lines.append("  " + say("connections.find.call", call=how))
+    return lines
+
+
+def servers_find(root: Path, words: List[str]) -> Dict[str, Any]:
+    """`harness connections find <words>` (1.7.38, layer 1): a few lines, the connections that fit; a read. `_text`, for the agent to read and for a person."""
+    from core import connections
+
+    text = " ".join(words).strip()
+    window = connections.window_aliases(root)  # the same connections as the line at the start of a chat: all of them (1.7.38, C12 TB-07, FB-3)
+    away, unknown = connections.away_aliases(root), connections.unknown_aliases(root)
+    how_of = {one["alias"]: one["how"] for one in connections.calls(root, every=True) if one.get("how")}  # with `harness as <name> --` in front when this window does not carry it (or it is not known)
+    try:
+        broken = connections.faults(root)  # 1.7.38 (C13 FR 3, FR2 6): a list that cannot be read is not an empty list, and not a list with one connection fewer: say the file and the fault first, so the agent tells the user and does not wait for connections to be set up
+        from core import toolpacks
+
+        unlisted = toolpacks.use_fault(root)  # the company's list of the tool packs it turns on cannot be read: the connections cannot be matched with their packs
+    except Exception:  # noqa: BLE001 - the answer below is still true
+        broken, unlisted = [], None
+    if broken:  # even a connection of the person's own: the gate holds every call of the programs of the connection types until the file is fixed, so it is not one to use
+        return {"_text": say("connections.find.fault", file=broken[0]["file"], problem=" ".join(str(broken[0]["problem"]).split())[:240]), "exit_code": 1}
+    if unlisted:
+        return {"_text": say("connections.find.packs_fault", file=unlisted["file"], problem=" ".join(str(unlisted["problem"]).split())[:240]), "exit_code": 1}
+    found = connections.find(root, text, aliases=window) if text else {"matches": [], "total": 0, "all": len(window), "envs": []}
+    if not found["all"]:
+        return {"_text": say("connections.find.empty")}
+    if not text:
+        return {"_text": say("connections.find.words")}
+    if not found["matches"]:
+        return {"_text": say("connections.find.none", words=text, n=found["all"])}
+    if found.get("envs") and found["total"] == 1:
+        return {"_text": "\n".join(_find_lines(found, away, unknown, how_of)) + "\n" + say("connections.find.one.env", env=", ".join(env.upper() for env in found["envs"]))}
+    lines = _find_lines(found, away, unknown, how_of)
+    if found["total"] > len(found["matches"]):
+        lines.append(say("connections.find.more", n=found["total"] - len(found["matches"])))
+    lines.append(say("connections.find.many", n=found["total"]) + messages.gap() + say("connections.ask") if found["total"] > 1 else say("connections.find.one"))
+    return {"_text": "\n".join(lines)}
 
 
 def servers_test(root: Path, alias: str) -> Dict[str, Any]:
@@ -200,8 +266,9 @@ def servers_test(root: Path, alias: str) -> Dict[str, Any]:
 
     server = connections.listed(root).get(alias) or {}
     kind = connections.types(root).get(str(server.get("type"))) or {}
-    found = connections.test(root, alias, connections.identity_of(connections.read_env(root), alias, kind))
-    return {**found, "alias": alias, "exit_code": 0 if found["state"] == "ok" else 1}
+    found = connections.test(root, alias, connections.identity_of(connections.read_env(root), alias, kind, server))
+    said = (found.get("layers") or {}).get("text") or ""  # 1.7.38: the first step that broke, in a sentence
+    return {**found, "alias": alias, **({"next": said} if said and found["state"] != "ok" else {}), "exit_code": 0 if found["state"] == "ok" else 1}
 
 
 def servers_login(root: Path, alias: str, kind: str = "", given: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -216,14 +283,18 @@ def servers_login(root: Path, alias: str, kind: str = "", given: Optional[List[s
             if field.strip():
                 own[field.strip()] = value.strip()
     code, said = connections.login(root, alias, own)
-    if code == 2 and said:
+    if code != 0 and said:  # the sign-in did not start: it says why (no connection, no sign-in way, a program that is not there or not allowed to run)
         raise CommandError(said)
-    return {"alias": alias, "exit_code": code, "next": say("connections.login.after", alias=alias) if code == 0 else ""}
+    return {"exit_code": code, "_text": say("connections.login.after", alias=alias) if code == 0 else ""}  # a person's command (the board's Sign in runs it in the Terminal window): words, not JSON
 
 
 def _wait(root: Path, args: Any) -> Dict[str, Any]:
     from . import wait  # it imports this module's CommandError
 
+    if args.approval:  # 1.7.38: wait for the person's answer on a held call
+        return wait.run_approval_wait(root, args.approval, min(max(args.timeout, wait.APPROVAL_TIMEOUT[0]), wait.APPROVAL_TIMEOUT[1]))  # never past what VS Code allows a terminal call
+    if not args.run or not args.until:
+        raise CommandError(say("wait.approval.args"))
     return wait.run_wait(root, args.run, args.until, args.every, args.timeout, args.out, args.task)
 
 
@@ -291,6 +362,9 @@ def register(subparsers: Any) -> None:
     def connections_parser(name: str, help_text: str, wrap: Callable[[Dict[str, Any]], Dict[str, Any]]) -> None:
         listing = subparsers.add_parser(name, help=help_text)
         listing_commands = listing.add_subparsers(dest="connections_command")
+        looking = listing_commands.add_parser("find", help="find the connection a task needs by some words (a name, a system, an environment, what it is for); a few lines, a read")
+        looking.add_argument("words", nargs="+", help="what you look for, for example: sales warehouse dev")
+        looking.set_defaults(handler=lambda a: wrap(servers_find(repo_root(), a.words)))
         probe = listing_commands.add_parser("test", help="test the way in to a connection with its saved identity")
         probe.add_argument("alias")
         probe.set_defaults(handler=lambda a: wrap(servers_test(repo_root(), a.alias)))
@@ -307,9 +381,10 @@ def register(subparsers: Any) -> None:
     connections_parser("connections", "the connections of this copy (the company pack's and your own) and whether an identity is saved for each; `test <alias>` tests the way in", lambda found: found)
     connections_parser("servers", "renamed: use `harness connections`. This old name says so, then does the same", lambda found: dict(found, renamed=say("connections.renamed")))  # 1.7.20
 
-    waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")
-    waiting.add_argument("--run", required=True, help="the read-only command of a listed system to run each round, whole, in quotes")
-    waiting.add_argument("--until", required=True, help="a pattern (regular expression) the output must match to end the wait")
+    waiting = subparsers.add_parser("wait", help="wait in one call, with no model call: for an outside system to reach a state (--run, --until: a read of a listed system every N seconds until its output matches, or a timeout; the last output goes to a file of the task), or for the person to decide on a held call (--approval <code>)")
+    waiting.add_argument("--approval", default="", metavar="CODE", help="wait for the person to approve the held call with this code, open its connection for the task, or dismiss it: returns at once when they do, after 9 minutes when nobody has")
+    waiting.add_argument("--run", default="", help="the read-only command of a listed system to run each round, whole, in quotes")
+    waiting.add_argument("--until", default="", help="a pattern (regular expression) the output must match to end the wait")
     waiting.add_argument("--every", type=int, default=30, help="seconds between rounds (5 to 600; default 30)")
     waiting.add_argument("--timeout", type=int, default=540, help="seconds after which the wait ends with exit code 1 (10 to 7200; default 540: VS Code hands a terminal call back after 10 minutes, so a longer job is waited for with one call after another)")
     waiting.add_argument("--out", default="", help="a file inside the task folder where the last output is written whole, to record as evidence: RUNS/DEV/wait-job.txt means the task's own RUNS/")

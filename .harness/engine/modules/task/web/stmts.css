@@ -1,0 +1,19 @@
+/* The statements of a held call (stmts.js): a numbered list, the ones that wait for the person drawn first, the reads folded into one line. */
+.stm{margin:8px 0;min-width:0}
+.stm-h{margin-bottom:4px}.stm-h .stm-ask{color:var(--hot)}
+.stm-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;counter-reset:none}
+.stm-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:3px 8px;border-radius:6px;border:1px solid transparent;min-width:0}
+.stm-row .stm-n{flex:none;min-width:2.2em;text-align:right;color:var(--soft);font:12px var(--mono);font-variant-numeric:tabular-nums}
+.stm-row .stm-mark{flex:none;padding:0 7px;border-radius:999px;font-size:11.5px;line-height:18px;background:var(--track);color:var(--soft);cursor:help;white-space:nowrap}
+.stm-row .stm-on{flex:none;font-size:11.5px;color:var(--soft);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stm-row .stm-code{flex:1 1 14em;min-width:0;font:12.5px/1.45 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.stm-row .stm-file{flex:none;max-width:12em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stm-row .stm-why{flex:1 0 100%;padding-left:calc(2.2em + 8px);font-size:12px;color:var(--hot)}
+.stm-row.zone-write .stm-mark{background:var(--hot-bg);color:var(--hot)}
+.stm-row.zone-ask{background:var(--hot-bg);border-color:var(--hot-line)}
+.stm-row.zone-ask .stm-mark{background:var(--hot);color:#fff}
+.stm-reads{margin-top:4px}.stm-reads>summary{cursor:pointer;color:var(--soft);font-size:12.5px}
+.stm-reads .stm-list{margin-top:4px}.stm-row.zone-read .stm-code{color:var(--soft)}
+.stm-more{margin:6px 0 0 8px}.stm-more[hidden]{display:none}
+.stm-left{margin:4px 0 0 8px}
+@media (max-width:560px){.stm-row .stm-n{min-width:1.8em}.stm-row .stm-code{flex-basis:100%}.stm-row .stm-why{padding-left:0}}

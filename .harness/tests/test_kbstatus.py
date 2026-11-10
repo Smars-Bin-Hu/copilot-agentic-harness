@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from pathlib import Path
 
 from support import payload
 
@@ -171,6 +172,17 @@ class StatusTests(TaskCase):
         (domain / "architecture.md").write_text("# d\n\n## Flows\n\n`job:A` → `sp:B`\n\n## Traps\n", encoding="utf-8")
         self.assertTrue(kbstatus.domain_state(self.root, domain, deep=False)["done"])
         self.assertEqual(kbstatus.plan_command(domain / "discovery" / "learn-plan.md"), {"entries": ["job:Shop_Orders"], "stops": [], "shared_min": 3})
+
+    def test_a_domain_whose_objects_are_not_known_for_want_of_a_map_is_not_called_done(self) -> None:
+        """1.7.38: with no map the objects left cannot be counted, and the window showed a full green bar for a domain that was not finished."""
+        domain = self.root / "d"
+        (domain / "discovery").mkdir(parents=True)
+        (domain / "discovery" / "learn-plan.md").write_text(PLAN, encoding="utf-8")
+        (domain / "architecture.md").write_text("# d\n\n## Flows\n\n`job:A` → `sp:B`\n\n## Traps\n", encoding="utf-8")
+        state = kbstatus.domain_state(self.root, domain, deep=True)  # no map in this root
+        self.assertIn("problem", state)
+        self.assertFalse(state["done"])
+        self.assertIn("item.problem ? 0", (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "dock.js").read_text(encoding="utf-8"))
 
     def stop(self, **fields: object) -> dict:
         return self.hook(payload("Stop", SESSION, **fields))

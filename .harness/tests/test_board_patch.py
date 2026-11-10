@@ -59,6 +59,75 @@ assert.strictEqual(stages(row, true).steps[0].since, Date.parse("2026-11-01T09:5
 
 
 @unittest.skipUnless(NODE, "node is not installed")
+class ButtonsAreNotCoveredTests(unittest.TestCase):
+    def test_the_number_on_the_book_says_what_it_counts_on_hover_of_the_number_and_of_the_button(self) -> None:
+        """Retest N12: the badge showed a bare 4 and the hover of the button said only Knowledge base. The company's words (copies that differ) stay on the button, the count comes below them."""
+        dock = (WEB / "dock.js").read_text(encoding="utf-8")
+        source = between(dock, "  let staleCount = 0;", "  function watchStale()") + between(dock, "  function paintBook() {", "  function watchCompany()")
+        script = r"""
+const assert = require("assert");
+const TEXT = {"dock.kb": "Knowledge base", "dock.kb.badge.one": "1 stale card", "dock.kb.badge.n": "{n} stale cards", "dock.company.tip.one": "1 company item differs"};
+const t = (key, values) => TEXT[key].replace(/\{(\w+)\}/g, (whole, name) => values[name]);
+const plainWords = (text) => text, COMPANY_LINES = 6, changeWord = (row) => row, stuckWord = (item) => item;
+let drift = null;
+const mark = {hidden: true, textContent: "", title: ""}, book = {title: "Knowledge base"};
+global.document = {querySelector: (selector) => (selector === ".dock-count" ? mark : selector === ".dock-book" ? book : null)};
+""" + source + r"""
+badge(4);
+assert.deepStrictEqual([mark.hidden, mark.textContent, mark.title, book.title], [false, "4", "4 stale cards", "Knowledge base\n4 stale cards"]);
+badge(1);
+assert.strictEqual(mark.title, "1 stale card");
+drift = {total: 1, changes: ["x"], refused: [], problem: ""};
+paintBook();  // the company's words come first and the count stays
+assert.strictEqual(book.title, "1 company item differs\nx\n1 stale card");
+badge(120);
+assert.strictEqual(mark.textContent, "99+");
+badge(0);
+drift = null;
+paintBook();
+assert.deepStrictEqual([mark.hidden, mark.title, book.title], [true, "", "Knowledge base"]);
+"""
+        done = run_node(script)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_the_reply_bar_steps_aside_while_a_button_of_the_page_lies_under_it(self) -> None:
+        """Retest N11: the Say something pill sat on Approve and Dismiss. The check is by geometry: a button, link or field of the page under any part of the bar."""
+        source = between((WEB / "reply.js").read_text(encoding="utf-8"), "  const under = () => {", "  const soon = ")
+        script = r"""
+const assert = require("assert");
+const rect = (left, top, right, bottom) => ({left, top, right, bottom, width: right - left, height: bottom - top});
+const part = (box, extra) => Object.assign({hidden: false, getBoundingClientRect: () => rect(...box)}, extra);
+const bar = {children: [part([400, 700, 560, 744]), part([100, 100, 120, 120], {hidden: true})], classList: {toggle(name, on) { bar.on = on; }}};
+const mine = {open: false};
+let buttons = [];
+global.document = {querySelectorAll: () => buttons};
+global.requestAnimationFrame = (fn) => { fn(); return 1; };
+""" + source + r"""
+const button = (box, extra) => Object.assign({disabled: false, closest: () => null, getBoundingClientRect: () => rect(...box)}, extra);
+assert.strictEqual(under(), false, "nothing on the page: the bar stays");
+buttons = [button([100, 300, 200, 330])];
+assert.strictEqual(under(), false, "a button far from the bar");
+buttons = [button([480, 690, 560, 720])];  // Approve, half under the bar
+assert.strictEqual(under(), true);
+buttons = [button([480, 690, 560, 720], {disabled: true})];
+assert.strictEqual(under(), true, "a grey button is covered too: Approve and Open are grey until the code is typed (C12 TB-14)");
+buttons = [button([480, 690, 560, 720], {closest: () => ({})})];
+assert.strictEqual(under(), false, "a hidden part of the page");
+buttons = [button([480, 690, 560, 720])];
+mine.open = true;
+assert.strictEqual(under(), false, "with the panel open the bar is the panel's own");
+mine.open = false;
+dodge();
+assert.strictEqual(bar.on, true);
+buttons = [];
+dodge();
+assert.strictEqual(bar.on, false, "scrolled free: the bar is back");
+"""
+        done = run_node(script)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+
+@unittest.skipUnless(NODE, "node is not installed")
 class PairingLinkTests(unittest.TestCase):
     def test_a_link_pasted_into_a_tab_that_shows_the_board_is_read(self) -> None:
         """Only what follows the # changes then, so the page does not load again; the code stayed in the address bar and the page said "not paired"."""
@@ -458,7 +527,7 @@ class PromoteTermTests(unittest.TestCase):
     def test_the_names_of_the_chat_templates_and_the_button(self) -> None:
         self.assertEqual(chatsend.TEMPLATES["go-promote"], "Promote (write-back repo) approved. Go on with the promote, then stop and report.")
         self.assertIn("promote (write-back repo)", chatsend.PLAIN["go-recover"])
-        self.assertEqual(self.table("en")["board.action.approve-promote"], "approve promote")  # a button: plain
+        self.assertEqual(self.table("en")["board.action.approve-promote"], "Approve promote")  # a button: plain words, a capital first letter
         self.assertEqual(self.table("en")["desk.go.recover"], chatsend.PLAIN["go-recover"])
 
 
@@ -557,19 +626,21 @@ class WalkThroughTests(unittest.TestCase):
             self.assertNotIn(key, messages.table("en"), key)
         self.assertIn(".tk-model-name{max-width:16em;overflow:hidden;text-overflow:ellipsis", (WEB / "desk.css").read_text(encoding="utf-8"))  # a long model name does not push the line
 
-    def test_the_task_settings_bar_opens_an_environment_with_one_click_and_the_row_marks_it(self) -> None:
-        """1.7.6: the chips post `task allow` with no code; the line under the name has the open mark; both languages have the words."""
+    def test_the_task_settings_bar_lists_what_is_open_and_the_card_opens_a_connection_with_the_code(self) -> None:
+        """1.7.38: the pop lists the connections opened in this task, each with a Close that posts `task allow` with no code; the card of a held call opens one with the code; the row marks it."""
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: chip.getAttribute("aria-pressed") === "true" ? "off" : "on", step: "act"})', desk)
-        self.assertIn('disabled: listed && can ? null : "disabled"', desk)  # no system reaches it, or the board cannot act: not clickable
-        self.assertIn('class: "chip env never"', desk)  # prod
+        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, env: name, runner: on ? "on" : "off", step: "act"})', desk)  # close: one click, no code
+        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, step: "act", env: open.dataset.conn, runner: "on", code: input.value.trim()})', desk)  # open: the code of the call
+        self.assertIn("opens.forEach((open) => { open.disabled = !ready_();", desk)  # armed by the same View + code as Approve
+        self.assertNotIn('class: "chip env', desk)  # the environment chips are gone
         self.assertIn('ui.envs = slot("span", "tk-rv tk-env");', desk)  # a pill of the head, beside Independent review, not a field of the message bar
         self.assertIn('ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());', desk)
         status = (WEB / "status.js").read_text(encoding="utf-8")
-        self.assertIn('open: (data, key, focus) => openMark(data.open_envs, key, focus)', status)
+        self.assertIn('open: (data, key, focus) => openMark(data.open_conns, key, focus)', status)
         self.assertIn(".st-s-open{width:88px", (WEB / "status.css").read_text(encoding="utf-8"))
         en, zh = messages.table("en"), messages.table("zh")
-        for key in ("desk.set.open", "desk.set.open.none", "desk.set.open.never", "desk.set.open.note", "desk.set.open.off", "desk.set.open.cannot", "board.status.open", "board.status.open.word"):
+        for key in ("desk.set.open", "desk.set.open.tip.conn", "desk.set.open.list", "desk.set.open.empty", "desk.set.open.never", "desk.set.open.off", "desk.set.open.cannot", "board.status.open.conns", "board.status.open.word",
+                    "desk.outbox.open", "desk.outbox.open.tip.all", "desk.outbox.open.tip.items", "desk.outbox.opened", "desk.outbox.opened.hint", "desk.outbox.opened.tell", "desk.outbox.opened.body"):
             self.assertIn(key, en, key)
             self.assertIn(key, zh, key)
 
@@ -592,7 +663,7 @@ class WalkThroughTests(unittest.TestCase):
 
     def test_a_paired_browser_is_never_told_it_is_not_paired(self) -> None:
         serve = (WEB / "serve.js").read_text(encoding="utf-8")
-        self.assertIn("const post = (path, body) => ready.then(() => send(path, body));", serve)  # a call of the page waits for the pairing
+        self.assertIn("const post = (path, body, now) => ready.then(() => send(path, body, now));", serve)  # a call of the page waits for the pairing
         self.assertIn('const already = send("/api/status", {})', serve)  # the pairing itself cannot wait for itself
         self.assertIn('if (paired) document.querySelector(".unpaired-note")?.remove();', serve)
 

@@ -55,8 +55,8 @@ The templates are in English. Write the content of the goal files in the languag
 1. **Before starting**: set the step to `doing` in `TODO.md`; write in `NOW.md` which step it is and which task is used. For a step that writes files, open one task per step (the skill `harness-my-task`).
 2. **Do it**: by the rules of the task.
 3. **Check yourself**: run the checks that can be run. Write down the results; do not just say "it should be fine".
-4. **Wrap up**: promote first (if needed), then `task close`. This is the "step boundary": see the note on the gate below.
-5. **Hand over**:
+4. **Wrap up**: promote first (if needed), then deliver the task: `harness task deliver --summary "<text>"`, and stop. You never close a task: the user accepts it on the board, which closes it. This is the "step boundary": see the note on the gate below.
+5. **Hand over** (after the user has accepted and closed the task and told you to go on):
    - Set the step to `handed over` in `TODO.md` and write the results of your own check.
    - Write the acceptance as [Acceptance guides](#acceptance-guides) says: one line in `TODO.md` for a simple step; `accept/<step number>.md` for a complex one, with a link in `TODO.md`.
    - Write "waiting for the user's acceptance" in `NOW.md`. Tell the user in the conversation, then stop.
@@ -110,11 +110,11 @@ Add one entry when a step passes, the newest on top. Write only changes that are
 
 ## Writing files and the gate
 
-In a session with a task (before `task close`), the gate does not allow writes to files under `.workspace/goals/` (`LOG.md` and `accept/` included). So:
+In a session with an open task, the gate does not allow writes to files under `.workspace/goals/` (`LOG.md` and `accept/` included). So:
 
 - Write `NOW.md` before starting, then open the task.
-- When done, run `task close` first, then write `TODO.md`, `NOW.md`, `LOG.md` and the acceptance guide.
-- When the user brings a new requirement while a task is open: note it in the conversation first, and write it into the files at the step boundary. If the user wants it saved right away, run `task close` first (`task open` picks it up again afterwards).
+- When done, deliver the task and stop. The user accepts and closes it on the board. Then write `TODO.md`, `NOW.md`, `LOG.md` and the acceptance guide.
+- When the user brings a new requirement while a task is open: note it in the conversation first, and write it into the files at the step boundary. If the user wants it saved right away, ask them to close the task first (**Close** on the board); `task open` picks it up again afterwards.
 - When a write is refused, do not get around it with a terminal command. Do the next step the refusal gives.
 
 ## Gotchas
@@ -131,7 +131,7 @@ In a session with a task (before `task close`), the gate does not allow writes t
 
 | Issue | Solution |
 | --- | --- |
-| Writing `TODO.md`, `NOW.md` or `LOG.md` is refused | The task is not closed yet. Run `task close` first, then write |
+| Writing `TODO.md`, `NOW.md` or `LOG.md` is refused | The task is still open. Deliver it and stop: write after the user has closed it |
 | `.workspace/goals/<id>/` is not found | Ask the user for the name of the goal. Do not make a new one in its place |
 | The folder has several goals, and it is not clear which to pick up | List the first line of each goal's `NOW.md` and let the user choose |
 | `NOW.md` says `doing`, but the matching work is not on disk | Treat the step as not done. Tell the user, and start again from this step |

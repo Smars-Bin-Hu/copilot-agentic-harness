@@ -68,16 +68,16 @@ flowchart LR
     G --> H[Dry-run write-back<br/>PROMOTE-PLAN.diff]
     H --> I{You approve<br/>the write-back}
     I --> J[New branch in the repository<br/>not committed]
-    J --> K([You commit; the task closes,<br/>the report is written])
+    J --> K([The promote was your yes: the board closes the task,<br/>the report is written. You commit])
 ```
 
-A task of another kind has fewer steps: a root cause analysis or a design ends in a document (`RCA.md`, `DESIGN.md`), with no plan and no write-back. A test task has a guide and a step for each environment: you run it, bring the results back, and the agent judges them.
+A task of another kind has fewer steps: a root cause analysis or a design ends in a document (`RCA.md`, `DESIGN.md`), with no plan and no write-back. A test task has a guide and a step for each environment: you run it, bring the results back, and the agent judges them. These tasks end when the agent hands in a short summary and the task shows **to accept**: you press **Accept and close**, or **Not yet** and say what is missing. The agent never asks "close the task?": closing is your acceptance. A question or a chore on a ticket ends the same way.
 
 You can put any task aside (pause), take it up again (resume), or let the agent work down `TODO.md` without stopping to ask (autorun, beta). A closed task can be opened again, or archived out of the repository.
 
 ## 4. Follow and steer it in the browser
 
-Run `harness task board` in your own terminal. Your browser first shows an Enter screen (once for each tab) that checks that VS Code, Copilot, `harness doctor` and the pairing are ready, and lets you in only when they are. Then it opens on the board of every task. It opens as a **lobby**: each open task is a small agent on the floor, in the zone of what it is doing (at work, waiting for you, resting). Point at one: a card shows the task, its model, context, run time, stage and TODO, its time and Credits, and the same buttons as the list.
+Run `harness task board` in your own terminal. Your browser first shows an Enter screen (once for each tab) that checks that this copy is set up, the browser is paired, `harness doctor` has no error, VS Code is open and Copilot is connected, and lets you in only when they are. What the company's side still lacks (knowledge base, sign-ins, a program a tool pack needs) is told too, and never stops you. Then it opens on the board of every task. It opens as a **lobby**: each open task is a small agent on the floor, in the zone of what it is doing (at work, waiting for you, resting). Point at one: a card shows the task, its model, context, run time, stage and TODO, its time and Credits, and the same buttons as the list.
 
 ![The lobby: every open task as a small agent; the card of one shows its stage, how long it waited and its buttons](images/board.png)
 

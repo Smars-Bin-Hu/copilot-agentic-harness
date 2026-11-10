@@ -112,6 +112,20 @@
     return card(t("report.time"), nodes);
   }
 
+  // The model and the thinking effort of the main agent for one prompt (1.7.38, F3 M): a short mark, `model · effort` (the ones it changed between joined by an arrow), and each run on hover: the model, the effort, how many
+  // calls and how many reasoning tokens. Copilot's own small calls are not in it. A prompt the record gave no call for has no mark: nothing is guessed.
+  function modelMark(entry) {
+    const found = entry.model_calls;
+    if (!found || !found.runs || !found.runs.length) return null;
+    const name = (run) => run.model + (run.effort ? " \u00b7 " + run.effort : "");
+    const pairs = found.runs.filter((run, index, all) => all.findIndex((other) => name(other) === name(run)) === index);
+    const brief = pairs.slice(0, 2).map((run, index) => (index && run.model === pairs[index - 1].model && run.effort ? run.effort : name(run)));  // the second, on the same model, is only its effort
+    const shown = brief.join(" \u2192 ") + (pairs.length > 2 ? " +" + (pairs.length - 2) : "");
+    const lines = found.runs.map((run) => name(run) + " \u00b7 " + t(run.calls === 1 ? "report.model.call" : "report.model.calls", {n: run.calls}) + (run.reasoning_tokens !== null && run.reasoning_tokens !== undefined ? " \u00b7 " + t("report.model.reasoning", {n: amount(run.reasoning_tokens)}) : ""));
+    if (found.more) lines.push(t("report.model.more", {n: found.more}));
+    return (where) => h("div", {class: "model-line" + (where ? " " + where : "")}, h("span", {class: "tag model", title: lines.join("\n")}, shown));  // a function: the line is made twice, in the cell and under the row (a narrow window)
+  }
+
   function promptsCard() {
     const longest = Math.max(...info.prompts.map((entry) => entry.active_s)) || 1;
     const dearest = Math.max(...info.prompts.map((entry) => entry.aiu || 0)) || 1;
@@ -120,15 +134,17 @@
     const columns = hasUsage ? 9 : 7;
     const rows = [];
     for (const entry of info.prompts) {
-      const notes = [["report.tag.denied", "denied"], ["report.tag.blocks", "stop_blocks"], ["report.tag.failed", "failed_tool_calls"]]
-        .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), "bad")]);
+      const notes = [["report.tag.denied", "denied"], ["report.tag.held", "held"], ["report.tag.blocks", "stop_blocks"], ["report.tag.failed", "failed_tool_calls"]]
+        .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), field === "held" ? "" : "bad")]);  // a held call waited for the person: not a fault (C12 RB-N6)
       if (entry.compactions && entry.compactions.length) notes.push([" ", h("span", {class: "tag", title: compactedText(entry.compactions)}, t("report.tag.compacted", {n: entry.compactions.length}))]);
+      const mark = modelMark(entry);
       rows.push(h("tr", null,
         h("td", null, entry.n), h("td", {class: "when"}, when(entry.at, 5, 16)),
-        h("td", null, tag(entry.stage_labels && entry.stage_labels.length > 1 ? entry.stage_labels.join(" \u2192 ") : entry.stage_label || entry.stage), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null),
+        h("td", null, tag(entry.stage_labels && entry.stage_labels.length > 1 ? entry.stage_labels.join(" \u2192 ") : entry.stage_label || entry.stage), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null, mark ? mark("in") : null),
         h("td", {class: "grow"}, bar(timeParts(entry), longest)), num(clock(entry.active_s)),
         hasUsage ? [h("td", {style: "width:14%"}, bar([["usage", entry.aiu || 0, "Credits " + amount(entry.aiu)]], dearest, true)), num(amount(entry.aiu))] : null,
         num(entry.turns || "-"), num(entry.tool_calls)));
+      if (mark) rows.push(h("tr", {class: "tr-model"}, h("td"), h("td", {colspan: columns - 1}, mark(""))));
       if (entry.waited_after_s && entry.waited_after_s >= 60) {
         const wait = info.waits.find((item) => item.after_prompt === entry.n);
         rows.push(h("tr", {class: "gap"}, h("td"), h("td", {colspan: columns - 1},
@@ -283,18 +299,38 @@
       .then(() => { gateBusy = false; draw(); });
   }
 
+  // What the hook refused for is a word of the harness, not the name of its rule (`external-unpinned`): the words of the table, else the name with its dashes taken out (1.7.38, C13 FR2 7).
+  const ruleWords = (rule) => { const key = "desk.trace.rule." + rule; return Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : String(rule).replace(/[-_.]+/g, " "); };
+  // The reason in full may be 1500 characters, and the right way comes last in it: a row shows one line (the start, and where the way begins), the mouse over it and the opened row show the whole.
+  const clipWords = (text, size) => (text.length <= size ? text : text.slice(0, size).replace(/\s+\S*$/, "") + "\u2026");
+  function reasonSummary(text) {
+    const lines = String(text || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
+    const way = lines.find((line, index) => index > 0 && /^(?:The way:|\u6b63\u8def\uff1a)/.test(line));
+    return way ? clipWords(lines[0], 90) + " \u00b7 " + clipWords(way, 90) : clipWords(lines.join(" "), 180);
+  }
+  function reasonCell(text) {
+    const whole = String(text || "");
+    if (whole.length <= 200 && !whole.includes("\n")) return h("span", {class: "sub"}, whole);
+    const short = reasonSummary(whole);
+    const label = h("summary", {class: "sub", title: whole}, short);
+    const node = h("details", {class: "gate-reason"}, label, h("div", {class: "sub gate-reason-full"}, whole));
+    node.addEventListener("toggle", () => { label.textContent = node.open ? t("report.gate.reason.hide") : short; });  // opened, the row shows the whole reason, and its label says how to fold it
+    return node;
+  }
+
   function gateCard() {
     const gate = whole.gate;
     if (!gate) return null;
     const can = served();
     const title = t("report.gate", {n: gate.count});
-    if (!gate.count) return card(title, h("p", {class: "sub"}, t("report.gate.none")));
+    const heldNote = gate.held ? h("p", {class: "sub"}, t("report.gate.held", {n: gate.held})) : null;  // held for you is not a block (RC-4)
+    if (!gate.count) return card(title, [h("p", {class: "sub"}, t("report.gate.none")), heldNote]);
     const head = [th(t("report.col.at")), th(t("report.gate.col.what")), th(t("report.gate.col.rule")), th(t("report.gate.col.reason")), th(t("report.gate.col.verdict"))];
     const rows = gate.items.map((item) => h("tr", null,
       h("td", {class: "when"}, when(item.at, 11, 16)),
       h("td", null, h("code", {class: "gate-what", title: item.command || item.paths.join(", ")}, item.command || item.paths.join(", ") || item.tool)),
-      h("td", null, tag(item.rule)),
-      h("td", {class: "sub"}, item.reason),
+      h("td", null, h("span", {title: item.rule}, tag(ruleWords(item.rule)))),
+      h("td", null, reasonCell(item.reason)),
       h("td", null, can
         ? [VERDICTS.map((name) => h("button", {type: "button", class: "act" + (item.verdict === name ? " live" : ""), disabled: gateBusy ? "" : null, "aria-pressed": item.verdict === name ? "true" : "false"}, t("report.gate.v." + name))),
            item.exported ? [" ", tag(t("report.gate.exported"), "good")] : null]
@@ -303,7 +339,7 @@
     if (can) {  // the buttons get their click here: `h` sets attributes only
       rows.forEach((row, order) => row.querySelectorAll("button").forEach((button, index) => button.addEventListener("click", () => judge(gate.items[order], VERDICTS[index]))));
     }
-    const nodes = [h("p", {class: "hint top"}, t(can ? "report.gate.hint" : "report.gate.hint.static")), table(head, rows)];
+    const nodes = [h("p", {class: "hint top"}, t(can ? "report.gate.hint" : "report.gate.hint.static")), heldNote, table(head, rows)];
     if (gate.count > gate.shown) nodes.push(h("p", {class: "sub"}, t("report.gate.more", {shown: gate.shown, total: gate.count})));
     if (can) {
       const button = h("button", {type: "button", class: "act", disabled: gate.wrong_open && !gateBusy ? null : "disabled"}, t("report.gate.export", {n: gate.wrong_open}));

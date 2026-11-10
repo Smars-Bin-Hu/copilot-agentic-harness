@@ -301,6 +301,29 @@ class LinkTests(LinkCase):
         self.assertEqual((row["chat"]["state"], row["sub"]["kind"]), ("idle", "reply"))
         self.assertNotIn("started_at", row["chat"])  # idle: no run time
 
+    def test_every_chat_that_runs_or_waits_is_known_whatever_its_folder_provider_or_task(self) -> None:
+        """Retest N2: VS Code asks "a chat is still running, quit anyway?" (`veto.chat`) for any chat of any window, not only the chat of a task. A restart names them first."""
+        def change(session: str, status: int) -> None:
+            self.host.push({"jsonrpc": "2.0", "method": "root/sessionSummaryChanged", "params": {"session": session, "changes": {"status": status}}})
+
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1))
+        self.assertEqual(self.link.running_chats(), [])  # all three are idle
+        change("ahp-session:/elsewhere", 9)  # another folder, running
+        change("claude:/zzz", 56)  # another provider, waits for the person
+        change(self.resource, 9)  # the chat of the task, running
+        self.assertTrue(until(lambda: len(self.link.running_chats()) == 3), self.link.running_chats())
+        found = {chat["title"] + ":" + chat["state"] + ":" + chat["task"] for chat in self.link.running_chats()}
+        self.assertEqual(found, {"A chat:busy:", "A chat:input:", f"A chat:busy:{TASK}"})
+        change("ahp-session:/elsewhere", 33)  # finished
+        self.host.push({"jsonrpc": "2.0", "method": "root/sessionRemoved", "params": {"session": "claude:/zzz"}})
+        self.assertTrue(until(lambda: len(self.link.running_chats()) == 1), self.link.running_chats())
+        self.assertEqual(self.link.running_chats()[0]["task"], TASK)
+
+    def test_a_link_that_is_not_up_knows_no_running_chat(self) -> None:
+        self.link.everywhere = {"ahp-session:/x": {"title": "t", "status": 9}}
+        self.assertEqual(self.link.running_chats(), [])  # an old answer is not a word about a VS Code that may be gone
+
     def test_a_session_added_later_is_found_and_a_removed_one_is_forgotten(self) -> None:
         self.items.clear()
         self.link.start()
@@ -347,6 +370,28 @@ class NotReadyTests(LinkCase):
         self.assertEqual(self.row()["chat"], {"bound": False, "why": "none"})  # the row says why; nothing raised
         state["fail"] = False
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+
+    def test_the_link_knows_the_process_of_the_host_it_is_connected_to_and_forgets_it_when_it_is_not(self) -> None:
+        """1.7.38 (Q2): the board reads the environment of that process before any chat."""
+        state = {"fail": True}
+        real = self.open_host
+
+        def opener() -> ahp.Connection:
+            if state["fail"]:
+                raise ahp.NotReady("none")
+            link = real()
+            link.pid = 4711  # `ahp.connect` sets it from the endpoint
+            return link
+
+        self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, backoff=ahp.Backoff(0.05, 0.1))
+        self.addCleanup(self.link.stop)
+        self.assertIsNone(self.link.host())
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["why"] == "none"))
+        self.assertIsNone(self.link.host(), "not connected: no process")
+        state["fail"] = False
+        self.assertTrue(until(lambda: self.link.status()["ready"]))
+        self.assertEqual(self.link.host(), 4711)
 
     def test_opening_vs_code_from_the_board_makes_the_link_look_every_second_not_after_the_grown_wait(self) -> None:
         """1.7.19: while no window was open the wait between two looks had grown (3, 6 ... 60 s): after Open VS Code the Enter screen stayed red up to a minute."""

@@ -4,6 +4,8 @@
 .st-row{display:flex;align-items:center;gap:6px;height:20px;margin-top:3px;font-size:11.5px;line-height:1;color:var(--soft);white-space:nowrap}
 .st-slot{flex:none;display:flex;align-items:center;min-width:0;height:20px}
 .st-s-model{width:116px;overflow:hidden}.st-s-context{width:16px}.st-s-run{width:72px;overflow:hidden}.st-s-stage{width:76px}.st-s-todo{width:84px;overflow:hidden}.st-s-open{width:88px;overflow:hidden}
+.st-link{display:inline-flex;align-items:center;flex:none;gap:2px;height:18px;padding:0 3px;border-radius:5px;color:var(--soft);font-size:11px;line-height:1;cursor:default}.st-link:hover,.st-link:focus-visible{color:var(--ink);background:var(--line)}.st-link .st-lk{width:13px;height:13px;flex:none}
+.st-links{min-width:150px;max-width:min(320px,calc(100vw - 32px))}.st-links .st-lka{color:inherit;text-decoration:none}.st-links .st-lka:hover,.st-links .st-lka:focus-visible{text-decoration:underline}
 .st-chip.st-open{color:var(--good);border-color:var(--good-line);background:var(--good-bg)}
 .st-chip{display:block;max-width:100%;box-sizing:border-box;height:18px;line-height:16px;padding:0 6px;border:1px solid var(--line);border-radius:6px;overflow:hidden;text-overflow:ellipsis;color:var(--soft);font-size:11.5px}
 .st-ctx{display:inline-flex}
@@ -83,4 +85,6 @@
 .st-wrap .st-s-stage{width:100px}.st-wrap .st-s-model{width:auto;max-width:130px}.st-wrap .st-s-todo,.st-wrap .st-s-run{width:auto}.st-wrap .st-s-run{overflow:visible}
 .lb-card .st-chip{max-width:130px}
 @media (prefers-reduced-motion:reduce){.st-live,.st-d,.st-d.seg,.st-ribbon .st-l::after{animation:none!important}}
+.st-card{position:fixed;z-index:175;left:0;top:0;min-width:240px;max-width:min(340px,calc(100vw - 16px));box-sizing:border-box;padding:10px 12px;background:var(--pop);color:var(--ink);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);font-size:12.5px;line-height:1.45;opacity:0;visibility:hidden;transition:opacity .12s}
+.st-card.on{opacity:1;visibility:visible}
 .st-card{max-height:calc(100vh - 24px);overflow:auto;overscroll-behavior:contain}

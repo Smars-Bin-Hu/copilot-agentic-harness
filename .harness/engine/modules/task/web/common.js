@@ -107,7 +107,7 @@ const tag = (text, kind) => h("span", {class: "tag" + (kind ? " " + kind : "")},
 function stateOf(row, live) { return row.state === "working" && !live ? "quiet" : row.state || "quiet"; }
 // What a task waits for, in the language of the page. The server words it too (`row.waiting`), but a board that runs while the language is changed may still send the
 // old language for a while; the page's own table is always the one it shows. Waits with a detail in them (a command, a question, an environment) keep the server's words.
-const PLAIN_WAITS = ["plan", "promote", "recover", "review", "req", "commit", "stopped", "cancelled", "go-req", "go-plan", "go-promote", "go-recover", "go-review", "outbox", "asking"];
+const PLAIN_WAITS = ["plan", "promote", "recover", "review", "req", "commit", "stopped", "cancelled", "go-req", "go-plan", "go-promote", "go-recover", "go-review", "outbox", "asking", "accept"];
 function waitText(row) {
   return PLAIN_WAITS.includes(row.waiting_why) && Object.prototype.hasOwnProperty.call(TEXT, "task.waiting." + row.waiting_why) ? t("task.waiting." + row.waiting_why) : row.waiting;
 }
@@ -193,12 +193,13 @@ function actionTitle(key) {
 }
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
+  const shown = label;  // every label of the board starts with a capital, big or small (the texts are written so: `board.action.*`)
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
   const hot = isHot(row, item);
   // While the agent is in the middle of a turn nothing is pressed on the page: a question about the result is a doubt, and the person decides when the answer is in
   // (stop the agent in VS Code first, or wait for it to stop)
   const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive" && !TALK.includes(item.action);
-  const button = h("button", {class: "act" + (CHAT_ACTIONS.includes(item.action) ? " chat-act" : "") + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": label}, label);
+  const button = h("button", {class: "act" + (CHAT_ACTIONS.includes(item.action) ? " chat-act" : "") + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": shown}, shown);
   if (locked) button.disabled = true;
   if (chatGone(row) && CHAT_ACTIONS.includes(item.action) && item.action !== "send") {  // Send stays: its panel lets the person copy the message
     button.disabled = true;

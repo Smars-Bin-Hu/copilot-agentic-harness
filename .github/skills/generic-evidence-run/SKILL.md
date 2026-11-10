@@ -18,7 +18,7 @@ A fact from an environment is worth something only as a saved run with a number.
 
 **Who starts it: auto.** Use it as soon as a fact from an environment is needed. Recording the run needs the task the fact is for.
 
-**A look, in a Q&A task** (the user asks to run a read and see what comes back, and no other task needs the fact): the task is a `qa` task opened with no questions (skill `harness-my-task`). Run the command for each server, at once. When the chat start names servers reached through a prefix, use `harness as <alias> --` for those. Answer with what each returned, and write under `## Answer` in `TASK.md` each command, whole, with what it printed. Write no steps file and record no `E<n>`: that is only when the user asks to keep it as evidence, or the task becomes other work. Then close the task. That is all.
+**A look, in a Q&A task** (the user asks to run a read and see what comes back, and no other task needs the fact): the task is a `qa` task opened with no questions (skill `harness-my-task`). Run the command for each server, at once. When the chat start names servers reached through a prefix, use `harness as <alias> --` for those. Answer with what each returned, and write under `## Answer` in `TASK.md` each command, whole, with what it printed. Write no steps file and record no `E<n>`: that is only when the user asks to keep it as evidence, or the task becomes other work. Then deliver the task (`harness task deliver --summary "<the answer in a few lines>"`) and stop. That is all.
 
 ## Prerequisites
 

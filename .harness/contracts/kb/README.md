@@ -10,7 +10,7 @@ The form every domain of a knowledge base takes, so that code can check it and f
 <knowledge base>/
   README.md                  the map: the domains (a table `| Domain | What it does | Entry points | Status |`, which `kb status` reads), shared/, the glossary
   glossary.md                one English term per business term (generic-kb-translate uses it)
-  company/                   the company's own content, not for one domain: company.json, standards/, skills/, instructions/ (`harness company`; 03 Configure)
+  company/                   the company's own content, not for one domain: company.json, standards/, skills/, instructions/, tools/ (`packs.json` names the factory tool packs it turns on; `connections.json`; `computer.json`, the recipe for each colleague's computer; `packs/<name>/` for packs it wrote, never named like a factory pack) (`harness company`; 03 Configure). Skill names: `<prefix>-<name>` is a company SOP with no tool; `<prefix>-<pack>-<name>` is the SOP of one tool pack, `<pack>` being its program's name
   shared/                    what several domains use (a framework, shared tables), written once
   domains/<domain>/
     domain.yaml              who the domain is (below). It lists no objects

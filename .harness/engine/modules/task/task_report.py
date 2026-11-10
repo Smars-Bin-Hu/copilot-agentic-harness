@@ -115,7 +115,9 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
         lines.append(say("mdreport.plan.no_file"))
     lines += ["", say("mdreport.events.title"), "", say("mdreport.events.header"), "| --- | --- | --- | --- |"]
     for event in data.get("events", []):
-        lines.append(f"| {event['at'][:19]} | {event.get('round', '')} | {event_text(event['what'])} | {common.cell(event.get('detail', '')) or '-'} |")
+        facts = event.get("facts") if isinstance(event.get("facts"), dict) else {}
+        key, detail = common.plain_event(str(event["what"]), str(event.get("detail", "")), facts)  # F3 U5: `allow-env`, `link`, `test-runner` and `approve-call` in words, as the page tells them
+        lines.append(f"| {event['at'][:19]} | {event.get('round', '')} | {event_text(event['what']) if key == 'event.' + str(event['what']) else say(key, n=int(facts.get('batch') or 0))} | {common.cell(detail) or '-'} |")
     for old in data.get("rounds", []):
         lines += ["", say("mdreport.old.title", round=old["round"]), ""]
         lines.append(say("mdreport.old.plan", at=(old.get("plan") or {}).get("approved_at") or say("mdreport.old.plan.none")))

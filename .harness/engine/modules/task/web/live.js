@@ -13,7 +13,7 @@ const LIVE = (function () {
   const SLOW = 3000;  // after a failed one
   const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
 
-  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], listeners: [], needs: [], started: ""};
+  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], gates: [], marks: new Map(), listeners: [], needs: [], started: "", answer: false};
 
   const svg = (paths, size, cls) => {
     const node = document.createElementNS(NS, "svg");
@@ -165,18 +165,35 @@ const LIVE = (function () {
     rec.subList.replaceChildren(...[...sub.items.map(subLine), sub.more ? h("li", {class: "sub-think"}, t("desk.live.subagent.more")) : null, !sub.items.length ? h("li", {class: "sub-think"}, t("desk.live.subagent.none")) : null].filter(Boolean));
   }
 
-  // A call the gate held for the person fails in the chat ("Run Shell Command failed"): when its command is one waiting in the outbox, it is shown as held, not as failed (1.7.22).
+  // A call the gate stopped fails in the chat ("Run Shell Command failed"), and none of the three things it can be is a failure of the call itself (1.7.22, 1.7.24; F3 U7):
+  // held, and its card waits in the outbox ("held": amber); approved, and the agent has not run it again ("approved"); or stopped by the gate before: held and not approved (`past`), or refused (`refused`: a call the gate never lets through).
+  // The last two are read from the gate's own record (`st.gates`, the task's hook log) and matched to the failed call by its command and, when the board saw the call begin, by the time. A call that really failed stays red.
   const flat = (text) => String(text || "").replace(/\s+/g, " ").trim();
-  function isHeld(item) {  // "held" (waits for the person), "approved" (waits for the agent to run it again), or "" (a call like any other)
+  const sameCommand = (command, target) => command.includes(target) || target.includes(command.slice(0, 60));
+  function isHeld(item) {  // "held" (waits for the person), "approved" (waits for the agent to run it again), "past" or "refused" (the gate's record), or "" (a call like any other)
     if (item.k !== "tool" || item.st !== "fail" || !item.target) return "";
     const target = flat(item.target).slice(0, 60);
     if (target.length <= 3) return "";
-    const same = (command) => command.includes(target) || target.includes(command.slice(0, 60));
-    return st.held.some(same) ? "held" : st.approved.some(same) ? "approved" : "";  // an approved call that has not run is not a failure (1.7.24)
+    if (st.held.some((command) => sameCommand(command, target))) return "held";
+    if (st.approved.some((command) => sameCommand(command, target))) return "approved";  // an approved call that has not run is not a failure (1.7.24)
+    const mark = st.marks.get(item.id);
+    return mark ? (mark.how === "held" ? "past" : "refused") : "";
+  }
+  function markGates(items) {  // which failed calls the gate's record explains: each row of the record explains one call
+    const marks = new Map(), used = new Set();
+    for (const item of items) {  // oldest first
+      if (item.k !== "tool" || item.st !== "fail" || !item.target) continue;
+      const target = flat(item.target).slice(0, 60);
+      if (target.length <= 3) continue;
+      const index = st.gates.findIndex((row, at) => !used.has(at) && (!item.t0 || !row.ms || Math.abs(item.t0 - row.ms) <= 20000) && sameCommand(row.command, target));
+      if (index >= 0) { used.add(index); marks.set(item.id, st.gates[index]); }
+    }
+    return marks;
   }
   function paint(rec, item) {
     const held = isHeld(item);
-    const sig = JSON.stringify(item) + (held ? "|" + held : "");
+    const why = held === "past" || held === "refused" ? (st.marks.get(item.id) || {}).reason || "" : "";
+    const sig = JSON.stringify(item) + (held ? "|" + held + "|" + why : "");
     if (sig === rec.sig) return;
     rec.sig = sig;
     rec.item = item;
@@ -191,20 +208,21 @@ const LIVE = (function () {
     } else if (item.k === "tool") {
       const kind = kindOf(item.tool || "", item.name || "");
       if (rec.kind2 !== kind) { rec.kind2 = kind; rec.ico.replaceChildren(svg(ICONS[kind], 15)); }
-      const label = held === "approved" ? t("desk.live.approved") : held ? t("desk.live.held") : item.say || item.name || item.tool || "";
+      const label = held === "approved" ? t("desk.live.approved") : held === "past" ? t("desk.live.held.past") : held === "refused" ? t("desk.live.refused") : held ? t("desk.live.held") : item.say || item.name || item.tool || "";
       setText(rec.say, label);
-      rec.say.title = label;
+      rec.say.title = why ? label + ": " + why : label;  // what the gate said, in the words it gave
       setText(rec.tg, item.target || "");
       rec.tg.hidden = !item.target;
       rec.tg.title = (item.target || "") + (item.cut ? " …" : "");
-      for (const name of ["run", "wait", "fail", "done"]) rec.el.classList.toggle("is-" + name, (held ? "wait" : item.st === "stop" ? "done" : item.st || "done") === name);  // classList: the `enter` class is not lost
+      const shown = held === "past" ? "held" : held === "refused" ? "refused" : held ? "wait" : item.st === "stop" ? "done" : item.st || "done";
+      for (const name of ["run", "wait", "fail", "done", "held", "refused"]) rec.el.classList.toggle("is-" + name, shown === name);  // classList: the `enter` class is not lost
       paintSub(rec, item.sub);
       const time = rec.el2;
       if (item.st === "run" && item.t0) { running(time, item.t0); }
       else {
         stopped(time);
         const label2 = time.querySelector(".st-time");
-        setText(label2, held === "approved" ? t("desk.live.wait.agent") : held || item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : item.st === "stop" ? t("desk.trace.stopped") : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
+        setText(label2, held === "approved" ? t("desk.live.wait.agent") : held === "past" ? t("desk.live.held.tag") : held === "refused" ? t("desk.live.refused.tag") : held || item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : item.st === "stop" ? t("desk.trace.stopped") : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
       }
     } else {
       const done = !item.run;
@@ -247,6 +265,7 @@ const LIVE = (function () {
     const ids = new Set(items.map((item) => item.id));
     for (const [id, rec] of st.nodes) if (!ids.has(id)) { rec.el.remove(); st.nodes.delete(id); }
     st.lastSaid = (items.filter((item) => item.k === "me").pop() || {}).id || "";
+    st.marks = markGates(items);
     let previous = null;
     for (const item of items) {
       let rec = st.nodes.get(item.id);
@@ -263,7 +282,6 @@ const LIVE = (function () {
     earlier.hidden = !(data && data.bound && data.more && items.length);
     paintCalm(data, items);
     paintLife(data);
-    root.classList.toggle("is-busy", Boolean(data && data.bound && data.state === "busy"));
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
   }
 
@@ -271,10 +289,12 @@ const LIVE = (function () {
     const bound = Boolean(data && data.bound);
     const state = bound ? data.state : "";
     life.hidden = !bound;
-    const waits = state === "input" || (state === "idle" && st.needs.length > 0);  // the chat is idle, the task is not: a card above says what it waits for
-    setClass(life, "lv-life " + (state === "busy" ? "run" : waits ? "paused" : "calm"));
-    const when = state === "busy" && data.started ? Date.parse(data.started) : NaN;
-    setText(lifeLabel, state === "busy" ? t("desk.live.working") : waits ? t("desk.live.input") : state === "error" ? t("desk.chat.error") : t("desk.live.idle"));
+    root.classList.toggle("is-busy", state === "busy" && !st.answer);  // the robot of the footer works only when the agent does
+    const asked = state === "busy" && st.answer;  // busy in the chat, but the agent waits for the person's answer on a held call: not "Working"
+    const waits = asked || state === "input" || (state === "idle" && st.needs.length > 0);  // the chat is idle, the task is not: a card above says what it waits for
+    setClass(life, "lv-life " + (state === "busy" && !asked ? "run" : waits ? "paused" : "calm"));
+    const when = state === "busy" && !asked && data.started ? Date.parse(data.started) : NaN;
+    setText(lifeLabel, asked ? t("desk.live.approval") : state === "busy" ? t("desk.live.working") : waits ? t("desk.live.input") : state === "error" ? t("desk.chat.error") : t("desk.live.idle"));
     lifeSep.hidden = lifeRun.hidden = isNaN(when);
     if (!isNaN(when)) running(lifeRun, when); else stopped(lifeRun);
   }
@@ -348,8 +368,16 @@ const LIVE = (function () {
       st.chat = info.chat || null;
       const heldNow = (info.held || []).map(flat);
       const approvedNow = (info.approved || []).map(flat);
-      if (heldNow.join("\n") !== st.held.join("\n") || approvedNow.join("\n") !== st.approved.join("\n")) { st.held = heldNow; st.approved = approvedNow; for (const rec of st.nodes.values()) if (rec.item) paint(rec, rec.item); }  // a card that arrives later changes how its call reads
+      const gatesNow = (info.gates || []).map((row) => ({command: flat(row.command), how: row.how === "held" ? "held" : "refused", reason: flat(row.reason).slice(0, 240), ms: Date.parse(row.at || "") || 0})).filter((row) => row.command);
+      const gatesKey = JSON.stringify(gatesNow);
+      if (heldNow.join("\n") !== st.held.join("\n") || approvedNow.join("\n") !== st.approved.join("\n") || gatesKey !== st.gatesKey) {
+        st.held = heldNow; st.approved = approvedNow; st.gates = gatesNow; st.gatesKey = gatesKey;
+        st.marks = markGates([...st.nodes.values()].map((rec) => rec.item).filter(Boolean));
+        for (const rec of st.nodes.values()) if (rec.item) paint(rec, rec.item);  // a card that arrives later changes how its call reads
+      }
       st.off = info.off || "";
+      const answer = Boolean(info.answer);  // the agent sits in `harness wait --approval`: the chat is busy, but the agent waits for the person (1.7.38, C12 TB-15)
+      if (answer !== st.answer) { st.answer = answer; if (st.data) paintLife(st.data); }
       const nothing = st.chat && !st.chat.bound ? st.chat.why || "" : "";
       link.title = nothing === "no-cli" || nothing === "off" ? t("board.vs.why." + nothing) : t("board.vs.open");
       link.disabled = nothing === "no-cli" || nothing === "off";

@@ -289,7 +289,7 @@ const CHAT = (function () {
       chip.addEventListener("click", () => { state.lang = lang; langChips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); }); refresh(); });
       return chip;
     });
-    const view = SERVE.dialog([h("h2", null, t("board.new.title")), blocked,
+    const view = SERVE.dialog([h("h2", null, t("board.new.title")), blocked, typeof READYBAR !== "undefined" ? READYBAR.vsNote() : null,
       h("div", {class: "new-split"},
         h("div", {class: "new-form"},
           h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
@@ -380,6 +380,7 @@ const CHAT = (function () {
       if (last && state.models.some((item) => item.id === last.id)) model.value = last.id;
       state.domainList = Array.isArray(found.domains) ? found.domains : [];
       state.linkTypes = Array.isArray(found.link_types) ? found.link_types : [];
+      if (state.linkTypes.length) links.placeholder = state.linkTypes.slice(0, 2).map((one) => one.type + ":" + (one.example || "id")).join(" ");  // a sample of a type that is really there (F1 L6)
       for (const one of state.linkTypes) {  // a click puts the type in, ready for the number
         const chip = h("button", {type: "button", class: "chip", title: (one.label || one.type) + " \u00b7 " + one.toolpack}, one.type + ":");
         chip.addEventListener("click", () => { links.value = (links.value.trim() ? links.value.trim() + " " : "") + one.type + ":"; links.focus(); refresh(); });

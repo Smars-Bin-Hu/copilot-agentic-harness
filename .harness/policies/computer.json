@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "description": "The recipe for This computer (1.7.31). Empty here: the harness ships none. The company puts its own in the knowledge base, company/tools/computer.json, copied to computer.company.json by `harness company sync`: {\"ca_bundle\": {\"host\": <an outside address>, \"proxy\": \"host:port\"}, \"tool_folders\": [{\"label\": <the tool>, \"hint\": <where its folder is, in words>}]}. No secret and no path of the person's own: Get ready fills the CA bundle address and the proxy from it when the person has set none, and shows the hints beside the tool folders. Read by core/launchenv.py.",
+  "ca_bundle": {},
+  "tool_folders": []
+}

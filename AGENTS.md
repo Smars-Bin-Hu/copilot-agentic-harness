@@ -44,15 +44,19 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - Look at the real files before you act. Do not guess a path, a command, a setting or how to test.
 - Keep the changes the user already made. Do not touch unrelated files.
 - Work is done in tasks: one task, one folder, under `.workspace/sandbox/tasks/<task>/`.
-  When the user asks you to produce or change files, or mentions an existing task, first open or pick up the task with the skill `harness-my-task`. Plain questions need no task. A look that touches a server or a file (run a read, see what comes back) is a Q&A task: open it without asking, answer, close it.
+  When the user asks you to produce or change files, or mentions an existing task, first open or pick up the task with the skill `harness-my-task`. Plain questions need no task. A look that touches a server or a file (run a read, see what comes back) is a Q&A task: open it without asking, answer, deliver, wait for the person to accept.
 - With a task, write only inside the task folder. Files in a target repository cannot be changed directly: they are written only by a promote the user approves,
-  and the task's `DEV/` can be written only after the user approves the plan (`PLAN.md`) in the terminal.
+  and the task's `DEV/` can be written only after the user approves the plan (`PLAN.md`) on the task page.
   How a task folder is used (`TASK.md`, `REQ.md`, `DEV/`, what not to write): [workspace.instructions.md](.github/instructions/workspace.instructions.md).
   Only the user may change the confirmation line of `REQ.md`, under autorun too. Do not fill it in when it is empty: the review package tells the reviewer to treat the requirement as "to be confirmed", and that is not a problem.
 - Only the user can switch independent checks on: the user writes `[review]=n` in a prompt or on the task page. You cannot switch them on, approve for the user, or waive them.
   There are two subagents only: the reviewer, used only in a task with checks on; and the mapper (read only), which needs no task and is used only after the user types `/generic-mapreduce` or starts it on the board, up to a limit. You cannot switch it on yourself.
 - Only the user can switch autorun on, in the terminal (autorun: working down `TODO.md` without stopping). While it is on: do not ask the user, do not promote, write decisions into `LOG.md`; when you cannot go on, run `harness task autorun off --reason "<why>"`, then stop.
-- A hook may stop an action only when the action clearly breaks a policy; a write tool whose target cannot be read counts. A hook that fails itself must not hurt normal work.
+- Local work (reading and writing inside the task, running tests) is stopped only when it clearly breaks a policy; a write tool whose target cannot be read counts.
+- A call to an outside system passes only if it is on the pass list. On the refuse list it is refused. Anything else asks the user.
+  When the gate cannot judge a call (it fails, a setting cannot be read, or it cannot tell which connection the call reaches), the call does not pass.
+  Only helpers (reminders, logs, what the board shows) may fail without stopping normal work.
+  When the guardrails themselves cannot decide (the engine cannot load, the session state or the registry cannot be read, a guardrail file is not what the user accepted), commands and writes are refused and reads stay allowed, until the user repairs it. Tell the user; do not try to repair it or go round it.
 - Before you delete, overwrite or do anything hard to undo, confirm the target and the scope.
 - Guardrail files cannot be changed: a hook refuses. The list is in
   [.harness/policies/gate.json](.harness/policies/gate.json). When one must change, tell the user.

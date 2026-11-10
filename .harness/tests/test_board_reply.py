@@ -556,7 +556,8 @@ class PageTests(unittest.TestCase):
 
     def test_stop_withdraw_and_try_again_are_beside_the_pill_on_every_tab(self) -> None:
         reply = source("reply.js")
-        self.assertIn('document.body.append(h("div", {class: "rp-bar"}, pill, halt, back, again), panel);', reply)
+        self.assertIn('const bar = h("div", {class: "rp-bar"}, pill, halt, back, again);', reply)
+        self.assertIn("document.body.append(bar, panel);", reply)
         self.assertIn('halt.hidden = state !== "busy"', reply)
         self.assertIn('back.hidden = !info.show || !live || !["busy", "idle", "input", "error"].includes(state)', reply)  # a message sent by mistake is taken back while the agent works too
         self.assertIn("again.hidden = !info.show || !live || !live.retry;", reply)
@@ -575,7 +576,7 @@ class PageTests(unittest.TestCase):
         self.assertEqual((chatsend.MAX_FILE, chatsend.MAX_FILES_TOTAL), (10 * 1024 * 1024, 20 * 1024 * 1024))
 
     def test_a_task_that_waits_is_not_called_idle(self) -> None:
-        self.assertIn('const waits = state === "input" || (state === "idle" && st.needs.length > 0);', source("live.js"))
+        self.assertIn('const waits = asked || state === "input" || (state === "idle" && st.needs.length > 0);', source("live.js"))
 
     def test_the_stream_is_drawn_by_the_drawing_of_the_documents(self) -> None:
         self.assertIn('LIVE.drawing(blocks)', source("desk.js"))

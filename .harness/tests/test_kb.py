@@ -173,7 +173,7 @@ class PromoteTests(KbCase):
 
         from modules.task import task as task_ops
 
-        task_ops.recover(self.root, "job1", reader=lambda _prompt: record["plan_sha256"][:8], interactive=True, out=io.StringIO())
+        task_ops.recover(self.root, "job1", reader=lambda _prompt: record["plan_sha256"][:6], interactive=True, out=io.StringIO())
         self.assertEqual(run_git(self.kb, "status", "--porcelain"), "")
         self.assertEqual((self.kb / "orders" / "delay.md").read_text(encoding="utf-8"), "old\n")
 

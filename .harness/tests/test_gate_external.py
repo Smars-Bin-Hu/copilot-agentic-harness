@@ -243,7 +243,7 @@ class GateExternalTests(HarnessTestCase):
         self.assertEqual(self.term("tk show T-1"), {})
         denied = self.term("cloudctl --sub dev delete x")
         self.assertEqual(denied["permissionDecision"], "deny")
-        for text in ("cloud", "dev", "destroy", "cloudctl --sub dev delete x", "不要重试"):
+        for text in ("cloud", "dev", "销毁", "cloudctl --sub dev delete x", "不要重试"):
             self.assertIn(text, denied["permissionDecisionReason"])
         held = self.term("tk comment T-1 hello")  # a write to a system without environments: the outbox (M43-4)
         self.assertEqual(held["permissionDecision"], "deny")
@@ -269,11 +269,12 @@ class GateExternalTests(HarnessTestCase):
         self.configure(SYSTEMS)
         self.assertEqual(self.term("cloudctl --sub dev list && cloudctl delete x")["permissionDecision"], "deny")
 
-    def test_a_list_that_does_not_validate_is_ignored_and_tools_check_says_why(self) -> None:
+    def test_a_list_that_does_not_validate_refuses_its_programs_and_tools_check_says_why(self) -> None:
         broken = copy.deepcopy(SYSTEMS)
         broken["cloud"]["verbs"].append({"pattern": "(", "verb": "read"})
         self.configure(broken)
-        self.assertEqual(self.term("cloudctl delete x"), {})  # a hook that fails itself must not hurt normal work
+        self.assertEqual(self.term("cloudctl delete x")["permissionDecision"], "deny")  # 1.7.38 (C13 F2): turned over: the list was ignored and the call passed; a gate that cannot judge a call of a listed program does not pass it
+        self.assertEqual(self.term("ls"), {})  # a command that names no listed program is as free as before
         completed = self.cli("tools", "check")
         self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
         self.assertIn("bad pattern", completed.stdout)
@@ -405,39 +406,65 @@ class GateExternalTaskTests(TaskCase):
         testrecord.set_runner(self.root, "t-test", "DEV", False, interactive=True)
         self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")
 
-    def test_the_person_opens_an_environment_for_one_task_and_the_switch_lets_writes_through_but_never_a_destroy_or_prod(self) -> None:
-        """1.7.4: `task allow --env dev --on` is the task-level switch: task, outbox and human decisions of that environment pass; deny does not; prod cannot be opened."""
+    def test_the_person_opens_a_connection_for_one_task_and_the_switch_lets_writes_through_but_never_a_destroy_or_prod(self) -> None:
+        """1.7.38: `task allow --conn cloud --on` is the task-level switch: task, outbox and human decisions of that connection pass; deny does not; prod cannot be opened."""
         from modules.task import tasklife
 
         self.configure()
         self.new()
         with self.assertRaises(Exception):
-            tasklife.set_allow(self.root, NAME, "dev", True, interactive=False)  # an agent's terminal
+            tasklife.set_allow(self.root, NAME, "cloud", True, interactive=False)  # an agent's terminal
         with self.assertRaises(Exception):
-            tasklife.set_allow(self.root, NAME, "prod", True, interactive=True)
+            tasklife.set_allow(self.root, NAME, "prod", True, interactive=True)  # not a connection
+        with self.assertRaises(Exception):
+            tasklife.set_allow(self.root, NAME, "dev", True, interactive=True)  # an environment is not opened any more
         self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")  # task level, no plan
         self.assertEqual(self.term("cloudctl --sub qat run --name j")["permissionDecision"], "deny")  # human
-        found = tasklife.set_allow(self.root, NAME, "DEV", True, interactive=True)
-        self.assertEqual((found["env"], found["on"], found["open"]), ("dev", True, ["dev"]))
+        found = tasklife.set_allow(self.root, NAME, "CLOUD", True, interactive=True)
+        self.assertEqual((found["conn"], found["on"], found["open"]), ("cloud", True, ["cloud"]))
         self.assertEqual(self.term("cloudctl --sub dev create --name x"), {})
         self.assertEqual(self.term("cloudctl --sub dev run --name j"), {})  # human in dev: opened too
-        self.assertEqual(self.term("cloudctl --sub qat run --name j")["permissionDecision"], "deny")  # another environment
+        self.assertEqual(self.term("cloudctl --sub qat run --name j"), {})  # the connection serves qat too, and the CLI opened it whole
         self.assertEqual(self.term("cloudctl --sub dev delete x")["permissionDecision"], "deny")  # never a destroy
+        self.assertEqual(self.term("cloudctl run --name j")["permissionDecision"], "deny")  # no environment named: prod, never opened
         rows = [row["external"] for row in self.session_log(SESSION) if row.get("external")]
-        self.assertEqual([(row["env"], row["verb"], row.get("opened")) for row in rows[-4:]], [("dev", "write", True), ("dev", "exec", True), ("qat", "exec", None), ("dev", "destroy", None)])  # the log says what went through on the switch
-        tasklife.set_allow(self.root, NAME, "dev", False, interactive=True)
+        self.assertEqual([(row["env"], row["verb"], row.get("opened")) for row in rows[-5:]], [("dev", "write", True), ("dev", "exec", True), ("qat", "exec", True), ("dev", "destroy", None), ("prod", "exec", None)])  # the log says what went through on the switch
+        tasklife.set_allow(self.root, NAME, "cloud", False, interactive=True)
         self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")
-        self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "allow-env"], ["dev: on", "dev: off"])
+        self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "allow-env"], ["cloud: on", "cloud: off"])
 
+    def test_an_old_allow_env_opens_nothing(self) -> None:
+        """1.7.38: tasks that were opened by environment before keep their `allow_env`; it is not read, so nothing is open by it."""
+        from taskcase import TASK
+
+        self.configure()
+        self.new()
+        path = self.root / TASK / ".task" / "task.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["allow_env"] = {"dev": {"at": "2026-11-01T00:00:00+00:00"}}
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")
+
+    def test_a_system_of_several_environments_opened_from_a_card_is_open_in_that_environment_only(self) -> None:
+        from modules.task import tasklife
+
+        self.configure()
+        self.new()
+        tasklife.set_allow(self.root, NAME, "cloud", True, interactive=True, env="dev")
+        self.assertEqual(self.term("cloudctl --sub dev run --name j"), {})
+        self.assertEqual(self.term("cloudctl --sub qat run --name j")["permissionDecision"], "deny")
 
     def test_open_to_the_agent_leaves_a_tool_packs_system_closed(self) -> None:
-        """1.7.13: a tool pack's system (a ticket board, a pipeline) holds each write for the person, even in an environment the person opened; `openable` says otherwise."""
+        """1.7.13: a tool pack's system (a ticket board, a pipeline) holds each write for the person, even when another connection is open; `openable` or `open` says otherwise."""
         from modules.task import tasklife
 
         board = dict(SYSTEMS["cloud"], reach={"cli": ["boardctl"]}, toolpack="tracker")
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": {**SYSTEMS, "board": board, "open-board": dict(board, reach={"cli": ["openctl"]}, openable=True)}}), encoding="utf-8")
         self.new()
-        tasklife.set_allow(self.root, NAME, "dev", True, interactive=True)
+        tasklife.set_allow(self.root, NAME, "cloud", True, interactive=True)
+        with self.assertRaises(Exception):
+            tasklife.set_allow(self.root, NAME, "board", True, interactive=True)  # its type does not let it open
+        tasklife.set_allow(self.root, NAME, "open-board", True, interactive=True)
         self.assertEqual(self.term("cloudctl --sub dev create --name x"), {})
         self.assertEqual(self.term("boardctl --sub dev create --name x")["permissionDecision"], "deny")
         self.assertEqual(self.term("openctl --sub dev create --name x"), {})
@@ -458,11 +485,14 @@ class SamplePackTests(unittest.TestCase):
         examples = Path(__file__).resolve().parents[1] / "examples"
         root = Path(tempfile.mkdtemp())
         shutil.copytree(Path(__file__).resolve().parents[1] / "policies", root / ".harness" / "policies")
-        shutil.copytree(examples / "toolpacks" / "sqlserver", root / ".harness" / "toolpacks" / "sqlserver")
+        shutil.copytree(examples.parent / "toolpacks" / "sqlserver", root / ".harness" / "toolpacks" / "sqlserver")
+        from support import add_path
+
+        add_path(root, root / ".harness" / "toolpacks" / "sqlserver")  # on: a folder this computer added
         listed = json.loads((examples / "connections.json").read_text(encoding="utf-8"))["connections"]
         (root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {name: item for name, item in listed.items() if item["type"] == "sqlserver"}}), encoding="utf-8")
         systems = config.load_policy(root, "tools")["systems"]  # each connection of the sample is a system (1.7.10)
-        self.assertEqual(sorted(systems), ["orders-dev", "orders-ist", "orders-qat"])
+        self.assertEqual(sorted(systems), ["orders-dev", "orders-ist", "orders-qat", "sqlserver-other"])  # the last is the pack's own (1.7.38, C13 F2): the programs that reach a SQL Server with no connection are refused
         self.assertEqual(external.validate(systems), [])
         verb = lambda query: external.classify(f'sqlcmd -S sql-dev.example.local,1433 -E -Q "{query}"', systems)[0][0].verb  # noqa: E731
         self.assertEqual(external.classify('sqlcmd -S sql-ist.example.local -E -Q "SELECT 1"', systems)[0][0].system, "orders-ist")  # the default port may be left out

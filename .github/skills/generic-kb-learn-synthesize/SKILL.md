@@ -37,7 +37,7 @@ board-step: learn
 5. **`README.md`**: in its table of domains, set the domain's `Status` to `learned <date>`.
 6. **`domain.yaml`**: `entry_points` (now that they have cards), `description`, `sources` with the base commits the cards were read at, `updated`, `generated_by`, the `boundaries` and `open_questions` that came up in the batches.
 7. **Check**: `harness kb cardcheck --path <domain folder in DEV>` until no error (it checks each flow line); `harness kb check --path <same>` until no error.
-8. **Write back the whole domain**: tick the architecture in `TODO.md`; `harness task diff`, `harness task promote --dry-run`, and the user's `approve-promote` in their terminal. Tell the user, in three lines, the state of the base: cards, open requests, unknowns; and that what tasks find from now on is added with `generic-capture-knowledge`. After the write-back, tick the last step, offer to close the task, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
+8. **Write back the whole domain**: tick the architecture in `TODO.md`; `harness task diff`, `harness task promote --dry-run`, and the user's approval of the promote on the task page. Tell the user, in three lines, the state of the base: cards, open requests, unknowns; and that what tasks find from now on is added with `generic-capture-knowledge`. After the write-back, tick the last step, offer to close the task, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 

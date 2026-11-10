@@ -303,7 +303,7 @@ class DoctorTests(unittest.TestCase):
         for key in ("windows", "powershell"):
             with self.subTest(key):
                 def change(data: dict, key: str = key) -> None:
-                    data["hooks"]["Stop"][0][key] = "python3 .harness/engine/hook.py"
+                    data["hooks"]["Stop"][0][key] = "python3 .harness/engine/launch.py"
 
                 self.edit_json(".github/hooks/harness.json", change)
                 result = self.doctor()
@@ -575,7 +575,7 @@ class DoctorTests(unittest.TestCase):
         self.write_log([self.call()])  # the hook has run: no warning about that either
         result = self.doctor()
         self.assertIn("会被加载（applyTo 是 **）", result.stdout)
-        self.assertEqual([line for line in result.stdout.splitlines() if "[WARN]" in line and "git 仓库" not in line], [])  # the not-git warning is another test
+        self.assertEqual([line for line in result.stdout.splitlines() if "[WARN]" in line and "git 仓库" not in line and "护栏文件" not in line], [])  # the not-git warning and the integrity warning (a test copy has no accepted list, C13 RE-A L1) are other tests
 
     def test_instructions_linked_from_agents_md_are_loaded(self) -> None:
         self.kb({"README.md": "# KB\n", "a.md": "text\n"})
@@ -673,6 +673,65 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
 
 
+class SystemReachTests(unittest.TestCase):
+    """1.7.38: `harness doctor` in a terminal no longer calls a connection that passed its Test "not reachable (exit code 127)"."""
+
+    def test_a_connection_is_judged_by_the_board_probe_and_a_hand_written_system_by_its_own_command(self) -> None:
+        from unittest import mock
+
+        import doctor
+
+        systems = {"board": {"needs": {"probes": {"dev": "board whoami"}, "launch": "Open VS Code."}}, "down": {"needs": {"probes": {"dev": "down whoami"}}}, "mine": {"needs": {"probes": {"none": "mine ping"}}}}
+        asked: list = []
+
+        def run(command: str, _root: Path = None) -> tuple:
+            asked.append(command)
+            return 0, "ok"
+
+        with tempfile.TemporaryDirectory() as folder, mock.patch("core.connections.listed", return_value={"board": {}, "down": {}}), \
+                mock.patch("core.connections.probe_lines", return_value={"board:dev": {"state": "ok"}, "down:dev": {"state": "failed"}}), mock.patch("modules.gate.external.run_probe", side_effect=run):
+            found = doctor.system_reach(Path(folder), systems)
+        self.assertEqual(list(found), ["board", "down", "mine"])
+        self.assertEqual((found["board"]["reachable"], found["down"]["reachable"], found["mine"]["reachable"]), (True, False, True))
+        self.assertEqual(asked, ["mine ping"])  # a connection is not run again in the bare terminal
+        self.assertIn("failed", found["down"]["why"])
+
+    def test_connections_with_no_sign_in_kept_are_one_warning_not_one_each(self) -> None:
+        """Q16: the cause is the same for all of them; a connection that has a sign-in and still fails keeps its own line."""
+        from unittest import mock
+
+        import doctor
+        from core import messages
+
+        class Report:
+            def __init__(self) -> None:
+                self.lines: list = []
+
+            ok = lambda self, text: self.lines.append(("ok", text))  # noqa: E731
+            warn = lambda self, text: self.lines.append(("warn", text))  # noqa: E731
+            error = lambda self, text: self.lines.append(("error", text))  # noqa: E731
+
+        systems = {name: {"needs": {"probes": {"dev": f"{name} whoami"}}} for name in ("ado", "sql-dev", "sql-ist", "kept", "fine")}
+        answers = {name: {"reachable": False, "why": "exit code 1", "launch": "x"} for name in ("ado", "sql-dev", "sql-ist", "kept")}
+        answers["fine"] = {"reachable": True, "why": "", "launch": ""}
+        messages.reset()
+        self.addCleanup(messages.reset)
+        with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ, {"HARNESS_LANGUAGE": "en"}), mock.patch("core.config.load_policy", return_value={"systems": systems}), mock.patch("modules.gate.external.validate", return_value=[]), \
+                mock.patch("modules.gate.external.warnings", return_value=[]), mock.patch("modules.gate.external.reach", return_value=answers), mock.patch("core.connections.listed", return_value={name: {} for name in systems}), \
+                mock.patch("core.connections.probe_lines", return_value={}), mock.patch("core.connections.unsigned", return_value=["ado", "sql-dev", "sql-ist", "fine"]):
+            report = Report()
+            doctor.check_systems(report, Path(folder))
+        warned = [text for kind, text in report.lines if kind == "warn"]
+        self.assertEqual(len(warned), 2, warned)  # one for the three with no sign-in, one for the one that has a sign-in and still fails
+        self.assertTrue(any("kept" in text and "not reachable" in text for text in warned))
+        joined = next(text for text in warned if "ado" in text)
+        for name in ("ado", "sql-dev", "sql-ist"):
+            self.assertIn(name, joined)
+        self.assertIn("3 connections", joined)
+        self.assertNotIn("fine", joined)  # reachable from here: no warning about it
+        self.assertEqual([text for kind, text in report.lines if kind == "ok" and "reachable" in text], ["Outside system fine is reachable from here (its probe answered)."])
+
+
 class LayoutTests(unittest.TestCase):
     def test_engine_code_parses_as_python_39(self) -> None:
         for path in sorted([*ENGINE.rglob("*.py"), *(REPO / ".harness" / "examples").rglob("*.py")]):
@@ -689,7 +748,7 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(loose, [])
 
     def test_engine_code_uses_only_the_standard_library(self) -> None:
-        local = {"core", "adapters", "modules", "doctor", "hook", "cli"}
+        local = {"core", "adapters", "modules", "doctor", "hook", "cli", "integrity"}
         stdlib = {
             "__future__", "argparse", "ast", "bisect", "codecs", "signal", "winreg", "statistics", "base64", "csv", "zipfile", "collections", "contextlib", "copy", "ctypes", "dataclasses", "datetime", "difflib", "hashlib", "hmac", "html", "http", "importlib", "io", "secrets", "threading", "xml",
             "concurrent", "json", "locale", "math", "msvcrt", "ntpath", "os", "pathlib", "pickle", "posixpath", "queue", "random", "re", "select", "shlex", "shutil", "socket", "ssl", "stat", "string", "struct", "subprocess", "sys", "tempfile", "time",

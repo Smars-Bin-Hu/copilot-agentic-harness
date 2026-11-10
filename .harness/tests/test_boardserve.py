@@ -125,6 +125,24 @@ class CodeStampTests(unittest.TestCase):
 
 
 class ServeTests(ServeCase):
+    def test_pack_for_colleagues_checks_first_lists_what_is_not_committed_and_commits_on_a_click(self) -> None:
+        """1.7.38: the board checks the knowledge base before it asks for a folder, lists the changed files, and commits them for the person."""
+        from pathlib import Path
+
+        self.assertEqual(self.request("POST", "/api/company", {"op": "packcheck"})[0], 403)
+        self.assertEqual(self.request("POST", "/api/company", {"op": "commit"})[0], 403)
+        cookie = self.pair()
+        dirty = boardserve.company.DirtyError(Path("/kb"), [f" M file{n}.md" for n in range(15)])
+        with mock.patch.object(boardserve.company, "pack_check", side_effect=dirty):
+            status, data, _ = self.request("POST", "/api/company", {"op": "packcheck"}, cookie=cookie)
+        self.assertEqual((status, data["dirty"], len(data["files"]), data["more"]), (409, "/kb", 12, 3))
+        with mock.patch.object(boardserve.company, "commit_changes", return_value={"committed": True, "lines": [" M a.md"]}) as commit:
+            status, data, _ = self.request("POST", "/api/company", {"op": "commit"}, cookie=cookie)
+        self.assertEqual((status, data["result"]["committed"]), (200, True))
+        commit.assert_called_once()
+        with mock.patch.object(boardserve.company, "pack_check", return_value={"ok": True, "word": "acme"}):
+            self.assertEqual(self.request("POST", "/api/company", {"op": "packcheck"}, cookie=cookie)[1]["result"]["word"], "acme")
+
     def test_restart_is_for_the_paired_browser_and_gives_the_next_code(self) -> None:
         self.assertEqual(self.request("POST", "/api/restart", {})[0], 403)
         board = types.SimpleNamespace(server=mock.Mock(), next_code="")
@@ -217,6 +235,37 @@ class ServeTests(ServeCase):
         self.request("POST", "/api/reopen", {})  # not twice in a moment
         self.assertEqual(len(self.links), before + 1)
 
+    def test_one_board_for_a_copy_a_start_on_any_other_port_tells_the_running_port_and_opens_it(self) -> None:
+        """Q19: before, only a start on the same port found the board that runs; a start on another port made a second board for the same copy."""
+        other = free_port()
+        out = io.StringIO()
+        again: list = []
+        before = len(self.links)
+        found = boardserve.serve(self.root, port=other, interactive=True, out=out, opener=again.append)
+        self.assertEqual((found["already"], found["port"], found["stopped"]), (True, self.port, False))
+        self.assertEqual(out.getvalue().strip(), messages.text("serve.already", port=self.port, url=f"http://127.0.0.1:{self.port}/"))  # the port and the address of the board that runs
+        self.assertIn(str(self.port), out.getvalue())
+        self.assertEqual(len(self.links), before + 1, "the running board opened the browser with a new code")
+        with socket.socket() as probe:  # no second board listens on the other port
+            self.assertNotEqual(probe.connect_ex(("127.0.0.1", other)), 0)
+        self.assertEqual(json.loads(board_serve_file(self.root).read_text(encoding="utf-8"))["port"], self.port)
+        found = boardserve.serve(self.root, port=self.port, interactive=True, out=io.StringIO(), opener=again.append)  # the same port too
+        self.assertEqual((found["already"], found["port"]), (True, self.port))
+        self.assertEqual(again[-1], f"http://127.0.0.1:{self.port}/", "the new code was refused once in a moment: the plain address opens")  # (the test's opener returns nothing, which the second start reads as "not opened")
+
+    def test_the_status_names_the_folder_the_board_serves(self) -> None:
+        self.assertEqual(self.request("POST", "/api/status", {})[1]["root"], str(self.root))
+
+    def test_running_board_ignores_a_stale_file_and_a_board_of_another_copy(self) -> None:
+        self.assertEqual(boardserve.running_board(self.root), self.port)
+        other = self.root / "other-copy"
+        (other / ".harness" / "runtime").mkdir(parents=True)
+        (other / ".harness" / "runtime" / "board-serve.json").write_text(json.dumps({"port": self.port, "pid": 1}), encoding="utf-8")
+        self.assertEqual(boardserve.running_board(other), 0, "the port answers, but with the folder of another copy")
+        (other / ".harness" / "runtime" / "board-serve.json").write_text(json.dumps({"port": free_port(), "pid": 1}), encoding="utf-8")
+        self.assertEqual(boardserve.running_board(other), 0, "nothing answers there: a file of a board that crashed")
+        self.assertEqual(boardserve.running_board(self.root / "no-folder"), 0)
+
     def test_a_close_with_no_reason_keeps_the_pages_own_words(self) -> None:
         cookie = self.pair()
         self.assertEqual(self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)[0], 200)
@@ -254,7 +303,7 @@ class ServeTests(ServeCase):
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview", "with_req": True}, cookie=cookie)
         self.assertEqual(status, 200, data)
         self.assertTrue(any("REQ.md" in line for line in data["result"]["screen"]))
-        code = task_ops.plan_digest_with(req.read_text(encoding="utf-8"), tasks.plan_digest(self.root, TASK))[:8]
+        code = task_ops.plan_digest_with(req.read_text(encoding="utf-8"), tasks.plan_digest(self.root, TASK))[:6]
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "act", "code": code, "with_req": True}, cookie=cookie)
         self.assertEqual(status, 200, data)
         self.assertTrue(self.data()["plan"]["approved_sha256"])
@@ -304,8 +353,8 @@ class ServeTests(ServeCase):
         self.assertEqual(status_now["started"], status_now["now"], "the board says when it runs an older release than the files (B63)")
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
         self.assertEqual(status, 200, data)
-        code = tasks.plan_digest(self.root, TASK)[:8]
-        self.assertIn(code, data["result"]["ask"])
+        code = tasks.plan_digest(self.root, TASK)[:6]
+        self.assertIn(code[:6].upper(), data["result"]["ask"])  # six capitals, as the code of a held call (C12 N13)
         self.assertTrue(data["result"]["screen"])
         self.assertFalse(tasks.plan_approved(self.root, TASK, self.data()))  # a preview approves nothing
         self.assertEqual(self.request("POST", "/api/act", {**body, "code": "00000000"}, cookie=cookie)[0], 409)

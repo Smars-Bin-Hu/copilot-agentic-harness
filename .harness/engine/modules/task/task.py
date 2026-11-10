@@ -90,9 +90,9 @@ def locked(root: Path, task: str) -> Iterator[Dict[str, Any]]:
         atomic_write(path, data)
 
 
-def note(data: Dict[str, Any], what: str, detail: str = "") -> None:
-    """One line of the audit trail the report prints."""
-    data.setdefault("events", []).append({"at": utc_now(), "round": data["round"], "what": what, "detail": detail})
+def note(data: Dict[str, Any], what: str, detail: str = "", **facts: Any) -> None:
+    """One line of the audit trail the report prints. `facts` (F3 AP): what a page reads back instead of the words of `detail` (the code of a call, the files it was approved with)."""
+    data.setdefault("events", []).append({"at": utc_now(), "round": data["round"], "what": what, "detail": detail, **({"facts": facts} if facts else {})})
     del data["events"][:-EVENTS_KEPT]
 
 
@@ -262,19 +262,31 @@ def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     return note + _next_step(root, task, data)
 
 
+def finish_text(task: str, data: Dict[str, Any]) -> str:
+    """How this kind of task ends, in one rule for the agent (1.7.38, C12 Q14; C13): closing is the person's acceptance, and the agent never closes a task or asks "close the task?". A development task is accepted by its
+    promote; any other task, a look included, is delivered with a short summary and accepted on the board. The rule is in the skill `harness-my-task`; this is its one sentence for the prompt."""
+    kind = data.get("kind")
+    if kind == "qa":
+        return say("task.finish.qa", name=name_of(task))
+    if kind in ("dev", "kb") and data.get("target_mode"):
+        return say("task.finish.dev")
+    return say("task.finish.deliver", name=name_of(task))
+
+
 def _next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     plan, dev = f"{task}/{tasks.PLAN_NAME}", f"{task}/{tasks.DEV_NAME}"
+    finish = finish_text(task, data)
     page = say("task.step.page", url=page_url(root, task)) if page_url(root, task) else ""  # where the user reads the plan
     handed = data.get("handoff") if isinstance(data.get("handoff"), dict) else {}
     if handed.get("what"):  # handed to the person: their result comes before any next step
         return say("task.step.handoff", env=handed.get("env", ""), what=handed.get("detail") or handed.get("what", ""), task=task)
-    opened = sorted(data["allow_env"]) if isinstance(data.get("allow_env"), dict) else []
-    page = (say("task.step.allow_env", envs=", ".join(env.upper() for env in opened)) if opened else "") + page
+    opened = sorted(data["allow_conn"]) if isinstance(data.get("allow_conn"), dict) else []
+    page = (say("task.step.allow_conn", names=", ".join(opened)) if opened else "") + page
     if data.get("kind") == "test" and isinstance(data.get("test_runner"), dict) and any(value == "agent" for value in data["test_runner"].values()):
         mine = ", ".join(sorted(env for env, value in data["test_runner"].items() if value == "agent"))
         return say("task.step.test_agent", envs=mine, task=task)
     if not tasks.plan_digest(root, task):
-        return say("task.step.plan", plan=plan, dev=dev, task=task) + page
+        return say("task.step.plan", plan=plan, dev=dev, task=task, finish=finish) + page
     if not tasks.plan_approved(root, task, data):
         if req_state(root, task) in ("open", "changed"):  # one ask, not two that say different things: both files, one code
             return say("task.step.approve_req", plan=plan, req=f"{task}/{tasks.REQ_FILE}", dev=dev, task=task, name=name_of(task)) + page
@@ -288,7 +300,7 @@ def _next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
 
     if (data.get("promote") or {}).get("state") == "done" and commitmsg.to_commit(data):
         return say("promote.done.person").strip()  # written back and not committed: closing now would take the wait off the board
-    return text + say("task.step.close")
+    return text + say("task.step.close", finish=finish)
 
 
 def status(root: Path, raw_task: str = "") -> Dict[str, Any]:
@@ -328,9 +340,10 @@ def todo_left(root: Path, task: str) -> List[str]:
     return [step["text"] for step in autorun.steps_of(root, task) if not step["done"]]
 
 
-def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "", check_todo: bool = True, todo_note: str = "") -> Dict[str, Any]:
+def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "", check_todo: bool = True, todo_note: str = "", void_note: str = "") -> Dict[str, Any]:
     """Close the task. Steps of TODO.md not ticked stop it (`check_todo`) unless `todo_open` says why they stay: tick what is done, or say why not.
-    The person closing on the board page decides for themselves: the page shows how many are left, and passes `check_todo=False`; `todo_note` keeps their words in TODO.md."""
+    The person closing on the board page decides for themselves: the page shows how many are left, and passes `check_todo=False`; `todo_note` keeps their words in TODO.md.
+    A call of the task that still waits for the person is void when it closes (1.7.38, C13 FB-4): it goes to the history with `void_note` (default: the task was closed) and can never be approved or run."""
     task = resolve(root, raw_task)
     left = todo_left(root, task)
     if check_todo and left and not todo_open.strip():
@@ -357,8 +370,12 @@ def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "",
     hint = tasklife.links_hint(root, tasks.read(root, task) or {})
     from core import outbox  # a held write shows on the page only while the task is open (1.7.20: a Q&A chore on a ticket may leave one)
 
-    held = len(outbox.pending_for(root, task))
+    voided = outbox.void_for_task(root, task, void_note or say("task.close.void"))  # 1.7.38, C13 FB-4: they are void now, not left to be approved later
+    held = len(voided)
     if held:
+        with locked(root, task) as again:
+            note(again, "void", say("task.close.void.record" if held != 1 else "task.close.void.record.one", count=held, note=void_note or say("task.close.void")))  # "3 calls voided: task closed", not "3: task closed" (1.7.38, F1 L4)
+        result["voided"] = held
         hint = say("task.close.held", count=held, name=name_of(task)) + hint
     if hint:
         result["next"] = hint
@@ -489,6 +506,36 @@ def _req_unfilled(root: Path, task: str) -> List[Tuple[str, int]]:
     return found
 
 
+_FIELD_PLACEHOLDER = re.compile(r"^\s*[-*]\s+\*\*[^*\n]+\*\*\s*[:：]\s*<[^<>\n]+>\s*$")  # `- **Updated**: <yyyy-mm-dd>`
+
+
+def without_placeholders(text: str) -> str:
+    """A document of the task as a person reads it on the page (1.7.38, C11 T2-05): the lines that are still the template's `<...>` are left out, and a heading that this empties goes too.
+    The file is not changed; what the agent never filled in is not shown as if it were an answer."""
+    lines = text.splitlines()
+    gone = [False] * len(lines)
+    fence = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fence = not fence
+        elif not fence and (_FIELD_PLACEHOLDER.match(line) or re.match(r"^<[^<>\n]+>$", stripped)):
+            gone[index] = True
+    for index, line in enumerate(lines):
+        if gone[index] or not re.match(r"^#{2,6}\s+\S", line.strip()):
+            continue
+        rest = [(other, dropped) for other, dropped in zip(lines[index + 1:], gone[index + 1:]) if dropped or other.strip()]
+        body = []
+        for other, dropped in rest:
+            if re.match(r"^#{1,6}\s+\S", other.strip()) and not dropped:
+                break
+            body.append(dropped)
+        if body and all(body):  # everything under it was the template's
+            gone[index] = True
+    kept = [line for line, dropped in zip(lines, gone) if not dropped]
+    return "\n".join(kept) + ("\n" if text.endswith("\n") else "")
+
+
 def req_placeholders(root: Path, task: str) -> int:
     """How many lines of REQ.md are still the template's `<...>` (the agent left them instead of writing the answer, or "none"). 0 when there is no REQ.md."""
     return sum(count for _heading, count in _req_unfilled(root, task))
@@ -544,7 +591,7 @@ def confirm_req(
         if hashlib.sha256(now.encode("utf-8")).hexdigest() != digest:
             raise CommandError(say("req.changed"))
         fill_confirmation(root, task, path, now, again, digest)
-        if not tasks.plan_digest(root, task):
+        if not tasks.plan_digest(root, task) and not isinstance(again.get("deliver"), dict):  # a delivered task waits for its acceptance: confirming does not tell the agent to go on, nor take that away (1.7.38, C12 TB-01)
             again["waiting"] = {"since": utc_now(), "why": "go-req"}  # no plan yet, and nobody told the agent: the page gives the message to send (1.5.34)
     return {"confirmed": True, "task": task, "req": req, "next": say("req.next")}
 
@@ -858,7 +905,10 @@ def run_promote(root: Path, raw_task: str, dry_run: bool) -> Dict[str, Any]:
         data["promote"] = new  # a `partial` record is saved too: the lock writes it back, the error is raised after
         note(data, "promote" if not failed else "promote-partial", result["branch"])
         if not failed:
-            result["next"] = promoted_text(result, new)
+            from . import tasklife  # it imports this module
+
+            hint = tasklife.links_hint(root, data)  # the board closes the task: a ticket it names is asked about now, and written after the task is opened again
+            result["next"] = promoted_text(result, new) + (" " + hint if hint else "")
             return {"dry_run": False, **common.shown(result)}
         failure = promote_target.partial_message(new)
     raise CommandError(failure)

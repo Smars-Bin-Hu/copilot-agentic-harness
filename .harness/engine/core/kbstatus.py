@@ -103,7 +103,7 @@ def domain_state(root: Path, folder: Path, deep: bool) -> Dict[str, Any]:
             state.update(to_learn=order["to_learn"], batches_left=len(order["batches"]))
         except MapError as error:
             state["problem"] = str(error)
-    state["done"] = state["plan"] and state["architecture"] and not state.get("to_learn")
+    state["done"] = state["plan"] and state["architecture"] and not state.get("to_learn") and "problem" not in state  # no map: how many objects are left is not known (1.7.38: it showed a full bar)
     if not plan and cards(folder) and (folder / "architecture.md").is_file():
         state.update(done=True, migrated=True)  # learned before learn plans (a migration): built; refresh keeps it true
     return state

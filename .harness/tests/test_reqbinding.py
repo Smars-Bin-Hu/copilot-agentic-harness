@@ -8,7 +8,7 @@ import unittest
 import support  # noqa: F401  (puts the engine on sys.path)
 from taskcase import TASK, TaskCase
 
-from core import tasks
+from core import messages, tasks
 from modules.task import task as task_ops
 from modules.task import taskdesk, taskreview
 
@@ -110,7 +110,7 @@ class BindingTests(TaskCase):
         with self.assertRaises(task_ops.CommandError):
             task_ops.approve_plan(self.root, TASK, reader=lambda _p: "00000000", interactive=True, out=out, with_req=True)
         self.assertIn(f"{TASK}/REQ.md", out.getvalue(), "the screen of one code for both names the requirement")
-        task_ops.confirm_req(self.root, TASK, reader=lambda _p: hashlib.sha256(self.req.read_bytes()).hexdigest()[:8], interactive=True, out=io.StringIO())
+        task_ops.confirm_req(self.root, TASK, reader=lambda _p: hashlib.sha256(self.req.read_bytes()).hexdigest()[:6], interactive=True, out=io.StringIO())
         self.assertNotIn(f"{TASK}/REQ.md", screen())
 
     def test_an_approval_from_before_the_requirement_was_kept_stays_approved(self) -> None:
@@ -125,7 +125,7 @@ class BindingTests(TaskCase):
         import hashlib
 
         def confirm() -> None:
-            task_ops.confirm_req(self.root, TASK, reader=lambda _p: hashlib.sha256(self.req.read_bytes()).hexdigest()[:8], interactive=True, out=io.StringIO())
+            task_ops.confirm_req(self.root, TASK, reader=lambda _p: hashlib.sha256(self.req.read_bytes()).hexdigest()[:6], interactive=True, out=io.StringIO())
 
         self.assertEqual(task_ops.req_state(self.root, TASK), "open")
         confirm()
@@ -169,7 +169,7 @@ class RequirementFirst(TaskCase):
         with self.assertRaises(task_ops.CommandError):
             self.approve_plan(with_req=False)  # the plan alone
         with self.assertRaises(task_ops.CommandError):
-            self.approve_plan(code=tasks.plan_digest(self.root, TASK)[:8], with_req=True)  # the code of the plan alone is not the code of both
+            self.approve_plan(code=tasks.plan_digest(self.root, TASK)[:6], with_req=True)  # the code of the plan alone is not the code of both
         self.approve_plan(with_req=True)
         self.assertTrue(tasks.plan_approved(self.root, TASK))
         self.assertEqual(task_ops.req_state(self.root, TASK), "confirmed")
@@ -209,9 +209,9 @@ class RequirementFirst(TaskCase):
         self.write_plan()
         self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "plan", "a plan waiting comes first; its button asks for both")
         step = task_ops.next_step(self.root, TASK, self.data())
-        self.assertIn("--with-req", step)
+        self.assertIn(messages.text("board.action.approve-plan"), step)  # the button of the page, one code for both (C12 RB-N8: no command to run)
         self.assertIn("REQ.md", step)
-        self.assertNotIn("`harness task approve-plan`", step, "one ask, not the plain command that is refused")
+        self.assertNotIn("task approve-plan", step, "the person is told the button, not a command")
         self.approve_plan(with_req=True)
         self.assertNotEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "req")
 

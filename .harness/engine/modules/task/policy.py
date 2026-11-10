@@ -39,7 +39,7 @@ POLICY_SCHEMA = {
                 "closed_shown": {"type": "integer", "minimum": 0},
                 "active_seconds": {"type": "integer", "minimum": 10},
                 "rewind": {"type": "object", "properties": {"points": {"type": "integer", "minimum": 0}, "max_file_mb": {"type": "integer", "minimum": 0}}},
-                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}},
+                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept"]}},
             },
         },
         "commit": {"type": "object", "properties": {"coauthor": {"type": "string"}}},

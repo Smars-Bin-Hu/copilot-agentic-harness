@@ -1,0 +1,87 @@
+{
+  "type": "demotracker",
+  "label": "Demo tracker",
+  "env": "none",
+  "cli": [
+    "demotracker"
+  ],
+  "free": [
+    "--help",
+    "-h",
+    "--version"
+  ],
+  "fields": {
+    "project": {
+      "label": "Project",
+      "placeholder": "DEMO"
+    }
+  },
+  "match": "--project\\s+{project}\\b",
+  "auth": {
+    "signin": {
+      "identity": "tool",
+      "label": "Its own sign-in",
+      "login": "demotracker --project {project} login"
+    }
+  },
+  "test": "demotracker --project {project} whoami",
+  "call": "demotracker --project {project} <command>",
+  "expect": "^(\\S+)\\s*$",
+  "denied": "not signed in",
+  "verbs": [
+    {
+      "pattern": "\\bdelete\\b",
+      "verb": "destroy"
+    },
+    {
+      "pattern": "\\b(?:comment|set-state)\\b",
+      "verb": "write"
+    },
+    {
+      "pattern": "\\b(?:get|list|whoami)\\b",
+      "verb": "read"
+    }
+  ],
+  "show": {
+    "ticket": "\\b(?:get|comment|set-state|delete)\\s+(\\S+)",
+    "state": "\\bset-state\\s+\\S+\\s+(\\S+)"
+  },
+  "rules": {
+    "none": {
+      "read": "allow",
+      "write": "outbox",
+      "exec": "human",
+      "destroy": "deny"
+    }
+  },
+  "say": [
+    {
+      "pattern": "\\bcomment\\s+(\\S+)",
+      "text": {"en": "Add a comment to ticket {1}", "zh": "给工单 {1} 加评论"}
+    },
+    {
+      "pattern": "\\bset-state\\s+(\\S+)\\s+(\\S.*)$",
+      "text": {"en": "Set ticket {1} to {2}", "zh": "把工单 {1} 改成 {2}"}
+    },
+    {
+      "pattern": "\\bdelete\\s+(\\S+)",
+      "text": {"en": "Delete ticket {1}", "zh": "删除工单 {1}"}
+    }
+  ],
+  "body": [
+    {
+      "pattern": "--file\\s+(\\S+)",
+      "from": "file"
+    },
+    {
+      "pattern": "--text\\s+\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "from": "text"
+    },
+    {
+      "pattern": "\\bcomment\\s+\\S+\\s+(?!--)(\\S.*)$",
+      "from": "text"
+    }
+  ],
+  "item": "\\bdemotracker(?:\\.cmd)?\\s+--project\\s+\\S+\\s+(?:comment|set-state)\\s+(\\S+)",
+  "link": "demo"
+}

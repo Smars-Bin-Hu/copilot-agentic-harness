@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, gitread, messages, repo_paths, schema
+from .paths import policies_dir
 
 POLICY_NAME = "target"
 REPO_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -137,6 +138,34 @@ def load(root: Path) -> Targets:
     return Targets(configured=bool(base or policy["repos"]), repos=repos, problems=problems, timeout=timeout)
 
 
+def diagnose(root: Path, error: BaseException) -> Tuple[str, str]:
+    """`(file, what is wrong)` for a target policy that cannot be read (1.7.38, C13 F2b): the first of its three files (`target.json`, the company's, the person's) that is not valid JSON or not an object; else the
+    first layer that makes the merged policy one the schema refuses; else `target.json` with the fault as it was raised. For the gate, which refuses what may write into a target meanwhile, and for `harness doctor`."""
+    merged: Any = {}
+    seen: List[Tuple[str, Any]] = []
+    for suffix in ("", ".company", ".override"):
+        name = f"{POLICY_NAME}{suffix}.json"
+        path = policies_dir(root) / name
+        if not path.is_file():
+            if not suffix:
+                return name, "the file is missing"
+            continue
+        try:
+            data = config.read_json(path)
+        except (OSError, ValueError) as problem:
+            return name, " ".join(str(problem).split())[:200]
+        if not isinstance(data, dict):
+            return name, "the file is not an object"
+        seen.append((name, data))
+    for name, data in seen:
+        try:
+            merged = config.deep_merge(merged, data)
+            validate_policy(merged)
+        except Exception as problem:  # noqa: BLE001 - the layer that made the policy wrong
+            return name, " ".join(str(problem).split())[:200]
+    return f"{POLICY_NAME}.json", " ".join(str(error).split())[:200]
+
+
 KB_DIR = "knowledge-base"  # where a team puts its knowledge base when it is not registered as a repository
 COMPANY_DIR = "company"  # in a knowledge base: the company's standards, skills and instructions (`company.py`)
 KB_IGNORED = {"README.md", ".gitkeep", ".gitignore", ".DS_Store"}  # what is no content: the shipped placeholder and housekeeping files
@@ -163,24 +192,44 @@ def company_folder(root: Path) -> Optional[Path]:
     return next((path / COMPANY_DIR for _name, path in knowledge_bases(root) if (path / COMPANY_DIR).is_dir()), None)
 
 
+def _registered(root: Path) -> List[Tuple[str, Path]]:
+    """The knowledge bases the target policy registers. Raises when the policy cannot be read (`knowledge_bases` swallows that; `kb_fault` reports it)."""
+    found: List[Tuple[str, Path]] = []
+    policy = config.load_policy(root, POLICY_NAME)
+    base = str(policy.get("repos_root") or "").strip()
+    for name, entry in (policy.get("repos") or {}).items():
+        if not isinstance(entry, dict) or not entry.get("knowledge_base"):
+            continue
+        raw = str(entry.get("path") or "").strip()
+        if raw:
+            found.append((name, expand(raw, root)))
+        elif base:
+            found.append((name, expand(base) / name))
+    return found
+
+
+def kb_fault(root: Path) -> Optional[Tuple[str, str]]:
+    """`(file, what is wrong)` when the list of knowledge bases cannot be read from the target policy (1.7.38, C13 F2c), else None. `knowledge_bases` swallows that fault and answers with `knowledge-base/` only, so a knowledge base
+    registered somewhere else, and the company tool packs in it, are not seen. The gate holds the programs it can still place from the text of the files (`govern.kb_systems`) and `harness doctor` says ERROR. Never raises."""
+    try:
+        _registered(root)
+        return None
+    except Exception as error:  # noqa: BLE001 - this is the fault
+        try:
+            return diagnose(root, error)
+        except Exception:  # noqa: BLE001
+            return f"{POLICY_NAME}.json", " ".join(str(error).split())[:200]
+
+
 def knowledge_bases(root: Path) -> List[Tuple[str, Path]]:
     """(name, folder) of every knowledge base: the registered ones and `knowledge-base/` of the harness folder.
 
-    Reads the policy only (no git, no listing of repos_root): a hook calls it for every tool call. Never raises.
+    Reads the policy only (no git, no listing of repos_root): a hook calls it for every tool call. Never raises. A policy that cannot be read gives `knowledge-base/` only: `kb_fault` says so, and the gate does not let that
+    pass in silence (`govern.kb_systems`).
     """
-    found: List[Tuple[str, Path]] = []
     try:
-        policy = config.load_policy(root, POLICY_NAME)
-        base = str(policy.get("repos_root") or "").strip()
-        for name, entry in (policy.get("repos") or {}).items():
-            if not isinstance(entry, dict) or not entry.get("knowledge_base"):
-                continue
-            raw = str(entry.get("path") or "").strip()
-            if raw:
-                found.append((name, expand(raw, root)))
-            elif base:
-                found.append((name, expand(base) / name))
-    except Exception:  # noqa: BLE001 - a broken policy must not stop a hook
+        found = _registered(root)
+    except Exception:  # noqa: BLE001 - a broken policy must not stop a hook; `kb_fault` reports it
         found = []
     default = root / KB_DIR
     try:

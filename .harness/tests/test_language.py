@@ -24,7 +24,7 @@ HOLE = re.compile(r"(?<!\{)\{([a-z_]+)\}(?!\})")
 SESSION = "sess-language"
 # Messages that read the same in Chinese, by rule (exact names, so a new untranslated message still fails): the two render modes are proper names (Glass, Lite: the user's words for them, as in the
 # settings panel in both languages); the product name; and two that are only placeholders or a copyright line.
-SAME_IN_CHINESE = {"board.new.links.ph", "desk.links.ph", "board.enter.tip.systems.unreached", "board.enter.tip.systems.ok", "board.enter.d.systems.unreached", "board.enter.d.systems.unknown", "board.enter.d.systems.ok", "dock.group.harness", "dock.kb.col.domain", "dock.kb.domains.tab", "setup.line.tools", "setup.line.doctor", "setup.title", "board.enter.getready", "desk.run", "desk.run.ask", "desk.run.stop", "desk.rounds.agent", "board.shell.glass", "board.shell.lite", "board.enter.label", "board.enter.m.repos.problem", "board.enter.legal"}
+SAME_IN_CHINESE = {"board.new.links.ph", "desk.links.ph", "board.enter.tip.systems.unreached", "board.enter.tip.systems.ok", "board.enter.d.systems.unreached", "board.enter.d.systems.unknown", "board.enter.d.systems.ok", "dock.group.harness", "dock.co.skills", "dock.co.domains", "dock.kb.col.domain", "dock.kb.domains.tab", "setup.line.tools", "setup.line.doctor", "setup.title", "board.enter.getready", "desk.run", "desk.run.ask", "desk.run.stop", "desk.rounds.agent", "board.shell.glass", "board.shell.lite", "board.enter.label", "board.enter.m.repos.problem", "board.enter.legal", "board.enter.t.doctor", "board.enter.t.vscode", "board.enter.t.copilot", "board.enter.g.harness", "board.enter.n.doctor", "board.enter.n.packs", "board.enter.n.vscode", "board.enter.n.copilot", "board.enter.d.kb.version", "machine.prog.harness", "machine.signins.title", "ready.kb.found"}
 # Chinese that stays in the code on purpose: the sample line doctor prints, and the labels a task made in Chinese has.
 CHINESE_ALLOWED = {
     "core/output.py": ("SAMPLE = ",),
@@ -49,6 +49,25 @@ class TableTests(unittest.TestCase):
         english, chinese = messages.table("en"), messages.table("zh")
         different = [name for name in english if holes(english[name]) != holes(chinese.get(name, ""))]
         self.assertEqual(different, [])
+
+    def test_a_message_that_names_a_button_takes_its_words_from_the_message_of_that_button(self) -> None:
+        for language in ("en", "zh"):
+            raw = json.loads((Path(messages.__file__).parent / f"messages.{language}.json").read_text(encoding="utf-8"))
+            named = {name: re.findall(r"\{@([A-Za-z0-9_.-]+)\}", text) for name, text in raw.items() if "{@" in text}
+            self.assertTrue(named, language)
+            self.assertEqual({name: [key for key in keys if key not in raw] for name, keys in named.items() if any(key not in raw for key in keys)}, {}, "a name that is not a message")
+            table = messages.table(language)
+            self.assertEqual([name for name in named if "{@" in table[name]], [], "every mark is replaced when the table is read")
+        self.assertEqual(messages.table("en")["connections.layer.signin.none"], "No account is saved for {alias}. Press " + messages.table("en")["connections.signin"] + ".")
+        self.assertEqual(messages._linked({"a": "x {@b}", "b": "y {@c}", "c": "z"}), {"a": "x y z", "b": "y z", "c": "z"})  # noqa: SLF001
+        self.assertEqual(messages._linked({"a": "x {@nope}"}), {"a": "x {@nope}"})  # noqa: SLF001
+
+    def test_the_code_a_person_types_has_one_name_in_each_language(self) -> None:
+        chinese = " ".join(messages.table("zh").values())
+        self.assertNotIn("验证码", chinese)
+        self.assertNotIn("批准码", chinese)
+        self.assertEqual(messages.table("en")["desk.outbox.code"], "code")
+        self.assertEqual(messages.table("zh")["desk.outbox.code"], "确认码")
 
     def test_the_english_table_has_no_chinese(self) -> None:
         english = messages.table("en")

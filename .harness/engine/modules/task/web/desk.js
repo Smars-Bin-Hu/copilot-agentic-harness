@@ -148,7 +148,7 @@
     const copy = h("button", {type: "button", class: "act", disabled: item.command ? null : "disabled"}, t("desk.outbox.copy"));
     copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });  // the query, as in a held call
     const open = h("button", {type: "button", class: "act hot"}, t("desk.evidence.open"));
-    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const close = h("button", {type: "button", class: "act"}, t("desk.window.close"));  // a window that only shows something has nothing to cancel (F1 L5)
     const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { view.close(); fileOpen = name; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
     const fact = (label, value) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), typeof value === "string" ? h("code", null, value) : value);
     const view = SERVE.dialog([h("h2", null, item.id + " · " + item.env + " · " + (item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run}))),
@@ -425,7 +425,7 @@
 
   // The row an action button is made for (what `actionButton` and the dialogs read of the task).
   function actionRow() {
-    return {name: desk.name, waiting: desk.waiting, state: desk.state, chat: desk.chat, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
+    return {name: desk.name, waiting: desk.waiting, state: desk.state, chat: desk.chat, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed, req_sections: desk.req_sections,
       result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
   }
   const OPTIONAL = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
@@ -512,6 +512,8 @@
     menuOpen = true;
     fill(ui.menu, menuItems());
     ui.menu.hidden = false;
+    ui.menu.style.right = ui.menu.style.left = "";
+    if (ui.menu.getBoundingClientRect().left < 8) { ui.menu.style.right = "auto"; ui.menu.style.left = "0"; }  // a narrow window puts the button at the left of the head: the menu opens to the right, not off the screen (F1)
     ui.moreBtn.setAttribute("aria-expanded", "true");
     const first = ui.menu.querySelector("a,button:not([disabled])");
     if (first) first.focus();
@@ -748,43 +750,50 @@
       h("p", {class: "sub set-note", title: t("desk.set.note")}, t("desk.set.note")));
   }
 
-  // "Open to the agent" (1.7.6): a setting of the task at the head of its page, beside Independent review. One chip per environment the protocol knows; clickable only when a
-  // system of the company pack reaches it; prod is never a choice. A click is `harness task allow --env <e> --on` (or --off): no code, it can be closed at once. The agent's writes and
-  // procedures on that environment's listed systems then run without the outbox. Not drawn when no system is listed.
+  // "Open to the agent" (1.7.6; by connection since 1.7.38): a setting of the task at the head of its page, beside Independent review. It lists what the person opened for this task, each one with a
+  // button that closes it: connections (a held write's card opens them: `Open <connection> for this task`), and the linked items. Nothing to open here before a call is held; the
+  // card of the call is where the person decides. A click on Close is `harness task allow --conn <name> --off`: no code, it can be closed at once. Not drawn when there is nothing to say.
   const DOOR = ["M3 14V3.5A1.5 1.5 0 0 1 4.5 2h5A1.5 1.5 0 0 1 11 3.5V14", "M11 6h2.5v8H11", "M3 14h10.5", "M8 8.5h.01"];
   let closeEnvs = null;
-  const keepEnvs = (on) => { try { if (on) sessionStorage.setItem("tk-envs-open", "1"); else sessionStorage.removeItem("tk-envs-open"); } catch (error) { /* no storage: the pop closes, as before */ } };  // a click on a chip reloads the page: the pop stays open, so the next click is one more click
+  const keepEnvs = (on) => { try { if (on) sessionStorage.setItem("tk-envs-open", "1"); else sessionStorage.removeItem("tk-envs-open"); } catch (error) { /* no storage: the pop closes, as before */ } };  // a click reloads the page: the pop stays open, so the next click is one more click
   const keptEnvs = () => { try { return sessionStorage.getItem("tk-envs-open") === "1"; } catch (error) { return false; } };
   document.addEventListener("click", (event) => { if (closeEnvs && !event.target.closest(".tk-env")) closeEnvs(); });
   document.addEventListener("keydown", (event) => { if (closeEnvs && event.key === "Escape") closeEnvs(); });
   function envButton() {
     const found = desk.allow;
     closeEnvs = null;
-    if (!found || !found.envs || !found.envs.length) return null;
-    const open = found.envs.filter((item) => item.open);
+    if (!found || (!(found.open || []).length && !found.links && !(found.can || []).length && !found.any)) return null;
+    const rows = found.open || [];
+    const links = found.links;
     const can = served() && full.status === "open" && SERVE.runs("task allow");
-    const chips = found.envs.map((item) => {
-      const listed = item.systems.length > 0;
-      const tip = !listed ? t("desk.set.open.none", {env: item.env}) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
-      const seen = item.reach;  // reached from VS Code (1.7.9): a dot on the chip, the words on hover
-      const why = (one) => one.state === "denied" ? (one.launch || t("desk.reach.why.identity")) : one.why === "no-answer" ? t("desk.reach.why.no-answer") : t("desk.reach.why.exit", {why: one.why});
-      const part = (one) => one.state === "ok" ? t("desk.reach.ok", {env: one.system, who: one.who || "-"}) : one.state === "unknown" ? t("desk.reach.unknown", {env: one.system}) : t("desk.reach.bad", {env: one.system, launch: why(one)});
-      const seenTip = seen ? (seen.parts || []).map(part).join("\n") : "";  // one line per server of this environment
-      const chip = h("button", {type: "button", class: "chip env" + (item.open ? " on" : ""), "aria-pressed": item.open ? "true" : "false", title: tip + (seenTip ? "\n" + seenTip : ""), disabled: listed && can ? null : "disabled"},
-        seen ? h("i", {class: "reach-dot " + (seen.state === "ok" ? "ok" : seen.state === "unknown" ? "unknown" : "bad")}) : null, (item.label || item.env) + (item.open ? " ✓" : ""));
-      chip.addEventListener("click", () => {
-        chips.forEach((node) => { node.disabled = true; });
-        SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: chip.getAttribute("aria-pressed") === "true" ? "off" : "on", step: "act"}).then(() => { keepEnvs(true); SERVE.done(); }, (error) => { chips.forEach((node) => { node.disabled = false; }); SERVE.failed(error); });
-      });
-      return chip;
-    });
-    const never = (found.never || []).map((env) => h("span", {class: "chip env never", title: t("desk.set.open.never", {env})}, env));
-    const note = open.length ? h("p", {class: "set-tip"}, t("desk.set.open.note", {envs: open.map((item) => item.env).join(", "), systems: [...new Set(open.flatMap((item) => item.systems))].join(", ")})) : null;
-    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip")), h("p", {class: "set-warn"}, t("desk.set.open.warn")), h("div", {class: "chips env-chips"}, chips, never), note,
+    const buttons = [];
+    const flip = (name, on, node) => {
+      buttons.forEach((one) => { one.disabled = true; });
+      SERVE.post("/api/act", {action: "task allow", task: desk.name, env: name, runner: on ? "on" : "off", step: "act"}).then(() => { keepEnvs(true); SERVE.done(); }, (error) => { buttons.forEach((one) => { one.disabled = false; }); SERVE.failed(error); });
+    };
+    const rowFor = (item) => {
+      const close = h("button", {type: "button", class: "act", title: item.known ? t("desk.set.open.conn.tip", {name: item.name}) : t("desk.set.open.conn.gone", {name: item.name}), disabled: can ? null : "disabled"}, t("desk.set.open.conn.close"));
+      buttons.push(close);
+      close.addEventListener("click", () => flip(item.name, false, close));
+      return h("div", {class: "open-row", "data-conn": item.name}, h("b", null, item.name), item.env && item.env !== "none" ? tag(item.env, "hot") : null, h("span", {class: "sub"}, t("desk.set.open.conn.scope")), close);
+    };
+    const linksRow = () => {
+      const systems = links.systems.join(", ");
+      const refs = links.refs.join(", ");
+      const toggle = h("button", {type: "button", class: "act" + (links.open ? "" : " hot"), title: links.open ? t("desk.set.open.links.on.tip", {systems}) : t("desk.set.open.links.off.tip", {systems}), disabled: can ? null : "disabled"}, links.open ? t("desk.set.open.conn.close") : t("desk.outbox.open", {name: t("desk.set.open.links")}));
+      buttons.push(toggle);
+      toggle.addEventListener("click", () => flip("links", !links.open, toggle));
+      return h("div", {class: "open-row", "data-conn": "links"}, h("b", null, t("desk.set.open.links")), h("span", {class: "sub"}, links.open ? t("desk.set.open.links.row", {refs}) : t("desk.set.open.links.off.row", {refs})), toggle);
+    };
+    const shown = [...rows.map(rowFor), links ? linksRow() : null].filter(Boolean);
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip.conn")),
+      h("div", {class: "open-list"}, shown.length ? [h("b", {class: "sub"}, t("desk.set.open.list")), ...shown] : h("p", {class: "sub"}, t("desk.set.open.empty"))),
+      (found.can || []).length ? h("p", {class: "sub"}, t("desk.set.open.can", {names: found.can.join(", ")})) : null,
+      h("p", {class: "sub"}, t("desk.set.open.never")),
       can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
-    const unreached = found.envs.filter((item) => item.reach && (item.reach.state === "denied" || item.reach.state === "failed")).map((item) => item.env.toUpperCase());  // VS Code cannot reach these (1.7.9)
-    const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip") + (unreached.length ? "\n" + t("desk.reach.pill", {envs: unreached.join(", ")}) : "")},
-      icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.label || item.env).join(", ") : t("desk.set.open.off")), unreached.length ? h("i", {class: "reach-dot bad pill"}) : null);
+    const names = [...rows.map((item) => item.name), ...(links && links.open ? [t("desk.set.open.links")] : [])];
+    const button = h("button", {type: "button", class: "rv-btn" + (names.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip.conn")},
+      icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, names.length ? (names.length > 2 ? String(names.length) : names.join(", ")) : t("desk.set.open.off")));
     const show = (on) => { if (on && closeReview) closeReview(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => { keepEnvs(false); show(pop.hidden); });
     if (keptEnvs()) { keepEnvs(false); setTimeout(() => show(true), 0); }
@@ -1070,45 +1079,83 @@
       h("div", {class: "tk-need-h"}, h("div", {class: "tk-need-t"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), askBubble()), items.length || desk.waiting ? waitedLine() : null),
       notes,
       idle ? [h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, jump]
-        : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, talkButtons(row, item), h("p", {class: "hint"}, hintOf(item))))));
+        : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, talkButtons(row, item), h("p", {class: "hint"}, hintOf(item)), ["question", "confirm"].includes(item.action) && desk.ask && served() ? h("div", {class: "tk-asked"}, askCard().build()) : null))));  // what the chat asks is on the card, not only behind the bubble (1.7.38, C11 T2-13)
   }
 
   function waitBand() {
     if (desk.past) return pastNote();
-    const told = approvedCard();
-    if (!needsCard()) return told;
-    const items = needItems().filter((item) => item.action !== "approve-action");  // the held calls have cards of their own
+    const told = [approvedCard(), openedCard()].filter(Boolean);  // the approved calls, and the calls whose connection was opened: the one step left is to tell the agent
+    const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
+    const box = batchBox();  // two held calls or more, the ones the agent went on without too: one box over their cards (F3 AP)
+    if (!needsCard()) return told.length || left.length ? [...told, ...(box ? [box] : []), ...left] : null;
+    const items = needItems().filter((item) => item.action !== "approve-action" && item.action !== "accept");  // the held calls and the delivered work have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
-    const cards = told ? [told] : [];  // the approved calls first: the one step left is to tell the agent
-    cards.push(...(desk.outbox || []).map((item, index) => outboxCard(item, index || told ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
+    const cards = [...told];
+    if (box) cards.push(box);
+    cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told.length ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
+    const finish = acceptCard();
+    if (finish) cards.push(finish);
     cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
     if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
-    return cards;
+    return [...cards, ...left];
+  }
+
+  // --- the work delivered, to accept (1.7.38, C12 Q14) -------------------------------------------------------------------------------------------------------
+  // The agent wrote a short summary and stopped. Accept and close: the board closes the task, with no message to the agent (no chat, no tokens). Not yet: the reply box opens, to say what is missing.
+  function acceptCard() {
+    const found = desk.accept;
+    if (!found || desk.waiting_why !== "accept") return null;
+    const item = desk.actions.find((entry) => entry.action === "accept");
+    const yes = item ? actionButton(actionRow(), item, "big") : null;
+    const not = h("button", {type: "button", class: "act big", "data-act": "not-yet", title: t("desk.accept.not_yet.tip"), disabled: served() && canAct() && typeof REPLY !== "undefined" ? null : "disabled"}, t("desk.accept.not_yet"));
+    not.addEventListener("click", () => { if (typeof REPLY !== "undefined") REPLY.open(); });
+    return h("section", {class: "tk-need strong tk-accept", "data-action": "accept"},
+      h("div", {class: "tk-need-h"}, tag(t("task.waiting.accept"), "hot"), waitedLine()),
+      h("p", {class: "hint"}, t("desk.accept.hint")),
+      h("div", {class: "tk-accept-sum"}, h("b", null, t("desk.accept.summary")), h("div", {class: "tk-accept-text", tabindex: "0"}, found.summary)),
+      found.skipped.length ? h("div", {class: "tk-accept-skip"}, h("b", null, t("desk.accept.skipped")), h("ul", null, found.skipped.map((line) => h("li", null, line)))) : null,
+      found.todo_open ? h("p", {class: "sub"}, t("desk.accept.open", {why: found.todo_open})) : null,
+      h("div", {class: "tk-need-go"}, yes, not));
   }
 
   // --- a call to an outside system held in the outbox (1.7.7) -------------------------------------------------------------------------------------------------
   // The card shows the facts (what, where, the pack's `show` facts, the target) and the first words of the command; View opens the small window with the command laid out line by line
   // and the file it reads, whole, scrolling. The code is typed on the card, as the design says a person reads the command first: Approve wakes once the window was opened.
   // Approve is `harness approve-action` with that code (the board's act, no preview); Dismiss takes the call away without running anything.
-  const viewedCalls = new Set();
+  const changedCalls = new Map();  // code -> what the server said when a file of the call changed after View: the card shows it until View is pressed again (a redraw would lose it)
+  const viewedCalls = new Map();  // code -> the files of the call and their digests, as the card had them when View was pressed: Approve sends them back, and the server asks for a new View when a file is not the same (1.7.38, C12 RB-N5)
   const enteredCodes = new Map();  // what the person typed or clicked into a card's code box, kept when the card is drawn again
+  const reasonRows = new Map();  // code -> {kind}: the "Why not?" row of a card is open, and which of the two reasons that take a line is chosen (1.7.38); the line itself is a `data-keep` field
+  const reasonLines = new Map();  // code -> the line typed in the reason box, kept when the card is drawn again
+  const REASONS = ["command", "connection", "later", "other_way"], LINE_REASONS = ["command", "other_way"];
   const approvedCalls = new Map();  // code -> {at}: approved on this page and not yet told to the agent; the agent runs an approved call only when it is prompted, so the card offers to tell it
   const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default): past it, telling is no use
   // After an approval: a green card with the codes and one button that tells the chat to run them (a send to the chat, as an answer), in place of typing it.
   const toldCodes = new Set();  // told the agent from this page: the card stays all the same until the command has run (the server says which approvals are left, 1.7.24)
+  const seenCodes = new Set();  // approved codes the server has listed at least once: when one is gone from the list afterwards, the command has run, and its card goes at once (1.7.38, C12 TB-02)
+  // Run (the approval is used up) or run out. Before the server has listed a code once, the page keeps it for 6 seconds (the poll may be a moment behind the click). After that it goes at once:
+  // it used to stay for those 6 seconds with no word from the server and fell back to "Tell the agent to run it" while the agent was already running the command.
+  function pruneApproved(left, now) {
+    if (left) left.forEach((code) => seenCodes.add(code));
+    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000 || (left && !left.has(code) && (seenCodes.has(code) || now - found.at > 6000))) { approvedCalls.delete(code); toldCodes.delete(code); seenCodes.delete(code); }
+    for (const code of [...seenCodes]) if (left && !left.has(code)) seenCodes.delete(code);
+  }
   function approvedCard() {
     const now = Date.now();
     const left = Array.isArray(desk.approved) ? new Set(desk.approved.map((item) => item.code)) : null;  // null: a page without the list (a saved copy)
-    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000 || (left && !left.has(code) && now - found.at > 6000)) { approvedCalls.delete(code); toldCodes.delete(code); }  // run (the approval is used up) or run out
+    pruneApproved(left, now);
     const codes = [...new Set([...(left ? [...left] : []), ...approvedCalls.keys()])];
     if (!codes.length || desk.past) return null;
     const titles = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.title]));
-    const all = codes.every((code) => toldCodes.has(code));
+    const heardBy = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.told || ""]));  // "wait": its wait returned; "message": the board woke it (1.7.38)
+    for (const code of codes) if (!heardBy.get(code) && (approvedCalls.get(code) || {}).heard) heardBy.set(code, approvedCalls.get(code).heard);  // the answer to the click said the agent waited: no gap before the next poll says it
+    const all = codes.every((code) => toldCodes.has(code) || heardBy.get(code));
+    const viaWait = codes.every((code) => heardBy.get(code) === "wait");
     const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: a message from here would answer the wrong thing (1.7.20)
     const can = served() && canAct() && !asking;
-    const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"));
+    const tell = h("button", {type: "button", class: "act" + (all ? "" : " hot") + " big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"));
     const said = h("div", {class: "bad"});
     tell.addEventListener("click", () => {
       tell.disabled = true; tell.textContent = t("board.serve.working");
@@ -1118,8 +1165,31 @@
     return h("section", {class: "tk-need strong tk-call done"},
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good")),
       codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, code), title ? h("span", {class: "tk-call-say"}, title) : null); }),  // each code stands in front of its own title (1.7.29)  // which call was approved (1.7.25)
-      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
-      h("div", {class: "tk-need-go tk-call-go"}, tell, said));
+      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : viaWait ? "desk.outbox.told.wait" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
+      viaWait ? null : h("div", {class: "tk-need-go tk-call-go"}, tell, said));  // the agent's wait returned and it goes on by itself: nothing to press
+  }
+  // After "Open <connection> for this task" on a card (1.7.38): the connection is open, the command is not approved. A green card asks the person to tell the agent to run it again; it goes when the agent has.
+  const toldOpened = new Set();
+  function openedCard() {
+    const list = Array.isArray(desk.opened) ? desk.opened : [];
+    if (!list.length || desk.past) return null;
+    const names = [...new Set(list.flatMap((item) => item.shown || item.names))];  // the linked items of ado, not "ado": that is all that was opened
+    const all = list.every((item) => toldOpened.has(item.code) || item.told);
+    const viaWait = list.every((item) => item.told === "wait");
+    const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);
+    const can = served() && canAct() && !asking;
+    const tell = h("button", {type: "button", class: "act" + (all ? "" : " hot") + " big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.opened.tell"));
+    const said = h("div", {class: "bad"});
+    tell.addEventListener("click", () => {
+      tell.disabled = true; tell.textContent = t("board.serve.working");
+      SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: t("desk.outbox.opened.body", {names: names.join(", ")}), step: "act"})
+        .then(() => { list.forEach((item) => toldOpened.add(item.code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t(all ? "desk.outbox.tell.again" : "desk.outbox.opened.tell"); });
+    });
+    return h("section", {class: "tk-need strong tk-call done", "data-action": "opened"},
+      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.opened"), "good")),
+      list.map((item) => h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, item.code), item.title ? h("span", {class: "tk-call-say"}, item.title) : null)),
+      h("p", {class: "sub"}, t(asking ? "desk.outbox.opened.asking" : viaWait ? "desk.outbox.opened.wait" : all ? "desk.outbox.opened.told" : "desk.outbox.opened.hint", {names: names.join(", ")})),
+      viaWait ? null : h("div", {class: "tk-need-go tk-call-go"}, tell, said));  // the agent's wait returned and it goes on by itself: nothing to press
   }
   const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;
   function sqlNodes(text) {
@@ -1139,103 +1209,202 @@
       if (line.kind === "program") rows.push(h("div", {class: "cmd-line"}, h("span", {class: "cmd-prog"}, line.text)));
       else if (line.kind === "option") rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-opt"}, line.text), line.value ? [" ", h("span", {class: "cmd-val"}, line.value)] : null));
       else if (line.kind === "flag") rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-opt"}, line.text)));
+      else if (line.kind === "sep") rows.push(h("div", {class: "cmd-sep"}, h("span", null, line.text)));  // the next command of the line (1.7.38)
       else if (line.kind === "block") rows.push(h("div", {class: "cmd-block"}, sqlNodes(line.text)));
       else rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-val"}, line.text)));
     }
     return h("div", {class: "cmd-fmt"}, rows);
   }
   const known = (key, plain) => (Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : plain);  // a word of the harness in the language of the page; a name a tool pack gives stays as it is
+  const factSpan = (label, value, hot, title) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", title ? {title} : null, value)) : null);
+  const factList = (facts) => Object.entries(facts || {}).map(([name, value]) => factSpan(known("desk.outbox.fact." + name, name), value));
+  const manyWrites = (item) => Array.isArray(item.parts) && item.parts.length > 1;  // a held line of several writes: each has its own words, facts and text (1.7.38)
+  const ZONE_WORDS = {ask: ["desk.outbox.zone.ask", "desk.outbox.zone.ask.tip"], write: ["desk.outbox.zone.write", "desk.outbox.zone.write.tip"], broken: ["desk.outbox.zone.broken", "desk.outbox.zone.broken.tip"]};  // why a held call waits: word and hover
+  const tailPath = (path, max) => (path.length <= max ? path : "\u2026" + path.slice(1 - max));  // a long path keeps its end, where the file name is; the whole path is on hover
+  const scriptsOf = (item) => (item.layout ? item.layout.scripts || (item.layout.script ? [item.layout.script] : []) : []);  // every file the line names and the task holds (1.7.38: two `-i` files show both)
+  const zoneFact = (zone, note, system, env, why) => (ZONE_WORDS[zone] ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.zone")), system ? [h("b", null, system), env && env !== "none" ? [" ", tag(env, "hot")] : null, " "] : null,
+    h("span", {class: "unnamed", title: t(ZONE_WORDS[zone][1], {what: note || "-"}) + (why && zone === "ask" ? "\n" + t("desk.outbox.zone.why", {why}) : "")}, t(ZONE_WORDS[zone][0]), " ", h("span", {class: "why"}, "?"))) : null);  // the statement as it was written, and, when the type says it, what is wrong with it (F3 U2)
+  const systemFact = (system, env) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, system), env && env !== "none" ? [" ", tag(env, "hot")] : null);
   function callFacts(item) {
     const verb = known("desk.outbox.verb." + item.verb, item.verb);
-    const fact = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
+    const many = manyWrites(item);
+    const reaches = item.reaches && item.reaches.length > 1 ? item.reaches : null;  // a line on more than one system names each of them (1.7.38)
+    const holds = item.holds && item.holds.length > 1 ? item.holds : null;  // and why each part is held
     return h("div", {class: "tk-call-facts"},
-      fact(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
-      ...Object.entries(item.facts || {}).map(([name, value]) => fact(known("desk.outbox.fact." + name, name), value)),
-      fact(t("desk.outbox.target"), item.target),
-      item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t("desk.outbox.lines", {n: item.layout.script.lines}))) : null);
+      factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb, false, item.named === false ? null : item.verb === "unknown" ? t("desk.outbox.verb.unknown.tip") : item.verb),  // a call of a pack with a faulty file has no kind: the gate could not judge it (1.7.38, M5)
+      reaches ? h("span", {class: "tk-fact tk-systems"}, h("span", {class: "k"}, t("desk.outbox.systems")), reaches.map((one, index) => [index ? " " : "", h("b", null, one.system), one.env && one.env !== "none" ? [" ", tag(one.env, "hot")] : null])) : systemFact(item.system, item.env),
+      ...(many ? [] : factList(item.facts)),
+      many ? null : factSpan(t("desk.outbox.target"), item.target),
+      ...(holds ? holds.map((hold) => zoneFact(hold.zone, hold.note, hold.system, hold.env)) : [zoneFact(item.zone, item.zone_note, "", "", item.why)]),  // 1.7.38: why a call of a type with lists waits; a line on more than one system says why for each part (F1 M6)
+      ...scriptsOf(item).map((script) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", {class: "tk-path", title: script.path}, tailPath(script.path, window.innerWidth < 560 ? 24 : 44)), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.lines.one" : "desk.outbox.lines", {n: script.lines})))));  // the end of the path: two scripts of one folder differ there (F1 M3)
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
-  // The raw command is folded: ids, headers and long addresses are not on the face of the card.
-  const sayLine = (item) => (item.say ? h("div", {class: "tk-call-say"}, item.say, item.writes > 1 ? h("span", {class: "tk-writes"}, t("desk.outbox.writes", {n: item.writes})) : null) : null);
+  // The raw command is folded: ids, headers and long addresses are not on the face of the card. A line of several writes (1.7.38) says each on a line of its own, with its own facts and text.
+  const sayLine = (item) => {
+    if (manyWrites(item)) {
+      return h("div", {class: "tk-parts"}, h("span", {class: "tk-writes"}, t(item.parts.every((part) => part.say) ? "desk.outbox.writes" : "desk.outbox.statements", {n: item.parts.length})),  // statements: the type gave no title to each, and one may be a read
+        h("ol", null, item.parts.map((part) => h("li", null, part.say ? h("div", {class: "tk-call-say"}, part.say) : null, part.system || Object.keys(part.facts || {}).length ? h("div", {class: "tk-call-facts"}, part.system ? systemFact(part.system, part.env) : null, ...factList(part.facts)) : null, bodyBlock(part)))));
+    }
+    return item.say ? h("div", {class: "tk-call-say"}, item.say) : null;
+  };
   function bodyBlock(item) {
     const body = item.body;
     if (!body) return null;
     if (body.missing) return h("div", {class: "tk-call-body missing"}, h("p", {class: "bad"}, t("desk.outbox.body.missing", {path: body.path, dismiss: t("desk.outbox.dismiss")})));
     return h("div", {class: "tk-call-body"},
-      h("div", {class: "tk-body-h"}, h("b", null, t("desk.outbox.body")), " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
+      h("div", {class: "tk-body-h"}, h("b", null, body.system ? t("desk.outbox.body.on", {label: body.label || t("desk.outbox.body"), where: body.system + (body.env && body.env !== "none" ? " (" + body.env + ")" : "")}) : body.label || t("desk.outbox.body")), " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),  // "The statement that will run on acmedw-dev (dev)" when the line reaches more than one system (F1 M4)
       h("pre", {class: "tk-body-text", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null);
   }
   const rawFold = (item) => h("details", {class: "tk-raw"}, h("summary", null, t("desk.outbox.raw")), h("pre", {class: "cmd-script one"}, item.command));
   // What a person wants to copy out of a call is the body: the query in the quoted block, or the script the command reads; the command line itself only when there is neither.
   function callBody(item) {
     if (item.body) return item.command;  // the text it writes is on the card; what Copy gives is the command itself
-    const script = item.layout && item.layout.script;
-    if (script && script.text) return script.text;
+    const files = scriptsOf(item).filter((script) => script.text);
+    if (files.length) return files.map((script) => script.text).join("\n");  // two files: both, one after the other
     const lines = item.layout ? item.layout.lines : [];
     const block = lines.find((line) => line.kind === "block") || lines.find((line) => line.quoted && (line.kind === "arg" || line.value));  // a long quoted value, or a short one (`-Q "SELECT 1"`)
     return block ? (block.kind === "option" ? block.value : block.text) : item.command;
   }
   function callWindow(item, onCode) {
-    viewedCalls.add(item.code);
+    viewedCalls.set(item.code, item.seen || {});
+    changedCalls.delete(item.code);
     const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
     copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
-    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-    const script = item.layout && item.layout.script;
+    const close = h("button", {type: "button", class: "act"}, t("desk.window.close"));  // View only shows: nothing to cancel (F1 L5)
+    const scripts = scriptsOf(item);
     // The code, as a chip: a click copies it, puts it in the card's box and closes the window, so Approve is the next press.
     const codeChip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, item.code);
     const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), sayLine(item), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: when(item.created_at, 0, 16)}), " ", codeChip),
       h("div", {class: "win-body"},  // one scrolling body (both ways); the blocks in it scroll sideways only; the buttons stay in view
-        bodyBlock(item),
+        manyWrites(item) ? null : bodyBlock(item),
+        typeof STMTS !== "undefined" ? STMTS.block(item.stmts) : null,
         h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)),
-        script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
+        scripts.map((script) => [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t(script.lines === 1 ? "desk.outbox.script.note.one" : "desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)]),
         h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command))),
       h("div", {class: "row win-foot"}, copy, close)]);
     view.box.classList.add("wide");
     close.addEventListener("click", () => { view.close(); draw(true); });
     codeChip.addEventListener("click", () => { navigator.clipboard.writeText(item.code).then(() => {}, () => {}); view.close(); if (onCode) onCode(item.code); });
   }
+  // A line that reaches more than one connection passes only when every part does: when opening cannot pass all of them the card offers no Open and says which parts still need the person (1.7.38, F1 M6).
+  function stuckNote(item) {
+    const holds = item.holds || [];
+    if (holds.length < 2 || (item.offers || []).length || item.moved_on || !holds.some((hold) => hold.zone === "write")) return null;
+    const names = holds.filter((hold) => !hold.opens).map((hold) => hold.system + (hold.env && hold.env !== "none" ? " (" + hold.env + ")" : ""));
+    return h("p", {class: "sub tk-open-note"}, t("desk.outbox.open.stuck", {parts: names.join(", ")}));
+  }
+  // The box over two held calls or more (batch.js, 1.7.38 F3 AP): what it needs of this page is whether the files of a call were viewed, how to open its View window, and what the page does after an approval.
+  function batchBox() {
+    const held = (desk.outbox || []).filter((item) => item.batch && item.batch !== "never");  // all that wait for the person and may be approved together: a call the agent went on without can still be approved, and the card then asks to tell the agent. A call the gate could not judge, and a delete, is never in the box (1.7.38, C13 FR 1): only its own card approves it, after View
+    if (held.length < 2 || typeof BATCH === "undefined" || !served() || desk.past) return null;
+    const title = (item) => (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })();
+    return BATCH.box({
+      task: desk.name, items: held, max: desk.batch_max || 60, can: Boolean(canAct() && SERVE.runs("approve-action")),
+      needsView: () => true,  // as on the card of a call: View first, for every call (1.7.38, C13 FR 1)
+      viewed: (code) => viewedCalls.get(code), unview: (code) => { viewedCalls.delete(code); },
+      view: (item) => callWindow(item, null), redraw: () => draw(true), done: () => SERVE.done(),
+      reasons: REASONS, lineReasons: LINE_REASONS,
+      approved: (codes, result) => { for (const code of codes) { const item = held.find((one) => one.code === code); approvedCalls.set(String(code).toUpperCase(), {at: Date.now(), heard: result && result.agent && result.agent[code] === "wait" ? "wait" : "", title: item ? title(item) : ""}); } },
+    });
+  }
+
   function outboxCard(item, notes) {
     const can = served() && canAct() && SERVE.runs("approve-action");
     const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("desk.outbox.code"), "aria-label": t("board.serve.code")});
     const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;  // the window was opened and a code was typed (the one the agent gave, in the draft's name)
     const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled", title: t("desk.outbox.view_first")}, t("desk.outbox.approve"));
     // Why Approve is grey is shown by motion, not words: View pulses until it was opened, then the code box until a code is typed (hand test: the tip alone was not seen).
+    const gone = Boolean(item.moved_on);  // the agent ran other commands after this call: it does not wait for it, so nothing pulses and Dismiss is the main button
+    const opens = gone ? [] : (item.offers || []).map((offer) => {  // 1.7.38: one button for each connection of the line that the card may open for the task; it needs the same code as Approve
+      const tip = t(offer.scope === "items" ? "desk.outbox.open.tip.items" : "desk.outbox.open.tip.all", {name: offer.system, refs: (offer.refs || []).join(", ")});
+      const open = h("button", {type: "button", class: "act tk-open", "data-conn": offer.system, disabled: "disabled", title: tip}, t(offer.scope === "items" ? "desk.outbox.open.items" : "desk.outbox.open", {name: offer.system}));  // ado opens only the items the task is linked to: the button says so
+      open.dataset.tip = tip;
+      return open;
+    });
     const arm = () => {
       yes.disabled = !ready_();
       yes.title = ready_() || !can ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first");
-      view.classList.toggle("pulse", can && !viewedCalls.has(item.code));
-      input.classList.toggle("pulse", can && viewedCalls.has(item.code) && !input.value.trim());
+      opens.forEach((open) => { open.disabled = !ready_(); open.title = ready_() || !can ? open.dataset.tip : yes.title; });
+      view.classList.toggle("pulse", can && !gone && !viewedCalls.has(item.code));
+      input.classList.toggle("pulse", can && !gone && viewedCalls.has(item.code) && !input.value.trim());
     };
     input.addEventListener("input", arm);
-    const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
+    const no = h("button", {type: "button", class: "act" + (gone ? " hot big" : ""), disabled: can ? null : "disabled", "aria-expanded": reasonRows.has(item.code) ? "true" : "false"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
-    const said = h("div", {class: "bad"});
+    const said = h("div", {class: "bad"}, !viewedCalls.has(item.code) && changedCalls.has(item.code) ? changedCalls.get(item.code) : null);
     view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; enteredCodes.set(item.code, code); arm(); yes.focus(); }); arm(); });  // the code is not filled in by opening View: the person types it, or clicks it in View (1.7.29)
     input.addEventListener("input", () => enteredCodes.set(item.code, input.value));
     input.addEventListener("focus", arm);
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), title: item.say || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })()}); SERVE.done(); }, (error) => { if (error.data && error.data.changed) { viewedCalls.delete(item.code); changedCalls.set(item.code, error.message); } said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });  // a file changed since View: View pulses again
     };
     yes.addEventListener("click", send);
+    opens.forEach((open) => open.addEventListener("click", () => {
+      if (!ready_()) return;
+      opens.forEach((one) => { one.disabled = true; }); yes.disabled = true;
+      SERVE.post("/api/act", {action: "task allow", task: desk.name, step: "act", env: open.dataset.conn, runner: "on", code: input.value.trim()}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); });
+    }));
     input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });
-    no.addEventListener("click", () => {
+    // Dismiss opens a row "Why not?" (1.7.38): one click on a reason dismisses the call with it; the two reasons that take a line open a box first. "No reason" dismisses with none. The agent is told the reason:
+    // at once by its wait, or woken with it; with none it stops that path and tells what was not done.
+    const reasonBox = h("div", {class: "tk-reasons", role: "group", "aria-label": t("desk.outbox.reason.title")});
+    const dismiss = (reason, note) => {
+      reasonBox.querySelectorAll("button").forEach((one) => { one.disabled = true; });
       no.disabled = true;
-      SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; });
+      SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code, reason, note: note || ""}).then(() => { reasonRows.delete(item.code); reasonLines.delete(item.code); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; reasonBox.querySelectorAll("button").forEach((one) => { one.disabled = false; }); });
+    };
+    const paintReasons = () => {
+      const open = reasonRows.get(item.code);
+      reasonBox.hidden = !open;
+      no.setAttribute("aria-expanded", open ? "true" : "false");
+      if (!open || reasonBox.firstChild) return;
+      const line = h("input", {class: "tk-reason-line", type: "text", maxlength: 500, autocomplete: "off", placeholder: t("desk.outbox.reason.line.ph"), "aria-label": t("desk.outbox.reason.line.ph"), "data-keep": "reason." + item.code});
+      line.value = reasonLines.get(item.code) || "";
+      line.addEventListener("input", () => reasonLines.set(item.code, line.value));
+      const go = h("button", {type: "button", class: "act hot", "data-act": "reason-go"}, t("desk.outbox.reason.go"));
+      const lineRow = h("span", {class: "tk-reason-line-row"}, line, go);
+      lineRow.hidden = !LINE_REASONS.includes(open.kind);
+      const chips = REASONS.map((kind) => {
+        const chip = h("button", {type: "button", class: "act tk-reason" + (open.kind === kind ? " on" : ""), "data-reason": kind}, t("desk.outbox.reason." + kind));
+        chip.addEventListener("click", () => {
+          if (!LINE_REASONS.includes(kind)) return dismiss(kind, "");
+          reasonRows.set(item.code, {kind});
+          chips.forEach((one) => one.classList.toggle("on", one === chip));
+          lineRow.hidden = false;
+          line.focus();
+        });
+        return chip;
+      });
+      const none = h("button", {type: "button", class: "act tk-reason", "data-reason": "none"}, t("desk.outbox.reason.none"));
+      none.addEventListener("click", () => dismiss("", ""));
+      const send = () => { const kind = (reasonRows.get(item.code) || {}).kind; if (LINE_REASONS.includes(kind)) dismiss(kind, line.value); };
+      go.addEventListener("click", send);
+      line.addEventListener("keydown", (event) => { if (isEnter(event)) send(); });
+      reasonBox.replaceChildren(h("span", {class: "sub", title: t("desk.outbox.reason.tip")}, t("desk.outbox.reason.title")), ...chips, none, lineRow);
+    };
+    no.addEventListener("click", () => {
+      if (reasonRows.has(item.code)) reasonRows.delete(item.code); else reasonRows.set(item.code, {kind: ""});
+      reasonBox.replaceChildren();
+      paintReasons();
     });
+    paintReasons();
     input.value = enteredCodes.get(item.code) || "";  // the card was drawn again: what the person put in stays
     arm();
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
     const words = Boolean(item.say || item.body);  // the type says it in words: the card shows that and folds the command
-    return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
-      h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub", title: item.draft ? t("desk.outbox.draft.tip", {file: item.draft}) : null}, t("desk.outbox.since", {at: when(item.created_at, 11, 16)}))),  // the draft's file name is on hover, not on the card (1.7.26)
+    return h("section", {class: "tk-need tk-call" + (gone ? " moved" : " strong"), "data-action": "approve-action", "data-code": item.code},
+      h("div", {class: "tk-need-h"}, tag(t(gone ? "desk.outbox.moved" : "task.waiting.outbox"), gone ? "" : "hot"), h("span", {class: "sub", title: item.draft ? t("desk.outbox.draft.tip", {file: item.draft}) : null}, t("desk.outbox.since", {at: when(item.created_at, 11, 16)}))),  // the draft's file name is on hover, not on the card (1.7.26)
       sayLine(item),
       callFacts(item),
-      bodyBlock(item),
+      manyWrites(item) ? null : bodyBlock(item),
+      typeof STMTS !== "undefined" ? STMTS.block(item.stmts) : null,  // F3 AP: the statements of a call that carries many, each judged by its type's lists
       words ? rawFold(item) : h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
+      gone ? h("p", {class: "hint"}, t("desk.outbox.moved.note")) : item.agent === "wait" || item.agent === "ended" ? h("p", {class: "sub tk-agent", "data-agent": item.agent}, t("desk.outbox.agent." + item.agent)) : null,  // 1.7.38: where the agent stands: it waits here, or it stopped on this call
+      stuckNote(item),
       notes,
-      h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
+      h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), ...opens, no, h("span", {class: "sub"}, t("desk.outbox.same_as")), reasonBox, said));  // View first in the row: the eye goes View, code, Approve
   }
 
   // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.
@@ -1265,7 +1434,7 @@
     const chat = served() && !desk.past ? desk.chat : null;
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), gates: ((desk.trace && desk.trace.entries) || []).filter((entry) => entry.kind === "gate" && !entry.source && entry.command).slice(-60).map((entry) => ({command: entry.command, how: entry.decision === "held" ? "held" : "refused", reason: entry.reason || "", at: entry.at})), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed", answer: (desk.outbox || []).some((item) => item.agent === "wait")});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }
@@ -2241,22 +2410,62 @@
   const traceOpen = new Map();  // prompt number -> open; the newest is open until the person says otherwise
   const spent = (seconds) => (seconds > 0 && seconds < 10 ? seconds.toFixed(1) + " s" : clock(seconds));
 
+  // What the person decided, in its place by time (1.7.38, F3 AP): one line for each (a call approved alone or in a batch, a connection opened or closed, a call not approved with the reason, the calls a close
+  // voided) and what became of an approved call. The details are under the line: the command exactly as it was approved, the files it was approved with and their fingerprints.
+  function decisionRow(item, stamp) {
+    const code = item.code ? h("code", {class: "tr-code"}, item.code) : null;
+    const where = item.system ? [" ", h("span", {class: "sub"}, item.system + (item.env && item.env !== "none" ? " \u00b7 " + item.env.toUpperCase() : ""))] : null;
+    let head, mark = null, lines = [];
+    if (item.what === "approved") {
+      head = [h("b", null, t("desk.trace.decision.approved")), " ", code, item.batch > 1 ? [" ", tag(t("desk.trace.decision.batch", {n: item.batch}))] : null, where];
+      mark = tag(t("desk.trace.outcome." + (item.outcome || "waiting")), item.outcome === "ran" ? "good" : item.outcome === "waiting" ? "" : "hot");
+      if (item.outcome === "ran" && item.ran_at) lines.push(h("div", {class: "sub"}, t("desk.trace.outcome.ran.at", {at: when(item.ran_at, 11, 19)})));
+      if (item.command) lines.push(h("pre", {class: "tr-cmd", tabindex: "0"}, item.command));
+      for (const file of item.files || []) lines.push(h("div", {class: "sub tr-file", title: file.path}, t("desk.trace.decision.file", {path: file.path, sha: file.sha})));
+    } else if (item.what === "dismissed") {
+      head = [h("b", null, t("desk.trace.decision.dismissed")), " ", code];
+      const why = item.reason ? t("desk.outbox.reason." + item.reason) : t("desk.outbox.reason.none");
+      mark = tag(why, "");
+      if (item.note) lines.push(h("div", {class: "sub"}, item.note));
+      if (item.text) lines.push(h("div", {class: "sub"}, item.text));
+      if (item.command) lines.push(h("pre", {class: "tr-cmd", tabindex: "0"}, item.command));
+    } else if (item.what === "opened" || item.what === "closed") {
+      head = [h("b", null, t(item.links ? "desk.trace.decision." + item.what + ".links" : "desk.trace.decision." + item.what)), " ", item.links ? null : h("span", {class: "sub"}, item.name + (item.env ? " \u00b7 " + item.env.toUpperCase() : ""))];
+      if (item.what === "opened") mark = tag(t(item.links ? "desk.trace.decision.scope.items" : "desk.trace.decision.scope.all"), "hot");
+    } else {
+      head = [h("b", null, t("desk.trace.decision.void")), " ", h("span", {class: "sub"}, item.text || "")];
+    }
+    const summary = h("summary", null, ...head, mark ? [" ", mark] : null);
+    const body = lines.length ? h("details", {class: "tr-more"}, summary, ...lines) : null;
+    return h("li", {class: "tr-decision " + item.what}, stamp, h("div", {class: "what"}, body || h("div", null, ...head, mark ? [" ", mark] : null)));
+  }
+
   function traceRow(item) {
     const stamp = h("span", {class: "when sub"}, when(item.at, 5, 19));
     if (item.kind === "prompt") return h("li", {class: "tr-prompt"}, stamp, h("div", {class: "what sub"}, t("desk.trace.prompt")));
     if (item.kind === "think") return h("li", {class: "tr-think"}, stamp, h("div", {class: "what sub"}, t("desk.trace.think"), " \u00b7 " + spent(item.seconds)));
     if (item.kind === "subagent") return h("li", {class: "tr-agent"}, stamp, h("div", {class: "what"}, h("b", null, item.agent), " ", tag(t("desk.trace.subagent")), h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds) + " \u00b7 " + t("desk.trace.calls", {n: item.tool_calls || 0}) + (item.model ? " \u00b7 " + item.model : ""))));
+    if (item.kind === "decision") return decisionRow(item, stamp);
     const gate = item.kind === "gate";
-    return h("li", {class: (gate ? "tr-gate" : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "")}, stamp,
+    return h("li", {class: (gate ? (item.decision === "held" ? "tr-held" : "tr-gate") : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "")}, stamp,
       h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
-        gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub"}, " \u00b7 " + item.rule) : null] : null,
+        gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub", title: item.rule}, " \u00b7 " + ruleWords(item.rule)) : null] : null,
         !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
         !gate && item.ok === null ? [" ", item.stopped ? tag(t("desk.trace.stopped")) : tag(t("desk.trace.running"), "good run")] : null,
         item.seconds ? h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds)) : null,
         (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)]),
         item.command ? [" ", h("code", null, item.command)] : null,
-        item.reason ? h("div", {class: "sub"}, item.reason) : null,
+        item.reason ? reasonNode(item.reason) : null,
         item.error ? h("div", {class: "sub"}, item.error) : null));
+  }
+  // What the hook refused for is a word of the harness, not the name of its rule (`external-unpinned`): the words of the table, else the name with its dashes taken out (1.7.38, C13 FR 11).
+  const ruleWords = (rule) => { const key = "desk.trace.rule." + rule; return Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : String(rule).replace(/[-_.]+/g, " "); };
+  // The reason in full is what tells the agent the right way, and it comes last: a long one shows its start and opens to the whole.
+  const REASON_SHOWN = 180;
+  function reasonNode(text) {
+    if (text.length <= REASON_SHOWN) return h("div", {class: "sub"}, text);
+    const cut = text.slice(0, REASON_SHOWN).replace(/\s+\S*$/, "");
+    return h("details", {class: "tr-reason"}, h("summary", {class: "sub"}, cut + "\u2026"), h("div", {class: "sub tr-reason-full"}, text));
   }
 
   function traceStats(stats) {

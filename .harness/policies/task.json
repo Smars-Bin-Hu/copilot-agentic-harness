@@ -60,7 +60,8 @@
       "autorun on",
       "recover",
       "archive",
-      "close"
+      "close",
+      "accept"
     ]
   },
   "health": {

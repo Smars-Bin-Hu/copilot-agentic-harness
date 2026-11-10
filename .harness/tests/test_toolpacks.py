@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -9,10 +10,11 @@ import stat
 import subprocess
 import sys
 import tempfile
+import unittest
 import zipfile
 from pathlib import Path
 
-from support import HarnessTestCase, pre_tool
+from support import HarnessTestCase, pre_tool, use_packs
 
 from core import company, config, toolpacks, launchenv, connections, skillcheck
 from core.toolpacks import ToolpackError
@@ -98,7 +100,7 @@ class Install(ToolpackCase):
         for why, folder in cases.items():
             with self.assertRaises(ToolpackError, msg=why):
                 toolpacks.add(self.root, str(folder))
-        self.assertFalse((self.root / toolpacks.FOLDER).exists() and any((self.root / toolpacks.FOLDER).iterdir()))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [], "nothing is recorded")
 
     def test_a_skill_may_lead_with_the_companys_prefix(self) -> None:
         (self.root / ".harness/policies/user.override.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
@@ -107,16 +109,21 @@ class Install(ToolpackCase):
         with self.assertRaises(ToolpackError):
             toolpacks.add(self.root, str(make(self.outside / "other", name="other", skills=("acme-tracker-x",))))  # the company's prefix, but another pack's name
 
-    def test_again_needs_replace_and_a_skill_the_new_version_dropped_goes(self) -> None:
+    def test_the_same_folder_again_is_the_same_entry_another_folder_of_the_name_needs_replace_and_a_dropped_skill_goes(self) -> None:
         make(self.source, skills=("tracker-ticket", "tracker-old"))
         toolpacks.add(self.root, str(self.source))
+        toolpacks.add(self.root, str(self.source))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [str(self.source.resolve())], "one entry")
+        other = make(self.outside / "tracker2", skills=("tracker-ticket",))
+        shutil.copytree(self.source / "types", other / "types", dirs_exist_ok=True)
         with self.assertRaises(ToolpackError):
-            toolpacks.add(self.root, str(self.source))
-        shutil.rmtree(self.source / "skills" / "tracker-old")
-        make(self.source, version="1.1.0", skills=("tracker-ticket",))
-        done = toolpacks.add(self.root, str(self.source), replace=True)
+            toolpacks.add(self.root, str(other))
+        make(other, version="1.1.0", skills=("tracker-ticket",))
+        done = toolpacks.add(self.root, str(other), replace=True)
         self.assertEqual(done["version"], "1.1.0")
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [str(other.resolve())])
         self.assertFalse((self.root / ".github/skills/tracker-old").exists())
+        self.assertTrue((self.root / ".github/skills/tracker-ticket/SKILL.md").is_file())
 
     def test_a_skill_that_is_not_its_own_is_never_written_over(self) -> None:
         mine = self.root / ".github/skills/tracker-ticket"
@@ -126,25 +133,21 @@ class Install(ToolpackCase):
             toolpacks.add(self.root, str(self.source))
         self.assertEqual((mine / "SKILL.md").read_text(encoding="utf-8"), "mine\n")
 
-    def test_a_zip_with_one_folder_installs_and_one_that_climbs_out_is_refused(self) -> None:
-        good = self.outside / "tracker.zip"
-        with zipfile.ZipFile(good, "w") as archive:
-            for path in self.source.rglob("*"):
-                archive.write(path, "tracker/" + path.relative_to(self.source).as_posix())
-        self.assertEqual(toolpacks.add(self.root, str(good))["installed"], "tracker")
-        bad = self.outside / "bad.zip"
-        with zipfile.ZipFile(bad, "w") as archive:
-            archive.writestr("toolpack.json", "{}")
-            archive.writestr("../escape.txt", "x")
-        with self.assertRaises(ToolpackError):
-            toolpacks.add(self.root, str(bad), replace=True)
-        self.assertFalse((self.outside / "escape.txt").exists())
+    def test_a_zip_is_refused_in_one_sentence_nothing_is_unpacked(self) -> None:
+        archive = self.outside / "tracker.zip"
+        with zipfile.ZipFile(archive, "w") as out:
+            out.writestr("tracker/toolpack.json", "{}")
+        with self.assertRaises(ToolpackError) as caught:
+            toolpacks.add(self.root, str(archive))
+        self.assertIn("tracker.zip", str(caught.exception))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [])
 
     def test_remove_takes_back_its_folder_and_skills_into_the_backup(self) -> None:
         toolpacks.add(self.root, str(self.source))
         done = toolpacks.remove(self.root, "tracker")
         self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
-        self.assertFalse((self.root / toolpacks.FOLDER / "tracker").exists())
+        self.assertTrue(self.source.is_dir(), "the folder itself is the person's: it stays")
+        self.assertEqual(toolpacks.ledger(self.root), {"packs": {}, "paths": []})
         self.assertTrue((Path(done["backup"]) / "skills" / "tracker-ticket" / "SKILL.md").is_file())
         self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
         with self.assertRaises(ToolpackError):
@@ -160,6 +163,20 @@ class Install(ToolpackCase):
         launchenv.save_paths(self.root, [str(connections_bin)])
         toolpacks.add(self.root, str(self.source))
         self.assertEqual(toolpacks.check(self.root)["toolpacks"][0]["programs"], {"tracker": True})
+
+    @unittest.skipIf(os.name == "nt", "a run bit is a macOS and Linux thing")
+    def test_a_program_the_pack_brings_shows_only_when_it_cannot_run(self) -> None:
+        """1.7.38: the company pack that brings its own program had an orange dot and no word why."""
+        (self.source / "bin").mkdir()
+        program = self.source / "bin" / "tracker"
+        program.write_text("#!/bin/sh\necho 1\n", encoding="utf-8")
+        (self.source / "bin" / "tracker.cmd").write_text("@echo 1\n", encoding="utf-8")
+        manifest = toolpacks.manifest(self.source)
+        program.chmod(0o755)
+        self.assertEqual(toolpacks.declared_needs(self.source, manifest, ""), [])
+        program.chmod(0o644)
+        rows = toolpacks.declared_needs(self.source, manifest, "")
+        self.assertEqual([(row["program"], row["found"], row["blocked"], row["why"]) for row in rows], [("tracker", False, str(program), "own")])
 
     def test_check_says_a_program_is_missing_and_finds_it_in_a_tool_folder(self) -> None:
         toolpacks.add(self.root, str(self.source))
@@ -177,7 +194,7 @@ class Install(ToolpackCase):
         for words in (["toolpack", "add", str(self.source)], ["toolpack", "remove", "tracker"]):
             done = self.cli(*words)
             self.assertEqual(done.returncode, 1, words)
-        self.assertFalse((self.root / toolpacks.FOLDER / "tracker").exists())
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [])
 
     def test_the_agent_cannot_write_into_an_installed_tool_pack(self) -> None:
         toolpacks.add(self.root, str(self.source))
@@ -196,24 +213,31 @@ class FromCompany(ToolpackCase):
         (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
         make(self.kb / "tools" / "packs" / "tracker")
 
-    def test_sync_installs_it_once_replaces_it_when_it_changed_and_lists_one_that_left(self) -> None:
+    def test_the_companys_own_pack_is_on_its_skills_are_put_once_and_again_when_the_version_changes_and_taken_back(self) -> None:
         first = company.sync(self.root)
-        self.assertIn(".harness/toolpacks/tracker", first["copied"])
-        self.assertEqual(toolpacks.ledger(self.root)["tracker"]["from"], "company")
-        self.assertNotIn(".harness/toolpacks/tracker", company.sync(self.root)["copied"], "again: nothing to do")
+        self.assertIn(".github/skills/acme-tracker-ticket", first["copied"])
+        row = toolpacks.listed(self.root)["tracker"]
+        self.assertEqual((row["source"], row["active"]), ("company", True))
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["source"], "company")
+        self.assertNotIn(".github/skills/acme-tracker-ticket", company.sync(self.root)["copied"], "again: nothing to do")
         make(self.kb / "tools" / "packs" / "tracker", version="2.0.0")
-        company.sync(self.root)
-        self.assertEqual(toolpacks.ledger(self.root)["tracker"]["version"], "2.0.0")
+        again = company.sync(self.root)
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["version"], "2.0.0")
+        self.assertEqual(len(again["toolpacks"]["lines"]), 1)
+        self.assertTrue(again["toolpacks"]["lines"][0].startswith("tracker 1.0.0 → 2.0.0"))
+        self.assertEqual(toolpacks.recent_updates(self.root), again["toolpacks"]["lines"], "doctor shows the same line")
         shutil.rmtree(self.kb / "tools" / "packs" / "tracker")
-        self.assertEqual(company.sync(self.root)["toolpacks_gone"], ["tracker"])
-        self.assertTrue((self.root / toolpacks.FOLDER / "tracker").is_dir(), "listed, not removed")
+        gone = company.sync(self.root)
+        self.assertNotIn("tracker", toolpacks.listed(self.root))
+        self.assertFalse((self.root / ".github/skills/acme-tracker-ticket").exists(), "its skills are taken back")
+        self.assertEqual(toolpacks.ledger(self.root)["packs"], {})
+        self.assertIn(".github/skills/acme-tracker-ticket", gone["copied"])
 
-    def test_one_installed_by_hand_is_not_replaced_by_the_companys(self) -> None:
-        toolpacks.add(self.root, str(self.source))
-        make(self.kb / "tools" / "packs" / "tracker", version="3.0.0")
-        found = company.sync(self.root)
-        self.assertEqual(found["exit_code"], 1)
-        self.assertEqual(toolpacks.ledger(self.root)["tracker"]["version"], "1.0.0")
+    def test_a_folder_added_here_cannot_take_the_name_of_the_companys_pack(self) -> None:
+        with self.assertRaises(ToolpackError):
+            toolpacks.add(self.root, str(self.source))
+        self.assertEqual(toolpacks.listed(self.root)["tracker"]["source"], "company", "the company's first")
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [])
 
 
 TRACKER = """#!{python}
@@ -260,6 +284,31 @@ class ToolIdentity(ToolpackCase):
         self.assertEqual(connections.identity_of(env, "board", TOOL_KIND), {"account": "me@example.org"})
         self.assertEqual(connections.plan(self.root, ["board"])["direct"], ["board"])
 
+    @unittest.skipIf(os.name == "nt", "a run bit is a macOS and Linux thing")
+    def test_a_program_with_no_run_bit_is_told_in_words_not_as_not_found_and_not_as_code_126(self) -> None:
+        """1.7.38: a zip that lost the run bit left `runbook` there but not allowed to run. Test, the sign-in, the pack's needs and the Local rows say so."""
+        program = self.tools / "tracker"
+        launchenv.save_paths(self.root, [str(self.tools)])
+        program.chmod(0o644)
+        found = connections.test(self.root, "board", {})
+        self.assertEqual(found["state"], "missing")
+        self.assertIn("chmod +x", found["why"])
+        self.assertIn(str(program), found["why"])
+        self.assertEqual((found["layers"]["broken"], found["layers"]["key"]), ("program", "program.blocked"))
+        code, said = connections.login(self.root, "board")
+        self.assertEqual(code, 126)
+        self.assertIn("chmod +x", said)
+        done = self.cli("connections", "login", "board")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("chmod +x", done.stdout + done.stderr)
+        self.assertNotIn("Permission denied", done.stdout + done.stderr)
+        row = next(item for item in toolpacks.needs_report(self.root)["tracker"] if item["program"] == "tracker")
+        self.assertEqual((row["found"], row["blocked"]), (False, str(program)))
+        self.assertEqual(next(item for item in launchenv._program_rows(self.root) if item["program"] == "tracker")["blocked"], str(program))  # noqa: SLF001
+        program.chmod(0o755)
+        self.assertTrue(next(item for item in toolpacks.needs_report(self.root)["tracker"] if item["program"] == "tracker")["found"])
+        self.assertEqual(toolpacks.blocked("nothing-like-it", str(self.tools)), "")
+
     def test_a_board_with_no_environment_is_a_system_of_the_toolpack_and_its_writes_are_held(self) -> None:
         system = config.load_policy(self.root, "tools")["systems"]["board"]
         self.assertEqual((system["env"], system["toolpack"]), ("none", "tracker"))
@@ -272,6 +321,8 @@ class ToolIdentity(ToolpackCase):
         done = self.cli("connections", "login", "mine", "--type", "tracker", "--set", "org=demo", "--set", "auth=signin")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(connections.test(self.root, "mine", {}, server={"type": "tracker", "env": "none", "org": "demo", "own": True})["state"], "ok")
+        self.assertNotIn("{", done.stdout, "the board's Terminal window shows what a person reads, not JSON with alias and next")
+        self.assertIn("mine", done.stdout)
 
     def test_login_is_refused_for_a_server_without_a_sign_in_of_its_own(self) -> None:
         self.assertEqual(connections.login(self.root, "nowhere")[0], 2)
@@ -412,14 +463,17 @@ class TaskLinks(TaskCase):
 
 
 class ShippedSample(ToolpackCase):
-    """1.7.16: the sample in examples/toolpacks installs as it is and does what its README says, with its own made-up program."""
+    """1.7.16: the sample in .harness/toolpacks is turned on by `use` as it is and does what its README says, with its own made-up program."""
 
     def test_install_sign_in_test_read_and_a_held_write(self) -> None:
         from support import REPO
 
-        sample = REPO / ".harness" / "examples" / "toolpacks" / "demotracker"
+        sample = REPO / ".harness" / "toolpacks" / "demotracker"
         self.assertEqual(toolpacks.problems(self.root, sample), [])
-        toolpacks.add(self.root, str(sample))
+        shutil.copytree(sample, self.root / ".harness" / "toolpacks" / "demotracker")
+        self.assertFalse(toolpacks.listed(self.root)["demotracker"]["active"], "a factory pack is off until the knowledge base turns it on")
+        use_packs(self.root, "demotracker")
+        toolpacks.sync_skills(self.root)
         self.assertEqual(skillcheck.check_all(self.root, ["demotracker-ticket"])[0]["errors"], [])
         home = self.root / "home"
         home.mkdir()
@@ -455,9 +509,9 @@ class BoardActions(ToolpackCase):
         board = self.board()
         row = board.machine({"step": "toolpacks"})["toolpacks"][0]
         self.assertFalse(row["newer"])
-        make(self.source, version="1.2.0")
-        self.assertTrue(board.machine({"step": "toolpacks"})["toolpacks"][0]["newer"])
+        make(self.source, version="1.2.0")  # read where it lies: the new version is seen at once
         self.assertEqual(board.machine({"step": "toolpack-update", "name": "tracker"})["toolpacks"][0]["version"], "1.2.0")
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["version"], "1.2.0")
         self.assertEqual(board.machine({"step": "toolpack-remove", "name": "tracker"})["toolpacks"], [])
         for step in ("state", "paths", "drop"):
             board.machine({"step": step, "paths": []})
@@ -471,9 +525,10 @@ class BoardActions(ToolpackCase):
         self.assertEqual(done["added"]["installed"], "tracker")
         self.assertEqual(done["added"]["version"], "1.0.0")
         self.assertIn("tracker", done["missing"])  # the made-up program is not on this computer
-        make(self.source, version="1.1.0")
+        other = make(self.outside / "tracker-new", version="1.1.0")  # another folder with the same pack name
+        quoted = '"%s"' % other
         asked = board.machine({"step": "toolpack-add", "path": quoted})
-        self.assertEqual(asked, {"confirm": {"name": "tracker", "version": "1.1.0", "installed": "1.0.0"}})
+        self.assertEqual(asked, {"confirm": {"name": "tracker", "version": "1.1.0", "installed": "1.0.0", "source": str(self.source.resolve())}})
         self.assertEqual(board.machine({"step": "toolpacks"})["toolpacks"][0]["version"], "1.0.0")  # nothing changed yet
         board.machine({"step": "toolpack-add", "path": quoted, "replace": True})
         self.assertEqual(board.machine({"step": "toolpacks"})["toolpacks"][0]["version"], "1.1.0")
@@ -495,10 +550,15 @@ class BoardActions(ToolpackCase):
         row = board.machine({"step": "toolpacks"})["toolpacks"][0]
         self.assertEqual((row["types"], row["skills"], row["mcp_rules"]), ([{"type": "tracker", "label": "Tracker", "via": "cli"}], 1, 0))
 
-    def test_one_from_the_company_pack_is_not_changed_here(self) -> None:
-        toolpacks.add(self.root, str(self.source), origin=toolpacks.COMPANY)
-        with self.assertRaises(ValueError):
+    def test_a_company_or_factory_pack_is_not_removed_here_it_says_where_to_turn_it_off(self) -> None:
+        make(self.root / "knowledge-base" / "company" / "tools" / "packs" / "tracker")
+        with self.assertRaises(ValueError) as caught:
             self.board().machine({"step": "toolpack-remove", "name": "tracker"})
+        self.assertIn("company/tools/packs/tracker", str(caught.exception))
+        use_packs(self.root, "demotracker")
+        with self.assertRaises(ValueError) as caught:
+            self.board().machine({"step": "toolpack-remove", "name": "demotracker"})
+        self.assertIn("packs.json", str(caught.exception))
 
 
 class McpOptional(ToolpackCase):
@@ -808,10 +868,10 @@ class LinkedItems(TaskCase):
     def test_the_task_page_offers_the_linked_items_chip_only_when_a_pack_can_scope_them(self) -> None:
         from modules.task import taskdesk, tasklife
 
-        self.assertNotIn("links", [item["env"] for item in taskdesk.allow_view(self.root, self.data())["envs"]])
+        self.assertIsNone(taskdesk.allow_view(self.root, self.data())["links"])
         tasklife.link(self.root, NAME, "trk:42", True)
-        chip = [item for item in taskdesk.allow_view(self.root, self.data())["envs"] if item["env"] == "links"]
-        self.assertEqual((len(chip), chip[0]["open"], chip[0]["systems"]), (1, False, ["board"]))
+        row = taskdesk.allow_view(self.root, self.data())["links"]
+        self.assertEqual((row["open"], row["systems"], row["refs"]), (False, ["board"], ["trk:42"]))
 
     # 1.7.25 (C8 R4): one rule instead of a patch for each way round the net
 
@@ -921,28 +981,1153 @@ class LinkedItems(TaskCase):
 
 
 class InstallFromZip(HarnessTestCase):
-    """1.7.21: a zip keeps no execute bit (the pack's programs get it back); a source that is not a pack, a bad zip and a path too long are one sentence each."""
+    """1.7.21 / 1.7.30: a source that is not a pack, a zip, and a path too long are one sentence each; a pack's programs are read where they lie."""
 
-    def test_programs_in_bin_are_executable_after_a_zip_install_and_errors_are_sentences(self) -> None:
+    def test_errors_are_sentences(self) -> None:
         with tempfile.TemporaryDirectory() as holder:
-            folder = make(Path(holder) / "tracker")
-            (folder / "bin").mkdir()
-            (folder / "bin" / "tracker").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
-            archive = Path(holder) / "tracker.zip"
-            with zipfile.ZipFile(archive, "w") as out:
-                for item in folder.rglob("*"):
-                    if item.is_file():
-                        out.write(item, item.relative_to(folder).as_posix())  # no mode kept
-            toolpacks.add(self.root, str(archive))
-            program = self.root / toolpacks.FOLDER / "tracker" / "bin" / "tracker"
-            if os.name != "nt":
-                self.assertTrue(os.access(program, os.X_OK))
             empty = Path(holder) / "empty"
             empty.mkdir()
             junk = Path(holder) / "junk.zip"
             junk.write_text("not a zip", encoding="utf-8")
-            for source, word in ((empty, "not a tool pack"), (junk, "not a zip"), (Path(holder) / ("x" * 400), "too long")):
+            for source, word in ((empty, "not a tool pack"), (junk, "a file"), (Path(holder) / ("x" * 400), "too long")):
                 with self.assertRaises(ToolpackError) as caught:
                     toolpacks.add(self.root, str(source))
                 self.assertNotIn("Errno", str(caught.exception))
                 self.assertNotIn("Traceback", str(caught.exception))
+
+
+class FactoryPacks(ToolpackCase):
+    """1.7.30: a factory pack is read where it lies; it is on when the knowledge base names it; only its skills are copied, renamed with the company's prefix."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.factory = make(self.root / ".harness" / "toolpacks" / "tracker", skills=("tracker-ticket", "tracker-note"))
+        for name in ("tracker-ticket", "tracker-note"):  # the skills refer to each other and to themselves by name
+            (self.factory / "skills" / name / "SKILL.md").write_text(SKILL.format(name=name) + "See `tracker-note` and tracker-ticket, not tracker-ticketing or tracker-notes.\n", encoding="utf-8")
+        self.kb = self.root / "knowledge-base" / "company"
+        (self.kb / "tools").mkdir(parents=True)
+        (self.root / "knowledge-base" / "README.md").write_text("# kb\n", encoding="utf-8")
+
+    def use(self, *names: str) -> None:
+        (self.kb / "tools" / "packs.json").write_text(json.dumps({"use": list(names)}), encoding="utf-8")
+
+    def prefix(self, word: str) -> None:
+        (self.root / ".harness/policies/user.override.json").write_text(json.dumps({"skill_prefix": word}), encoding="utf-8")
+
+    def test_the_toggle_writes_use_and_puts_or_takes_back_the_skills(self) -> None:
+        self.prefix("acme")
+        (self.kb / "tools" / "packs.json").write_text(json.dumps({"use": ["other"], "note": "kept"}), encoding="utf-8")
+        row = toolpacks.check(self.root)["toolpacks"][0]
+        self.assertEqual((row["active"], row["toggle"]), (False, "on"))
+        done = toolpacks.set_use(self.root, "tracker", True)
+        self.assertEqual(done["use"], ["other", "tracker"])
+        self.assertEqual(json.loads((self.kb / "tools" / "packs.json").read_text(encoding="utf-8")), {"use": ["other", "tracker"], "note": "kept"})
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
+        self.assertNotIn("tracker", json.dumps(toolpacks.ledger(self.root)["paths"]), "the ledger holds no choice")
+        done = toolpacks.set_use(self.root, "tracker", False)
+        self.assertEqual(done["use"], ["other"])
+        self.assertFalse((self.root / ".github/skills/acme-tracker-ticket").exists())
+        self.assertIn("acme-tracker-ticket", done["removed"])
+        with self.assertRaises(toolpacks.ToolpackError):
+            toolpacks.set_use(self.root, "nosuch", True)
+
+    def test_the_board_step_flips_a_factory_pack_and_answers_with_the_new_rows(self) -> None:
+        from modules.task import boardserve
+
+        board = boardserve.Board(self.root, False, 8798, [])
+        self.addCleanup(lambda: board.link.stop() if hasattr(board.link, "stop") else None)
+        rows = board.machine({"step": "toolpack-use", "name": "tracker", "on": True})["toolpacks"]
+        self.assertTrue(rows[0]["active"])
+        rows = board.machine({"step": "toolpack-use", "name": "tracker", "on": False})["toolpacks"]
+        self.assertFalse(rows[0]["active"])
+        with self.assertRaises(ValueError):
+            board.machine({"step": "toolpack-use", "name": "nosuch", "on": True})
+
+    def test_the_listing_says_used_by_the_company_what_a_pack_needs_even_when_off_and_how_its_skills_are_named(self) -> None:
+        """1.7.38, the Tool packs window: `used` (the company's list names it), `needs_all` (looked for on or off; a program the pack brings in its own bin is not one), `skill_label`, `company`."""
+        self.prefix("acme")
+        (self.factory / "bin").mkdir()
+        (self.factory / "bin" / "tracker").write_text("#!/bin/sh\n", encoding="utf-8")  # the pack brings it
+        (self.factory / "bin" / "tracker").chmod(0o755)  # and it can run (one that cannot is on the list: 1.7.38)
+        kind = dict(KIND, auth={"own": {"identity": "env", "env": {"TRACKER_TOKEN": "password"}}, "signin": {"identity": "tool", "login": "trk-login", "needs": ["trk-login"]}})
+        (self.factory / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
+        self.use()
+        found = toolpacks.check(self.root)
+        row = found["toolpacks"][0]
+        self.assertEqual((found["company"], row["used"], row["active"]), (True, False, False))
+        self.assertEqual([(item["program"], item["why"]) for item in row["needs_all"]], [("trk-login", "signin")], "off: still named; the program of its own bin is not one")
+        self.assertEqual((row["skill_names"], row["skill_label"]), ([], ""), "off: its skills are not put")
+        self.use("tracker")
+        row = toolpacks.check(self.root)["toolpacks"][0]
+        self.assertEqual((row["used"], row["active"], row["skill_label"]), (True, True, "acme-tracker-*"))
+        self.assertEqual(sorted(row["skill_names"]), ["acme-tracker-note", "acme-tracker-ticket"])
+        self.assertEqual(toolpacks.skill_label(["acme-tracker-ticket"]), "acme-tracker-ticket")
+        shutil.rmtree(self.root / "knowledge-base")
+        found = toolpacks.check(self.root)
+        self.assertEqual((found["company"], found["toolpacks"][0]["used"]), (False, False))
+
+    def test_the_toggle_makes_packs_json_when_missing_and_is_refused_without_a_company_folder(self) -> None:
+        toolpacks.set_use(self.root, "tracker", True)
+        self.assertEqual(json.loads((self.kb / "tools" / "packs.json").read_text(encoding="utf-8")), {"use": ["tracker"]})
+        shutil.rmtree(self.root / "knowledge-base")
+        self.assertEqual(toolpacks.check(self.root)["toolpacks"][0]["toggle"], "nocompany")
+        with self.assertRaises(toolpacks.ToolpackError):
+            toolpacks.set_use(self.root, "tracker", True)
+
+    def test_a_factory_pack_is_off_until_use_names_it_and_off_again_when_dropped(self) -> None:
+        row = toolpacks.listed(self.root)["tracker"]
+        self.assertEqual((row["source"], row["active"]), ("harness", False))
+        self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {}, "its rules are not read")
+        self.assertEqual(launchenv.tool_folders(self.root), [])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.use("tracker")
+        done = toolpacks.sync_skills(self.root)
+        self.assertEqual(sorted(done["put"]), ["tracker-note", "tracker-ticket"])
+        self.assertTrue(toolpacks.listed(self.root)["tracker"]["active"])
+        self.assertIn("tracker-board", config.load_policy(self.root, "tools")["systems"])
+        self.assertEqual(connections.types(self.root)["tracker"]["toolpack"], "tracker")
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"], {"source": "harness", "version": "1.0.0", "skills": ["tracker-note", "tracker-ticket"], "mcp": []})
+        self.use()
+        gone = toolpacks.sync_skills(self.root)
+        self.assertEqual(sorted(gone["removed"]), ["tracker-note", "tracker-ticket"])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertEqual(toolpacks.ledger(self.root)["packs"], {})
+        self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
+
+    def connect(self, **fields) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"board": dict({"type": "tracker", "env": "none", "org": "demo"}, **fields)}}), encoding="utf-8")
+
+    def term(self, command: str) -> dict:
+        event = pre_tool("s-off", "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+        event["cwd"] = str(self.root)
+        return self.hook(event)
+
+    def test_a_pack_that_is_off_still_guards_the_connections_that_use_its_type(self) -> None:
+        """1.7.38: turning a pack off takes back its skills and its bin/ only; a connection of its type is still judged."""
+        self.use()
+        none = self.term("tracker --org demo comment 7 hi")  # 1.7.38 (C13 F2b): turned over. With no connection the gate used to know no tracker and passed the call; it is refused now, with the way (a pack that is off still names its programs)
+        self.assertEqual(none.get("permissionDecision"), "deny", none)
+        self.assertIn("harness connections find", none["permissionDecisionReason"])
+        self.connect()
+        systems = config.load_policy(self.root, "tools")["systems"]
+        self.assertEqual((systems["board"]["toolpack"], systems["board"]["env"]), ("tracker", "none"))
+        self.assertNotIn("needs", systems["board"], "nothing probes a connection of an off pack: no state on the board")
+        self.assertIn("tracker-board", systems, "its rules.json counts too")
+        held = self.term("tracker --org demo comment 7 hi")
+        self.assertEqual(held.get("permissionDecision"), "deny", held)
+        self.assertIn("board", json.dumps(held, ensure_ascii=False))
+        self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "a read runs")
+        self.assertEqual(toolpacks.guard_only(self.root), {"tracker": ["board"]})
+        # what turning off still takes back
+        self.assertNotIn("tracker", toolpacks.active(self.root))
+        self.assertEqual(toolpacks.bin_folders(self.root), [])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertNotIn("tracker", connections.types(self.root), "the board and the tests see the types of the packs that are on")
+        self.assertIn("tracker", connections.types(self.root, guard=True))
+        self.assertEqual(toolpacks.needs_report(self.root), {})
+
+    def test_an_off_pack_judges_prod_as_read_only_and_a_connection_of_another_type_guards_nothing(self) -> None:
+        self.connect(env="prod")
+        denied = self.term("tracker --org demo comment 7 hi")
+        self.assertEqual(denied.get("permissionDecision"), "deny")
+        self.assertIn("(prod)", denied["permissionDecisionReason"])
+        self.assertNotIn("Approve", denied["permissionDecisionReason"], "prod is refused, not held for the person's approval")
+        self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "prod read runs")
+        self.connect(type="elsewhere")
+        self.assertEqual(toolpacks.guard_only(self.root), {})
+        self.assertEqual(self.term("tracker --org demo comment 7 hi").get("permissionDecision"), "deny")  # 1.7.38 (C13 F2b): turned over. A connection of another type guards nothing, and the call is refused for having no connection of its own type
+        self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
+
+    def test_an_own_connection_in_the_env_file_guards_an_off_pack_too(self) -> None:
+        connections.write_env(self.root, {"HARNESS_CONNECTION_MINE_ALIAS": "mine", "HARNESS_CONNECTION_MINE_TYPE": "tracker", "HARNESS_CONNECTION_MINE_ENV": "none", "HARNESS_CONNECTION_MINE_ORG": "demo"})
+        self.assertEqual(self.term("tracker --org demo comment 7 hi").get("permissionDecision"), "deny")
+        self.assertEqual(toolpacks.guard_only(self.root), {"tracker": ["mine"]})
+
+    def test_a_pack_that_is_on_keeps_its_type_and_an_off_pack_with_the_same_type_is_not_read(self) -> None:
+        other = make(self.root / ".harness" / "toolpacks" / "tracker2", name="tracker2", skills=("tracker2-ticket",))
+        (other / "types" / "tracker.json").write_text(json.dumps(dict(KIND, label="Second")), encoding="utf-8")
+        self.use("tracker2")
+        self.connect()
+        self.assertEqual(sorted(toolpacks.guarded(self.root)), ["tracker2"], "tracker brings the same type but tracker2 is on and keeps it")
+        self.assertEqual(connections.types(self.root, guard=True)["tracker"]["label"], "Second")
+        self.assertEqual(toolpacks.guard_only(self.root), {})
+
+    def test_an_off_packs_mcp_rules_count_while_a_connection_uses_it(self) -> None:
+        manifest = json.loads((self.factory / "toolpack.json").read_text(encoding="utf-8"))
+        manifest["mcp"] = {"tools": [{"pattern": "^mcp_tracker_(get|list)", "verb": "read"}, {"pattern": "^mcp_tracker_", "verb": "write"}]}
+        (self.factory / "toolpack.json").write_text(json.dumps(manifest), encoding="utf-8")
+        self.assertIsNone(toolpacks.mcp_verb(self.root, "mcp_tracker_update"), "off, no connection: not judged")
+        self.connect()
+        self.assertEqual(toolpacks.mcp_verb(self.root, "mcp_tracker_update"), {"toolpack": "tracker", "verb": "write"})
+        self.assertEqual(toolpacks.mcp_verb(self.root, "mcp_tracker_get_x")["verb"], "read")
+
+    def test_doctor_says_an_off_pack_still_guards_its_connections(self) -> None:
+        self.connect()
+        lines = DoctorToolpacks.lines_of(self.root)
+        self.assertTrue(any("tracker" in line and "board" in line and "[OK]" in line for line in lines), lines)
+        self.use("tracker")
+        self.assertFalse(any("still judges" in line for line in DoctorToolpacks.lines_of(self.root)))
+
+    def test_a_name_in_use_that_no_pack_has_is_listed(self) -> None:
+        self.use("tracker", "nosuch")
+        self.assertEqual(toolpacks.unknown_use(self.root), ["nosuch"])
+        self.assertEqual(toolpacks.check(self.root)["unknown_use"], ["nosuch"])
+
+    def test_sync_says_a_name_in_use_that_no_pack_has(self) -> None:
+        self.use("tracker", "nosuch")
+        done = toolpacks.sync_skills(self.root)
+        self.assertEqual(done["unknown_use"], ["nosuch"])
+        self.assertTrue(any("nosuch" in line for line in done["lines"]))
+
+    def test_the_company_prefix_of_the_knowledge_base_renames_the_pack_skills_and_the_policy_wins(self) -> None:
+        (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
+        self.assertEqual(skillcheck.company_prefix(self.root), "", "company sync still wants the person's own word")
+        self.prefix("other")
+        self.assertEqual(skillcheck.effective_prefix(self.root), "other")
+        self.assertIn("acme", skillcheck.prefix_conflict(self.root))
+        self.prefix("acme")
+        self.assertEqual(skillcheck.prefix_conflict(self.root), "")
+
+    def test_a_company_pack_with_the_name_of_a_factory_pack_is_an_error_everywhere(self) -> None:
+        self.use("tracker")
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        self.assertEqual(toolpacks.clashes(self.root), ["tracker"])
+        self.assertEqual(toolpacks.listed(self.root)["tracker"]["source"], "harness", "reading goes on: the factory pack stays")
+        found = toolpacks.check(self.root)
+        self.assertEqual((found["exit_code"], len(found["clashes"])), (1, 1))
+        done = toolpacks.sync_skills(self.root)
+        self.assertEqual([item["toolpack"] for item in done["refused"]], ["tracker"])
+        self.assertFalse(any("updated" in line for line in done["lines"]))
+        self.assertTrue(any("`tracker`" in line for line in done["lines"]))
+        lines = DoctorToolpacks.lines_of(self.root)
+        self.assertTrue(any("factory" in line or "出厂" in line for line in lines))
+        self.assertTrue(any(line.startswith("[ERROR]") and "`tracker`" in line for line in lines), "doctor reports it as an error (1.7.38)")
+
+    def seed_company(self) -> None:
+        """A company with a skill of its own, a connection list and a factory pack that is on, synced once with no clash."""
+        self.prefix("acme")
+        (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
+        (self.kb / "skills" / "acme-hello").mkdir(parents=True)
+        (self.kb / "skills" / "acme-hello" / "SKILL.md").write_text(SKILL.format(name="acme-hello"), encoding="utf-8")
+        (self.kb / "tools" / "connections.json").write_text(json.dumps({"connections": {"board": {"type": "tracker", "env": "none", "org": "demo"}}}), encoding="utf-8")
+        self.use("tracker")
+        good = company.sync(self.root, remove=True)
+        self.assertEqual((good["found"], good.get("failed"), good["exit_code"]), (True, None, 0), good)
+
+    def tree(self) -> dict:
+        """Every file under .github/skills, the ledger, and the copies the sync makes, with their bytes; and the backup folders."""
+        out = {}
+        for place in (self.root / ".github", self.root / ".harness" / "policies", self.root / ".harness" / "runtime"):
+            for path in sorted(place.rglob("*")) if place.is_dir() else []:
+                if path.is_file():
+                    out[path.relative_to(self.root).as_posix()] = path.read_bytes()
+        return out
+
+    def test_a_company_pack_with_the_name_of_a_factory_pack_stops_the_whole_sync_and_changes_nothing(self) -> None:
+        """1.7.38: the factory pack stayed and the company's was skipped with a line; the rest of the sync went on. Now the sync stops before it changes anything."""
+        self.seed_company()
+        before = self.tree()
+        self.assertIn(".github/skills/acme-tracker-ticket/SKILL.md", before)
+        # everything a sync would do now: a changed company skill, a new one, a pack turned off, a new version of a pack, a skill that left the company content
+        (self.kb / "skills" / "acme-hello" / "SKILL.md").write_text(SKILL.format(name="acme-hello") + "\nChanged.\n", encoding="utf-8")
+        (self.kb / "skills" / "acme-new").mkdir()
+        (self.kb / "skills" / "acme-new" / "SKILL.md").write_text(SKILL.format(name="acme-new"), encoding="utf-8")
+        make(self.factory, version="2.0.0", skills=("tracker-ticket", "tracker-note"))
+        self.use()
+        (self.kb / "tools" / "connections.json").write_text(json.dumps({"connections": {}}), encoding="utf-8")
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        make(self.kb / "tools" / "packs" / "other", name="other", skills=())
+        before = self.tree()
+        done = company.sync(self.root, remove=True)
+        self.assertEqual((done["found"], done["failed"], done["exit_code"]), (True, True, 1))
+        self.assertEqual(done["clashes"], ["tracker"])
+        self.assertEqual(done["copied"], [])
+        self.assertIn("`tracker`", done["error"])
+        self.assertEqual(done["next"], done["error"], "one line")
+        self.assertEqual(len(done["error"].splitlines()), 1)
+        self.assertEqual(self.tree(), before, "no skill copied, none taken back, the ledger and the copies as they were")
+        self.assertFalse((self.root / ".harness" / "runtime" / "company-backup").exists())
+        self.assertFalse((self.root / ".harness" / "runtime" / "toolpack-backup").exists())
+        self.assertEqual(company.sync_after(self.root), {"error": done["error"], "clashes": ["tracker"]})
+        shown = company.diff(self.root)
+        self.assertEqual((shown["found"], shown["in_sync"], shown["problem"]), (True, False, done["error"]))
+        # the command line says it too: the line, and exit code 1
+        said = self.cli("company", "sync")
+        self.assertEqual(said.returncode, 1)
+        self.assertIn("`tracker`", said.stdout + said.stderr)
+        # once the company's pack is renamed away (the folder is gone here) the sync does all of it
+        shutil.rmtree(self.kb / "tools" / "packs" / "tracker")
+        again = company.sync(self.root, remove=True)
+        self.assertEqual((again.get("failed"), again["exit_code"]), (None, 0), again)
+        self.assertTrue((self.root / ".github/skills/acme-new/SKILL.md").is_file())
+        self.assertFalse((self.root / ".github/skills/acme-tracker-ticket").exists(), "the pack was turned off")
+
+    def test_the_stop_line_names_every_pack_and_says_to_rename_the_companys_pack_in_both_languages(self) -> None:
+        make(self.factory.parent / "second", name="second", skills=())
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        make(self.kb / "tools" / "packs" / "second", name="second", skills=())
+        self.assertEqual(toolpacks.clashes(self.root), ["second", "tracker"])
+        line = toolpacks.clash_stop(self.root)
+        self.assertIn("`second`, `tracker`", line)
+        for language, words in (("en", "Rename the company's pack"), ("zh", "改名")):
+            texts = json.loads((Path(toolpacks.__file__).parent / f"messages.{language}.json").read_text(encoding="utf-8"))
+            self.assertIn(words, texts["company.sync.clash"], language)
+            self.assertIn("{names}", texts["company.sync.clash"], language)
+
+    def test_the_board_still_opens_with_a_clash_adding_a_folder_and_the_switch_say_why_and_change_nothing(self) -> None:
+        from modules.task import boardserve
+
+        self.use()
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        done = toolpacks.sync_skills(self.root)  # what the board does when it opens: it must not raise
+        self.assertTrue(done["failed"])
+        use_before = (self.kb / "tools" / "packs.json").read_text(encoding="utf-8")
+        with self.assertRaises(toolpacks.ToolpackError) as caught:
+            toolpacks.set_use(self.root, "tracker", True)
+        self.assertIn("`tracker`", str(caught.exception))
+        self.assertEqual((self.kb / "tools" / "packs.json").read_text(encoding="utf-8"), use_before, "the choice is not written")
+        with self.assertRaises(toolpacks.ToolpackError):
+            toolpacks.add(self.root, str(self.source))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [], "nothing recorded")
+        board = boardserve.Board(self.root, False, 8799, [])
+        self.addCleanup(lambda: board.link.stop() if hasattr(board.link, "stop") else None)
+        with self.assertRaises(ValueError) as refused:
+            board.machine({"step": "toolpack-use", "name": "tracker", "on": True})
+        self.assertIn("`tracker`", str(refused.exception))
+        rows = board.machine({"step": "toolpacks"})["toolpacks"]  # the window still lists what there is
+        self.assertTrue(rows)
+
+    def test_with_a_prefix_the_folder_the_name_and_the_references_between_a_packs_skills_are_renamed(self) -> None:
+        self.prefix("acme")
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        text = (self.root / ".github/skills/acme-tracker-ticket/SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("name: acme-tracker-ticket\n", text)
+        self.assertIn("See `acme-tracker-note` and acme-tracker-ticket, not tracker-ticketing or tracker-notes.", text, "whole words only")
+        self.assertEqual(skillcheck.check_all(self.root, ["acme-tracker-ticket"])[0]["errors"], [])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["skills"], ["acme-tracker-note", "acme-tracker-ticket"])
+        self.assertEqual(connections.brief(self.root, "none").get("skills"), [])
+        self.assertEqual(skillcheck.check_all(self.root, ["acme-tracker-note"])[0]["errors"], [])
+
+    def test_the_company_prefix_set_later_moves_the_skills(self) -> None:
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        self.assertTrue((self.root / ".github/skills/tracker-ticket").is_dir())
+        self.prefix("acme")
+        toolpacks.sync_skills(self.root)
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
+
+    def test_a_changed_company_prefix_says_the_skills_were_renamed(self) -> None:
+        self.prefix("acme")
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        self.prefix("zeta")
+        done = toolpacks.sync_skills(self.root)
+        self.assertIn({"toolpack": "tracker", "from": "acme-tracker-ticket", "to": "zeta-tracker-ticket"}, done["renamed"])
+        self.assertIn("acme-tracker-ticket", done["removed"])
+        self.assertIn("zeta-tracker-ticket", done["put"])
+        self.assertEqual(len(done["lines"]), 1)
+        self.assertIn("acme-tracker-* → zeta-tracker-*", done["lines"][0])
+        self.assertNotIn("renamed", toolpacks.sync_skills(self.root), "again: nothing")
+
+    def test_a_new_version_puts_the_skills_again_and_says_so(self) -> None:
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        self.assertEqual(toolpacks.sync_skills(self.root), {"put": [], "removed": [], "updated": [], "refused": [], "unknown_use": [], "lines": []}, "again: nothing")
+        make(self.factory, version="1.1.0", skills=("tracker-ticket",))
+        (self.factory / "skills" / "tracker-ticket" / "SKILL.md").write_text(SKILL.format(name="tracker-ticket") + "New.\n", encoding="utf-8")
+        shutil.rmtree(self.factory / "skills" / "tracker-note")
+        done = toolpacks.sync_skills(self.root)
+        self.assertEqual(done["updated"], [{"toolpack": "tracker", "from": "1.0.0", "to": "1.1.0"}])
+        self.assertTrue(done["lines"][0].startswith("tracker 1.0.0 → 1.1.0"))
+        self.assertIn("New.", (self.root / ".github/skills/tracker-ticket/SKILL.md").read_text(encoding="utf-8"))
+        self.assertFalse((self.root / ".github/skills/tracker-note").exists(), "a skill the new version dropped goes")
+        self.assertEqual(toolpacks.recent_updates(self.root), done["lines"])
+        row = toolpacks.check(self.root)["toolpacks"][0]
+        self.assertEqual((row["active"], row["updated"]), (True, {"from": "1.0.0", "to": "1.1.0"}), "the Tools window marks the row")
+
+    def test_company_sync_does_not_call_a_pack_skill_the_companys_own_and_a_clash_is_refused(self) -> None:
+        self.prefix("acme")
+        (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
+        self.use("tracker")
+        mine = self.root / ".github/skills/acme-tracker-note"
+        mine.mkdir(parents=True)
+        (mine / "SKILL.md").write_text("somebody's own\n", encoding="utf-8")
+        found = company.sync(self.root)
+        self.assertEqual([item["skill"] for item in found["refused"]], ["acme-tracker-note"])
+        self.assertEqual((mine / "SKILL.md").read_text(encoding="utf-8"), "somebody's own\n")
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
+        again = company.sync(self.root, remove=True)
+        self.assertNotIn("acme-tracker-ticket", again["only_here"], "a pack's skill is not 'only here'")
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir(), "remove=True leaves it")
+
+    def test_the_diff_offers_a_sync_when_the_packs_skills_differ(self) -> None:
+        self.use("tracker")
+        self.assertFalse(company.diff(self.root)["in_sync"])
+        company.sync(self.root)
+        self.assertTrue(company.diff(self.root)["in_sync"])
+
+    def test_the_gate_guards_the_factory_folder_and_the_ledger(self) -> None:
+        for relative in (".harness/toolpacks/tracker/rules.json", ".harness/runtime/toolpacks.json"):
+            event = pre_tool("s-guard", "create_file", {"filePath": str(self.root.resolve() / relative), "content": "{}"})
+            event["cwd"] = str(self.root.resolve())
+            self.assertEqual(self.hook(event)["permissionDecision"], "deny", relative)
+
+    def test_connections_share_names_a_factory_pack_in_use_and_copies_a_folder_added_here(self) -> None:
+        self.assertTrue(toolpacks.share(self.root, self.kb, "tracker"))
+        self.assertEqual(json.loads((self.kb / "tools" / "packs.json").read_text(encoding="utf-8")), {"use": ["tracker"]})
+        self.assertFalse(toolpacks.share(self.root, self.kb, "tracker"), "once")
+        toolpacks.add(self.root, str(make(self.outside / "other", name="other", skills=())))
+        self.assertTrue(toolpacks.share(self.root, self.kb, "other"))
+        self.assertTrue((self.kb / "tools" / "packs" / "other" / "toolpack.json").is_file())
+
+
+class DoctorToolpacks(ToolpackCase):
+    """1.7.30: what `harness doctor` says about tool packs."""
+
+    @staticmethod
+    def lines_of(root) -> list:
+        import doctor
+
+        report = doctor.Report()
+        doctor.check_toolpacks(report, root)
+        return report.lines
+
+    def lines(self) -> list:
+        return self.lines_of(self.root)
+
+    def test_every_fault_of_the_computer_recipe_is_named_without_a_mangled_pattern(self) -> None:
+        kb = self.root / "knowledge-base" / "company" / "tools"
+        kb.mkdir(parents=True)
+        (self.root / "knowledge-base" / "README.md").write_text("# kb\n", encoding="utf-8")
+        (kb / "computer.json").write_text(json.dumps({"ca_bundle": {"host": "bad host!", "proxy": "nope"}, "tool_folders": [{"hint": "x"}]}), encoding="utf-8")
+        text = " ".join(self.lines())
+        for word in ("ca_bundle.host", "ca_bundle.proxy", "tool_folders[0]", "label"):
+            self.assertIn(word, text)
+        self.assertNotIn("the file+", text)
+        self.assertNotIn("^[", text)
+
+    def test_a_leftover_examples_folder_is_to_be_deleted(self) -> None:
+        self.assertEqual(self.lines(), [])
+        (self.root / ".harness" / "examples" / "toolpacks").mkdir(parents=True)
+        self.assertTrue(any(".harness/examples/toolpacks/" in line and "Delete" in line or "删掉" in line for line in self.lines()))
+
+    def test_a_required_field_of_a_company_connection_that_is_unset_is_named(self) -> None:
+        kind = dict(KIND, fields={"org": {"label": "Org"}, "region": {"label": "Region", "default": "eu"}, "note": {"label": "Note", "optional": True}})
+        (self.source / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
+        toolpacks.add(self.root, str(self.source))
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"t1": {"type": "tracker", "env": "none"}, "t2": {"type": "tracker", "env": "none", "org": "acme"}}}), encoding="utf-8")
+        self.assertEqual(connections.unset_fields(self.root), [{"alias": "t1", "type": "tracker", "fields": ["org"]}])
+        self.assertTrue(any("`t1`" in line and "org" in line for line in self.lines()))
+
+    def test_a_company_skill_that_writes_a_command_the_pack_does_not_list_is_named(self) -> None:
+        (self.root / ".harness/policies/user.override.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
+        make(self.source, commands=["get", "comment"])
+        toolpacks.add(self.root, str(self.source))
+        skill = self.root / ".github/skills/acme-tracker-howto"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(SKILL.format(name="acme-tracker-howto") + "\nRun `tracker get 5` then:\n\n```\ntracker fetchall 5\n```\n\nThe tracker is slow today.\n", encoding="utf-8")
+        found = toolpacks.command_problems(self.root)
+        self.assertEqual(found, [{"skill": "acme-tracker-howto", "program": "tracker", "word": "fetchall", "pack": "tracker"}], "prose is not code")
+        self.assertTrue(any("fetchall" in line and "acme-tracker-howto" in line for line in self.lines()))
+        make(self.source, commands=[])  # a pack that lists none is not checked
+        self.assertEqual(toolpacks.command_problems(self.root), [])
+
+
+class ShippedFactoryPacks(ToolpackCase):
+    def test_every_factory_pack_checks_clean_and_ados_commands_are_those_of_its_program(self) -> None:
+        from support import REPO
+
+        for folder in sorted((REPO / ".harness" / "toolpacks").iterdir()):
+            if folder.is_dir():
+                self.assertEqual(toolpacks.problems(self.root, folder), [], folder.name)
+        listed = json.loads((REPO / ".harness" / "toolpacks" / "ado" / "toolpack.json").read_text(encoding="utf-8"))["commands"]
+        out = subprocess.run([sys.executable, str(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado"), "--help"], capture_output=True, text=True, check=False).stdout
+        for word in listed:
+            self.assertIn(word, out, word)
+
+    @staticmethod
+    def ado_program():
+        """The `ado` program of the repository loaded as a module (it has no .py name); nothing runs on loading."""
+        import importlib.machinery
+        import importlib.util
+
+        from support import REPO
+
+        path = str(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado")
+        spec = importlib.util.spec_from_loader("ado_program", importlib.machinery.SourceFileLoader("ado_program", path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_ado_turns_only_a_line_break_and_one_backslash_and_the_card_reads_the_text_the_same_way(self) -> None:
+        """1.7.38: `C:\\temp\\data` was broken (`\\t` a tab, the other backslashes dropped). Only `\\n` and `\\\\` are turned; the held card (cmdview) does the same."""
+        from modules.task import cmdview
+
+        ado = self.ado_program()
+        cases = {  # written -> what the program writes
+            r"line one\nline two": "line one\nline two",
+            r"a\\b": "a\\b",  # two backslashes are one
+            r"a\\nb": "a\\nb",  # a backslash and n, no line break
+            r"C:\temp\data": "C:\\temp\\data",  # a path: \t and \d stay
+            r"C:\temp\new": "C:\\temp\new",  # but \n is a line break: a path with it goes in a file
+            r"\d+\s*": "\\d+\\s*",
+            r"tab\there": "tab\\there",
+            r'say \"hi\"': 'say \\"hi\\"',
+            "plain": "plain", "": "", "end\\": "end\\",
+            r"\\\\": "\\\\",
+            r"\\\n": "\\\n",
+        }
+        for written, expected in cases.items():
+            self.assertEqual(ado.unescaped(written), expected, written)
+            self.assertEqual(cmdview._unescape(written), expected, written)  # noqa: SLF001 - the two must stay the same
+            self.assertEqual(ado.unescaped(written), cmdview._unescape(written), written)  # noqa: SLF001
+
+
+    def test_the_ado_program_has_no_back_door_in_the_environment_and_its_versions_agree(self) -> None:
+        """1.7.38: ADO_URL, ADO_ORG, ADO_PROJECT, ADO_PAT and ADO_TOKEN let a call go elsewhere than the connection the gate judged. The connection is the saved one, or the one the harness hands over while it tests."""
+        from support import REPO
+
+        folder = REPO / ".harness" / "toolpacks" / "ado"
+        for path in [folder / "bin" / "ado", folder / "bin" / "ado.cmd", *sorted((folder / "types").glob("*.json")), *sorted(folder.glob("*.md")), *sorted(folder.rglob("SKILL.md"))]:
+            text = path.read_text(encoding="utf-8")
+            for name in ("ADO_URL", "ADO_ORG", "ADO_PROJECT", "ADO_PAT", "ADO_TOKEN"):
+                self.assertNotIn(name, text, f"{path.name}: {name}")
+        version = json.loads((folder / "toolpack.json").read_text(encoding="utf-8"))["version"]
+        self.assertEqual(self.ado_program().PACK_VERSION, version)
+
+class AdoCardWords(HarnessTestCase):
+    """1.7.38 (C11 T2-03): a held line of several writes says each write on a line of its own, with its own facts, and no `;` sticks to a value."""
+
+    def words(self, line: str) -> dict:
+        from modules.task import taskdesk
+
+        use_packs(self.root, "ado")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "org": "acme", "project": "demo"}}}), encoding="utf-8")
+        systems = config.policy_or_empty(self.root, "tools")["systems"]
+        return taskdesk.call_words(line, systems["ado"], self.root, self.root)
+
+    def test_three_writes_in_one_line_are_three_titles_with_their_own_facts(self) -> None:
+        found = self.words("ado comment 300109 --text 'Checked' ; ado update 300109 --state Active; ado link 300109 --to 300104 --type related")
+        self.assertEqual(found["writes"], 3)
+        self.assertEqual(len(found["says"]), 3)
+        self.assertEqual(len(set(found["says"])), 3, found["says"])
+        parts = found["parts"]
+        self.assertEqual(parts[0]["body"]["text"], "Checked")
+        self.assertEqual(parts[1]["facts"], {"item": "300109", "state": "Active"})
+        self.assertNotIn(";", json.dumps([part["facts"] for part in parts]))
+        self.assertEqual(found["facts"], {}, "the facts are in the parts")
+
+    def test_a_pipeline_run_and_a_retry_keep_their_facts_apart(self) -> None:
+        found = self.words("ado queue orders-ci --branch main --param loadDate=2026-11-08; ado retry 901 --stage Build")
+        first, second = found["parts"]
+        self.assertEqual((first["facts"].get("pipeline"), first["facts"].get("branch"), first["facts"].get("param")), ("orders-ci", "main", "loadDate=2026-11-08"))
+        self.assertEqual((second["facts"].get("run"), second["facts"].get("stage")), ("901", "Build"))
+        self.assertNotIn("stage", first["facts"])
+        self.assertNotIn("branch", second["facts"])
+
+    def test_one_write_beside_reads_is_one_card_with_the_facts_of_the_write_only(self) -> None:
+        found = self.words("ado item 300104; ado update 300104 --state Active; ado comments 300104")
+        self.assertEqual((found["writes"], "parts" in found), (1, False))
+        self.assertEqual(found["facts"], {"item": "300104", "state": "Active"})
+        none = self.words("ado item 300104")
+        self.assertEqual((none["say"], none["says"], none["writes"]), ("", [], 0))
+
+    def test_a_text_with_a_semicolon_is_one_write(self) -> None:
+        found = self.words("ado comment 300104 --text \"done; checked\"")
+        self.assertEqual(found["writes"], 1)
+        self.assertEqual(found["body"]["text"], "done; checked")
+
+
+class SqlCardWords(HarnessTestCase):
+    """1.7.38 (C11 T2-12): the card of a held SQL write shows the whole statement, not the first 70 characters of the command."""
+
+    def words(self, line: str) -> dict:
+        from modules.task import taskdesk
+
+        use_packs(self.root, "sqlserver")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"acmedw-dev": {
+            "type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "database": "AcmeDW", "auth": "sql"}}}), encoding="utf-8")
+        systems = config.policy_or_empty(self.root, "tools")["systems"]
+        return taskdesk.call_words(line, systems["acmedw-dev"], self.root, self.root)
+
+    def test_the_statement_of_q_is_the_body_in_both_quotes_and_a_backslash_n_stays(self) -> None:
+        statement = "UPDATE dbo.orders_stage SET warehouse_code = N'WH-01' WHERE warehouse_code IS NULL AND note = 'a\\nb'"
+        found = self.words(f'sqlcmd -S localhost,14332 -C -d AcmeDW -Q "{statement}"')
+        self.assertEqual(found["body"]["text"], statement, "the whole statement, the WHERE too, no line break made of a backslash and n")
+        self.assertTrue(found["body"]["label"])
+        single = self.words("sqlcmd -S localhost,14332 -C -Q 'SELECT 1; UPDATE t SET a = 1'")
+        self.assertEqual(single["body"]["text"], "SELECT 1; UPDATE t SET a = 1")
+        escaped = self.words('sqlcmd -S localhost,14332 -Q "EXEC p @x = \\"a\\" ; SELECT 2" -b')
+        self.assertEqual(escaped["body"]["text"], 'EXEC p @x = "a" ; SELECT 2')
+        self.assertIsNone(self.words("sqlcmd -S localhost,14332 -C -i DEV/_manual/load.sql")["body"], "a file is shown by the window, as before")
+
+
+class OpenRulesOfTheTypes(TaskCase):
+    """1.7.38 (C12 D1): a tool pack's type says how far a connection of it may be opened for a task, per environment; the company can lower it; prod and a destroy are never opened."""
+
+    SQL = "sqlcmd -S localhost,{port} -C -Q \"UPDATE t SET a = 1 WHERE b = 2\""
+
+    def setUp(self) -> None:
+        super().setUp()
+        use_packs(self.root, "sqlserver", "ado")
+        self.write_connections({
+            "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"},
+            "acmedw-ist": {"type": "sqlserver", "env": "ist", "host": "localhost", "port": "14331", "auth": "sql"},
+            "acmedw-qat": {"type": "sqlserver", "env": "qat", "host": "localhost", "port": "14330", "auth": "sql"},
+            "acmedw-prod": {"type": "sqlserver", "env": "prod", "host": "localhost", "port": "14329", "auth": "sql"},
+            "ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo"}})
+        (self.root / ".harness/policies/tools.override.json").write_text(json.dumps({"systems": {
+            "cloud": {"reach": {"cli": "cloudctl"}, "env": "ist", "verbs": [{"pattern": r"\brun\b", "verb": "exec"}]}}}), encoding="utf-8")
+
+    def write_connections(self, listed) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": listed}), encoding="utf-8")
+
+    def systems(self):
+        return config.policy_or_empty(self.root, "tools")["systems"]
+
+    def term(self, command: str):
+        data = pre_tool("sess-main", "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+        data["cwd"] = str(self.root)
+        return self.hook(data)
+
+    def test_the_types_say_how_far_each_environment_may_be_opened(self) -> None:
+        from core import systems
+
+        listed = self.systems()
+        self.assertEqual({name: systems.open_scope(listed[name], listed[name]["env"]) for name in ("acmedw-dev", "acmedw-ist", "acmedw-qat", "acmedw-prod", "ado", "cloud")},
+                         {"acmedw-dev": "all", "acmedw-ist": "all", "acmedw-qat": "no", "acmedw-prod": "no", "ado": "items", "cloud": "all"})
+        self.assertEqual(systems.open_scope(dict(listed["acmedw-dev"], open="all"), "prod"), "no", "prod is never opened, whatever a system says")
+        self.assertEqual(systems.open_scope({"toolpack": "x"}, "dev"), "no", "a tool pack's system that says nothing stays closed")
+        self.assertEqual(systems.open_scope({"openable": True, "toolpack": "x"}, "dev"), "all", "the old word still opens a system in dev, ist and qat")
+
+    def test_the_company_can_lower_what_a_type_says_but_not_raise_it(self) -> None:
+        from core import systems
+
+        self.write_connections({
+            "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql", "open": "no"},
+            "acmedw-qat": {"type": "sqlserver", "env": "qat", "host": "localhost", "port": "14330", "auth": "sql", "open": "all"},
+            "acmedw-ist": {"type": "sqlserver", "env": "ist", "host": "localhost", "port": "14331", "auth": "sql", "open": {"ist": "items"}},
+            "acmedw-prod": {"type": "sqlserver", "env": "prod", "host": "localhost", "port": "14329", "auth": "sql", "open": "all"}})
+        listed = self.systems()
+        self.assertEqual({name: listed[name]["open"] for name in ("acmedw-dev", "acmedw-qat", "acmedw-ist", "acmedw-prod")}, {"acmedw-dev": "no", "acmedw-qat": "no", "acmedw-ist": "items", "acmedw-prod": "no"})
+        self.assertEqual(systems.open_scope(listed["acmedw-ist"], "ist"), "items")
+
+    def test_a_type_with_a_wrong_open_word_is_reported(self) -> None:
+        kind = {"type": "x", "label": "X", "cli": ["x"], "fields": {"a": {"label": "A"}}, "match": "x", "auth": {"own": {"identity": "env"}}, "test": "x", "open": {"dev": "everything"}}
+        self.assertTrue(any(".open" in problem for problem in connections.type_problems(kind)))
+        kind["open"] = {"dev": "all", "*": "no"}
+        self.assertEqual([problem for problem in connections.type_problems(kind) if ".open" in problem], [])
+        kind["open"] = "items"
+        self.assertEqual([problem for problem in connections.type_problems(kind) if ".open" in problem], [])
+
+    def test_the_cli_opens_a_connection_by_its_type_and_says_no_to_the_rest(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        self.assertEqual(tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)["open"], ["acmedw-dev"])
+        self.assertEqual(tasklife.set_allow(self.root, NAME, "acmedw-ist", True, interactive=True)["open"], ["acmedw-dev", "acmedw-ist"])
+        for name in ("acmedw-qat", "acmedw-prod", "dev"):
+            with self.assertRaises(Exception, msg=name):
+                tasklife.set_allow(self.root, NAME, name, True, interactive=True)
+        self.assertEqual(tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)["env"], "links", "an items connection opens as its linked items")
+        self.assertTrue(self.data()["allow_links"])
+
+    def test_the_gate_lets_an_opened_connection_through_only_for_a_write_or_a_run_and_never_in_another_connection(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        dev, ist, qat = (self.SQL.format(port=port) for port in (14332, 14331, 14330))
+        self.assertEqual(self.term(dev)["permissionDecision"], "deny")
+        tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
+        self.assertEqual(self.term(dev), {})
+        self.assertEqual(self.term(ist)["permissionDecision"], "deny", "another connection of the same type stays closed")
+        self.assertEqual(self.term(qat)["permissionDecision"], "deny")
+        self.assertEqual(self.term(f"sqlcmd -S localhost,14332 -C -Q \"EXEC dbo.usp_job_start @name = N'x'\""), {}, "a run passes too")
+        self.assertEqual(self.term("sqlcmd -S localhost,14332 -C -Q \"DROP TABLE t\""), {}, "C13 SQL: a drop of the write list passes a DEV connection the person opened")
+        self.assertEqual(self.term("sqlcmd -S localhost,14332 -C -Q \"KILL 52\"")["permissionDecision"], "deny", "the refuse list: never")
+        rows = [row["external"] for row in self.session_log("sess-main") if row.get("external")]
+        self.assertEqual([(row["system"], row["verb"], row.get("opened")) for row in rows],
+                         [("acmedw-dev", "write", None), ("acmedw-dev", "write", True), ("acmedw-ist", "write", None), ("acmedw-qat", "write", None), ("acmedw-dev", "exec", True), ("acmedw-dev", "destroy", True), ("acmedw-dev", "destroy", None)])
+
+    def test_a_line_that_writes_two_connections_passes_only_when_both_are_open(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        both = self.SQL.format(port=14332) + " && " + self.SQL.format(port=14331)
+        tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
+        self.assertEqual(self.term(both)["permissionDecision"], "deny")
+        tasklife.set_allow(self.root, NAME, "acmedw-ist", True, interactive=True)
+        self.assertEqual(self.term(both), {})
+
+    def test_prod_and_a_type_that_says_no_are_not_opened_even_when_the_task_file_says_open(self) -> None:
+        """The gate asks the type, not only the task: a name forced into `allow_conn` opens nothing in prod or in a connection the type keeps closed."""
+        self.new()
+        path = self.root / TASK / ".task" / "task.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["allow_conn"] = {name: {"at": "2026-11-08T00:00:00+00:00", "env": env} for name, env in (("acmedw-prod", "prod"), ("acmedw-qat", "qat"))}
+        path.write_text(json.dumps(data), encoding="utf-8")
+        for port in (14329, 14330):
+            self.assertEqual(self.term(self.SQL.format(port=port))["permissionDecision"], "deny", port)
+
+    def test_a_statement_on_the_refuse_list_is_refused_even_when_the_company_made_a_destroy_a_held_call(self) -> None:
+        """1.7.38: the refuse list is the strictest answer. A company's `rules` for the destroy verb do not turn it into a card, and an opened connection does not pass it."""
+        from core import approvals
+        from modules.task import tasklife
+
+        self.write_connections({"acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql", "rules": {"dev": {"destroy": "outbox"}}}})
+        self.new()
+        tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
+        self.assertEqual(self.term('sqlcmd -S localhost,14332 -C -Q "KILL 52"')["permissionDecision"], "deny")
+        self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [], "refused, not held: nothing to approve, no Open button")
+
+    def test_a_subagent_gets_nothing_from_an_opened_connection(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
+        data = pre_tool("sess-main", "run_in_terminal", {"command": self.SQL.format(port=14332), "explanation": "t", "isBackground": False})
+        data["cwd"], data["agent_type"] = str(self.root), "reviewer"
+        self.assertEqual(self.hook(data)["permissionDecision"], "deny")
+
+    def test_the_agent_cannot_open_a_connection_itself(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        with self.assertRaises(Exception):
+            tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=False)  # the agent's terminal is no tty
+        done = self.cli("task", "allow", "--conn", "acmedw-dev", "--on")  # a pipe, not a person at a terminal
+        self.assertNotEqual(done.returncode, 0)
+        self.assertNotIn("acmedw-dev", self.data().get("allow_conn", {}))
+        task_json = f".workspace/sandbox/tasks/{NAME}/.task/task.json"
+        for write in (f"echo '{{}}' > {task_json}", f"sed -i '' 's/open/x/' {task_json}"):
+            self.assertEqual(self.term(write)["permissionDecision"], "deny", write)  # the file that holds the opening is the harness's alone
+        edit = pre_tool("sess-main", "Write", {"path": task_json, "file_text": "{}"})
+        edit["cwd"] = str(self.root)
+        self.assertEqual(self.hook(edit)["permissionDecision"], "deny")
+
+    def test_the_held_call_says_which_connections_the_card_can_open(self) -> None:
+        from core import approvals, outbox
+
+        self.new()
+        reason = self.term(self.SQL.format(port=14332))["permissionDecisionReason"]
+        self.assertIn("acmedw-dev", reason)
+        self.assertIn(outbox.say("gate.external.outbox.opens", buttons=outbox.say("gate.external.outbox.button", text=outbox.say("desk.outbox.open", name="acmedw-dev"))), reason)
+        entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual(entry["offers"], [{"system": "acmedw-dev", "env": "dev", "scope": "all"}])
+        self.assertEqual(outbox.offer_for(self.root, TASK, entry["code"].lower(), "acmedw-dev")["scope"], "all")
+        self.assertIsNone(outbox.offer_for(self.root, TASK, entry["code"], "acmedw-ist"), "the call offers only what it reached")
+        self.assertIsNone(outbox.offer_for(self.root, "other/task", entry["code"], "acmedw-dev"), "the code of another task's call opens nothing here")
+        self.assertNotIn("opens", self.term(self.SQL.format(port=14330))["permissionDecisionReason"].lower().replace("opened", ""), "qat cannot be opened: the card offers nothing and the text does not")
+        self.assertEqual([item for item in approvals.pending(self.root, 10, file=approvals.ACTIONS) if item["system"] == "acmedw-qat"][0].get("offers"), None)
+
+    def test_a_line_that_writes_two_connections_offers_one_button_for_each(self) -> None:
+        from core import approvals
+
+        self.new()
+        self.term(self.SQL.format(port=14332) + " && " + self.SQL.format(port=14331))
+        entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual(sorted(offer["system"] for offer in entry["offers"]), ["acmedw-dev", "acmedw-ist"])
+
+    def test_a_card_offers_the_linked_items_of_an_ado_connection_and_only_for_an_item_the_task_names(self) -> None:
+        from core import approvals
+        from modules.task import tasklife
+
+        self.new()
+        self.term("ado comment 123 --text hi")  # not linked: refused, no card
+        self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [])
+        tasklife.link(self.root, NAME, "ado:123", True)
+        self.assertEqual(self.term("ado comment 123 --text hi")["permissionDecision"], "deny")
+        entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual(entry["offers"], [{"system": "ado", "env": "none", "scope": "items", "refs": ["ado:123"]}])
+        self.term("ado create --type Bug --title x")  # a new item: no opening covers it
+        created = [item for item in approvals.pending(self.root, 10, file=approvals.ACTIONS) if "create" in item["command"]][0]
+        self.assertIsNone(created.get("offers"))
+        tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)
+        self.assertEqual(self.term("ado comment 123 --text hi"), {})
+
+    def test_a_company_that_lowers_ado_to_no_keeps_the_linked_items_held(self) -> None:
+        from modules.task import tasklife
+
+        self.write_connections({"ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "open": "no"}})
+        self.new()
+        tasklife.link(self.root, NAME, "ado:123", True)
+        tasklife.set_allow(self.root, NAME, "links", True, interactive=True)
+        self.assertEqual(self.term("ado comment 123 --text hi")["permissionDecision"], "deny")
+
+
+class AdoHostsOfConnections(HarnessTestCase):
+    """1.7.38 (C11 T2-02): `ado-any` guards `az rest` to dev.azure.com; the address of an ado connection (`url`: an Azure DevOps Server, a lab) is guarded the same way."""
+
+    DELETE = "az rest --method delete --url {base}/acme/demo/_apis/wit/workitems/1?api-version=7.0"
+    POST = "az rest --method post --url {base}/acme/demo/_apis/wit/workitems/1/comments --body '{{}}'"
+    GET = "az rest --method get --url {base}/acme/demo/_apis/wit/workitems/1"
+
+    def connect(self, **fields) -> None:
+        use_packs(self.root, "ado")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "org": "acme", "project": "demo", **fields}}}), encoding="utf-8")
+
+    def term(self, line: str) -> str:
+        event = pre_tool("s-ado", "run_in_terminal", {"command": line, "explanation": "t", "isBackground": False})
+        event["cwd"] = str(self.root)
+        return self.hook(event).get("permissionDecision", "allow")
+
+    def test_az_rest_to_the_address_of_a_connection_is_judged_like_dev_azure_com(self) -> None:
+        self.connect(url="https://tfs.example.local/tfs")
+        cloud = "https://dev.azure.com"
+        self.assertEqual([self.term(line.format(base=cloud)) for line in (self.DELETE, self.POST, self.GET)], ["deny", "deny", "allow"], "the cloud: delete refused, write held, read free")
+        for base in ("https://tfs.example.local/tfs", "http://TFS.example.local", "https://tfs.example.local"):
+            self.assertEqual([self.term(line.format(base=base)) for line in (self.DELETE, self.POST, self.GET)], ["deny", "deny", "allow"], base)
+        for short in ("-m delete", "--method DELETE", "--method 'delete'"):
+            self.assertEqual(self.term(f"az rest {short} --url https://tfs.example.local/tfs/x"), "deny", short)
+
+    def test_a_port_counts_and_a_look_alike_host_does_not(self) -> None:
+        self.connect(url="https://localhost:18443")
+        self.assertEqual(self.term(self.DELETE.format(base="https://localhost:18443")), "deny")
+        self.assertEqual(self.term(self.POST.format(base="https://localhost:18443")), "deny")
+        for other in ("https://localhost:18444", "https://localhost", "https://localhost:184430", "https://localhost:18443.evil.example"):
+            self.assertEqual(self.term(self.DELETE.format(base=other)), "allow", f"{other}: not an address of a connection; the gate does not know the host")
+
+    def test_every_connection_adds_its_host_and_a_connection_without_url_adds_none(self) -> None:
+        self.connect()
+        self.assertEqual(self.term(self.DELETE.format(base="https://tfs.example.local/tfs")), "allow", "no connection names this host")
+        self.assertEqual(self.term(self.DELETE.format(base="https://dev.azure.com")), "deny")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "ado": {"type": "azure-devops", "env": "none", "org": "a", "project": "p", "url": "https://one.example.local/tfs"},
+            "ado2": {"type": "azure-devops", "env": "none", "org": "b", "project": "q", "url": "https://two.example.local:8443"},
+            "other": {"type": "sqlserver", "env": "dev", "host": "three.example.local"}}}), encoding="utf-8")
+        for base in ("https://one.example.local/tfs", "https://two.example.local:8443"):
+            self.assertEqual(self.term(self.DELETE.format(base=base)), "deny", base)
+        self.assertEqual(self.term(self.DELETE.format(base="https://three.example.local")), "allow")
+
+    def test_a_connection_of_the_own_kind_in_the_env_file_counts_too(self) -> None:
+        use_packs(self.root, "ado")
+        connections.write_env(self.root, {"HARNESS_CONNECTION_LAB_ALIAS": "lab", "HARNESS_CONNECTION_LAB_TYPE": "azure-devops", "HARNESS_CONNECTION_LAB_ENV": "none",
+                                          "HARNESS_CONNECTION_LAB_ORG": "acme", "HARNESS_CONNECTION_LAB_PROJECT": "demo", "HARNESS_CONNECTION_LAB_URL": "https://localhost:18443"})
+        self.assertEqual(self.term(self.DELETE.format(base="https://localhost:18443")), "deny")
+
+    def test_curl_to_an_azure_devops_address_is_judged_like_az_rest(self) -> None:
+        """1.7.38 (C12 Q20): a curl call to dev.azure.com, to *.visualstudio.com or to the `url` of a connection: a read runs, a write is held for the person, a delete is refused."""
+        from core import approvals
+
+        self.connect(url="https://localhost:18443")
+        for base in ("https://dev.azure.com", "https://vsrm.dev.azure.com", "https://acme.visualstudio.com", "https://localhost:18443"):
+            self.assertEqual(self.term(f"curl -s {base}/acme/demo/_apis/wit/workitems/1"), "allow", base)
+            self.assertEqual(self.term(f"curl -s -H 'Accept: application/json' {base}/acme/demo/_apis/wit/workitems/1 > .workspace/out.json"), "allow", base)
+            self.assertEqual(self.term(f"curl -X GET {base}/_apis/projects | jq ."), "allow", base)
+            self.assertEqual(self.term(f"curl {base}/_apis/projects -I"), "allow", base)
+            for line in (f"curl -X DELETE {base}/acme/demo/_apis/wit/workitems/1", f"curl --request delete {base}/x", f"curl -sX DELETE {base}/x", f"curl -XDELETE {base}/x", f"curl --request=DELETE {base}/x"):
+                self.assertEqual(self.term(line), "deny", line)
+                self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [], f"a delete is refused, not held: {line}")
+        for line in ("curl -X POST -d '{{}}' {base}/x", "curl -X PATCH {base}/x", "curl -X PUT {base}/x", "curl -d '{{}}' {base}/x", "curl --data-binary @body.json {base}/x", "curl -F file=@a.txt {base}/x", "curl -T a.txt {base}/x",
+                     "curl -s --json '{{}}' {base}/x", "curl {base}/x -sSd '{{}}'"):
+            before = len(approvals.pending(self.root, 10, file=approvals.ACTIONS))
+            self.assertEqual(self.term(line.format(base="https://dev.azure.com")), "deny", line)
+            self.assertEqual(len(approvals.pending(self.root, 10, file=approvals.ACTIONS)), before + 1, f"a write is held for the person: {line}")
+
+    def test_a_curl_that_writes_a_file_asks_even_for_a_read(self) -> None:
+        """`-o` could write a guardrail file: the read of Azure DevOps that saves to a file keeps the ask of the network rule (a redirection into the task folder does not)."""
+        self.connect()
+        for line in ("curl -s -o out.json https://dev.azure.com/acme/_apis/projects", "curl -sSo out.json https://dev.azure.com/x", "curl -O https://dev.azure.com/x", "curl --output out.json https://dev.azure.com/x",
+                     "curl --remote-name https://dev.azure.com/x", "curl -D headers.txt https://dev.azure.com/x", "curl -K cfg https://dev.azure.com/x", "curl -o .harness/policies/gate.json https://dev.azure.com/x"):
+            self.assertEqual(self.term(line), "ask", line)
+        self.assertEqual(self.term("curl -s https://dev.azure.com/x"), "allow")
+
+    def test_the_letters_of_curl_options_are_read_with_their_case(self) -> None:
+        """`-f` is not `-F`, `-x` (a proxy) is not `-X`, `-t` is not `-T`: a read that uses them is still a read."""
+        self.connect()
+        for line in ("curl -fsSL https://dev.azure.com/x", "curl -x proxy:8080 https://dev.azure.com/x", "curl -t x https://dev.azure.com/x", "curl -X GET https://dev.azure.com/x", "curl -k -L --max-time 5 -H 'A: b' https://dev.azure.com/x"):
+            self.assertEqual(self.term(line), "allow", line)
+
+    def test_curl_to_another_address_asks_as_before(self) -> None:
+        self.connect(url="https://localhost:18443")
+        for line in ("curl https://example.com/x", "curl -X DELETE https://example.com/x", "curl https://dev.azure.com.evil.example/x", "curl https://evil-dev.azure.com/x", "curl https://localhost:18444/x",
+                     "curl https://dev.azure.com/x https://example.com/y", "curl https://dev.azure.com/x && curl https://example.com/y", "curl https://example.com/x | tee out && curl https://dev.azure.com/x",
+                     "curl -d 'https://dev.azure.com/x' https://example.com/y"):
+            self.assertEqual(self.term(line), "ask", line)
+
+    def test_the_word_curl_alone_holds_nothing(self) -> None:
+        """`curl` is a program that only an address makes a call: a line that names it as a word, or a script that runs it elsewhere, is not held by the rule of listed programs."""
+        self.connect()
+        (self.root / "fetch.sh").write_text("#!/bin/sh\ncurl -s https://example.com/a\n", encoding="utf-8")
+        for line in ("echo curl", "grep curl notes.txt", "which curl", "python3 -c \"print('curl')\"", "git commit -m 'curl: retry'", "bash fetch.sh", "docker run --rm curlimages/curl --version"):
+            self.assertNotEqual(self.term(line), "deny", line)
+
+    def test_the_rules_of_the_pack_name_curl_by_address_only(self) -> None:
+        from core import systems
+
+        self.connect()
+        listed = config.policy_or_empty(self.root, "tools")["systems"]
+        self.assertEqual(systems.validate(listed), [])
+        self.assertEqual((systems.clis(listed["ado-curl"]), systems.by_address(listed["ado-curl"])), ([], ["curl"]))
+        self.assertNotIn("curl", [program for system in listed.values() for program in systems.clis(system)])
+        self.assertTrue(systems.validate({"x": {"reach": {"by_address": ["curl"]}}}), "an address-only program needs a `when`")
+
+    def test_the_rules_file_of_the_pack_checks_clean(self) -> None:
+        from support import REPO
+
+        self.assertEqual(toolpacks.problems(self.root, REPO / ".harness" / "toolpacks" / "ado"), [])
+
+
+class AdoProgramConnection(HarnessTestCase):
+    """1.7.38: the `ado` program reaches the saved connection, or the one the harness hands over while it tests, and nothing else. A small web server on this computer stands in for Azure DevOps."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import http.server
+        import threading
+
+        from support import ENGINE, REPO
+
+        seen: list = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - the name the server calls
+                seen.append((self.path, self.headers.get("Authorization", "")))
+                body = json.dumps({"authenticatedUser": {"providerDisplayName": "Test Person", "properties": {"Account": {"$value": "test.person@acme.example"}}}}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args) -> None:  # noqa: D102 - no noise in the test output
+                return
+
+        self.seen = seen
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.url = f"http://127.0.0.1:{server.server_address[1]}"
+        # the program finds its harness copy from where it lies: a root with the engine's core and the program
+        (self.root / ".harness" / "engine").mkdir(parents=True)
+        (self.root / ".harness" / "engine" / "cli.py").write_text("", encoding="utf-8")
+        shutil.copytree(ENGINE / "core", self.root / ".harness" / "engine" / "core", ignore=shutil.ignore_patterns("__pycache__"))
+        self.program = self.root / ".harness" / "toolpacks" / "ado" / "bin" / "ado"
+        self.program.parent.mkdir(parents=True)
+        shutil.copy(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado", self.program)
+        self.decoys = {"ADO_URL": "http://127.0.0.1:9", "ADO_ORG": "evil", "ADO_PROJECT": "evil", "ADO_PAT": "evil-pat", "ADO_TOKEN": "evil-bearer"}
+
+    def ado(self, *arguments: str, env: dict = None) -> subprocess.CompletedProcess:
+        empty = self.root / "no-az"
+        empty.mkdir(exist_ok=True)
+        base = {key: value for key, value in os.environ.items() if not key.startswith(("HARNESS_CONNECTION_", "ADO_"))}
+        return subprocess.run([sys.executable, str(self.program), *arguments], cwd=str(self.root), capture_output=True, text=True, check=False,
+                              env={**base, "PATH": str(empty), "HARNESS_ROOT": str(self.root), **(env or {})})
+
+    def test_a_connection_not_saved_yet_is_the_variables_of_the_test_and_the_old_back_doors_do_nothing(self) -> None:
+        mine = {"HARNESS_CONNECTION_T1_ORG": "acme", "HARNESS_CONNECTION_T1_PROJECT": "demo", "HARNESS_CONNECTION_T1_URL": self.url, "HARNESS_CONNECTION_T1_TOKEN": "typed-token", "HARNESS_CONNECTION_T1_AUTH": "token"}
+        done = self.ado("--conn", "t1", "me", "--short", env={**mine, **self.decoys})
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "test.person@acme.example"), done.stderr)
+        self.assertEqual(self.seen, [("/acme/_apis/connectionData", "Basic " + base64.b64encode(b":typed-token").decode("ascii"))], "the connection's address and token, not ADO_URL or ADO_PAT")
+        del self.seen[:]
+        without_url = {key: value for key, value in mine.items() if not key.endswith("_URL")}
+        done = self.ado("--conn", "t1", "me", "--short", env={**without_url, **self.decoys})
+        self.assertNotEqual(done.returncode, 0, "no url: the cloud address, never ADO_URL")
+        self.assertEqual(self.seen, [])
+        self.assertNotIn("127.0.0.1:9", done.stderr)
+
+    def test_the_saved_connection_is_used_with_its_own_address_and_token_whatever_the_environment_says(self) -> None:
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "auth": "token", "org": "acme", "project": "demo", "url": self.url}}}), encoding="utf-8")
+        connections.write_env(self.root, {"HARNESS_CONNECTION_ADO_TOKEN": "saved-token"})
+        done = self.ado("me", "--short", env=self.decoys)
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "test.person@acme.example"), done.stderr)
+        self.assertEqual(self.seen, [("/acme/_apis/connectionData", "Basic " + base64.b64encode(b":saved-token").decode("ascii"))])
+        self.assertNotEqual(self.ado("--conn", "nope", "me", "--short", env=self.decoys).returncode, 0, "a name that is not saved is not made up from the environment")
+
+    def test_a_bearer_token_in_the_environment_is_not_a_sign_in(self) -> None:
+        """ADO_TOKEN let a call skip `az`; now a connection that signs in with `az` needs `az`."""
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "auth": "signin", "org": "acme", "project": "demo", "url": self.url}}}), encoding="utf-8")
+        done = self.ado("me", "--short", env=self.decoys)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("az is not found", done.stderr)
+        self.assertEqual(self.seen, [])
+
+
+TWO_WAYS = dict(KIND, auth={"signin": {"identity": "tool", "login": "trk-login --org {org}", "label": "Its own sign-in", "needs": ["trk-login"]},
+                            "token": {"identity": "token", "label": "Token", "env": {"TRACKER_TOKEN": "token"}}},
+                test="tracker --org {org} whoami", expect="^(\\S+@\\S+)$", denied="run login first")
+
+
+class ProgramNeeds(ToolpackCase):
+    """1.7.37: what a pack needs is declared by the pack, per sign-in way, and checked as soon as it is on: the same answer everywhere."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.source / "types" / "tracker.json").write_text(json.dumps(TWO_WAYS), encoding="utf-8")
+        (self.source / "rules.json").unlink()
+        toolpacks.add(self.root, str(self.source))
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "board": {"type": "tracker", "env": "none", "org": "demo"},
+            "board-b": {"type": "tracker", "env": "none", "org": "demo2"},
+            "board-t": {"type": "tracker", "env": "none", "org": "demo3", "auth": "token"}}}), encoding="utf-8")
+        self.bin = self.root / "somewhere" / "bin"
+        self.bin.mkdir(parents=True)
+        for name in ("trk-login", "tracker"):
+            program = self.bin / name
+            program.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+            program.chmod(program.stat().st_mode | stat.S_IEXEC)
+
+    def rows(self):
+        return toolpacks.needs_report(self.root)["tracker"]
+
+    def test_a_program_of_the_pack_and_one_of_each_signin_way_in_use_are_looked_for(self) -> None:
+        got = [(row["program"], row["why"], row["found"]) for row in self.rows()]
+        self.assertEqual(got, [("tracker", "pack", False), ("trk-login", "signin:board", False), ("trk-login", "signin:board-b", False)], "the token way needs nothing")
+        launchenv.add_folder(self.root, "tracker", str(self.bin))
+        found = self.rows()
+        self.assertTrue(all(row["found"] for row in found))
+        self.assertTrue(all(row["path"].startswith(str(self.bin)) for row in found))
+
+    def test_a_missing_program_makes_the_pack_not_usable_in_the_listing_and_in_doctor(self) -> None:
+        row = next(item for item in toolpacks.check(self.root)["toolpacks"] if item["name"] == "tracker")
+        self.assertFalse(row["ok"])
+        self.assertEqual({name for name, ok in row["programs"].items() if not ok}, {"tracker", "trk-login"})
+        self.assertTrue(any("tracker" in str(line) and "trk-login" in str(line) and ("Get ready" in str(line) or "开始设置" in str(line)) for line in DoctorToolpacks.lines_of(self.root)))
+        launchenv.add_folder(self.root, "tracker", str(self.bin))
+        self.assertTrue(next(item for item in toolpacks.check(self.root)["toolpacks"] if item["name"] == "tracker")["ok"])
+        self.assertFalse(any("trk-login" in str(line) for line in DoctorToolpacks.lines_of(self.root)))
+
+    def test_a_pack_that_is_off_is_not_asked(self) -> None:
+        self.assertEqual(toolpacks.needs_report(self.root, include_off=False).keys(), {"tracker"})
+        self.assertEqual(toolpacks.missing_for(self.root, "board-t"), ["tracker"], "only the pack's own program for a token connection")
+        self.assertEqual(toolpacks.missing_for(self.root, "board"), ["tracker", "trk-login"])
+
+    def test_the_agent_is_told_when_a_program_is_missing(self) -> None:
+        from modules.gate import handler
+
+        line = handler.named_line(type("C", (), {"root": self.root})(), {"alias": "board", "env": "none", "call": "tracker --org demo whoami"})
+        self.assertIn("trk-login", line)
+        self.assertIn("tracker", line.split("trk-login")[0].split("。")[-1] + line)
+        launchenv.add_folder(self.root, "tracker", str(self.bin))
+        self.assertNotIn("trk-login", handler.named_line(type("C", (), {"root": self.root})(), {"alias": "board", "env": "none", "call": "tracker --org demo whoami"}))
+
+    def test_the_company_tab_counts_each_missing_program_once(self) -> None:
+        from modules.task import companyview
+
+        rows = companyview.tools(self.root, "en")
+        item = next(one for one in rows if one["name"] == "tracker")
+        self.assertEqual([m for m in item["missing"] if m.startswith("program:")], ["program:tracker", "program:trk-login"])
+        self.assertEqual({p["why"] for p in item["programs"]}, {"pack", "signin:board", "signin:board-b"})
+
+    def test_a_type_that_asks_for_a_bad_needs_list_is_refused(self) -> None:
+        bad = dict(TWO_WAYS, auth={"signin": dict(TWO_WAYS["auth"]["signin"], needs="az")})
+        self.assertTrue(any("needs" in line for line in connections.type_problems(bad)))
+
+
+class ToolLevelSignin(ToolIdentity):
+    """1.7.37: the sign-in of a program is one for the program, shared by every connection of the type, and can be made before a connection exists."""
+
+    def test_one_key_for_the_tool_and_the_old_per_connection_key_is_read_still(self) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "board": {"type": "tracker", "env": "none", "org": "demo"}, "board2": {"type": "tracker", "env": "none", "org": "demo2"}}}), encoding="utf-8")
+        before = connections.signins(self.root)
+        self.assertEqual([(row["program"], row["account"], row["shared_by"]) for row in before["tools"]], [("tracker", "", ["board", "board2"])])
+        connections.save(self.root, "board", {}, who="me@example.org")
+        env = connections.read_env(self.root)
+        self.assertEqual(env["HARNESS_TOOL_TRACKER_USER"], "me@example.org")
+        self.assertNotIn(connections.env_key("board", "account"), env)
+        kind = connections.types(self.root)["tracker"]
+        for alias in ("board", "board2"):
+            self.assertEqual(connections.identity_of(env, alias, kind, connections.listed(self.root)[alias]), {"account": "me@example.org"}, "shared")
+        connections.write_env(self.root, {"HARNESS_TOOL_TRACKER_USER": None, connections.env_key("board", "account"): "old@example.org"})
+        shown = connections.signins(self.root)["tools"][0]
+        self.assertEqual(shown["account"], "old@example.org")
+        connections.forget_tool(self.root, "tracker")
+        self.assertNotIn(connections.env_key("board", "account"), connections.read_env(self.root))
+
+    def test_the_tool_can_be_signed_in_before_any_connection_exists(self) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {}}), encoding="utf-8")
+        launchenv.save_paths(self.root, [str(self.tools)])
+        shown = connections.signins(self.root)
+        self.assertEqual([(row["program"], row["shared_by"]) for row in shown["tools"]], [("tracker", [])])
+        self.assertEqual(connections.login(self.root, "tracker")[0], 0, "the sign-in is run by the program's name")
+
+    def test_a_token_connection_is_a_row_of_its_own_and_an_orphan_is_named_until_forgotten(self) -> None:
+        token_kind = dict(KIND, type="tok", cli=["tracker"], auth={"token": {"identity": "token", "label": "Token", "env": {"TRACKER_TOKEN": "token"}}})
+        (self.source / "types" / "tok.json").write_text(json.dumps(token_kind), encoding="utf-8")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"t-one": {"type": "tok", "env": "none", "org": "x"}}}), encoding="utf-8")
+        connections.write_env(self.root, {connections.env_key("t-one", "token"): "s3", connections.env_key("gone-db", "account"): "me", connections.env_key("gone-db", "password"): "p"})
+        shown = connections.signins(self.root)
+        self.assertEqual([(row["alias"], row["state"]) for row in shown["connections"]], [("t-one", "saved")])
+        self.assertEqual(shown["orphans"], [{"name": "gone-db", "account": "me"}])
+        connections.forget(self.root, "gone-db")
+        self.assertEqual(connections.signins(self.root)["orphans"], [])
+        self.assertIn(connections.env_key("t-one", "token"), connections.read_env(self.root), "a listed connection's identity is not touched")
+
+
+class SigninsOnTheBoard(ProgramNeeds):
+    """1.7.37: the board hands the This computer tab its four blocks; the page strings carry the pieces."""
+
+    def board(self):
+        from modules.task import boardserve
+
+        board = boardserve.Board(self.root, False, 8798, [])
+        self.addCleanup(lambda: board.link.stop() if hasattr(board.link, "stop") else None)
+        return board
+
+    def test_i_installed_it_here_adds_the_folder_and_the_row_turns_found(self) -> None:
+        board = self.board()
+        rows = {row["program"]: row for row in board.machine({"step": "state"})["programs"]}
+        self.assertEqual((rows["tracker"]["found"], rows["trk-login"]["found"]), (False, False))
+        self.assertEqual(sorted(item["conn"] for item in rows["trk-login"]["needed_by"]), ["board", "board-b"])
+        with self.assertRaises(ValueError):
+            board.machine({"step": "folder-add", "program": "tracker", "path": str(self.root)})
+        after = board.machine({"step": "folder-add", "program": "tracker", "path": str(self.bin)})
+        self.assertTrue(all(row["found"] for row in after["programs"]))
+        self.assertEqual([item["path"] for item in after["paths"]], [str(self.bin)])
+        after = board.machine({"step": "paths", "paths": []})
+        self.assertEqual(after["paths"], [], "a folder you added can be taken out again")
+
+    def test_the_servers_list_carries_the_signins(self) -> None:
+        found = self.board().servers({"step": "list"})["signins"]
+        self.assertEqual([row["alias"] for row in found["connections"]], ["board-t"])
+        self.assertEqual(found["tools"][0]["program"], "trk-login")
+        self.assertEqual(found["tools"][0]["shared_by"], ["board", "board-b"])
+
+    def test_a_connection_that_signs_in_with_the_tool_has_its_own_row_with_the_program_and_a_test_of_what_is_kept_says_so_where_the_probes_say_theirs(self) -> None:
+        """1.7.38: no tool row; each row of the list says its type's way (`via`) and the program whose sign-in it uses (`tool`); a Test of the saved identity and a Save write the connection's state."""
+        from core import reach
+
+        board = self.board()
+        rows = {row["alias"]: row for row in board.servers({"step": "list"})["connections"]}
+        self.assertEqual((rows["board"]["tool"], rows["board-b"]["tool"], rows["board-t"]["tool"]), ("trk-login", "trk-login", ""))
+        self.assertEqual({row["via"] for row in rows.values()}, {"cli"})
+        launchenv.add_folder(self.root, "tracker", str(self.bin))
+        kind = dict(TWO_WAYS)
+        kind.pop("expect")  # the made-up program answers "ok", not an account
+        (self.source / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
+        found = board.servers({"step": "test", "alias": "board-t", "password": "x", "saved": False})
+        self.assertEqual((found["state"], found["layers"]["broken"]), ("ok", ""))
+        self.assertEqual(reach.read(self.root).get("board-t:none"), None, "a test of what was typed says nothing about the connection as it is kept")
+        board.servers({"step": "test", "alias": "board-t", "password": "x"})
+        board.servers({"step": "save", "alias": "board-t", "password": "x"})
+        self.assertEqual(reach.read(self.root)["board-t:none"]["state"], reach.OK, "a sign-in that passed its test clears an old failure")
+        reach.record(self.root, "board-t:none", reach.DENIED, "identity")
+        board.servers({"step": "test", "alias": "board-t", "saved": True})
+        self.assertIn(reach.read(self.root)["board-t:none"]["state"], (reach.OK, reach.DENIED, reach.FAILED), "a test of what is kept writes the state, whatever it found")
+        self.assertEqual(reach.read(self.root)["board-t:none"]["source"], "test")
+
+    def test_the_page_strings_for_the_four_blocks(self) -> None:
+        web = Path(toolpacks.__file__).resolve().parents[1] / "modules" / "task" / "web"
+        machine, servers, setup, enter = [(web / name).read_text(encoding="utf-8") for name in ("machine.js", "servers.js", "setup.js", "enter.js")]
+        for word in ('"folder-add"', 'machine.prog.title', 'machine.net.title', '"MCP "', 'machine.paths.added', 'machine.paths.remove', "localPanel", "packsPanel", "machine.pack.needs.signin"):
+            self.assertIn(word, machine, word)
+        self.assertNotIn("machine.paths.placeholder", machine, "no Tool folders text box any more")
+        self.assertNotIn("signinsBlock", machine + servers, "the sign-ins are rows of the connections, not a block of Local (1.7.38)")
+        for word in ("orphanRow", '"forget-tool"', "connections.shared.with", "machine.signins.orphan", "connections.own.add", "layersBox", "connectionsPanel"):
+            self.assertIn(word, servers, word)
+        self.assertNotIn("toolRow", servers, "no row for a tool: a connection whose way in is the tool's sign-in has its own Sign in (1.7.38)")
+        for word in ("machine.prog.title", "machine.net.title"):
+            self.assertIn(word, setup, word)
+        self.assertIn("machine.conn.notusable", enter)

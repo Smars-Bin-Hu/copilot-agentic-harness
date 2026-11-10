@@ -62,6 +62,11 @@
 .fi-tool.is-fail .el{color:var(--bad)}
 .fi-tool.is-wait .dot{background:var(--hot-dot);border-color:var(--hot-dot);animation:lvblink 1.8s ease-in-out infinite}
 .fi-tool.is-wait .el{color:var(--hot)}
+.fi-tool.is-held .dot{background:var(--hot-dot);border-color:var(--hot-dot)}  /* held by the gate and not waiting any more: amber, still (F3 U7) */
+.fi-tool.is-held .el{color:var(--hot)}
+.fi-tool.is-refused .dot{background:transparent;border-color:var(--soft)}  /* refused by the gate: a ring, not the red of a failed call */
+.fi-tool.is-refused .el{color:var(--soft)}
+.fi-tool.is-refused .in{color:var(--soft);font-weight:450}
 .fi-tool.is-run .dot{background:var(--good-dot);border-color:var(--good-dot);box-shadow:0 0 0 4px var(--good-bg);animation:lvpulse 2s ease-out infinite}
 .fi.is-run .in{background:linear-gradient(100deg,var(--ink) 35%,var(--soft) 50%,var(--ink) 65%) 0 0/250% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:lvshim 1.7s linear infinite}
 .fi-tool.is-run .el .st-time,.fi-tool.is-run .el.st-run{color:var(--good)}
@@ -118,6 +123,7 @@
 
 /* ---------- the reply: no box on the page. One pill; a panel over the page ---------- */
 .rp-bar{position:fixed;left:50%;bottom:22px;z-index:50;transform:translateX(-50%);display:flex;align-items:center;gap:8px}
+.rp-bar.aside{opacity:0;pointer-events:none}.rp-bar{transition:opacity .15s}  /* a button of the page lies under the bar: it goes and lets the click through (reply.js); it stays in place, so the look at what lies under it gives the same answer (1.7.38, C12 TB-14: at a fifth of its strength it still lay over Approve and Open) */
 .rp-stop{display:inline-flex;align-items:center;gap:7px;height:44px;margin:0;padding:0 16px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;box-shadow:var(--shadow),0 10px 40px rgba(0,0,0,.18);white-space:nowrap}
 .rp-stop[hidden]{display:none}
 .rp-stop:hover,.rp-stop:focus-visible{border-color:var(--bad);color:var(--bad)}

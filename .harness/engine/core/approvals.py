@@ -18,8 +18,14 @@ from .state import atomic_write, state_lock
 
 FILE = "git-approvals.json"
 ACTIONS = "action-approvals.json"
-MAX_ENTRIES = 50
+MAX_ENTRIES = 50  # the file keeps this many entries, when it can: it drops only what no longer waits (below)
+MAX_PENDING = 200  # (1.7.38, C13 M1, R-1) calls that wait for the person, per task (per session when the call has no task): the next one is refused, never an older one dropped
+MAX_PENDING_ALL = 2000  # (1.7.38, R-1) all tasks together, so the file cannot grow without end: one task that fills its share does not stop the others
 DEFAULT_MINUTES = 10
+
+
+class TooManyWaiting(Exception):
+    """MAX_PENDING calls already wait for the person: a new one is not held (1.7.38, C13 M1)."""
 
 
 def path(root: Path, file: str = FILE) -> Path:
@@ -49,8 +55,34 @@ def _alive(item: Dict[str, Any], limit: float, now: float) -> bool:
     return now - float(item.get("at", 0)) <= (PENDING_HOURS * 3600.0 if item.get("state") == "pending" else limit)
 
 
+KEPT_STATES = ("pending", "approved", "opened")  # a call that waits, an approval not used yet, a card whose connections were opened and that the agent has not run again
+
+
+def trimmed(entries: List[Dict[str, Any]], limit_minutes: Optional[int] = None, now: Optional[float] = None) -> List[Dict[str, Any]]:
+    """The entries to keep (1.7.38, C13 M1): at most MAX_ENTRIES, but an entry that still waits for the person (`pending`), an approval that is not used and not run out (`approved`) and a card that was opened and
+    waits for the agent's second run (`opened`) are never dropped, whatever task they are of. What goes is what is over: the stubs of a dismissed or void call (the person said no, or the task closed), and what has run out
+    (when `limit_minutes` is given) or is in no live state; the oldest of each first."""
+    over = len(entries) - MAX_ENTRIES
+    if over <= 0:
+        return entries
+    seconds = None if limit_minutes is None else limit_minutes * 60.0
+    stamp = time.time() if now is None else now
+
+    def spent(item: Dict[str, Any]) -> bool:
+        return seconds is not None and not _alive(item, seconds, stamp)
+
+    gone: set = set()
+    for rank in (lambda item: item.get("state") in ("dismissed", "used"), lambda item: spent(item) or item.get("state") not in KEPT_STATES):
+        for index, item in enumerate(entries):
+            if len(gone) >= over:
+                break
+            if index not in gone and rank(item):
+                gone.add(index)
+    return [item for index, item in enumerate(entries) if index not in gone]
+
+
 def _write(root: Path, entries: List[Dict[str, Any]], name: str = FILE) -> None:
-    atomic_write(path(root, name), {"entries": entries[-MAX_ENTRIES:]})
+    atomic_write(path(root, name), {"entries": trimmed(entries)})
 
 
 def collapse(command: str) -> str:
@@ -62,13 +94,19 @@ def _code(session_id: str, command: str, at: float) -> str:
     return hashlib.sha256(f"{session_id}\n{command}\n{at}".encode("utf-8")).hexdigest()[:6].upper()
 
 
+def _owner(item: Dict[str, Any], session_id: str) -> str:
+    """Whose share of MAX_PENDING a waiting call takes: its task, or its session when it has none (a git approval) (1.7.38, R-1)."""
+    task = item.get("task")
+    return f"task:{task}" if isinstance(task, str) and task else f"session:{session_id}"
+
+
 def request(
     root: Path, surface: str, session_id: str, command: str, limit_minutes: int, now: Optional[float] = None,
     file: str = FILE, extra: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Record the command as waiting for a person and return its code. The same command in the same session keeps its code.
 
-    `extra`: what the person should see besides the command (for an outside call: system, environment, verb, task, draft)."""
+    `extra`: what the person should see besides the command (for an outside call: system, environment, verb, task, draft). Raises TooManyWaiting when MAX_PENDING calls wait already."""
     now = time.time() if now is None else now
     text, limit = collapse(command), limit_minutes * 60.0
     with state_lock(path(root, file)):
@@ -80,6 +118,12 @@ def request(
                     item.update(missing)
                     _write(root, entries, file)
                 return item["code"]
+        waiting = [item for item in entries if item.get("state") == "pending"]
+        owner = _owner(extra or {}, session_id)
+        if len(waiting) >= MAX_PENDING_ALL:
+            raise TooManyWaiting(str(MAX_PENDING_ALL))
+        if sum(1 for item in waiting if _owner(item, item.get("session_id", "")) == owner) >= MAX_PENDING:
+            raise TooManyWaiting(str(MAX_PENDING))
         taken = {item["code"] for item in entries}
         code = _code(session_id, text, now)
         while code in taken:
@@ -113,9 +157,11 @@ def consume(root: Path, session_id: str, command: str, limit_minutes: int, now: 
         entries = [item for item in _read(root, file) if _alive(item, limit, now)]
         for item in entries:
             if item["session_id"] == session_id and item["command"] == text and item["state"] == "approved":
-                entries.remove(item)
+                used = dict(item)
+                item.pop("files", None)
+                item.update(state="used", at=now, used_at=utc_now())  # (1.7.38, C13 FR 21) a stub, as a dismissal leaves: a `harness wait` that comes back for this code later learns that the call has run
                 _write(root, entries, file)
-                return item
+                return used
         _write(root, entries, file)
     return None
 
@@ -137,29 +183,114 @@ def approved_all(root: Path, limit_minutes: int, now: Optional[float] = None, fi
     return [item for item in _read(root, file) if item["state"] == "approved" and _alive(item, limit_minutes * 60.0, now)]
 
 
-def approve(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
-    """Mark the pending entry with this code as approved. The approval clock starts now. None when no pending entry has the code."""
+def approve(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE, files: Optional[Dict[str, str]] = None, command: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Mark the pending entry with this code as approved. The approval clock starts now. None when no pending entry has the code. `files` (1.7.38): the files the command names and what they held when the
+    person approved (`core.pinfiles`); the command runs on this approval only while they hold the same. `command` (F3, a batch): only an entry that holds exactly this command is approved: one that took a new command
+    since the person was shown the list (`rewrite`) is left as it is."""
     now = time.time() if now is None else now
     with state_lock(path(root, file)):
         entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
         for item in entries:
             if item["state"] == "pending" and item["code"] == code.strip().upper():
+                if command is not None and item["command"] != collapse(command):
+                    break
                 item.update(state="approved", at=now, approved_at=utc_now())
+                if files is not None:
+                    item["files"] = files
                 _write(root, entries, file)
                 return dict(item)
         _write(root, entries, file)
     return None
 
 
-def dismiss(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
-    """Take a pending entry away (the person said no, on the board: 1.7.7). The entry, or None when no pending entry has the code."""
+def dismiss(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE, reason: str = "", note: str = "") -> Optional[Dict[str, Any]]:
+    """Take a pending entry away (the person said no, on the board: 1.7.7). The entry as it was, with the `reason` and `note` the person gave (1.7.38), or None when no pending entry has the code.
+    A stub stays for a while (state `dismissed`, with the reason): the agent that waits for this code (`harness wait --approval`) reads its answer there."""
     now = time.time() if now is None else now
     with state_lock(path(root, file)):
         entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
         for item in entries:
             if item["state"] == "pending" and item["code"] == code.strip().upper():
-                entries.remove(item)
+                done = dict(item)
+                item.pop("offers", None)
+                item.pop("wait", None)
+                item.update(state="dismissed", at=now, dismissed_at=utc_now(), reason=reason, note=note)
+                _write(root, entries, file)
+                return dict(done, reason=reason, note=note)
+        _write(root, entries, file)
+    return None
+
+
+def find(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
+    """The entry with this code in any state it can still be in (pending, approved, opened, or dismissed a moment ago), or None (1.7.38). What `harness wait --approval` looks at."""
+    now = time.time() if now is None else now
+    wanted = str(code or "").strip().upper()
+    return next((dict(item) for item in _read(root, file) if item.get("code") == wanted and _alive(item, limit_minutes * 60.0, now)), None)
+
+
+def wait_mark(root: Path, code: str, state: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> bool:
+    """The agent's wait on a pending entry (1.7.38, `harness wait --approval`): `running` (with the time of its last beat), `timeout` (it ended by time: the agent was told to end its turn and say what waits),
+    or `gone` (it ended another way: the terminal was stopped). The board reads it to know whether the agent waits for the call. Only a pending entry takes it; True when it did."""
+    now = time.time() if now is None else now
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
+        for item in entries:
+            if item["state"] == "pending" and item["code"] == str(code or "").strip().upper():
+                kept = item.get("wait") if isinstance(item.get("wait"), dict) else {}
+                item["wait"] = {"state": state, "beat": now, "since": kept.get("since") or now}
+                _write(root, entries, file)
+                return True
+    return False
+
+
+def told(root: Path, code: str, how: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> bool:
+    """The agent was told that the person decided (1.7.38): by the wait that was running (`wait`) or by a message the board sent to its chat (`message`). The card of the page then does not ask the person to tell it."""
+    now = time.time() if now is None else now
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
+        for item in entries:
+            if item["code"] == str(code or "").strip().upper():
+                item["told"] = how
+                _write(root, entries, file)
+                return True
+    return False
+
+
+def opened_all(root: Path, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> List[Dict[str, Any]]:
+    """Every entry whose connections were opened from its card and that the agent has not run again (1.7.38), whatever session it is for."""
+    now = time.time() if now is None else now
+    return [item for item in _read(root, file) if item["state"] == "opened" and _alive(item, limit_minutes * 60.0, now)]
+
+
+def mark_opened(root: Path, code: str, names: List[str], limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
+    """The person opened connections for the task from the card of this pending entry (1.7.38). The entry keeps no offer for them (`offers`), and remembers them (`opened_for`). With no offer left it is
+    `opened`: the person has done their part, and the agent is to run the same command again; it is not an approval of the command. None when no pending entry has the code."""
+    now = time.time() if now is None else now
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
+        for item in entries:
+            if item["state"] == "pending" and item["code"] == code.strip().upper():
+                item["opened_offers"] = [*(item.get("opened_offers") or []), *(one for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system") in names)]  # what was offered, for the words of the green card (the linked items of ado)
+                item["offers"] = [one for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system") not in names]
+                item["opened_for"] = sorted(set(item.get("opened_for") or []) | set(names))
+                if not item["offers"]:
+                    item.update(state="opened", at=now, opened_at=utc_now())
                 _write(root, entries, file)
                 return dict(item)
         _write(root, entries, file)
     return None
+
+
+def settle(root: Path, task: str, command: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> int:
+    """The agent ran the command of an `opened` entry again (it went through, or it is held anew): the entry has done its work and goes (1.7.38). How many were taken away."""
+    now = time.time() if now is None else now
+    text = collapse(command)
+    if not path(root, file).exists():
+        return 0
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
+        keep = [item for item in entries if not (item["state"] == "opened" and item.get("task") == task and item["command"] == text)]
+        if len(keep) != len(entries):
+            _write(root, keep, file)
+        return len(entries) - len(keep)
+

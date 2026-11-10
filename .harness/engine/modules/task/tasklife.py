@@ -141,6 +141,8 @@ def next_text(root: Path, task: str, data: Dict[str, Any], left: str) -> str:
         text += say("task.next.qa", name=task_ops.name_of(task))
     if tier == "full" or tasks.plan_digest(root, task):
         text += task_ops.next_step(root, task, data)
+    elif data.get("kind") != "qa":
+        text += task_ops.finish_text(task, data) + " "  # an RCA, a design, an analysis: no plan, so no next step names how it ends (1.7.38)
     if left:
         text += say("task.next.switched", other=left, other_name=task_ops.name_of(left))
     if not data.get("domains"):
@@ -301,13 +303,16 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
                 return {"why": "review", "since": last_event(data, "review") or updated}
     except Exception:  # noqa: BLE001 - a list must not fail over one task's checks
         pass
+    mark = data.get("waiting")
+    held = waited_calls(root, task)
+    if isinstance(mark, dict) and mark.get("why") == "accept" and mark.get("since") and isinstance(data.get("deliver"), dict) and data.get("status") == "open" and not held:
+        return {"why": "accept", "since": str(mark["since"])}  # delivered: the person accepts the work. An unconfirmed requirement does not cover it (1.7.38, C12 TB-01); the page can show both. A call held for an answer still comes first
     if data.get("tier") == "full" and not tasks.plan_approved(root, task, data) and task_ops.req_state(root, task) in ("open", "changed"):
         try:
             written = datetime.fromtimestamp((tasks.task_dir(root, task) / tasks.REQ_FILE).stat().st_mtime, timezone.utc).isoformat()
         except OSError:
             written = last_event(data, "confirm-req") or updated
         return {"why": "req", "since": written}  # written, not confirmed: no plan can be approved on it (1.5.30). It waits since the agent wrote it, not since the task was opened
-    held = outbox.pending_for(root, task)
     if held:
         return {"why": "outbox", "since": str(held[0].get("created_at") or updated)}  # a call to an outside system waits in the outbox (1.7.7): the agent stopped on it
     handed = data.get("handoff")
@@ -315,10 +320,11 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         return {"why": str(handed["what"]), "since": str(handed["since"])}  # the agent handed work to the person that only they can do: it stays until the agent clears it
     if state == "done" and data.get("status") == "open" and commitmsg.to_commit(data):
         return {"why": "commit", "since": last_event(data, "promote") or updated}  # written back, not committed: the person commits, then closes the task (B63)
-    mark = data.get("waiting")
     if isinstance(mark, dict) and mark.get("since"):
         if mark.get("why") in GO_MARKS:
             return {"why": str(mark["why"]), "since": str(mark["since"])}  # approved on a page or in a terminal; the agent is not told yet
+        if mark.get("why") == "accept":
+            return {"why": "accept", "since": str(mark["since"])}  # the agent delivered and stopped: the person accepts the work, or says not yet (1.7.38)
         run = data.get("autorun") if isinstance(data.get("autorun"), dict) else {}
         ended = run.get("stopped") if run.get("state") == "off" else None
         if isinstance(ended, dict) and str(ended.get("at", "")) <= str(mark["since"]) and ended.get("why") not in ("person",):
@@ -328,6 +334,13 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     if cancelled:
         return {"why": "cancelled", "since": cancelled}
     return {"why": "", "since": ""}
+
+
+def waited_calls(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls to outside systems of this task that wait for the person and that the agent waits for (1.7.38): a call the agent did not wait for (it went on, or delivered) is no wait of the person's."""
+    held = outbox.pending_for(root, task)
+    gone = outbox.moved_on(root, held) if held else set()
+    return [item for item in held if str(item.get("code")) not in gone]
 
 
 LIVE_WAITS = ("confirm", "question")  # what the chat in VS Code waits for right now (1.6, B75): told by the board's link to the host, not by a file; `apply_ask` puts it on a row
@@ -447,10 +460,14 @@ def set_waiting(root: Path, task: str, mark: Optional[Dict[str, str]]) -> None:
     path = tasks.state_file(root, task)
     with state_lock(path):
         data = tasks.read(root, task)
-        if data is None or data.get("waiting") == mark:
+        if data is None:
             return
+        changed = data.get("waiting") != mark
         data["waiting"] = mark
-        atomic_write(path, data)
+        if mark is None and data.pop("deliver", None) is not None:  # the person answered: the work they were asked to accept is not delivered any more (1.7.38)
+            changed = True
+        if changed:
+            atomic_write(path, data)
 
 
 def waiting_text(data: Dict[str, Any], why: str) -> str:
@@ -498,41 +515,63 @@ def handoff(root: Path, raw_task: str, what: str, env: str, detail: str = "") ->
     return {"task": task, "handoff": what, "env": env, "next": say("task.handoff.next"), **defects_synced(root, task)}
 
 
-ALLOW_KEY = "allow_env"
-ALLOW_ENVS = ("dev", "ist", "qat")  # the environments a person may open for a task; prod never, and a system with no environment (`none`) has nothing to open
-LINKS = "links"  # 1.7.18: not an environment: the items the task is linked to (a work item); the agent's writes to them go through, to no other item
+ALLOW_KEY = "allow_conn"  # 1.7.38: the connections the person opened for this task, `{name: {at, env}}`. Before it was `allow_env` (environments); that old key is not read any more: nothing is opened by it
+RETIRED_KEY = "allow_env"
+RETIRED_ENVS = ("dev", "ist", "qat", "prod")  # the names an environment switch had; `task allow --env` says it is gone
+LINKS = "links"  # 1.7.18: not a connection: the items the task is linked to (a work item); the agent's writes to them go through, to no other item
 LINKS_KEY = "allow_links"
 
 
-def allowed_env(data: Dict[str, Any], env: str) -> bool:
-    """Did the person open this environment for this task (`task allow --env <E> --on`, 1.7.4)? The gate then lets a write or a procedure of a listed system there through, instead of holding it."""
+def allowed_conn(data: Dict[str, Any], name: str) -> bool:
+    """Did the person open this connection for this task? The gate then lets a write or a run on it through, instead of holding it."""
     found = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
-    return str(env).lower() in found
+    return str(name) in found
 
 
-def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Optional[bool] = None) -> Dict[str, Any]:
-    """The person opens an environment for one task (the agent's writes and procedures on the listed systems of that environment run without a further approval), or
-    closes it again. Terminal only, no code: the switch ends with the task and can be turned off at once. A destroy is still refused, prod cannot be opened, and
-    every call still leaves its line in the log."""
+def conn_scope(system: Dict[str, Any]) -> str:
+    """How far Open to the agent may go for a connection (1.7.38): its type's rule for its environment. A system that serves several environments (written by hand with `env_from`) takes the widest
+    of its non-prod ones; the gate still asks again for each call, with the environment of that call."""
+    from core import systems as outside
+
+    envs = {system["env"]} if system.get("env") else {rule["env"] for rule in system.get("env_from") or []} | ({system["default_env"]} if system.get("default_env") else set())
+    scopes = [outside.open_scope(system, env) for env in sorted(envs)] or [outside.open_scope(system, "none")]
+    return max(scopes, key=outside.OPEN_SCOPES.index)
+
+
+def set_allow(root: Path, raw_task: str, name: str, on: bool, interactive: Optional[bool] = None, env: str = "") -> Dict[str, Any]:
+    """The person opens one connection for one task (the agent's writes and runs on it go through with no further approval), or closes it again; `links` opens the items the task is linked to.
+    Terminal only, no code: the switch ends with the task and can be turned off at once. A destroy is still refused, prod cannot be opened, and every call still leaves its line in the log.
+    What a connection may be opened to is its type's word (`open`), lowered by the company: `all`, `items` (the linked items) or `no`. The board's card asks for the code of the held call first
+    (`core.outbox.offer_for`); this function is what both call. `env`: the environment the card's call was in; a system written by hand that serves several environments is then opened for that one only."""
     task_ops.person("task allow", interactive, typed=False)
-    env = " ".join(str(env or "").split()).lower()
-    if env == LINKS:
+    name = " ".join(str(name or "").split()).lower()
+    if name == LINKS:
         return _set_allow_links(root, raw_task, on)
-    if env not in ALLOW_ENVS:
-        raise CommandError(say("task.allow.env", env=env or "-", allowed=", ".join(ALLOW_ENVS)))
+    from core import config, systems as outside
+
+    system = (config.policy_or_empty(root, "tools").get("systems") or {}).get(name)
     task = task_ops.resolve(root, raw_task)
+    if on:
+        if not isinstance(system, dict):
+            raise CommandError(say("task.allow.retired" if name in RETIRED_ENVS else "task.allow.unknown", name=name or "-", open=say("desk.outbox.open", name="...")))  # the label of the card's button, as the page draws it
+        scope = conn_scope(system)
+        if scope == outside.ITEMS:  # the connection opens as its linked items (ado)
+            return dict(_set_allow_links(root, raw_task, True), conn=name)
+        if scope != outside.ALL:
+            raise CommandError(say("task.allow.no", name=name))
     with task_ops.locked(root, task) as data:
         task_ops.require_open(data)
         held = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
-        before = env in held
+        before = name in held
         if on:
-            held[env] = {"at": utc_now()}
+            held[name] = {"at": utc_now(), "env": str((system or {}).get("env") or env or "").lower()}
         else:
-            held.pop(env, None)
+            held.pop(name, None)
         data[ALLOW_KEY] = held
         if before != on:
-            task_ops.note(data, "allow-env", f"{env}: {'on' if on else 'off'}")
-    return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.on" if on else "task.allow.off", env=env.upper())}
+            where = str(held.get(name, {}).get("env") or env or (system or {}).get("env") or "").lower() if on else str(env or "").lower()  # the scope: the environment it was opened for (F3 AP)
+            task_ops.note(data, "allow-env", f"{name}{f' ({where})' if where and where != 'none' else ''}: {'on' if on else 'off'}", name=name, env=where if where != "none" else "")
+    return {"task": task, "conn": name, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.conn.on" if on else "task.allow.conn.off", name=name)}
 
 
 def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:
@@ -558,10 +597,14 @@ def check_link_type(root: Path, ref: str) -> None:
     """The board takes a ticket of a type an installed tool pack gives, and says which types there are when it is another (1.7.22). With no type installed, any `<type>:<id>` is kept as text."""
     from core import toolpacks
 
-    types = [item["type"] for item in toolpacks.link_types(root)]
-    kind = str(ref or "").split(":", 1)[0]
+    found = toolpacks.link_types(root)
+    types = [item["type"] for item in found]
+    kind, _, ident = str(ref or "").partition(":")
     if types and kind not in types:
         raise CommandError(say("task.link.type", type=kind, types=", ".join(types)))
+    spec = next((item for item in found if item["type"] == kind), None)
+    if spec and spec.get("id") and not re.fullmatch(spec["id"], ident):  # (1.7.38, F1 L6) the type says what an id looks like: `ado:bad` is not a work item
+        raise CommandError(say("task.link.id", type=kind, ref=str(ref)[:64], example=f"{kind}:{spec['example']}" if spec.get("example") else kind + ":<id>"))
 
 
 def link(root: Path, raw_task: str, ref: str, on: bool, by_person: bool = False) -> Dict[str, Any]:
@@ -595,10 +638,11 @@ def link(root: Path, raw_task: str, ref: str, on: bool, by_person: bool = False)
             **({"warning": say("task.link.unknown", type=known["type"])} if on and not known["toolpack"] else {})}
 
 
-def links_hint(root: Path, data: Dict[str, Any]) -> str:
-    """One line for the agent when a task that names outside items is done: it may offer to update them, never update them unasked."""
+def links_hint(root: Path, data: Dict[str, Any], still_open: bool = False) -> str:
+    """One line for the agent when a task that names outside items is done: it may offer to update them, never update them unasked. `still_open`: the task is delivered and waits to be accepted (1.7.38), so it need not be opened again."""
     refs = [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
-    return say("task.link.suggest", links=", ".join(refs), name=str(data.get("name") or "")) if refs and data.get("kind") != "qa" else ""  # a look only reads: nothing to offer
+    key = "task.link.suggest.open" if still_open else "task.link.suggest"
+    return say(key, links=", ".join(refs), name=str(data.get("name") or "")) if refs and data.get("kind") != "qa" else ""  # a look only reads: nothing to offer
 
 
 def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:
@@ -751,6 +795,8 @@ def at_work(root: Path, data: Dict[str, Any], why: Optional[str] = None) -> bool
     if data.get("status") != "open" or paused_since(data) or data.get("waiting") or data.get("handoff"):
         return False
     if not held(root, data) or not (active_now(root, data) or subagent_running(root, data)):
+        return False
+    if outbox.agent_waiting(root, str(data.get("task") or "")):  # 1.7.38: it sits in `harness wait --approval` on a held call: it makes no call, it waits for the person
         return False
     if why is None:
         why = "cancelled" if cancelled_at(data) else ""

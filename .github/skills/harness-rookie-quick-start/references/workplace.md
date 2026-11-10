@@ -27,10 +27,10 @@ Open the board with the user and show these five things, one at a time:
 
 1. **The list.** Every task, with what it waits for and since when. Orange means it waits for you. There are buttons to filter (all, waiting for you, working, quiet, no session, paused, closed), a search box, and a click on a column head sorts.
 2. **A task's page.** Click a task name. At the top is what waits for you, each button with a line on when to press it. Below are tabs: Overview (the progress), Requirement (`REQ.md`), Plan, TODO, Log, Changes, Review (when you asked for independent checks: each round with what the reviewer answered), Test (on a test task: the guide, and each environment with its results and verdict), Task Record.
-3. **The buttons.** *Confirm requirement*, *approve plan*, *approve write-back*, *pause*, *resume*, *archive*. An approval asks for a code that the page shows; you type it, which is how it stays your decision.
+3. **The buttons.** *Confirm requirement*, *Approve plan*, *Approve promote*, *Pause*, *Resume*, *Archive*. An approval asks for a code that the page shows; you type it, which is how it stays your decision.
 4. **Time and usage.** A link on the task's page: where the time and the usage of this task went.
 
-5. **VS Code, when it is open.** A pill at the top says the board is linked to the chats. Then the button **send to agent** appears after an approval (it sends the "go on" message for you, so there is nothing to paste), a working agent has **steer** and **stop**, and a command Copilot asks to run can be allowed from the board. Only you can press these. **New task** makes a chat that opens a task. Just mention them now; the practice task shows send.
+5. **VS Code, when it is open.** A pill at the top says the board is linked to the chats. Then an approval of the requirement, the plan or the write-back wakes the agent by itself; the button **Send to agent** appears only when the chat could not take the message (it sends the "go on" message for you, so there is nothing to paste), a working agent has **Steer** and **Stop**, and a command Copilot asks to run can be allowed from the board. Only you can press these. **New task** makes a chat that opens a task. Just mention them now; the practice task shows send.
 
 The agent gives you the address of the task's page in its messages. Click it, or open the board and click the task.
 

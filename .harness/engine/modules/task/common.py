@@ -14,7 +14,7 @@ import shutil
 import stat
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import config, logs, messages, repo_paths, targets, tasks
 from core.logs import read_lines, read_session
@@ -350,6 +350,14 @@ def child_sessions(root: Path, surface: str, session_id: str, since: str) -> Lis
     return found
 
 
+HELD_DECISIONS = ("outbox", "human")  # what the gate decides for a call that waits for the person: approve it on the board, or run it yourself
+
+
+def is_held(row: Dict[str, Any]) -> bool:
+    """A hook-log line of a call that waits for the person (the gate said no for now), not one that was refused (C12 RB-N6, RC-4). The report, the Gate blocks and the Agent actions tab count the two apart."""
+    return row.get("decision") == "deny" and isinstance(row.get("external"), dict) and row["external"].get("decision") in HELD_DECISIONS
+
+
 def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
     session_id, surface = data.get("session_id", ""), data.get("surface", "vscode")
     rows = read_session(root, surface, session_id)
@@ -362,7 +370,8 @@ def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
     window = [row for row in every if row.get("at", "") >= since]
     counted = {
         "calls": len(window),
-        "deny": sum(1 for row in window if row.get("decision") == "deny"),
+        "deny": sum(1 for row in window if row.get("decision") == "deny" and not is_held(row)),
+        "held": sum(1 for row in window if is_held(row)),
         "ask": sum(1 for row in window if row.get("decision") == "ask"),
         "block": sum(1 for row in window if row.get("decision") == "block"),
         "subagent": sum(1 for row in window if row.get("event") == "SubagentStart"),
@@ -379,9 +388,27 @@ def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
         target = row.get("target") or {}
         about = messages.joined(target.get("paths", [])) or target.get("command", "")
         lines.append(
-            f"| {row.get('at', '')[11:19]} | {row.get('event', '')} | {row.get('tool_name', '') or '-'} | {row.get('decision', '')}"
+            f"| {row.get('at', '')[11:19]} | {row.get('event', '')} | {row.get('tool_name', '') or '-'} | {'held' if is_held(row) else row.get('decision', '')}"
             f" | {row.get('judge', '')}:{','.join(row.get('by') or [])} | {cell(row.get('reason', ''))} | {cell(about) or '-'} |"
         )
     if len(refusals) > LOG_ROWS:
         lines.append(say("log.refusals.more", count=len(refusals) - LOG_ROWS))
     return lines
+
+
+PAIRED_EVENTS = re.compile(r"^(.+): (on|off|agent|person)$")  # the notes `allow-env`, `link` and `test-runner` write: a name, a colon and a state
+
+
+def plain_event(what: str, detail: str, facts: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
+    """The key of the line of the Task Record and its detail in words a person reads (1.7.38, F3 U5): `allow-env`, `link` and `test-runner` wrote `name: state`, and the page showed that with the internal word as its label.
+    Now the state is in the label and only the name stays in the detail; the linked items, which are not a connection, have their own label. `approve-call` says in its label whether the call was approved alone or in
+    a batch (`facts["batch"]`, the number of calls approved together). Anything else is left as it was."""
+    if what == "approve-call":
+        return ("event.approve-call.batch" if int((facts or {}).get("batch") or 0) > 1 else "event.approve-call"), str((facts or {}).get("code") or detail.split(":", 1)[0])
+    found = PAIRED_EVENTS.match(detail) if what in ("allow-env", "link", "test-runner") else None
+    if not found:
+        return f"event.{what}", detail
+    name, state = found.group(1), found.group(2)
+    if what == "allow-env" and name == "links":  # tasklife.LINKS: the items the task is linked to, not a connection
+        return f"event.allow-env.links.{state}", ""
+    return f"event.{what}.{state}", name

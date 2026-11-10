@@ -160,9 +160,9 @@ The chat box of VS Code has a Session Target. The harness supports only sessions
 - **Claude and Codex sessions**: not tested, and taken as not working.
 - **`copilot -p` (the command line, no window)**: measured: the hooks of the repository do not run, and the harness has no effect.
 
-### The hook lets a call through when it fails itself
+### When the hook fails itself
 
-The hook refuses only when a policy is clearly broken, or a write tool does not say which file it writes. When it fails itself (a broken setting, a parse error), it lets the call through and writes to `hook-errors.jsonl`. The hook runs before every tool call, and hurting normal work costs more than missing a stop. Finding setup problems is the job of `doctor`.
+The rule is in [AGENTS.md](../AGENTS.md) (Core limits). Local work (reads, writes inside the task, tests) is refused only when a policy is clearly broken, or a write tool does not say which file it writes. When the hook fails itself (a broken setting, a parse error), local work passes and the error goes to `hook-errors.jsonl`: the hook runs before every tool call, and hurting normal work costs more than missing a stop. A call to a program or an MCP tool that a tool pack governs does not pass: it is refused with what failed ([modules/gate/failclosed.py](../.harness/engine/modules/gate/failclosed.py)), and the same when a setting cannot be read or the connection cannot be told ([12 Guardrails and the gate](12-guardrails-and-gate.md)). The gate's own policy is one of these settings: when `gate.json` cannot be read, the gate runs on a built-in copy of the shipped rules and also refuses a write outside the task folder and a git write ([12](12-guardrails-and-gate.md)). Only helpers (reminders, logs, what the board shows) fail without stopping anything. Finding setup problems is the job of `doctor`.
 
 There are two cases the hook itself cannot handle; the platform decides them (measured in a Copilot session on 2026-10-10):
 
@@ -189,7 +189,7 @@ The board can send a message to the chat of a task, steer or stop it, allow a co
 - **Nothing is guessed.** A message goes out only when the chat is bound to the task for sure (by a chat the board made, or by the Copilot session id found in it) and is in the state the action needs. Else the board says why and gives the text to copy: a wrong chat costs more than a paste. The host is read again just before the action.
 - **The messages are fixed text.** The approval code and the options you pick are all that change. No control mark (`[review]`, `/compact`) goes out unless you pressed the button for it.
 - **Allow all makes the gate the only brake.** A chat made from the board is allow all, so its first command never waits in VS Code before the task exists, and the gate review (judge each block, export the wrong ones as eval samples) and the health warning exist to show what the gate did.
-- **The link is read-mostly and fails soft.** One thread holds the connection and a cache; a page reads the cache. The token stays in memory. A page never fails or waits over it. The Enter screen is the gate: with no VS Code, a person does not go in.
+- **The link is read-mostly and fails soft.** One thread holds the connection and a cache; a page reads the cache. The token stays in memory. A page never fails or waits over it. The Enter screen is the gate: with no VS Code, or a Copilot that is not connected, a person does not go in (1.7.38: every line of Harness & Local is required; the company's content is optional and never a gate).
 
 ### Admin mode: rights follow the session, not the agent
 

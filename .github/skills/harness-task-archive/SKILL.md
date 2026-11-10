@@ -50,4 +50,4 @@ No task is opened for it: it is upkeep of the harness, not work of the team. In 
 | "Which folder?" | No `--to` and nothing kept. Ask the user for an absolute path |
 | "is inside the task folder" | The archive must be outside `.workspace/sandbox/tasks/`. Ask for another folder |
 | "Already in ...: <name>" | A task of the same name is archived there. Ask the user: leave it out, or use another folder |
-| A task the user wants is in `cannot` | Read them the reason. Closing it (`harness task close --task <name>`) is their call; a promote halfway needs `task recover` in their terminal first |
+| A task the user wants is in `cannot` | Read them the reason. Closing it is their call (**Close** on the board, or `harness task close --task <name>` in their terminal; you never close a task); a promote halfway needs `task recover` in their terminal first |

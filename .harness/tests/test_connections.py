@@ -7,12 +7,13 @@ from unittest import mock
 import os
 import stat
 import sys
+import types
 from pathlib import Path
 from typing import Any, Dict
 
 from support import HarnessTestCase, pre_tool, put_type
 
-from core import config, connections
+from core import config, connections, messages
 from modules.gate import external
 
 SESSION = "sess-servers"
@@ -91,7 +92,7 @@ class GateViewTests(ConnectionsCase):
         self.assertNotIn("needs", config.load_policy(self.root, "tools")["systems"]["db-dev"])  # the person's own wins
 
     def test_servers_on_one_host_are_told_apart_by_the_port(self) -> None:
-        pack = Path(__file__).resolve().parents[1] / "examples" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
+        pack = Path(__file__).resolve().parents[1] / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
         put_type(self.root, json.loads(pack.read_text(encoding="utf-8")), pack="sqlserver")
         self.company({f"s{n}": {"type": "sqlserver", "env": "dev", "auth": "sql", "host": "127.0.0.1", "port": str(14330 + n)} for n in range(3)})
         systems = config.load_policy(self.root, "tools")["systems"]
@@ -211,20 +212,24 @@ class GateTests(ConnectionsCase):
         start["cwd"] = str(self.root)
         told = self.hook(start).get("additionalContext", "")
         self.assertIn("harness as db-dev --", told)
-        # the start of a chat names the servers in one line; a prompt that names one gets a command that reaches it (1.7.10)
-        self.assertIn("db-dev (DEV), db-ist (IST)", told)
+        # the start of a chat says what kinds of connection there are and how to find one, not their names (1.7.38); a prompt that names one gets a command that reaches it (1.7.10)
+        self.assertIn("2 Fake DB", told)
+        self.assertNotIn("db-ist", told)  # the one name is that of the connection this window reaches through the prefix
         self.assertNotIn("fakedb --host", told)
         asked = payload("UserPromptSubmit", SESSION, prompt="db-dev和db-ist都查一下")
         asked["cwd"] = str(self.root)
         named = self.hook(asked).get("additionalContext", "")
-        self.assertIn("- db-ist (IST): Fake DB [host=db2, port=5000]", named)  # 1.7.20: the fields; no tool pack skill, so the test command is offered as that
+        self.assertIn("- db-ist (IST): Fake DB", named)  # 1.7.20: the fields; no tool pack skill, so the test command is offered as that
+        self.assertIn(messages.text("connections.named.call", call="fakedb --host db2:5000 --who"), named, "1.7.38 (C13 FR 9): how to call it comes first")
+        self.assertIn(messages.text("connections.named.fields", fields="host: db2; port: 5000"), named, "the fields are facts, not `host=db2`")
+        self.assertNotIn("host=db2", named)
         self.assertIn("`fakedb --host db2:5000", named)
         self.assertIn("`harness as db-dev -- fakedb --host db1:5000", named)
         (self.root / ".harness" / "toolpacks" / "testpack" / "skills" / "testpack-db").mkdir(parents=True)  # now the pack has a skill: the line points at it and at the program
         told_again = self.hook(asked).get("additionalContext", "")
         self.assertIn(connections.say("connections.named.pack", toolpack="testpack", skills="testpack-db", program="fakedb"), told_again)
         self.assertIn(connections.say("connections.named.wrap", alias="db-dev"), told_again)
-        self.assertNotIn("fakedb --host", told_again)
+        self.assertNotIn(connections.say("connections.named.test", call="@@").split("@@")[0], told_again, "with a skill the test command is not offered as the way; the call line (1.7.38, C13 FR 9) always is")
         other = payload("UserPromptSubmit", SESSION, prompt="look at db-devx and my-db-ist2")  # only a whole alias counts
         other["cwd"] = str(self.root)
         self.assertNotIn("fakedb --host", self.hook(other).get("additionalContext", ""))
@@ -253,12 +258,19 @@ class CarryTests(ConnectionsCase):
         (kb / "connections.json").write_text(json.dumps({"connections": {"o-dev": {"type": "other", "env": "dev", "auth": "own", "host": "h"}}}), encoding="utf-8")
         (kb.parent / "company.json").write_text("{}", encoding="utf-8")
         company.sync(self.root)
-        self.assertTrue((self.root / ".harness" / "toolpacks" / "otherpack" / "types" / "other.json").is_file())
+        self.assertEqual(connections.types(self.root)["other"]["toolpack"], "otherpack")  # read where it lies
         self.assertIn("o-dev", connections.listed(self.root))
 
     def test_a_connection_of_ones_own_goes_in_the_company_pack_without_the_identity(self) -> None:
         """Knowledge base, Pack for colleagues: the connection and its tool pack go in the company content; the account and password stay in .env (1.7.10)."""
         self.company({})
+        # the pack is a folder this computer added from elsewhere, not a factory pack: a copy in the company's packs/ must not take the name of a factory pack (1.7.38: that stops the sync)
+        import shutil
+
+        added = self.root / "added-packs" / "testpack"
+        added.parent.mkdir()
+        shutil.move(str(self.root / ".harness" / "toolpacks" / "testpack"), str(added))
+        (self.root / ".harness" / "runtime" / "toolpacks.json").write_text(json.dumps({"packs": {}, "paths": [str(added)]}), encoding="utf-8")
         with self.assertRaises(ValueError):  # no company content to add to
             connections.share(self.root, ["mine"])
         kb = self.root / "knowledge-base" / "company"
@@ -304,7 +316,8 @@ class BoardChecksItself(ConnectionsCase):
         return ready.Ready(self.root, Link(), lambda _root: {"errors": 0, "first": "", "failed": ""}, checker=checker or reachcheck.Checker(self.root, probe=lambda _root: None))
 
     def line(self, check) -> dict:
-        return next(item for item in check.answer(True)["checks"] if item["id"] == "systems")
+        """The connections row of the optional block (1.7.38): `names` with a state each, `rows` for the hover table."""
+        return next(item for item in check.answer(True)["optional"]["items"] if item["key"] == "connections")
 
     def test_probe_all_writes_what_the_hook_would_and_leaves_a_connection_without_an_identity_to_the_hook(self) -> None:
         from core import reach
@@ -319,6 +332,14 @@ class BoardChecksItself(ConnectionsCase):
         self.assertFalse(reach.recent(self.root, ["db-dev:dev", "db-ist:ist"]))
         connections.save(self.root, "db-dev", {"account": "alice", "password": "wrong"})
         self.assertEqual(connections.probe_all(self.root), {"db-dev:dev": "denied"})
+
+    def test_unsigned_names_the_connections_with_no_sign_in_kept_here(self) -> None:
+        """Q16: the list `harness doctor` merges into one line."""
+        self.assertEqual(connections.unsigned(self.root), ["db-dev", "db-ist"])
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        self.assertEqual(connections.unsigned(self.root), ["db-ist"])
+        connections.forget(self.root, "db-dev")
+        self.assertEqual(connections.unsigned(self.root), ["db-dev", "db-ist"])
 
     def test_the_checker_asks_when_an_answer_is_missing_or_old_not_on_every_poll(self) -> None:
         from core import reach
@@ -340,17 +361,77 @@ class BoardChecksItself(ConnectionsCase):
         self.assertTrue(checker.start())  # Check and Open VS Code ask whatever the age
         checker.last.join(10)
 
-    def test_the_line_has_names_with_a_state_a_table_and_no_word_about_an_account_when_never_checked(self) -> None:
+    def test_no_check_starts_while_vscode_is_quitting_and_one_that_does_not_answer_is_told_in_the_singular(self) -> None:
+        """Retest N3: after a failed restart the Enter screen showed "1 do not answer" for a minute: a check had run against a VS Code that was half gone."""
+        from core import reach
+        from modules.task import reachcheck
+
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        asked = []
+        check = self.ready(reachcheck.Checker(self.root, probe=lambda root: asked.append(1)))
+        states = {"state": "quitting", "since": 5.0}
+        check.restart = types.SimpleNamespace(view=lambda: states)
+        check.answer(True)
+        self.assertEqual(asked, [], "a quit is waiting: no check")
+        for state, since in (("failed", 100.0), ("opening", 200.0)):
+            states.update(state=state, since=since)
+            check.answer(True)
+            self.assertEqual(asked, [], state)
+        states.update(state="failed", since=400.0)  # long ago: the board looks again
+        check.answer(True)
+        check.checker.last.join(10)
+        self.assertEqual(asked, [1])
+        reach._write(self.root, {"db-dev:dev": {"state": reach.FAILED, "at": "2026-11-08T10:00:00Z", "why": "no-answer", "who": "", "source": "board"}})
+        found = self.line(self.ready())
+        self.assertIn(messages.text("ready.conn.down.one", n=1), found["detail"])
+        self.assertEqual(next(problem for problem in found["problems"] if problem["key"] == "down")["short"], messages.text("ready.p.down.short.one", n=1))
+
+    def test_the_row_has_names_with_a_state_a_table_and_no_problem_for_a_sign_in_that_was_never_tested(self) -> None:
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
         found = self.line(self.ready())
-        self.assertEqual((found["why"], found["check"]), ("unknown", True))
-        self.assertFalse(found.get("launch") or found.get("identities"))  # "VS Code needs your account" is for a refused identity only
-        self.assertEqual(found["names"], [{"name": "db-dev", "state": "unknown"}, {"name": "db-ist", "state": "unknown"}])
+        self.assertEqual(found["names"], [{"name": "db-dev", "state": "untested", "saved": True}, {"name": "db-ist", "state": "none", "saved": False}])  # saved, not tested yet: waiting; nothing saved: not signed in
+        problems = [problem for problem in found["problems"] if problem["key"] != "identity"]  # 1.7.38 (C13 D3-3): the yellow note of an identity VS Code does not carry has its own tests
+        self.assertEqual([problem["key"] for problem in problems], ["signin"])  # only db-ist is a problem
+        self.assertIn("db-ist", problems[0]["text"])
+        self.assertNotIn("db-dev", problems[0]["text"])
         connections.probe_all(self.root)  # db-ist has no identity kept here: left to the hook
         found = self.line(self.ready())
-        self.assertEqual(found["names"], [{"name": "db-dev", "state": "ok"}, {"name": "db-ist", "state": "unknown"}])
+        self.assertEqual(found["names"], [{"name": "db-dev", "state": "ok", "saved": True}, {"name": "db-ist", "state": "none", "saved": False}])
         row = found["rows"][0]
         self.assertEqual((row["system"], row["env"], row["state"], row["reason"]), ("db-dev", "dev", "ok", "alice"))
+        self.assertEqual(self.ready().answer(True)["optional"]["identities"], 1)  # one sign-in saved and its test passed: the VS Code button may say "with identities"
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "wrong"})
+        connections.probe_all(self.root)
+        found = self.line(self.ready())
+        self.assertEqual(found["names"][0]["state"], "down")  # saved, and the last test failed
+        self.assertEqual([problem["key"] for problem in found["problems"] if problem["key"] != "identity"], ["signin", "down"])
+        self.assertEqual(self.ready().answer(True)["optional"]["identities"], 0)
+
+    def test_the_table_follows_the_order_of_the_window_and_says_not_signed_in_for_a_connection_with_no_sign_in(self) -> None:
+        """C12 N6, N7: the window sorts by the label of the kind, then environment, then name; the table sorted by the name of the pack and said "not checked" with no reason where the name had said "Not signed in"."""
+        put_type(self.root, dict(KIND, type="rbk", label="Acme runbooks", cli=["rbk"], test="rbk {auth} --who"))
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"},
+                      "db-ist": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db2", "port": "5000"},
+                      "zz-run": {"type": "rbk", "env": "dev", "auth": "own"}})
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        rows = self.line(self.ready())["rows"]
+        self.assertEqual([row["system"] for row in rows], ["zz-run", "db-dev", "db-ist"], "Acme runbooks before Fake DB, as the window lists them")
+        for row in rows:
+            if row["system"] == "db-ist":
+                self.assertEqual(row["reason"], messages.text("board.enter.cs.none"))
+            if row["system"] == "db-dev":
+                self.assertEqual(row["reason"], "", "signed in, not tested yet: nothing to say")
+
+    def test_the_row_of_the_enter_screen_says_how_many_more_connections_have_their_pack_off_and_they_are_not_in_the_table(self) -> None:
+        """Q22."""
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}, "old-a": {"type": "offtype", "env": "dev"}})
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        connections.probe_all(self.root)
+        found = self.line(self.ready())
+        self.assertEqual([one["name"] for one in found["names"]], ["db-dev"])
+        self.assertEqual([row["system"] for row in found["rows"]], ["db-dev"])
+        self.assertEqual(found["off"]["text"], messages.text("ready.conn.off.one", names="old-a"))
+        self.assertEqual([problem for problem in found["problems"] if problem["key"] != "identity"], [])  # the one connection that counts is signed in
 
     def test_a_connection_without_an_environment_has_an_empty_env_cell_and_a_system_with_two_states_is_partly(self) -> None:
         from core import reach
@@ -366,16 +447,16 @@ class BoardChecksItself(ConnectionsCase):
                          [("s", "dev", "ok", "pack-a"), ("s", "ist", "down", "pack-a"), ("t", "", "down", ""), ("u", "", "unknown", "")])
 
     def test_regression_a_connection_added_while_the_screen_is_open_shows_at_once_not_after_the_cache(self) -> None:
-        """The first answer said "none" and the folder cache (10 s) kept it: a connection added a second later was not on the screen until the cache ran out."""
+        """The first answer said "none" and the cache (10 s) kept it: a connection added a second later was not on the screen until the cache ran out."""
         for name in ("connections.company.json",):
             (self.root / ".harness" / "policies" / name).unlink()
         check = self.ready()
-        self.assertEqual(self.line(check)["why"], "none")
+        self.assertEqual(self.line(check)["names"], [])
         self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}})
-        self.assertEqual(self.line(check)["why"], "unknown")  # the same Ready object, no time passed
+        self.assertEqual([one["name"] for one in self.line(check)["names"]], ["db-dev"])  # the same Ready object, no time passed
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
         connections.probe_all(self.root)
-        self.assertEqual(self.line(check)["state"], "ok")
+        self.assertEqual(self.line(check)["names"][0]["state"], "ok")
 
 
 class RulesOfTheType(ConnectionsCase):
@@ -427,6 +508,21 @@ class UnsavedConnectionTest(ConnectionsCase):
         self.assertNotIn("_PASSWORD", out)
         self.assertEqual(connections.derived(self.root, {}) .get("my-trk"), None, "not saved: no system yet")
 
+    def test_a_program_that_keeps_its_own_sign_in_is_signed_in_when_the_last_check_got_through_whether_or_not_the_account_was_kept(self) -> None:
+        """Retest N4: the Enter screen counted the runbook signed in (its check passed) and the window said not signed in until Test was pressed."""
+        from core import reach
+        from modules.task import boardserve
+
+        connections.save(self.root, "my-trk", {}, own=self.mine("my-trk", auth="signin"), who="ann")
+        row = lambda: next(item for item in boardserve.servers_view(self.root, False)["connections"] if item["alias"] == "my-trk")  # noqa: E731
+        self.assertEqual((row()["tool"], row()["saved"], row()["signed"]), ("true", True, True))
+        connections.forget_tool(self.root, "true")  # the account is not kept here any more
+        self.assertEqual((row()["saved"], row()["signed"]), (False, False), "no check has got through yet")
+        reach._write(self.root, {"my-trk:none": {"state": reach.OK, "at": "2026-11-08T10:00:00Z", "why": "", "who": "ann", "source": "board"}})
+        self.assertEqual((row()["saved"], row()["signed"], row()["who"]), (False, True, "ann"))
+        reach._write(self.root, {"my-trk:none": {"state": reach.DENIED, "at": "2026-11-08T10:00:00Z", "why": "identity", "who": "", "source": "board"}})
+        self.assertFalse(row()["signed"])
+
     def test_two_connections_with_the_same_org_and_project_are_told_apart_by_name(self) -> None:
         self.assertEqual(connections.command(self.kind, self.mine("a-one"), {}, "a-one"), "envdump --conn a-one")
         self.assertEqual(connections.command(self.kind, self.mine("b-two"), {}, "b-two"), "envdump --conn b-two")
@@ -441,3 +537,75 @@ class UnsavedConnectionTest(ConnectionsCase):
         self.assertEqual(connections.variables(self.kind, self.mine("my-trk"), {"token": "s3cret"}), {"TRK_PAT": "s3cret"})
         connections.forget(self.root, "my-trk")
         self.assertNotIn("HARNESS_CONNECTION_MY_TRK_TOKEN", env())
+
+
+class KeptWhenTheTestNeverReached(ConnectionsCase):
+    """Q1: a sign-in test that broke at the program or at the address keeps what was typed ("saved, not tested yet"); one that broke at the sign-in or at the account access keeps nothing."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        put_type(self.root, dict(KIND, type="nodb", label="No DB", cli=["nodb-missing"], match="--host\\s+{host}:{port}\\b", test="nodb-missing --host {host}:{port} {auth} --who"))
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"},
+                      "db-down": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db3", "port": "9999"},
+                      "db-none": {"type": "nodb", "env": "qat", "auth": "own", "host": "db4", "port": "5000"}})
+        from modules.task import boardserve
+
+        self.board = boardserve.Board(self.root, False, 8799, [])
+        self.addCleanup(lambda: self.board.link.stop() if hasattr(self.board.link, "stop") else None)
+
+    def typed(self, alias: str, password: str = "right", account: str = "alice", **extra: Any) -> Dict[str, Any]:
+        return self.board.servers({"step": "test", "alias": alias, "account": account, "password": password, "keep": True, **extra})
+
+    def row(self, alias: str) -> Dict[str, Any]:
+        return next(item for item in self.board.servers({"step": "list"})["connections"] if item["alias"] == alias)
+
+    def test_a_test_that_never_reached_the_server_keeps_the_sign_in_and_marks_it_not_tested_yet(self) -> None:
+        from core import reach
+
+        found = self.typed("db-down")
+        self.assertEqual((found["state"], found["layers"]["broken"], found["kept"]), ("down", "address", True))
+        self.assertEqual(connections.read_env(self.root)["HARNESS_CONNECTION_DB_DOWN_ACCOUNT"], "alice")
+        self.assertEqual(connections.read_env(self.root)["HARNESS_CONNECTION_DB_DOWN_PASSWORD"], "right")
+        line = reach.read(self.root)["db-down:ist"]
+        self.assertEqual((line["state"], line["why"]), (reach.UNKNOWN, connections.UNTESTED))
+        row = self.row("db-down")
+        self.assertEqual((row["saved"], row["untested"], row["reach"]), (True, True, reach.UNKNOWN))
+        from core import readyitems
+
+        self.assertEqual({one["name"]: one["state"] for one in readyitems.connection_states(self.root)}["db-down"], "untested")  # waiting, not a problem of the Enter screen
+
+    def test_a_program_that_is_not_there_keeps_the_sign_in_too(self) -> None:
+        found = self.typed("db-none")
+        self.assertEqual((found["state"], found["layers"]["broken"], found["kept"]), ("missing", "program", True))
+        self.assertTrue(self.row("db-none")["untested"])
+
+    def test_a_wrong_sign_in_is_not_kept(self) -> None:
+        found = self.typed("db-dev", password="wrong")
+        self.assertEqual((found["state"], found["layers"]["broken"], found["kept"]), ("denied", "access", False))
+        self.assertNotIn("HARNESS_CONNECTION_DB_DEV_PASSWORD", connections.read_env(self.root))
+        self.assertFalse(self.row("db-dev")["saved"])
+
+    def test_nothing_typed_and_a_window_that_did_not_ask_keep_nothing(self) -> None:
+        found = self.typed("db-down", password="", account="")
+        self.assertFalse(found["kept"])
+        self.assertEqual(connections.read_env(self.root), {})
+        found = self.board.servers({"step": "test", "alias": "db-down", "account": "alice", "password": "right"})  # the own-connection form never asks: it keeps nothing before Save
+        self.assertNotIn("kept", found)
+        self.assertEqual(connections.read_env(self.root), {})
+
+    def test_test_works_without_typing_again_and_a_pass_clears_the_mark(self) -> None:
+        self.typed("db-down")
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}, "db-down": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db3", "port": "5000"},
+                      "db-none": {"type": "nodb", "env": "qat", "auth": "own", "host": "db4", "port": "5000"}})  # the address is mended
+        self.assertTrue(self.row("db-down")["untested"])
+        answer = self.board.servers({"step": "test", "alias": "db-down", "saved": True})  # nothing typed: it uses what was kept
+        self.assertEqual((answer["state"], answer["who"]), ("ok", "alice"))
+        row = self.row("db-down")
+        self.assertEqual((row["untested"], row["reach"], row["who"]), (False, "ok", "alice"))
+
+    def test_a_kept_sign_in_that_is_tested_again_and_fails_is_a_failed_test_not_an_untested_one(self) -> None:
+        self.typed("db-down")
+        answer = self.board.servers({"step": "test", "alias": "db-down", "saved": True})  # the address is still down
+        self.assertEqual(answer["state"], "down")
+        row = self.row("db-down")
+        self.assertEqual((row["untested"], row["reach"], row["saved"]), (False, "failed", True))

@@ -129,7 +129,7 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
     into["end"] = max(into["end"], other["end"])
     for key in ("turns", "model_s", "turn_s", "approval_s", "hook_s", "subagent_s"):
         into[key] += other[key]
-    for key in ("tools", "subagents", "skills", "compactions", "cache_calls", "thinks", "spends", "docs"):
+    for key in ("tools", "subagents", "skills", "compactions", "cache_calls", "thinks", "spends", "docs", "calls"):
         into[key].extend(other.get(key) or [])
     for name in other["models"]:
         if name not in into["models"]:
@@ -139,6 +139,23 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
             into[key] = (into.get(key) or 0) + other[key]
     if other["context_tokens"] is not None:
         into["context_tokens"] = other["context_tokens"]
+
+
+RUNS_KEPT = 40  # model runs one prompt sends to the page, the first ones: a prompt with more is cut and says how many were left out
+
+
+def model_runs(calls: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The model calls of one prompt as runs (1.7.38, F3 M): calls in a row with the same model and effort are one run. `{runs: [{model, effort, calls, reasoning_tokens}], calls, more}`.
+    `reasoning_tokens` is None when no call of the run gave a number. Nothing is made up: a prompt the record gave no call for has no runs, and the page shows no mark."""
+    runs: List[Dict[str, Any]] = []
+    for call in calls:
+        if runs and (runs[-1]["model"], runs[-1]["effort"]) == (call["model"], call["effort"]):
+            runs[-1]["calls"] += 1
+            if call["reasoning"] is not None:
+                runs[-1]["reasoning_tokens"] = (runs[-1]["reasoning_tokens"] or 0) + call["reasoning"]
+        else:
+            runs.append({"model": call["model"], "effort": call["effort"], "calls": 1, "reasoning_tokens": call["reasoning"]})
+    return {"runs": runs[:RUNS_KEPT], "calls": len(calls), "more": max(0, len(runs) - RUNS_KEPT)}
 
 
 def from_events(record: Dict[str, Any], hook_prompts: List[Dict[str, Any]], picked_up: List[float]) -> List[Dict[str, Any]]:
@@ -444,17 +461,23 @@ def split(prompt: Dict[str, Any]) -> Dict[str, Optional[float]]:
     return {"active_s": active, "model_s": model, "tool_s": turns - model - approval - subagent, "approval_s": approval, "subagent_s": subagent, "other_s": active - turns}
 
 
+HELD_DECISIONS = common.HELD_DECISIONS
+
+
 def count_rows(rows: List[Dict[str, Any]], start: float, end: float) -> Dict[str, int]:
-    found = {"denied": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0}
+    found = {"denied": 0, "held": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0}
     for row in rows:
         at = copilot_events.seconds(row.get("at"))
         if at is None or not start <= at < end:
             continue
         decision = row.get("decision")
+        held = common.is_held(row)  # a call that waits for the person is held, not refused (C12 RB-N6)
         if row.get("external") and row.get("event") == "PreToolUse":  # a call to an outside system the company listed (M43-3)
             found["external_calls"] += 1
-            found["external_denied"] += 1 if decision == "deny" else 0
-        if decision == "deny":
+            found["external_denied"] += 1 if decision == "deny" and not held else 0
+        if held:
+            found["held"] += 1
+        elif decision == "deny":
             found["denied"] += 1
         elif decision == "ask":
             found["asked"] += 1
@@ -572,7 +595,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, 
             "turns": prompt["turns"], "tool_calls": len(prompt["tools"]), "failed_tool_calls": len([tool for tool in prompt["tools"] if not tool["ok"]]),
             "slowest_tool": {"name": slowest["name"], "seconds": round(slowest["seconds"], 1)} if slowest and slowest["seconds"] >= 1 else None,
             "input_tokens": prompt.get("input_tokens"), "output_tokens": prompt.get("output_tokens"),
-            "subagents": len(prompt["subagents"]), "skills": sorted(set(prompt["skills"])), "models": prompt["models"], **counted,
+            "subagents": len(prompt["subagents"]), "skills": sorted(set(prompt["skills"])), "models": prompt["models"], "model_calls": model_runs(prompt.get("calls") or []), **counted,
             "compactions": [{key: value for key, value in item.items() if key != "at"} for item in prompt["compactions"]],
             "text": prompt.get("text", ""),  # for the page only: `for_agent` takes it out
             "compact": bool(prompt.get("compact")),  # a /compact the person asked for, not a message (1.6.113)
@@ -647,7 +670,7 @@ def assemble(task: str, data: Dict[str, Any], items: List[Dict[str, Any]], revie
     """The report of the given prompts: the totals, the tables and the findings. `build` calls it for all prompts and for each round."""
     totals: Dict[str, Any] = {
         "prompts": len([item for item in items if not item["prompt"].get("compact")]), "compacts": len([item for item in items if item["prompt"].get("compact")]), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
-        "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0,
+        "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "held": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0,
         "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None, "compactions": 0,
         "cache_input_tokens": None, "cache_read_tokens": None, "cache_write_tokens": None, "cache_cold_calls": 0, "cache_cold_write_tokens": 0,
     }
@@ -660,7 +683,7 @@ def assemble(task: str, data: Dict[str, Any], items: List[Dict[str, Any]], revie
         prompts.append(entry)
         for key, value in item["parts"].items():
             add(totals, key, value)
-        for key in ("tool_calls", "failed_tool_calls", "denied", "asked", "stop_blocks", "external_calls", "external_denied"):
+        for key in ("tool_calls", "failed_tool_calls", "denied", "held", "asked", "stop_blocks", "external_calls", "external_denied"):
             totals[key] += entry[key]
         add(totals, "aiu", prompt["aiu"])
         add(totals, "premium_requests", prompt["premium_requests"])
@@ -753,10 +776,11 @@ def findings(result: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not prompts:
         return found
     active, waiting = totals["active_s"], totals["waiting_s"]
+    asked = totals.get("approval_s") or 0.0  # inside a turn the agent also waited for an answer or an approval: that is the person's time too, and it is not the agent's work (C12 RB-N6)
     if waiting >= 60 and result["waits"]:
         longest = result["waits"][0]
         note(
-            "waiting", share(waiting, active + waiting), waiting=clock(waiting), active=clock(active), share=percent(share(waiting, active + waiting)),
+            "waiting", share(waiting + asked, active + waiting), waiting=clock(waiting + asked), active=clock(max(active - asked, 0.0)), share=percent(share(waiting + asked, active + waiting)),
             longest=clock(longest["seconds"]), prompt=longest["after_prompt"], reason=say(f"insight.wait.{longest['reason']}"),
         )
     if (totals.get("paused_s") or 0) >= 60:
@@ -806,6 +830,8 @@ def findings(result: Dict[str, Any]) -> List[Dict[str, Any]]:
         note("slow_tool", share(slow_tool["total_s"], active) * 0.8, tool=slow_tool["name"], calls=slow_tool["calls"], time=clock(slow_tool["total_s"]), longest=clock(slow_tool["max_s"]))
     if totals["denied"] or totals["stop_blocks"]:
         note("refused", min(0.3, 0.03 * (totals["denied"] + totals["stop_blocks"])), denied=totals["denied"], blocks=totals["stop_blocks"])
+    if totals["held"]:
+        note("held", 0.0, held=totals["held"])
     if totals["failed_tool_calls"]:
         note("failed", min(0.3, 0.03 * totals["failed_tool_calls"]), failed=totals["failed_tool_calls"], calls=totals["tool_calls"])
     if result["source"] != SOURCE_EVENTS:

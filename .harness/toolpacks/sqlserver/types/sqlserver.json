@@ -1,0 +1,278 @@
+{
+  "type": "sqlserver",
+  "label": "SQL Server",
+  "description": "A sample connection type, brought by the sqlserver tool pack; the harness knows no type. sqlcmd reaches the server; the way in is a Windows account (the network identity of the window, as runas /netonly gives it) or a SQL account (sqlcmd reads it from SQLCMDUSER and SQLCMDPASSWORD). The test asks the server who the session is.",
+  "cli": [
+    "sqlcmd"
+  ],
+  "fields": {
+    "host": {
+      "label": "Server",
+      "placeholder": "sql-dev.example.local"
+    },
+    "port": {
+      "label": "Port",
+      "default": "1433"
+    },
+    "database": {
+      "label": "Database",
+      "optional": true
+    }
+  },
+  "match": "(?:-S|--server)(?:\\s+|=)\"?{host},{port}(?![\\w.,-])",
+  "pin": {
+    "options": [
+      "-S",
+      "--server"
+    ],
+    "fold": [
+      [
+        "^tcp:",
+        ""
+      ],
+      [
+        "\\s*,\\s*",
+        ","
+      ],
+      [
+        "(?<!:):(\\d+)$",
+        ",\\1"
+      ],
+      [
+        "\\.(?=,|$)",
+        ""
+      ],
+      [
+        ",0+(?=\\d)",
+        ","
+      ],
+      [
+        "^([^,]+)$",
+        "\\1,1433"
+      ]
+    ],
+    "other": [
+      "-D",
+      "--dsn"
+    ],
+    "free": [
+      "-?",
+      "--help",
+      "--version"
+    ],
+    "subcommand": true
+  },
+  "auth": {
+    "windows": {
+      "label": "Windows account (DOMAIN\\id)",
+      "identity": "netonly",
+      "args": "-E"
+    },
+    "sql": {
+      "label": "SQL account",
+      "identity": "env",
+      "env": {
+        "SQLCMDUSER": "account",
+        "SQLCMDPASSWORD": "password"
+      },
+      "args": ""
+    }
+  },
+  "test": "sqlcmd -S {host},{port} {auth} -C -l 5 -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\"",
+  "call": "sqlcmd -S {host},{port} {auth} -C -d {database} -Q \"<statement>\"",
+  "expect": "^\\s*(\\S+)\\s*$",
+  "denied": "Login failed|Cannot generate SSPI context|The login is from an untrusted domain",
+  "down": "TCP Provider|Named Pipes Provider|Login timeout expired|Cannot open server|network-related or instance-specific error|unable to open tcp connection|connection refused|i/o timeout",
+  "verbs": [
+    {
+      "pattern": "\\btruncate[\\s\\x00-\\x20]+table[\\s\\x00-\\x20]+(?!#\\w)|\\bdrop[\\s\\x00-\\x20]+(?!(?:procedure|proc|view|function|trigger|synonym)\\b)(?!table[\\s\\x00-\\x20]+(?:if[\\s\\x00-\\x20]+exists[\\s\\x00-\\x20]+)?#\\w+[\\s\\x00-\\x20]*(?:;|$))\\w+|\\b(?:kill|shutdown|restore)\\b",
+      "verb": "destroy"
+    },
+    {
+      "pattern": "\\binto\\b|\\b(?:insert|update|delete|merge|create|alter|grant|revoke)\\b",
+      "verb": "write"
+    },
+    {
+      "pattern": "\\b(?:begin\\s+tran(?:saction)?|commit|rollback|save\\s+tran(?:saction)?|dbcc|backup|reconfigure|deny|disable\\s+trigger|enable\\s+trigger|openrowset|opendatasource|openquery|bulk|xp_\\w+)\\b",
+      "verb": "write"
+    },
+    {
+      "pattern": "\\bexec(?:ute)?\\b|\\bsp_\\w+",
+      "verb": "exec"
+    },
+    {
+      "pattern": "(?:^|\\s)-(?:q|o)(?:\\s|$)|(?:^|\\s)-o\\S|SQLCMD\\w*\\s*=|\\bSQLCMDINI\\b|(?:^|\\s)(?-i:-c)|(?:^|\\s)--batch-terminator\\b|(?:^|\\s)--(?:initial-query|output-file|unicode-output-file|trace-file)(?:\\s|=|$)",
+      "verb": "write"
+    },
+    {
+      "pattern": "\\b(?:select|with|set\\s+nocount)\\b",
+      "verb": "read"
+    }
+  ],
+  "reads": [
+    "SELECT\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|next value for)\\b).*",
+    "WITH\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|next value for)\\b).*\\bSELECT\\b.*",
+    "USE \\w+",
+    "SET (?:(?:NOCOUNT|NOEXEC|PARSEONLY|FMTONLY|XACT_ABORT|ARITHABORT|ANSI_\\w+|QUOTED_IDENTIFIER|CONCAT_NULL_YIELDS_NULL|NUMERIC_ROUNDABORT|STATISTICS (?:IO|TIME|XML|PROFILE)|SHOWPLAN_(?:ALL|TEXT|XML)) (?:ON|OFF)|TRANSACTION ISOLATION LEVEL (?:READ UNCOMMITTED|READ COMMITTED|REPEATABLE READ|SNAPSHOT|SERIALIZABLE)|(?:LOCK_TIMEOUT|DATEFIRST|ROWCOUNT|TEXTSIZE) \\d+|DATEFORMAT \\w+|LANGUAGE \\w+)",
+    "PRINT\\b(?!.*\\b(?:into|insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|next value for)\\b).*",
+    "DECLARE @\\w+ (?:AS )?[A-Za-z_]\\w*(?: ?\\( ?(?:\\d+|MAX)(?: ?, ?\\d+)? ?\\))?(?: ?= ?(?:-?\\d+(?:\\.\\d+)?|N?''|NULL))?(?: ?, ?@\\w+ (?:AS )?[A-Za-z_]\\w*(?: ?\\( ?(?:\\d+|MAX)(?: ?, ?\\d+)? ?\\))?(?: ?= ?(?:-?\\d+(?:\\.\\d+)?|N?''|NULL))?)*",
+    "SET @\\w+ ?= ?(?:(?:-?\\d+(?:\\.\\d+)?|N?''|NULL)|@\\w+)",
+    "EXEC(?:UTE)? (?:\\w+\\.)*(?:sp_help|sp_helptext|sp_helpindex|sp_helpconstraint|sp_columns|sp_tables|sp_pkeys|sp_fkeys|sp_stored_procedures)(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?"
+  ],
+  "writes": [
+    "INSERT INTO\\b(?!.*\\b(?:update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+)\\b).*",
+    "UPDATE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? [\\w.#@]+ SET (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
+    "DELETE\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+)\\b)(?: TOP ?\\( ?\\d+ ?\\))? FROM [\\w.#@]+ (?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*?\\bWHERE\\b(?! ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\1(?![\\w.])))(?!.*\\bOR\\b ?[( ]*(?:NOT[( ]+)*(?:(?:-?\\d+(?:\\.\\d+)?|N?'') ?(?:=|<>|!=|<=|>=|<|>) ?(?:-?\\d+(?:\\.\\d+)?|N?'')|(\\w[\\w.]*) ?= ?\\2(?![\\w.]))).+",
+    "MERGE\\b(?!.*\\b(?:drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|merge .*merge)\\b).*",
+    "(?:CREATE OR ALTER|CREATE|ALTER) (?:PROCEDURE|PROC|VIEW|FUNCTION) [\\w.]+(?!.*\\b(?:xp_\\w+|kill|shutdown|restore|reconfigure|openrowset|opendatasource|openquery|bulk)\\b).*",
+    "EXEC(?:UTE)? (?!(?:\\w+\\.)*(?:sp|xp)_)(?:\\w+\\.)*\\w+(?: (?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?)(?: ?, ?(?:(?:@\\w+ ?= ?)?(?:N?''|-?\\d+(?:\\.\\d+)?|NULL|DEFAULT|@\\w+|[\\w.]+)(?: OUT(?:PUT)?)?))*)?",
+    "(?:BEGIN|END|BEGIN TRY|END TRY|BEGIN CATCH|END CATCH|RETURN)",
+    "(?:DROP TABLE|TRUNCATE TABLE)(?: IF EXISTS)? [\\w.#]+(?: ?, ?[\\w.#]+)*",
+    "DROP (?:PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER|SYNONYM)(?: IF EXISTS)? [\\w.]+(?: ?, ?[\\w.]+)*",
+    "IF OBJECT_ID ?\\( ?N?'' ?(?:, ?N?'' ?)?\\) IS NOT NULL DROP (?:TABLE|PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER|SYNONYM) [\\w.#]+",
+    "CREATE TABLE [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|into|select|use|xp_\\w+|sp_\\w+)\\b).*\\)",
+    "CREATE (?:UNIQUE )?(?:CLUSTERED |NONCLUSTERED )?INDEX \\w+ ON [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|into|select|use|xp_\\w+|sp_\\w+)\\b).*",
+    "ALTER TABLE [\\w.#]+ ADD (?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|into|select|use|xp_\\w+|sp_\\w+)\\b).*",
+    "(?:BEGIN TRAN(?:SACTION)?|COMMIT(?: TRAN(?:SACTION)?)?|ROLLBACK(?: TRAN(?:SACTION)?)?)",
+    "SELECT\\b(?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|use|xp_\\w+|sp_\\w+)\\b)(?!.*\\binto (?!#\\w))(?=.*\\binto #\\w+\\b).*",
+    "IF OBJECT_ID ?\\( ?N?'' ?(?:, ?N?'' ?)?\\) IS NULL (?:BEGIN )?CREATE TABLE [\\w.#]+ ?\\((?!.*\\b(?:insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|backup|restore|kill|shutdown|dbcc|waitfor|reconfigure|bulk|openrowset|opendatasource|openquery|openxml|disable|enable|setuser|revert|writetext|updatetext|send|xp_\\w+|sp_\\w+|into|select|use)\\b).*\\)(?: END)?"
+  ],
+  "refuse": [
+    {
+      "pattern": "\\b(?:kill|shutdown|restore)\\b",
+      "reason": {
+        "en": "The agent never ends sessions, stops the server or restores a database. Tell the user what is needed and why: the user does it.",
+        "zh": "agent 不结束会话、不停服务器、不还原数据库。告诉用户需要什么、为什么：由用户来做。"
+      }
+    },
+    {
+      "pattern": "^!!",
+      "reason": {
+        "en": "`!!` runs a shell command on this computer, outside the database. Run that command in the terminal on its own, where the gate judges it.",
+        "zh": "`!!` 会在这台电脑上执行 shell 命令，在数据库之外。把那条命令单独放到终端里执行，由 gate 判断。"
+      }
+    },
+    {
+      "pattern": "^:connect\\b",
+      "reason": {
+        "en": "`:connect` sends what follows to another server, so the gate cannot tell which connection is used. Run the statement as its own call with `sqlcmd -S <that server>`.",
+        "zh": "`:connect` 会把后面的内容发到另一台服务器，gate 看不出用的是哪个连接。把语句单独用 `sqlcmd -S <那台服务器>` 调用。"
+      }
+    },
+    {
+      "pattern": "^:(?:out|error|perftrace)\\b",
+      "reason": {
+        "en": "`:out`, `:error` and `:perftrace` write to a file the gate does not see. Redirect the output in the terminal instead (`> file` inside the task folder).",
+        "zh": "`:out`、`:error`、`:perftrace` 会写到 gate 看不见的文件。改在终端里重定向输出（任务文件夹内的 `> 文件`）。"
+      }
+    },
+    {
+      "pattern": "\\bxp_\\w+",
+      "reason": {
+        "en": "Extended procedures such as `xp_cmdshell` run outside the database. Do the work in the terminal, where the gate judges it, or tell the user. (In the body of a procedure you deploy, it is not refused: the deploy waits for the user.)",
+        "zh": "`xp_cmdshell` 这类扩展过程在数据库之外执行。在终端里做（由 gate 判断），或告诉用户。（写在要部署的过程正文里不拒绝：部署等用户批准。）"
+      }
+    }
+  ],
+  "directives": [
+    "^:on\\s+error\\s+(?:exit|ignore)$",
+    "^:setvar\\s+[A-Za-z_][\\w-]*(?:\\s+.*)?$"
+  ],
+  "outputs": {
+    "options": [
+      "-o",
+      "--output-file"
+    ]
+  },
+  "input": {
+    "options": [
+      "-i",
+      "--input-file"
+    ],
+    "include": "^\\s*:r\\s+(?:\"([^\"\\r\\n]+)\"|(\\S+))",
+    "text": [
+      "-Q",
+      "--query"
+    ],
+    "variables": [
+      "-v",
+      "--variables"
+    ]
+  },
+  "body": [
+    {
+      "pattern": "(?:^|\\s)(?:-[Qq]|--query|--initial-query)(?:\\s+|=)\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "from": "text",
+      "raw": true,
+      "label": {
+        "en": "The statement that will run",
+        "zh": "将要执行的语句"
+      }
+    },
+    {
+      "pattern": "(?:^|\\s)(?:-[Qq]|--query|--initial-query)(?:\\s+|=)'([^']*)'",
+      "from": "text",
+      "raw": true,
+      "label": {
+        "en": "The statement that will run",
+        "zh": "将要执行的语句"
+      }
+    }
+  ],
+  "target": "\\b(?:from|into|update|join)\\s+([\\w.\\[\\]]+)",
+  "show": {
+    "server": "(?:-S|--server)(?:\\s+|=)\"?([^\\s,\"]+)",
+    "port": "(?:-S|--server)(?:\\s+|=)\"?[^\\s,\"]+,(\\d+)",
+    "database": "(?:-d|--database-name)(?:\\s+|=)(\\S+)"
+  },
+  "say": [
+    {
+      "pattern": "^(?!.*\\bwhere\\b)(?=.*\\b(?:update\\s+[\\w.\\[\\]#@]+\\s+set|delete\\s+from)\\b)",
+      "text": {
+        "en": "UPDATE or DELETE with no WHERE",
+        "zh": "没有 WHERE 的 UPDATE 或 DELETE"
+      },
+      "why": {
+        "en": "It has no WHERE, so it would change every row of the table.",
+        "zh": "它没有 WHERE，会改动表里的每一行。"
+      }
+    },
+    {
+      "pattern": "(?:^|\\s)(?:-o\\s*\\S|--output-file(?:\\s+|=)\\S)",
+      "text": {
+        "en": "Saves its output in a file",
+        "zh": "把输出存进一个文件"
+      },
+      "why": {
+        "en": "The file is not inside the task folder, so the call waits for you.",
+        "zh": "这个文件不在任务文件夹里，所以要等你决定。"
+      }
+    }
+  ],
+  "open": {
+    "dev": "all",
+    "ist": "all",
+    "qat": "no",
+    "prod": "no"
+  },
+  "rules": {
+    "dev": {
+      "read": "allow",
+      "write": "outbox",
+      "exec": "outbox",
+      "destroy": "outbox"
+    },
+    "ist": {
+      "read": "allow",
+      "write": "outbox",
+      "exec": "outbox",
+      "destroy": "outbox"
+    },
+    "qat": {
+      "read": "allow",
+      "write": "outbox",
+      "exec": "human",
+      "destroy": "deny"
+    }
+  }
+}

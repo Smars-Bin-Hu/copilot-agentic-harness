@@ -4,10 +4,10 @@
     "SessionStart": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30
@@ -16,10 +16,10 @@
     "UserPromptSubmit": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30
@@ -28,10 +28,10 @@
     "userPromptTransformed": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30
@@ -40,10 +40,10 @@
     "PreToolUse": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30
@@ -52,10 +52,10 @@
     "PostToolUse": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30
@@ -64,10 +64,10 @@
     "PostToolUseFailure": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30
@@ -76,10 +76,10 @@
     "SubagentStart": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30
@@ -88,10 +88,10 @@
     "SubagentStop": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30
@@ -100,10 +100,10 @@
     "Stop": [
       {
         "type": "command",
-        "command": "python3 .harness/engine/hook.py",
-        "windows": "python .harness/engine/hook.py",
-        "bash": "python3 .harness/engine/hook.py",
-        "powershell": "python .harness/engine/hook.py",
+        "command": "python3 .harness/engine/launch.py",
+        "windows": "python .harness/engine/launch.py",
+        "bash": "python3 .harness/engine/launch.py",
+        "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
         "timeout": 30,
         "timeoutSec": 30

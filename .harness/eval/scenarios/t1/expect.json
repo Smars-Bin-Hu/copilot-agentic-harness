@@ -9,7 +9,7 @@
         "decision": "deny",
         "by": "gate",
         "kind": "task-plan",
-        "reason_contains": "task approve-plan"
+        "reason_contains": "PLAN.md"
       },
       "min": 1
     }

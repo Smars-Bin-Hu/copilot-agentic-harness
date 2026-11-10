@@ -320,6 +320,8 @@ class Connection:
         self.notices: Deque[Dict[str, Any]] = collections.deque()
         self.counter = 0
         self.closed = False
+        self.pid: Any = None  # the editor process this host runs in, as `code agent endpoints` names it (1.7.38: the board reads its environment before any chat)
+        self.instance = ""
 
     def upgrade(self) -> None:
         key = base64.b64encode(os.urandom(16)).decode()
@@ -444,6 +446,7 @@ def connect(endpoint: Endpoint) -> Connection:
     """Open the endpoint, upgrade, `initialize`. The caller keeps the Connection in one thread."""
     transport = open_transport(endpoint)
     link = Connection(transport, endpoint.token())
+    link.pid, link.instance = endpoint.pid, endpoint.instance
     try:
         link.upgrade()
         link.hello()

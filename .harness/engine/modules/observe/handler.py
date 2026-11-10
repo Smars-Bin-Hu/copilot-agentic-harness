@@ -38,6 +38,9 @@ def load_policy(root: Path) -> Dict[str, Any]:
         return DEFAULTS
 
 
+REASON_LOG_CHARS = 1500  # the gate's own words to the agent: never cut where its way ends; the command in them is cut as before in `target`
+
+
 def clip(text: Any, limit: int) -> Any:
     if isinstance(text, str) and len(text) > limit:
         return text[:limit] + "…"
@@ -49,7 +52,7 @@ def clip_record(record: Dict[str, Any], limit: int) -> Dict[str, Any]:
     clipped = dict(record)
     for key in ("reason", "error"):
         if key in record:
-            clipped[key] = clip(redact.text(record[key]), limit)
+            clipped[key] = clip(redact.text(record[key]), max(limit, REASON_LOG_CHARS) if key == "reason" else limit)  # (1.7.38, C13 FR 11) what the gate told the agent keeps its end, where the right way is
     target = record.get("target")
     if isinstance(target, dict):
         clipped["target"] = {"paths": [clip(item, limit) for item in target.get("paths", [])]}

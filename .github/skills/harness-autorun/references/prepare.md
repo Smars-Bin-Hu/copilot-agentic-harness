@@ -8,7 +8,7 @@ You cannot ask the user while autorun runs. So ask everything here.
 | --- | --- | --- |
 | A task, at the full tier | `harness task status` | No task: use the skill `harness-my-task`. Not full: `harness task upgrade --tier full` |
 | A clear requirement | Read `REQ.md`, look at "Done when" | Complete it with the user. If the standard cannot be put in words, autorun does not fit |
-| An approved plan | `harness task status` | Write `PLAN.md` and ask the user to run `harness task approve-plan` in the terminal |
+| An approved plan | `harness task status` | Write `PLAN.md` and tell the user to press *Approve plan* on the task page |
 | Steps in `TODO.md` | Read it | Break the work down as described below |
 | Independent checks on | `n` of `harness task review status` is above 0 | Ask the user to send a prompt with `[review]=1`. You cannot write it yourself |
 | The files to change are fetched | They are under `DEV/` | `harness task fetch <repository>/<path>` |

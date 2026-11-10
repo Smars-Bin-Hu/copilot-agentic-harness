@@ -14,7 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import config, messages, shortcmd, standards, state as files, targets
+from core import company, config, messages, shortcmd, skillcheck, standards, state as files, targets
+from core import connections as conn_core, launchenv, toolpacks
 
 MAX_NAME = 100
 MAX_PATH = 1024
@@ -227,21 +228,90 @@ def rules_of(target: Dict[str, Any]) -> List[Dict[str, str]]:
     return [{"repo": name, "rule": rule} for name, entry in sorted((target.get("repos") or {}).items()) if isinstance(entry, dict) and isinstance(entry.get("refused_paths"), list) for rule in entry["refused_paths"] if rule != GIT_RULE]
 
 
+def _files(folder: Path, used: Tuple[str, ...], ending: str = "") -> Tuple[int, List[str]]:
+    """The content files of a folder of the knowledge base (not the README or a hidden file): how many the engine uses, and the names of the others, which nothing reads (1.7.38: the Enter screen counts the same way).
+    A file is used when its name is in `used`, or ends with `ending`."""
+    try:
+        names = sorted(item.name for item in folder.iterdir() if item.is_file() and item.suffix == ".md" and item.name != "README.md" and not item.name.startswith("."))
+    except OSError:
+        return 0, []
+    use = [name for name in names if name in used or (ending and name.endswith(ending))]
+    return len(use), [name for name in names if name not in use]
+
+
+def company_skills(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
+    """The company's own skills: how many, and which are not by the rules. The same check as the Enter screen (`readyitems`), so both count the same."""
+    from . import readyitems, skillgroups  # here: readyitems reads much the form does not need at import
+    prefix = skillcheck.effective_prefix(root)
+    found = readyitems.company_skills(root, folder, prefix, skillgroups.active_packs(root))
+    return {"n": len(found), "off": [path.name for _name, path in found if readyitems.skill_trouble(path, prefix)]}
+
+
+def shown_path(root: Path, path: Path) -> str:
+    """A folder as a person reads it: absolute, and `~` for the home folder."""
+    try:
+        full = (path if path.is_absolute() else root / path).resolve()
+        home = Path.home().resolve()
+        return "~/" + full.relative_to(home).as_posix() if full != home and home in full.parents else str(full)
+    except (OSError, ValueError, RuntimeError):
+        return str(path)
+
+
 def kb_state(root: Path) -> Dict[str, Any]:
-    """What is in place: the form says so, and does not ask for a knowledge base a person already has."""
+    """What is in place: the form says so, and does not ask for a knowledge base a person already has. `domain_skills`: `domains/<domain>/skills/<skill>/`."""
     for _name, path in targets.knowledge_bases(root):
         if targets.knowledge_base_content(path):
+            domains = 0
+            skills = 0
             try:
-                domains = sum(1 for item in (path / "domains").iterdir() if item.is_dir())
+                for item in (path / "domains").iterdir():
+                    if item.is_dir() and not item.name.startswith("."):
+                        domains += 1
+                        try:
+                            skills += sum(1 for one in (item / "skills").iterdir() if (one / "SKILL.md").is_file())
+                        except OSError:
+                            pass
             except OSError:
-                domains = 0
+                pass
             found: Dict[str, Any] = {}
             try:
                 found = json.loads((path / targets.COMPANY_DIR / "company.json").read_text(encoding="utf-8-sig"))
             except (OSError, ValueError):
                 pass
-            return {"here": True, "domains": domains, "prefix": str(found.get("skill_prefix") or "").strip().lower() if isinstance(found, dict) else ""}
-    return {"here": False, "domains": 0, "prefix": ""}
+            version = ""
+            try:
+                manifest = json.loads((path / targets.COMPANY_DIR / "manifest.json").read_text(encoding="utf-8-sig"))
+                version = str(manifest.get("version") or "") if isinstance(manifest, dict) else ""
+            except (OSError, ValueError):
+                pass
+            return {"here": True, "domains": domains, "domain_skills": skills, "version": version, "path": shown_path(root, path), "prefix": str(found.get("skill_prefix") or "").strip().lower() if isinstance(found, dict) else ""}
+    return {"here": False, "domains": 0, "domain_skills": 0, "version": "", "path": "", "prefix": ""}
+
+
+def company_facts(root: Path) -> Dict[str, Any]:
+    """The read-only checklist of the section From the company (1.7.36): what the knowledge base brought, one fact each. Quick: file looks only; never raises.
+    `prefix`: `kb` is what the knowledge base's `company.json` says, `effective` what the checks use; the page shows an input only when `kb` is empty."""
+    out: Dict[str, Any] = {"folder": False, "instructions": False, "standards": False, "declared": no_such(root), "prefix": {"kb": "", "effective": "", "conflict": ""},
+                           "packs": [], "own_packs": [], "instructions_n": 0, "instructions_unused": [], "standards_n": 0, "standards_unused": [], "skills": {"n": 0, "off": []}, "connections": [], "recipe": {"present": False, "host": "", "proxy": "", "tool_folders": 0, "error": ""}}
+    try:
+        folder = targets.company_folder(root)
+        out["folder"] = folder is not None
+        out["instructions"] = bool(folder and company.instruction_sources(folder))
+        out["standards"] = bool(folder and (folder / standards.COMPANY_FILE).is_file())
+        out["prefix"] = {"kb": skillcheck.knowledge_base_prefix(root), "effective": skillcheck.effective_prefix(root), "conflict": skillcheck.prefix_conflict(root)}
+        out["packs"] = toolpacks.use_list(root)
+        own = folder / toolpacks.COMPANY_PACKS if folder else None
+        out["own_packs"] = sorted(item.name for item in own.iterdir() if item.is_dir() and not item.name.startswith(".")) if own is not None and own.is_dir() else []  # the company's own, besides the factory packs it turns on
+        if folder:
+            out["instructions_n"], out["instructions_unused"] = _files(folder / "instructions", (), company.INSTRUCTION_SUFFIX)
+            out["standards_n"], out["standards_unused"] = _files(folder / "standards", (Path(standards.COMPANY_FILE).name,))
+        out["skills"] = company_skills(root, folder)
+        out["connections"] = list(conn_core.company_connections(config.policy_or_empty(root, conn_core.POLICY)))
+        found = launchenv.recipe(root)
+        out["recipe"] = {"present": (root / launchenv.RECIPE).is_file(), "host": found["host"], "proxy": found["proxy"], "tool_folders": len(found["tool_folders"]), "error": found["error"]}
+    except Exception:  # noqa: BLE001 - doctor reports a broken file; the checklist only shows less
+        pass
+    return out
 
 
 def status(root: Path, short: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -257,7 +327,7 @@ def status(root: Path, short: Optional[Dict[str, Any]] = None) -> Dict[str, Any]
     singles = [str(entry["path"]) for entry in (target.get("repos") or {}).values() if is_single(entry)]
     forced = forced_language()
     return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": forced or str(user.get("language") or messages.language()), "language_forced": bool(forced), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": singles, "broken": [path for path in singles if not has_git(Path(path))], "skill_prefix": str(user.get("skill_prefix") or ""),
-            "install_command": str((tools.get("python") or {}).get("install_command") or ""), "rules": rules_of(target), "kb": kb_state(root), "stamp": stamp(root),
+            "install_command": str((tools.get("python") or {}).get("install_command") or ""), "rules": rules_of(target), "kb": kb_state(root), "company": company_facts(root), "stamp": stamp(root),
             "short": short_state(root) if short is None else short, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 
 
@@ -401,7 +471,7 @@ def missing(root: Path) -> List[str]:
     except ValueError:
         pass
     declared = no_such(root)
-    company = targets.company_folder(root)
+    folder = targets.company_folder(root)
     out: List[str] = []
     try:
         kb = {name for name, _path in targets.knowledge_bases(root)}
@@ -411,11 +481,11 @@ def missing(root: Path) -> List[str]:
         out.append("repos")
     if not any(targets.knowledge_base_content(path) for _name, path in targets.knowledge_bases(root)):
         out.append("domains")
-    if not (company and (company / "instructions" / "knowledgebase.instructions.md").is_file()):
+    if not (folder and company.instruction_sources(folder)):
         out.append("instructions")
     if not str(user.get("skill_prefix") or "").strip() and "skills" not in declared:
         out.append("skills")
-    if not (company and (company / standards.COMPANY_FILE).is_file()) and "standards" not in declared:
+    if not (folder and (folder / standards.COMPANY_FILE).is_file()) and "standards" not in declared:
         out.append("standards")
     return out
 
@@ -441,7 +511,7 @@ def guide(root: Path) -> Dict[str, Any]:
         text = ""
     parts = re.split(r"^## ", text, flags=re.M)
     found = {part.split("\n", 1)[0].strip(): part.split("\n", 1)[1] if "\n" in part else "" for part in parts[1:]}
-    return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root), "declared": no_such(root)}
+    return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root), "declared": no_such(root), "company": targets.company_folder(root) is not None}
 
 
 def sample(root: Path) -> Dict[str, str]:

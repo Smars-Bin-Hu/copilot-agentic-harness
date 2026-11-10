@@ -7,6 +7,7 @@ import os
 import stat
 from pathlib import Path
 from typing import List, Tuple
+from unittest import mock
 
 from support import HarnessTestCase
 
@@ -61,6 +62,42 @@ class ToolFolders(LaunchEnvCase):
         connections.write_env(self.root, {"HARNESS_SERVER_DB_ACCOUNT": "me"})
         launchenv.save_paths(self.root, [str(self.tools)])
         self.assertEqual(connections.read_env(self.root)["HARNESS_SERVER_DB_ACCOUNT"], "me")
+
+
+class Programs(LaunchEnvCase):
+    """1.7.37: no more tool folders as a concept: a program that is not found gets "I installed it here"."""
+
+    def test_the_folder_must_hold_the_program_that_asked_for_it(self) -> None:
+        for bad, program in ((str(self.root / "nowhere"), "az"), (str(self.root / "tools"), "az"), (str(self.tools), "other"), ("relative", "az")):
+            with self.assertRaises(ValueError, msg=bad):
+                launchenv.add_folder(self.root, program, bad)
+        self.assertEqual(launchenv.settings(self.root)["paths"], [])
+        launchenv.add_folder(self.root, "az", ' "' + str(self.tools) + '" ')
+        launchenv.add_folder(self.root, "az", str(self.tools))
+        self.assertEqual(launchenv.settings(self.root)["paths"], [str(self.tools)], "once")
+
+    def test_the_rows_say_who_needs_each_program_and_carry_the_companys_hint_for_a_missing_one(self) -> None:
+        import json
+        import tempfile
+        from test_toolpacks import make
+
+        recipe = {"tool_folders": [{"label": "Azure CLI", "hint": "C:\\tools\\az\\bin", "program": "tracker-nowhere"}, {"label": "Old", "hint": "an old entry without a program"}]}
+        (self.root / launchenv.RECIPE).write_text(json.dumps(recipe), encoding="utf-8")
+        with tempfile.TemporaryDirectory() as outside:
+            from core import toolpacks
+
+            toolpacks.add(self.root, str(make(Path(outside) / "tracker", needs={"programs": ["tracker-nowhere"], "trust": []})))
+            shown = launchenv.state(self.root)
+        rows = {row["program"]: row for row in shown["programs"]}
+        self.assertEqual(list(rows)[0], "python")
+        self.assertTrue(rows["python"]["found"])
+        self.assertEqual((rows["tracker-nowhere"]["found"], rows["tracker-nowhere"]["hint"], rows["tracker-nowhere"]["needed_by"][0]["pack"]), (False, "C:\\tools\\az\\bin", "tracker"))
+        self.assertEqual([item["label"] for item in shown["recipe"]["tool_folders"]], ["Azure CLI", "Old"], "an entry without a program still works")
+        self.assertEqual(shown["recipe"]["tool_folders"][1].get("program"), None)
+
+    def test_a_program_on_the_path_shows_no_hint_and_a_bad_program_name_in_the_recipe_is_named(self) -> None:
+        self.assertTrue(any("program" in line for line in launchenv.recipe_errors({"tool_folders": [{"label": "x", "program": "a b!"}]})))
+        self.assertEqual(launchenv.recipe_errors({"tool_folders": [{"label": "x", "program": "az"}]}), [])
 
 
 class Bundle(LaunchEnvCase):
@@ -121,6 +158,58 @@ class Bundle(LaunchEnvCase):
         with self.assertRaises(ValueError):
             launchenv.make(self.root, "a b; rm", "", get_chain=self.chain([cert(9)]), verify=lambda *_: (True, ""))
 
+    def test_a_host_may_carry_its_port_and_the_chain_is_asked_for_that_port(self) -> None:
+        """1.7.38: the recipe's `host` can be `host:port`; Make used to reach port 443 only."""
+        self.assertEqual(launchenv.split_host("dev.example.org"), ("dev.example.org", 443))
+        self.assertEqual(launchenv.split_host(" dev.example.org:18443 "), ("dev.example.org", 18443))
+        for bad in ("a:0", "a:70000", "a:b", "a:1:2", ":8", "a b:9", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                launchenv.split_host(bad)
+        made = launchenv.make(self.root, "localhost:18443", "", get_chain=self.chain([cert(9), cert(5)]), verify=lambda *_: (True, ""))
+        self.assertEqual((self.asked, made["host"], launchenv.settings(self.root)["host"]), (("localhost:18443", ""), "localhost:18443", "localhost:18443"))
+        with self.assertRaises(ValueError):
+            launchenv.make(self.root, "localhost:99999", "", get_chain=self.chain([cert(9)]), verify=lambda *_: (True, ""))
+        argv: list = []
+
+        class Done:
+            stdout, stderr = "-----BEGIN CERTIFICATE-----\n" + base64.b64encode(bytes([4]) * 60).decode("ascii") + "\n-----END CERTIFICATE-----\nVerify return code: 0 (ok)\n", ""
+
+        def run(command: list, **_kw: object) -> Done:
+            argv.extend(command)
+            return Done()
+        with mock.patch.object(launchenv.shutil, "which", return_value="/usr/bin/openssl"):
+            launchenv.chain_openssl("localhost:18443", "", run)
+        self.assertEqual((argv[argv.index("-servername") + 1], argv[argv.index("-connect") + 1]), ("localhost", "localhost:18443"))
+        script: list = []
+        with self.assertRaises(ValueError):  # the made-up answer holds no TRUST line; the script it was given is what is looked at
+            launchenv.chain_windows("localhost:18443", "127.0.0.1:9000", lambda command, **_kw: script.append(command[-1]) or Done())
+        self.assertIn("$h = 'localhost'; $port = 18443;", script[0])
+        self.assertNotIn("__PORT__", script[0])
+        self.assertEqual(launchenv.recipe_errors({"ca_bundle": {"host": "localhost:18443", "proxy": "127.0.0.1:9000"}}), [])
+        self.assertTrue(launchenv.recipe_errors({"ca_bundle": {"host": "localhost:abc"}}))
+
+    def test_no_chain_because_nothing_answered_names_the_proxy_not_an_errno(self) -> None:
+        class Down:
+            stdout, stderr = "", "connect:errno=61\n"
+
+        with mock.patch.object(launchenv.shutil, "which", return_value="/usr/bin/openssl"):
+            with self.assertRaises(ValueError) as proxy:
+                launchenv.chain_openssl("h.example.org", "127.0.0.1:9009", lambda *a, **k: Down())
+            with self.assertRaises(ValueError) as host:
+                launchenv.chain_openssl("h.example.org", "", lambda *a, **k: Down())
+        self.assertIn("127.0.0.1:9009", str(proxy.exception))
+        self.assertNotIn("errno", str(proxy.exception))
+        self.assertIn("h.example.org", str(host.exception))
+        self.assertNotIn("9009", str(host.exception))
+
+        class Odd:
+            stdout, stderr = "", "something else broke\n"
+
+        with mock.patch.object(launchenv.shutil, "which", return_value="/usr/bin/openssl"):
+            with self.assertRaises(ValueError) as other:
+                launchenv.chain_openssl("h.example.org", "", lambda *a, **k: Odd())
+        self.assertIn("something else broke", str(other.exception), "a failure that is not a missing answer keeps its words")
+
     def test_proxy_addresses_and_pem_reading(self) -> None:
         self.assertEqual(launchenv.proxy_address("http://user@127.0.0.1:9000/"), "127.0.0.1:9000")
         self.assertEqual(launchenv.proxy_address("nonsense"), "")
@@ -140,7 +229,7 @@ class Bundle(LaunchEnvCase):
         blocks, trust = launchenv.chain_windows("h.example.org", "127.0.0.1:9000", run=lambda argv, **k: seen.append(argv) or Done())
         self.assertEqual((blocks, trust), ([cert(4)], "None"))
         script = seen[0][-1]
-        self.assertIn("$h = 'h.example.org'; $p = '127.0.0.1:9000'", script, "the values are in the script itself: -Command passes it no $args")
+        self.assertIn("$h = 'h.example.org'; $port = 443; $p = '127.0.0.1:9000'", script, "the values are in the script itself: -Command passes it no $args")
         self.assertEqual(seen[0][-2], "-Command")
 
         class Empty:
@@ -209,3 +298,84 @@ class WhatVsCodeGot(LaunchEnvCase):
         def broken(*a, **k):
             raise OSError("no pgrep")
         self.assertFalse(launchenv.vscode_running(run=broken, platform="darwin"))
+
+
+PS_LINE = ("/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US "
+           "TERM_PROGRAM=vscode PATH=/Users/me/tools/az/bin:/usr/bin:/Applications/Visual Studio Code.app/Contents/Resources/app/bin REQUESTS_CA_BUNDLE=/Users/me/Dev Folder/copy/.harness/certs/ca-bundle.pem HOME=/Users/me")
+
+
+class SettingsCarriedByVSCode(LaunchEnvCase):
+    """1.7.38, Q2: the board tells before any chat whether the VS Code that runs was started with this copy's settings."""
+
+    def settings_on(self) -> None:
+        launchenv.save_paths(self.root, [str(self.tools)])
+
+    def test_the_environment_in_a_ps_line_is_read_with_spaces_in_a_value_and_no_argument_taken_for_a_name(self) -> None:
+        found = launchenv.parse_ps_environ(PS_LINE)
+        self.assertEqual(found["PATH"], "/Users/me/tools/az/bin:/usr/bin:/Applications/Visual Studio Code.app/Contents/Resources/app/bin")
+        self.assertEqual(found["REQUESTS_CA_BUNDLE"], "/Users/me/Dev Folder/copy/.harness/certs/ca-bundle.pem")
+        self.assertEqual(found["TERM_PROGRAM"], "vscode")
+        self.assertNotIn("--type", found)
+        self.assertNotIn("type", found)
+        self.assertEqual(launchenv.parse_ps_environ(""), {})
+
+    def test_an_environment_is_read_by_ps_on_macos_by_proc_on_linux_and_never_on_windows(self) -> None:
+        done = mock.Mock(returncode=0, stdout=PS_LINE)
+        run = mock.Mock(return_value=done)
+        self.assertEqual(launchenv.host_environ(4711, "darwin", run)["TERM_PROGRAM"], "vscode")
+        self.assertEqual(run.call_args[0][0], ["ps", "eww", "-o", "command=", "-p", "4711"])
+        self.assertEqual(launchenv.host_environ(4711, "linux", read=lambda path: b"A=1\0PATH=/a:/b\0")["PATH"], "/a:/b")
+        self.assertIsNone(launchenv.host_environ(4711, "win32", run), "another process's memory is not read")
+        self.assertIsNone(launchenv.host_environ("x", "darwin", run))
+        self.assertIsNone(launchenv.host_environ(4711, "darwin", mock.Mock(return_value=mock.Mock(returncode=1, stdout=""))))
+        self.assertIsNone(launchenv.host_environ(4711, "linux", read=mock.Mock(side_effect=PermissionError)))
+
+    def test_how_long_a_process_ran_is_read_from_ps_elapsed_time(self) -> None:
+        self.assertEqual(launchenv._elapsed_seconds("08:47"), 527.0)  # noqa: SLF001
+        self.assertEqual(launchenv._elapsed_seconds("1:02:03"), 3723.0)  # noqa: SLF001
+        self.assertEqual(launchenv._elapsed_seconds("2-00:00:10"), 172810.0)  # noqa: SLF001
+        self.assertIsNone(launchenv._elapsed_seconds("nonsense"))  # noqa: SLF001
+        run = mock.Mock(return_value=mock.Mock(returncode=0, stdout="  01:40\n"))
+        self.assertEqual(launchenv.process_started(4711, "darwin", run, now=lambda: 1000.0), 900.0)
+
+    def test_a_copy_with_no_settings_accepts_any_vscode(self) -> None:
+        self.assertEqual(launchenv.needs(self.root), {"folders": [], "bundle": ""})
+        found = launchenv.carried(self.root, 4711, environ=lambda _pid: {"PATH": "/usr/bin"})
+        self.assertEqual((found["state"], found["missing"]), (launchenv.FREE, []))
+
+    def test_the_environment_of_the_agent_host_is_judged_by_the_words_of_the_hook(self) -> None:
+        self.settings_on()
+        lost = launchenv.carried(self.root, 4711, environ=lambda _pid: {"PATH": "/usr/bin"})
+        self.assertEqual((lost["state"], lost["by"], lost["missing"]), (launchenv.MISSING, "env", [f"PATH {self.tools}"]))
+        good = launchenv.carried(self.root, 4711, environ=lambda _pid: {"PATH": os.pathsep.join([str(self.tools), "/usr/bin"])})
+        self.assertEqual((good["state"], good["by"]), (launchenv.CARRIED, "env"))
+        self.assertEqual(launchenv.carried(self.root, None)["state"], launchenv.UNSEEN)  # no VS Code known: nothing is judged
+
+    def test_where_the_environment_cannot_be_read_the_start_of_the_board_and_the_birth_of_the_process_decide(self) -> None:
+        """Windows: a VS Code created after the board started it has the settings; one created before it does not; a VS Code the board did not start proves nothing."""
+        self.settings_on()
+        none = lambda _pid: None  # noqa: E731
+        born = lambda at: (lambda _pid: at)  # noqa: E731
+        self.assertEqual(launchenv.carried(self.root, 4711, none, born(1000.0))["state"], launchenv.UNSEEN, "never started by the board, no chat yet")
+        launchenv.mark_started(self.root)
+        mark = launchenv._stamp(launchenv.seen(self.root)["at"])  # noqa: SLF001
+        after = launchenv.carried(self.root, 4711, none, born(mark + 5))
+        self.assertEqual((after["state"], after["by"]), (launchenv.CARRIED, "board"))
+        within = launchenv.carried(self.root, 4711, none, born(mark - 1))  # created a moment before the mark: the board marks just before it asks VS Code to open
+        self.assertEqual(within["state"], launchenv.CARRIED)
+        before = launchenv.carried(self.root, 4711, none, born(mark - 3600))  # an older VS Code: the board's start did not make it
+        self.assertEqual((before["state"], before["by"]), (launchenv.MISSING, "board"))
+        self.assertEqual(launchenv.carried(self.root, 4711, none, none)["state"], launchenv.UNSEEN, "when it cannot be known when the process was created")
+
+    def test_a_chat_of_this_vscode_is_believed_and_one_of_an_older_vscode_is_not(self) -> None:
+        self.settings_on()
+        none = lambda _pid: None  # noqa: E731
+        found = launchenv.note_seen(self.root, {"PATH": "/usr/bin"})  # a hook: the chat's environment lacks the tool folder
+        at = launchenv._stamp(found["at"])  # noqa: SLF001
+        said = launchenv.carried(self.root, 4711, none, lambda _pid: at - 60)  # this VS Code started a minute before the chat
+        self.assertEqual((said["state"], said["by"], said["missing"]), (launchenv.MISSING, "hook", [f"PATH {self.tools}"]))
+        stale = launchenv.carried(self.root, 4711, none, lambda _pid: at + 60)  # this VS Code is newer than that report
+        self.assertEqual(stale["state"], launchenv.UNSEEN)
+        launchenv.note_seen(self.root, {"PATH": str(self.tools)})
+        good = launchenv.carried(self.root, 4711, none, lambda _pid: at - 60)
+        self.assertEqual((good["state"], good["by"]), (launchenv.CARRIED, "hook"))

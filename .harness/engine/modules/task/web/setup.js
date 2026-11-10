@@ -5,7 +5,7 @@ const SETUP = (function () {
   function mount(app, finished, onbusy) {  // `onbusy(true|false)`: the window around the form hides its Close while the work runs
     const POLL = 2000, SLOW = 8000;  // slow once the short command is found: only a change from a terminal is left to see
     const leave = finished || (() => location.assign("/"));
-    const st = {form: null, timer: 0, probe: 0, refused: [], rules: [], busy: false, saved: false, ready: false, mode: "none", root: "", rootFound: null, singles: [], broken: [], full: false, replace: false, kb: {here: false, domains: 0, prefix: ""}, stamp: "", opened: "", latest: null};
+    const st = {form: null, timer: 0, probe: 0, refused: [], rules: [], busy: false, saved: false, ready: false, mode: "none", root: "", rootFound: null, singles: [], broken: [], full: false, replace: false, kb: {here: false, domains: 0, prefix: ""}, stamp: "", opened: "", latest: null, tools: null, probePrefix: ""};
     const ask = (step, body) => SERVE.post("/api/setup", {step, ...(body || {})}).then((data) => data.result);
 
     const shortBox = h("section", {class: "su-card"});
@@ -18,13 +18,19 @@ const SETUP = (function () {
     const repos = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: t("setup.repos.ph")});
     const kbPath = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", hidden: ""});
     const kbNote = h("p", {class: "su-note"});
+    const kbDot = h("span", {class: "su-dot need"});  // the dot of the knowledge base row: in place, or the folder chosen just now reads well (1.7.38)
+    const kbInfo = h("div", {class: "su-kbinfo"});  // path, domains, domain skills, version of the knowledge base that is in place
+    const repoDot = h("span", {class: "su-dot need"});
     const kbParts = h("div", {class: "su-parts", hidden: ""});
+    const kbChanges = h("div", {class: "su-changes", hidden: ""});  // what an update from the folder would change, listed before the person ticks (Q5)
     const kbLearn = h("button", {type: "button", class: "su-link"}, t("setup.kb.learn"));
     kbLearn.addEventListener("click", () => DOCK.allSkills("kb"));
     const kbPick = h("button", {type: "button", class: "act"}, t("setup.browse"));
+    kbPick.hidden = true;
     kbPick.addEventListener("click", () => DOCK.chooseOnPage(kbPick.dataset.kind, kbPath.value.trim(), (path) => { kbPath.value = path; checkKb(); gate(); }));
     const kbReplaceBox = h("input", {type: "checkbox"});
-    const kbReplace = h("label", {class: "su-tick", hidden: ""}, kbReplaceBox, h("span", null, t("setup.kb.replace")));
+    const kbReplaceText = h("span", null, t("setup.kb.replace"));
+    const kbReplace = h("label", {class: "su-tick", hidden: ""}, kbReplaceBox, kbReplaceText);
     kbReplaceBox.addEventListener("change", () => { st.replace = kbReplaceBox.checked; gate(); });
     const prefix = h("input", {type: "text", class: "su-in su-short", maxlength: 31, autocomplete: "off", spellcheck: "false"});
     const install = h("input", {type: "text", class: "su-in su-mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph")});
@@ -56,6 +62,7 @@ const SETUP = (function () {
       if (st.root) parts.push(item(st.root, st.rootFound.n > 0, st.rootFound.n ? t("setup.repos.found", {n: st.rootFound.n, names: st.rootFound.names.join(", ")}) : st.rootFound.why, () => { st.root = ""; st.rootFound = null; keepRules((rule) => st.singles.some((path) => folder(path) === rule.repo)); }));
       st.singles.forEach((path) => { const ok = !st.broken.includes(path); parts.push(item(path, ok, t(ok ? "setup.repos.valid" : "setup.repos.invalid"), () => { st.singles = st.singles.filter((held) => held !== path); keepRules((rule) => rule.repo !== folder(path)); })); });
       repoList.replaceChildren(...parts);
+      repoDot.className = "su-dot " + (parts.length && parts.every((node) => !node.querySelector(".su-dot.bad")) ? "ok" : parts.length ? "bad" : "need");
     }
     function pickRepos(found) {
       const take = h("button", {type: "button", class: "act hot"}, t("setup.repos.take"));
@@ -125,6 +132,18 @@ const SETUP = (function () {
       chip.addEventListener("click", () => setMode(mode));
       return chip;
     });
+    const modeBox = h("div", {class: "chips su-modes"}, modes);
+    function paintKbInfo() {
+      kbInfo.hidden = st.mode !== "none";
+      modeBox.title = st.kb.here ? t("setup.kb.have.tip") : "";
+      if (st.mode !== "none") return;
+      const k = st.kb;
+      kbInfo.replaceChildren(...(k.here ? [h("code", {class: "su-kbpath", title: k.path}, k.path), h("span", null, t("setup.kb.info.domains", {n: k.domains})), h("span", null, t("setup.kb.info.dskills", {n: k.domain_skills || 0})), k.version ? h("span", {class: "su-soft"}, t("setup.kb.info.version", {version: k.version})) : null].filter(Boolean) : [h("span", {class: "su-off"}, t("setup.fact.notfound"))]));
+    }
+    function kbDotPaint() {
+      const ok = st.mode === "none" ? st.kb.here : Boolean(kbPath.value.trim()) && st.kbOk !== false;
+      kbDot.className = "su-dot " + (ok ? "ok" : "need");
+    }
     const setMode = (mode) => {
       st.mode = mode;
       modes.forEach((chip) => { const on = chip.dataset.mode === mode; chip.classList.toggle("on", on); chip.setAttribute("aria-pressed", on ? "true" : "false"); });
@@ -135,16 +154,48 @@ const SETUP = (function () {
       kbPick.dataset.kind = mode === "package" ? "file" : "folder";
       kbPath.placeholder = mode === "package" ? t("setup.kb.package.ph") : t("setup.kb.folder.ph");
       kbNote.className = "su-note";
+      st.probePrefix = "";
       paintParts(null);
-      kbNote.replaceChildren(...(mode !== "none" ? [] : st.kb.here ? [t("setup.kb.have", {n: st.kb.domains})] : [t("setup.kb.none.hint"), " ", kbLearn]));
+      kbNote.replaceChildren(...(mode !== "none" || st.kb.here ? [] : [t("setup.kb.none.line"), " ", kbLearn]));
+      paintKbInfo();
       st.full = false;
+      st.update = null;
       paintReplace();
+      paintChanges();
       if (mode !== "none" && kbPath.value.trim()) checkKb();
+      kbDotPaint();
       gate();
     };
     function paintReplace() {
       kbReplace.hidden = !st.full;
+      kbReplaceText.textContent = t(st.update && st.update.state === "behind" ? "setup.kb.update.tick" : "setup.kb.replace");  // a git update, or the old replace
       if (!st.full) { st.replace = false; kbReplaceBox.checked = false; }
+    }
+    // "Send to the folder" first asks (C13 FA-3): the folder that takes the commits, its branch, and the title of each commit. "Send" runs the engine's line in the Terminal window (the line itself is never shown here);
+    // the Terminal says how it ended, and the form looks again when it ended well.
+    function sendWindow(u) {
+      const info = u.send || {}, titles = info.subjects || [], n = info.ahead || u.ahead || titles.length;
+      const go = h("button", {type: "button", class: "act hot"}, t("setup.kb.update.send.go"));
+      const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+      const view = SERVE.dialog([h("h2", null, t("setup.kb.update.pull")), h("p", {class: "sub"}, t("setup.kb.update.send.about")),
+        h("dl", {class: "su-send-facts"}, h("dt", null, t("setup.kb.update.send.folder")), h("dd", null, h("code", null, info.folder || "-")), h("dt", null, t("setup.kb.update.send.branch")), h("dd", null, h("code", null, info.branch || u.branch || "-")),
+          h("dt", null, t(n === 1 ? "setup.kb.update.send.commits.one" : "setup.kb.update.send.commits", {n})), h("dd", null, h("ul", {class: "su-chg"}, titles.map((line) => h("li", null, line)), n > titles.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: n - titles.length})) : null))),
+        h("div", {class: "row"}, go, no)]);
+      no.addEventListener("click", view.close);
+      go.addEventListener("click", () => { view.close(); TERM.run(u.pull, checkKb); });
+      go.focus();
+    }
+    // The list of an update from a folder (Q5): the files it would add, change or remove, the first ones by name; for a copy that is ahead, the commits that stay.
+    const MARK = {add: "+", change: "~", remove: "\u2212"};
+    function paintChanges() {
+      const u = st.update, rows = u && u.state === "behind" ? u.changes || [] : [];
+      const subjects = u && u.state === "ahead" ? u.subjects || [] : [];
+      // The commits of this copy that the folder lacks (they stay): each title once, and a button that sends them to the folder in the Terminal window (the command is the engine's, never shown here).
+      const send = u && u.state === "ahead" && u.pull && typeof TERM !== "undefined" ? h("button", {type: "button", class: "act su-send", title: t("setup.kb.update.pull.tip")}, t("setup.kb.update.pull")) : null;
+      if (send) send.addEventListener("click", () => sendWindow(u));
+      kbChanges.hidden = !rows.length && !subjects.length && !send;
+      kbChanges.replaceChildren(...(rows.length ? [h("ul", {class: "su-chg"}, rows.map((row) => h("li", {class: row.change}, h("b", null, MARK[row.change] || "~"), " ", h("code", null, row.path))), u.total > rows.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.total - rows.length})) : null)] : []),
+        ...(subjects.length ? [h("ul", {class: "su-chg"}, subjects.map((line) => h("li", null, line)), u.ahead > subjects.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.ahead - subjects.length})) : null)] : []), ...(send ? [send] : []));  // never a bare null: replaceChildren writes it as the word "null" (C12 N3)
     }
     // The check of a chosen folder (`company.layout`): green for what is right, a warning with the place for the rest. It stops nothing, and it says what the states below will say.
     function paintParts(parts) {
@@ -157,44 +208,165 @@ const SETUP = (function () {
     function checkKb() {
       ask("probe", {kind: st.mode, path: kbPath.value}).then((found) => {
         kbNote.className = "su-note" + (found.full ? "" : !found.ok ? " bad" : found.why ? "" : " good");  // a knowledge base in place is a choice to make, not a fault
-        kbNote.textContent = !found.ok ? found.why : st.mode === "package" ? t("setup.kb.package.ok", {version: found.version, new: found.new, changed: found.changed, removed: found.removed}) + (found.local ? " " + t("setup.kb.package.local", {n: found.local}) : "") : found.why || t("setup.kb.folder.ok");
+        kbNote.textContent = !found.ok ? plainWords(found.why) : st.mode === "package" ? t("setup.kb.package.ok", {version: found.version, new: found.new, changed: found.changed, removed: found.removed}) + (found.local ? " " + t("setup.kb.package.local", {n: found.local}) : "") : plainWords(found.why || t("setup.kb.folder.ok"));
         st.full = Boolean(found.full);
+        st.update = st.mode === "folder" ? found.update || null : null;
+        st.kbOk = Boolean(found.ok);
         paintParts(st.mode === "folder" && kbPath.value.trim() ? found.parts || [] : null);
         paintReplace();
+        paintChanges();
         if (found.prefix && !prefix.value) prefix.value = found.prefix;
+        st.probePrefix = found.prefix || "";
         gate();
       }, () => { paintParts(null); });
     }
     const go = h("button", {type: "button", class: "act hot big"}, t(finished ? "setup.save" : "setup.finish"));
     const goNote = h("span", {class: "su-note"});
     function gate() {  // what the server would refuse for being empty, said before the button is pressed
-      const lacking = !name.value.trim() ? t("setup.name.need", {limit: 100}) : st.mode !== "none" && !kbPath.value.trim() ? t("setup.kb.path") : st.full && !st.replace ? t("setup.kb.replace.need") : !st.ready ? t("setup.finish.first") : "";
+      const lacking = !name.value.trim() ? t("setup.name.need", {limit: 100}) : st.mode !== "none" && !kbPath.value.trim() ? t("setup.kb.path") : st.update && ["ahead", "unrelated", "dirty", "error"].includes(st.update.state) ? t("setup.kb.update.stop") : st.full && !st.replace ? t(st.update && st.update.state === "behind" ? "setup.kb.update.need" : "setup.kb.replace.need") : !st.ready ? t("setup.finish.first") : "";
       go.disabled = st.busy || st.saved || Boolean(lacking);
-      goNote.textContent = st.busy ? t("setup.finish.working") : st.saved ? "" : lacking || t("setup.finish.note");
+      goNote.textContent = st.busy ? t("setup.finish.working") : st.saved ? "" : lacking;
       if (onbusy) onbusy(st.busy);
     }
     const values = () => ({name: name.value, language: st.lang, repos_root: st.root, singles: st.singles, kb_mode: st.mode, kb_path: kbPath.value, kb_replace: st.replace, skill_prefix: prefix.value, install_command: install.value, refused: st.refused, rules: st.rules});
     const chips = ["en", "zh"].map((lang) => {
       const chip = h("button", {type: "button", class: "chip", "data-lang": lang}, t("desk.send.lang." + lang));
-      chip.addEventListener("click", () => setLang(lang));
+      chip.addEventListener("click", () => chooseLang(lang));
       return chip;
     });
-    const langNote = h("p", {class: "su-note", hidden: ""}, t("setup.language.forced"));
+    const langNote = h("span", {class: "sv-info", tabindex: "0", hidden: "", title: t("setup.language.forced")}, "\u24d8");  // only when HARNESS_LANGUAGE is set in the environment the board runs in
     const setLang = (lang) => { st.lang = lang; chips.forEach((chip) => { const on = chip.dataset.lang === lang; chip.classList.toggle("on", on); chip.setAttribute("aria-pressed", on ? "true" : "false"); }); };
+    // The form is in the language the person chose, at once (C12 N10): the language is written now (the call the settings panel makes), the page loads again in it, and what was typed is put back.
+    const KEEP = "harness.setup.keep";
+    function chooseLang(lang) {
+      const was = st.lang;
+      setLang(lang);
+      if (lang === was || lang === document.documentElement.lang || !st.form) return;
+      try { sessionStorage.setItem(KEEP, JSON.stringify(values())); if (finished) sessionStorage.setItem("harness.reopen", "setup"); } catch (error) { /* the form then starts again from what is saved */ }  // in a window over the board: dock.js opens it again
+      chips.forEach((chip) => { chip.disabled = true; });
+      SERVE.post("/api/language", {language: lang}, true).then(() => { chips.forEach((chip) => { chip.disabled = false; }); }, (error) => {  // the page is loading again when it worked
+        try { sessionStorage.removeItem(KEEP); sessionStorage.removeItem("harness.reopen"); } catch (nothing) { /* nothing to remove */ }
+        chips.forEach((chip) => { chip.disabled = false; });
+        setLang(was);
+        said.replaceChildren(...SERVE.reasons(error.message || error));
+      });
+    }
+    function keepBack() {  // after that reload: what was typed in the form
+      let kept = null;
+      try { kept = JSON.parse(sessionStorage.getItem(KEEP) || "null"); sessionStorage.removeItem(KEEP); } catch (error) { kept = null; }
+      if (!kept || typeof kept !== "object") return;
+      name.value = String(kept.name || name.value);
+      st.root = typeof kept.repos_root === "string" ? kept.repos_root : st.root;
+      st.singles = Array.isArray(kept.singles) ? kept.singles : st.singles;
+      st.refused = Array.isArray(kept.refused) ? kept.refused : st.refused;
+      st.rules = Array.isArray(kept.rules) ? kept.rules : st.rules;
+      paintRepos();
+      paintRules();
+      if (["none", "package", "folder"].includes(kept.kb_mode) && kept.kb_mode !== "none") {
+        setMode(kept.kb_mode);
+        kbPath.value = String(kept.kb_path || "");
+        if (kbPath.value.trim()) checkKb();
+      }
+      prefix.value = String(kept.skill_prefix || prefix.value);
+      install.value = String(kept.install_command || install.value);
+      more.open = more.open || Boolean(install.value || st.rules.length);
+      gate();
+    }
     const star = () => h("b", {class: "su-star", "aria-hidden": "true"}, " *");
     const kbStar = star();
     kbStar.hidden = true;
-    const companyState = h("p", {class: "su-state"});
-    const standardsState = h("p", {class: "su-state"});
     const needs = (key) => st.guide.missing.includes(key) || (key === "kb" && st.guide.missing.includes("domains"));
-    function paintStates() {
-      if (!st.guide) return;
-      const state = (node, need, text) => node.replaceChildren(h("span", {class: "su-dot " + (need ? "need" : "ok")}), text);
-      const has = (key) => st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now speaks for itself, before it is copied
+    // The facts (1.7.36): one row each, a dot, a name, one short fact; the details are on hover. `text` is a string, a node (words with parts coloured), or a list of names with a dot each.
+    // `go` = [window, part]: the name opens that window of Tools there; `open` = the same as a button at the end of the row (1.7.38: the packs and the connections).
+    const NAMES = 6;  // names shown on a row; the rest is "+N", all of them on hover
+    const dotOf = (kind) => h("span", {class: "su-dot " + kind});
+    const fact = (label, kind, text, tip, help, go, open) => {
+      let key = label;
+      if (go) { key = h("button", {type: "button", class: "su-fk-btn", title: t("setup.fact.open", {where: label})}, label); key.addEventListener("click", () => TOOLS.open(go[0], loadTools, go[1])); }
+      let end = null;
+      if (open) { end = h("button", {type: "button", class: "act su-open su-fact-open"}, t("tools.open")); end.addEventListener("click", () => TOOLS.open(open[0], loadTools, open[1])); }
+      const shape = Array.isArray(text) ? " su-names" : typeof text === "string" ? " su-text" : " su-rich";
+      return h("div", {class: "su-fact", "data-kind": kind, title: tip || ""}, dotOf(kind), h("b", {class: "su-fk"}, key, help ? " " : null, help ? question(help) : null), h("span", {class: "su-fv" + shape}, text), end);
+    };
+    const names = (items) => {  // [{name, kind, tip}] -> a name with a dot each; long lists are cut with "+N"
+      const shown = items.slice(0, NAMES).map((item) => h("span", {class: "su-nm", title: item.tip || ""}, dotOf(item.kind), item.name));
+      return items.length > NAMES ? [...shown, h("span", {class: "su-more-n", title: items.slice(NAMES).map((item) => item.name).join(", ")}, "+" + (items.length - NAMES))] : shown;
+    };
+    const part = (text, kind) => h("span", {class: kind ? "su-" + kind : null}, text);  // a piece of a row's words: "off" yellow, "soft" grey
+    const openTab = (tab) => {  // the one Open of a card, in its title row
+      const button = h("button", {type: "button", class: "act su-open"}, t("tools.open"));
+      button.addEventListener("click", () => TOOLS.open(tab, loadTools));
+      return button;
+    };
+    const files = (n) => t(n === 1 ? "setup.fact.file.one" : "setup.fact.files", {n});
+    const factsBox = h("div", {class: "su-facts"});
+    const computerBox = h("div", {class: "su-facts"});
+    const lookNote = h("span", {class: "su-note"});
+    function paintFacts() {
+      if (!st.guide || !st.latest) return;
+      const c = st.latest.company || {};
+      const has = (key) => st.parts && st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now speaks for itself, before it is copied
       const missing = (key) => (st.parts ? !has(key) : needs(key));
-      state(companyState, missing("instructions"), t(missing("instructions") ? "setup.company.need" : "setup.company.ok"));
-      state(standardsState, missing("standards"), t(missing("standards") ? "setup.standards.need" : st.parts || !st.guide.declared.includes("standards") ? "setup.standards.ok" : "setup.standards.none"));
+      const rows = [], mine = [];
+      let look = 0;  // rows to look at for company tasks: yellow ones, with a knowledge base in place
+      const add = (list, node, kind) => { list.push(node); if (kind === "need") look++; };
+      const inCopy = st.guide.company && !st.parts;  // counts are of the company folder that is here, not of one just chosen
+      const lacking = missing("instructions");
+      const partial = lacking && !st.parts && st.guide.company;  // the folder is there but lacks the one file: say that, not "not found" (1.7.34)
+      // Only the file the engine uses counts (1.7.38), as on the Enter screen: the others are told as "not used", their names on hover.
+      const counted = (n, unused) => (!inCopy || !n ? t("setup.fact.found") : h("span", null, files(n), (unused || []).length ? part(" \u00b7 " + t("setup.fact.skipped", {n: unused.length}), "soft") : null));
+      const unusedTip = (unused, key, used) => ((unused || []).length ? " " + t(key, {names: unused.join(", "), used}) : "");
+      add(rows, fact(t("setup.fact.company"), lacking ? "need" : "ok", lacking ? t(partial ? "setup.fact.noinstr" : "setup.fact.notfound") : counted(c.instructions_n, c.instructions_unused), t(lacking ? (partial ? "setup.company.partial" : "setup.company.need") : "setup.company.ok") + (lacking || !inCopy ? "" : unusedTip(c.instructions_unused, "setup.fact.skipped.instr", "knowledgebase.instructions.md")), "instructions"), lacking ? "need" : "ok");
+      const skills = c.skills || {n: 0, off: []};
+      const noSkills = st.parts ? !has("skills") : !inCopy || !skills.n;
+      const off = inCopy ? skills.off || [] : [];
+      const skillKind = noSkills || off.length ? "need" : "ok";
+      add(rows, fact(t("setup.skills"), skillKind, noSkills ? t("setup.fact.notfound") : st.parts ? t("setup.fact.found") : h("span", null, String(skills.n), off.length ? part(" \u00b7 " + t("setup.fact.skills.off", {n: off.length, names: off.slice(0, 3).join(", ") + (off.length > 3 ? ", \u2026" : "")}), "off") : null),
+        off.length ? off.join("\n") : t(noSkills ? "setup.fact.skills.none.tip" : "setup.fact.skills.ok.tip"), "skills"), skillKind);
+      const own = st.probePrefix || (c.prefix && c.prefix.kb) || "";  // the knowledge base names it: a fact, no box. It names none: the box (the override keeps working)
+      const conflict = !st.probePrefix && c.prefix && c.prefix.conflict;
+      const showBox = !own && (st.kb.here || st.mode !== "none");  // no knowledge base at all: a yellow "not found" (1.7.38)
+      prefixRow.hidden = !showBox;
+      if (own) add(rows, fact(t("setup.prefix"), conflict ? "need" : "ok", own, conflict || t("setup.fact.prefix.tip"), "skills"), conflict ? "need" : "ok");
+      else if (showBox) rows.push(prefixRow);
+      else if (c.prefix && c.prefix.effective) add(rows, fact(t("setup.prefix"), "ok", c.prefix.effective, t("setup.fact.prefix.tip"), "skills"), "ok");  // no knowledge base, but this copy names one (user.override.json): say it, as the Enter screen does
+      else add(rows, fact(t("setup.prefix"), "need", t("setup.fact.notfound"), t("setup.fact.prefix.none.tip"), "skills"), "need");
+      const standard = missing("standards");
+      const said = !st.parts && st.guide.declared.includes("standards");
+      add(rows, fact(t("setup.standards"), standard ? "need" : said ? "none" : "ok", standard ? t("setup.fact.notfound") : said ? t("setup.fact.nonesaid") : counted(c.standards_n, c.standards_unused), t(standard ? "setup.standards.need" : said ? "setup.standards.none" : "setup.standards.ok") + (standard || said || !inCopy ? "" : unusedTip(c.standards_unused, "setup.fact.skipped.stds", "code-standards.md")), "standards"), standard ? "need" : "ok");
+      const tools = st.tools || {};
+      const packs = [...(c.packs || []).map((name) => ({name, from: "harness"})), ...(c.own_packs || []).map((name) => ({name, from: "company"}))];
+      const ready = new Map(((tools.packs || {}).names || []).map((item) => [item.name, item.ok]));
+      const packKinds = packs.map((item) => !ready.has(item.name) ? "none" : ready.get(item.name) ? "ok" : "need");
+      const packKind = !packs.length || packKinds.includes("need") ? "need" : "ok";
+      add(rows, fact(t("setup.toolpacks"), packKind, packs.length ? [...names(packs.map((item, index) => ({name: item.name, kind: packKinds[index], tip: ready.has(item.name) ? t(ready.get(item.name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))), packs.some((item) => item.from === "harness") ? part(packs.every((item) => item.from === "harness") ? t("setup.fact.packs.harness") : t("setup.fact.packs.mixed", {harness: packs.filter((item) => item.from === "harness").length, own: packs.filter((item) => item.from !== "harness").length}), "soft") : null].filter(Boolean)
+        : h("span", null, part(t("setup.fact.packs.none"), "off"), part(" \u00b7 " + t("setup.fact.packs.picks"), "soft")), packs.map((item) => item.name).join(", ") || t("setup.fact.packs.tip"), "", ["packs", ""], ["packs", ""]), packKind);
+      const conns = tools.conns ? tools.conns.rows : (c.connections || []).map((name) => ({alias: name, saved: false, account: ""}));
+      const offConns = tools.conns ? tools.conns.off || [] : [];  // their tool pack is off: not counted
+      const todo = conns.filter((row) => !row.saved).length, failed = conns.filter((row) => row.failed).length;  // failed: kept, and the last check or Test did not pass
+      const connKind = !conns.length || todo || failed ? "need" : "ok";
+      add(rows, fact(t("connections.title"), connKind, conns.length ? [...names(conns.map((row) => ({name: row.alias, kind: row.failed ? "need" : row.saved ? "ok" : "ring", tip: row.failed ? t("setup.fact.signin.failed", {account: row.account || "-"}) : row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")}))),
+        part([todo ? t("setup.fact.conns.todo", {n: todo}) : failed ? "" : t("setup.fact.conns.all"), failed ? t("setup.fact.conns.failed", {n: failed}) : ""].filter(Boolean).join(" \u00b7 "), todo || failed ? "off" : "soft")]
+        : part(t("setup.fact.conns.none"), "off"), [conns.map((row) => row.alias).join(", ") || t("setup.fact.conns.tip"), offConns.length ? t(offConns.length === 1 ? "setup.fact.conns.off.one" : "setup.fact.conns.off", {n: offConns.length, names: offConns.slice(0, 4).join(", ") + (offConns.length > 4 ? " +" + (offConns.length - 4) : "")}) : ""].filter(Boolean).join("\n"), "", ["connections", ""], ["connections", ""]), connKind);
+      factsBox.replaceChildren(...rows);
+      // Local
+      const pc = tools.pc;
+      if (pc) {
+        const lackingProg = pc.programs.filter((row) => !row.found).map((row) => row.program);
+        const progKind = lackingProg.length ? "need" : "ok";
+        add(mine, fact(t("machine.prog.title"), progKind, [...names(pc.programs.map((row) => ({name: row.found ? row.program : row.program + " \u00b7 " + t("machine.prog.missing"), kind: row.found ? "ok" : "need", tip: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}))), pc.programs.length === 1 ? part(t("setup.fact.programs.hint"), "soft") : null].filter(Boolean),
+          lackingProg.length ? t("machine.prog.lacking", {programs: lackingProg.join(", ")}) : t("machine.prog.tip"), "", ["local", "programs"]), progKind);
+        const netKind = pc.certs ? "ok" : pc.company_proxy ? "need" : "ring";
+        add(mine, fact(t("machine.net.title"), netKind, pc.certs ? [t(pc.certs === 1 ? "setup.fact.ca.n.one" : "setup.fact.ca.n", {n: pc.certs}), pc.proxy ? t("setup.fact.net.proxy", {proxy: pc.proxy}) : ""].filter(Boolean).join(" \u00b7 ") : h("span", null, part(t("machine.ca.none.long"), pc.company_proxy ? "off" : null), part(" \u00b7 " + t(pc.company_proxy ? "setup.fact.ca.need.company" : "setup.fact.ca.need.maybe"), "soft")),
+          pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip"), "", ["local", "network"]), netKind);
+        mine.push(fact("MCP", pc.mcp ? "ok" : "ring", t(pc.mcp ? "setup.fact.mcp.on" : "setup.fact.mcp.off"), t("machine.mcp.tip"), "", ["local", "mcp"]));
+      }
+      computerBox.replaceChildren(...mine);
+      lookNote.textContent = st.kb.here && look ? t("setup.look.n", {n: look}) : "";
+      kbDotPaint();
     }
+    const paintStates = paintFacts;
+    function loadTools() { if (typeof TOOLS === "undefined") return Promise.resolve(); return TOOLS.facts().then((found) => { st.tools = found; paintFacts(); }); }
     function loadGuide() {
       return ask("guide").then((found) => { st.guide = found; paintStates(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message || error)); });
     }
@@ -214,14 +386,20 @@ const SETUP = (function () {
         if (found.why) parts.push(h("p", {class: "su-note bad"}, found.why));
         if (found.output) {
           const lines = found.output.split("\n");
-          const size = found.ok ? lines.findIndex((line) => !/[\u2500-\u259f]/.test(line)) : 0;  // the drawn letters come first
-          parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, size > 0 ? h("span", {class: "su-art"}, lines.slice(0, size).join("\n")) : null, lines.slice(Math.max(size, 0)).join("\n")));
+          const size = found.ok ? lines.findIndex((line) => !/[\u2500-\u259f]/.test(line)) : 0;  // the drawn letters come first; they are left out (1.7.38): they never drew well in a box, and the proof is the words under them
+          parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, lines.slice(Math.max(size, 0)).join("\n").replace(/^\n+/, "")));
         }
         if (found.python) parts.push(h("p", {class: "su-warn"}, found.python));
         testOut.replaceChildren(...parts);
       }, (error) => { button.disabled = false; testOut.replaceChildren(h("p", {class: "su-note bad"}, error.message || String(error))); });
     }
 
+    // This browser is not paired (or the board did not answer): the first card says so, instead of staying an empty box (1.7.38). The poll goes on: pairing in another tab shows the real card at once.
+    function paintUnpaired(error) {
+      st.shortKey = "";
+      const unpaired = Boolean(error && error.data && error.data.unpaired);
+      shortBox.replaceChildren(h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "1"), h("h2", null, t("setup.short.title"))), h("p", {class: "su-note bad"}, t(unpaired ? "setup.short.unpaired" : "setup.short.nolink")), h("p", {class: "su-note"}, (error && error.message) || ""));
+    }
     function paintShort(found) {
       const key = JSON.stringify([found.short, found.reopen]);
       if (key === st.shortKey) return;  // the poll must not take away the button the person is about to press
@@ -240,6 +418,7 @@ const SETUP = (function () {
         parts.push(h("p", {class: "su-note"}, t("setup.short.do")), h("div", {class: "su-cmd"}, h("code", null, found.short.command), copy), h("div", {class: "su-end"}, run), out);
       } else {
         if (found.reopen) parts.push(h("p", {class: "su-warn"}, t("setup.short.reopen")));
+        parts.push(h("p", {class: "su-note"}, t("setup.short.where")));  // the path above may be another copy's: it runs the copy of the folder you are in (1.7.38)
         const test = h("button", {type: "button", class: "act"}, t("setup.short.test"));
         test.addEventListener("click", () => testShort(test));
         parts.push(h("div", {class: "su-end"}, test, h("code", {class: "su-note"}, "harness --version")), testOut);
@@ -276,9 +455,15 @@ const SETUP = (function () {
     }
     function paint(found) {
       paintShort(found);
-      if (!st.form) fill(found);
+      if (!st.form) { fill(found); keepBack(); }
       app.classList.remove("su-loading");
+      if (!st.scrolled) {  // the Enter screen sent the person to the section that is missing (1.7.36): ?sec=you|company|computer
+        st.scrolled = true;
+        const want = new URLSearchParams(location.search).get("sec"), target = want && app.querySelector('[data-sec="' + want.replace(/[^a-z]/g, "") + '"]');
+        if (target) setTimeout(() => target.scrollIntoView({block: "start"}), 0);
+      }
       st.latest = found;
+      paintFacts();
       changed.hidden = !found.stamp || found.stamp === st.stamp || st.busy || st.saved;
       broken.textContent = found.problem;  // a poll tells it too: the file can break while the form is open
       broken.hidden = !found.problem;
@@ -289,7 +474,7 @@ const SETUP = (function () {
     function load() {
       clearTimeout(st.timer);
       if (!app.isConnected) return Promise.resolve();
-      return ask("state").then(paint, (error) => { app.classList.remove("su-loading"); said.replaceChildren(...SERVE.reasons(error.message || error)); }).then(() => { if (!document.hidden) st.timer = setTimeout(load, st.ready ? SLOW : POLL); else st.timer = 0; });
+      return ask("state").then(paint, (error) => { app.classList.remove("su-loading"); if (!st.shortKey) paintUnpaired(error); said.replaceChildren(...SERVE.reasons(error.message || error)); }).then(() => { if (!document.hidden) st.timer = setTimeout(load, st.ready ? SLOW : POLL); else st.timer = 0; });
     }
 
     // While the work runs: a spinner, a line that says do not close, and the steps done. At the end: the result, or the reason it stopped (1.7.19).
@@ -305,6 +490,7 @@ const SETUP = (function () {
     function follow() {
       ask("job").then((found) => {
         paintLines(found);
+        if (found.lines.length !== st.seenLines) { st.seenLines = found.lines.length; loadTools(); }  // a step ended: the packs and connections it brought show now, not at the end (1.7.38)
         if (found.running) { setTimeout(follow, 700); return; }
         st.busy = false;
         go.textContent = t(found.done ? (finished ? "setup.save" : "setup.finish") : "setup.run.again");  // after a stop, the same button runs it again
@@ -312,13 +498,14 @@ const SETUP = (function () {
         st.saved = found.done;
         gate();
         if (!found.done) return;
+        loadTools();
         st.parts = null;  // what the folder had is now copied: the states below follow the copy itself, read again (1.7.22; "Not found yet" stayed after the copy)
         loadGuide();
         leave();
       }, (error) => { st.busy = false; gate(); said.replaceChildren(...SERVE.reasons(error.message || error)); });
     }
     go.addEventListener("click", () => {
-      st.busy = true;
+      st.busy = st.touched = true;
       gate();
       said.replaceChildren();
       ask("act", {...values(), stamp: st.stamp}).then(follow,
@@ -403,7 +590,7 @@ const SETUP = (function () {
       });
     }
     name.addEventListener("input", gate);
-    kbPath.addEventListener("input", () => { st.full = false; paintReplace(); gate(); clearTimeout(st.probe); st.probe = setTimeout(checkKb, 400); });
+    kbPath.addEventListener("input", () => { st.full = false; st.update = null; paintReplace(); paintChanges(); gate(); clearTimeout(st.probe); st.probe = setTimeout(checkKb, 400); });
     document.addEventListener("visibilitychange", () => { if (!document.hidden && !st.timer && app.isConnected) load(); });
 
     const olderLink = h("button", {type: "button", class: "su-link"}, t("setup.older.title"));
@@ -455,17 +642,25 @@ const SETUP = (function () {
       show(st.guide.sections.find((part) => part.key === key) || st.guide.sections[0]);
     }
     loadGuide();
-    // Tools (1.7.17): one group, a line each for Tool packs, Connections and This computer; the work in one window with a tab each (tools.js).
-    const toolsGroup = typeof TOOLS === "undefined" ? null : TOOLS.group();
+    loadTools();
+    const prefixRow = row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint")));  // only when the knowledge base names none (1.7.36)
+    // The knowledge base is the first fact of card 3 and shaped like the others: a dot, its name, and what it says (1.7.38); the chips choose where a new one comes from.
+    const kbRow = h("div", {class: "su-fact su-kbrow"}, kbDot, h("b", {class: "su-fk"}, t("setup.kb"), kbStar, " ", question("kb")), h("div", {class: "su-fv su-kbv"}, modeBox, h("div", {class: "su-line"}, kbPath, kbPick), kbInfo, kbNote, kbChanges, kbParts, kbReplace));
+    const repoRow = h("div", {class: "su-fact su-repos"}, repoDot, h("b", {class: "su-fk"}, t("setup.repos"), " ", question("repos")), h("div", {class: "su-fv su-repov"}, h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))));
+    const card = (key, num, head, ...nodes) => h("section", {class: "su-card", "data-sec": key}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, num), h("h2", null, t("setup.sec." + key), " ", h("span", {class: "sv-info", tabindex: "0", title: t("setup.sec." + key + ".tip")}, "\u24d8")), head), ...nodes);  // four cards of one rank (1.7.38)
     const more = h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row([t("setup.install"), question("python")], install, h("p", {class: "su-note"}, t("setup.install.example"))), row([t("setup.refused"), question("repos")], h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint"))));
     app.classList.add("su-loading");  // an empty form that jumps when its data comes is worse than a moment of nothing
-    app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t(finished ? "setup.lead.again" : "setup.lead"), " ", olderLink), shortBox,
-      h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
-        changed, broken, row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips), langNote), row([t("setup.repos"), question("repos")], h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),
-        row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote, kbParts, kbReplace), row([t("setup.company"), question("instructions")], companyState), toolsGroup, row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))), row([t("setup.standards"), question("standards")], standardsState),
-        more, h("div", {class: "su-end"}, go, goNote), said)));
+    const finishTip = h("span", {class: "sv-info", tabindex: "0", title: t("setup.finish.note")}, "\u24d8");
+    app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t(finished ? "setup.lead.again" : "setup.lead"), " ", olderLink), shortBox, changed, broken,
+      card("you", "2", null, row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "su-line"}, h("span", {class: "chips su-modes"}, chips), langNote))),
+      card("company", "3", h("span", {class: "su-tag"}, t("setup.optional")), kbRow, factsBox, repoRow),
+      card("computer", "4", openTab("local"), computerBox, more),
+      h("div", {class: "su-end"}, go, finishTip, goNote, lookNote), said));
     gate();
     load();
+    // Finish writes the language first and goes on for a while. A reload in the middle (the page asks to stay, but a reload by hand or a second tab happens) would lose the work it shows: the page that finds it running goes on showing it (1.7.38).
+    SERVE.stay(() => st.touched && app.isConnected);
+    ask("job").then((found) => { if (found.running && !st.busy) { st.busy = st.touched = true; gate(); follow(); } }, () => {});
     return {busy: () => st.busy, dirty: () => Boolean(st.form) && !st.saved && JSON.stringify(values()) !== st.opened};
   }
   if (DATA.getReady) {

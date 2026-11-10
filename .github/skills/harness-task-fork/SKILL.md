@@ -29,7 +29,7 @@ specificTo: generic
    | rca → dev, design → dev | `RCA.md` or the design, `REQ/` (the user's documents) |
 
 4. Write the new task's `REQ.md` from those files and from what the user asked now. It needs the user's confirmation like any requirement: do not fill in the confirmation line.
-5. Go on as `harness-my-task` says for the new kind (plan, test guide, and so on). At the end of this reply, ask whether to close the old task, if it is open.
+5. Go on as `harness-my-task` says for the new kind (plan, test guide, and so on). The old task stays as it is: do not ask whether to close it (the user decides on the board, [how a task ends](../harness-my-task/SKILL.md)).
 
 ## Gotchas
 

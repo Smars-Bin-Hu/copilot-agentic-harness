@@ -62,6 +62,7 @@
 .tk-wait{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
 .tk-wait>.card{margin:0}
 .tk-need{padding:12px 14px;border:1px solid var(--line);border-radius:12px}
+.tk-need.moved{border-style:dashed}  /* a held call the agent went on without (1.7.38): not a wait, so no orange edge */
 .tk-need.strong{border-color:var(--hot-line);border-left:3px solid var(--hot-dot);background:var(--hot-bg)}
 .tk-need-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 10px;margin-bottom:6px;min-width:0}
 .tk-need-h h2{margin:0;font-size:14.5px;min-width:0;overflow-wrap:anywhere}
@@ -106,8 +107,6 @@
 .tk-foot footer{margin-top:14px}
 
 /* ---------- the cards over the stage strip and the context bar ---------- */
-.st-card{position:fixed;z-index:175;left:0;top:0;min-width:240px;max-width:min(340px,calc(100vw - 16px));box-sizing:border-box;padding:10px 12px;background:var(--pop);color:var(--ink);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);font-size:12.5px;line-height:1.45;opacity:0;visibility:hidden;transition:opacity .12s}
-.st-card.on{opacity:1;visibility:visible}
 .st-card .st-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .st-card .tk-cx-h{margin-top:12px}
 .st-card .sub{margin-top:6px;overflow-wrap:anywhere}
@@ -167,19 +166,27 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 
 @media (max-width:1100px){.tk-stage{width:100px}.tk-name{max-width:30ch}}
 @media (max-width:900px){.tk-head{flex-wrap:wrap;padding-right:96px}.tk-name{flex:1 1 40%}.tk-sp{display:none}}  /* the search pill floats over the right end */
-@media (max-width:900px){.rv-name{display:none}}
+@media (max-width:900px) and (min-width:641px){.rv-name{display:none}}  /* below 640 the line wraps, and the names of the two buttons show: a button that says only `off` or `none` says nothing (1.7.38, C13 FR 14) */
 @media (max-width:640px){.tk-info{flex-wrap:wrap}.tk-info-l{flex-basis:100%;flex-wrap:wrap}.rv-pop{right:auto;left:0}}
 @media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}
-/* "Open to the agent" (1.7.6): the environment chips in the pop of the head pill. An open one is green; one no system reaches is dim; prod is struck through */
-.rv-pop .env-chips .chip.env.on{border-color:var(--good-line);background:var(--good-bg);color:var(--good)}
-.rv-pop .env-chips .chip.env[disabled]{opacity:.45;cursor:not-allowed}
-.rv-pop .env-chips .chip.env.never{opacity:.45;cursor:not-allowed;text-decoration:line-through}
+/* "Open to the agent" (1.7.38): the pop of the head pill lists what is open in this task, one row each with a button that closes it */
+.rv-pop .open-list{display:flex;flex-direction:column;gap:6px;margin:8px 0;max-height:40vh;overflow-y:auto}
+.rv-pop .open-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:6px 8px;border:1px solid var(--good-line);background:var(--good-bg);border-radius:8px}
+.rv-pop .open-row b{overflow-wrap:anywhere;min-width:0}.rv-pop .open-row .sub{flex:1 1 12em;min-width:0}
+.tk-call-go .tk-open{max-width:100%;overflow-wrap:anywhere;white-space:normal;text-align:left}
 /* a call held in the outbox (1.7.7): the facts in one line, the command's first words, the code on the card; the window lays the command out and scrolls both ways */
 .tk-fact .unnamed .why{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:var(--approval);color:#fff;font-size:10px;font-weight:700;cursor:help}
 .tk-call-facts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;margin:4px 0 8px}
 .tk-fact{display:inline-flex;align-items:center;gap:6px;min-width:0}.tk-fact .k{color:var(--soft);font-size:12px}.tk-fact code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--track);padding:1px 6px;border-radius:5px;max-width:22em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-cmd-peek{display:flex;align-items:center;gap:8px;min-width:0;margin:0 0 8px}.tk-cmd-peek code{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--soft)}
 .tk-call-go{flex-wrap:wrap;gap:8px}.tk-code-in{display:inline-flex;align-items:center;gap:8px}.tk-code-in input.code{width:11ch;font-family:ui-monospace,Menlo,monospace;letter-spacing:2px;text-transform:uppercase}.tk-code-in input.code::placeholder{text-transform:none;letter-spacing:0;font-family:inherit}
+/* Dismiss with a reason (1.7.38): a row of reasons under the buttons; the two that take a line show a box */
+.tk-reasons{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;flex:1 1 100%;padding-top:6px;border-top:1px dashed var(--line)}.tk-reasons[hidden]{display:none}
+.tk-reasons .tk-reason.on{background:var(--track);border-color:var(--line2);font-weight:600}.tk-reason-line-row{display:flex;flex-wrap:wrap;flex:1 1 100%;min-width:0;gap:8px;align-items:center}.tk-reason-line-row[hidden]{display:none}.tk-reason-line{flex:1 1 10em;min-width:0;max-width:100%}.tk-reasons{min-width:0;max-width:100%}
+.tk-agent{margin:0 0 6px}
+/* the work delivered, to accept (1.7.38): the agent's summary as it wrote it, then the two answers */
+.tk-accept-sum{margin:6px 0 10px}.tk-accept-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:min(40vh,320px);overflow:auto;margin-top:4px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--track);font-size:13.5px;line-height:1.5}
+.tk-accept-skip{margin:0 0 10px;font-size:13px}.tk-accept-skip ul{margin:4px 0 0;padding-left:20px}
 .tk-call.done{border-color:var(--good-dot)}.tk-call.done .code-chip.still{cursor:default}
 .ev-step{border-top:1px solid var(--line);padding-top:10px;margin-top:12px}.ev-step:first-child{border-top:0;margin-top:0;padding-top:0}.ev-step h3{font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px}.ev-step-n{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;background:var(--track);font-size:11px;color:var(--soft)}
 .step-cmd{margin:6px 0 8px}.step-cmd .code-bar{display:flex;justify-content:space-between;align-items:center}.step-cmd .cmd-scroll{margin:4px 0 0}.step-out{margin:0 0 14px}.step-out>p:first-child{margin:4px 0}
@@ -190,6 +197,8 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .cmd-scroll.one{max-height:6em}.cmd-scroll.one .cmd-script{white-space:pre}
 .cmd-scroll{max-height:min(50vh,520px);overflow:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;background:var(--track);margin:6px 0 10px}
 .cmd-fmt,.cmd-script{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.55;padding:10px 12px;white-space:pre;margin:0;min-width:max-content}
+.cmd-sep{margin:6px 0;border-top:1px dashed var(--line);color:var(--soft);font-size:11px;line-height:1.2}.cmd-sep span{background:var(--card);padding:0 6px;position:relative;top:-6px;margin-left:1em}  /* the next command of a line (1.7.38) */
+.tk-parts{margin:2px 0 8px}.tk-parts .tk-writes{display:block;margin-left:0}.tk-parts ol{margin:2px 0 0;padding-left:22px}.tk-parts li{margin:0 0 8px}.tk-parts li .tk-call-say{margin:0}.tk-parts li .tk-call-facts{margin:2px 0 4px}
 .cmd-line.in{padding-left:2em}.cmd-prog{font-weight:700}.cmd-opt{color:var(--soft)}.cmd-val{color:var(--ink)}.cmd-block{padding:4px 0 4px 4em;white-space:pre-wrap;color:var(--good)}.cmd-fmt .kw,.cmd-script .kw{font-weight:650}
 /* an evidence citation (1.7.8): a chip in the text, the window on a click; the table's row tools */
 .ev{display:inline-flex;align-items:center;gap:4px;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:0 7px;height:20px;border-radius:6px;border:1px solid var(--line2);background:var(--track);color:var(--ink);cursor:pointer;vertical-align:1px}
@@ -228,3 +237,9 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .tk-need.strong.tk-call.done{background:var(--good-bg);border-color:var(--good-line);border-left-color:var(--good-dot)}  /* an approved call: the whole card is green, not orange with a green edge (1.7.28) */
 .tk-call-row{display:flex;align-items:baseline;gap:10px;margin:4px 0 2px}.tk-call-row .tk-call-say{margin:0;min-width:0}.tk-call-row .code-chip{flex:none}.tk-writes{margin-left:8px;font-size:12px;font-weight:600;color:var(--hot);white-space:nowrap}
 .tk-call.done .code-chip.still{background:var(--good-bg);color:var(--good)}
+
+/* 1.7.38 (C11 T2-13): the question or the command the chat waits on, on the card itself */
+.tk-asked{flex:1 1 100%;margin:6px 0 4px;padding:8px 12px;border-left:3px solid var(--line2);background:var(--card);border-radius:6px;font-size:13px;line-height:1.5;overflow-wrap:anywhere;min-width:0}
+.tk-asked .tk-peek{max-width:none}.tk-asked p{margin:2px 0}.tk-asked ul{margin:4px 0 0;padding-left:20px}
+.tk-fact code.tk-path{max-width:100%;text-overflow:clip}  /* a script path is cut from the left by the page (it keeps the file name), never again by the box (1.7.38, F1 M3) */
+.tr-reason summary{cursor:pointer;overflow-wrap:anywhere}.tr-reason-full{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px}

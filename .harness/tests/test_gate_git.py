@@ -98,7 +98,12 @@ class GateGitTests(HarnessTestCase):
     def test_a_broken_target_policy_does_not_open_the_floor_or_break_the_gate(self) -> None:
         (self.root / ".harness" / "policies" / "target.override.json").write_text("{ not json", encoding="utf-8")
         self.assertEqual(self.decision(self.edit(f"{self.repos}/repo_b/.git/config")), "deny")
-        self.assertEqual(self.edit(f"{self.repos}/repo_b/src/a.sql"), {})
+        # 1.7.38 (C13 F2b): turned over. A policy that cannot be read used to mean "no target repositories", and the working tree of a repository was open. The gate does not know where the targets are now, so a write into
+        # a git repository other than this one is refused, with the file that is wrong; a path that is in no repository is as free as before.
+        out = self.edit(f"{self.repos}/repo_b/src/a.sql")
+        self.assertEqual(self.decision(out), "deny")
+        self.assertIn("target.override.json", self.reason(out))
+        self.assertEqual(self.edit(f"{self.repos}/not_a_repo.txt"), {})
 
     def test_the_working_tree_of_a_target_repository_is_written_by_promote_only(self) -> None:
         """A file of a target repository is never edited directly. The reason names the way that works."""

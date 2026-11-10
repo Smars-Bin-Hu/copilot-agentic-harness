@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -354,6 +356,14 @@ class KnowledgeBaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             setupjob.copy_folder(self.root, self.source)
 
+    def test_keeping_a_knowledge_base_in_place_is_not_told_as_not_set(self) -> None:
+        """1.7.38: the result line of Keep it said "not set; you can set it later" while a knowledge base was there."""
+        def line(key: str) -> str:
+            return dict((name, step) for name, step in setupjob.steps(self.root, {"kb_mode": "none"}))[key]()
+        self.assertEqual(line("kb"), messages.text("setup.line.later"))  # the placeholder README only: nothing is in place
+        setupjob.copy_folder(self.root, self.source)
+        self.assertEqual(line("kb"), messages.text("setup.kb.kept"))
+
     def test_a_copy_that_fails_leaves_nothing_and_can_be_run_again(self) -> None:
         (self.source / "secret.md").write_text("x", encoding="utf-8")
         with mock.patch("shutil.copytree", side_effect=OSError("no way")):
@@ -473,6 +483,16 @@ class GuideTests(unittest.TestCase):
         for part in found["sections"]:
             self.assertTrue(part["blocks"], part["title"])
 
+    def test_the_guide_says_whether_the_company_folder_is_there(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            self.assertFalse(setup.guide(root)["company"])
+            (root / "knowledge-base" / "company").mkdir(parents=True)
+            found = setup.guide(root)
+            self.assertTrue(found["company"])
+            self.assertIn("instructions", found["missing"], "the one file is still missing: the page says so, not 'not found'")
+
     def test_a_team_may_declare_it_has_no_skills_but_not_no_repositories(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -481,6 +501,195 @@ class GuideTests(unittest.TestCase):
             self.assertEqual(setup.declare(root, "skills", False), [])
             with self.assertRaises(ValueError):
                 setup.declare(root, "repos", True)
+
+
+
+class CompanyFactsTests(unittest.TestCase):
+    """The read-only checklist of the section From the company (1.7.36)."""
+
+    def test_an_empty_copy_has_no_facts_and_never_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            facts = setup.company_facts(Path(folder))
+            self.assertEqual((facts["folder"], facts["instructions"], facts["packs"], facts["connections"]), (False, False, [], []))
+            self.assertEqual(facts["prefix"]["kb"], "")
+            self.assertFalse(facts["recipe"]["present"])
+
+    def test_the_prefix_is_a_fact_when_the_knowledge_base_names_it_else_the_page_shows_a_box(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            company = root / "knowledge-base" / "company"
+            (company / "instructions").mkdir(parents=True)
+            (company / "instructions" / "knowledgebase.instructions.md").write_text("x", encoding="utf-8")
+            (root / "knowledge-base" / "domains" / "d").mkdir(parents=True)
+            facts = setup.company_facts(root)
+            self.assertEqual((facts["folder"], facts["instructions"], facts["prefix"]["kb"]), (True, True, ""))
+            (company / "company.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
+            self.assertEqual(setup.company_facts(root)["prefix"]["kb"], "acme")
+            self.assertIn("company", setup.status(root))
+
+    def test_the_form_counts_what_the_knowledge_base_brings_and_names_the_company_skills_that_are_not_by_the_rules(self) -> None:
+        """1.7.38: card 3 says path, domains, domain skills, version, the files of instructions and standards, the company's skills and which break the naming rule."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            kb = root / "knowledge-base"
+            company = kb / "company"
+            (company / "instructions").mkdir(parents=True)
+            for name in ("knowledgebase.instructions.md", "etl.instructions.md", "notes.md", "README.md"):  # a README is no instruction; notes.md is not named <name>.instructions.md
+                (company / "instructions" / name).write_text("x", encoding="utf-8")
+            (company / "standards").mkdir()
+            (company / "standards" / "code-standards.md").write_text("x", encoding="utf-8")
+            (company / "standards" / "extra.md").write_text("x", encoding="utf-8")
+            (company / "company.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
+            (company / "manifest.json").write_text(json.dumps({"version": "2026.11.05"}), encoding="utf-8")
+            for name, has_file in (("acme-good", True), ("release-notes", True), ("acme-empty", False)):
+                (company / "skills" / name).mkdir(parents=True)
+                if has_file:
+                    (company / "skills" / name / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+            for domain, count in (("sales", 2), ("hr", 1)):
+                for index in range(count):
+                    (kb / "domains" / domain / "skills" / f"domain-{domain}-{index}").mkdir(parents=True)
+                    (kb / "domains" / domain / "skills" / f"domain-{domain}-{index}" / "SKILL.md").write_text("x", encoding="utf-8")
+            (kb / "domains" / "empty").mkdir()
+            found = setup.status(root, {"found": True, "command": "", "windows": False})
+            self.assertEqual((found["kb"]["here"], found["kb"]["domains"], found["kb"]["domain_skills"], found["kb"]["version"], found["kb"]["prefix"]), (True, 3, 3, "2026.11.05", "acme"))
+            self.assertTrue(found["kb"]["path"].endswith("knowledge-base"))
+            facts = found["company"]
+            self.assertEqual((facts["instructions_n"], facts["instructions_unused"], facts["standards_n"], facts["standards_unused"]), (2, ["notes.md"], 1, ["extra.md"]), "every <name>.instructions.md is counted (Q7); only the code-standards file is; a README is no instruction")
+            self.assertEqual((facts["skills"]["n"], facts["skills"]["off"]), (3, ["acme-empty", "acme-good", "release-notes"]), "no SKILL.md, a name that is not the folder's, or not the company's word: the check of the Enter screen")
+            self.assertEqual(facts["own_packs"], [])
+            (company / "tools" / "packs" / "acmejobs").mkdir(parents=True)
+            self.assertEqual(setup.company_facts(root)["own_packs"], ["acmejobs"])
+        with tempfile.TemporaryDirectory() as folder:  # no knowledge base: every count is zero and nothing raises
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            found = setup.status(root, {"found": True, "command": "", "windows": False})
+            self.assertEqual((found["kb"], found["company"]["skills"], found["company"]["instructions_n"]), ({"here": False, "domains": 0, "domain_skills": 0, "version": "", "path": "", "prefix": ""}, {"n": 0, "off": []}, 0))
+
+    def test_the_page_draws_four_cards_and_keeps_every_control(self) -> None:
+        web = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
+        source = (web / "setup.js").read_text(encoding="utf-8")
+        messages = json.loads((support.REPO / ".harness" / "engine" / "core" / "messages.en.json").read_text(encoding="utf-8"))
+        for key, number, head in (("you", "2", "null"), ("company", "3", 'h("span", {class: "su-tag"}'), ("computer", "4", 'openTab("local")')):
+            self.assertIn(f'card("{key}", "{number}", {head}', source)
+            self.assertIn(f"setup.sec.{key}", messages)
+        self.assertNotIn("setup.form.title", source)
+        for control in ("name", "chips", "repos", "modes", "kbPath", "prefix", "install", "refusedBox", "more", "go"):
+            self.assertIn(control, source)
+        # 1.7.38: card 3 holds the knowledge base, the facts and the code repositories, in that order; card 4 is Local and holds the programs, the network and MCP, with one Open
+        card = source[source.index('card("company", "3"'):source.index('card("computer", "4"')]
+        self.assertLess(card.index("kbRow"), card.index("factsBox"))
+        self.assertLess(card.index("factsBox"), card.index("repoRow"))
+        self.assertIn("computerBox", source[source.index('card("computer", "4"'):])
+        self.assertIn('["packs", ""], ["packs", ""]', source)  # Tool packs and Connections have their own Open, which opens their own window
+        self.assertIn('["connections", ""], ["connections", ""]', source)
+        self.assertIn("TOOLS.open(go[0], loadTools, go[1])", source)
+        self.assertIn("TOOLS.open(open[0], loadTools, open[1])", source)
+        self.assertIn("paintUnpaired", source, "a browser that is not paired is told so inside the first card")
+        # the small print is a hover: HARNESS_LANGUAGE only when set, the override files beside Finish setup
+        self.assertIn('title: t("setup.language.forced")', source)
+        self.assertIn('title: t("setup.finish.note")', source)
+        self.assertIn("sec=", (web / "enter.js").read_text(encoding="utf-8"))
+
+
+WEB = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
+FINISH_SCRIPT = r"""
+const assert = require("assert"), fs = require("fs"), vm = require("vm");
+const [web, mode, change] = process.argv.slice(2);  // mode: "press" (the person presses Finish) or "resume" (the page is loaded again while the work runs); change: a text to take out of setup.js
+class Node {
+  constructor(tag) { this.tag = tag; this.attrs = {}; this.kids = []; this.on = {}; this.hidden = false; this.disabled = false; this.value = ""; this.textContent = ""; this.dataset = {}; this.style = {}; this.isConnected = true; this.checked = false; this.open = false; this.classes = new Set(); this.classList = {add: (c) => this.classes.add(c), remove: (c) => this.classes.delete(c), toggle: (c, on) => (on === undefined ? !this.classes.has(c) : on) ? this.classes.add(c) : this.classes.delete(c), contains: (c) => this.classes.has(c)}; }
+  setAttribute(name, value) { this.attrs[name] = value; if (name === "hidden") this.hidden = true; if (name === "disabled") this.disabled = true; if (name.startsWith("data-")) this.dataset[name.slice(5)] = value; if (name === "class") String(value).split(" ").forEach((c) => this.classes.add(c)); }
+  get lastChild() { return this.kids[this.kids.length - 1] || {}; }
+  getAttribute(name) { return this.attrs[name] === undefined ? null : this.attrs[name]; }
+  append(...kids) { this.kids.push(...kids); }
+  replaceChildren(...kids) { this.kids = kids; }
+  addEventListener(type, fn) { (this.on[type] = this.on[type] || []).push(fn); }
+  removeEventListener() {}
+  querySelector() { return null; }
+  querySelectorAll() { return []; }
+  remove() {}
+  after() {}
+  focus() {}
+  scrollIntoView() {}
+  contains() { return false; }
+}
+const all = [];
+const document = {documentElement: {lang: "en"}, hidden: false, body: new Node("body"), activeElement: null,
+  createElement: (tag) => { const node = new Node(tag); all.push(node); return node; }, createTextNode: (text) => ({text}),
+  getElementById: (id) => (id === "data" ? {textContent: JSON.stringify({serve: {actions: []}, getReady: false})} : new Node("main")),
+  querySelector() { return null; }, querySelectorAll() { return []; }, addEventListener() {}, removeEventListener() {}};
+let reloads = 0, left = [];
+const location = {hash: "", pathname: "/setup", search: "", reload() { reloads++; }, assign(where) { left.push(where); }};
+// The board, in the part Finish meets: every answer carries the language; the work writes it first, then goes on; the work is over after `LONG` asks.
+const LONG = 5;
+let language = "en", asks = 0, running = mode === "resume";
+const found = {problem: "", name: "Tester", language: "en", language_forced: false, repos_root: "", root: null, singles: [], broken: [], skill_prefix: "", install_command: "", rules: [], example: "/x", stamp: "s1",
+  kb: {here: false, domains: 0, domain_skills: 0, version: "", path: "", prefix: ""}, company: {}, short: {found: "/bin/harness", command: "", windows: false}, reopen: false};
+function answer(step, body) {
+  if (step === "state") return found;
+  if (step === "guide") return {missing: [], declared: [], sections: [], company: false};
+  if (step === "act") { running = true;  /* the person chose zh: the work writes it first */ asks = 0; setTimeout(() => { language = "zh"; }, 0); return {lines: [], running: true, done: false, total: 6, stamp: "s1"}; }
+  if (step === "job") {
+    if (running && ++asks > LONG) running = false;
+    return {lines: running ? [{key: "kb", ok: true, detail: "x"}] : [{key: "kb", ok: true, detail: "x"}, {key: "doctor", ok: true, detail: "y"}], running, done: !running, total: 6, stamp: "s2"};
+  }
+  return {};
+}
+const fetch = (path, options) => {
+  const body = JSON.parse(options.body || "{}");
+  const data = path === "/api/status" ? {paired: true} : path === "/api/setup" ? {result: answer(body.step, body)} : {};
+  return Promise.resolve({ok: true, json: () => Promise.resolve({...data, language})});
+};
+const quick = (fn, ms) => setTimeout(fn, Math.min(ms || 0, 3));
+const context = vm.createContext({document, location, fetch, window: {addEventListener() {}}, history: {replaceState() {}}, Node, URLSearchParams, console, setTimeout: quick, clearTimeout, setInterval: () => 0, clearInterval() {}, JSON, Promise});
+const load = (file, edit) => vm.runInContext(edit ? fs.readFileSync(web + "/" + file, "utf8").replace(edit, "") : fs.readFileSync(web + "/" + file, "utf8"), context, {filename: file});
+vm.runInContext("DATA = undefined;", context);
+for (const file of ["common.js", "serve.js"]) load(file);
+vm.runInContext("globalThis.SERVE = SERVE;", context);
+vm.runInContext(fs.readFileSync(web + "/setup.js", "utf8").replace(change || "\0", "") + "\nglobalThis.SETUP = SETUP;", context, {filename: "setup.js"});
+const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+(async () => {
+  await wait(20);  // the pairing
+  const app = new Node("main");
+  context.SETUP.mount(app);
+  await wait(30);
+  if (mode === "press") {
+    const go = all.find((node) => node.attrs.class === "act hot big");
+    assert.ok(go, "the Finish button is drawn");
+    assert.strictEqual(go.disabled, false, "the form is ready to be sent");
+    for (const fn of go.on.click) fn();
+  }
+  for (let turn = 0; turn < 100 && !left.length; turn++) await wait(10);
+  console.log(JSON.stringify({reloads, left}));
+  process.exit(0);
+})();
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class FinishKeepsThePageTests(unittest.TestCase):
+    """N1 of the retest: with 中文 chosen, Finish wrote the language first, the next answer carried it, and the page loaded itself again in the middle of the work: a stale form and no way back to Enter."""
+
+    def run_page(self, mode: str, change: str = "") -> dict:
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "finish.js"
+            file.write_text(FINISH_SCRIPT, encoding="utf-8")
+            done = subprocess.run([shutil.which("node"), str(file), str(WEB), mode, change], capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout.strip().splitlines()[-1])
+
+    def test_a_changed_language_does_not_load_the_page_again_while_the_work_runs(self) -> None:
+        seen = self.run_page("press")
+        self.assertEqual(seen, {"reloads": 0, "left": ["/"]}, "the work is followed to its end, then the page leaves for Enter")
+
+    def test_without_asking_to_stay_the_page_is_lost(self) -> None:
+        seen = self.run_page("press", "SERVE.stay(() => st.touched && app.isConnected);")
+        self.assertGreaterEqual(seen["reloads"], 1, "the test can see the fault it is for")
+
+    def test_a_page_loaded_again_while_the_work_runs_goes_on_showing_it(self) -> None:
+        seen = self.run_page("resume")
+        self.assertEqual(seen, {"reloads": 0, "left": ["/"]})
 
 
 if __name__ == "__main__":

@@ -164,6 +164,17 @@ class PageTests(unittest.TestCase):
         source = (taskhtml.WEB.parent / "taskhtml.py").read_text(encoding="utf-8")
         self.assertEqual(source.count('"dock.js", "term.js"'), source.count('"dock.js", '))
 
+    def test_the_window_a_button_opened_closes_by_itself_after_a_good_end_and_never_lies_over_a_dialog(self) -> None:
+        """1.7.38 (T1-06): it covered dialogs, the yellow block's Hide and the search pill, and stayed open."""
+        term = (taskhtml.WEB / "term.js").read_text(encoding="utf-8")
+        css = (taskhtml.WEB / "dock.css").read_text(encoding="utf-8")
+        self.assertIn("memory.auto = !memory.open;", term)  # only a window that a button opened
+        self.assertIn("!found.code && !found.gone && memory.auto && memory.open", term)  # a failed command stays to be read
+        self.assertIn('box.addEventListener("pointerdown", () => { memory.auto = false; });', term)  # what the person touched stays
+        self.assertIn('document.documentElement.classList.toggle("term-open"', term)
+        self.assertIn("html.term-open body.has-dialog .shade{padding-right:calc(var(--term-w,480px) + 28px)}", css)  # wide: the dialog moves left
+        self.assertIn("body.has-dialog .term{z-index:165}", css)  # narrow: the window goes under it
+
 
 if __name__ == "__main__":
     unittest.main()

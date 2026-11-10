@@ -246,7 +246,7 @@
         h("div", {class: "name-line"}, kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
           DATA.serve ? h("a", {href: "/task/" + encodeURIComponent(row.name), title: row.name}, row.name)
             : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/"), title: row.name}, row.name) : h("span", {title: row.name}, row.name),
-          DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null),
+          DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null, Status.links(row.links)),  // a small link icon when the task is linked to tickets (1.7.38)
         statusLine(row), meta(row)),
       h("td", {class: "state"}, state(row), warnTag(row) ? [" ", warnTag(row)] : null),
       h("td", {class: "checks col-reviews"}, row.status === "new" ? "-" : checkDots(row)),
@@ -274,6 +274,49 @@
   const stamp = h("span");
   const boardName = h("b", null, t("board.title"));
   const newSlot = h("span", {class: "new-slot"});  // the main act of the board: the far end of the header, filled
+  // Calls that wait for the person and belong to no open task (1.7.38, C13 FR 25): a chat that holds no task, or a call that came after its task was closed. No task page shows them, and they count toward the limit of waiting calls,
+  // so the board lists them here, with a way to void them. Hidden when there are none.
+  const elsewhereBox = h("div", {class: "lb-elsewhere", hidden: ""});
+  function paintElsewhere(list) {
+    elsewhereBox.hidden = !list.length;
+    if (!list.length) { elsewhereBox.replaceChildren(); return; }
+    const open = h("button", {type: "button", class: "act", title: t("board.held.tip")}, t("board.held.review"));
+    open.addEventListener("click", () => {
+      const said = h("div", {class: "bad"});
+      let left = list.slice();  // the calls still listed: a call that was voided leaves the window, which stays open for the others (1.7.38, C13 FR2 10)
+      const title = h("h2", null);
+      const all = h("button", {type: "button", class: "act hot"});
+      const rowOf = new Map();
+      const count = () => { title.textContent = t(left.length === 1 ? "board.held.title.one" : "board.held.title", {n: left.length}); all.textContent = t(left.length === 1 ? "board.held.void.one" : "board.held.void_all", {n: left.length}); };
+      const voidThem = (codes, button) => {
+        button.disabled = true;
+        SERVE.post("/api/void", {codes}).then(() => {
+          codes.forEach((code) => { const row = rowOf.get(code); if (row) row.remove(); });
+          left = left.filter((item) => !codes.includes(item.code));
+          if (!left.length) { view.close(); } else { count(); button.disabled = false; }
+          SERVE.done();
+        }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); button.disabled = false; });
+      };
+      all.addEventListener("click", () => voidThem(left.map((item) => item.code), all));
+      const close = h("button", {type: "button", class: "act"}, t("connections.close"));
+      const verbWords = (verb) => { const key = "desk.outbox.verb." + verb; return Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : (verb || "-"); };
+      const clipped = (text) => (text.length <= 140 ? text : text.slice(0, 139) + "\u2026");
+      const rowsOf = list.map((item) => {
+        const one = h("button", {type: "button", class: "act"}, t("board.held.void"));
+        one.addEventListener("click", () => voidThem([item.code], one));
+        const row = h("li", {class: "el-row", title: item.command},
+          h("b", null, item.system || "-"), item.env && item.env !== "none" ? [" ", h("span", {class: "tag hot"}, item.env)] : null, " ", h("span", {class: "tag"}, verbWords(item.verb)), " ",
+          h("span", {class: "sub"}, item.task ? t("board.held.of", {task: item.task}) : t("board.held.notask"), " \u00b7 ", item.at ? item.at.slice(0, 16).replace("T", " ") : ""), " ", one,
+          item.command ? h("div", null, h("code", {class: "el-cmd"}, clipped(item.command))) : null);  // what the call is: two calls that look alike are told apart by it
+        rowOf.set(item.code, row);
+        return row;
+      });
+      count();
+      const view = SERVE.dialog([title, h("p", {class: "sub"}, t("board.held.lead")), h("ul", {class: "el-list"}, ...rowsOf), said, h("div", {class: "row win-foot"}, all, close)]);
+      close.addEventListener("click", view.close);
+    });
+    elsewhereBox.replaceChildren(h("span", {class: "tag hot"}, t(list.length === 1 ? "board.held.title.one" : "board.held.title", {n: list.length})), " ", open);
+  }
   const statusBox = h("span", {class: "lb-status"});  // a served board: VS Code and the pairing. The time of the numbers is a tip on the name: the page keeps itself fresh
   const stampNote = h("span");  // a page on disk says in the footer how to get fresher numbers; the header has room for the time only
   document.querySelector("main").classList.add("wide");
@@ -401,13 +444,9 @@
     shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint")]);
     newSlot.replaceChildren(...[rows.length ? newTask() : null].filter(Boolean));
     paintFound(DATA.serve && DATA.serve.kb_found);
-    paintSetup(DATA.serve && DATA.serve.setup);
     paintSpace(DATA.serve && DATA.serve.space);
     statusBox.replaceChildren(...[SHELL.vsPill(vscode), typeof SERVE !== "undefined" ? SERVE.pairMark() : null, kbMark].filter(Boolean));
   }
-  // The big warning (1.6.59): what this copy lacks before it can do real work. It stays until that is set; a click opens the setup guide.
-  const setupBar = h("a", {class: "setup-bar", href: "/setup", hidden: ""});
-  setupBar.addEventListener("click", (event) => { if (typeof DOCK === "undefined") return; event.preventDefault(); DOCK.setupWindow(); });
   const kbTip = h("span", {class: "kb-tip"});
   const kbMark = h("span", {class: "kb-mark", tabindex: "0", hidden: ""}, h("i"), t("board.kb.mark"), kbTip);
   function placeTip() {  // fixed: the header cuts off what leaves it. Over a wallpaper the header's blur makes the header, not the window, what `fixed` counts from: that offset is measured and taken off
@@ -427,22 +466,13 @@
     kbMark.dataset.sig = sig;
     kbTip.replaceChildren(h("b", null, t("board.kb.found")), h("ul", null, items.map((text) => h("li", null, text.replace(/[.\u3002]$/, "")))));
   }
-  function paintSetup(list) {
-    const items = list || [];
-    if (!setupBar.isConnected) { const top = document.querySelector(".lb-top"); if (top) top.after(setupBar); }
-    setupBar.hidden = !items.length;
-    const sig = items.join();
-    if (setupBar.dataset.sig === sig) return;
-    setupBar.dataset.sig = sig;
-    setupBar.replaceChildren(h("i"), h("span", null, t("board.setup.warn", {n: items.length})), h("span", {class: "setup-more"}, items.map((key) => h("span", null, t("board.setup." + key)))));
-  }
   // The task folders over `board.archive_over_mb` (1.6.109, tasksize.py, measured once an hour): how much, the largest closed tasks, and a button that ticks
   // the largest closed ones until the rest is under the limit, in the list, where the person unticks any and archives the rest. "Later" hides it in this
   // browser until the folders grow by another tenth.
   const spaceBar = h("div", {class: "space-bar", hidden: ""});
   const SPACE_SHOWN = 3;
   function paintSpace(space) {
-    if (!spaceBar.isConnected) { const top = setupBar.isConnected ? setupBar : document.querySelector(".lb-top"); if (top) top.after(spaceBar); }
+    if (!spaceBar.isConnected) { const top = typeof READYBAR !== "undefined" ? READYBAR.node() : document.querySelector(".lb-top"); if (top) top.after(spaceBar); }
     const later = Number(keep.get("spaceLater", "0")) || 0;
     const show = Boolean(space && space.over) && !(later && space.total < later * 1.1);
     spaceBar.hidden = !show;
@@ -545,8 +575,8 @@
   }
 
   app.replaceChildren(
-    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), SHELL.banner(), said,
-    kpis, controls, lobby.node,
+    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), ...(typeof READYBAR !== "undefined" ? [READYBAR.node()] : []), SHELL.banner(), said,
+    elsewhereBox, kpis, controls, lobby.node,
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint"), DATA.serve ? null : " ", DATA.serve ? null : stampNote), copyright());
   draw();
@@ -570,8 +600,9 @@
     asOf = data.as_of;
     if (typeof CHAT !== "undefined") CHAT.seen(data.rows);  // the New task notice may be waiting for its task
     archiveTo = data.archive_to || "";
+    paintElsewhere(DATA.serve ? data.held_elsewhere || [] : []);
     SHELL.vs(data.vscode);
-    if (DATA.serve) { DATA.serve.setup = data.setup; DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); paintSetup(data.setup); }
+    if (DATA.serve) { DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); }
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
     if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else { paintStamp(); paintSpace(data.space); }
   }

@@ -16,6 +16,7 @@ from unittest import mock
 from support import ENGINE, HarnessTestCase, confirm_requirement, payload, subagent_start
 
 from core import messages, tasks
+from core.paths import utc_now
 from core.state import update_state
 from modules.task import task as task_ops
 from modules.task import tasklife
@@ -329,7 +330,7 @@ class ListTests(LifeCase):
         self.assertEqual(result["waiting"], 1)
         confirm_requirement(self.root, f"{BASE}/first")
         digest = tasks.plan_digest(self.root, f"{BASE}/first")
-        task_ops.approve_plan(self.root, f"{BASE}/first", reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
+        task_ops.approve_plan(self.root, f"{BASE}/first", reader=lambda _prompt: digest[:6], interactive=True, out=io.StringIO())
         found = self.listed()["tasks"][0]  # nobody told the agent: the task now waits for the person to say so
         self.assertEqual((found["waiting_why"], found["waiting"]), ("go-plan", "计划已批准：通知 agent 开始"))
         self.assertEqual(self.listed()["waiting"], 1)
@@ -627,9 +628,9 @@ class RequirementFileTests(LifeCase):
         self.assertIn(f"{BASE}/job/REQ.md", self.new()["next"])
         self.assertNotIn("REQ.md", self.new("quick", "qa")["next"])
 
-    def test_a_qa_task_is_closed_once_answered(self) -> None:
-        """A look at a server is a Q&A: the agent answers, writes it down and closes the task itself (1.7.10)."""
-        self.assertIn("task close --task quick", self.new("quick", "qa")["next"])
+    def test_a_qa_task_is_delivered_once_answered(self) -> None:
+        """A look at a server is a Q&A: the agent answers, writes it down and delivers it; it never closes the task (C13: the person accepts)."""
+        self.assertIn("task deliver --task quick", self.new("quick", "qa")["next"])
         self.assertNotIn("task close", self.new()["next"])
 
 
@@ -673,6 +674,19 @@ class RelayReminderTests(LifeCase):
         reason = self.stop()["reason"]
         self.hook(payload("UserPromptSubmit", S1, prompt=reason))
         self.assertEqual(self.stop(), {})
+
+    def test_a_delivery_writes_the_status_line_itself_so_stop_asks_for_no_task_file(self) -> None:
+        """C12 RB-N4: the agent delivered, the Stop hook sent it back to write TASK.md, and that was one more turn (a premium request) for every delivery."""
+        self.new("job", "rca")
+        self.done(f"{BASE}/job/RCA.md")
+        self.cli_json("task", "deliver", "--task", "job", "--summary", "RCA done. Look at RCA.md.")
+        self.assertEqual(self.stop(), {})
+        status = next(line for line in (self.folder() / "TASK.md").read_text(encoding="utf-8").splitlines() if line.startswith(("- **Status", "- **状态")))
+        self.assertIn(messages.text("accept.status.delivered", date=utc_now()[:10]), status)
+        self.assertNotIn("task_file_not_updated", [row.get("kind") for row in self.session_log(S1)])
+        self.hook(payload("UserPromptSubmit", S1, prompt="not yet: add the numbers"))  # the person's next message takes the delivery away
+        self.done(f"{BASE}/job/RCA.md")
+        self.assertEqual(self.stop()["decision"], "block", "work after that is asked for again")
 
     def test_updating_the_task_file_is_enough(self) -> None:
         self.new()
@@ -799,7 +813,10 @@ class MessageTests(unittest.TestCase):
             "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.", "desk.hint.", "desk.wait.", "desk.go.", "desk.via.", "board.filter.", "board.archive.", "board.select.", "board.close.", "desk.tab.", "desk.changes.", "desk.missing.", "stage.requirement", "stage.plan", "stage.developing", "stage.writeback", "stage.byhand", "stage.done", "stage.doing", "stage.guide", "stage.check", "fork.why.",
             "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "board.queue.", "board.action.", "autorun.why.", "unit.",
             "gate.git.why.", "promote.hint.", "task.resolve.", "log.count.", "path.what", "delete.what", "approval.person_only", "event.", "mdreport.promote.", "doctor.language.source.", "doctor.override.how.", "doctor.target.kind.", "doctor.output.sample", "kbstatus.next.", "rules.reply.", "board.vs.why.", "desk.chat.", "desk.send.lang.", "send.refused.", "ask.refused.answer.", "create.refused.", "fileop.refused.", "board.new.perm.", "report.gate.v.", "board.warn.", "desk.trace.", "compact.refused.",
-            "dock.kb.", "dock.group.", "dock.step.", "dock.atlas.mode.", "setup.line.", "setup.kb.package", "setup.kb.folder", "setup.kb.none", "board.setup.", "stage.partial", "stage.failed", "desk.group.", "desk.jump.", "desk.ctx.part.", "desk.ctx.group.", "desk.ctx.level.", "desk.rewind.why.", "desk.fact.", "board.wall.state.", "board.enter.t.", "board.enter.d.", "board.enter.m.", "connections.state.", "connections.tip.", "board.enter.tip.", "board.enter.say.", "board.enter.sys.col.", "desk.outbox.verb.", "desk.outbox.fact.", "board.enter.sys.state.", "outbox.draft.", "outbox.state.", "desk.evidence.out.",
+            "dock.kb.", "dock.co.", "board.enter.tool.", "dock.group.", "dock.step.", "dock.atlas.mode.", "setup.line.", "setup.sec.", "connections.layer.", "connections.step.", "board.enter.g.", "board.enter.n.", "setup.kb.package", "setup.kb.folder", "setup.kb.none", "board.setup.", "stage.partial", "stage.failed", "desk.group.", "desk.jump.", "desk.ctx.part.", "desk.ctx.group.", "desk.ctx.level.", "desk.rewind.why.", "desk.fact.", "board.wall.state.", "board.enter.t.", "board.enter.d.", "board.enter.m.", "connections.state.", "connections.tip.", "board.enter.tip.", "board.enter.say.", "board.enter.sys.col.", "machine.conn.src.", "desk.outbox.verb.", "desk.outbox.fact.", "board.enter.sys.state.", "outbox.draft.", "outbox.state.", "outbox.reason.", "wait.approval.follow.", "desk.outbox.reason.", "desk.outbox.agent.", "desk.evidence.out.", "ready.files", "ready.kb.domains", "ready.kb.skills", "ready.packs", "ready.repos", "ready.vs.", "board.enter.cs.", "board.vs.restart.why.",
+            "ready.p.broken.short", "ready.p.unreadable.short", "ready.p.identity.", "gate.external.outbox.what", "gate.external.autorun.what",  # 1.7.38 (F1): the key is built from a base and a suffix (`.short`, `.one`, `.what`, `.unknown`)
+            "desk.stmt.zone.",  # 1.7.38 (F3): the zone of a statement is the end of the key (read, write, ask, refuse; and `.tip`)
+            "gate.external.unpinned.why.", "gate.external.hidden.", "gate.external.invalid", "gate.policy.unreadable.note",  # 1.7.38 (F2): the end of the key is the state of the call (`rules.py`, `external.py`, `failclosed.py`), or the key is written between single quotes inside an f-string (`fallback.py`)
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table("zh") if f'"{name}"' not in source and not name.startswith(dynamic)]

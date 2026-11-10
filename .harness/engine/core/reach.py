@@ -12,7 +12,10 @@ probe for it; the hooks can, because VS Code starts them and they inherit its id
 The state is `.harness/runtime/state/reach.json`: `{"<system>:<env>": {state, at, why, who, source}}`. `state`: ok, denied (the identity is not let in: the
 launch sentence helps), failed (the server did not answer: down, or this computer is off its network; a new identity would not help), unknown.
 `why` is a word the page turns into its own sentence: `identity`, `other-identity`, `no-answer`, `exit-<n>`. `who` is what the pack's `expect` pattern captured (its first group), or empty: the board shows only what the
-company asked it to show. Never a password, never the probe's whole output.
+company asked it to show. Never a password, never the probe's whole output. `said` (1.7.38): the first line the probe printed when nothing answered (`no-answer`), so a person can see why; a probe that got no answer is run once more first.
+
+Only a run that is meant to keep an answer writes this file: the board's own check, the hook and `tools reach --probe`. `harness doctor` reports and writes nothing here: the board runs it in a child with the PATH of a new terminal, and what it found
+there must not replace what the board found in VS Code's environment (C12 N2).
 """
 
 from __future__ import annotations
@@ -27,12 +30,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from . import clip
 from . import systems as outside
 from .paths import utc_now
 
 FILE = Path(".harness") / "runtime" / "state" / "reach.json"
 FRESH_MINUTES = 30
 OK, DENIED, FAILED, UNKNOWN = "ok", "denied", "failed", "unknown"
+RETRY_PAUSE = 1.0  # seconds before a probe that got no answer is run once more (1.7.38): one lost packet is not "the server does not answer"
 
 
 def path(root: Path) -> Path:
@@ -58,11 +63,21 @@ def _write(root: Path, found: Dict[str, Dict[str, Any]]) -> None:
 probes = outside.probes
 
 
+def failed_words(line: Dict[str, Any]) -> str:
+    """Why a probe failed, in the board's words (the Enter table and the Company tab read the same): no answer, with what the probe printed when it printed something (1.7.38), or its first line / exit code."""
+    from . import messages  # it reads the connections, which read this module
+
+    if line.get("why") == "no-answer":
+        said = str(line.get("said") or "")
+        return messages.text("desk.reach.why.no-answer") + (" " + messages.text("desk.reach.said", said=said) if said else "")
+    return messages.text("desk.reach.why.exit", why=line.get("why") or "")
+
+
 def first_line(output: str, limit: int = 160) -> str:
     """The first line of a program's answer that says something."""
     for line in (output or "").splitlines():
         if line.strip():
-            return line.strip()[:limit]
+            return clip.words(line, limit)  # between words, with an ellipsis (1.7.38)
     return ""
 
 
@@ -75,11 +90,25 @@ def _judge(needs: Dict[str, Any], code: Optional[int], output: str) -> Tuple[str
     if code != 0:
         return FAILED, first_line(output) or f"exit-{code}", ""  # what the program said first, not just its exit code (1.7.21)
     if needs.get("expect"):
-        found = re.search(needs["expect"], output or "")
+        found = re.search(needs["expect"], output or "", re.MULTILINE)  # as `connections.judge` reads it: a warning line before the answer is not another identity
         if not found:
             return DENIED, "other-identity", ""
         return OK, "", (found.group(1).strip()[:80] if found.groups() and found.group(1) else "")
     return OK, "", ""
+
+
+def judged(needs: Dict[str, Any], run: Callable[[], Tuple[Optional[int], str]]) -> Dict[str, Any]:
+    """One probe, as a stored line without its time: `{state, why, who, said}`. No answer is tried once more after RETRY_PAUSE; `said` is what the last try printed first (only when nothing answered)."""
+    code, output = run()
+    state, why, who = _judge(needs, code, output)
+    if state == FAILED and why == "no-answer":
+        time.sleep(RETRY_PAUSE)
+        code, output = run()
+        state, why, who = _judge(needs, code, output)
+    line = {"state": state, "why": why[:200], "who": who}
+    if state == FAILED and why == "no-answer" and first_line(output):
+        line["said"] = first_line(output)
+    return line
 
 
 def probe_all(root: Path, listed: Dict[str, Any], run: Callable[[str], Tuple[Optional[int], str]]) -> Dict[str, Dict[str, Any]]:
@@ -88,8 +117,7 @@ def probe_all(root: Path, listed: Dict[str, Any], run: Callable[[str], Tuple[Opt
     for name, system in (listed or {}).items():
         needs = system.get("needs") or {}
         for env, command in probes(system).items():
-            state, why, who = _judge(needs, *run(command))
-            found[f"{name}:{env}"] = {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "probe"}
+            found[f"{name}:{env}"] = {**judged(needs, lambda command=command: run(command)), "at": utc_now(), "source": "probe"}
     _write(root, found)
     return found
 
@@ -125,6 +153,14 @@ def recent(root: Path, keys: List[str], seconds: float = 300.0, now: Optional[fl
         except ValueError:
             return False
     return True
+
+
+def record(root: Path, key: str, state: str, why: str = "", who: str = "") -> None:
+    """What a test or a sign-in on the board found out about one connection (`<alias>:<env>`), kept where the probes keep theirs (1.7.38): the rows of the Connections window and the
+    Enter screen read the same place, so a connection that was signed in again does not show the old failure."""
+    found = read(root)
+    found[key] = {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "test"}
+    _write(root, found)
 
 
 def start(root: Path, listed: Dict[str, Any]) -> bool:
@@ -182,7 +218,8 @@ def view(root: Path, listed: Dict[str, Any]) -> List[Dict[str, Any]]:
                 launch = messages.text("reach.denied.saved", alias=name)  # an identity is kept here and was not accepted: starting VS Code again would change nothing
             if started_wrong:
                 line = {**line, "state": DENIED, "why": "vscode-env", "who": ""}
-                launch = messages.text("reach.vscode_env")
+                gaps = [str(item) for item in lacks.get("missing") or []]
+                launch = messages.text("reach.vscode_env", missing=", ".join(gaps[:3]) + (", \u2026" if len(gaps) > 3 else "") if gaps else "-")
             out.append({"system": name, "env": env, **line, "launch": launch})
     return out
 
@@ -217,7 +254,9 @@ def launch_script(root: Path, platform: str = sys.platform) -> Optional[Path]:
     """A tool pack's script that starts VS Code with the identity (`launch/` of an installed tool pack): Windows only, the first `.cmd` or `.bat`."""
     if not platform.startswith("win"):
         return None
-    found = sorted(item for item in (root / ".harness" / "toolpacks").glob("*/launch/*") if item.suffix.lower() in (".cmd", ".bat"))
+    from . import toolpacks  # the active packs only (1.7.30)
+
+    found = sorted(item for pack in toolpacks.active(root).values() for item in (pack["folder"] / "launch").glob("*") if item.suffix.lower() in (".cmd", ".bat"))
     return found[0] if found else None
 
 

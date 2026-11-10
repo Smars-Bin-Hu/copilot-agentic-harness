@@ -41,7 +41,7 @@ class Links(TaskCase):
         self.new()
 
     def test_the_link_types_come_from_the_installed_tool_packs(self) -> None:
-        self.assertEqual(toolpacks.link_types(self.root), [{"type": "trk", "label": "Ticket", "toolpack": "tracker"}])
+        self.assertEqual(toolpacks.link_types(self.root), [{"type": "trk", "label": "Ticket", "toolpack": "tracker", "id": "", "example": ""}])  # (1.7.38, F1 L6) a pack that gives no `id` or `example` leaves them empty
 
     def test_the_new_task_window_takes_several_tickets_and_checks_each(self) -> None:
         self.assertEqual(chatnew.links_of({"links": "trk:42, ado:300100  trk:42"}), ["trk:42", "ado:300100"])
@@ -78,7 +78,7 @@ class HeldCallCard(TaskCase):
         super().setUp()
         from support import REPO
 
-        toolpacks.add(self.root, str(REPO / ".harness" / "examples" / "toolpacks" / "demotracker"))
+        toolpacks.add(self.root, str(REPO / ".harness" / "toolpacks" / "demotracker"))
         (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"demo": {"type": "demotracker", "env": "none", "project": "DEMO"}}}), encoding="utf-8")
         self.new(kind="qa")
         for ref in ("demo:7", "demo:9"):
@@ -97,7 +97,7 @@ class HeldCallCard(TaskCase):
     def test_a_comment_from_a_file_shows_the_sentence_and_the_file(self) -> None:
         relative = self.task.relative_to(self.root).as_posix() + "/notes.md"
         card = self.held(f"demotracker --project DEMO comment 7 --file {relative}")
-        self.assertEqual(card["say"], "Add a comment to ticket 7")
+        self.assertEqual(card["say"], "给工单 7 加评论")  # the tests run in zh (support.py): the sample pack's say text has both languages (1.7.30)
         self.assertEqual((card["body"]["from"], card["body"]["lines"], card["body"]["text"]), ("file", 2, "Checked the load.\nAll good.\n"))
 
     def test_the_facts_a_type_shows_are_on_the_card(self) -> None:
@@ -125,11 +125,13 @@ class HeldCallCard(TaskCase):
         self.assertEqual(card["body"]["text"], 'one\ntwo "q"')
 
     def test_the_text_is_read_as_the_shell_passes_it_on_and_then_as_the_program_reads_it(self) -> None:
-        """1.7.25 (R4 K8): `"a\\\\nb"` was shown as one line `a\\nb`; the shell hands `a\\nb` on and the program writes two lines."""
+        """1.7.25 (R4 K8): `"a\\\\nb"` was shown as one line `a\\nb`; the shell hands `a\\nb` on and the program writes two lines.
+        1.7.38: only `\\n` is a line break and `\\\\` one backslash; a tab escape, a Windows path and a regular expression stay as written."""
         from modules.task import cmdview
 
         rules = [{"pattern": r'--text\s+"((?:[^"\\]|\\.)*)"', "from": "text"}, {"pattern": r"--text\s+'([^']*)'", "from": "text"}]
-        for written, text in (('"a\\nb"', "a\nb"), ('"a\\\\nb"', "a\nb"), ("'a\\nb'", "a\nb"), ('"say \\"hi\\""', 'say "hi"'), ('"cost \\$5"', "cost $5"), ('"x\\ty"', "x\ty"), ("'a\\\\nb'", "a\\\nb")):
+        for written, text in (('"a\\nb"', "a\nb"), ('"a\\\\nb"', "a\nb"), ("'a\\nb'", "a\nb"), ('"say \\"hi\\""', 'say "hi"'), ('"cost \\$5"', "cost $5"), ('"x\\ty"', "x\\ty"), ("'a\\\\nb'", "a\\nb"),
+                              ("'C:\\temp\\data'", "C:\\temp\\data"), ('"C:\\\\temp\\\\data"', "C:\\temp\\data"), ("'\\d+\\s'", "\\d+\\s"), ("'one\\\\two'", "one\\two")):
             body = cmdview.body_of(f"comment 7 --text {written}", rules, None)
             self.assertEqual(body["text"], text, written)
             self.assertEqual(body["lines"], text.count("\n") + 1, written)
@@ -145,7 +147,7 @@ class HeldCallCard(TaskCase):
         (self.task / "big.md").write_text("line\n" * 5000, encoding="utf-8")
         big = self.held("demotracker --project DEMO comment 7 --file " + self.task.relative_to(self.root).as_posix() + "/big.md")["body"]
         self.assertEqual((len(big["text"]), big["lines"], big["cut"]), (cmdview.BODY_CHARS, 5000, True))
-        self.assertEqual(self.held("demotracker --project DEMO set-state 9 Done")["say"], "Set ticket 9 to Done")
+        self.assertEqual(self.held("demotracker --project DEMO set-state 9 Done")["say"], "把工单 9 改成 Done")
 
     def test_the_rules_are_checked_when_the_type_is_read(self) -> None:
         from core import connections

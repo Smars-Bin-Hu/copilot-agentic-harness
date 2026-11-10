@@ -69,7 +69,7 @@ The skills behind the steps: `generic-kb-toolkit-design`, `/generic-kb-toolkit-b
 
 ## See how the domains hang together
 
-Open the knowledge base window (the book at the bottom right of the board) and press **Map**. It shows which domain uses which. What others build on stands left, and what comes last stands right. An arrow means "uses".
+Open the knowledge base window (the book at the bottom right of the board, or the same button on the Enter screen) and press **Map**. The **Company** tab beside it lists what the company part of the knowledge base gives the agent (tools, skills, standards). It shows which domain uses which. What others build on stands left, and what comes last stands right. An arrow means "uses".
 
 - **Who uses what**: click a domain to see what it uses and what uses it. Click a row to see the objects behind it.
 - **If this changes**: click a domain to see which domains a change can reach, step by step.
@@ -139,6 +139,23 @@ Two files of each domain hold what only people or environments know:
 - Every card says `Level: verified (read in <repo> at <commit>)`.
 - `domain.yaml` holds the commit of each repository the domain was learned at.
 - A source that was deleted keeps its card only with `source_missing` and level `unknown`, so it does not read like checked knowledge.
+
+## What goes into `company/`
+
+`company/` in the knowledge base is what is the company's, not one domain's. `harness company sync` makes the copies Copilot needs.
+
+| Goes in | Where |
+| --- | --- |
+| The skill prefix (names the pack skills; your `user.override.json` wins, `doctor` says when they differ) | `company.json`: `{"skill_prefix": "acme"}` |
+| Which factory tool packs are on | `tools/packs.json`: `{"use": ["ado", "sqlserver"]}` |
+| Tool packs the company wrote (not named like a factory pack) | `tools/packs/<name>/` |
+| Connections, without secrets | `tools/connections.json` |
+| The recipe for each colleague's computer (CA bundle host and proxy, where a program is installed, as `{label, hint, program}`; no secret) | `tools/computer.json` |
+| SOP skills (no tool: `<prefix>-<name>`) | `skills/` |
+| Instructions for the agent, any number: `<name>.instructions.md` (a file with another name is not read by Copilot and is marked `not used`) | `instructions/` |
+| Code standards | `standards/code-standards.md` |
+
+Each instructions file is copied to `.github/instructions/` as `<prefix>-<name>.instructions.md`; `knowledgebase.instructions.md` (how to read the knowledge base) keeps its name and replaces the one the harness ships. A file you take out of `instructions/` is taken back by the next sync you ask for (it goes to `.harness/runtime/company-backup/`). The SOP skills of a tool pack come with the pack, as `<prefix>-<pack>-<name>`. Never put in `company/`: `.env`, accounts, passwords, tokens, certificates or a CA bundle. They stay on each computer.
 
 ## Make it yours
 

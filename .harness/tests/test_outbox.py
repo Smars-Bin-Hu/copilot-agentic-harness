@@ -59,7 +59,7 @@ class OutboxTests(OutboxCase):
         for lang in ("en", "zh"):
             found = json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
             self.assertNotIn("UTC", found["desk.outbox.asked"], lang)
-            self.assertNotIn("DROP", found["desk.set.open.tip"], lang)
+            self.assertNotIn("DROP", found["desk.set.open.tip.conn"], lang)
             self.assertNotIn("approve-action", found["desk.outbox.same_as"], lang)
 
     def test_a_write_waits_with_a_draft_then_runs_once_after_approval(self) -> None:
@@ -95,6 +95,49 @@ class OutboxTests(OutboxCase):
         again = self.term(COMMENT)
         self.assertEqual(again["permissionDecision"], "deny")  # used up: a new approval with a new code
         self.assertNotEqual(code_of(again["permissionDecisionReason"]), code)
+
+    def test_the_agent_is_told_to_wait_for_the_code_and_the_gate_lets_that_wait_through(self) -> None:
+        """1.7.38 (C12 Q12): a held call tells the agent to run `harness wait --approval <code>`; the wait only reads the approval state, so the gate lets it through, in each spelling of the command."""
+        self.new()
+        reason = self.term(COMMENT)["permissionDecisionReason"]
+        code = code_of(reason)
+        self.assertIn(f"wait --approval {code}", reason)
+        self.assertIn("9 分钟", reason)
+        for command in (f"harness wait --approval {code}", f"harness wait --approval {code} --timeout 540", f"harness.cmd wait --approval {code}",
+                        f".harness/bin/harness wait --approval {code}", f"python3 .harness/engine/cli.py wait --approval {code}", f"cd {self.root} && harness wait --approval {code}"):
+            self.assertEqual(self.term(command), {}, command)
+        self.assertEqual(self.term("harness approve-action")["permissionDecision"], "deny", "the other command is still the person's alone")
+
+    def test_a_dismissal_keeps_its_reason_for_the_wait_and_the_draft(self) -> None:
+        from core import approvals as core_approvals, outbox as core_outbox
+
+        self.new()
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        (draft,) = self.drafts()
+        done = core_outbox.dismiss_action(self.root, code, interactive=True, reason="other_way", note="  write it\nin the ticket page ")
+        self.assertEqual((done["dismissed"], done["reason"], done["note"], done["agent"]), (True, "other_way", "write it in the ticket page", "ended"))
+        self.assertIn("换个做法", draft.read_text(encoding="utf-8"))
+        self.assertEqual(core_outbox.pending_for(self.root, TASK), [], "no longer held")
+        stub = core_approvals.find(self.root, code, 10, file=core_approvals.ACTIONS)
+        self.assertEqual((stub["state"], stub["reason"], stub["note"]), ("dismissed", "other_way", "write it in the ticket page"))
+        self.assertEqual(core_outbox.decided(stub)["reason"], "other_way")
+        self.assertEqual(self.term(COMMENT)["permissionDecision"], "deny", "the same call asked again is a new card")
+        self.assertNotEqual(code_of(self.term(COMMENT)["permissionDecisionReason"]), code)
+
+    def test_a_reason_is_one_of_four_and_only_two_take_a_line(self) -> None:
+        from core import outbox as core_outbox
+
+        self.new()
+        for reason, note, kept in (("command", "x", "x"), ("connection", "x", ""), ("later", "x", ""), ("other_way", "y", "y"), ("", "z", "")):
+            code = code_of(self.term(f'tk comment T-7 "{reason or "none"}"')["permissionDecisionReason"])
+            done = core_outbox.dismiss_action(self.root, code, interactive=True, reason=reason, note=note)
+            self.assertEqual((done["reason"], done["note"]), (reason, kept))
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        with self.assertRaises(ValueError):
+            core_outbox.dismiss_action(self.root, code, interactive=True, reason="because")
+        with self.assertRaises(ValueError):
+            core_outbox.dismiss_action(self.root, code, interactive=False, reason="later")
+        self.assertEqual(len(core_outbox.pending_for(self.root, TASK)), 1, "a refused dismissal changed nothing")
 
     def test_a_call_held_before_the_task_gets_its_draft_marked_once_the_task_is_open(self) -> None:
         """1.7.4: the agent tried outside a task, was told to open one, opened it and asked again: the same code, now with a draft; the approval marks that draft."""
@@ -196,6 +239,59 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertTrue(view[0]["draft"].startswith("OUTBOX/"))
         self.assertEqual(view[0]["facts"], {})
 
+    def test_a_held_call_the_agent_does_not_wait_for_is_marked_and_is_no_wait_of_the_person(self) -> None:
+        """1.7.38 (C11 Q21): "the agent went on" is decided by the wait signal, not by what it ran after the call. Its wait on the code is running, or its wait ran out and it was told to end its turn:
+        it waits. It did neither (after the minute or two it has to start the wait): it went on. The card stays (the person may dismiss or approve it), but the task does not say it waits for the person."""
+        from core import approvals as core_approvals, outbox as core_outbox
+        from modules.task import taskboard, taskdesk, tasklife
+
+        self.new()
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        minutes = 10
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "outbox")
+        self.assertFalse(taskdesk.outbox_view(self.root, TASK)[0]["moved_on"], "just held: the agent is on its way to start the wait")
+        self.assertEqual(taskdesk.outbox_view(self.root, TASK)[0]["agent"], "", "and the card says nothing of the agent yet")
+        self.assertEqual(self.term("tk show T-7"), {})  # a read it runs meanwhile: no matter
+        self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), set())
+        with mock.patch.object(core_outbox, "START_GRACE_S", 0.0):  # the minutes it has to start a wait cannot be waited for in a test
+            self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), {code}, "no wait was ever started: it went on")
+            self.assertNotEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "outbox", "the task is not waiting for the person because of it")
+            rows, _problems = taskboard.board_rows(self.root, False, 0, ("approve-action",), rewrite=False)
+            row = next(item for item in rows["tasks"] if item["task"] == TASK)
+            self.assertNotEqual(row["waiting_why"], "outbox")
+            (view,) = taskdesk.outbox_view(self.root, TASK)
+            self.assertEqual((view["code"], view["moved_on"], view["agent"]), (code, True, "away"), "still on the page, marked")
+            self.assertEqual([item["code"] for item in core_outbox.pending_for(self.root, TASK)], [code], "still held: it can be approved or dismissed")
+
+            core_approvals.wait_mark(self.root, code, "running", minutes, file=core_approvals.ACTIONS)  # its wait is running
+            self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), set())
+            self.assertEqual(taskdesk.outbox_view(self.root, TASK)[0]["agent"], "wait")
+            self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "outbox")
+            core_approvals.wait_mark(self.root, code, "running", minutes, now=__import__("time").time() - 60, file=core_approvals.ACTIONS)  # the beat is old: its terminal was stopped
+            self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), {code})
+            core_approvals.wait_mark(self.root, code, "timeout", minutes, file=core_approvals.ACTIONS)  # its wait ran out: it ended its turn saying what waits
+            self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), set())
+            self.assertEqual(taskdesk.outbox_view(self.root, TASK)[0]["agent"], "ended")
+            self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "outbox")
+            core_approvals.wait_mark(self.root, code, "gone", minutes, file=core_approvals.ACTIONS)  # stopped for good
+            self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), {code})
+            self.approve(code)
+            self.assertEqual([item["code"] for item in taskdesk.approved_view(self.root, TASK)], [code])
+
+    def test_what_the_agent_runs_after_a_held_call_does_not_decide_whether_it_waits(self) -> None:
+        """The 1.5 s guess of 1.7.38 is gone: a read, a refused call or another held call after the held one change nothing; only the wait signal counts."""
+        from core import outbox as core_outbox
+        from modules.task import taskdesk
+
+        self.new()
+        self.term(COMMENT)
+        self.assertEqual(self.term(COMMENT)["permissionDecision"], "deny")  # the same call held again
+        self.term('tk comment T-9 "another write"')  # another held call
+        self.assertEqual(self.term("tk show T-8"), {})
+        self.edit("TASK.md")
+        self.assertTrue(all(not item["moved_on"] for item in taskdesk.outbox_view(self.root, TASK)))
+        self.assertFalse(hasattr(core_outbox, "MOVED_MARGIN_S"))
+
     def test_an_approved_call_stays_on_the_page_until_the_command_has_run(self) -> None:
         """1.7.24: the green card is the server's, not the page's memory: it is there after the agent answered or the page was loaded again, and goes when the command ran (the approval is used up)."""
         from modules.task import taskdesk
@@ -246,7 +342,7 @@ class OutboxOnThePageTests(OutboxCase):
         from modules.task import tasklife
 
         self.new()
-        tasklife.set_allow(self.root, TASK, "dev", True, interactive=True)
+        tasklife.set_allow(self.root, TASK, "cloud", True, interactive=True)
         def as_reviewer(command: str) -> Dict[str, Any]:
             data = pre_tool(SESSION, "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
             data["cwd"], data["agent_type"] = str(self.root), "reviewer"
@@ -254,7 +350,7 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertEqual(as_reviewer("tk show T-7"), {})  # a read (the tickets system names `show`)
         refused = as_reviewer("cloudctl run job-1")
         self.assertIn("reviewer", refused["permissionDecisionReason"])
-        self.assertEqual(self.term("cloudctl run job-1"), {})  # the main agent: the environment is open
+        self.assertEqual(self.term("cloudctl run job-1"), {})  # the main agent: the connection is open
 
     def test_the_packs_show_patterns_give_the_facts_of_the_card(self) -> None:
         from modules.task import taskdesk
@@ -293,14 +389,14 @@ class OutboxOnThePageTests(OutboxCase):
         from modules.task import taskhtml
 
         desk = (taskhtml.WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()})', desk)  # the code must be typed (hand test B90-b: an empty box approved)
+        self.assertIn('SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}})', desk)  # the code must be typed (hand test B90-b: an empty box approved)
         self.assertIn('const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;', desk)
         self.assertNotIn("placeholder: item.code", desk)  # the box does not show the code
-        self.assertIn('SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code})', desk)
+        self.assertIn('SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code, reason, note: note || ""})', desk)  # 1.7.38: with the reason the person chose
         self.assertIn("shade.addEventListener(\"click\"", (taskhtml.WEB / "serve.js").read_text(encoding="utf-8"))  # a click beside the window closes it
         self.assertIn('view.box.classList.add("wide")', desk)
         self.assertIn(".cmd-scroll{max-height:min(50vh,520px);overflow:auto", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))  # the window scrolls both ways
-        self.assertIn('"outbox", "asking"]', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
+        self.assertIn('"outbox", "asking", "accept"]', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
         en, zh = messages.table("en"), messages.table("zh")
         for key in ("task.waiting.outbox", "outbox.state.dismissed", "gate.action.dismissed", "desk.outbox.view", "desk.outbox.approve", "desk.outbox.dismiss", "desk.outbox.window", "desk.outbox.view_first"):
             self.assertIn(key, en, key)

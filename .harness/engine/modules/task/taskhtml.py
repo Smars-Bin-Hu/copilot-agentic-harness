@@ -5,6 +5,8 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   task.html, board.html   the skeleton of each page; desk.html: one task as the board server sends it (M16)
   tokens.css, ui.css      the look, shared: the colours of the light and the dark theme, and how things look under them; theme.js sets the theme and Lite before the page is drawn
   status.js, status.css   the small status marks (model, context ring, run time, mini stage ribbon, TODO) under a task name and on the lobby card; the ribbon is shared: the task page draws its stage strip from it and opens a card on it (`Status.card`)
+  batch.js, batch.css           a served task page only: the box over two held calls or more, one code for the ticked ones (1.7.38, F3)
+  stmts.js, stmts.css           the task page: the statements of a held call one by one, numbered, each with its system and how its type judges it, the reads folded (1.7.38, F3)
   rounds.js, rounds.css         a served task page only: the earlier rounds of the chat, at the top of the Live tab
   run.js, run.css               a served task page only: the Ask agent and Run buttons of a shell code block, the panel of a running command
   live.js, reply.js, live.css   a served task page only: the stream of the Live tab (the latest items of the chat, changed in place) and the reply panel (a pill at the bottom centre; text, language, model, drafts, Send, Steer, Stop)
@@ -13,12 +15,14 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   wall.js, wall.css       the wallpaper (the pictures of the folder the person chose, small copies made in the browser), the glass panels over a picture, the Background part of the settings
   shell.js, shell.css     the board and the task page only: the search pill and Cmd+K palette, the gear and the settings panel, the VS Code banner (fixed to the window, outside the page)
   bot3d.js                the 3D robot of the Enter screen (WebGL, no library); enter.js keeps a flat one when it cannot run
-  enter.js, enter.css     a served page only: the Enter screen (wordmark, robot, hold to charge, the readiness list of `/api/ready`); a file on disk has none
+  enter.js, enter.css     a served page only: the Enter screen (wordmark, robot, hold to charge, the two blocks of `/api/ready`: Harness & Local required, From the company optional, and the VS Code button); a file on disk has none
+  readyui.js              a served page only: where a fix of the readiness answer leads (the setup form, a Tools window, the knowledge base window, the Terminal) and the VS Code button's restart (1.7.38)
+  readybar.js, readybar.css   the board only: the red and the yellow block under its header after Enter (1.7.38)
   page.css, lobby.css     where things go, shared / the board's lobby
   common.js               helpers shared by both pages
-  tools.js                a served page only: the Tools window (a tab each for Tool packs, Connections, This computer) and the Tools group of Get ready (1.7.17)
-  machine.js              a served page only: the Tool packs and This computer tabs (tool folders, the CA bundle, MCP) of the Tools window
-  servers.js              a served page only: the Connections tab (each connection and the person's identity, tested before it is kept, Export) and Open VS Code with identities (1.7.10)
+  tools.js                a served page only: the three Tools windows (Tool packs, Connections & sign-ins, Local), opened one at a time, and the facts of Get ready (1.7.17, three windows 1.7.38)
+  machine.js              a served page only: the Tool packs and Local windows (the packs, tool folders, the CA bundle, MCP)
+  servers.js              a served page only: the Connections & sign-ins window (each connection with its sign-in and Test, Export) and Open VS Code with identities (1.7.10)
   task.js, board.js       how each page is drawn from its data; desk.js the task page, diffview.js the code compare of its Changes tab, highlight.js the colours of code, serve.js the server's buttons, chat.js the send panel, steer and stop
 
 `build` copies the style, the scripts and the data (as JSON) into the skeleton, so the result is still one file that
@@ -95,7 +99,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
         "/*THEME*/": read("theme.js"),
-        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *(["dock.css", "kbatlas.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else [])]),
+        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else [])]),
         "<!--DATA-->": as_json(data),
         "/*JS*/": "\n".join(read(name) for name in scripts),
     }
@@ -112,7 +116,7 @@ def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, An
     serve: set when the board server sends the page (the Gate verdicts get buttons, and a link to save the page).
     Without it the page is a file: it shows the verdicts and has no calls to a server."""
     if serve is not None:
-        return build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "kbatlas.js", "servers.js", "machine.js", "tools.js", "setup.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh)
+        return build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh)
     return build("task.html", ["common.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
 
 
@@ -126,11 +130,11 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
-    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "servers.js", "machine.js", "tools.js", "setup.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
+    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "readybar.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
     return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"])
 
 
-DESK_STYLES = ["page.css", "diffview.css", "highlight.css"]
+DESK_STYLES = ["page.css", "diffview.css", "highlight.css", "stmts.css", "batch.css"]
 
 # A saved copy opens from a disk, away from the board: it may run its own script and nothing else, and ask the network for nothing.
 SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
@@ -138,13 +142,13 @@ SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsaf
 
 def setup_page(serve: Dict[str, Any]) -> str:
     """Get ready, as the board server sends it. It has no Enter screen: it is where a new copy goes from there."""
-    return build("setup.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "kbatlas.js", "servers.js", "machine.js", "tools.js", "setup.js"], say("setup.title"), {"serve": serve, "getReady": True}, 0, ["page.css"])
+    return build("setup.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js"], say("setup.title"), {"serve": serve, "getReady": True}, 0, ["page.css"])
 
 
 def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> str:
     """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
     Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
     if serve is not None:
-        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "servers.js", "machine.js", "tools.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
-    page = build("desk.html", ["common.js", "status.js", "highlight.js", "diffview.js", "space.js", "wall.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
+        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "stmts.js", "batch.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
+    page = build("desk.html", ["common.js", "status.js", "highlight.js", "stmts.js", "diffview.js", "space.js", "wall.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

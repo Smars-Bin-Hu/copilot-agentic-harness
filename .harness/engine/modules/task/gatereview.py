@@ -41,8 +41,13 @@ def rule_of(row: Dict[str, Any]) -> str:
     return _SAFE.sub("-", name.lower()).strip("-.")[:60] or "gate"
 
 
-def denies(root: Path, data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Every deny of the task since it began, oldest first. `id` is stable: the same line gives the same id each time."""
+def denies(root: Path, data: Dict[str, Any], held: bool = False) -> List[Dict[str, Any]]:
+    """Every refusal of the task since it began, oldest first; with `held`, the calls that waited for the person instead (1.7.38, C12 RC-4: a held call is not a block)."""
+    return [item for item in _gate_lines(root, data) if item["held"] == held]
+
+
+def _gate_lines(root: Path, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Every `deny` line of the task since it began, oldest first, each with `held`. `id` is stable: the same line gives the same id each time."""
     session, surface = str(data.get("session_id") or ""), str(data.get("surface") or "vscode")
     if not session:
         return []
@@ -60,7 +65,7 @@ def denies(root: Path, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         base = hashlib.sha1(json.dumps([row.get("at"), row.get("tool_name"), command, paths, row.get("reason")], sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:12]
         seen[base] = seen.get(base, 0) + 1
         found.append({"id": base if seen[base] == 1 else f"{base}-{seen[base]}", "at": str(row.get("at") or ""), "tool": str(row.get("tool_name") or ""), "command": redact.text(command), "paths": [redact.text(item) for item in paths],
-                      "rule": rule_of(row), "reason": redact.text(row.get("reason"))})  # the page may be saved and sent: no secret from the log goes into it
+                      "rule": rule_of(row), "reason": redact.text(row.get("reason")), "held": common.is_held(row)})  # the page may be saved and sent: no secret from the log goes into it
     return found
 
 
@@ -71,14 +76,15 @@ def verdicts(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def section(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     """What the report page draws: the blocks (the newest SHOWN), each with the person's verdict, and the counts."""
-    found = denies(root, data)
+    lines = _gate_lines(root, data)
+    found = [item for item in lines if not item["held"]]
     kept = verdicts(data)
     items = []
     for item in found[-SHOWN:]:
         mark = kept.get(item["id"]) or {}
         items.append({**item, "verdict": mark.get("v", ""), "exported": bool(mark.get("exported_at"))})
     counts = {name: sum(1 for item in found if (kept.get(item["id"]) or {}).get("v") == name) for name in VERDICTS}
-    return {"count": len(found), "shown": len(items), "items": items, "counts": counts, "wrong_open": sum(1 for item in items if item["verdict"] == "wrong" and not item["exported"]), "path": SAMPLE_DIR.as_posix()}
+    return {"count": len(found), "held": len(lines) - len(found), "shown": len(items), "items": items, "counts": counts, "wrong_open": sum(1 for item in items if item["verdict"] == "wrong" and not item["exported"]), "path": SAMPLE_DIR.as_posix()}
 
 
 def set_verdict(root: Path, task: str, gate_id: str, verdict: str) -> Dict[str, Any]:

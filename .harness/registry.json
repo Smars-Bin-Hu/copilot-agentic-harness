@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.7.29",
-  "released": "2026-11-07",
+  "version": "1.7.38",
+  "released": "2026-11-09",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -9,6 +9,8 @@
   "engine": {
     "files": [
       ".harness/engine/hook.py",
+      ".harness/engine/launch.py",
+   ".harness/engine/integrity.py",
       ".harness/engine/cli.py",
       ".harness/engine/doctor.py",
       ".harness/engine/core/",
@@ -38,6 +40,7 @@
       ".harness/tests/test_kbstatus.py",
       ".harness/tests/test_kbatlas.py",
       ".harness/tests/test_kbdetail.py",
+      ".harness/tests/test_companyview.py",
       ".harness/tests/test_starticon.py",
       ".harness/tests/test_reply.py",
       ".harness/INDEX.md",
@@ -52,6 +55,7 @@
       ".harness/engine/adapters/common.py",
       ".harness/engine/modules/__init__.py",
       ".harness/examples/",
+      ".harness/toolpacks/",
       ".github/skills/generic-build-new-skill/",
       ".github/skills/generic-goal-driven/",
       ".github/skills/generic-grill-me/",
@@ -79,7 +83,8 @@
       ".harness/tests/test_kbextract.py",
       ".harness/tests/test_reinstall.py",
       ".harness/.env.example",
-      ".harness/policies/connections.json"
+      ".harness/policies/connections.json",
+      ".harness/policies/computer.json"
     ]
   },
   "modules": {
@@ -170,10 +175,12 @@
         ".harness/tests/test_refs.py",
         ".harness/tests/test_standards.py",
         ".harness/tests/test_company.py",
+        ".harness/tests/test_kbupdate.py",
         ".harness/tests/test_promote_delete.py",
         ".harness/tests/test_taskdesk.py",
         ".harness/tests/test_taskrun.py",
         ".harness/tests/test_setup.py",
+        ".harness/tests/test_computer_recipe.py",
         ".harness/tests/test_skillboard.py",
         ".harness/tests/test_fusion.py",
         ".harness/tests/test_skillsend.py",
@@ -228,6 +235,29 @@
         ".workspace/README.md",
         ".harness/tests/test_reach.py",
         ".harness/tests/test_connections.py",
+        ".harness/tests/test_connlayers.py",
+        ".harness/tests/test_open_connection.py",
+        ".harness/tests/test_approval_wake.py",
+        ".harness/tests/test_accept.py",
+        ".harness/tests/test_c12_fb.py",
+        ".harness/tests/test_c12_fc.py",
+        ".harness/tests/test_c12_fd.py",
+        ".harness/tests/test_c13_d4.py",
+        ".harness/tests/test_c13_f1.py",
+        ".harness/tests/test_c13_f2.py",
+        ".harness/tests/test_c13_f3.py",
+        ".harness/tests/test_c13_fr.py",
+        ".harness/tests/test_c13_fr2.py",
+        ".harness/tests/test_c13_fr3.py",
+        ".harness/tests/test_c13_sql.py",
+        ".harness/tests/test_statements.py",
+        ".harness/tests/test_gate_lists.py",
+        ".harness/tests/test_gate_sqlserver.py",
+        ".harness/tests/test_gate_redteam.py",
+        ".harness/tests/test_connection_find.py",
+        ".harness/tests/test_readyitems.py",
+        ".harness/tests/test_c13_d5.py",
+        ".harness/tests/test_vsrestart.py",
         ".harness/tests/test_launchenv.py",
         ".harness/tests/test_ticketflow.py",
         ".harness/tests/test_toolpacks.py"

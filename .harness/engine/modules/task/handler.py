@@ -207,8 +207,8 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
             tasklife.resume_on_prompt(ctx.root, data["task"])  # the person is back at a task they had put aside
         except Exception:  # noqa: BLE001 - a mark for a list; never in the way of the prompt
             pass
-    if data is not None and data.get("waiting"):
-        mark_waiting(ctx, data, False)  # the person answered
+    if data is not None and (data.get("waiting") or data.get("deliver")):
+        mark_waiting(ctx, data, False)  # the person answered (and what was delivered is not, any more)
     if data is not None:
         try:  # the restore point a rewind goes back to (1.6.109); a point that cannot be taken never holds up the message
             from . import rewind
@@ -338,6 +338,8 @@ def task_file_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     validate_policy(policy)  # a broken policy raises: hook.py logs it and the reminder does not run (fail-open)
     if not policy.get("task_file_reminder", True) or not tasks.task_file(ctx.root, data["task"]).is_file():
         return None
+    if isinstance(data.get("deliver"), dict):
+        return None  # `task deliver` wrote the Status line of TASK.md itself; the person's next message takes the delivery away (C12 RB-N4)
     state = relay(ctx)
     if not state["wrote"] or state["task_file"] or state["reminded"]:
         return None
@@ -397,10 +399,14 @@ def mark_waiting(ctx: Context, data: Dict[str, Any], stopped: bool) -> None:
     """The board's mark (M12-1): the agent of this task stopped, so the person is next. Never in the way of the hook."""
     from core.paths import utc_now
 
+    from core import outbox
+
     from . import tasklife
 
     try:
-        tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "stopped"} if stopped else None)
+        tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "accept" if data.get("deliver") else "stopped"} if stopped else None)  # delivered, then stopped: the person accepts (1.7.38)
+        if stopped and data.get("deliver"):
+            outbox.agent_left(ctx.root, data["task"])  # a call held between the delivery and the stop that the agent never waited on: left behind now (F3 U4)
     except Exception:  # noqa: BLE001 - the mark is for a list; losing it must not turn a Stop into an error
         pass
 
@@ -427,7 +433,8 @@ def note_asking(event: HookEvent, ctx: Context) -> None:
             if mark.get("why") != "asking":
                 tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "asking"})
         elif mark.get("why") == "asking":
-            tasklife.set_waiting(ctx.root, data["task"], None)  # answered (or the agent went on): it is at work again
+            delivered = data.get("deliver") if isinstance(data.get("deliver"), dict) else None  # 1.7.38 (C13 FR 24): a delivered task is still to accept after a question and its answer, until the person accepts or the agent delivers again
+            tasklife.set_waiting(ctx.root, data["task"], {"since": str(delivered.get("at") or utc_now()), "why": "accept"} if delivered else None)  # answered (or the agent went on): it is at work again
     except Exception:  # noqa: BLE001 - the mark is for the board; losing it must not turn a tool call into an error
         pass
 

@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import systems as outside
-from core import approval, config, messages, outbox, reach, tasks
+from core import approval, config, messages, outbox, pinfiles, tasks
 from core.paths import cli_command, utc_now
 
-from . import autorun, cmdview, common, evidence, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
+from . import accept, autorun, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
 from . import steps as step_parts
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
@@ -44,6 +44,8 @@ def documents(root: Path, task: str) -> List[Dict[str, Any]]:
     for name in names:
         data = (folder / name).read_bytes()
         text = data[:MAX_DOC_BYTES].decode("utf-8", errors="replace")
+        if name == tasks.TASK_FILE:
+            text = task_ops.without_placeholders(text)  # 1.7.38: the template's `<...>` lines are not an answer
         tree = mdtree.parse(text)
         tree["blocks"] = mdtree.resolve_images(tree["blocks"], "")
         out.append({"name": name, "blocks": tree["blocks"], "cut": tree["cut"] or len(data) > MAX_DOC_BYTES})
@@ -115,18 +117,89 @@ def evidence_pictures(folder: Path, env: str) -> List[str]:
         return []
 
 
-def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optional[Path] = None) -> Dict[str, Any]:
-    """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none."""
+def _program(text: str) -> str:
+    """The program a statement runs, as the gate names it: the first word, with no folder, no `.cmd`, `.bat` or `.exe`, in lower case."""
+    found = cmdview.tokens(text)
+    word = found[0]["text"] if found else ""
+    return re.sub(r"\.(?:cmd|bat|exe)$", "", re.split(r"[\\/]", word)[-1], flags=re.IGNORECASE).lower()
+
+
+def system_of(text: str, listed: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """The system one statement reaches, `{system, env}`: of the systems whose program it runs, the one whose `reach.when` pattern matches the most of its arguments (the way the gate tells two servers
+    on one host apart); one with no pattern only when no other matches. A name for a card, not a judgment: the gate decides."""
+    program = _program(text)
+    args = cmdview.args_of(text, [program]) if program else ""
+    best, best_len, fallback = None, -1, None
+    for name, system in listed.items():
+        if not isinstance(system, dict) or program not in outside.clis(system):
+            continue
+        when = str((system.get("reach") or {}).get("when") or "")
+        if not when:
+            fallback = fallback or name
+            continue
+        try:
+            found = re.search(when, args, re.IGNORECASE)
+        except re.error:
+            continue
+        if found and len(found.group(0)) > best_len:
+            best, best_len = name, len(found.group(0))
+    name = best or fallback
+    return {"system": name, "env": str((listed[name] or {}).get("env") or "")} if name else None
+
+
+def reached(command: str, listed: Optional[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """The systems a command line reaches, each once, in the order of the line: `[{system, env}]` (1.7.38). Each statement of the line (cut as `cmdview.commands` cuts it) on its own."""
+    out: List[Dict[str, str]] = []
+    for text in cmdview.commands(command) if listed else []:
+        one = system_of(text, listed or {})
+        if one and one not in out:
+            out.append(one)
+    return out
+
+
+def _whose(body: Any, text: str, command: str, listed: Optional[Dict[str, Any]]) -> Any:
+    """The one text of a line that reaches more than one system (a script on one, a statement on the other) says whose it is: `system` and `env` in its body (1.7.38)."""
+    if not isinstance(body, dict) or len(reached(command, listed)) < 2:
+        return body
+    there = system_of(text, listed or {})
+    return dict(body, system=there["system"], env=there["env"]) if there else body
+
+
+def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optional[Path] = None, listed: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none.
+    1.7.38: a held line of several writes has one part for each (`parts`: `{say, facts, body, system?}`), cut where the line is cut outside quotes, so a card can say every write on a line of its own with its own facts;
+    with `listed` (the systems of the tools policy) a part names the system and the environment its own command reaches, when the line reaches more than one (`system`, `env`);
+    `says` is every title; `writes` their number; `say`, `facts` and `body` are those of the first (or, for a call that says nothing, of the whole command). `parts` is there only for more than one."""
     programs = outside.clis(system)
+    rules = system.get("say")
+    parts = []
+    texts = []  # a type that says nothing in words but has a statement or a text of each command (SQL): one part for each command that has one (C12 N5)
+    for text in cmdview.commands(command):
+        args = cmdview.args_of(text, programs)
+        said = cmdview.say_of(args, rules)
+        body = cmdview.body_of(args, system.get("body"), folder, root)
+        if said:
+            parts.append({"say": said, "why": cmdview.why_of(args, rules), "facts": cmdview.facts(text, system.get("show")), "body": body, "at": text})  # by command, not by the word `ado` (a `--conn ado` is no second write)
+        if body:
+            texts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body, "at": text})
+    if len(texts) > 1 and len(texts) > len(parts):
+        parts = texts  # the line runs several statements, and they do not all have a title: each is shown with its own server and text, the second is not hidden behind the first
+    if len(parts) > 1 and len(reached(command, listed)) > 1:  # two statements on two systems: each says its own (a card that names the first only is wrong for the second)
+        for part in parts:
+            there = reached(part["at"], listed)
+            if there:
+                part.update(system=there[0]["system"], env=there[0]["env"])
+    if len(parts) == 1:
+        parts[0]["body"] = _whose(parts[0]["body"], parts[0]["at"], command, listed)
+    for part in parts:
+        part.pop("at", None)
+    if parts:
+        return {"say": parts[0]["say"], "why": parts[0].get("why", "") if len(parts) == 1 else "", "says": [part["say"] for part in parts if part["say"]], "writes": len(parts), "facts": parts[0]["facts"] if len(parts) == 1 else {}, "body": parts[0]["body"], **({"parts": parts} if len(parts) > 1 else {})}
     args = cmdview.args_of(command, programs)
-    said = cmdview.say_of(args, system.get("say"))
-    if not said:  # a line of several commands (a read, then the write): the title is that of the part that says something (1.7.27)
-        for part in cmdview.all_args(command, programs):
-            if cmdview.say_of(part, system.get("say")):
-                args, said = part, cmdview.say_of(part, system.get("say"))
-                break
-    writes = sum(1 for part in re.split(r"\n|;|&&|\|\||\|", command) if re.search(r"\S", part) and cmdview.say_of(cmdview.args_of(part, programs), system.get("say")))  # a held line of several writes: the card says how many (1.7.29); by command, not by the word `ado` (a `--conn ado` is no second write)
-    return {"say": said, "writes": writes, "body": cmdview.body_of(args, system.get("body"), folder, root)}
+    body = cmdview.body_of(args, system.get("body"), folder, root)
+    if body and len(texts) == 1:
+        body = _whose(texts[0]["body"], texts[0]["at"], command, listed)
+    return {"say": "", "why": "", "says": [], "writes": 0, "facts": cmdview.facts(command, system.get("show")), "body": body}
 
 
 def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
@@ -136,17 +209,32 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
         systems = config.policy_or_empty(root, "tools").get("systems") or {}
         folder = tasks.task_dir(root, task)
         out = []
-        for item in outbox.pending_for(root, task):
+        waiting = outbox.pending_for(root, task)
+        gone = outbox.moved_on(root, waiting)  # 1.7.38: the agent does not wait for these (its wait on the code is not running, and it did not end its turn on it)
+        for item in waiting:
             system = systems.get(item.get("system", "")) or {}
-            out.append({
-                "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
+            place = outbox.agent_place(item)
+            there = reached(item["command"], systems)
+            pinned = pinfiles.pins(str(item["command"]), root, str(item.get("task") or ""), str(item.get("cwd") or ""))
+            listing = stmtview.of_call(root, task, str(item["command"]), systems, pinned, str(item.get("cwd") or ""))  # F3 AP: each statement of a call that carries many, judged by the lists of its type
+            out.append({"batch": outbox.batch_class(item), "moved_on": str(item["code"]) in gone, "agent": "" if place == "ended" and (item.get("wait") or {}).get("state") != "timeout" else place,  # "" for a call held a moment ago: it has not started its wait yet, and says nothing
+                "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": "unknown" if item.get("zone") == "broken" else item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True), "zone": item.get("zone", ""), "zone_note": item.get("zone_note", ""), "holds": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "zone": str(one.get("zone", "")), "note": str(one.get("note", "")), "opens": bool(one.get("opens"))} for one in item.get("holds") or [] if isinstance(one, dict)],
+                "offers": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "scope": str(one.get("scope", "")), "refs": [str(ref) for ref in one.get("refs") or []]} for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system")],  # 1.7.38: the connections this card may open for the task
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
-                "facts": cmdview.facts(item["command"], system.get("show")), "layout": cmdview.layout(item["command"], folder),
-                **call_words(item["command"], system, folder, root),
+                "layout": cmdview.layout(item["command"], folder, root, str(item.get("cwd") or "")),
+                "reaches": there if len(there) > 1 else [],  # 1.7.38: a line on more than one system names each (the head of the card shows them all)
+                "seen": pinned, "stmts": listing if listing and listing["total"] > 1 else None,  # the files the line names, as they are as this card is drawn: what View shows and Approve is held to (RB-N5)
+                **call_words(item["command"], system, folder, root, systems),
             })
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []
+
+
+def cut_command(command: Any, size: int = 80) -> str:
+    """The start of a command, on one line, for the title of a card: with a mark when it was cut (C12 N14)."""
+    one = " ".join(str(command).split())
+    return one if len(one) <= size else one[: size - 1].rstrip() + "\u2026"
 
 
 def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
@@ -158,34 +246,59 @@ def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
         for item in outbox.approved_for(root, task):
             said = ""
             try:
-                said = call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["say"]
+                said = " \u00b7 ".join(call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["says"])
             except Exception:  # noqa: BLE001 - a title is a help; the card has the command anyway
                 said = ""
             out.append({"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"],
-                        "approved_at": item.get("approved_at", ""), "title": said or " ".join(str(item["command"]).split())[:80]})
+                        "approved_at": item.get("approved_at", ""), "title": said or cut_command(item["command"]), "told": str(item.get("told") or "")})  # told: "wait" (its wait returned), "message" (the board woke it)
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []
 
 
-def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
-    """The Task settings field "Open to the agent" (1.7.6): each environment the protocol knows, with the systems of the company pack that reach it (none: the chip
-    cannot be clicked) and whether the person opened it for this task (`task allow`). Prod is listed as never. Empty `envs` when no system is listed: the field is not drawn."""
+def opened_view(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The held calls of this task whose connections the person opened from the card and that the agent has not run again (1.7.38): the page keeps a green card, and asks the person to tell the agent."""
     try:
         systems = config.policy_or_empty(root, "tools").get("systems") or {}
-        reaches = outside.environments(systems) if systems and not outside.validate(systems) else {}
-        seen = {line["env"]: line for line in reach.by_env(reach.view(root, systems))} if reaches else {}  # reached from VS Code (1.7.9), across the systems of each environment
+        out = []
+        for item in outbox.opened_for(root, task):
+            said = ""
+            try:
+                said = " \u00b7 ".join(call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["says"])
+            except Exception:  # noqa: BLE001 - a title is a help; the card has the code anyway
+                said = ""
+            names = [str(name) for name in item.get("opened_for") or []]
+            out.append({"code": item["code"], "names": names, "shown": [outbox.opened_words(name, item.get("opened_offers")) for name in names], "title": said or cut_command(item["command"]), "told": str(item.get("told") or "")})
+        return out
+    except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
+        return []
+
+
+def allow_view(root: Path, data: Dict[str, Any], task: str = "") -> Dict[str, Any]:
+    """The Task settings field "Open to the agent" (1.7.38): the connections the person opened for this task (`open`, each can be closed), the linked items when a connection of the task's tickets
+    is opened by them (`links`), and the connections a held call of THIS task offers to open (`can`, for the words of the pop: not every connection there is). `any`: some connection could be opened,
+    so the field is drawn even before a call is held. Nothing to draw when there is none of these. The switch ends with the task."""
+    try:
+        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        systems = systems if systems and not outside.validate(systems) else {}
     except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the field is then not drawn
-        reaches, seen = {}, {}
-    opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) and data.get("status") == "open" else {}  # the switch ends with the task (hand test B90-a: a closed task said dev was open)
-    envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or ""),
-             "reach": {"state": seen[env]["state"], "parts": seen[env]["parts"]} if env in seen else None} for env in tasklife.ALLOW_ENVS] if reaches else []
+        systems = {}
+    is_open = data.get("status") == "open"
+    held = data.get(tasklife.ALLOW_KEY) if isinstance(data.get(tasklife.ALLOW_KEY), dict) and is_open else {}
+    rows = [{"name": name, "env": str((item or {}).get("env") or (systems.get(name) or {}).get("env") or ""), "since": str((item or {}).get("at") or ""), "known": name in systems} for name, item in sorted(held.items())]
+    openable = sorted(name for name, system in systems.items() if name not in held and isinstance(system, dict) and tasklife.conn_scope(system) == outside.ALL)
+    try:  # the ones a held call of this task offers: those have to do with this task
+        offered = {str(one.get("system")) for item in (outbox.pending_for(root, task) if task and is_open else []) for one in item.get("offers") or [] if isinstance(one, dict)}
+    except Exception:  # noqa: BLE001 - the pop then says less
+        offered = set()
+    can = [name for name in openable if name in offered]
     refs = {str(item.get("ref", "")).split(":", 1)[0] for item in (data.get("links") or []) if isinstance(item, dict)}
-    scoped = sorted(name for name, system in (systems or {}).items() if isinstance(system, dict) and system.get("item") and system.get("link") in refs) if refs else []
-    if scoped:  # 1.7.18: the items the task is linked to, a chip of their own: the agent's writes to them only
-        on = bool(data.get(tasklife.LINKS_KEY)) and data.get("status") == "open"
-        envs = envs + [{"env": tasklife.LINKS, "label": messages.text("desk.set.open.links"), "systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "reach": None}]
-    return {"envs": envs, "never": [outside.PROD]}
+    scoped = sorted(name for name, system in systems.items() if isinstance(system, dict) and system.get("item") and system.get("link") in refs and tasklife.conn_scope(system) in (outside.ITEMS, outside.ALL)) if refs else []
+    links = None
+    if scoped:  # 1.7.18: the items the task is linked to: the agent's writes to them only
+        on = bool(data.get(tasklife.LINKS_KEY)) and is_open
+        links = {"systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "refs": [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]}
+    return {"open": rows, "links": links, "can": can, "any": bool(openable), "never": [outside.PROD]}
 
 
 def links_view(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -262,7 +375,12 @@ def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         detail = taskinsight.SESSION_IN_DETAIL.sub(lambda found: say("task.note.session", session_id=found.group(1)), str(event.get("detail", "")))
         mark, key = standout(what, detail)
-        label = say(key) if key in messages.table(messages.language()) else what
+        values: Dict[str, Any] = {}
+        if what in ("allow-env", "link", "test-runner", "approve-call"):
+            facts = event.get("facts") if isinstance(event.get("facts"), dict) else {}
+            key, detail = common.plain_event(what, detail, facts)
+            values = {"n": int(facts.get("batch") or 0)}
+        label = say(key, **values) if key in messages.table(messages.language()) else what
         out.append({"at": event.get("at", ""), "round": event.get("round", 1), "what": what, "label": label, "detail": detail, "via": "", "mark": mark})
     out.reverse()
     return out
@@ -453,7 +571,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "approved": approved_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

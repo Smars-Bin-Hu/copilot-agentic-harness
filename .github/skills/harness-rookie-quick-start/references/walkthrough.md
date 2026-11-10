@@ -24,7 +24,7 @@ Afterwards give the user the address of the task's page, from the output of that
 
 Write what you understood from the user's sentence into `REQ.md`. Ask the user to open the **Requirement** tab of the task's page (the **Overview** tab holds the progress book, `TASK.md`). Say in one sentence each what they are for.
 
-Ask: "Did I get it right?" If the user says yes, ask them to press **confirm requirement** on the page and type the code. Only the user can do that: the harness fills the confirmation line, and you never do. If the user says no, fix `REQ.md` on the spot and ask again.
+Ask: "Did I get it right?" If the user says yes, ask them to press **Confirm requirement** on the page and type the code. Only the user can do that: the harness fills the confirmation line, and you never do. If the user says no, fix `REQ.md` on the spot and ask again.
 
 If the board is not running, the same is `harness task confirm-req` in a terminal.
 
@@ -67,11 +67,11 @@ You say what to change
   -> the changes are written to a new branch, not committed. Committing is yours to do
 ```
 
-Say it in three sentences: the agent never changes the real repository directly; before the changes you approve the plan; before the write-back you approve once more. After each approval the agent is not told by the approval itself. With the board linked to VS Code, press **send to agent** on the page; without it, the page gives a message to paste into the chat.
+Say it in three sentences: the agent never changes the real repository directly; before the changes you approve the plan; before the write-back you approve once more. On the board, each approval wakes the agent by itself when VS Code is linked and the chat is idle. If it could not, press **Send to agent** on the page, or paste the message the page gives into the chat.
 
 ### 9. Wrapping up
 
-The work is done. Ask the user whether to close the task, and tell them what closing does: it writes the report and lets the session go, and the task can be opened again. Close it only after they say yes: run `harness task close`, or the user presses **close** on the task's page. On the board the task is now closed: set the filter to **Closed** to see it. Give the user the link to the report ("Time and usage" on the task's page). Tell them: the folder is still there, `task open` opens it again, and when they want it out of the way they can archive it from the board (a button on every closed task). Ask whether they want this practice task archived.
+The work is done. Do not ask whether to close the task: deliver it with a three-line summary (`harness task deliver --summary "<text>"`) and stop. The task's page shows **to accept**; tell the user what the two buttons do: **Accept and close** writes the report and lets the session go (the task can be opened again), **Not yet** opens the reply box to say what is missing. They press one. On the board the task is now closed after the first: set the filter to **Closed** to see it. Give the user the link to the report ("Time and usage" on the task's page). Tell them: the folder is still there, `task open` opens it again, and when they want it out of the way they can archive it from the board (a button on every closed task). Ask whether they want this practice task archived.
 
 Last, use this table to tell them which other features start only when they type something themselves (all of them cost usage, so the agent does not use them by itself):
 

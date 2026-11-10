@@ -14,6 +14,7 @@ MASK = "***"
 _NAMES = r"(?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|access[_-]?key|auth(?:orization)?|credential|private[_-]?key|sas|signature|sig|pat(?![a-z]))"  # pat: a personal access token (AZURE_DEVOPS_EXT_PAT=...), not path, patch or pattern
 _PATH_PART = re.compile(r"[A-Za-z]?[a-z0-9_-]*|[A-Z0-9_-]+|[A-Z0-9]{1,12}(?:[-_][A-Za-z0-9]{1,16})+")  # the last: a code with a name after it (`435E00-ado`, the draft of a held call; 1.7.21)
 _WORD = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])")
+_CAMEL = re.compile(r"(?:[A-Z][a-z]{1,}|[A-Z]{2,}(?![a-z])|[a-z]{2,}|[0-9]{1,4})+")  # a folder or file name written in words: `AcmeDW`, `StoredProcedures`, `usp2Load` (C12 RB-N8: a path with `AcmeDW` in it was masked from there to the next space)
 
 
 def _reads_as_name(run: str) -> bool:
@@ -27,11 +28,16 @@ def _reads_as_name(run: str) -> bool:
     return len(words) >= 3 and digits <= 0.3 * sum(char.isalnum() for char in run) and sum(map(len, words)) / len(words) >= 3.5 and max(map(len, words)) <= 24
 
 
+def _camel(part: str) -> bool:
+    """A name in words (`_CAMEL`) with at least one real word in it (four letters): a random piece of a key is made of short bits."""
+    return bool(_CAMEL.fullmatch(part)) and any(len(word) >= 4 for word in _WORD.findall(part))
+
+
 def _long_run(found: Match[str]) -> str:
     """A long run with no space is a key or a hash, unless it reads as a path (at least two slashes and words between them) or as a name of code. A key that has slashes (base64) mixes its cases
     inside a part."""
     parts = found.group(0).split("/")
-    if len(parts) >= 3 and all(_PATH_PART.fullmatch(part) and (len(part) < 32 or "-" in part or "_" in part) for part in parts):
+    if len(parts) >= 3 and all((_PATH_PART.fullmatch(part) or _camel(part)) and (len(part) < 32 or "-" in part or "_" in part) for part in parts):
         return found.group(0)
     return found.group(0) if _reads_as_name(found.group(0)) else MASK
 

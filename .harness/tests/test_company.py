@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -17,6 +18,7 @@ from core import setup as core_setup
 from core.company import CompanyError
 from modules.task import setupjob
 
+REAL_STRFTIME = time.strftime
 SKILL = "---\nname: {name}\ndescription: 'Open a ticket in the tracker. Use when a task needs a ticket.'\ntype: workflow\nspecificTo: generic\n---\n\n# Ticket\n\nOpen one.\n"
 RULE = "### No select star\n\n- **Applies to**: `*.sql`\n- **Rule**: name the columns.\n"
 FILES = {
@@ -100,6 +102,26 @@ class SyncTests(CompanyCase):
         self.assertFalse((self.root / ".github" / "skills" / "acme-gone").exists())
         self.assertEqual([path.name for path in (self.root / ".harness" / "runtime" / "company-backup").glob("*/*")], ["acme-gone"])
 
+    def test_a_copy_put_under_an_old_word_is_taken_back_when_the_word_changes(self) -> None:
+        set_prefix(self.root)
+        company.sync(self.root)
+        self.assertEqual(json.loads((self.root / ".harness" / "runtime" / "company-copies.json").read_text(encoding="utf-8"))["skills"], ["acme-ticket"])
+        put(self.root, {".github/skills/mine-own/SKILL.md": "not the company's\n"})
+        shutil.move(str(self.kb / "company" / "skills" / "acme-ticket"), str(self.kb / "company" / "skills" / "bnk-ticket"))
+        (self.kb / "company" / "company.json").write_text('{ "skill_prefix": "bnk" }\n', encoding="utf-8")
+        (self.kb / "company" / "skills" / "bnk-ticket" / "SKILL.md").write_text(SKILL.format(name="bnk-ticket"), encoding="utf-8")
+        set_prefix(self.root, "bnk")
+        self.assertIn({"path": ".github/skills/acme-ticket", "change": "remove"}, company.diff(self.root)["changes"])
+        company.sync_after(self.root)
+        self.assertTrue((self.root / ".github" / "skills" / "acme-ticket").is_dir())  # only a person's sync takes it back
+        result = company.sync(self.root, remove=True)
+        self.assertIn(".github/skills/acme-ticket", result["copied"])
+        self.assertFalse((self.root / ".github" / "skills" / "acme-ticket").exists())
+        self.assertTrue((self.root / ".github" / "skills" / "bnk-ticket").is_dir())
+        self.assertTrue((self.root / ".github" / "skills" / "mine-own").is_dir())  # not in the ledger: none of our business
+        self.assertEqual([path.name for path in (self.root / ".harness" / "runtime" / "company-backup").glob("*/*")], ["acme-ticket"])
+        self.assertTrue(company.diff(self.root)["in_sync"])
+
     def test_no_company_content_is_no_difference(self) -> None:
         with mock.patch.object(company.targets, "company_folder", return_value=None):
             self.assertTrue(company.diff(self.root)["in_sync"])
@@ -113,11 +135,96 @@ class SyncTests(CompanyCase):
         self.assertTrue((self.root / ".github" / "skills" / "acme-ticket").is_dir())
         self.assertFalse((self.root / ".github" / "skills" / "generic-review").exists())
 
-    def test_only_the_named_instruction_file_is_copied(self) -> None:
+    def test_each_instruction_file_is_copied_with_the_companys_word_in_front_and_the_main_one_keeps_its_name(self) -> None:
+        """Q7: `<name>.instructions.md` -> `.github/instructions/<prefix>-<name>.instructions.md`; a file that is not named so is left; the harness's own files are never replaced."""
         set_prefix(self.root)
-        put(self.kb, {"company/instructions/skills.instructions.md": "mine\n"})
+        shipped = self.root / ".github" / "instructions"
+        shipped.mkdir(parents=True, exist_ok=True)
+        (shipped / "skills.instructions.md").write_text("the harness's own\n", encoding="utf-8")
+        put(self.kb, {"company/instructions/skills.instructions.md": "the company's\n", "company/instructions/sql.instructions.md": "sql\n", "company/instructions/acme-etl.instructions.md": "etl\n",
+                      "company/instructions/notes.md": "not an instruction\n", "company/instructions/README.md": "# readme\n", "company/instructions/.hidden.instructions.md": "x\n"})
+        result = company.sync(self.root)
+        self.assertEqual(sorted(path.name for path in shipped.iterdir()), ["acme-etl.instructions.md", "acme-skills.instructions.md", "acme-sql.instructions.md", "knowledgebase.instructions.md", "skills.instructions.md"])
+        self.assertEqual((shipped / "skills.instructions.md").read_text(encoding="utf-8"), "the harness's own\n")  # not replaced
+        self.assertEqual((shipped / "acme-skills.instructions.md").read_text(encoding="utf-8"), "the company's\n")
+        self.assertIn(".github/instructions/acme-sql.instructions.md", result["copied"])
+        self.assertEqual(json.loads((self.root / ".harness" / "runtime" / "company-copies.json").read_text(encoding="utf-8"))["instructions"], ["acme-etl.instructions.md", "acme-skills.instructions.md", "acme-sql.instructions.md"])  # the main file is the harness's: never in the ledger
+        self.assertEqual(company.sync(self.root)["already_same"], 5)  # a skill, the main file and three more instruction files: nothing changed
+        self.assertTrue(company.diff(self.root)["in_sync"])
+
+    def test_two_instruction_files_with_one_copy_name_are_told_and_the_first_wins(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "one\n", "company/instructions/acme-sql.instructions.md": "two\n"})
+        result = company.sync(self.root)
+        self.assertEqual([item["skill"] for item in result["refused"]], ["sql.instructions.md"])  # sorted order: `acme-sql` is the first
+        self.assertIn("acme-sql.instructions.md", result["refused"][0]["why"])
+        self.assertEqual((self.root / ".github" / "instructions" / "acme-sql.instructions.md").read_text(encoding="utf-8"), "two\n")
+
+    def test_a_file_that_left_the_content_is_seen_by_diff_and_doctor_and_taken_back_only_when_a_person_asks(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})
         company.sync(self.root)
-        self.assertFalse((self.root / ".github" / "instructions" / "skills.instructions.md").exists())
+        copy = self.root / ".github" / "instructions" / "acme-sql.instructions.md"
+        put(self.root, {".github/instructions/acme-mine.instructions.md": "a person's own\n"})  # not in the ledger: none of our business
+        (self.kb / "company" / "instructions" / "sql.instructions.md").unlink()
+        self.assertIn({"path": ".github/instructions/acme-sql.instructions.md", "change": "remove"}, company.diff(self.root)["changes"])
+        self.assertIn(".github/instructions/acme-sql.instructions.md", company.drift(self.root)["stale"])
+        company.sync_after(self.root)
+        self.assertTrue(copy.is_file(), "a sync at the end of another command removes nothing")
+        result = company.sync(self.root, remove=True)
+        self.assertIn(".github/instructions/acme-sql.instructions.md", result["copied"])
+        self.assertFalse(copy.exists())
+        self.assertTrue((self.root / ".github" / "instructions" / "acme-mine.instructions.md").is_file())
+        self.assertEqual([path.name for path in (self.root / ".harness" / "runtime" / "company-backup").glob("*/*")], ["acme-sql.instructions.md"])
+        self.assertTrue(company.diff(self.root)["in_sync"])
+        self.assertEqual(json.loads((self.root / ".harness" / "runtime" / "company-copies.json").read_text(encoding="utf-8"))["instructions"], [])
+
+    def test_the_save_of_get_ready_takes_back_what_left_the_content_as_sync_now_does_and_says_so(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})
+        company.sync(self.root)
+        copy = self.root / ".github" / "instructions" / "acme-sql.instructions.md"
+        (self.kb / "company" / "instructions" / "sql.instructions.md").unlink()
+        line = dict(setupjob.steps(self.root, {"kb_mode": "none"}))["sync"]()
+        self.assertFalse(copy.exists(), "the person pressed Save: the copy that left is not left for a second press")
+        self.assertIn("acme-sql.instructions.md", line)
+        self.assertIn("company-backup", line)
+        self.assertTrue(company.diff(self.root)["in_sync"])
+
+    def test_the_main_instruction_file_is_never_taken_back_and_a_new_word_takes_the_old_copies_back(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})
+        company.sync(self.root)
+        (self.kb / "company" / "instructions" / "knowledgebase.instructions.md").unlink()
+        company.sync(self.root, remove=True)
+        self.assertTrue((self.root / ".github" / "instructions" / "knowledgebase.instructions.md").is_file(), "it is the harness's file: its copy stays")
+        shutil.move(str(self.kb / "company" / "skills" / "acme-ticket"), str(self.kb / "company" / "skills" / "bnk-ticket"))
+        (self.kb / "company" / "company.json").write_text('{ "skill_prefix": "bnk" }\n', encoding="utf-8")
+        (self.kb / "company" / "skills" / "bnk-ticket" / "SKILL.md").write_text(SKILL.format(name="bnk-ticket"), encoding="utf-8")
+        set_prefix(self.root, "bnk")
+        company.sync(self.root, remove=True)
+        names = sorted(path.name for path in (self.root / ".github" / "instructions").iterdir())
+        self.assertIn("bnk-sql.instructions.md", names)
+        self.assertNotIn("acme-sql.instructions.md", names)
+
+    def test_doctor_judges_only_the_guide_to_the_knowledge_base_not_the_other_company_instructions(self) -> None:
+        import doctor
+
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "---\napplyTo: '**/*.sql'\n---\n\nSee knowledge-base/domains for the tables.\n"})
+        company.sync(self.root)
+        names = [path.name for path in doctor.kb_instruction_files(self.root)]
+        self.assertIn("knowledgebase.instructions.md", names)
+        self.assertNotIn("acme-sql.instructions.md", names)
+
+    def test_an_instruction_file_needs_the_word_like_a_skill_does(self) -> None:
+        put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})
+        shutil.rmtree(self.kb / "company" / "skills")
+        with self.assertRaises(CompanyError):
+            company.sync(self.root)  # no `skill_prefix`: nothing can be named
+        shutil.rmtree(self.kb / "company" / "instructions")
+        put(self.kb, {"company/instructions/knowledgebase.instructions.md": "main\n"})
+        self.assertFalse(company.sync(self.root)["refused"])  # the main file alone needs no word
 
     def test_no_word_or_another_word_stops_before_anything_is_copied(self) -> None:
         with self.assertRaises(CompanyError) as caught:
@@ -148,11 +255,13 @@ class ToolsTests(CompanyCase):
         put(self.kb, {"company/tools/packs/sqlpack/toolpack.json": json.dumps(self.PACK), "company/tools/packs/sqlpack/rules.json": json.dumps(self.RULES),
                       "company/tools/packs/sqlpack/launch/start-vscode.cmd": "@echo off\r\nrunas ...\r\n", "company/tools/connections.json": json.dumps({"connections": {}})})
         result = company.sync(self.root)
-        self.assertIn(".harness/toolpacks/sqlpack", result["copied"])
+        from core import toolpacks
+
+        self.assertEqual(toolpacks.listed(self.root)["sqlpack"]["source"], "company", "read where it lies: nothing is copied but skills")
         self.assertIn(".harness/policies/connections.company.json", result["copied"])
         from core import config, reach
 
-        self.assertEqual(reach.launch_script(self.root, "win32"), self.root / ".harness" / "toolpacks" / "sqlpack" / "launch" / "start-vscode.cmd")
+        self.assertEqual(reach.launch_script(self.root, "win32"), self.kb / "company" / "tools" / "packs" / "sqlpack" / "launch" / "start-vscode.cmd")
         self.assertEqual(config.load_policy(self.root, "tools")["systems"]["dev-sql"]["env"], "dev")
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": {"dev-sql": {"env": "qat"}}}), encoding="utf-8")
         merged = config.load_policy(self.root, "tools")["systems"]["dev-sql"]
@@ -199,6 +308,10 @@ class PackageCase(HarnessTestCase):
     def pack(self) -> dict:
         return company.pack(self.root, str(self.out))
 
+    def one_minute(self):
+        """The clock stands at 14:32 on 8 November: two packages of this minute meet."""
+        return mock.patch.object(company.time, "strftime", side_effect=lambda fmt: "2026.11.08-1432" if fmt == "%Y.%m.%d-%H%M" else REAL_STRFTIME(fmt))
+
     def owner_changes(self, files: dict, gone: tuple = ()) -> None:
         put(self.kb, files)
         for name in gone:
@@ -218,7 +331,53 @@ class PackageCase(HarnessTestCase):
             manifest = json.loads(package.read(company.MANIFEST_PATH))
         self.assertEqual(manifest["skill_prefix"], "acme")
         self.assertEqual(self.pack()["version"], f"{made['version']}.2")  # never over an earlier package
+        self.assertRegex(made["version"], r"^\d{4}\.\d{2}\.\d{2}-\d{4}$")  # the date and the minute
         self.assertTrue(Path(made["package"]).is_file())
+
+    def test_a_program_of_a_company_pack_keeps_its_run_bit_through_a_package_and_an_update(self) -> None:
+        program = "company/tools/packs/runbook/bin/runbook"
+        plain = "company/tools/packs/runbook/README.md"
+        put(self.kb, {program: "#!/usr/bin/env python3\nprint(1)\n", plain: "x\n", "company/tools/packs/runbook/bin/other": "#!/bin/sh\n"})
+        (self.kb / program).chmod(0o755)
+        (self.kb / "company/tools/packs/runbook/bin/other").chmod(0o644)  # written on a computer with no run bit: the first line says it is a program
+        run_git(self.kb, "add", "-A")
+        run_git(self.kb, "commit", "-qm", "pack")
+        made = self.pack()
+        with zipfile.ZipFile(made["package"]) as package:
+            modes = {item.filename: (item.external_attr >> 16) & 0o777 for item in package.infolist()}
+        self.assertEqual((modes[program], modes["company/tools/packs/runbook/bin/other"], modes[plain], modes["README.md"]), (0o755, 0o755, 0o644, 0o644))
+        set_prefix(self.mate)
+        self.update(made["package"])
+        kb = self.mate / "knowledge-base"
+        self.assertTrue((kb / program).stat().st_mode & 0o100)
+        self.assertTrue((kb / "company/tools/packs/runbook/bin/other").stat().st_mode & 0o100)
+        self.assertFalse((kb / plain).stat().st_mode & 0o111)
+        # the same content again, the program has lost its bit here: an update gives it back
+        (kb / program).chmod(0o644)
+        self.update(made["package"])
+        self.assertTrue((kb / program).stat().st_mode & 0o100)
+
+    def test_a_package_of_before_the_modes_still_gives_a_program_its_bit(self) -> None:
+        program = "company/tools/packs/runbook/bin/runbook"
+        put(self.kb, {program: "#!/usr/bin/env python3\n"})
+        run_git(self.kb, "add", "-A")
+        run_git(self.kb, "commit", "-qm", "pack")
+        made = self.pack()
+        old = self.place / "old.zip"
+        with zipfile.ZipFile(made["package"]) as package, zipfile.ZipFile(old, "w") as again:
+            for name in package.namelist():
+                again.writestr(name, package.read(name))  # what 1.7.37 did: mode 600 for all
+        set_prefix(self.mate)
+        self.update(str(old))
+        self.assertTrue((self.mate / "knowledge-base" / program).stat().st_mode & 0o100)
+
+    def test_two_packages_of_one_day_do_not_overwrite_each_other(self) -> None:
+        with self.one_minute():
+            first = self.pack()
+        with mock.patch.object(company.time, "strftime", side_effect=lambda fmt: "2026.11.08-1433" if fmt == "%Y.%m.%d-%H%M" else REAL_STRFTIME(fmt)):
+            second = self.pack()
+        self.assertEqual((first["version"], second["version"]), ("2026.11.08-1432", "2026.11.08-1433"))
+        self.assertTrue(Path(first["package"]).is_file() and Path(second["package"]).is_file())
 
     def test_the_owner_cannot_pack_what_a_colleague_could_not_use(self) -> None:
         with self.assertRaises(CompanyError):
@@ -237,6 +396,19 @@ class PackageCase(HarnessTestCase):
         with self.assertRaises(CompanyError):
             self.pack()
         self.assertEqual(list(self.out.iterdir()), [])
+
+    def test_the_checks_run_before_a_folder_is_chosen_and_the_dirty_files_are_listed_and_committed_on_a_click(self) -> None:
+        """1.7.38: `pack_check` is the first half of `pack`; `commit_changes` is the Commit them button."""
+        self.assertEqual(company.pack_check(self.root), {"ok": True, "word": "acme"})
+        put(self.kb, {"new.md": "not committed\n", "README.md": "changed\n"})
+        with self.assertRaises(company.DirtyError) as caught:
+            company.pack_check(self.root)
+        self.assertEqual(sorted(line.split()[-1] for line in caught.exception.lines), ["README.md", "new.md"])
+        done = company.commit_changes(self.root)
+        self.assertTrue(done["committed"])
+        self.assertEqual(run_git(self.kb, "status", "--porcelain"), "")
+        self.assertEqual(company.pack_check(self.root)["word"], "acme")
+        self.assertEqual(company.commit_changes(self.root), {"committed": False, "lines": []})  # nothing to commit: no empty commit, no error
 
     def test_a_first_install_needs_no_backup_and_a_dry_run_writes_nothing(self) -> None:
         package = self.pack()["package"]

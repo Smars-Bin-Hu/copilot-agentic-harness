@@ -33,10 +33,10 @@ The hard part is not the language: it is that the same term comes out the same w
 
 1. **Settle the scope with the user**: which domains or folders. Fetch those files: `harness task fetch --task <task> <kb repo>/<path>...` (Markdown, YAML, JSON). Fetch `glossary.md` at the root of the knowledge base too if it exists.
 2. **Glossary first.** Run `python3 .github/skills/generic-kb-translate/scripts/kbtranslate.py terms --task <task folder>` (Windows: `python`). It lists Chinese phrases of the originals, the ones in headings, tables and bold first. Start from the existing glossary if there is one; add the business terms, system names, recurring phrases. Write `GLOSSARY-DRAFT.md` in the task folder, in the form of [glossary.md](./templates/glossary.md). Show it to the user and stop until they agree. Their answer is the glossary.
-3. **Plan.** Write `PLAN.md`: the files, that each original is overwritten by its English (the Chinese stays in git history), and that `glossary.md` is added or updated. The user approves it in their terminal (`harness task approve-plan`).
+3. **Plan.** Write `PLAN.md`: the files, that each original is overwritten by its English (the Chinese stays in git history), and that `glossary.md` is added or updated. The user approves it on the task page.
 4. **Translate**, file by file, into `DEV/<kb repo>/<path>` (the same path as the original), by the glossary and [style.md](./references/style.md). Put the agreed glossary at `DEV/<kb repo>/glossary.md`. Do a few files, then run step 5, then go on: a mistake found early is fixed once.
 5. **Check**: `python3 .github/skills/generic-kb-translate/scripts/kbtranslate.py check --task <task folder> --glossary <task folder>/DEV/<kb repo>/glossary.md`. Fix every problem it lists, and run it again until it says 0 files with problems. Exit code 1 means something is left.
-6. **Hand over**: `harness task diff`, then `harness task promote --dry-run`. Tell the user what was translated, what you were unsure of (the lines you listed in `LOG.md`), and that the write-back waits for `harness task approve-promote` in their terminal.
+6. **Hand over**: `harness task diff`, then `harness task promote --dry-run`. Tell the user what was translated, what you were unsure of (the lines you listed in `LOG.md`), and that the write-back waits for the user to approve the promote on the task page.
 
 ## Gotchas
 

@@ -6,7 +6,7 @@
 
 const SERVE = (function () {
   const serve = DATA.serve;
-  const free = (action) => action === "pause" || action === "resume";
+  const free = (action) => action === "pause" || action === "resume" || action === "accept";  // no code, no preview: accept closes the task the agent delivered (1.7.38)
   let busy = false;
   const stack = [];  // the windows open now, the top one last
   const quiet = new Set();  // the windows that only tell something: the page under them keeps refreshing (`busy` is false), but keys still wait for them (`open`)
@@ -24,16 +24,20 @@ const SERVE = (function () {
   }
 
   let reloading = false;
+  // A page that shows work in progress asks to stay (1.7.38): the Get ready form writes the language first and goes on for a while, and a reload then lost the work it was showing.
+  // `keep()` says whether it still asks. The page that changes the language itself (the settings panel) passes `now`: that one reloads.
+  const keepers = [];
+  const stay = (keep) => { keepers.push(keep); };
 
   // Every call of the page waits for the pairing of this load: asked before it, a paired browser would be refused and told it is not paired.
-  const post = (path, body) => ready.then(() => send(path, body));
+  const post = (path, body, now) => ready.then(() => send(path, body, now));
 
-  function send(path, body) {
+  function send(path, body, now) {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body)})
       .then((response) => response.json().then((data) => {
         if (response.ok) {
           // The language was changed while the page was open: its texts are the old ones, so the page is loaded again (once: the address is the same, the server now sends the new ones).
-          if (data.language && data.language !== document.documentElement.lang && !reloading) { reloading = true; location.reload(); }
+          if (data.language && data.language !== document.documentElement.lang && !reloading && (now || !keepers.some((keep) => keep()))) { reloading = true; location.reload(); }
           return data;
         }
         if (data.unpaired) unpairedNote();  // the server says it: a button that does nothing would be worse
@@ -190,9 +194,22 @@ const SERVE = (function () {
     const tell = row.todo_left ? h("button", {class: "act hot", type: "button", disabled: "disabled", title: canTalk ? "" : t("board.close.notalk")}, t("board.close.tell")) : null;
     if (tell) go.classList.remove("hot");
     const pick = tell && row.chat && row.chat.bound && typeof CHAT !== "undefined" ? CHAT.modelPick(row.name) : null;  // the model of the message to the agent (1.6.101); a chat still to make has its own dialog
+    const held = h("div", {class: "held-block", hidden: ""});  // the calls of the task that still wait, listed in this window when the board has said so (1.7.38, F3 M2): the one yes closes the task and voids them
     const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), row.state === "quiet" ? h("p", {class: "bad"}, t("board.close.quiet")) : null, row.result_missing ? h("p", {class: "bad"}, t("board.close.result", {file: row.result_missing})) : null,
-      row.todo_left ? [h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})), steps, h("label", {class: "sub"}, t("board.close.reason")), words, pick ? pick.node : null] : null,
+      held, row.todo_left ? [h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})), steps, h("label", {class: "sub"}, t("board.close.reason")), words, pick ? pick.node : null] : null,
       h("div", {class: "row"}, tell, go, no), said]);
+    let listed = [];  // the codes the person was shown
+    go.disabled = true;  // until the board has said whether calls wait: the yes is for the list the person sees
+    post("/api/close", {task: row.name, step: "preview"}).then((data) => {
+      go.disabled = false;
+      listed = ((data.result && data.result.held) || []).map((call) => call.code);
+      if (!listed.length) return;
+      const found = heldBlock(data.result.held);
+      held.replaceChildren(h("p", {class: "bad"}, found.title), ...found.nodes);
+      held.hidden = false;
+      if (!row.todo_left) go.textContent = t(listed.length === 1 ? "board.accept.held.go.one" : "board.accept.held.go");  // one call: "Void it and close" (1.7.38, C13 FR 12)
+      requestAnimationFrame(found.mark);
+    }, () => { go.disabled = false; });  // when the list cannot be had, the server still refuses to close while a call waits, and the button says so
     no.addEventListener("click", view.close);
     if (row.todo_left) {
       post("/api/close", {task: row.name, step: "steps"}).then((data) => steps.replaceChildren(...data.result.left.map((text) => h("li", null, text))), () => {});
@@ -207,9 +224,53 @@ const SERVE = (function () {
     }
     go.addEventListener("click", () => {
       go.disabled = true;
-      post("/api/close", {task: row.name, reason: words ? words.value.trim() : ""}).then(() => { view.close(); done(); },
+      post("/api/close", {task: row.name, reason: words ? words.value.trim() : "", ...(listed.length ? {void: true, voids: listed} : {})}).then(() => { view.close(); done(); },
         (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
     });
+  }
+
+  // The part of the question Close and Accept and close share when calls of the task still wait for the person (C13 FB-4, F1 M2, F3 M2): what to say, the calls listed (each with the part of its command that tells it apart
+  // from a twin, F3 U3), and a mark that tells a list that scrolls. `title` and `nodes` go in a window; call `mark` once it is on the page.
+  function heldBlock(calls) {
+    const one = calls.length === 1;
+    const list = h("ul", {class: "held-list"}, calls.map((call) => h("li", null, h("b", null, call.system + (call.env && call.env !== "none" ? " " + call.env.toUpperCase() : "")), " ", h("span", {class: "held-title"}, call.title),
+      call.detail ? h("span", {class: "held-detail", title: call.detail}, call.detail) : null)));
+    const more = h("p", {class: "sub held-more", hidden: ""}, t("board.accept.held.more"));
+    const mark = () => { more.hidden = !(list.scrollHeight > list.clientHeight + 1 && list.scrollTop + list.clientHeight < list.scrollHeight - 1); };
+    list.addEventListener("scroll", mark);
+    return {title: t(one ? "board.accept.held.title.one" : "board.accept.held.title", {n: calls.length}), nodes: [h("p", null, t(one ? "board.accept.held.warn.one" : "board.accept.held.warn")), list, more], mark};
+  }
+
+  // The window Accept and close asks when calls of the task still wait: the calls are listed, closing voids them, and the task closes on the second yes.
+  // `run(true, codes)` closes with the person's yes and the codes it was shown (the server asks for both); it gives a promise.
+  function askVoid(calls, run, back) {
+    const found = heldBlock(calls);
+    const go = h("button", {class: "act hot", type: "button"}, t(calls.length === 1 ? "board.accept.held.go.one" : "board.accept.held.go"));
+    const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+    const said = h("div", {class: "bad"});
+    const view = dialog([h("h2", null, found.title), ...found.nodes, h("div", {class: "row"}, go, no), said]);
+    requestAnimationFrame(found.mark);
+    no.addEventListener("click", view.close);
+    go.addEventListener("click", () => {
+      go.disabled = true;
+      run(true, calls.map((call) => call.code)).then(() => { view.close(); done(); }, (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; if (back) back(); });
+    });
+    return view;
+  }
+
+  // Accept and close (1.7.38, C13 FB-4): when calls of the task still wait for the person, the page lists them first and closes on the second yes.
+  // The server asks for that yes too: an acceptance that does not carry it is refused while a call waits.
+  function accept(button, row, body) {
+    const work = () => { button.textContent = t("board.serve.working"); };
+    const back = () => { button.textContent = button.dataset.label; };
+    const close = (void_, codes) => post("/api/act", {...body, step: "act", ...(void_ ? {void: true, voids: codes || []} : {})});
+    work();
+    post("/api/act", {...body, step: "preview"}).then((data) => {
+      const calls = (data.result && data.result.held) || [];
+      if (!calls.length) return close(false).then(done);
+      back();
+      askVoid(calls, (void_, codes) => { work(); return close(void_, codes); }, back);
+    }).catch((error) => { back(); failed(error); });
   }
 
   function act(button, row, item, withReq) {
@@ -220,16 +281,11 @@ const SERVE = (function () {
     if (item.action === "stop") return CHAT.stop(row);
     if (item.action === "close") return close(row);
     if (item.action === "archive") return archive([row.name], serve.archive_to);
-    // A plan stands on a confirmed requirement: the plan alone is refused, and one code can confirm the requirement and approve the plan.
-    if (item.action === "approve-plan" && row.req_unconfirmed && !withReq) {
-      const go = h("button", {class: "act hot", type: "button"}, t("board.plan.req.go"));
-      const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-      const view = dialog([h("h2", null, t("board.plan.req.title")), h("p", null, t("board.plan.req")), h("div", {class: "row"}, go, no)]);
-      no.addEventListener("click", view.close);
-      go.addEventListener("click", () => { view.close(); act(button, row, item, true); });
-      return;
-    }
+    // A plan stands on a confirmed requirement: the plan alone is refused, so one code confirms the requirement and approves the plan (1.7.38, C11 T2-11: no window of its own before the code; the window with the code says it).
+    const joint = item.action === "approve-plan" && Boolean(row.req_unconfirmed);
+    withReq = withReq || joint;
     const body = {action: item.action, task: row.name, ...(withReq ? {with_req: true} : {})};
+    if (item.action === "accept") return accept(button, row, body);
     if (free(item.action)) {
       button.textContent = t("board.serve.working");
       post("/api/act", {...body, step: "act"}).then(done, (error) => { button.textContent = button.dataset.label; failed(error); });
@@ -247,7 +303,9 @@ const SERVE = (function () {
       const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
       const said = h("div", {class: "bad"});
       // What the terminal would show can be long (a promote lists every file): it scrolls in its own box, so the code and the buttons stay in view.
-      const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), h("div", {class: "screen"}, data.result.screen.map((line) => h("p", {class: "sub"}, line))),
+      const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), joint ? h("p", null, t("board.plan.req")) : null,
+        joint && (row.req_sections || []).length ? h("p", {class: "bad"}, t("desk.req.unfinished", {sections: row.req_sections.join(", ")})) : null,  // the card says it; so does the window the code is typed in
+        h("div", {class: "screen"}, data.result.screen.map((line) => h("p", {class: "sub"}, line))),
         h("p", null, data.result.ask), input, h("div", {class: "row"}, yes, no), said]);
       no.addEventListener("click", view.close);
       const send = () => {
@@ -294,6 +352,44 @@ const SERVE = (function () {
         anyway.addEventListener("click", () => end(() => go("/api/open", {anyway: true}).then(resolve, reject)));
       });
     });
+  }
+
+  // Restart VS Code (1.7.38): the board asks VS Code to quit the normal way (a file that is not saved is asked about by VS Code itself), waits until it has gone, and opens it again the way `openVS` does. Never a kill.
+  // The server says first, with 409 and `busy`, when the agent of a task is at work: the person chooses Restart anyway or Cancel. `open: false` only quits (the identities picker opens it then).
+  // `onState(view)`: the state of the restart as it goes (quitting, opening, done, failed). The promise ends with `done`; `failed` is an error whose `why` is a code (`still-open`, `no-command`) or the engine's words.
+  // `names`: the chats VS Code lists as running when it did not quit (`still-chat`).
+  const restartWhy = (why, names) => (Object.prototype.hasOwnProperty.call(TEXT, "board.vs.restart.why." + why) ? t("board.vs.restart.why." + why, {names: (names || []).join(", ")}) : String(why || ""));
+  function restartVS(options) {
+    const opts = options || {};
+    const go = opts.sender || post;
+    const ask = (anyway) => go("/api/restart", {open: opts.open !== false, anyway: anyway || undefined});
+    const follow = () => new Promise((resolve, reject) => {
+      const look = () => go("/api/restart", {step: "state"}).then((data) => {
+        const view = data.result || {};
+        if (opts.onState) opts.onState(view);
+        if (view.state === "done") resolve(view);
+        else if (view.state === "failed") reject(Object.assign(new Error(restartWhy(view.why, view.names)), {why: view.why, quiet: false}));
+        else setTimeout(look, 700);
+      }, reject);
+      look();
+    });
+    return ask(false).catch((error) => {
+      if (!(error && error.data && error.data.busy)) throw error;
+      return new Promise((resolve, reject) => {
+        const names = error.data.busy || [], chats = error.data.chats || [];  // tasks whose agent is at work; other chats of VS Code that run or wait for the person (VS Code asks about them itself when it quits)
+        const yes = h("button", {type: "button", class: "act hot live"}, t("board.vs.restart.anyway"));
+        const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+        const says = [names.length ? h("p", null, names.length === 1 ? t("board.vs.restart.busy.one", {name: names[0]}) : t("board.vs.restart.busy", {names: names.join(", ")})) : null,
+          chats.length ? h("p", null, chats.length === 1 ? t("board.vs.restart.chat.one", {name: chats[0]}) : t("board.vs.restart.chats", {names: chats.join(", ")})) : null, h("p", {class: "sub"}, t("board.vs.restart.busy.then"))].filter(Boolean);
+        const view = dialog([h("h2", null, t(names.length ? "board.vs.restart.busy.title" : "board.vs.restart.chat.title")), ...says, h("div", {class: "row win-foot"}, yes, no)]);
+        let done = false;
+        const end = (then) => { if (done) return; done = true; clearInterval(watch); view.close(); then(); };
+        const cancelled = () => reject(Object.assign(error, {quiet: true}));  // the person chose: nothing is said
+        const watch = setInterval(() => { if (!view.box.isConnected) end(cancelled); }, 300);
+        no.addEventListener("click", () => end(cancelled));
+        yes.addEventListener("click", () => end(() => ask(true).then(resolve, reject)));
+      });
+    }).then(follow);
   }
 
   function vsButton(chat) {
@@ -362,5 +458,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner(true));
   }
 
-  return {call, file, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
+  return {call, file, stay, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, restartVS, restartWhy, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
 })();

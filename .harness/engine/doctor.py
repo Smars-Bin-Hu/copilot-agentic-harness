@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import ahp, company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
+from core import ahp, clip, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -25,7 +25,7 @@ from core.state import TRACKED_EVENTS
 def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
-HOOK_ENTRY = ".harness/engine/hook.py"
+HOOK_ENTRY = ".harness/engine/launch.py"  # the one file the hook configuration starts (1.7.38, C13 FR2 4); it loads hook.py
 COMMAND_KEYS = ("command", "windows", "linux", "osx", "bash", "powershell")
 KB_DIR = "knowledge-base"
 BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
@@ -40,16 +40,21 @@ SLOW_GATE_SHARE = 0.5  # of the PreToolUse timeout: the SDK engine lets a call t
 DEFAULT_HOOK_TIMEOUT = 30
 
 
+TOPICS = "HARNESS_DOCTOR_TOPICS"  # the board's own run (1.7.38): a warning about the company's content (knowledge base, standards, repositories) says so, `[WARN:company]`; one about its copies `[WARN:copies]`; a person's run prints `[WARN]` as always
+
+
 class Report:
     def __init__(self) -> None:
         self.errors = 0
         self.lines: List[str] = []
+        self.topic = ""  # the part of the run that is going on: `company` while the checks of the repositories, the knowledge base, its copies and the standards run
 
     def ok(self, message: str) -> None:
         self.lines.append(f"[OK]    {message}")
 
     def warn(self, message: str) -> None:
-        self.lines.append(f"[WARN]  {message}")
+        mark = f"[WARN:{self.topic}] " if self.topic and os.environ.get(TOPICS) else "[WARN]  "
+        self.lines.append(f"{mark}{message}")
 
     def error(self, message: str) -> None:
         self.errors += 1
@@ -245,6 +250,40 @@ def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> N
         report.ok(say("doctor.hookcfg.ok", count=len(configured & needed)))
 
 
+def check_hook_start(report: Report, root: Path) -> None:
+    """(1.7.38, C13 FR2 4) The two files the hook starts from, `launch.py` and `hook.py`, can be compiled. A syntax error in `hook.py` made the hook exit with no answer; the launcher now refuses commands and writes in its place,
+    and this says which file and line so that the person can put it back. A fault in `launch.py` itself cannot be covered: Copilot cannot start it."""
+    folder = root / ".harness" / "engine"
+    bad = 0
+    for name in ("launch.py", "hook.py"):
+        try:
+            compile((folder / name).read_text(encoding="utf-8-sig"), str(folder / name), "exec")
+        except SyntaxError as error:
+            bad += 1
+            report.error(say("doctor.hookstart.broken", file=f".harness/engine/{name}", line=error.lineno or 0, error=" ".join(str(error.msg).split()), consequence=say("doctor.hookstart.launch" if name == "launch.py" else "doctor.hookstart.hook")))
+        except (OSError, ValueError) as error:
+            bad += 1
+            report.error(say("doctor.hookstart.unreadable", file=f".harness/engine/{name}", error=" ".join(str(error).split())[:200], consequence=say("doctor.hookstart.launch" if name == "launch.py" else "doctor.hookstart.hook")))
+    if not bad:
+        report.ok(say("doctor.hookstart.ok"))
+
+
+def check_messages(report: Report) -> None:
+    """(1.7.38, C13 FR2 10) The two message tables can be read. A table that cannot be read leaves the other language to speak for it (an English user is told the rules in Chinese): an error naming the file and the fault."""
+    bad = 0
+    for language in messages.LANGUAGES:
+        path = messages.table_path(language)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            if not isinstance(data, dict) or not data:
+                raise ValueError("it is not a table of messages")
+        except (OSError, ValueError) as error:
+            bad += 1
+            report.error(say("doctor.messages.unreadable", file=f".harness/engine/core/{path.name}", error=" ".join(str(error).split())[:200]))
+    if not bad:
+        report.ok(say("doctor.messages.ok"))
+
+
 def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -> None:
     if entry["status"] == "retired":
         return
@@ -270,7 +309,18 @@ def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -
             module.validate_policy(config.load_policy(root, policy_name))
             report.ok(say("doctor.policy.ok", name=policy_name))
         except Exception as error:
-            report.error(say("doctor.policy.bad", name=policy_name, error=error))
+            diagnose = getattr(module, "diagnose", None)
+            readable = True
+            if policy_name == "gate" and callable(diagnose):  # 1.7.38 (C13 F2c): a policy the gate cannot read (it runs on its built-in copy then): which file, what is wrong, and what the gate does meanwhile
+                try:
+                    module.validate_policy(config.load_policy(root, policy_name), floor=False)
+                except Exception:  # noqa: BLE001
+                    readable = False
+            if not readable:
+                file, problem = diagnose(root, error)
+                report.error(say("doctor.gate.policy_bad", file=file, error=problem))
+            else:
+                report.error(say("doctor.policy.bad", name=policy_name, error=error))
 
 
 def check_unseen(report: Report, root: Path) -> None:
@@ -370,6 +420,15 @@ def check_user(report: Report, root: Path) -> None:
         report.ok(say("doctor.user.name", name=found["name"], source=found["source"]))
 
 
+def _connection_fault_names(root: Path) -> set:
+    try:
+        from core import connections
+
+        return {str(item["file"]) for item in connections.faults(root)}
+    except Exception:  # noqa: BLE001 - doctor says it in its own check
+        return set()
+
+
 def check_overrides(report: Report, root: Path) -> None:
     """Each `<name>.company.json` (the company pack) and `<name>.override.json` (the person's): a layer that merges onto an existing policy, and what it changed."""
     directory = policies_dir(root)
@@ -388,6 +447,8 @@ def check_overrides(report: Report, root: Path) -> None:
             override = config.read_json(path)
             config.deep_merge(base, override)
         except Exception as error:
+            if name == "connections" and _connection_fault_names(root) & {path.name, f"{name}*.json"}:
+                continue  # (1.7.38, C13 FR 15) the connection list error below says the same, with what it holds: one error for one fault, not two
             report.error(say("doctor.override.unmergeable", file=path.name, name=name, error=error))
             continue
         touched = config.changes(base, override)
@@ -415,7 +476,10 @@ def kb_instruction_files(root: Path) -> List[Path]:
     """Instruction files that have text and are about the knowledge base: named after it, or naming its folder."""
     directory = root / ".github" / "instructions"
     found = []
+    others = set(company.ledger_files(root))  # the company's other instruction files (1.7.38) are about other things; only the guide to the knowledge base is judged here
     for path in sorted(directory.glob("*.instructions.md")) if directory.is_dir() else []:
+        if path.name in others:
+            continue
         text = path.read_text(encoding="utf-8")
         if body_of(text) and ("knowledge" in path.name.lower() or KB_DIR in text.lower()):
             found.append(path)
@@ -512,7 +576,7 @@ def check_skills(report: Report, root: Path) -> None:
 
     A third-party skill keeps its own name and form, so only its errors count. Warns only: a bad skill must not stop the harness.
     """
-    problem = skillcheck.prefix_problem(root)
+    problem = skillcheck.prefix_problem(root) or skillcheck.prefix_conflict(root)
     if problem:
         report.warn(problem)
     results = skillcheck.check_all(root)
@@ -593,6 +657,112 @@ def check_company(report: Report, root: Path) -> None:
         report.ok(say("doctor.company.ok", version=found["version"] or "-"))
 
 
+def check_toolpacks(report: Report, root: Path) -> None:
+    """Tool packs (1.7.30): a leftover of the old layout, a name in `use` no factory pack has, a connection field that is not filled in, a skill that uses a command its pack does not list."""
+    try:
+        from core import connections, launchenv, toolpacks
+
+        if (root / ".harness" / "examples" / "toolpacks").exists():
+            report.warn(say("doctor.toolpacks.old_examples"))
+        gone = toolpacks.unknown_use(root)
+        if gone:
+            report.warn(say("doctor.toolpacks.unknown", names=", ".join(gone)))
+        for line in toolpacks.clash_lines(root):  # `company sync` stops as a whole while this stands (1.7.38)
+            report.error(line)
+        company = targets.company_folder(root)
+        recipe_file = company / "tools" / "computer.json" if company else None
+        if recipe_file is not None and recipe_file.is_file():
+            try:
+                faults = launchenv.recipe_errors(json.loads(recipe_file.read_text(encoding="utf-8-sig")))
+            except ValueError as error:
+                faults = [str(error)]
+            if faults:
+                report.warn(say("doctor.toolpacks.recipe", faults="; ".join(faults)))
+        for one in toolpacks.faults(root):  # 1.7.38 (G-1): a faulty file makes the gate hold every call of the pack's programs; it is an error, not a quiet gap
+            for fault in one["faults"]:
+                report.error(say("doctor.toolpacks.unreadable" if fault.get("unreadable") else "doctor.toolpacks.broken", pack=one["pack"], file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(one["programs"]) or "-"))
+        held = connections.broken_systems(root)  # 1.7.38 (C13 F2): a connection list that cannot be read holds every program of the connection types: an error, not a quiet gap
+        for fault in connections.faults(root):
+            report.error(say("doctor.connections.broken", file=fault["file"], problem=str(fault["problem"]).rstrip(".") + ".", programs=", ".join(sorted({one for system in held.values() for one in system["reach"]["cli"]})) or "-"))
+        names = sorted(toolpacks.active(root))
+        if names:
+            report.ok(say("doctor.toolpacks.on", names=", ".join(names)))
+        for name, aliases in toolpacks.guard_only(root).items():  # a pack that is off still guards the connections that use its types (1.7.38)
+            report.ok(say("doctor.toolpacks.guard", name=name, aliases=", ".join(aliases)))
+        for line in toolpacks.recent_updates(root):
+            report.ok(line)
+        for name, rows in toolpacks.needs_report(root).items():  # a program a pack on needs is not found (1.7.37)
+            lost = list(dict.fromkeys(row["program"] for row in rows if not row["found"]))
+            if lost:
+                report.warn(say("doctor.toolpacks.program", name=name, programs=", ".join(lost)))
+        for item in connections.unset_fields(root):
+            report.warn(say("doctor.toolpacks.unset", alias=item["alias"], type=item["type"], fields=", ".join(item["fields"])))
+        for item in toolpacks.command_problems(root):
+            report.warn(say("doctor.toolpacks.command", **item))
+    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
+        report.warn(say("doctor.company.failed", error=error))
+
+
+def check_vscode_settings(report: Report, root: Path) -> None:
+    """(1.7.38, C13 TA-Q2) A VS Code that runs without the settings of this copy (the tool folders, the CA bundle): a warning that says what is missing and where to mend it. The board makes the same check itself
+    (its VS Code line), so the board's own run of doctor leaves it out. A VS Code that cannot be judged says nothing."""
+    if os.environ.get(TOPICS):
+        return
+    try:
+        from core import launchenv
+
+        found = launchenv.windows_without_settings(root)
+        if found:
+            from modules.task import ready
+
+            lost = list(dict.fromkeys(item for one in found for item in one["missing"]))
+            report.warn(say("doctor.vscode.settings", missing=ready.missing_words(lost) or "-"))
+    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
+        report.warn(say("doctor.company.failed", error=error))
+
+
+def reach_words(code: str, said: str = "") -> str:
+    """The word a probe leaves (`no-answer`, `identity`, `exit-<n>`) as a person reads it; anything else is kept as it is. `said`: what the probe printed when nothing answered."""
+    if code == "no-answer":
+        return say("doctor.systems.why.no_answer") + (say("doctor.systems.why.said", said=said) if said else "")
+    if code in ("identity", "other-identity"):
+        return say("doctor.systems.why.identity")
+    if code.startswith("exit-"):
+        return say("doctor.systems.why.exit", code=code[5:])
+    return code
+
+
+def system_reach(root: Path, systems: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Is each outside system reachable from here? A connection is probed as the board and VS Code do it (1.7.38): with the tool folders and the CA bundle VS Code gets and the identity kept here, so a connection
+    that passed its Test is not reported as not reachable (exit code 127 or 1) just because a terminal has neither. What has no kept identity, and a system written by hand, is probed in this terminal as before."""
+    from core import connections, reach as seen
+    from core import systems as outside
+    from modules.gate import external
+
+    listed = set(connections.listed(root))
+    try:
+        done = connections.probe_lines(root) if listed else {}  # it reports and keeps nothing: the board runs doctor in a child with another PATH, and its answer must not replace the board's own (C12 N2)
+    except Exception:  # noqa: BLE001 - a probe that cannot run leaves the terminal's way
+        done = {}
+    by_connection: Dict[str, Dict[str, Any]] = {}
+    for name, system in systems.items():
+        keys = [f"{name}:{env}" for env in outside.probes(system)]
+        if name in listed and keys and all(key in done for key in keys):
+            bad = [key for key in keys if done[key]["state"] != seen.OK]
+            code = str(done[bad[0]].get("why") or done[bad[0]]["state"]) if bad else ""
+            code = "no-answer" if code == connections.UNTESTED_SLOW else code  # (F1 M9) the board keeps "no answer" as "saved, not tested yet: no answer"; doctor says it in its own words
+            said = str(done[bad[0]].get("said") or "") if bad else ""
+            by_connection[name] = {"reachable": not bad, "why": clip.words(say("doctor.systems.why.connection", why=reach_words(code, said)), 260) if bad else "",
+                                   "launch": say("doctor.systems.launch.noanswer") if code == "no-answer" else (system.get("needs") or {}).get("launch") or ""}  # a new identity does not help when nothing answered
+    rest = {name: system for name, system in systems.items() if name not in by_connection}
+    answers = {**external.reach(rest, lambda command: external.run_probe(command, root)), **by_connection}
+    try:
+        loose = set(connections.unsigned(root))  # a connection with no sign-in kept here: told in one line, not one for each (1.7.38)
+    except Exception:  # noqa: BLE001 - a list that cannot be read leaves the lines one by one
+        loose = set()
+    return {name: dict(answers[name], unsigned=name in loose and not answers[name]["reachable"]) for name in systems if name in answers}
+
+
 def check_systems(report: Report, root: Path) -> None:
     """The outside systems a company listed (M43-2): is the list well formed, and is each system that has a probe reachable from here (1.7.1)? Nothing listed is fine: the harness ships none."""
     try:
@@ -601,7 +771,7 @@ def check_systems(report: Report, root: Path) -> None:
         systems = config.load_policy(root, "tools").get("systems") or {}
         errors = external.validate(systems)
         found = external.warnings(systems) if not errors else []
-        reached = external.reach(systems, lambda command: external.run_probe(command, root)) if not errors else {}
+        reached = system_reach(root, systems) if not errors else {}
     except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
         report.warn(say("doctor.systems.unreadable", error=error))
         return
@@ -615,11 +785,14 @@ def check_systems(report: Report, root: Path) -> None:
     report.ok(say("doctor.systems.ok", count=len(systems), names=", ".join(systems)))
     for text in found:
         report.warn(say("doctor.systems.warn", text=text))
+    loose = [name for name, line in reached.items() if line.get("unsigned")]
     for name, line in reached.items():
         if line["reachable"]:
             report.ok(say("doctor.systems.reached", name=name))
-        else:
+        elif name not in loose:
             report.warn(say("doctor.systems.unreached", name=name, why=line["why"], launch=line["launch"] or say("doctor.systems.no_launch")))
+    if loose:  # no sign-in is kept for them: the cause is the same for all, and so is the way out
+        report.warn(say("doctor.systems.unsigned.one" if len(loose) == 1 else "doctor.systems.unsigned", n=len(loose), names=", ".join(loose)))
 
 
 def check_standards(report: Report, root: Path) -> None:
@@ -640,7 +813,15 @@ def check_targets(report: Report, root: Path) -> None:
     try:
         found = targets.load(root)
     except Exception as error:
-        report.error(say("doctor.target.policy_bad", error=error))
+        file, problem = targets.diagnose(root, error)  # 1.7.38 (C13 F2b): which file, and what is wrong
+        report.error(say("doctor.target.policy_bad", file=file, error=problem))
+        kb = targets.kb_fault(root)  # 1.7.38 (C13 F2c): the list of knowledge bases is unreadable too, so the company packs in one registered elsewhere are not seen: the programs the gate still found in the text of the files are named
+        try:
+            held = sorted({word for item in govern.kb_systems(root).values() for word in item["reach"]["cli"]}) if kb else []
+        except Exception:  # noqa: BLE001 - the line about the target policy above says the file; this one only names programs
+            held = []
+        if held:
+            report.error(say("doctor.target.kb_bad", file=kb[0], error=kb[1], held=say("doctor.target.kb_held", programs=", ".join(held))))
         return
     if not found.configured:
         report.ok(say("doctor.target.none"))
@@ -774,7 +955,50 @@ def shown(lines: List[str]) -> str:
     return "\n".join(out)
 
 
-def run(root: Path) -> int:
+def check_integrity(report: Report, root: Path) -> None:
+    """(1.7.38, C13 FR 17a) The guardrail files against the list the person accepted (`integrity.py`): an error naming the files that are not as accepted (the hook refuses commands and writes meanwhile), and what to do: start the
+    board when a new version was put in, `harness doctor --accept` or put the files back when the same version changed. When nothing was accepted yet, or the list was deleted or cannot be read, a warning (C13 RE-A L1); also when the list cannot be kept at all."""
+    try:
+        import integrity
+
+        listed = integrity.read(root)
+        if listed is None:
+            fault = integrity.write_problem()
+            if fault:
+                report.warn(say("doctor.integrity.unwritable", folder=str(integrity.home_dir() or ""), error=fault))  # FR2 5: not a list nobody made yet: one that cannot be made
+            else:
+                path = integrity.list_path(root)
+                report.warn(say("doctor.integrity.broken", path=str(path)) if path is not None and path.exists() else say("doctor.integrity.none"))  # (1.7.38, C13 RE-A L1) a warning: nothing checks the guardrail files, whether no list was made yet or it was deleted or broken
+            return
+        found = integrity.changes(root, listed)
+        if found:
+            words = ", ".join(found[: integrity.SHOWN]) + (f" (+{len(found) - integrity.SHOWN} more)" if len(found) > integrity.SHOWN else "")
+            now = integrity._registry_version(root)  # noqa: SLF001
+            was = str(listed.get("harness") or "")
+            board = ".board" if os.environ.get(TOPICS) else ""  # the board's own run (FR2 8): the words are shown on a page, which carries no command text
+            report.error(say("doctor.integrity.upgrade" + board, n=len(found), files=words, was=was, now=now) if was != now else say("doctor.integrity.changed" + board, n=len(found), files=words))
+        else:
+            report.ok(say("doctor.integrity.ok", n=len(listed.get("files") or {})))
+    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
+        report.warn(say("doctor.integrity.failed", error=error))
+
+
+def run(root: Path, accept: bool = False) -> int:
+    if accept:  # the person says the guardrail files are as they should be (cli.py: `harness doctor --accept`, a person at a terminal)
+        from core import approval
+
+        approval.require_person("doctor --accept", typed=False)
+        import integrity
+
+        try:
+            before = integrity.changes(root)  # what the person takes in with this: the files that are not as the last list says (FR2 5)
+            done = integrity.accept(root)
+        except OSError as error:
+            print(say("doctor.integrity.cannot_write", folder=str(integrity.home_dir() or ""), error=" ".join(f"{type(error).__name__}: {error}".split())[:200]))
+            return 1
+        if before:
+            print(say("doctor.integrity.accepted_changes", n=len(before), files=", ".join(before[: integrity.SHOWN]) + (f" (+{len(before) - integrity.SHOWN} more)" if len(before) > integrity.SHOWN else "")))
+        print(say("doctor.integrity.accepted", n=done["files"], path=done["path"]))
     report = Report()
     check_python(report)
     check_interpreter(report)
@@ -789,6 +1013,8 @@ def run(root: Path) -> int:
     check_files(report, root, "engine", registry["engine"]["files"])
     check_tool_kinds(report)
     check_hook_config(report, root, registry)
+    check_hook_start(report, root)
+    check_messages(report)
     check_hook_activity(report, root, registry)
     check_agents(report, root)
     check_logs(report, root, registry)
@@ -796,12 +1022,23 @@ def run(root: Path) -> int:
     check_overrides(report, root)
     sample = check_output(report, root)
     check_user(report, root)
+    report.topic = "company"
     check_targets(report, root)
+    report.topic = ""
     check_location(report, root)
+    report.topic = "company"
     check_knowledge_base(report, root)
-    check_skills(report, root)
+    report.topic = ""
+    check_skills(report, root)  # skills, packs and systems: the items of readyitems.py say more, so they are not counted twice
+    report.topic = "copies"  # the board counts the copies itself (readyitems.sync_item), with a button; its count of doctor's notes leaves this line out
     check_company(report, root)
+    report.topic = ""
+    check_toolpacks(report, root)
+    check_integrity(report, root)
+    check_vscode_settings(report, root)
+    report.topic = "company"
     check_standards(report, root)
+    report.topic = ""
     check_task_names(report, root)
     check_optional_packages(report, root)
     check_vscode(report)

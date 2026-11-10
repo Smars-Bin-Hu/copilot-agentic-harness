@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import bisect
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -44,9 +45,12 @@ _found: Dict[str, Tuple[Tuple[int, int], List[Tuple[str, str, float]]]] = {}  # 
 _trees: Dict[str, Tuple[Any, float, Dict[str, Any]]] = {}  # task -> what its files were, when it was read, the tree
 
 
-def _clip(text: Any) -> str:
+REASON_CHARS = 1600  # (1.7.38, C13 FR 11) what the gate told the agent, kept whole enough to show the right way it ends with; the row shows the start and the rest opens
+
+
+def _clip(text: Any, limit: int = TEXT_CHARS) -> str:
     text = redact.text(str(text or "")).strip()
-    return text if len(text) <= TEXT_CHARS else text[:TEXT_CHARS - 1].rstrip() + "…"
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
 
 
 def _path(text: Any) -> str:
@@ -68,8 +72,8 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
         elif event == "PreToolUse" and row.get("decision") in ("deny", "ask"):
             target = row.get("target") if isinstance(row.get("target"), dict) else {}
             entries.append({
-                "at": at, "kind": "gate", "tool": name, "tool_kind": str(row.get("tool_kind") or ""), "decision": row["decision"],
-                "rule": str(row.get("kind") or "") or ".".join(str(item) for item in (row.get("by") or [])), "reason": _clip(row.get("reason")),
+                "at": at, "kind": "gate", "tool": name, "tool_kind": str(row.get("tool_kind") or ""), "decision": "held" if common.is_held(row) else row["decision"],  # a call that waits for the person is held, not blocked (C12 RC-4)
+                "rule": str(row.get("kind") or "") or ".".join(str(item) for item in (row.get("by") or [])), "reason": _clip(row.get("reason"), REASON_CHARS),
                 "paths": [_path(item) for item in target.get("paths") or []], "command": _clip(target.get("command")),
             })
         elif event == "PreToolUse" and name:
@@ -95,6 +99,88 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
         entries = [dict(item, source=source) for item in entries if item["kind"] != "prompt"]  # a subagent's prompt is the agent's call message, not the user
     cut = max(0, len(entries) - shown)
     return {"entries": entries[cut:], "cut": cut}
+
+
+# --- what the person decided (1.7.38, C13 F3 AP) -----------------------------------------------------------------------------------------------------------------
+# The Agent actions tab says what the agent did and what the gate answered; here the person's side is put in by time: a call approved (alone or in a batch, with the files it was approved with), a connection opened,
+# a call not approved (with the reason and the person's line), the calls a close voided, and what became of an approved call (it ran, the approval ran out, the agent asked again with another command).
+# Nothing is stored for this: the task's history (task.json events), the draft of each call (OUTBOX/) and the hook log say it all.
+
+DECISION_EVENTS = ("approve-call", "outbox-dismiss", "allow-env", "void")
+_CODE_LINE = re.compile(r"^([0-9A-Fa-f]{6}): (.*)$", re.DOTALL)
+APPROVAL_COMMAND_CHARS = 1500
+FOLLOW_S = 1800.0  # how long after an approval a call of the same system is read as the agent coming back with another command
+
+
+def draft_command(root: Path, task: str, code: str) -> str:
+    """The command of a held call exactly as the draft kept it (the first fenced block under its command heading), or ""."""
+    try:
+        for path in sorted((root / task / "OUTBOX").glob(f"{code}-*.md")):
+            text = path.read_text(encoding="utf-8")
+            found = re.search(r"```\n(.*?)\n```", text, re.DOTALL)
+            if found:
+                return found.group(1).strip()[:APPROVAL_COMMAND_CHARS]
+    except OSError:
+        pass
+    return ""
+
+
+def _outcome(rows: List[Dict[str, Any]], row: Dict[str, Any], taken: set, minutes: int, now: float) -> None:
+    """What became of an approved call, from the hook log: the first run of the same system and environment after the approval that is not another approval's is its run. No run, and the approval is still good: waiting.
+    No run, and a call of the same system was held again within FOLLOW_S: the agent came back with another command. No run, and the approval ran out: expired."""
+    given = copilot_events.seconds(row["at"]) or 0.0
+    for index, one in enumerate(rows):
+        ran = copilot_events.seconds(one.get("at"))
+        external = one.get("external") if isinstance(one.get("external"), dict) else {}
+        if index in taken or one.get("event") != "PreToolUse" or ran is None or ran < given or not external.get("approved"):
+            continue
+        if (external.get("system"), external.get("env")) == (row.get("system"), row.get("env") or external.get("env")):
+            taken.add(index)
+            row.update(outcome="ran", ran_at=one["at"])
+            return
+    again = next((one for one in rows if one.get("event") == "PreToolUse" and given < (copilot_events.seconds(one.get("at")) or 0.0) <= given + FOLLOW_S and common.is_held(one)
+                  and isinstance(one.get("external"), dict) and one["external"].get("system") == row.get("system")), None)
+    row["outcome"] = "changed" if again is not None else "expired" if now > given + minutes * 60.0 else "waiting"
+
+
+def decisions(root: Path, data: Dict[str, Any], task: str, sessions: Optional[List[str]] = None, limit: int = 400) -> List[Dict[str, Any]]:
+    """The person's decisions of this task as rows for the Agent actions list, oldest first: `{at, kind: "decision", what, ...}`. `what`: approved (code, batch: 0 for one call alone, else how many were approved together,
+    system, env, files [{path, sha}], command, outcome, ran_at), opened (name, env, on), dismissed (code, reason, note), void (text). Never raises."""
+    try:
+        from core import approvals as approvals_core
+
+        minutes = approvals_core.minutes(config.policy_or_empty(root, "gate"))
+        surface = str(data.get("surface") or "vscode")
+        logged: List[Dict[str, Any]] = []
+        for session in sessions or [str(data.get("session_id") or "")]:
+            if session:
+                logged += read_tail(session_log_path(root, surface, session), TAIL_BYTES)
+        logged.sort(key=lambda item: str(item.get("at") or ""))
+        now, taken = time.time(), set()
+        out: List[Dict[str, Any]] = []
+        for event in data.get("events") or []:
+            what, facts = str(event.get("what") or ""), event.get("facts") if isinstance(event.get("facts"), dict) else {}
+            if what not in DECISION_EVENTS:
+                continue
+            row: Dict[str, Any] = {"at": str(event.get("at") or ""), "kind": "decision", "round": event.get("round", 1)}
+            if what == "approve-call":
+                code = str(facts.get("code") or "")
+                row.update(what="approved", code=code, batch=int(facts.get("batch") or 0), system=str(facts.get("system") or ""), env=str(facts.get("env") or ""),
+                           files=[{"path": str(path), "sha": str(sha)} for path, sha in (facts.get("files") or {}).items()][:12], command=draft_command(root, task, code))
+                _outcome(logged, row, taken, minutes, now)
+            elif what == "outbox-dismiss":
+                found = _CODE_LINE.match(str(event.get("detail") or ""))
+                row.update(what="dismissed", code=str(facts.get("code") or (found.group(1) if found else "")).upper(), reason=str(facts.get("reason") or ""), note=str(facts.get("note") or ""), text="" if facts else (found.group(2) if found else str(event.get("detail") or "")))
+                row["command"] = draft_command(root, task, row["code"]) if row["code"] else ""
+            elif what == "allow-env":
+                detail = str(event.get("detail") or "")
+                row.update(what="opened" if detail.endswith(": on") else "closed", name=str(facts.get("name") or common.plain_event("allow-env", detail)[1]), env=str(facts.get("env") or ""), links=str(facts.get("name") or detail).startswith("links"))
+            else:
+                row.update(what="void", text=_clip(event.get("detail")))
+            out.append(row)
+        return out[-limit:]
+    except Exception:  # noqa: BLE001 - a record that is not what it should be must not take the page down
+        return []
 
 
 def subagents(root: Path, session: str, since: float) -> List[Tuple[str, str, float]]:
@@ -190,6 +276,7 @@ def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     info = taskinsight.of_task(root, task, None, True)
     surface = str(data.get("surface") or "vscode")
     entries = [item for session in info["sessions"] for item in entries_of(root, surface, session["session_id"], str(data.get("created_at") or ""))]
+    entries += decisions(root, data, task, [session["session_id"] for session in info["sessions"]])  # the person's decisions, each in the prompt it came in (F3 AP)
     nodes = nodes_of(info, entries)
     for node, item in zip(nodes, info["prompts"]):
         path = None if item.get("until") else copilot_events.events_path(item.get("session_id") or "")
@@ -261,6 +348,12 @@ def flat(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     rows = [row for row in read_tail(session_log_path(root, surface, session), TAIL_BYTES) if str(row.get("at") or "") >= since]
     found = build(rows)
     entries, cut = found["entries"], found["cut"]
+    mine = decisions(root, data, str(data.get("task") or ""), [session])  # the person's decisions, in their place by time (F3 AP)
+    if mine:
+        entries = sorted(entries + mine, key=lambda item: str(item.get("at") or ""))
+        over = max(0, len(entries) - SHOWN)
+        entries, cut = entries[over:], cut + over
+        found = {"entries": entries, "cut": cut}
     names = []
     for agent, name, _at in subagents(root, session, copilot_events.seconds(since) or 0.0):
         mine = build([row for row in read_tail(session_log_path(root, surface, agent), SUB_TAIL) if str(row.get("at") or "") >= since], SHOWN, name)

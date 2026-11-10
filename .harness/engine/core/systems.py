@@ -25,6 +25,10 @@ READ, WRITE, DESTROY, EXEC = "read", "write", "destroy", "exec"
 VERBS = (READ, WRITE, DESTROY, EXEC)
 ENVS = ("dev", "ist", "qat", "prod", "none")
 PROD = "prod"
+# How far Open to the agent may go for one connection (1.7.38, C12): `no` (a write or a run always waits for the person), `items` (only the items the task is linked to), `all` (every
+# write and run of the connection). From the loosest to the strictest is the reverse of the order here; a company can only lower a type's scope.
+NO, ITEMS, ALL = "no", "items", "all"
+OPEN_SCOPES = (NO, ITEMS, ALL)
 PROBE_SECONDS = 5  # a probe that takes longer than this is "not reachable": the Enter screen and doctor must not hang on it
 PROBE_OUTPUT = 4000  # what is kept of a probe's output, for the pattern
 
@@ -32,7 +36,24 @@ PROBE_OUTPUT = 4000  # what is kept of a probe's output, for the pattern
 DEFAULT_RULES = {READ: ALLOW, WRITE: OUTBOX, EXEC: HUMAN, DESTROY: DENY}
 PROD_RULES = {READ: ALLOW, WRITE: DENY, EXEC: DENY, DESTROY: DENY}
 
+# (1.7.38, C13 F2c) The words that only print help or the version, for a type that declares none (`free`, or `pin.free`): a call whose arguments are these words and nothing else reaches no one. A type that wants more
+# (`items --help`) declares its own; `"free": []` turns the default off.
+DEFAULT_FREE = ("--help", "-h", "-?", "--version")
+
 _NAME = r"^[a-z][a-z0-9_-]*$"
+_WORDS = {"type": "array", "items": {"type": "string", "minLength": 1}}
+PIN_SCHEMA = {  # 1.7.38 (C13 F2): see modules/gate/pin.py
+    "type": "object",
+    "properties": {
+        "options": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "fold": {"type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "string"}}},
+        "other": _WORDS,
+        "free": _WORDS,
+        "subcommand": {"type": "boolean"},
+    },
+    "required": ["options"],
+    "additionalProperties": False,
+}
 _RULE_SET = {"type": "object", "properties": {verb: {"type": "string", "enum": list(DECISIONS)} for verb in VERBS}, "additionalProperties": False}
 _PATTERN_RULE = {"type": "object", "required": ["pattern"], "properties": {"pattern": {"type": "string", "minLength": 1}}}
 SYSTEMS_SCHEMA = {
@@ -45,7 +66,10 @@ SYSTEMS_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "cli": {"type": ["string", "array"], "items": {"type": "string", "minLength": 1}},
+                    "by_address": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: programs (`curl`) that are a call of this system only when their arguments match `when`; any other use of the program is not the system's, and its name alone holds nothing
                     "when": {"type": "string", "minLength": 1},
+                    "code": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38 (C13 F2): words that name this system in the code a one-liner interpreter runs (`python3 -c`, `node -e`); needs `blocked`
+                    "also": {"type": "object", "required": ["type", "field"], "properties": {"type": {"type": "string", "minLength": 1}, "field": {"type": "string", "minLength": 1}}, "additionalProperties": False},  # 1.7.38: the hosts that the connections of this type have in this field are part of `when`
                 },
                 "additionalProperties": False,
             },
@@ -60,6 +84,8 @@ SYSTEMS_SCHEMA = {
                 "items": {"type": "object", "required": ["pattern", "verb"], "properties": {"pattern": {"type": "string", "minLength": 1}, "verb": {"type": "string", "enum": list(VERBS)}}},
             },
             "target": {"type": "string"},
+            "commands": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the subcommands of the system's own program (a tool pack's `commands`): a call whose subcommand is none of them is refused, with a line, not held
+            "command": {"type": "string", "minLength": 1},  # 1.7.38: a pattern on the arguments after the program whose first group is the subcommand (default: the first word)
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
             "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
             "say": {  # 1.7.20: `[{"pattern": <on the arguments after the program>, "text": "Add a comment to work item {1}"}]`: the first match is the one line a held call's card opens with
@@ -70,8 +96,26 @@ SYSTEMS_SCHEMA = {
                 "type": "array",
                 "items": {"type": "object", "required": ["pattern", "from"], "properties": {"pattern": {"type": "string", "minLength": 1}, "from": {"type": "string", "enum": ["file", "text"]}}},
             },
+            "input": {  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from (`["-i"]`), the options whose next word is statement text (`["-Q"]`), and a pattern for the files such a file names itself (`:r file`): the gate reads them and judges their statements by the lists of the type
+                "type": "object",
+                "properties": {"options": {"type": "array", "items": {"type": "string", "minLength": 1}}, "include": {"type": "string", "minLength": 1}, "unjudged": {"type": "string", "minLength": 1}, "text": {"type": "array", "items": {"type": "string", "minLength": 1}}, "variables": {"type": "array", "items": {"type": "string", "minLength": 1}}},  # `variables`: the options that give script variables (`sqlcmd -v name=value`, 1.7.38, C13 SQL). `unjudged` is the key of the first 1.7.38 build: read, no effect (the `refuse` list does its work)
+                "additionalProperties": False,
+            },
+            "reads": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the pass list of a type whose program takes statements as text: a pattern each statement must match whole (modules/gate/statements.py)
+            "writes": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the statements an opened connection passes (the same patterns)
+            "directives": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38 (C13 FR 23): patterns of the sqlcmd lines (`:ON ERROR EXIT`) that only change how the program reacts: they are no statement, so they hold nothing and refuse nothing; every other line stays as it was
+            "outputs": {"type": "object", "properties": {"options": {"type": "array", "items": {"type": "string", "minLength": 1}}}, "additionalProperties": False},  # 1.7.38 (C13 FR 22): the options that name a file the program writes its output to (`-o file`): inside the task folder it is a local write, and the call is judged by its statements as without it
+            "refuse": {  # 1.7.38: what is refused at once, with the reason that tells the agent the right way (a string, or {"en": ..., "zh": ...}); a pattern found anywhere in a statement or a sqlcmd line
+                "type": "array",
+                "items": {"type": "object", "required": ["pattern", "reason"], "properties": {"pattern": {"type": "string", "minLength": 1}, "reason": {"type": ["string", "object"], "minLength": 1}}},
+            },
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
+            "hint": {"type": ["string", "object"], "minLength": 1},  # 1.7.38 (D1-7): what a refusal tells the agent to do instead (a string, or {"en": ..., "zh": ...}): `ado` for a delete sent to Azure DevOps by hand
+            "pin": PIN_SCHEMA,  # 1.7.38 (C13 F2): how a call of this program names the connection it reaches (modules/gate/pin.py): a call that cannot be pinned to one connection is refused
+            "blocked": {"type": ["string", "object"], "minLength": 1},  # 1.7.38 (C13 F2): a program (or code) the gate cannot judge: every call of it is refused with this text (a string, or {"en": ..., "zh": ...}), which says what to do instead
+            "broken": {"type": "string", "minLength": 1},  # 1.7.38 (G-1): written by the harness for a tool pack whose type file or rules file is faulty: what is wrong. Every call of the programs it lists is held (it owns them before any other system)
             "openable": {"type": "boolean"},
+            "open": {"type": "string", "enum": list(OPEN_SCOPES)},  # 1.7.38: how far Open to the agent goes for this system; see `open_scope`
             "item": {"type": ["string", "array"], "minLength": 1, "items": {"type": "string", "minLength": 1}},  # 1.7.18: a pattern whose first group is the id of the item a write names (a work item); 1.7.25: a pattern, or a list of them; every group of every match names an item
             "link": {"type": "string", "minLength": 1},  # 1.7.18: the link type of `harness task link` that names such an item (ado)  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a tool pack's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
             "needs": {  # 1.7.9: `probes` names one probe per environment (another server, another account); `denied` is what a call prints when the identity is not let in
@@ -92,6 +136,12 @@ def clis(system: Dict[str, Any]) -> List[str]:
     return [item.lower() for item in ([reach] if isinstance(reach, str) else reach)]
 
 
+def by_address(system: Dict[str, Any]) -> List[str]:
+    """The programs that belong to a system only for an address its `when` names (1.7.38: `curl` to an Azure DevOps address), in lower case."""
+    reach = (system.get("reach") or {}).get("by_address") or []
+    return [item.lower() for item in ([reach] if isinstance(reach, str) else reach)]
+
+
 def validate(systems: Any) -> List[str]:
     """What is wrong with the `systems` of a policy: a list of texts, empty when it is fine. Never raises."""
     if systems in (None, {}):
@@ -103,14 +153,24 @@ def validate(systems: Any) -> List[str]:
     for name, system in systems.items():
         if not re.match(_NAME, name):
             errors.append(f"systems.{name}: a name is lower case letters, digits, - and _, and starts with a letter")
-        if not clis(system):
+        if not clis(system) and not by_address(system) and not (system.get("reach") or {}).get("code"):
             errors.append(f"systems.{name}.reach: give at least one program in `cli`")
+        given = system.get("input")
+        if isinstance(given, dict) and not (given.get("options") or given.get("text")):
+            errors.append(f"systems.{name}.input: give `options` (the options that name a file) or `text` (the options whose next word is statement text)")
+        if (system.get("writes") or system.get("refuse")) and not system.get("reads"):
+            errors.append(f"systems.{name}: `writes` and `refuse` work with `reads`, the pass list: give it")
         when = (system.get("reach") or {}).get("when")
-        for program in clis(system) if not when else ():
+        if by_address(system) and not when:
+            errors.append(f"systems.{name}.reach: `by_address` needs a `when` that names the address")
+        if (system.get("reach") or {}).get("code") and not system.get("blocked"):
+            errors.append(f"systems.{name}.reach: `code` names words that a one-liner interpreter must not run: give `blocked`, the text that says what to do instead")
+        for program in clis(system) if not when and not system.get("broken") else ():
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
-        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"item[{index}]", value) for index, value in enumerate([system["item"]] if isinstance(system.get("item"), str) else (system.get("item") or [])) if isinstance(value, str)] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs", "say", "body") for index, item in enumerate(system.get(key) or [])]
+        patterns = [("target", system.get("target") or ""), ("command", system.get("command") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or ""), ("input.include", (system.get("input") or {}).get("include") or ""), ("input.unjudged", (system.get("input") or {}).get("unjudged") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"item[{index}]", value) for index, value in enumerate([system["item"]] if isinstance(system.get("item"), str) else (system.get("item") or [])) if isinstance(value, str)] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs", "say", "body") for index, item in enumerate(system.get(key) or [])]
+        patterns += [(f"pin.fold[{index}]", str(step[0])) for index, step in enumerate((system.get("pin") or {}).get("fold") or []) if isinstance(step, list) and step]
         for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)
@@ -130,6 +190,8 @@ def warnings(systems: Dict[str, Any]) -> List[str]:
     """What is allowed but is likely a mistake. For `tools check`."""
     found: List[str] = []
     for name, system in (systems or {}).items():
+        if system.get("broken"):
+            continue  # said by `doctor`, as an error
         if not system.get("verbs"):
             found.append(f"{name}: no `verbs`, so every call counts as a write")
         if system.get("default_env") not in (None, PROD) and "env" not in system:
@@ -143,14 +205,48 @@ def warnings(systems: Dict[str, Any]) -> List[str]:
     return found
 
 
-def environments(systems: Dict[str, Any]) -> Dict[str, List[str]]:
+def openable(system: Dict[str, Any]) -> bool:
+    """May Open to the agent let this system's held calls through (1.7.13)? A system says so with `openable`; a tool pack's system (a ticket board, a pipeline, a database) is closed unless it
+    says yes: its writes reach people or data, so the person approves each one. Since 1.7.38 `open` says how far, and this is only the old way to say `all` or `no`."""
+    if isinstance(system.get("openable"), bool):
+        return system["openable"]
+    return not system.get("toolpack")
+
+
+def scope_rule(rule: Any, env: str) -> str:
+    """The scope a type (or a connection) declares for an environment (1.7.38): `rule` is one word (`"items"`, for every environment) or `{env: word}` with `"*"` for the rest. What is not
+    declared, or is not one of the three words, is `no`."""
+    if isinstance(rule, str):
+        return rule if rule in OPEN_SCOPES else NO
+    if isinstance(rule, dict):
+        found = rule.get(str(env).lower()) or rule.get("*")
+        return found if found in OPEN_SCOPES else NO
+    return NO
+
+
+def lower_scope(first: str, second: str) -> str:
+    """The stricter of two scopes: a company can tighten what a type says, never loosen it."""
+    return min((first, second), key=OPEN_SCOPES.index)
+
+
+def open_scope(system: Dict[str, Any], env: str) -> str:
+    """How far Open to the agent may go for a call of this system in this environment (1.7.38): `all`, `items` or `no`. Prod is never opened, whatever a system says. A system that gives `open`
+    (a connection derives it from its type) is read as it says; a system written by hand without it keeps the old rule: open to the agent where `openable` is true, in dev, ist and qat."""
+    if str(env or "").lower() == PROD:
+        return NO
+    if system.get("open") in OPEN_SCOPES:
+        return system["open"]
+    return ALL if openable(system) and str(env or "").lower() in ("dev", "ist", "qat") else NO
+
+
+def environments(systems: Dict[str, Any], only_openable: bool = False) -> Dict[str, List[str]]:
     """The environments the listed systems reach, `{env: [system names]}`, from `env`, `env_from` and `default_env`; prod and none left out (nothing is opened there).
     For the task page: which environments a person may open for a task (1.7.6)."""
     found: Dict[str, List[str]] = {}
     for name, system in (systems or {}).items():
         envs = {system["env"]} if system.get("env") else {rule["env"] for rule in system.get("env_from") or []} | ({system["default_env"]} if system.get("default_env") else set())
         for env in sorted(envs):
-            if env not in (PROD, "none"):
+            if env not in (PROD, "none") and (openable(system) or not only_openable):
                 found.setdefault(env, []).append(name)
     return found
 
@@ -199,6 +295,15 @@ def reach(systems: Dict[str, Any], run: Callable[[str], Tuple[Optional[int], str
         bad = [line for line in lines if not line["reachable"]]
         found[name] = {"reachable": not bad, "why": bad[0]["why"] if bad else "", "launch": needs.get("launch") or ""}
     return found
+
+
+def verb_word(verb: str) -> str:
+    """The kind of a call as a person reads it: the protocol word in English (`write`); in Chinese the word of the board only (`写`). The English word stays in hovers and logs."""
+    from . import messages
+    if messages.language() == "en":
+        return verb
+    found = messages.text(f"desk.outbox.verb.{verb}")
+    return verb if found == f"desk.outbox.verb.{verb}" else found
 
 
 def place(system: str, env: str) -> str:

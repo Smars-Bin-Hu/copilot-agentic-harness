@@ -26,7 +26,9 @@ import socket
 import ssl
 import subprocess
 import sys
+import time
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -41,8 +43,27 @@ PROXY_KEY = "HARNESS_CA_PROXY"
 MADE_KEY = "HARNESS_CA_MADE"
 MCP_KEY = "HARNESS_MCP"  # allowed | blocked (1.7.17): may tool packs add MCP servers to VS Code here? Blocked unless the person says otherwise
 BUNDLE = Path(".harness") / "certs" / "ca-bundle.pem"
+RECIPE = ".harness/policies/computer.company.json"  # 1.7.31: from `company/tools/computer.json`; what every colleague's computer needs and holds no secret
+RECIPE_SCHEMA = {"type": "object", "properties": {
+    "ca_bundle": {"type": "object", "properties": {
+        "host": {"type": "string", "pattern": r"^[A-Za-z0-9.\-]+(:\d{1,5})?$", "maxLength": 260},
+        "proxy": {"type": "string", "pattern": r"^[A-Za-z0-9.\-\[\]:]+:\d{1,5}$", "maxLength": 260}}},
+    "tool_folders": {"type": "array", "maxItems": 20, "items": {"type": "object", "required": ["label"], "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 80}, "hint": {"type": "string", "maxLength": 400},
+        "program": {"type": "string", "pattern": r"^[\w.\-]+$", "maxLength": 60}}}}}}
 TRUST_VARS = ("REQUESTS_CA_BUNDLE",)  # Python tools (az, pip's requests); NODE_EXTRA_CA_CERTS and others when a tool pack asks for them
 DEFAULT_HOST = "example.com"
+HTTPS_PORT = 443
+HOST_FORM = re.compile(r"^([A-Za-z0-9.\-]+)(?::(\d{1,5}))?$")  # `host`, or `host:port` for a server that is not on 443 (1.7.38)
+
+
+def split_host(value: str) -> Tuple[str, int]:
+    """`(host, port)` of `host` or `host:port`; the port is 443 when none is written. ValueError for anything else."""
+    found = HOST_FORM.match(value.strip())
+    port = int(found.group(2)) if found and found.group(2) else HTTPS_PORT
+    if not found or not 0 < port < 65536:
+        raise ValueError(value)
+    return found.group(1), port
 SECONDS = 20
 PEM = re.compile(r"-----BEGIN CERTIFICATE-----\s+([A-Za-z0-9+/=\s]+?)\s+-----END CERTIFICATE-----")
 ROOTS_SEARCH_DEPTH = 8  # certifi/cacert.pem sits a few folders down in a tool's own Python
@@ -147,6 +168,41 @@ def save_paths(root: Path, raw: List[str]) -> Dict[str, Any]:
     return {"paths": paths}
 
 
+def add_folder(root: Path, program: str, raw: str) -> Dict[str, Any]:
+    """"I installed it here" (1.7.37): add the folder to `HARNESS_TOOL_PATH` when it holds `program`, so the next check finds it. A folder without it is refused."""
+    text = str(raw).strip().strip('"')
+    folder = Path(os.path.expandvars(os.path.expanduser(text)))
+    if not text or not folder.is_absolute():
+        raise ValueError(say("launch.path.relative", path=text or "-"))
+    if not folder.is_dir():
+        raise ValueError(say("launch.path.none", path=text))
+    if not shutil.which(program, path=str(folder)):
+        raise ValueError(say("launch.path.noprogram", program=program, path=text))
+    return save_paths(root, settings(root)["paths"] + [str(folder)])
+
+
+def _program_rows(root: Path) -> List[Dict[str, Any]]:
+    """The Programs block (1.7.37): one row per program a tool pack that is on needs, and who needs it; `python` first. Found on the PATH VS Code will get, with the place;
+    a program not found carries the company recipe's hint for it, when there is one."""
+    from . import toolpacks
+
+    path = next((value for key, value in extra(root).items() if key.upper() == "PATH"), None)
+    hints = {item["program"]: item for item in recipe(root)["tool_folders"] if item.get("program")}
+    wanted: Dict[str, List[Dict[str, str]]] = {}
+    for pack, rows in toolpacks.needs_report(root).items():
+        for row in rows:
+            who = {"pack": pack, "why": "signin" if row["why"].startswith("signin:") else "pack", "conn": row["why"][7:] if row["why"].startswith("signin:") else ""}
+            if who not in wanted.setdefault(row["program"], []):
+                wanted[row["program"]].append(who)
+    python = shutil.which("python3", path=path) or shutil.which("python", path=path) or sys.executable
+    out = [{"program": "python", "found": bool(python), "path": python or "", "needed_by": [{"pack": "harness", "why": "pack", "conn": ""}], "hint": "", "label": ""}]
+    for program, who in sorted(wanted.items()):
+        where = toolpacks.locate(program, path)
+        hint = hints.get(program) or {}
+        out.append({"program": program, "found": bool(where), "path": where, "blocked": "" if where else toolpacks.blocked(program, path), "needed_by": who, "hint": hint.get("hint", ""), "label": hint.get("label", "")})
+    return out
+
+
 def drop_bundle(root: Path) -> Dict[str, Any]:
     target = root / BUNDLE
     if target.is_file():
@@ -214,7 +270,7 @@ def lacking(root: Path, environ: Optional[Dict[str, str]] = None) -> List[str]:
 
 def note_seen(root: Path, environ: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Called by the hook at the start of a chat: keep what this environment lacks. `{ok, missing, at}`."""
-    found = {"ok": False, "missing": lacking(root, environ), "at": utc_now()}
+    found = {"ok": False, "missing": lacking(root, environ), "at": utc_now(), "by": "hook"}
     found["ok"] = not found["missing"]
     target = root / SEEN
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -241,6 +297,163 @@ def mark_started(root: Path) -> None:
         target.write_text(json.dumps({"ok": True, "missing": [], "at": utc_now(), "by": "board"}), encoding="utf-8")
     except OSError:
         pass
+
+
+# --- is the VS Code that runs the one with this copy's settings? Before any chat (1.7.38, Q2) ---------------------------------------------------------------------
+#
+# The hook tells it at the first chat (`note_seen`). The board can tell earlier, because the editor's agent host names itself in `code agent endpoints` (its `pid`): the agent's commands and the
+# hooks run in that process, so its environment is what the hook would see.
+#   macOS, Linux   its environment is read (`ps eww`, `/proc/<pid>/environ`): the same `lacking` the hook runs, on the same variables.
+#   Windows        another process's environment cannot be read without reading its memory, and that is what a security tool on a work computer watches for: it is not done. Instead the
+#                  board knows when it started VS Code (`mark_started`) and when that process was created (`process_started`, a query that needs no right on the process): a VS Code
+#                  created after the board's start got its settings; one created before did not. A VS Code the board did not start, with no chat yet, is "unseen": nothing proves it.
+# What a VS Code must carry for this copy is `needs`: the tool folders and the CA bundle (what `lacking` can check). Which identities a window holds is the person's choice (Open with
+# identities), and `harness as` reaches the others: they do not make a VS Code wrong.
+
+CARRIED, FREE, MISSING, UNSEEN = "carried", "free", "missing", "unseen"
+START_SLACK = 3.0  # seconds: the board marks its start just before it asks VS Code to open; a process created within this much before the mark is the board's
+
+
+def needs(root: Path) -> Dict[str, Any]:
+    """What a VS Code must be started with for this copy: `{folders, bundle}`; both empty: any VS Code will do."""
+    bundle = bundle_path(root)
+    return {"folders": tool_folders(root), "bundle": str(bundle) if bundle else ""}
+
+
+def parse_ps_environ(text: str) -> Dict[str, str]:
+    """The environment in the output of `ps eww`: the command and its arguments, then `NAME=value` words. A value may hold spaces (a folder named `Visual Studio Code.app`): it runs to the next ` NAME=`.
+    An argument is no name (`--type=utility` starts with a dash)."""
+    words = list(re.finditer(r"(?:(?<=\s)|^)([A-Za-z_][A-Za-z0-9_]*)=", text))
+    out: Dict[str, str] = {}
+    for index, found in enumerate(words):
+        end = words[index + 1].start() if index + 1 < len(words) else len(text)
+        out[found.group(1)] = text[found.end():end].rstrip()
+    return out
+
+
+def host_environ(pid: Any, platform: str = sys.platform, run: Callable[..., Any] = subprocess.run, read: Callable[[str], bytes] = lambda path: Path(path).read_bytes()) -> Optional[Dict[str, str]]:
+    """The environment of a process of this user, or None when it cannot be read (Windows, a process that is gone, a refusal). Never a guess."""
+    try:
+        number = int(pid)
+    except (TypeError, ValueError):
+        return None
+    try:
+        if platform.startswith("win"):
+            return None  # not without reading another process's memory
+        if platform == "darwin":
+            done = run(["ps", "eww", "-o", "command=", "-p", str(number)], capture_output=True, text=True, timeout=5)
+            return parse_ps_environ(done.stdout or "") if done.returncode == 0 and (done.stdout or "").strip() else None
+        raw = read(f"/proc/{number}/environ")
+        return {key: value for key, _, value in (item.decode("utf-8", "replace").partition("=") for item in raw.split(b"\0")) if key} or None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def _elapsed_seconds(text: str) -> Optional[float]:
+    """`ps -o etime=`: `[[dd-]hh:]mm:ss`."""
+    found = re.match(r"^\s*(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)\s*$", text or "")
+    if not found:
+        return None
+    days, hours, minutes, seconds = (int(item or 0) for item in found.groups())
+    return float(((days * 24 + hours) * 60 + minutes) * 60 + seconds)
+
+
+def process_started(pid: Any, platform: str = sys.platform, run: Callable[..., Any] = subprocess.run, now: Callable[[], float] = time.time) -> Optional[float]:
+    """When a process was created, in seconds since 1970; None when it is not known. Windows: `GetProcessTimes` on a handle that may only ask for limited information (no memory is read)."""
+    try:
+        number = int(pid)
+    except (TypeError, ValueError):
+        return None
+    try:
+        if platform.startswith("win"):
+            import ctypes
+            from ctypes import wintypes
+
+            kernel = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            kernel.OpenProcess.restype = wintypes.HANDLE  # a handle is as wide as a pointer: say it, or ctypes cuts it to an int
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel.OpenProcess(0x1000, False, number)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return None
+            try:
+                created, other_a, other_b, other_c = (wintypes.FILETIME() for _ in range(4))
+                if not kernel.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(other_a), ctypes.byref(other_b), ctypes.byref(other_c)):
+                    return None
+                ticks = (created.dwHighDateTime << 32) | created.dwLowDateTime  # 100 ns since 1601
+                return ticks / 10_000_000 - 11644473600
+            finally:
+                kernel.CloseHandle(handle)
+        done = run(["ps", "-o", "etime=", "-p", str(number)], capture_output=True, text=True, timeout=5)
+        elapsed = _elapsed_seconds(done.stdout or "") if done.returncode == 0 else None
+        return None if elapsed is None else now() - elapsed
+    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+        return None
+
+
+def _stamp(text: Any) -> Optional[float]:
+    try:
+        return datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def carried(root: Path, pid: Any, environ: Optional[Callable[[Any], Optional[Dict[str, str]]]] = None, started: Optional[Callable[[Any], Optional[float]]] = None) -> Dict[str, Any]:
+    """Was the VS Code whose agent host has this `pid` started with the settings of this copy? `{state, by, missing}`. state: `free` (this copy has no settings to carry), `carried`, `missing` (it is
+    known to lack them: `missing` lists what), `unseen` (nothing proves either way). `by`: env (its environment was read), hook (the hook of a chat in this VS Code said so), board (the board started it),
+    none. No VS Code known (`pid` empty) is `unseen` with `by` none: the caller does not judge then."""
+    want = needs(root)
+    if not want["folders"] and not want["bundle"]:
+        return {"state": FREE, "by": "none", "missing": []}
+    if not pid:
+        return {"state": UNSEEN, "by": "none", "missing": []}
+    read = (environ or host_environ)(pid)
+    if read is not None:  # the same words as the hook's: what `extra` would give and this environment lacks
+        lost = lacking(root, read)
+        return {"state": MISSING if lost else CARRIED, "by": "env", "missing": lost}
+    since = (started or process_started)(pid)
+    found = seen(root)
+    at = _stamp(found.get("at")) if found else None
+    if since is not None and at is not None:
+        if found.get("by") == "board":
+            return {"state": CARRIED, "by": "board", "missing": []} if since >= at - START_SLACK else {"state": MISSING, "by": "board", "missing": [str(item) for item in want["folders"][:3]] or ["CA bundle"]}  # created before the board's start: not the board's
+        if found.get("by") == "hook" and at >= since:  # a chat of this VS Code told: its word is the truth
+            lost = [str(item) for item in found.get("missing") or []]
+            return {"state": MISSING if lost or found.get("ok") is False else CARRIED, "by": "hook", "missing": lost}
+    return {"state": UNSEEN, "by": "none", "missing": []}
+
+
+def windows_without_settings(root: Path, endpoints: Optional[Callable[[], List[Any]]] = None) -> List[Dict[str, Any]]:
+    """(1.7.38, C13 TA-Q2) For `harness doctor`: the VS Code processes that run now and are known to lack the settings of this copy: `[{pid, by, missing}]`. The same check the board makes (`carried`: macOS and Linux read
+    the environment of the editor's agent host by its pid; Windows compares when the board started VS Code with when that process was created); a VS Code the check cannot judge (`unseen`) is not listed. Empty
+    when this copy has nothing to carry, when no `code` command or no running VS Code is found, or when it cannot be asked. `endpoints` is for the tests. Never raises."""
+    want = needs(root)
+    if not want["folders"] and not want["bundle"]:
+        return []
+    try:
+        if endpoints is None:
+            from . import ahp
+
+            code = ahp.find_code()
+            if not code:
+                return []
+            found = ahp.parse_endpoints(ahp.run_code(code, ["agent", "endpoints"], timeout=10))
+        else:
+            found = endpoints()
+        out: List[Dict[str, Any]] = []
+        done: set = set()
+        for endpoint in found:
+            pid = getattr(endpoint, "pid", None)
+            if not pid or pid in done:
+                continue
+            done.add(pid)
+            verdict = carried(root, pid)
+            if verdict["state"] == MISSING:
+                out.append({"pid": pid, "by": verdict.get("by", ""), "missing": list(verdict.get("missing") or [])})
+        return out
+    except Exception:  # noqa: BLE001 - a look at the editor must never hurt a check
+        return []
 
 
 def vscode_running(run: Callable[..., Any] = subprocess.run, platform: str = sys.platform) -> bool:
@@ -362,26 +575,37 @@ def _find(top: Path, name: str, depth: int, budget: int = 20000):
 
 
 WINDOWS_CHAIN = r"""
-$h = '__HOST__'; $p = '__PROXY__'
+$h = '__HOST__'; $port = __PORT__; $p = '__PROXY__'
 $global:zchain = @(); $global:zerr = ''
 $cb = [Net.Security.RemoteCertificateValidationCallback]{ param($s, $c, $ch, $e) $global:zerr = "$e"; $global:zchain = @($ch.ChainElements | ForEach-Object { $_.Certificate }); $true }
 if ($p) { $hp = $p.Split(':'); $tcp = [Net.Sockets.TcpClient]::new($hp[0], [int]$hp[1]); $ns = $tcp.GetStream()
-  $req = [Text.Encoding]::ASCII.GetBytes("CONNECT ${h}:443 HTTP/1.1`r`nHost: ${h}:443`r`n`r`n"); $ns.Write($req, 0, $req.Length)
+  $req = [Text.Encoding]::ASCII.GetBytes("CONNECT ${h}:${port} HTTP/1.1`r`nHost: ${h}:${port}`r`n`r`n"); $ns.Write($req, 0, $req.Length)
   $one = New-Object byte[] 1; $head = ''
   while (-not $head.EndsWith("`r`n`r`n")) { if ($ns.Read($one, 0, 1) -le 0) { break }; $head += [char]$one[0] }
   if ($head -notmatch '^HTTP/1\.[01] 2') { "PROXY " + ($head -split "`r`n")[0]; exit 3 } }
-else { $tcp = [Net.Sockets.TcpClient]::new($h, 443); $ns = $tcp.GetStream() }
+else { $tcp = [Net.Sockets.TcpClient]::new($h, $port); $ns = $tcp.GetStream() }
 $ssl = [Net.Security.SslStream]::new($ns, $false, $cb); $ssl.AuthenticateAsClient($h); $tcp.Close()
 "TRUST $zerr"
 $zchain | ForEach-Object { "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($_.RawData, 'InsertLineBreaks') + "`n-----END CERTIFICATE-----" }
 """
 
 
+_UNREACHED = re.compile(r"errno=\d+|refused|timed? ?out|unreachable|No connection could be made|getaddrinfo|Name or service not known|nodename nor servname|could not be resolved|No such host", re.IGNORECASE)
+
+
+def chain_failed(said: str, host: str, proxy: str) -> ValueError:
+    """Why no chain was read, for a person: nothing answered at the proxy (or at the address, with no proxy), or git-style raw words when it was something else (`errno=61` means nothing to a person)."""
+    if _UNREACHED.search(said):
+        return ValueError(say("launch.ca.unreached.proxy", where=proxy) if proxy else say("launch.ca.unreached.host", where=host))
+    return ValueError(say("launch.ca.chain.failed", said=said[:300]))
+
+
 def chain_windows(host: str, proxy: str, run: Callable[..., Any] = subprocess.run) -> Tuple[List[str], str]:
     """The chain Windows builds for `host`, through `proxy` when given (the root from the system's store included). `(blocks, trust)`: trust is
     "None" when Windows trusts it, else the reason (RemoteCertificateChainErrors, ...)."""
     # The values go into the script's text: `-Command <script> <args>` hands the script no $args. Both were checked to hold no quote (make, proxy_address).
-    script = WINDOWS_CHAIN.replace("__HOST__", host).replace("__PROXY__", proxy)
+    host, port = split_host(host)
+    script = WINDOWS_CHAIN.replace("__HOST__", host).replace("__PORT__", str(port)).replace("__PROXY__", proxy)
     done = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=SECONDS,
                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     out = done.stdout or ""
@@ -391,7 +615,7 @@ def chain_windows(host: str, proxy: str, run: Callable[..., Any] = subprocess.ru
     trust = re.search(r"^TRUST (.*)$", out, re.MULTILINE)
     blocks = pem_blocks(out)
     if not trust or not blocks:  # no chain read: say why, never "None" (the system trusted nothing it was shown)
-        raise ValueError(say("launch.ca.chain.failed", said=((done.stderr or out).strip().splitlines() or ["-"])[-1][:300]))
+        raise chain_failed(((done.stderr or out).strip().splitlines() or ["-"])[-1], host, proxy)
     return blocks, trust.group(1).strip() or "None"
 
 
@@ -401,11 +625,12 @@ def chain_openssl(host: str, proxy: str, run: Callable[..., Any] = subprocess.ru
     program = shutil.which("openssl")
     if not program:
         raise ValueError(say("launch.ca.no_openssl"))
-    argv = [program, "s_client", "-showcerts", "-servername", host, "-connect", f"{host}:443"] + (["-proxy", proxy] if proxy else [])
+    host, port = split_host(host)
+    argv = [program, "s_client", "-showcerts", "-servername", host, "-connect", f"{host}:{port}"] + (["-proxy", proxy] if proxy else [])
     done = run(argv, input="", capture_output=True, text=True, timeout=SECONDS)
     blocks = pem_blocks(done.stdout or "")
     if not blocks:
-        raise ValueError(say("launch.ca.chain.failed", said=((done.stderr or "").strip().splitlines() or ["-"])[-1][:300]))
+        raise chain_failed(((done.stderr or "").strip().splitlines() or ["-"])[-1], host, proxy)
     verify = re.search(r"Verify return code: (\d+) \(([^)]*)\)", done.stdout or "")
     return blocks, ("None" if verify and verify.group(1) == "0" else (verify.group(2) if verify else "?"))
 
@@ -418,10 +643,11 @@ def check(bundle: Path, host: str, proxy: str, timeout: float = SECONDS) -> Tupl
     """Can a tool that trusts only this bundle reach `host` (through `proxy`)? The same check as az's Python makes. `(ok, why)`."""
     context = ssl.create_default_context(cafile=str(bundle))
     try:
+        host, wanted = split_host(host)
         if proxy:
             name, port = proxy.rsplit(":", 1)
             raw = socket.create_connection((name.strip("[]"), int(port)), timeout=timeout)
-            raw.sendall(f"CONNECT {host}:443 HTTP/1.1\r\nHost: {host}:443\r\n\r\n".encode("ascii"))
+            raw.sendall(f"CONNECT {host}:{wanted} HTTP/1.1\r\nHost: {host}:{wanted}\r\n\r\n".encode("ascii"))
             head = b""
             while b"\r\n\r\n" not in head:
                 piece = raw.recv(1)
@@ -432,7 +658,7 @@ def check(bundle: Path, host: str, proxy: str, timeout: float = SECONDS) -> Tupl
                 raw.close()
                 return False, say("launch.ca.proxy.refused", said=head.split(b"\r\n")[0].decode("latin-1"))
         else:
-            raw = socket.create_connection((host, 443), timeout=timeout)
+            raw = socket.create_connection((host, wanted), timeout=timeout)
         with context.wrap_socket(raw, server_hostname=host):
             return True, ""
     except ssl.SSLCertVerificationError as error:
@@ -451,8 +677,10 @@ def make(root: Path, host: str = "", proxy: Optional[str] = None, get_chain: Cal
     """Make the bundle: the public roots, then every certificate of the chain but the first (the site's own). Kept only when the check passes with it,
     so a bundle that would not help never replaces one that does."""
     host = (host or DEFAULT_HOST).strip()
-    if not re.match(r"^[A-Za-z0-9.\-]+$", host):
-        raise ValueError(say("launch.ca.host.bad", host=host))
+    try:
+        split_host(host)
+    except ValueError:
+        raise ValueError(say("launch.ca.host.bad", host=host)) from None
     proxy = detect_proxy() if proxy is None else proxy_address(proxy) if proxy.strip() else ""
     paths = settings(root)["paths"]
     where, roots = base_roots(paths)
@@ -481,12 +709,71 @@ def make(root: Path, host: str = "", proxy: Optional[str] = None, get_chain: Cal
 
 # --- what Get ready shows ---------------------------------------------------------------------------------------------------------------------------------
 
+_FAULT = re.compile(r"^\$(?P<path>[^:]*): (?P<what>.*)$", re.S)
+_REASONS = {"host": "may hold letters, digits, dots and hyphens, and a port after a colon (`host:port`)", "proxy": "must look like `host:port`, for example `127.0.0.1:9000`"}
+
+
+def _plain_fault(item: str) -> str:
+    """One sentence for one fault of `schema.validate`: the key, then what is wrong. (The raw text holds a regex; its `$` must stay as it is.)"""
+    found = _FAULT.match(item)
+    if not found:
+        return item
+    path, what = found.group("path").lstrip("."), found.group("what")
+    key = path.replace("[", ".").replace("]", "").split(".")[-1] if path else ""
+    where = f"`{path}`" if path else "the file"
+    if what.startswith("missing required key"):
+        return f"{where} lacks the key {what.split('key', 1)[1].strip().replace(chr(39), chr(96))}"
+    if "does not match" in what:
+        return f"{where} {_REASONS.get(key, 'is not in the form expected')}"
+    if what.startswith("expected"):
+        return f"{where} has the wrong kind of value ({what.replace('expected ', 'wanted ')})"
+    if "characters" in what or "items" in what:
+        return f"{where} is {what}" if "longer" in what or "shorter" in what else f"{where} has {what}"
+    return f"{where}: {what}"
+
+
+def recipe_errors(data: Any) -> List[str]:
+    """What is wrong in a `computer.json`, in words that name the key; [] when it is right."""
+    from . import schema
+
+    if not isinstance(data, dict):
+        return ["the file is not a JSON object"]
+    errors = [_plain_fault(item) for item in schema.validate(data, RECIPE_SCHEMA)]
+    for key in data:
+        if key not in RECIPE_SCHEMA["properties"]:
+            errors.append(f"unknown key `{key}` (it holds `ca_bundle` and `tool_folders`)")
+    if isinstance(data.get("ca_bundle"), dict):
+        errors += [f"ca_bundle: unknown key `{key}`" for key in data["ca_bundle"] if key not in ("host", "proxy")]
+    return errors
+
+
+def recipe(root: Path) -> Dict[str, Any]:
+    """The company's recipe for this computer: `{"host", "proxy", "tool_folders": [{label, hint, program}], "error"}`. Empty with no file; a file with faults gives every fault, joined, and no values."""
+    out: Dict[str, Any] = {"host": "", "proxy": "", "tool_folders": [], "error": ""}
+    path = root / RECIPE
+    if not path.is_file():
+        return out
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as error:
+        out["error"] = str(error)
+        return out
+    errors = recipe_errors(data)
+    if errors:
+        out["error"] = "; ".join(errors)
+        return out
+    out["host"] = str((data.get("ca_bundle") or {}).get("host") or "")
+    out["proxy"] = str((data.get("ca_bundle") or {}).get("proxy") or "")
+    out["tool_folders"] = [{"label": str(item["label"]), "hint": str(item.get("hint") or ""), **({"program": str(item["program"])} if item.get("program") else {})} for item in data.get("tool_folders") or []]
+    return out
+
+
 def state(root: Path) -> Dict[str, Any]:
     kept = settings(root)
     bundle = bundle_path(root)
     n = len(pem_blocks(bundle.read_text(encoding="ascii", errors="ignore"))) if bundle else 0
-    return {"paths": [{"path": item, "found": Path(item).is_dir(), "programs": programs_in(Path(item))[:8]} for item in kept["paths"]],
+    return {"programs": _program_rows(root), "paths": [{"path": item, "found": Path(item).is_dir(), "programs": programs_in(Path(item))[:8]} for item in kept["paths"]],
             "bundle": {"path": str(bundle) if bundle else "", "n": n, "host": kept["host"], "proxy": kept["proxy"], "made": kept["made"],
                        "vars": trusted_by(root)},
-            "proxy": detect_proxy(), "default_host": DEFAULT_HOST, "mcp": {"allowed": mcp_allowed(root), "detected": detect_mcp(),
+            "proxy": detect_proxy(), "recipe": recipe(root), "default_host": DEFAULT_HOST, "mcp": {"allowed": mcp_allowed(root), "detected": detect_mcp(),
             "set": bool(conn_core.read_env(root).get(MCP_KEY))}}

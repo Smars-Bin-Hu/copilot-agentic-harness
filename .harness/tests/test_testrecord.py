@@ -263,10 +263,11 @@ class RunnerTests(RecordCase):
         self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": False, "runner": "person", "opened": False})  # a proposal is not a grant
         self.assertEqual(envs["IST"]["runner"], "person")
 
-    def test_an_environment_opened_to_the_agent_is_the_runner_grant_too_and_back_to_me_closes_both(self) -> None:
+    def test_a_connection_opened_to_the_agent_is_the_runner_grant_of_its_environment_too_and_back_to_me_closes_both(self) -> None:
         from modules.task import tasklife
 
-        tasklife.set_allow(self.root, "job", "dev", True, interactive=True)  # the head of the page: Open to the agent, dev
+        (self.root / ".harness" / "policies" / "tools.company.json").write_text(json.dumps({"systems": {"sql": {"reach": {"cli": "sqlcmd"}, "env": "dev"}}}), encoding="utf-8")
+        tasklife.set_allow(self.root, "job", "sql", True, interactive=True)  # the card of a held call: Open sql for this task (a connection of DEV)
         self.assertTrue(testrecord.granted(self.data("job"), "DEV"))
         envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
         self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": True, "runner": "agent", "opened": True})
@@ -275,7 +276,7 @@ class RunnerTests(RecordCase):
         given.write_text("ok\n", encoding="utf-8")
         testrecord.record(self.root, "job", "DEV", str(given), ["c::ok::PASS"], run_by="agent")  # no second grant needed
         back = testrecord.set_runner(self.root, "job", "DEV", False, interactive=True)
-        self.assertEqual((back["changed"], self.data("job").get("allow_env")), (True, {}))
+        self.assertEqual((back["changed"], self.data("job").get("allow_conn")), (True, {}))
         self.assertFalse(testrecord.granted(self.data("job"), "DEV"))
 
     def test_only_a_person_at_a_terminal_grants_and_the_grant_can_be_taken_back(self) -> None:
@@ -319,42 +320,59 @@ class RunnerTests(RecordCase):
                 boardserve.Board(self.root, False, 8798, ["pause"]).act("test runner", "job", "act", env_name="DEV", who="agent")  # not among the board's actions
 
 
-class OpenEnvironmentTests(RecordCase):
-    """1.7.6: the Task settings field "Open to the agent": which environments a listed system reaches, which are open, and the one-click action of the board."""
+class OpenConnectionTests(RecordCase):
+    """1.7.38: the Task settings field "Open to the agent": the connections the person opened for this task, the linked items, and the one-click close of the board; opening needs the code of a held call."""
 
     def setUp(self) -> None:
         super().setUp()
-        (self.root / ".harness" / "policies" / "tools.company.json").write_text(json.dumps({"systems": {"sql": {"reach": {"cli": "sqlcmd"}, "env_from": [{"pattern": "dev", "env": "dev"}, {"pattern": "qat", "env": "qat"}]}}}), encoding="utf-8")
+        (self.root / ".harness" / "policies" / "tools.company.json").write_text(json.dumps({"systems": {"sql": {"reach": {"cli": "sqlcmd"}, "env": "dev"}, "sql-qat": {"reach": {"cli": "sqlcmd", "when": "qat"}, "env": "qat", "open": "no"}}}), encoding="utf-8")
 
-    def test_the_view_lists_the_environments_with_their_systems_and_what_is_open(self) -> None:
+    def test_the_view_lists_what_is_open_and_what_a_card_could_open(self) -> None:
         from modules.task import taskboard, tasklife
 
         found = taskdesk.allow_view(self.root, self.data("job"))
-        self.assertEqual([(item["env"], item["systems"], item["open"]) for item in found["envs"]], [("dev", ["sql"], False), ("ist", [], False), ("qat", ["sql"], False)])
-        self.assertEqual(found["never"], ["prod"])
-        tasklife.set_allow(self.root, "job", "dev", True, interactive=True)
+        self.assertEqual((found["open"], found["can"], found["any"], found["links"], found["never"]), ([], [], True, None, ["prod"]), "no call is held: nothing to name, but the field is there")
+        tasklife.set_allow(self.root, "job", "sql", True, interactive=True)
         found = taskdesk.allow_view(self.root, self.data("job"))
-        self.assertTrue(found["envs"][0]["open"] and found["envs"][0]["since"])
+        self.assertEqual([(item["name"], item["env"], bool(item["since"]), item["known"]) for item in found["open"]], [("sql", "dev", True, True)])
+        self.assertEqual((found["can"], found["any"]), ([], False))
         rows, _problems = taskboard.board_rows(self.root, False, 0, (), rewrite=False)
-        self.assertEqual(next(row for row in rows["tasks"] if row["name"] == "job")["open_envs"], ["dev"])
+        self.assertEqual(next(row for row in rows["tasks"] if row["name"] == "job")["open_conns"], ["sql"])
         (self.root / ".harness" / "policies" / "tools.company.json").unlink()
-        self.assertEqual(taskdesk.allow_view(self.root, self.data("job"))["envs"], [])  # no system listed: the field is not drawn
+        found = taskdesk.allow_view(self.root, self.data("job"))
+        self.assertEqual(([item["name"] for item in found["open"]], found["can"], [item["known"] for item in found["open"]]), (["sql"], [], [False]))  # a connection that is gone can still be closed
 
     def test_the_settings_work_while_the_agent_is_at_work_and_the_rest_waits(self) -> None:
         board = boardserve.Board(self.root, False, 8798, ["task allow", "review set", "pause", "close"])
         busy = CommandError("busy")
         with mock.patch.object(boardserve.Board, "idle", side_effect=busy):
-            self.assertEqual(board.act("task allow", "job", "act", env_name="dev", who="on")["on"], True)  # a setting the agent reads at its next step
             self.assertEqual(board.act("review set", "job", "act", n=1)["n"], 1)
             with self.assertRaises(CommandError):
                 board.act("close", "job", "act")  # changes the task under the agent's hands: waits
+            self.assertEqual(board.act("task allow", "job", "act", env_name="sql", who="off")["on"], False)  # closing a connection is a setting too
 
-    def test_the_board_opens_and_closes_with_one_click(self) -> None:
+    def test_the_board_closes_with_one_click_and_opens_only_from_a_held_call_with_its_code(self) -> None:
         board = boardserve.Board(self.root, False, 8798, ["task allow"])
         with mock.patch.object(boardserve.Board, "idle", return_value=False):
-            found = board.act("task allow", "job", "act", env_name="dev", who="on")
-            self.assertEqual((found["on"], self.data("job")["allow_env"].keys().__len__()), (True, 1))
-            self.assertEqual(board.act("task allow", "job", "act", env_name="dev", who="off")["on"], False)
             with self.assertRaises(CommandError):
-                board.act("task allow", "job", "act", env_name="prod", who="on")
+                board.act("task allow", "job", "act", env_name="sql", who="on")  # no code
+            with self.assertRaises(CommandError):
+                board.act("task allow", "job", "act", env_name="sql", who="on", code="NOPE12")  # a code of no held call
+            self.assertNotIn("sql", self.data("job").get("allow_conn", {}))
+            self.hold("job", "CODE01", [{"system": "sql", "env": "dev", "scope": "all"}])
+            with self.assertRaises(CommandError):
+                board.act("task allow", "job", "act", env_name="sql-qat", who="on", code="CODE01")  # the call offers sql, not this one
+            found = board.act("task allow", "job", "act", env_name="sql", who="on", code="code01")
+            self.assertEqual((found["on"], found["open"]), (True, ["sql"]))
+            self.assertEqual(self.data("job")["allow_conn"]["sql"]["env"], "dev")
+            self.assertEqual(board.act("task allow", "job", "act", env_name="sql", who="off")["on"], False)
+            with self.assertRaises(CommandError):
+                board.act("task allow", "job", "act", env_name="prod", who="on", code="CODE01")
 
+    def hold(self, name: str, code: str, offers: list) -> None:
+        from core import approvals
+
+        approvals.request(self.root, "vscode", "s-1", "sqlcmd -S dev -Q 'update t set a = 1'", 10, file=approvals.ACTIONS, extra={"system": "sql", "env": "dev", "verb": "write", "target": "t", "task": f"{BASE}/{name}", "offers": offers})
+        entries = approvals._read(self.root, approvals.ACTIONS)  # noqa: SLF001
+        entries[-1]["code"] = code
+        approvals._write(self.root, entries, approvals.ACTIONS)  # noqa: SLF001

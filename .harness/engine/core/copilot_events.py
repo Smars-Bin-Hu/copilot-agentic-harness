@@ -87,7 +87,7 @@ def seconds(stamp: Any) -> Optional[float]:
 def new_prompt(at: float) -> Dict[str, Any]:
     return {
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
-        "tools": [], "subagents": [], "skills": [], "models": [], "aiu": None, "premium_requests": None, "context_tokens": None,
+        "tools": [], "subagents": [], "skills": [], "models": [], "calls": [], "aiu": None, "premium_requests": None, "context_tokens": None,
         "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [], "cache_calls": [], "thinks": [],
         "spends": [], "docs": [],  # when the usage came (`at`, aiu, premium, input, output) and when REQ.md or PLAN.md of a task was written: a report splits a prompt by stage with them
     }
@@ -99,6 +99,19 @@ TASK_DOCS = {"req.md": "req", "plan.md": "plan"}
 WRITE_WORDS = ("create", "edit", "write", "replace", "patch", "insert")
 PATH_KEYS = ("path", "filePath", "file_path")
 PATCH_HEADER = re.compile(r"^\*\*\* (?:Add File|Update File):\s*(.+?)\s*$", re.MULTILINE)
+
+
+HUMAN_TOOLS = ("ask_user", "askuserquestion")  # tools that only wait for the person's answer (the same list as `modules/task/handler.py` ASK_TOOLS)
+_APPROVAL_WAIT = re.compile(r"(?:^|[\s/\\;&|])wait(?:\.cmd)?\s+(?:--approval\b|\S+\s+--approval\b)")
+
+
+def waits_for_person(name: str, arguments: Any) -> bool:
+    """Is this tool call only the agent waiting for a person (1.7.38, C12 TB-04)? A question to the person (`ask_user`), or `harness wait --approval <code>` in a terminal: no work runs in either, so the
+    time is the person's, not the tool's. It was counted as tool time, and the report of a task that waited nine minutes said the tools ran for nine minutes."""
+    if name.lower() in HUMAN_TOOLS:
+        return True
+    command = arguments.get("command") if isinstance(arguments, dict) else None
+    return isinstance(command, str) and bool(_APPROVAL_WAIT.search(command))
 
 
 def task_docs(name: str, arguments: Any) -> List[Dict[str, str]]:
@@ -159,6 +172,22 @@ def context_tokens(data: Dict[str, Any]) -> Optional[int]:
             if tokens is not None and (best is None or tokens > best):
                 best = int(tokens)
     return best
+
+
+MAIN_CALL = "conversation-agent"  # the `interactionType` of a model call of the main agent; Copilot's own small calls (a title for the chat, say) have another one
+
+
+def model_call(spent: Dict[str, Any], at: float) -> Optional[Dict[str, Any]]:
+    """One model call of the main agent as the record says it (1.7.38, F3 M): `{at, model, effort, reasoning}`: the model, the thinking effort it was asked for (empty when the record gives none) and the reasoning tokens
+    it spent (None when none are given). None for a call that is not the main agent's (`interactionType` is another one: a title, a summary Copilot asks for by itself) and for one with no model named. A missing value is left empty, never guessed."""
+    kind = spent.get("interactionType")
+    if kind not in (None, "", MAIN_CALL):
+        return None
+    model = spent.get("model")
+    if not isinstance(model, str) or not model.strip():
+        return None
+    effort = spent.get("reasoningEffort")
+    return {"at": at, "model": model.strip(), "effort": effort.strip() if isinstance(effort, str) else "", "reasoning": whole_number(spent.get("reasoningTokens"))}
 
 
 def cache_call(spent: Dict[str, Any], at: float, before: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -294,14 +323,18 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                     current["turn_s"] += max(0.0, at - turn_started)
                 turn_started = message_at = None
             elif kind == "tool.execution_start":
-                tools[str(data.get("toolCallId"))] = {"name": str(data.get("toolName") or ""), "at": at, "asked": 0.0}
+                tools[str(data.get("toolCallId"))] = {"name": str(data.get("toolName") or ""), "at": at, "asked": 0.0, "person": waits_for_person(str(data.get("toolName") or ""), data.get("arguments"))}
                 current["docs"].extend(dict(found, at=at) for found in task_docs(str(data.get("toolName") or ""), data.get("arguments")))
             elif kind == "tool.execution_complete":
                 started = tools.pop(str(data.get("toolCallId")), None)
                 if started is not None:
                     metrics = ((data.get("toolTelemetry") or {}).get("metrics") or {}) if isinstance(data.get("toolTelemetry"), dict) else {}
+                    ran = max(0.0, at - started["at"] - started["asked"])
+                    if started.get("person"):  # the agent waited for a person in this call: that is waiting for the person, as a permission is (1.7.38, C12 TB-04)
+                        current["approval_s"] += ran
+                        ran = 0.0
                     current["tools"].append({
-                        "name": started["name"], "seconds": max(0.0, at - started["at"] - started["asked"]), "ok": data.get("success") is not False,
+                        "name": started["name"], "seconds": ran, "ok": data.get("success") is not False,
                         "result_tokens": number(metrics.get("result_token_count")) if isinstance(metrics, dict) else None,
                         "at": started["at"], "error": str((data.get("error") or {}).get("message") or "") if isinstance(data.get("error"), dict) else "",
                     })
@@ -343,6 +376,9 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                         mark[key] = int(value)
                 if len(mark) > 1:
                     current["spends"].append(mark)
+                made = model_call(spent, at)
+                if made is not None:
+                    current["calls"].append(made)
                 call = cache_call(spent, at, last_call.get(str(spent.get("model") or "")))
                 if call is not None:
                     current["cache_calls"].append(call)

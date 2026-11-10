@@ -20,7 +20,7 @@ The **kind** decides "what counts as done"; the **tier** decides "which files th
 
 | Kind | Done when | Default tier |
 | --- | --- | --- |
-| `qa` Q&A | The answer has a source; opened without questions, closed when answered | light |
+| `qa` Q&A | The answer has a source; opened without questions, delivered by the agent when answered, accepted by you | light |
 | `rca` | There is a chain of evidence: what was seen, logs, root cause, verification | medium |
 | `design` design, plan | There are options and trade-offs | medium |
 | `dev` development | The changes match the approved plan, with a record of self-testing | full |
@@ -53,9 +53,13 @@ The board gives a task one state, the first that holds:
 | closed / not started | Closed, or a folder no one has opened yet | Nothing |
 | paused | You put it aside | `task resume`, or just talk to its session |
 | working | A session holds it, made a hook call in the last 5 minutes and has not stopped (even if the plan it just wrote already waits for you) | Nothing; every button is grey until it stops |
-| waiting for you | A plan, a write-back, a decision on checks, test results or a word after a stop is yours, and the agent has stopped | Do it (the reason is on the tag) |
+| waiting for you | A plan, a write-back, a decision on checks, test results, a held call, work to accept (*to accept*) or a word after a stop is yours, and the agent has stopped or sits in its wait | Do it (the reason is on the tag) |
 | quiet | A session holds it, but 5 minutes with no call and no stop | Look at the VS Code window; if it is closed, open a session and name the task |
 | no session | Nothing waits for you and nothing holds it | Open a session and name the task, or close it |
+
+### Closing is your acceptance
+
+The agent never closes a task and never asks "close the task?" (the gate refuses `harness task close` from it). A **development task** is accepted by its promote: the board closes it, on its own clock (no page needs to be open), when the agent has stopped and nothing else waits (the files to commit stay on the Changes tab), and writes the status in `TASK.md`. Every other task, a **look** and a **chore on a ticket** included, ends when the agent runs `harness task deliver` with a short summary and stops; the task shows *to accept* (before a requirement you have not confirmed yet: confirming it does not call the agent or take the acceptance away), and you press **Accept and close** (no chat, no tokens) or **Not yet** (the reply box opens). Until you accept, you may go on talking in the same task; once it is closed, a new question opens a new task. If calls still wait for you when you accept, the page lists them first: closing voids them. A test where you skipped an environment says so in the summary, on your word.
 
 ### 9.4 The requirement: the agent writes, you confirm
 
@@ -64,19 +68,19 @@ The board gives a task one state, the first that holds:
 - When the requirement changes, the agent changes `REQ.md` first, then touches the work, and adds a line to the change record.
 - When a direct instruction of yours conflicts with `REQ.md`, a hook reminds the agent to bring them in line first.
 - Your own documents (a BRD, emails) go in `REQ/`; the agent only reads them. A Word or Excel file is not given to the agent as it is: `task intake convert` turns it into Markdown and CSV with a program (no AI, no tokens), keeps the original in `REQ/originals/` and writes a report of what it left out. You trim the text and write a one-page `INTAKE.md`; the agent reads those, writes `REQ.md`, and the skill `generic-req-review` checks it against the knowledge base and asks about what is unclear until you confirm. See `docs/09-intake.md`.
-- **A plan stands on a confirmed requirement.** `task approve-plan` refuses the plan alone while `REQ.md` is not confirmed (or changed since). One code confirms both: `task approve-plan --with-req`, or *approve plan* on the page, which asks first. The agent may draft the plan meanwhile; it cannot write `DEV/` until both are settled.
+- **A plan stands on a confirmed requirement.** The plan alone is refused while `REQ.md` is not confirmed (or changed since). You press **Approve plan** on the task page: one window says so and asks for one code, which confirms both. (**Confirm requirement** confirms the requirement alone.) The agent may draft the plan meanwhile; it cannot write `DEV/` until both are settled.
 - The requirement changes before the write-back: change it in the same task, confirm it and approve the plan again; what is in `DEV/` stays and is checked again. After the write-back: the same goal is a new round, another goal a new task.
 
 ### 9.5 Changing a target repository: two approvals
 
 ```text
-the agent writes REQ.md and PLAN.md, and stops    -> you read it in the editor and run task approve-plan in the terminal   <- the first approval
+the agent writes REQ.md and PLAN.md, and stops    -> you read it in the editor and press Approve plan on the task page      <- the first approval
 the agent fetches files into DEV/ with task fetch    (main is first brought up to its remote, by a fast-forward only; then read with git)
 the agent makes the changes in DEV/ -> task diff (CHANGES.diff)
 (with checks on) task review start -> the reviewer checks -> n passes are reached
-task promote --dry-run (main brought up again) -> PROMOTE-PLAN.diff -> you run task approve-promote in the terminal                               <- the second approval
+task promote --dry-run (main brought up again) -> PROMOTE-PLAN.diff -> you press Approve promote on the task page                              <- the second approval
 task promote: for each repository git switch -c <branch> main, files written, not committed
-task close -> the report is written
+the promote was your acceptance: the board closes the task when the agent has stopped and nothing else waits -> the report is written
 ```
 
 Key points:

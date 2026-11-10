@@ -55,7 +55,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
+from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
 from core import launchenv
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
@@ -71,9 +71,9 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import accept, autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
-from . import reachcheck
+from . import reachcheck, vsrestart
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -90,6 +90,7 @@ EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal i
 REOPEN_EVERY = 3.0  # seconds
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 SETTINGS = ("review set", "task allow", "task link", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
+WAKING = ("confirm-req", "approve-plan", "approve-promote")  # the decisions of the person that wake the agent by themselves (1.7.38, C13 RB-2)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
 DESK_REFRESH = 3  # seconds between two reads of a task page (10 until 1.7.26: a state that came from a hook, such as "waits for your answer", showed up about 7 seconds late)
@@ -113,7 +114,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept"]}
 
 
 class Fallback(CommandError):
@@ -218,6 +219,17 @@ def relaunch(code: str) -> None:
 
 
 
+def reach_words(line: Dict[str, Any]) -> str:
+    """Why the last check of a connection with a sign-in kept here did not pass, in a sentence, for the hover of its row (1.7.38, F1 M9): a refusal says it turned the account down; any other failure says what the program said.
+    Nothing when the check passed, or never answered (that is the row's own "not tested yet")."""
+    state, why = str(line.get("state") or ""), str(line.get("why") or "")
+    if state == reach.DENIED:
+        return say("connections.reach.other" if why == "other-identity" else "connections.reach.denied")
+    if state == reach.FAILED:
+        return say("connections.reach.failed", why=why or "-")
+    return ""
+
+
 def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
     """What the Servers window shows (1.7.10): each server with its kind, environment, fields and whether an identity is saved (the account, never the password),
     what VS Code reached last, the kinds a person may add a server of, and whether VS Code is open now."""
@@ -225,17 +237,31 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
     env = conn_core.read_env(root)
     seen = reach.read(root)
     rows = []
-    for alias, server in conn_core.listed(root).items():
+    listed = conn_core.listed(root)
+    faulty = toolpacks.faults(root) if any(server.get("type") and not known.get(str(server.get("type"))) for server in listed.values()) else []  # read once, and only when a connection's type is not known (S1)
+    for alias, server in listed.items():
         kind = known.get(str(server.get("type"))) or {}
         auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
-        saved = conn_core.identity_of(env, alias, kind)
-        rows.append({"alias": alias, "label": server.get("label", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "login": auth.get("login", ""),
+        saved = conn_core.identity_of(env, alias, kind, server)
+        reached = (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")
+        tool = conn_core.tool_program(auth) if auth.get("identity") == "tool" else ""
+        rows.append({"alias": alias, "label": server.get("label", ""), "about": str(server.get("about") or ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "guard": toolpacks.guard_of(root, str(server.get("type")), faulty) if server.get("type") and not kind else None, "via": kind.get("via", "cli"), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
-                     "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
-    kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
+                     "tool": tool,  # 1.7.38: the program whose own sign-in this connection uses; one sign-in per computer, shared
+                     "account": saved.get("account", ""), "saved": bool(saved), "reach": reached,
+                     "signed": conn_core.signed_in(saved, tool, reached), "reach_tip": reach_words(seen.get(f"{alias}:{server.get('env', '')}") or {}) if saved else "",  # a program keeps its own sign-in: a check that got through says it is signed in, whether or not the account was kept here. The Enter screen counts the same (retest N4)
+                     "who": str((seen.get(f"{alias}:{server.get('env', '')}") or {}).get("who") or ""),
+                     "untested": bool(saved) and reached == reach.UNKNOWN and (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("why") in (conn_core.UNTESTED, conn_core.UNTESTED_SLOW),
+                     "untested_why": "no-answer" if bool(saved) and reached == reach.UNKNOWN and (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("why") == conn_core.UNTESTED_SLOW else ""})  # 1.7.38: `who` is the name a passed test answered with (a token has no account of its own to show); `untested`: kept, and no test has reached the system since
+    kinds_out = {name: {"label": kind.get("label", name), "env": kind.get("env") or "", "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}
-    return {"connections": rows, "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
+    try:
+        broken = conn_core.faults(root)
+    except Exception:  # noqa: BLE001 - a note must not break the window
+        broken = []
+    fault = {"file": broken[0]["file"], "problem": str(broken[0]["problem"])[:240], "text": say("connections.list_fault", file=broken[0]["file"], problem=str(broken[0]["problem"])[:240])} if broken else None  # 1.7.38 (C13 FR 3): the list cannot be read: the window says so, and does not call a saved sign-in left over
+    return {"connections": rows, "list_fault": fault, "signins": conn_core.signins(root), "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
 
 
 EMBEDDED = re.compile(r"\bElectron/\d")  # the user agent of VS Code's own browser (an Electron app); Chrome, Edge and Firefox never send it
@@ -259,6 +285,7 @@ class Board:
         self.port = port
         self.actions = actions
         self.restarted = bool(os.environ.get(RESTART_CODE))
+        self.batch_salt = secrets.token_hex(16)  # a secret of this process: the code of a batch of held calls is made with it (core.outbox.batch_code); a restarted board gives other codes
         self.code = os.environ.pop(RESTART_CODE, "") or secrets.token_urlsafe(12)  # after Restart board the page brings this code back; a new process holds no session
         self.next_code = ""
         self.server: Any = None
@@ -271,8 +298,11 @@ class Board:
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
         self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
+        self.restarter = vsrestart.Restart(launchenv.vscode_running, self.open_vscode, gone=self.link.hurry, chats=lambda: self.other_chats([]))  # the VS Code button of the screen (1.7.38): quit, wait, open
+        self.ready.restart = self.restarter
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
+        self.sweeping = threading.Event()  # set when the server stops: the thread that closes promoted tasks ends
 
     def user_name(self) -> str:
         """The name for `Hi, <name>` on the Enter screen: what `harness user` reads (user.override.json, else `git config user.name`).
@@ -362,6 +392,7 @@ class Board:
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
+        self.close_promoted()
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served, rewrite=False)
         self.link.overlay(result["tasks"])
         for row in result["tasks"]:
@@ -373,12 +404,87 @@ class Board:
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
-        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "setup": core_setup.missing(self.root), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
+        elsewhere = outbox.held_elsewhere(self.root, self.task_is_open)
+        return {"held_elsewhere": elsewhere, "rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
+
+    def task_is_open(self, task: str) -> bool:
+        """Is this task (as an approval entry names it: its folder) open? A task that cannot be read is not."""
+        try:
+            return (tasks.read(self.root, task) or {}).get("status") == "open"
+        except Exception:  # noqa: BLE001
+            return False
+
+    def void_elsewhere(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The person voids calls that belong to no open task (1.7.38, C13 FR 25): the page lists them (`held_elsewhere` of the rows) and the codes it sends are checked again here, so a call of an open task is never voided by this."""
+        if "dismiss action" not in self.actions:
+            raise CommandError(say("serve.action.off", action="dismiss action"))
+        codes = [str(code) for code in data.get("codes") or []] if isinstance(data.get("codes"), list) else []
+        done = outbox.void_elsewhere(self.root, codes, self.task_is_open)
+        return {"voided": done, "count": len(done)}
+
+    SWEEP_EVERY = 5.0  # seconds between two looks for a promoted task that waits for nothing
+
+    def sweep_loop(self, wait: Optional[Callable[[float], bool]] = None) -> None:
+        """Close the promoted tasks that wait for nothing, on the server's own clock (1.7.38, C12 TB-12): it used to happen only when a page asked for the rows, so a promote made with no board page
+        open left the task open. `wait` gives the time between two looks (it returns True when the server stops); the tests pass their own."""
+        wait = wait or self.sweeping.wait
+        while not wait(self.SWEEP_EVERY):
+            try:
+                self.close_promoted()
+            except Exception:  # noqa: BLE001 - a look at the tasks must not end the thread
+                continue
+
+    def start_sweeper(self) -> None:
+        threading.Thread(target=self.sweep_loop, daemon=True, name="board-sweep").start()
+
+    def close_promoted(self) -> List[str]:
+        """The promote is the acceptance of a development task: when it is done, the agent has stopped and nothing else waits, the board closes the task (1.7.38, C12 Q14). At most once in a few seconds."""
+        now = time.monotonic()
+        with self.lock:
+            if now - getattr(self, "swept", -self.SWEEP_EVERY) < self.SWEEP_EVERY:
+                return []
+            self.swept = now
+        closed = accept.sweep(self.root)
+        for name in closed:
+            print(say("serve.did", action="close (promoted)", task=name), flush=True)
+        return closed
+
+    def open_vscode(self) -> None:
+        """Bring the VS Code window of this folder forward, started with this computer's settings; the connections are checked at once. Raises the reason when it cannot be asked (`/api/open`, and the end of a restart)."""
+        if not self.link.status().get("ready") and not launchenv.vscode_running():
+            launchenv.mark_started(self.root)  # this start has the settings: what an earlier one lacked no longer holds
+        asked = self.link.open_window()
+        if asked != "queued":
+            raise ValueError(say("serve.open.off") if asked == "off" else say("serve.open.no-cli"))
+        self.checker.start()  # the connections are checked at once, in VS Code's environment, so the Enter screen has a word within seconds (1.7.19)
+
+    def working_tasks(self) -> List[str]:
+        """The names of the open tasks whose agent is at work now: the hook log says so and VS Code does not say its chat runs no turn (`idle`), or VS Code says the chat is busy. A restart of VS Code would stop them."""
+        found: List[str] = []
+        for task in tasks.folders(self.root):
+            data = tasks.read(self.root, task)
+            if not data or data.get("status") != "open":
+                continue
+            chat = self.link.chat_of(task)
+            busy = chat.get("bound") and chat.get("state") == "busy"
+            if busy or (tasklife.at_work(self.root, data) and not (chat.get("bound") and chat.get("state") in CHAT_STILL)):
+                found.append(Path(task).name)
+        return found
+
+    def other_chats(self, working: List[str]) -> List[str]:
+        """The names of the chats VS Code lists as running or waiting for the person that `working_tasks` did not name: VS Code asks about each of them before it quits (`veto.chat`), a chat of a task or not, in any folder.
+        A chat of an open task is named by the task; any other by its title. Said before the restart, so the person is not first met by VS Code's own question."""
+        found: List[str] = []
+        for chat in self.link.running_chats():
+            name = Path(chat["task"]).name if chat["task"] else chat["title"].strip() or say("restart.chat.untitled")
+            if name not in working and name not in found:
+                found.append(name)
+        return found
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "setup": found["setup"], "space": found["space"]}, self.refresh), hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "space": found["space"]}, self.refresh), hidden=found["hidden"])
 
     def desk(self, name: str, trace_tree: bool = False) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served, trace_tree)  # the tree reads whole logs: only for a Trace tab that is open
@@ -573,19 +679,58 @@ class Board:
             return True
         raise CommandError(say("serve.busy"))
 
-    def close(self, name: str, reason: str = "") -> Dict[str, Any]:
+    def close(self, name: str, reason: str = "", void: bool = False, seen: Any = None) -> Dict[str, Any]:
         """Close a task (`task close`): the report is written, the session lets go. The folder stays; `task open` opens it again.
-        The browser must be paired; no code is typed, for it undoes nothing that cannot be undone. `reason`: what the person typed in the dialog (like `task close --reason`); else the page's own words."""
+        The browser must be paired; no code is typed, for it undoes nothing that cannot be undone. `reason`: what the person typed in the dialog (like `task close --reason`); else the page's own words.
+        Calls of the task that still wait for the person are void when it closes (1.7.38, C13 M2): the page lists them and asks first, as Accept and close does, and `void` says the person said yes; without it the close
+        is refused and the answer says how many wait. `seen` (F3): the codes the page listed; a call that came after the list is not void by that yes."""
         if "close" not in self.actions:
             raise CommandError(say("serve.action.off", action="close"))
         self.idle("close", name)
+        waiting = accept.held(self.root, name)
+        if accept.unseen(waiting, void, seen):
+            raise CommandError(say("serve.close.held", count=len(waiting)))
         words = reason.strip()[:500]
         result = task_ops.close(self.root, name, words or say("serve.close.reason"), check_todo=False, todo_note=words or say("serve.close.reason"))
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "") -> Dict[str, Any]:
-        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only."""
+    def batch(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Approve held calls of a task together with one code (1.7.38, C13 F3 AP). `step` preview: the code of the list the person ticked (`outbox.batch_preview`); act: approve those calls, each as if alone
+        (`outbox.approve_batch`: the code is checked against the list, a call that names files must have been viewed and its files unchanged; nothing is approved unless all hold). The agents that wait are told, as for one call."""
+        if "approve-action" not in self.actions:
+            raise CommandError(say("serve.action.off", action="approve-action"))
+        codes = [str(code) for code in data.get("codes") or []] if isinstance(data.get("codes"), list) else []
+        try:
+            if str(data.get("step", "act")) == "preview":
+                return outbox.batch_preview(self.root, codes, self.batch_salt)
+            before = {str(item.get("code")): item for item in (self.entry(code) for code in codes) if item}
+            for item in before.values():  # as for one call: while the agent is at work on the task (not waiting on a call), the page may be old and the agent may be answering
+                if item.get("task"):
+                    self.idle("approve-action", str(item["task"]))
+                    break
+            result = outbox.approve_batch(self.root, codes, str(data.get("code", "")), self.batch_salt, data.get("seen") if isinstance(data.get("seen"), dict) else {}, interactive=True)
+        except outbox.BatchRefused as error:
+            refusal = CommandError(str(error))
+            refusal.changed = list(error.files)
+            raise refusal from None
+        except ValueError as error:
+            raise CommandError(str(error)) from None
+        calls = result["calls"]
+        task = str(calls[0]["task"]) if calls else ""
+        if task:
+            with task_ops.locked(self.root, task_ops.resolve(self.root, task)) as held:  # the record of the task: each call was approved, with the batch it was in and the files it was approved with
+                for call in calls:
+                    task_ops.note(held, "approve-call", str(call["code"]), code=call["code"], batch=result["count"], files={key: str(value)[:12] for key, value in (call.get("files") or {}).items()}, system=call.get("system", ""), env=call.get("env", ""))
+            noted(self.root, task, "approve-action")
+            stood = [(code, self.place_of(before[code])) for code in (call["code"] for call in calls) if code in before]
+            self.after_decision(task, stood, messages.text("desk.outbox.tell.body", codes=", ".join(code for code, _place in stood)))
+            result["agent"] = {code: place for code, place in stood}
+        return result
+
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False, voids: Any = None) -> Dict[str, Any]:
+        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`;
+        `seen` for `approve-action` only: what the person saw when they pressed View (`outbox.approve_action`)."""
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
                 raise CommandError(say("serve.action.off", action=action))
@@ -596,15 +741,34 @@ class Board:
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = False if action in SETTINGS else self.idle(action, task)
-        if action == "dismiss action":  # the person says no to a held call (1.7.7): the code names it, nothing runs
+        if action == "accept" and step == "preview":  # the calls of the task that still wait for the person: the page lists them and asks before it closes the task (1.7.38, C13 FB-4)
+            return {"held": accept.held(self.root, task)}
+        if action == "accept":  # the person accepts the delivered work (1.7.38): the board closes the task; nothing is sent to the chat. `void`: the person said yes to the calls that still wait: they are void now
+            result = accept.accept(self.root, task, void=bool(void), seen=voids)
+            noted_after = result.get("task") or task
+            print(say("serve.did", action="accept", task=task_ops.name_of(noted_after)), flush=True)
+            return result
+        if action == "dismiss action":  # the person says no to a held call (1.7.7): the code names it, nothing runs. A reason (1.7.38) goes to the agent: at once by its wait, else by a message when its turn ended
             try:
-                result = outbox.dismiss_action(self.root, str(code or ""), interactive=True)
+                result = outbox.dismiss_action(self.root, str(code or ""), interactive=True, reason=str(reason or ""), note=str(note or ""))
             except ValueError as error:
                 raise CommandError(str(error)) from None
             noted(self.root, task, action)
+            result["told"] = self.after_dismiss(result)
             return result
-        if action == "task allow":  # one click, no code: the person opens an environment for this task, or closes it (1.7.6); the same function as `task allow`
-            result = tasklife.set_allow(self.root, task, str(env_name or ""), str(who or "") == "on", interactive=True)
+        if action == "task allow":  # the person closes a connection for this task with one click (1.7.6); the same function as `task allow`. Opening one needs the code of a held call that offers it (1.7.38)
+            name = " ".join(str(env_name or "").split()).lower()
+            on, offer = str(who or "") == "on", None
+            if on and name != tasklife.LINKS:
+                offer = outbox.offer_for(self.root, task_ops.resolve(self.root, task), str(code or ""), name)
+                if not offer:
+                    raise CommandError(say("serve.allow.code", name=name or "-"))
+            result = tasklife.set_allow(self.root, task, name, on, interactive=True, env=str((offer or {}).get("env") or ""))
+            if offer:  # the held calls that offered it have done their part: the agent that waits hears at once, one whose turn ended is woken, else the page asks the person to tell it (1.7.38)
+                found = result.get("task") or task_ops.resolve(self.root, task)
+                stood = {str(item["code"]): outbox.agent_place(item) for item in outbox.pending_for(self.root, found) if any(isinstance(one, dict) and one.get("system") == name for one in item.get("offers") or [])}
+                outbox.mark_opened_everywhere(self.root, found, [name])
+                self.after_decision(found, [(each, place) for each, place in stood.items() if (self.entry(each) or {}).get("state") == "opened"], messages.text("desk.outbox.opened.body", names=outbox.opened_words(name, [offer] if offer else [])))
             noted(self.root, result.get("task") or task, action)
             return result
         if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`
@@ -632,6 +796,10 @@ class Board:
         if action == "approve-plan" and with_req:
             plain = call
             call = lambda **kw: plain(with_req=True, **kw)  # noqa: E731 - the requirement and the plan, one code
+        if action == "approve-action" and isinstance(seen, dict):
+            held = call
+            call = lambda **kw: held(seen=seen, **kw)  # noqa: E731 - the files of the card, as the person saw them (1.7.38, C12 RB-N5)
+        stood = self.entry(code) if action == "approve-action" and step == "act" else None  # where the agent stood before the person's yes (1.7.38)
         out = io.StringIO()
         if step == "preview":
             def stop(asked: str) -> str:
@@ -647,9 +815,110 @@ class Board:
         try:
             result = call(reader=lambda _asked: code, interactive=True, out=out)
         except ValueError as error:  # core.outbox says no with a plain error; the page shows it as a refusal
-            raise CommandError(str(error)) from None
+            refusal = CommandError(str(error))
+            refusal.changed = list(getattr(error, "files", []) or [])  # a file of the call changed after View: the page asks to press View again
+            raise refusal from None
+        if action == "approve-action" and step == "act" and result.get("code"):  # the record of the task: this call was approved, alone, with the files it was approved with (F3 AP)
+            try:
+                with task_ops.locked(self.root, task_ops.resolve(self.root, str(result.get("task") or task))) as held:
+                    task_ops.note(held, "approve-call", str(result["code"]), code=result["code"], batch=0, files={key: str(value)[:12] for key, value in (result.get("files") or {}).items()}, system=result.get("system", ""), env=result.get("env", ""))
+            except Exception:  # noqa: BLE001 - the call is approved; a missing line must not undo it in the person's eyes
+                pass
         noted(self.root, result.get("task") or task, action)
+        if step == "act" and action in WAKING:  # 1.7.38, C13 RB-2: a decision that moves the task on wakes the agent by itself, as an approved call does: no second click on "tell the agent"
+            result["agent"] = self.wake_go(result.get("task") or task)
+        if stood and stood.get("task"):
+            place = self.place_of(stood)
+            self.after_decision(str(stood["task"]), [(str(stood["code"]), place)], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
+            result["agent"] = place  # the page says so on the green card at once, before its next poll (1.7.38, C12 TB-02)
         return result
+
+    # --- the agent, after the person decided on a held call (1.7.38) -----------------------------------------------
+
+    def entry(self, code: str) -> Optional[Dict[str, Any]]:
+        """The entry of a held call by its code, in any state it is in (None when none)."""
+        try:
+            return approvals.find(self.root, str(code or ""), approvals.minutes(config.policy_or_empty(self.root, "gate")), file=approvals.ACTIONS)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def wake_go(self, task: str) -> str:
+        """The person confirmed the requirement, approved the plan or approved the promote (1.7.38, C13 RB-2): the task now waits with a `go-*` mark, "tell the agent to go on". The board sends that message itself,
+        the one the button would send (`kind` go: the fixed text, the notes of the person, the model of the task). `message` when it went; "" when it could not (no chat, VS Code closed, the chat is busy, nothing to send):
+        the mark stays and the card still offers the button, so nothing is lost. Never raises."""
+        try:
+            found = tasks.read(self.root, task) or {}
+            if tasklife.waiting(self.root, task, found)["why"] not in chatsend.GO:
+                return ""
+            self.send({"task": task, "kind": "go", "lang": ""})
+            return "message"
+        except Exception:  # noqa: BLE001 - the decision is made; the button is the way back
+            return ""
+
+    def turn_ended(self, task: str) -> bool:
+        """Has the agent of this task stopped its turn (the Stop hook left its mark and no new prompt has taken it away)? A `harness wait` it left running in a background terminal then answers nobody until a message wakes the agent (1.7.38, C13 FR 8)."""
+        try:
+            mark = (tasks.read(self.root, task) or {}).get("waiting")
+            return isinstance(mark, dict) and mark.get("why") == "stopped"
+        except Exception:  # noqa: BLE001
+            return False
+
+    def place_of(self, entry: Dict[str, Any]) -> str:
+        """`outbox.agent_place`, with one more fact (1.7.38, C13 FR 8): a wait that still beats but whose agent has stopped its turn is `ended`, not `wait`: the board wakes the agent with the decision, as it does for a wait that ran out. A page
+        that said "goes on now" for it was wrong: nobody read the answer of the wait."""
+        place = outbox.agent_place(entry)
+        if place == "wait" and entry.get("task") and self.turn_ended(str(entry["task"])):
+            return "ended"
+        return place
+
+    def after_decision(self, task: str, decided: List[Tuple[str, str]], text: str) -> None:
+        """The person approved calls or opened their connection. `decided`: each code and where the agent stood (`outbox.agent_place`). One that waits in `harness wait --approval` hears it by itself
+        (the entry is marked). One whose wait ran out and whose turn ended is woken with `text`, as one message for all of them. Others are left: the card asks the person to tell the agent."""
+        minutes = approvals.minutes(config.policy_or_empty(self.root, "gate"))
+        for code, place in decided:
+            if place == "wait":
+                approvals.told(self.root, code, "wait", minutes, file=approvals.ACTIONS)
+        ended = [code for code, place in decided if place == "ended"]
+        if ended and self.wake(task, text):
+            for code in ended:
+                approvals.told(self.root, code, "message", minutes, file=approvals.ACTIONS)
+
+    def after_dismiss(self, done: Dict[str, Any]) -> str:
+        """The person did not approve a held call. The agent that waits has the reason from its wait. One whose turn ended on the call is woken with the reason, when there is one; without a reason, or when the
+        agent went on, it is only written in the task. Returns what happened: `wait`, `message` or `logged`. The record of the task says it in every case (F3 AP): the code, the reason and the person's line."""
+        try:
+            task = str(done.get("task") or "")
+            entry = self.entry(str(done.get("code") or "")) or {}
+            if task:
+                with task_ops.locked(self.root, task) as data:
+                    task_ops.note(data, "outbox-dismiss", f"{done.get('code')}: {outbox.reason_text(str(done.get('reason') or ''), str(done.get('note') or ''))}", code=str(done.get("code") or ""), reason=str(done.get("reason") or ""), note=str(done.get("note") or ""))
+            place = done.get("agent")
+            if place == "wait" and task and self.turn_ended(task):  # its wait runs in a background terminal and its turn is over: the reason and the person's line reach it only by a message (1.7.38, C13 FR 21)
+                place = "ended"
+            if place == "wait":
+                return "wait"
+            if done.get("reason") and place == "ended" and task and self.wake(task, outbox.wake_dismissed(entry)):
+                return "message"
+        except Exception:  # noqa: BLE001 - the call is dismissed; a missing line must not undo it in the person's eyes
+            pass
+        return "logged"
+
+    def wake(self, task: str, text: str) -> bool:
+        """Send `text` to the chat of the task as an answer (the agent's turn ended; the person has decided), without the person's saved drafts. False when it cannot go (no chat, VS Code closed, the chat is busy):
+        nothing is lost, the page then asks the person to tell the agent."""
+        try:
+            found = tasks.read(self.root, task) or {}
+            made = chatsend.prepare(self.root, task, "answer", "", "", text, "", with_drafts=False)
+            model = chatsend.model_of(found)
+            done = self.link.dispatch("send", task, made["text"], model, [])
+        except Exception:  # noqa: BLE001 - see above
+            return False
+        try:
+            tasklife.set_waiting(self.root, task, None)  # it works again; the card of the wait is gone with the answer
+        except Exception:  # noqa: BLE001
+            pass
+        self.sent(task, found, "answer", made["text"], done, {"why": "", "lang": made["lang"], "model": model or {}, "drafts": 0, "files": [], "by": "board"})
+        return True
 
     # --- talking to the chat (B72) ---------------------------------------------------------------------------------
 
@@ -705,7 +974,7 @@ class Board:
         given = {key: str(data.get(key) or "") for key in ("account", "password", "keyfile", "token")}
         own = data.get("own") if isinstance(data.get("own"), dict) else None
         if own is not None:
-            own = {key: str(value) for key, value in own.items() if key in ("type", "env", "auth", "label") or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}
+            own = {key: str(value) for key, value in own.items() if key in conn_core.OWN_FIELDS or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}
             if not conn_core.ALIAS.match(alias) or alias in conn_core.company_connections(config.policy_or_empty(self.root, conn_core.POLICY)):
                 raise ValueError(say("connections.alias.bad", alias=alias))
             if own.get("env") not in ("dev", "ist", "qat", "none"):
@@ -714,9 +983,15 @@ class Board:
         if step == "list":
             return servers_view(self.root, self.link.status().get("ready", False))
         if step == "test":
-            found = conn_core.test(self.root, alias, given, server=dict(own, own=True) if own else None)
+            found = conn_core.test(self.root, alias, given, server=dict(own, own=True) if own else None, saved=bool(data.get("saved")))
             if found["state"] in ("ok", "mcp"):  # an MCP connection has nothing to test here: what is kept is the connection itself
                 self.tested[alias] = (stamp, time.time(), found.get("who", ""))
+            if data.get("saved") and not own and found["state"] != "mcp":  # a test of what is kept here says how that connection is now (1.7.38)
+                self.note_reach(alias, found)
+            if data.get("keep") and not own:  # the sign-in form of a listed connection: a test that never reached the system keeps what was typed (1.7.38)
+                found["kept"] = conn_core.keep_untested(self.root, alias, found, given)
+                if found["kept"] and found.get("timeout"):
+                    found["kept_why"] = "no-answer"  # 1.7.38 (C13 D3-1): saved, not tested yet: no answer
             return found
         if step == "save":
             passed = self.tested.get(alias)
@@ -724,10 +999,14 @@ class Board:
                 raise ValueError(say("connections.save.untested"))
             conn_core.save(self.root, alias, given, own, who=passed[2] if len(passed) > 2 else "")
             self.tested.pop(alias, None)
+            self.note_reach(alias, {"state": "ok", "why": "", "who": passed[2] if len(passed) > 2 else ""}, own)  # it passed the test just before: the old failure is gone
             return {"saved": alias}
         if step == "forget":
             conn_core.forget(self.root, alias)
             return {"forgot": alias}
+        if step == "forget-tool":  # the sign-in of a program shared by the connections of a type (1.7.37)
+            conn_core.forget_tool(self.root, str(data.get("program") or ""))
+            return {"forgot": str(data.get("program") or "")}
         if step == "export":  # one's own connections in the form of connections.json (Tools, Connections, Export): no identity
             return conn_core.export(self.root)
         if step == "share":  # into the company pack: the server only, never the identity (knowledge base, Pack for colleagues)
@@ -750,6 +1029,22 @@ class Board:
             return made
         raise ValueError(say("serve.refused.request"))
 
+    def note_reach(self, alias: str, found: Dict[str, Any], own: Optional[Dict[str, Any]] = None) -> None:
+        """Keep what a test of a connection found out beside the probes' answers (`core.reach.record`). A connection with no environment of the list is not recorded."""
+        try:
+            server = own or conn_core.listed(self.root).get(alias) or {}
+            env = str(server.get("env") or "")
+            if env not in conn_core.ENVS:
+                return
+            state = {"ok": reach.OK, "denied": reach.DENIED}.get(str(found.get("state")), reach.FAILED)
+            why = str(found.get("why") or "")
+            kind = conn_core.types(self.root).get(str(server.get("type"))) or {}
+            if found.get("timeout") and state == reach.FAILED and kind and conn_core.delivery(kind, server)["identity"] != "tool":
+                state, why = reach.UNKNOWN, conn_core.UNTESTED_SLOW  # (1.7.38, C13 FR 12) a test that got no answer in time is kept as the background check keeps it: "not tested yet: no answer", never "test failed"
+            reach.record(self.root, f"{alias}:{env}", state, why, str(found.get("who") or ""))
+        except Exception:  # noqa: BLE001 - a note on a state must never fail the test the person pressed
+            pass
+
     def machine(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Get ready, This computer (1.7.11): the tool folders and the CA bundle VS Code is started with (`core.launchenv`). `step`: state, paths, bundle, drop."""
         step = str(data.get("step", ""))
@@ -763,12 +1058,15 @@ class Board:
         elif step == "mcp":  # the person says whether MCP may be used here (1.7.17); the tool packs' MCP servers follow
             done = launchenv.set_mcp(self.root, bool(data.get("allowed")))
             return dict(launchenv.state(self.root), mcp_done=done, vscode_open=bool(self.link.status().get("ready", False)))
+        elif step == "folder-add":  # "I installed it here" (1.7.37): the folder goes to HARNESS_TOOL_PATH when it holds the program; the next check finds it
+            launchenv.add_folder(self.root, str(data.get("program") or ""), str(data.get("path") or ""))
+            step = "state"
         elif step == "toolpack-add":  # a folder or zip the person names (1.7.19): what `harness toolpack add <path>` does; an installed name is replaced only after a second, confirming call
             from core import toolpacks
 
             try:
                 found = toolpacks.installed_against(self.root, str(data.get("path") or ""))
-                if found["installed"] and (toolpacks.ledger(self.root).get(found["name"]) or {}).get("from") == toolpacks.COMPANY:
+                if found["source"] == toolpacks.COMPANY:
                     raise ValueError(say("toolpack.company.managed", name=found["name"]))
                 if found["installed"] and not data.get("replace"):
                     return {"confirm": found}
@@ -777,17 +1075,27 @@ class Board:
             except toolpacks.ToolpackError as error:
                 raise ValueError(str(error)) from None
             return {"added": done, "missing": [name for name, ok in (row.get("programs") or {}).items() if not ok]}
+        elif step == "toolpack-use":  # a factory pack on or off: its name in `use` of the knowledge base's packs.json, and the skills follow at once (1.7.34)
+            from core import toolpacks
+
+            try:
+                toolpacks.set_use(self.root, str(data.get("name") or ""), bool(data.get("on")))
+            except toolpacks.ToolpackError as error:
+                raise ValueError(str(error)) from None
+            step = "toolpacks"
         elif step in ("toolpack-update", "toolpack-remove"):  # the paired browser is the person's: what `harness toolpack add --replace` / `remove` do at a terminal
             from core import toolpacks
 
             name = str(data.get("name") or "")
-            kept = toolpacks.ledger(self.root).get(name) or {}
-            if kept.get("from") == toolpacks.COMPANY:
-                raise ValueError(say("toolpack.company.managed", name=name))
-            if step == "toolpack-remove":
-                toolpacks.remove(self.root, name)
-            else:
-                toolpacks.add(self.root, str(kept.get("from") or ""), origin=str(kept.get("from") or ""), replace=True)
+            try:
+                if step == "toolpack-remove":  # a folder added here; a factory or company pack answers with where to turn it off
+                    toolpacks.remove(self.root, name)
+                else:  # nothing is copied now: the pack is read where it lies, so an update is only its skills again
+                    done = toolpacks.sync_skills(self.root)
+                    if done.get("failed"):  # a company pack has the name of a factory pack (1.7.38)
+                        raise toolpacks.ToolpackError(done["error"])
+            except toolpacks.ToolpackError as error:
+                raise ValueError(str(error)) from None
             step = "toolpacks"
         if step == "toolpacks":  # Get ready, Tool packs (1.7.13): what each has and lacks, with the servers of its kinds and whether each is signed in
             from core import toolpacks
@@ -796,7 +1104,7 @@ class Board:
             found.pop("exit_code", None)
             known, env = conn_core.types(self.root), conn_core.read_env(self.root)
             for row in found["toolpacks"]:
-                row["connections"] = [{"alias": alias, "saved": bool(conn_core.identity_of(env, alias, known.get(str(server.get("type"))) or {}))}
+                row["connections"] = [{"alias": alias, "saved": bool(conn_core.identity_of(env, alias, known.get(str(server.get("type"))) or {}, server))}
                                   for alias, server in conn_core.listed(self.root).items() if (known.get(str(server.get("type"))) or {}).get("toolpack") == row["name"]]
             return found
         if step not in ("state", "paths", "drop"):
@@ -1400,7 +1708,7 @@ def handler_for(board: Board) -> type:
             if path == "/api/reopen":  # a second `harness task board`: this server opens the browser with a new code. The answer never holds the code, so no pairing is needed
                 return self.answer(200, {"opened": board.open_page()})
             if path == "/api/status":
-                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status()})
+                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status(), "root": str(board.root)})
             if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the cache of the link and of the one doctor run; it waits for nothing
                 try:
                     return self.answer(200, board.ready.answer(board.paired(self.token())))
@@ -1413,13 +1721,23 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 if not data.get("anyway") and launchenv.extra(board.root) and launchenv.vscode_running() and launchenv.seen(board.root).get("ok") is not True:  # it is running and no chat found it started with the settings: starting it again gives it nothing (1.7.21); the person may still open it (`anyway`, 1.7.29)
                     return self.answer(409, {"error": say("serve.open.running_env"), "running": True})
-                if not board.link.status().get("ready") and not launchenv.vscode_running():
-                    launchenv.mark_started(board.root)  # this start has the settings: what an earlier one lacked no longer holds
-                asked = board.link.open_window()
-                if asked != "queued":
-                    return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
-                board.checker.start()  # the connections are checked at once, in VS Code's environment, so the Enter screen has a word within seconds (1.7.19)
+                try:
+                    board.open_vscode()
+                except ValueError as error:
+                    return self.answer(409, {"error": str(error)})
                 return self.answer(200, {"result": {"queued": True}})
+            if path == "/api/restart":  # the VS Code button of the Enter screen (1.7.38): quit the normal way, wait, open again. The paired browser only; never a kill
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                if str(data.get("step", "")) == "state":
+                    return self.answer(200, {"result": board.restarter.view()})
+                if os.environ.get("TERM_PROGRAM") == "vscode" or os.environ.get("VSCODE_IPC_HOOK_CLI"):  # this board runs in a terminal of VS Code: quitting VS Code would stop it
+                    return self.answer(409, {"error": say("restart.inside"), "inside": True})
+                names = [] if data.get("anyway") else board.working_tasks()
+                chats = [] if data.get("anyway") else board.other_chats(names)
+                if names or chats:
+                    return self.answer(409, {"error": say("restart.busy", names=", ".join(names + chats)), "busy": names, "chats": chats})
+                return self.answer(200, {"result": {"started": board.restarter.start(bool(data.get("open", True)))}})
             if path == "/api/reach":  # the Check button of the outside systems line: the board checks the connections now (the paired browser only)
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -1487,7 +1805,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     result = board.servers(data)
-                    if str(data.get("step", "")) in ("save", "forget", "open"):
+                    if str(data.get("step", "")) in ("save", "forget", "forget-tool", "open"):
                         print(say("serve.did", action="servers " + str(data.get("step")), task=str(data.get("alias") or "-")), flush=True)  # never a value
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
@@ -1529,6 +1847,11 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     op = str(data.get("op", ""))
+                    if op == "forget":  # every kept view is old: a rebuilt map, or Refresh (1.7.38)
+                        board.kb_view.forget()
+                        return self.answer(200, {"result": {"ok": True}})
+                    if op == "has":  # is a knowledge base in place: a few file looks, no view is started (Look up asks before it shows its box)
+                        return self.answer(200, {"result": {"has_kb": board.kb_view.has_kb()}})
                     return self.answer(200, {"result": board.kb_view.near(data.get("query")) if op == "near" else board.kb_view.get(op, bool(data.get("fresh")))})
                 except (KeyError, ValueError) as error:
                     return self.answer(409, {"error": str(error)})
@@ -1547,16 +1870,24 @@ def handler_for(board: Board) -> type:
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
+                    if data.get("op") == "packcheck":  # before the folder is asked for (1.7.38)
+                        return self.answer(200, {"result": company.pack_check(board.root)})
+                    if data.get("op") == "commit":  # what is changed in the knowledge base, committed by the person's click
+                        return self.answer(200, {"result": company.commit_changes(board.root)})
                     if data.get("op") == "pack":
                         return self.answer(200, {"result": company.pack(board.root, str(data.get("out", "")))})
                     if data.get("op") == "prefix":  # the word of the company content goes in the person's file, then the sync it was stopping
                         folder = targets.company_folder(board.root)
                         board.keep_override("skill_prefix", company.wanted_prefix(folder) if folder else "")
                     if data.get("op") in ("sync", "prefix"):
-                        company.sync(board.root, remove=True)
+                        done = company.sync(board.root, remove=True)
+                        if done.get("failed"):  # a company pack has the name of a factory pack: nothing was changed (1.7.38)
+                            return self.answer(409, {"error": done["error"], "clashes": done.get("clashes") or []})
+                        board.ready.drop_doctor()  # the notes of doctor were about the copies as they were
+                        board.ready.drop_optional()  # and so was the yellow note of the Enter screen: it is read again on the next poll (F3 FB1-b)
                     return self.answer(200, {"result": company.diff(board.root)})
                 except company.DirtyError as error:
-                    return self.answer(409, {"error": str(error), "dirty": error.path})
+                    return self.answer(409, {"error": str(error), "dirty": error.path, "files": error.lines[:12], "more": max(0, len(error.lines) - 12)})
                 except company.BadSkills as error:
                     return self.answer(409, {"error": str(error), "skills": error.skills})
                 except (company.CompanyError, OSError) as error:
@@ -1602,8 +1933,19 @@ def handler_for(board: Board) -> type:
                 try:
                     if data.get("step") == "steps":  # the steps of TODO.md the close dialog lists
                         return self.answer(200, {"result": {"left": [text[:200] for text in task_ops.todo_left(board.root, task_ops.resolve(board.root, str(data.get("task", ""))))[:30]]}})
-                    return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")))})
+                    if data.get("step") == "preview":  # the calls of the task that still wait for the person: the page lists them and asks before it closes the task (1.7.38, C13 M2)
+                        return self.answer(200, {"result": {"held": accept.held(board.root, str(data.get("task", "")))}})
+                    return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")), data.get("void") is True, data.get("voids"))})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/void":  # void the calls that belong to no open task (1.7.38, C13 FR 25): the paired browser only, like every decision on a held call
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.void_elsewhere(data)
+                    print(say("serve.did", action="void-held", task="-"), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
             if path == "/api/archive":
                 if not board.paired(self.token()):
@@ -1667,15 +2009,25 @@ def handler_for(board: Board) -> type:
                 except Exception:  # noqa: BLE001 - the page keeps what it shows
                     found = None
                 return self.answer(200, {"file": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
+            if path == "/api/batch":  # approve held calls together with one code (1.7.38, F3 AP): the paired browser only, like every approval
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.batch(data)
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as for one call
+                    return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
+                if str(data.get("step", "act")) != "preview":
+                    print(say("serve.did", action="approve-batch", task="-"), flush=True)
+                return self.answer(200, {"result": result})
             if path != "/api/act":
                 return self.answer(404, {"error": say("serve.refused.request")})
             action, task, step = str(data.get("action", "")), str(data.get("task", "")), str(data.get("step", "act"))
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"), bool(data.get("void")), data.get("voids"))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
-                return self.answer(409, {"error": str(error)})
+                return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)
             return self.answer(200, {"result": result})
 
@@ -1691,15 +2043,49 @@ def open_again(port: int) -> bool:
         return False
 
 
-def already_serving(root: Path, port: int) -> bool:
-    """The board of this same copy has this port and answers: a second double-click opens its page and leaves it running."""
-    if board_serve_port(root) != port:
-        return False
+def running_board(root: Path) -> int:
+    """The port of the board of this same copy that runs and answers, or 0 (1.7.38: one board for a copy, whatever its port). The file `board-serve.json` names the port; the answer names the folder it serves,
+    so another copy that took the port after a crash is not taken for this one. A board of an older release says no folder: the file is trusted then."""
+    port = board_serve_port(root)
+    if not port:
+        return 0
     try:
         with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=3) as answer:
-            return answer.status == 200
+            found = json.load(answer) if answer.status == 200 else None
     except (OSError, ValueError):
-        return False
+        return 0
+    if not isinstance(found, dict):
+        return 0
+    theirs = str(found.get("root") or "")
+    try:
+        return port if not theirs or Path(theirs).resolve() == root.resolve() else 0
+    except OSError:
+        return 0
+
+
+def already_running(root: Path, port: int, out: Any, opener: Callable[[str], Any]) -> Dict[str, Any]:
+    """A second start of the board of a copy that has one (any port): say where it is, open it, leave it running."""
+    address = f"http://127.0.0.1:{port}/"
+    print(say("serve.already", port=port, url=address), file=out, flush=True)
+    if not open_again(port):
+        opener(address)
+    return {"served": address, "stopped": False, "already": True, "port": port}
+
+
+def sync_on_start(root: Path) -> None:
+    """The company's content is in place when the board opens (1.7.38, F3 FB1-a; the skills of the tool packs since 1.7.30): the instructions and the skills of the company and the skills of the packs, as Sync now puts them, but it takes
+    nothing back (a skill that left the content is the person's to take back). After an upgrade that unzipped a factory version of a file the company changed, the company's version is back when the board starts. It never stops the start:
+    a clash or a broken pack is what `doctor` and the Enter screen say."""
+    try:
+        company.sync_after(root)
+    except Exception:  # noqa: BLE001 - a broken pack or file must not keep the board from starting
+        pass
+    try:  # 1.7.38 (C13 FR 17a): the first start of the board, or the first after an upgrade, accepts the guardrail files as they are; a change that nobody accepted within this version is not accepted here (doctor says which files)
+        import integrity
+
+        integrity.accept_on_start(root)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,
@@ -1707,6 +2093,9 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     """Run until Ctrl+C. `opener`, `ready` and `link` exist for the tests: `ready` gets the server once it listens; `link`, a link made by hand (a fake host, or none)."""
     task_ops.person("task board --serve", interactive, typed=False)
     out = out or sys.stdout
+    running = running_board(root)
+    if running:  # one board for a copy: a second start, on any port, tells the port of the one that runs and opens it
+        return already_running(root, running, out, opener)
     found = settings(root)
     link = link if link is not None else vslink.VsLink(root, enabled=vslink.enabled_by_policy(root))
     board = Board(root, everything, port or found["port"], found["actions"], link, found["refresh"])
@@ -1714,15 +2103,15 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     try:
         server = board.server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:
-        if already_serving(root, board.port):
-            print(say("serve.already", url=f"http://127.0.0.1:{board.port}/"), file=out, flush=True)
-            if not open_again(board.port):
-                opener(f"http://127.0.0.1:{board.port}/")
-            return {"served": f"http://127.0.0.1:{board.port}/", "stopped": False, "already": True}
+        running = running_board(root)  # two starts at one moment: the first was not in the file yet when this one looked
+        if running:
+            return already_running(root, running, out, opener)
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
+    sync_on_start(root)
     link.start()  # the thread only; the board does not wait for VS Code
     board.space.start()
+    board.start_sweeper()  # a promoted task closes by itself, with no page open (1.7.38)
     path = board_serve_file(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"port": board.port, "pid": os.getpid(), "started": utc_now()}), encoding="utf-8")
@@ -1742,6 +2131,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     if ready is not None:
         ready(server)
     else:
+        board.ready.vs_running.get()  # is any VS Code running: the button of the Enter screen says Open or Restart from the first answer
         board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104), not from the page's first question
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:
@@ -1749,6 +2139,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     except KeyboardInterrupt:
         pass
     finally:
+        board.sweeping.set()
         board.runner.stop_all()
         board.terminal.stop_all()
         link.stop()

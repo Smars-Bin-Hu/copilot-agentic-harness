@@ -939,7 +939,7 @@ def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[st
     code, output = run_with(kind, server, identity, line, root, timeout=wait, launch=launch, alias=alias)
     timed = code is None and (output or "").startswith("no answer in ")  # the program was still running: told as a timeout with its limit, not as a failure
     found = {**judge(kind, code, output), "seconds": round(time.time() - started, 1), **({"timeout": int(wait)} if timed else {})}
-    found["layers"] = connlayers.passed() if found["state"] == "ok" else connlayers.classify(kind, server, alias, found["state"], output or "", how, identity, why=found["why"], timeout=int(wait) if timed else 0)
+    found["layers"] = connlayers.passed() if found["state"] == "ok" else connlayers.classify(kind, server, alias, found["state"], output or "", how, identity, why=found["why"], timeout=int(wait) if timed else 0, code=code, line=line)
     return found
 
 

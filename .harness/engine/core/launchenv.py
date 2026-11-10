@@ -194,6 +194,14 @@ def _program_rows(root: Path) -> List[Dict[str, Any]]:
             who = {"pack": pack, "why": "signin" if row["why"].startswith("signin:") else "pack", "conn": row["why"][7:] if row["why"].startswith("signin:") else ""}
             if who not in wanted.setdefault(row["program"], []):
                 wanted[row["program"]].append(who)
+    for pack, item in toolpacks.active(root).items():  # (1.7.39, Windows) the program of a sign-in way a pack offers, before a connection uses it (`az` of az login): the pack's card points here, so its row is here
+        try:
+            declared = toolpacks.declared_needs(Path(item["folder"]), item["manifest"], path)
+        except Exception:  # noqa: BLE001 - a pack with a faulty file says so in its own card
+            continue
+        for row in declared:
+            if row["why"] == "signin" and not any(one["pack"] == pack and one["why"] == "signin" for one in wanted.get(row["program"], [])):
+                wanted.setdefault(row["program"], []).append({"pack": pack, "why": "signin", "conn": ""})
     python = shutil.which("python3", path=path) or shutil.which("python", path=path) or sys.executable
     out = [{"program": "python", "found": bool(python), "path": python or "", "needed_by": [{"pack": "harness", "why": "pack", "conn": ""}], "hint": "", "label": ""}]
     for program, who in sorted(wanted.items()):

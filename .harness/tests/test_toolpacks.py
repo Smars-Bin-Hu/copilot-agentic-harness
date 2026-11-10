@@ -365,6 +365,19 @@ class McpTools(ToolpackCase):
 from taskcase import NAME, TASK, TaskCase  # noqa: E402
 
 
+class OfferedSignInProgramTests(HarnessTestCase):
+    """1.7.39 (Windows): a pack that is on offers a sign-in way that needs a program (`az` for az login). Its card says "needs az · not found, Local"; the Local window has the row, with the field for its
+    folder, before any connection uses that way."""
+
+    def test_the_local_window_lists_az_of_the_ado_pack_with_no_connection(self) -> None:
+        from support import use_packs
+
+        use_packs(self.root, "ado")
+        rows = {item["program"]: item for item in launchenv._program_rows(self.root)}  # noqa: SLF001
+        self.assertIn("az", rows)
+        self.assertEqual(rows["az"]["needed_by"], [{"pack": "ado", "why": "signin", "conn": ""}])
+
+
 class LinkAddress(TaskCase):
     """1.7.21: the address of a link may use `{url}`, the server address field of the connection, with the type's default when it is left empty."""
 

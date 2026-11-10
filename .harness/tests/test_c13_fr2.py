@@ -1008,7 +1008,7 @@ class IntegrityWordsTests(unittest.TestCase):
         self.new_version()
         report = doctor.Report()
         doctor.check_integrity(report, self.root)
-        self.assertIn("1.7.39", report.lines[0])
+        self.assertIn(json.loads(self.original[".harness/registry.json"])["version"], report.lines[0])  # the version accepted, whatever the current one is
         self.assertIn("Start the board", report.lines[0].replace("启动看板", "Start the board"))
         self.assertNotIn("--accept", report.lines[0])
 

@@ -64,14 +64,13 @@ def words_of(line: Any) -> List[str]:
     return words[1:]
 
 
-def runs_harness(line: str) -> bool:
-    """Does the line start a harness command (the gate's reading of a line: `harness ...`, `cli.py`, through a wrapper)? Only such a line gets a code from the board: any other command needs none."""
-    try:
-        from modules.gate import harnesscmd
+HARNESS_WORD = re.compile(r"(?:^|[\s;&|(])(?:\S*[\\/])?(?:harness(?:\.cmd)?|cli\.py)(?=\s|$)", re.IGNORECASE)
 
-        return bool(harnesscmd.calls(line)[0])
-    except Exception:  # noqa: BLE001 - no code is the safe side: the command runs as before
-        return False
+
+def runs_harness(line: str) -> bool:
+    """Does the line run a harness command (`harness ...`, `.harness/bin/harness`, `cli.py`, after `cd x &&`)? Only such a line gets a code from the board: any other command needs none. A code given to a line that
+    does not use it does nothing; a line that does not get one runs as before."""
+    return bool(HARNESS_WORD.search(line or ""))
 
 
 class Job:

@@ -369,6 +369,31 @@ class ServeTests(ServeCase):
         self.assertIn("review waive", str(caught.exception))
 
 
+
+class IntegrityAcceptTests(ServeCase):
+    """1.7.39 (Windows): the board accepts the guardrail files after it lists them (`/api/integrity`), so a new zip of the same version needs no terminal. The paired browser only; the agent has no cookie."""
+
+    def test_the_paired_board_lists_then_accepts(self) -> None:
+        import integrity
+
+        home = self.root / "integrity-home"
+        patch = mock.patch.dict(os.environ, {"HARNESS_INTEGRITY_DIR": str(home)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        integrity.accept(self.root)
+        watched = sorted(integrity.walk(self.root))[0]
+        target = self.root / watched
+        target.write_bytes(target.read_bytes() + b"\n")
+        self.assertEqual(self.request("POST", "/api/integrity", {"step": "preview"})[0], 403, "not paired: refused")
+        cookie = self.pair()
+        status, data, _ = self.request("POST", "/api/integrity", {"step": "preview"}, cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertIn(watched + " (changed)", data["result"]["changed"])
+        self.assertEqual(integrity.changes(self.root), data["result"]["changed"], "a preview changes nothing")
+        self.assertEqual(self.request("POST", "/api/integrity", {"step": "accept"}, cookie=cookie)[0], 200)
+        self.assertEqual(integrity.changes(self.root), [])
+
+
 class ServeLifeTests(TaskCase):
     def test_only_a_person_starts_it(self) -> None:
         with self.assertRaises(CommandError):

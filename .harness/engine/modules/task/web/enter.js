@@ -487,7 +487,7 @@
       li.dataset.fix = !req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? "1" : "";
       if (!req && c && c.names && c.names.length) { setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setText(em, view.tag || (view.state === "check" ? "" : "—")); }
       const p = li.querySelector(".m");
-      const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), id === "vscode" ? [chk0.restart && chk0.restart.state, chk0.restart && chk0.restart.why, chk0.fail] : "", c && c.launch, root.lang]);
+      const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), id === "vscode" ? [chk0.restart && chk0.restart.state, chk0.restart && chk0.restart.why, chk0.fail] : "", c && c.integrity, c && c.launch, root.lang]);
       let note = view.note, soft = view.soft;
       if (id === "vscode") {
         const live = chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening");
@@ -509,6 +509,7 @@
             const links = view.notes.map((n) => n.fix).filter((fix) => { if (!fix || !fix.to || seen.has(fix.label)) return false; seen.add(fix.label); return true; });
             links.forEach((fix, index) => nodes.push(index ? " · " : gap, READY.link(fix, {done: () => poll(), onState: showRestart, opened: () => { chk0.opened = Date.now(); }, fail: (error) => { chk0.fail = error.message; render(); }}, fix.short || fix.label)));
           }
+          if (id === "doctor" && c && c.integrity) nodes.push(" ", READY.acceptButton(() => poll()));  // guardrail files not as accepted (1.7.39): the board accepts them after listing them
           if (!req && c && c.launch) { const b = h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")); nodes.push(h("br"), t("board.enter.m.systems.launch"), h("br"), b); }
           p.replaceChildren(...nodes);
         }

@@ -78,5 +78,33 @@ const READY = (function () {
     return "";
   }
 
-  return {go, button, link, vsAct, restartNote};
+  // Accept the guardrail files as they are now (1.7.39): the files are listed first; the person accepts in a window. After a new zip of the same version, or a change the person made on purpose.
+  // `done`: called after the accept. The board does it, not the terminal window: there `doctor --accept` is refused, because a pipe cannot tell a person from an agent.
+  function acceptFiles(done) {
+    const call = (step) => SERVE.post("/api/integrity", {step}).then((data) => data.result);
+    return call("preview").then((found) => {
+      const files = found.changed || [];
+      if (!files.length) { if (done) done(); return; }
+      const shown = files.slice(0, 20);
+      const go = h("button", {type: "button", class: "act hot"}, t("board.integrity.go"));
+      const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+      const said = h("p", {class: "bad", hidden: "hidden"});
+      const view = SERVE.dialog([h("h2", null, t("board.integrity.title", {n: files.length})), h("p", {class: "sub"}, t("board.integrity.about")),
+        h("ul", {class: "su-chg"}, shown.map((name) => h("li", null, h("code", null, name))), files.length > shown.length ? h("li", {class: "su-soft"}, t("board.integrity.more", {n: files.length - shown.length})) : null),
+        said, h("div", {class: "row"}, go, no)]);
+      no.addEventListener("click", view.close);
+      go.addEventListener("click", () => {
+        go.disabled = true;
+        call("accept").then(() => { view.close(); if (done) done(); }, (error) => { go.disabled = false; said.hidden = false; said.textContent = error.message; });
+      });
+      no.focus();
+    });
+  }
+  function acceptButton(done) {
+    const b = h("button", {type: "button", class: "en-open", title: t("board.integrity.tip")}, t("board.integrity.button"));
+    b.addEventListener("click", () => { acceptFiles(done).catch(() => {}); });
+    return b;
+  }
+
+  return {go, button, link, vsAct, restartNote, acceptFiles, acceptButton};
 })();

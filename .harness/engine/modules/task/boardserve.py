@@ -1862,6 +1862,21 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": board.terminal.act(data)})
                 except CommandError as error:
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/integrity":  # (1.7.39) accept the guardrail files as they are now, after the page listed them: the paired browser only. The agent has no cookie, and in a terminal it is refused (`doctor --accept`)
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    import integrity
+
+                    if data.get("step") == "accept":
+                        done = integrity.accept(board.root)
+                        board.ready.drop_doctor()  # what doctor said was about the files as they were
+                        print(say("serve.did", action="integrity-accept", task="-"), flush=True)
+                        return self.answer(200, {"result": done})
+                    listed = integrity.read(board.root)
+                    return self.answer(200, {"result": {"changed": integrity.changes(board.root), "was": str((listed or {}).get("harness") or ""), "now": integrity._registry_version(board.root)}})  # noqa: SLF001
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/restart":  # Restart board: the paired browser only
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

@@ -320,7 +320,7 @@ class Ready:
             was, now = str((listed or {}).get("harness") or ""), integrity._registry_version(self.root)  # noqa: SLF001
             files = ", ".join(changed[: integrity.SHOWN])
             words = messages.text("doctor.integrity.upgrade.board", n=len(changed), files=files, was=was, now=now) if was != now else messages.text("doctor.integrity.changed.board", n=len(changed), files=files)  # no command text on a page (FR2 8)
-            return {"state": "fail", "why": "errors", "n": len(changed), "detail": short(words)}
+            return {"state": "fail", "why": "errors", "n": len(changed), "detail": short(words), "integrity": len(changed)}  # the row has a button that accepts them (1.7.39)
         return {"state": "ok", "why": "ok", "n": 0}
 
     def drop_doctor(self) -> None:

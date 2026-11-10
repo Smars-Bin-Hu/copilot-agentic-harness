@@ -485,6 +485,11 @@ const SETUP = (function () {
         : failed ? [h("p", {class: "bad su-run-head", role: "status"}, t("setup.run.failed", {step: t("setup.line." + failed.key)})), h("p", {class: "su-note"}, t("setup.run.retry"))]
         : found.done ? [h("p", {class: "su-note good su-run-head", role: "status"}, "\u2713 " + t("setup.run.done"))] : [];
       said.replaceChildren(h("div", {class: "su-run"}, ...head, ...lines));
+      if (failed && failed.key === "doctor" && !found.running) {  // (1.7.39) stopped at doctor because guardrail files are not as accepted (a new zip of the same version): a button accepts them, then Retry setup
+        SERVE.post("/api/integrity", {step: "preview"}).then((data) => {
+          if ((data.result.changed || []).length && said.isConnected) said.querySelector(".su-run").append(h("p", null, READY.acceptButton(() => {})));
+        }, () => {});
+      }
       if (found.running || failed) said.scrollIntoView({block: "nearest", behavior: "smooth"});  // the form is long: the progress stays in sight
     }
     function follow() {

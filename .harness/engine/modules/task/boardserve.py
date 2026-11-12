@@ -73,7 +73,7 @@ from . import tasksize
 from . import wallpaper
 from . import accept, autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
-from . import reachcheck, vsrestart
+from . import perfreview, reachcheck, vsrestart
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -572,7 +572,12 @@ class Board:
     def report_info(self, name: str) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
         task = task_ops.resolve(self.root, name)
         info, now = taskboard.insight(self.root, task)
-        return task, taskboard.with_gate(self.root, task, info), now
+        info = taskboard.with_gate(self.root, task, info)
+        try:
+            info["perf"] = perfreview.page_view(task, perfreview.latest_review(self.root, task))  # the Agent Performance Review of this task (1.7.41)
+        except Exception:  # noqa: BLE001 - a review that cannot be read leaves the rest of the page
+            info["perf"] = {"subject": task, "review": None}
+        return task, info, now
 
     def report_page(self, name: str) -> str:
         """The time-and-usage page as the server sends it: the Gate verdicts have buttons, and the page can be saved."""

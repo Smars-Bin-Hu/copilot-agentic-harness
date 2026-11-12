@@ -511,3 +511,38 @@ def latest_review(root: Path, subject: str) -> Optional[Dict[str, Any]]:  # `sub
     findings = load(folder / FINDINGS)
     return {"task": name, "status": data.get("status", ""), "evidence": evidence, "findings": findings,
             "checked": check_findings(folder / FINDINGS, folder / EVIDENCE) if evidence and findings else None}
+
+
+PAGE_CALLS = 3000  # the strip of the page: a longer task shows its first calls of this many
+PAGE_TEXT = 500
+
+
+def page_view(subject: str, review: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """What the report page of `subject` draws (1.7.41): {subject, review}. The review's evidence is cut: every call as [id, seconds from the start, seconds, outcome] for the strip,
+    and in full only the calls and thoughts a candidate or a finding names."""
+    if review is None or not review.get("evidence"):
+        return {"subject": subject, "review": None if review is None else {"task": review["task"], "name": review["task"].rsplit("/", 1)[-1], "status": review["status"], "evidence": None, "findings": None}}
+    evidence, findings = review["evidence"], review.get("findings") or None
+    named = {ident for item in evidence.get("candidates") or [] for ident in item.get("calls") or []}
+    for item in (findings or {}).get("findings") or []:
+        if isinstance(item, dict):
+            named.update(str(ident) for ident in item.get("evidence") or [])
+    start = float(evidence.get("started_at") or 0.0)
+    thoughts = {item["id"]: item for item in evidence.get("thoughts") or []}
+    detail: Dict[str, Any] = {}
+    for call in evidence.get("calls") or []:
+        if call["id"] in named:
+            detail[call["id"]] = {"id": call["id"], "tool": call["tool"], "args": clip(call["args"], PAGE_TEXT), "outcome": "person" if call.get("person") and call["outcome"] == "ok" else call["outcome"], "seconds": call["seconds"], "error": clip(call["error"], PAGE_TEXT),
+                                  "result": clip(call.get("result") or "", 240), "gate": call.get("gate"), "thought": call.get("thought") or "", "prompt": call.get("prompt")}
+            if call.get("thought") in thoughts:
+                named.add(call["thought"])
+    for ident in named:
+        if ident in thoughts:
+            detail[ident] = {"id": ident, "text": clip(thoughts[ident]["text"], PAGE_TEXT), "prompt": thoughts[ident].get("prompt")}
+    calls = evidence.get("calls") or []
+    return {"subject": subject, "review": {
+        "task": review["task"], "name": review["task"].rsplit("/", 1)[-1], "status": review["status"], "source": evidence.get("source", ""), "made_at": evidence.get("made_at", ""),
+        "numbers": evidence.get("numbers") or {}, "prompts": len(evidence.get("prompts") or []), "cut": max(0, len(calls) - PAGE_CALLS),
+        "strip": [[call["id"], round(call["at"] - start, 1), call["seconds"] or 0, "person" if call.get("person") and call["outcome"] == "ok" else call["outcome"], call.get("prompt") or 0] for call in calls[:PAGE_CALLS]],
+        "candidates": evidence.get("candidates") or [], "detail": detail, "findings": findings, "checked": review.get("checked"),
+    }}

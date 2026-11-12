@@ -1,0 +1,27 @@
+/* The Agent Performance Review on a task's report page (perf.js, 1.7.41). */
+.pf-strip{position:relative;height:28px;border:1px solid var(--line);border-radius:6px;background:var(--flat);overflow:hidden;margin:6px 0 2px}
+.pf-call{position:absolute;top:4px;bottom:4px;border-radius:2px;opacity:.85}
+.pf-call.pf-flag{top:1px;bottom:1px;outline:2px solid var(--ink);outline-offset:0;opacity:1;z-index:1}
+.pf-axis{display:flex;justify-content:space-between;font-size:11px}
+.pf-stack{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:10px 0 6px}
+.pf-stack i{display:block;min-width:2px}
+.pf-ok{background:var(--good)}
+.pf-failed{background:var(--bad)}
+.pf-refused{background:var(--hot)}
+.pf-held{background:var(--approval)}
+.pf-person{background:repeating-linear-gradient(135deg,var(--approval) 0 3px,transparent 3px 7px)}
+.pf-running{background:var(--line)}
+.legend i.pf-flag-key{background:transparent;outline:2px solid var(--ink)}
+.pf-list{padding-left:20px;margin:6px 0}
+.pf-list>li{margin:0 0 12px}
+.pf-list p{margin:4px 0}
+.pf-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pf-summary{font-size:15px;line-height:1.5}
+.pf-change code,.pf-list code{font-family:var(--mono);font-size:12px}
+.pf-evidence{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.pf-ev summary{cursor:pointer;font-size:12px}
+.pf-ev pre{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:12px;background:var(--flat);border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin:4px 0;max-height:240px;overflow:auto}
+.pf-ev blockquote{margin:4px 0;padding:4px 10px;border-left:3px solid var(--line);font-style:italic;white-space:pre-wrap}
+.pf-left summary{cursor:pointer;margin:8px 0}
+.tag.soft{opacity:.7}
+.tag.good{border-color:var(--good-line);background:var(--good-bg)}

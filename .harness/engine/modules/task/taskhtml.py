@@ -23,6 +23,7 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   tools.js                a served page only: the three Tools windows (Tool packs, Connections & sign-ins, Local), opened one at a time, and the facts of Get ready (1.7.17, three windows 1.7.38)
   machine.js              a served page only: the Tool packs and Local windows (the packs, tool folders, the CA bundle, MCP)
   servers.js              a served page only: the Connections & sign-ins window (each connection with its sign-in and Test, Export) and Open VS Code with identities (1.7.10)
+  perf.js, perf.css       the task's report page: the Agent Performance Review of the task (1.7.41): the button that starts one, the strip of its calls, the candidates, the findings and the suggestions
   task.js, board.js       how each page is drawn from its data; desk.js the task page, diffview.js the code compare of its Changes tab, highlight.js the colours of code, serve.js the server's buttons, chat.js the send panel, steer and stop
 
 `build` copies the style, the scripts and the data (as JSON) into the skeleton, so the result is still one file that
@@ -99,7 +100,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
         "/*THEME*/": read("theme.js"),
-        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else [])]),
+        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])]),
         "<!--DATA-->": as_json(data),
         "/*JS*/": "\n".join(read(name) for name in scripts),
     }
@@ -116,13 +117,13 @@ def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, An
     serve: set when the board server sends the page (the Gate verdicts get buttons, and a link to save the page).
     Without it the page is a file: it shows the verdicts and has no calls to a server."""
     if serve is not None:
-        return build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh)
-    return build("task.html", ["common.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
+        return build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh)
+    return build("task.html", ["common.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
 
 
 def saved_report(info: Dict[str, Any], now: Optional[Dict[str, Any]] = None) -> str:
     """The report as one file to keep or send: as of now, no buttons, no server. It may run its own script and ask the network for nothing."""
-    page = build("task.html", ["common.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "snapshot": True})
+    page = build("task.html", ["common.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "snapshot": True})
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)
 
 

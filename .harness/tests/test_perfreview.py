@@ -21,7 +21,7 @@ def zulu(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
-class PerformanceReviewTests(HarnessTestCase):
+class ReviewCase(HarnessTestCase):
     def setUp(self) -> None:
         super().setUp()
         for session in (SUBJECT_SESSION, REVIEW_SESSION):
@@ -72,6 +72,9 @@ class PerformanceReviewTests(HarnessTestCase):
     def evidence(self) -> Dict[str, Any]:
         return json.loads((self.root / ".workspace/sandbox/tasks/apr-subject" / perfreview.EVIDENCE).read_text(encoding="utf-8"))
 
+
+
+class PerformanceReviewTests(ReviewCase):
     def test_the_calls_are_numbered_with_their_thinking_and_the_gate(self) -> None:
         self.a_session()
         found = self.cli_json("task", "performance", "subject", "--task", "apr-subject")
@@ -139,3 +142,30 @@ class PerformanceReviewTests(HarnessTestCase):
         completed = self.cli("task", "performance", "subject", "--task", "apr-subject")
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn(".workspace/sandbox/tasks/subject", completed.stdout + completed.stderr)
+
+
+class PerformancePageTests(ReviewCase):
+    def test_the_page_view_cuts_the_evidence_to_what_is_drawn(self) -> None:
+        self.a_session()
+        self.cli_json("task", "performance", "subject", "--task", "apr-subject")
+        view = perfreview.page_view(".workspace/sandbox/tasks/subject", perfreview.latest_review(self.root, ".workspace/sandbox/tasks/subject"))
+        review = view["review"]
+        self.assertEqual(len(review["strip"]), 7)
+        self.assertEqual(review["strip"][2][3], "refused")
+        self.assertIn("c3", review["detail"], "a call a candidate names is there in full")
+        self.assertIn("t1", review["detail"], "and the thinking before it")
+        self.assertIsNone(review["findings"])
+        self.assertIsNone(perfreview.page_view("x", None)["review"])
+
+    def test_the_report_page_carries_the_review(self) -> None:
+        from modules.task import taskhtml
+
+        self.a_session()
+        self.cli_json("task", "performance", "subject", "--task", "apr-subject")
+        info = {"name": "subject", "task": ".workspace/sandbox/tasks/subject", "kind": "dev", "tier": "", "status": "open", "source": "copilot-events", "span": {"from": "", "to": ""}, "as_of": "",
+                "prompts": [], "findings": [], "totals": {"active_s": 0, "waiting_s": 0, "model_s": None, "prompts": 0, "aiu": None, "premium_requests": None, "reviews": 0, "review_fails": 0},
+                "perf": perfreview.page_view(".workspace/sandbox/tasks/subject", perfreview.latest_review(self.root, ".workspace/sandbox/tasks/subject"))}
+        page = taskhtml.task_page(info)
+        self.assertIn("const PERF", page)
+        self.assertIn(".pf-strip", page)
+        self.assertIn("apr-subject", page)

@@ -353,10 +353,10 @@
     show();
     app.replaceChildren(...header().filter(Boolean));  // a part with nothing to show is left out, not drawn as "null"
     if (!info.prompts.length) {
-      app.append(...[h("div", {class: "card empty"}, t("report.empty")), gateCard(), footer(false)].filter(Boolean));
+      app.append(...[h("div", {class: "card empty"}, t("report.empty")), gateCard(), typeof PERF !== "undefined" ? PERF.section(whole.perf, served()) : null, footer(false)].filter(Boolean));
       return;
     }
-    for (const node of [findings(), timeCard(), gateCard(), promptsCard(), stagesCard(), contextCard(), cacheCard(), toolsCard(), reviewsCard(), footer(true)]) {
+    for (const node of [findings(), typeof PERF !== "undefined" ? PERF.section(whole.perf, served()) : null, timeCard(), gateCard(), promptsCard(), stagesCard(), contextCard(), cacheCard(), toolsCard(), reviewsCard(), footer(true)]) {
       if (node) app.append(node);
     }
   }

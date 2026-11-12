@@ -139,11 +139,11 @@ def median_of(peers: List[float]) -> float:
 
 
 def peers_of(rows: List[Dict[str, Any]], kind: str) -> List[float]:
-    """Credits of the closed tasks of the same kind that spent any."""
+    """Credits of the closed tasks of the same kind that spent any. An Agent Performance Review (`reviews`, 1.7.41) is an rca task of its own sort: it is left out."""
     found = []
     for row in rows:
         brief = row.get("brief") or {}
-        if row.get("status") == "closed" and (row.get("kind") or "") == kind and isinstance(brief.get("aiu"), (int, float)) and brief["aiu"] > 0:
+        if row.get("status") == "closed" and (row.get("kind") or "") == kind and not row.get("reviews") and isinstance(brief.get("aiu"), (int, float)) and brief["aiu"] > 0:
             found.append(float(brief["aiu"]))
     return found
 

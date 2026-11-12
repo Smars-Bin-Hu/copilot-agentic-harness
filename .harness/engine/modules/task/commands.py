@@ -23,7 +23,7 @@ from typing import Any, Dict
 from core import approval, messages, render, starticon, targets, tasks
 from core.paths import repo_root
 
-from . import accept, autorun, boardserve, common, intake, kbsetup, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
+from . import accept, autorun, boardserve, common, intake, kbsetup, perfreview, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
 
 
 def read_text_argument(path: str) -> str:
@@ -387,6 +387,11 @@ def register_task(subparsers: Any) -> None:
     deliver.add_argument("--summary-file", default="", help="a file inside the task folder with the summary (the path from the repository root)")
     deliver.add_argument("--skipped", action="append", default=[], help="a test environment the person skipped, on their word, and why (more than once)")
     deliver.add_argument("--todo-open", default="", help="why steps of TODO.md stay unticked (tick the ones that are done first)")
+    performance = add("performance", "Agent Performance Review (only after the person started it with /harness-agent-performance-review): the evidence of how the agent of another task worked, written to EVIDENCE.json of this rca task (--task), with the calls numbered and the candidates of a detour; then --call <id> for one call whole, --check for FINDINGS.json",
+                      lambda a: perfreview.run(repo_root(), a.subject, a.task, a.call, a.check))
+    performance.add_argument("subject", nargs="?", default="", help="the task to review (its name)")
+    performance.add_argument("--call", default="", help="one call (c12) or thought (t4) of EVIDENCE.json, whole")
+    performance.add_argument("--check", action="store_true", help="check FINDINGS.json of this task against EVIDENCE.json")
     report = add("report", "write .workspace/reports/tasks/<name>/report.md (what was done) and report.html (where the time and usage went)", cmd_report)
     report.add_argument("--open", action="store_true", help="open the HTML page in the browser (a person at a terminal)")
     report.add_argument("--detail", action="store_true", help="add the slowest prompts, the tools and the checks to `insight` (more to read)")

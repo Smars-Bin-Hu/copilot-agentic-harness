@@ -289,7 +289,7 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away
             problems.append({"task": row["task"], "error": f"{type(error).__name__}: {error}"})
     for row in result["tasks"]:  # the health rules (1.6, B74): `warn` is empty unless a rule fires; the cost rule compares with the closed tasks of the same kind on the list
-        row["warn"] = health.check(root, row, tasks.read(root, row["task"]) or {}, health.peers_of(result["tasks"], row.get("kind") or "")) if row["status"] == "open" else []
+        row["warn"] = health.check(root, row, tasks.read(root, row["task"]) or {}, health.peers_of(result["tasks"], row.get("kind") or "") if not row.get("reviews") else []) if row["status"] == "open" else []  # a review is compared with no rca task (1.7.41)
     return result, problems
 
 

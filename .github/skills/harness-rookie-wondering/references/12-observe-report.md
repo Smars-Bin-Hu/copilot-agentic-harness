@@ -42,6 +42,8 @@ How the two records are matched: the hook log notes for every prompt which task 
 
 The `report.html` next to it answers another question: where the time and the usage went. It splits every prompt into model thinking, tools running, subagents and waiting for you (your approval click, your answer to a question, and the agent's `harness wait --approval`), and works out the time spent waiting for you, the share of each stage, and how much the context grew. Each prompt row carries the model and the thinking effort of the main agent, read from Copilot's own usage record (1.7.38). To have the agent explain it, type `/harness-task-report` (only the user can start it).
 
+A third question is how the agent worked: where it took a detour, and whether the harness or the agent caused it. **Agent Performance Review** on the report page (1.7.41) opens an `rca` task for that. Code numbers every tool call with the gate's answer and the thinking before it, and marks the shapes of a detour (a made-up command, the same failed call again, another program after a refusal). The agent judges each mark with evidence and suggests which file to change; the page draws the calls in time with the findings. Only the user starts it.
+
 ### 12.5 doctor: the self-check
 
 It checks: whether the files are all there, whether the policies are valid, the hook configuration, the knowledge base and the target repositories, the spelling of model names, the language; it really runs Python once; whether the hook was called recently; the slowest recent gate call, with a warning when it is too close to the 30-second timeout.

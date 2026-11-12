@@ -57,6 +57,7 @@ The agent loads these from what you say. You rarely type them.
 | Skill | What it is for | Why only you |
 |---|---|---|
 | `/harness-task-report` | Shows the task board and where the time and usage of one task went | The report reads logs and costs tokens |
+| `/harness-agent-performance-review` | Reviews how the agent of one task worked: where it took a detour, why (harness, agent, environment or knowledge), and what to change. Also the button on a task's report page | It reads the whole record and thinking of a task; it costs much more than a question |
 | `/harness-autorun` | Autorun (beta): the agent works down `TODO.md` without you watching, and stops only for what a person must decide | It changes how a task runs; only you may switch it on |
 | `/generic-goal-driven` | Long work that spans sessions: central idea, step list, progress pointer and change log kept as files; waits for your "passed" after each step | It is a whole way of working, not an everyday tool |
 | `/generic-mapreduce` | Splits a big reading job into parts for read-only mappers, then puts the answers together | Expensive: several subagents run at once |

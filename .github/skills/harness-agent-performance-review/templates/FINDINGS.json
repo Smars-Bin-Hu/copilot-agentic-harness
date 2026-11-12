@@ -1,0 +1,24 @@
+{
+  "summary": "One to three sentences: how the task went, the biggest detour and its cost, whether the harness or the agent caused it.",
+  "findings": [
+    {
+      "candidate": "f2",
+      "title": "Short: what happened",
+      "class": "harness",
+      "verdict": "confirmed",
+      "why": "The root cause in two or three sentences, citing what the evidence shows: the gate's words, the error, the thinking line.",
+      "evidence": ["c12", "t7", "c13"],
+      "impact": "2 extra calls, about 40 s",
+      "change": {"file": ".harness/toolpacks/<pack>/types/<type>.json", "what": "One sentence: what to change there."}
+    }
+  ],
+  "suggestions": [
+    {
+      "title": "Short name of the change",
+      "file": "the file to change",
+      "what": "What to change, in one sentence.",
+      "why": "Which findings it removes.",
+      "priority": "high"
+    }
+  ]
+}

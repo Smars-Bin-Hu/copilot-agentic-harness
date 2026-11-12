@@ -12,6 +12,10 @@ To see which version you have: `harness --version`.
 
 ## Unreleased (on main after 1.7.40)
 
+### Added
+
+- **Agent Performance Review.** The report page of a task has a new button that opens an `rca` task (`apr-<task>`) to review how the agent worked. `harness task performance` reads every tool call of the task with the gate's answer and the agent's thinking before it, and marks what looks like a detour; the skill `harness-agent-performance-review` has the agent judge each mark with evidence (harness, agent, environment, knowledge, or the guardrail working) and suggest which file to change. The report page then shows a strip of all calls coloured by outcome, the marks, the findings with their evidence, and the suggestions. Started only by you. Review tasks are left out of the cost comparison of rca tasks.
+
 ### Changed
 
 - Restart VS Code on Windows: the board counts a VS Code as open only when a `Code.exe` has a window. Before, the `code` command itself and helpers left behind also counted, so the board said "VS Code did not quit" when no VS Code was open, and did not open it.

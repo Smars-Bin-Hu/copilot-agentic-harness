@@ -31,7 +31,7 @@ It runs in a task of kind `rca` of its own (the board opens one, named `apr-<tas
 
 ## Step-by-Step Workflows
 
-1. Run `harness task performance <task to review> --task <this task>`. It writes `EVIDENCE.json` into this task's folder and prints `brief`: the numbers, the prompts, and each candidate (`f1`, `f2`...) with its calls (`c12`) in short.
+1. Run `harness task performance <task to review> --task <this task>`. It writes `EVIDENCE.json` into this task's folder and prints `brief`: the numbers, the prompts, and each candidate (`f1`, `f2`...) with its calls (`c12`) in short. Subagents (the reviewer, the mapper) are in it too: their calls carry `agent`, and `brief.subagents` says which call of the main agent started each. Judge a subagent's detour like the main agent's, and name it in the finding.
 2. Look at `source` first. `hook-log`: Copilot's record of that task is not on this computer, so there is no thinking, no arguments of a call that went through and no result. **Tell the user this first**, and judge only what the hook log shows.
 3. Judge each candidate as [Judging](references/judging.md) says. Read a call or a thought whole when the brief is not enough: `harness task performance --call c12 --task <this task>`. You may read the reviewed task's files (`TASK.md`, `LOG.md`, `OUTBOX/`, the deliverable) for what it was asked and what it decided. Read no more than a verdict needs.
 4. Look past the candidates too: the list `outcomes` (every call that did not simply run) and the prompts. A detour no rule marked is a finding with `"candidate": ""`.

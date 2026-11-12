@@ -3,6 +3,10 @@
 .pf-call{position:absolute;top:4px;bottom:4px;border-radius:2px;opacity:.85}
 .pf-call.pf-flag{top:1px;bottom:1px;outline:2px solid var(--ink);outline-offset:0;opacity:1;z-index:1}
 .pf-axis{display:flex;justify-content:space-between;font-size:11px}
+.pf-lane{display:flex;align-items:center;gap:8px}
+.pf-lane .pf-strip{flex:1;margin:3px 0}
+.pf-lane-name{width:90px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.pf-axis-lanes{margin-left:98px}
 .pf-stack{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:10px 0 6px}
 .pf-stack i{display:block;min-width:2px}
 .pf-ok{background:var(--good)}

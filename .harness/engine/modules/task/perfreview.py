@@ -3,6 +3,8 @@
 `harness task performance <task> --task <review task>` reads the task's sessions, as they are on this computer:
   - Copilot's record (`events.jsonl`): every tool call of the main agent with its arguments, its result or error, and the thinking summary of the message that asked for it
     (`assistant.message.reasoningText`; its `toolRequests` name the calls). A call the gate refused ends with the error code `denied` and the gate's words.
+  - a subagent's own work (the reviewer, the mapper): its rows in the same record carry its `agentId`, which is also the session of its hook log; its calls get `agent` (its name),
+    and `agents` says which call of the main agent started each. Its candidates are found apart from the main agent's.
   - the hook log: what the gate decided for a call (refused, held for the person) and its rule; the person's decisions are in task.json (`tasktrace.decisions`).
 Code numbers the calls (c1, c2...) and the thoughts (t1...), works out the numbers, and marks what looks like a detour (f1...): a candidate, never a verdict. The agent of the
 review task judges each candidate with the skill `harness-agent-performance-review` and writes FINDINGS.json; `--check` checks it; the report page of the reviewed task shows both.
@@ -51,6 +53,7 @@ READ_TOOLS = ("view", "read", "read_file", "readfile", "str_replace_based_edit_t
 
 NOT_FOUND = re.compile(r"command not found|is not recognized as|no such file or directory|cannot find the path|unknown command|invalid choice|unrecognized arguments|"
                        r"no such option|unknown option|not a valid|does not exist|could not find|is not a .{0,20}command|usage:", re.IGNORECASE)
+MADE_HERE = re.compile(r"parent directory does not exist|no such file or directory: '?[^']*\.workspace/sandbox/tasks/", re.IGNORECASE)  # a file the agent is about to make in a folder not made yet: not a made-up path
 GUESS = re.compile(r"\b(?:i'?ll assume|assuming|i guess|probably|not sure|i'?m not certain|might be|my best guess|presumably)\b", re.IGNORECASE)
 BACKTICKED = re.compile(r"`([^`\n]{3,120})`")
 WORD = re.compile(r"[A-Za-z0-9_.:/\\-]+")
@@ -148,29 +151,38 @@ def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
                 row = json.loads(line)
             except ValueError:
                 continue
-            if not isinstance(row, dict) or not isinstance(row.get("data"), dict) or row.get("agentId"):
-                continue  # a subagent's own work is its session's
+            if not isinstance(row, dict) or not isinstance(row.get("data"), dict):
+                continue
             kind, data, at = row.get("type", ""), row["data"], copilot_events.seconds(row.get("timestamp"))
             if at is None:
                 continue
             any_row = True
+            agent_id = str(row.get("agentId") or "")  # a subagent's own work (the reviewer, the mapper): its rows carry its id, which is also the session of its hook log
+            if kind == "subagent.started" and agent_id:
+                out["agents"][agent_id] = {"id": agent_id, "name": str(data.get("agentDisplayName") or data.get("agentName") or "subagent"), "at": at, "by": str(data.get("toolCallId") or ""), "main": session}
+                continue
+            if agent_id and agent_id not in out["agents"]:
+                out["agents"][agent_id] = {"id": agent_id, "name": "subagent", "at": at, "by": "", "main": session}
+            agent = out["agents"][agent_id]["name"] if agent_id else ""
+            if kind == "user.message" and agent_id:
+                continue  # the subagent's prompt is the call that started it, not the person
             if kind == "user.message":
                 out["prompts"].append({"n": 0, "at": at, "session": session, "text": clip(data.get("content"), PROMPT_CHARS)})
             elif kind == "assistant.message":
                 said = str(data.get("reasoningText") or "").strip()
                 if said:
-                    thought = {"id": f"t?{session}:{len(out['thoughts']) + 1}", "at": at, "session": session, "text": clip(said, THOUGHT_CHARS)}
+                    thought = {"id": f"t?{session}:{len(out['thoughts']) + 1}", "at": at, "session": agent_id or session, "agent": agent, "text": clip(said, THOUGHT_CHARS)}
                     out["thoughts"].append(thought)
                     for request in data.get("toolRequests") or []:
                         if isinstance(request, dict) and request.get("toolCallId"):
                             thought_of[str(request["toolCallId"])] = thought["id"]
                 content = str(data.get("content") or "").strip()
                 if content:
-                    out["said"].append({"at": at, "session": session, "text": clip(content, PROMPT_CHARS)})
+                    out["said"].append({"at": at, "session": agent_id or session, "agent": agent, "text": clip(content, PROMPT_CHARS)})
             elif kind == "tool.execution_start":
                 ident = str(data.get("toolCallId") or "")
                 tool = str(data.get("toolName") or "")
-                call = {"id": f"c?{len(out['calls']) + 1}", "at": at, "prompt": 0, "session": session, "tool": tool, "args": args_of(tool, data.get("arguments")),
+                call = {"id": f"c?{len(out['calls']) + 1}", "at": at, "prompt": 0, "session": agent_id or session, "agent": agent, "ident": ident, "tool": tool, "args": args_of(tool, data.get("arguments")),
                         "thought": thought_of.get(ident, ""), "person": copilot_events.waits_for_person(tool, data.get("arguments")), "ok": None, "outcome": "running", "seconds": None, "error": "", "result": "", "result_tokens": None, "gate": None}
                 out["calls"].append(call)
                 started[ident] = call
@@ -231,7 +243,7 @@ def from_hook_log(root: Path, surface: str, session: str, out: Dict[str, Any]) -
         gate = item["kind"] == "gate"
         outcome = ("held" if item.get("decision") == "held" else "refused") if gate else ("ok" if item.get("ok") is not False else "failed")
         out["calls"].append({"id": f"c?{len(out['calls']) + 1}", "at": at, "prompt": 0, "session": session, "tool": item["tool"], "args": clip(item.get("command") or " ".join(item.get("paths") or []), ARGS_CHARS),
-                             "thought": "", "person": False, "ok": outcome == "ok", "outcome": outcome, "seconds": item.get("seconds"), "error": clip(item.get("reason") or item.get("error") or "", ERROR_CHARS), "result": "", "result_tokens": None,
+                             "thought": "", "person": False, "agent": "", "ok": outcome == "ok", "outcome": outcome, "seconds": item.get("seconds"), "error": clip(item.get("reason") or item.get("error") or "", ERROR_CHARS), "result": "", "result_tokens": None,
                              "gate": {"decision": outcome, "rule": item.get("rule", ""), "system": "", "env": ""} if gate else None})
 
 
@@ -246,7 +258,7 @@ def candidates(calls: List[Dict[str, Any]], thoughts: Dict[str, Dict[str, Any]],
 
     for index, call in enumerate(calls):
         later = calls[index + 1: index + 1 + AFTER_REFUSAL]
-        if call["outcome"] == "failed" and NOT_FOUND.search(call["error"] + " " + call["result"]):
+        if call["outcome"] == "failed" and NOT_FOUND.search(call["error"] + " " + call["result"]) and not MADE_HERE.search(call["error"]):
             add("invented", [call["id"]], say("perf.note.invented"))
         if call["outcome"] == "failed":
             again = next((other for other in later[:3] if other["tool"] == call["tool"] and similar(other["args"], call["args"]) >= SIMILAR), None)
@@ -293,12 +305,31 @@ def candidates(calls: List[Dict[str, Any]], thoughts: Dict[str, Dict[str, Any]],
 
 # --- the numbers -----------------------------------------------------------------------------------------------------------------------------------------------
 
+def by_agent(out: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The candidates of the main agent and of each subagent apart: a retry or a loop is within one agent. Each gets `agent` (empty: the main one); ids f1.. in time order."""
+    thoughts = {item["id"]: item for item in out["thoughts"]}
+    found: List[Tuple[float, Dict[str, Any]]] = []
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for call in out["calls"]:
+        groups.setdefault(call["session"], []).append(call)
+    at = {call["id"]: call["at"] for call in out["calls"]}
+    for session, calls in groups.items():
+        agent = calls[0].get("agent", "")
+        own = [item for item in out["said"] if item.get("session") == session]
+        decided = out["decisions"] if not agent else []
+        for item in candidates(calls, {key: value for key, value in thoughts.items() if value.get("session") == session}, decided, own):
+            found.append((min([at[ident] for ident in item["calls"] if ident in at] or [float("inf")]), dict(item, agent=agent)))
+    found.sort(key=lambda pair: pair[0])
+    return [dict(item, id=f"f{n}") for n, (_at, item) in enumerate(found, 1)]
+
+
 def numbers_of(root: Path, task: str, calls: List[Dict[str, Any]]) -> Dict[str, Any]:
     out: Dict[str, Any] = {"calls": len(calls)}
     for word in ("ok", "failed", "refused", "held", "running"):
         out[word] = sum(1 for call in calls if call["outcome"] == word)
     out["tool_s"] = round(sum(call["seconds"] or 0.0 for call in calls if not call.get("person")), 1)
     out["asked_person"] = sum(1 for call in calls if call.get("person"))
+    out["subagent_calls"] = sum(1 for call in calls if call.get("agent"))
     try:
         from . import taskinsight
 
@@ -329,6 +360,10 @@ def number(out: Dict[str, Any]) -> None:
         item["thought"] = renamed.get(item["thought"], "") if item["thought"] else ""
     for item in out["thoughts"] + out["said"]:
         item["prompt"] = sum(1 for at in starts if at <= item["at"] + 0.5)
+    by_ident = {call.pop("ident", ""): call["id"] for call in out["calls"]}
+    for agent in out["agents"]:
+        agent["by"] = by_ident.get(agent["by"], "")  # the main agent's call that started it
+        agent["calls"] = sum(1 for call in out["calls"] if call["session"] == agent["id"])
 
 
 def collect(root: Path, task: str) -> Dict[str, Any]:
@@ -338,7 +373,7 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
         raise common.CommandError(say("perf.no_task", task=task))
     surface = str(data.get("surface") or "vscode")
     out: Dict[str, Any] = {"version": VERSION, "task": task, "kind": data.get("kind", ""), "made_at": utc_now(), "sessions": [], "source": "copilot-events",
-                           "prompts": [], "thoughts": [], "said": [], "calls": [], "decisions": []}
+                           "prompts": [], "thoughts": [], "said": [], "calls": [], "agents": [], "decisions": []}
     use_events = True
     try:
         from . import taskinsight
@@ -348,10 +383,12 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
         pass
     for picked in sessions_of(data):
         session, surface = picked["session_id"], picked.get("surface") or surface
-        part: Dict[str, Any] = {"prompts": [], "thoughts": [], "said": [], "calls": []}
+        part: Dict[str, Any] = {"prompts": [], "thoughts": [], "said": [], "calls": [], "agents": {}}
         path = copilot_events.events_path(session) if use_events else None
         if path is not None and read_events(path, session, part):
             join_gate(root, surface, session, part["calls"])
+            for agent_id in part["agents"]:
+                join_gate(root, surface, agent_id, part["calls"])  # a subagent's gate decisions are in the hook log of its own session
             source = "copilot-events"
         elif read_session(root, surface, session):
             from_hook_log(root, surface, session, part)
@@ -359,8 +396,9 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
         else:
             continue
         start, end = window(data, part["prompts"], picked["at"])
-        for key in part:
+        for key in ("prompts", "thoughts", "said", "calls"):
             out[key] += [item for item in part[key] if start - 0.5 <= item["at"] <= end]
+        out["agents"] += [item for item in part["agents"].values() if start - 0.5 <= item["at"] <= end]
         out["sessions"].append({"id": session, "source": source})
     number(out)
     if out["sessions"] and all(item["source"] == "hook-log" for item in out["sessions"]):
@@ -377,12 +415,12 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
     start = min([call["at"] for call in out["calls"]] + [item["at"] for item in out["prompts"] if item["at"]])
     out["started_at"] = start
     out["numbers"] = numbers_of(root, task, out["calls"])
-    out["candidates"] = candidates(out["calls"], {item["id"]: item for item in out["thoughts"]}, out["decisions"], out["said"])
+    out["candidates"] = by_agent(out)
     return out
 
 
 def brief_call(call: Dict[str, Any], thoughts: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    item = {"id": call["id"], "tool": call["tool"], "args": clip(call["args"], BRIEF_ARGS), "outcome": call["outcome"]}
+    item = {"id": call["id"], "tool": call["tool"], "args": clip(call["args"], BRIEF_ARGS), "outcome": call["outcome"], **({"agent": call["agent"]} if call.get("agent") else {})}
     if call["error"]:
         item["error"] = clip(call["error"], BRIEF_TEXT)
     if call.get("gate") and call["gate"]["decision"] != "passed":
@@ -397,7 +435,7 @@ def brief(evidence: Dict[str, Any]) -> Dict[str, Any]:
     calls = {call["id"]: call for call in evidence["calls"]}
     thoughts = {item["id"]: item for item in evidence["thoughts"]}
     return {
-        "task": evidence["task"], "source": evidence["source"], "numbers": evidence["numbers"], "prompts": [{"n": item["n"], "text": clip(item["text"], BRIEF_TEXT)} for item in evidence["prompts"]],
+        "task": evidence["task"], "source": evidence["source"], "numbers": evidence["numbers"], "subagents": [{key: item[key] for key in ("name", "by", "calls")} for item in evidence.get("agents") or []], "prompts": [{"n": item["n"], "text": clip(item["text"], BRIEF_TEXT)} for item in evidence["prompts"]],
         "candidates": [dict(item, calls=[brief_call(calls[ident], thoughts) for ident in item["calls"] if ident in calls]) for item in evidence["candidates"]],
         "outcomes": [f"{call['id']} {call['outcome']}" for call in evidence["calls"] if call["outcome"] != "ok"],
     }
@@ -533,7 +571,7 @@ def page_view(subject: str, review: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     for call in evidence.get("calls") or []:
         if call["id"] in named:
             detail[call["id"]] = {"id": call["id"], "tool": call["tool"], "args": clip(call["args"], PAGE_TEXT), "outcome": "person" if call.get("person") and call["outcome"] == "ok" else call["outcome"], "seconds": call["seconds"], "error": clip(call["error"], PAGE_TEXT),
-                                  "result": clip(call.get("result") or "", 240), "gate": call.get("gate"), "thought": call.get("thought") or "", "prompt": call.get("prompt")}
+                                  "result": clip(call.get("result") or "", 240), "gate": call.get("gate"), "thought": call.get("thought") or "", "prompt": call.get("prompt"), "agent": call.get("agent") or ""}
             if call.get("thought") in thoughts:
                 named.add(call["thought"])
     for ident in named:
@@ -543,6 +581,7 @@ def page_view(subject: str, review: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return {"subject": subject, "review": {
         "task": review["task"], "name": review["task"].rsplit("/", 1)[-1], "status": review["status"], "source": evidence.get("source", ""), "made_at": evidence.get("made_at", ""),
         "numbers": evidence.get("numbers") or {}, "prompts": len(evidence.get("prompts") or []), "cut": max(0, len(calls) - PAGE_CALLS),
-        "strip": [[call["id"], round(call["at"] - start, 1), call["seconds"] or 0, "person" if call.get("person") and call["outcome"] == "ok" else call["outcome"], call.get("prompt") or 0] for call in calls[:PAGE_CALLS]],
+        "strip": [[call["id"], round(call["at"] - start, 1), call["seconds"] or 0, "person" if call.get("person") and call["outcome"] == "ok" else call["outcome"], call.get("prompt") or 0, call.get("agent") or ""] for call in calls[:PAGE_CALLS]],
+        "agents": [{key: item.get(key) for key in ("name", "by", "calls")} for item in evidence.get("agents") or []],
         "candidates": evidence.get("candidates") or [], "detail": detail, "findings": findings, "checked": review.get("checked"),
     }}

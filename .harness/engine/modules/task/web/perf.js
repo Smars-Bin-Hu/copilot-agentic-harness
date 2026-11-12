@@ -19,15 +19,18 @@ const PERF = (function () {
     if (!calls.length) return null;
     const flagged = new Set(review.candidates.flatMap((item) => item.calls));
     const end = Math.max(1, ...calls.map(([, at, seconds]) => at + seconds));
-    const marks = calls.map(([id, at, seconds, outcome, prompt]) => h("i", {
+    const mark = ([id, at, seconds, outcome, prompt, agent]) => h("i", {
       class: "pf-call pf-" + outcome + (flagged.has(id) ? " pf-flag" : ""),
       style: `left:${((at / end) * 100).toFixed(2)}%;width:max(3px,${((seconds / end) * 100).toFixed(2)}%)`,
-      title: t("report.perf.strip.tip", {id, outcome: t("report.perf.outcome." + outcome), seconds: clock(seconds), prompt}),
-    }));
+      title: (agent ? agent + " · " : "") + t("report.perf.strip.tip", {id, outcome: t("report.perf.outcome." + outcome), seconds: clock(seconds), prompt}),
+    });
+    const names = ["", ...[...new Set(calls.map((call) => call[5] || ""))].filter(Boolean)];  // the main agent first, then each subagent: a lane each
+    const lanes = names.map((agent) => h("div", {class: "pf-lane"}, names.length > 1 ? h("span", {class: "pf-lane-name sub", title: agent || t("report.perf.main")}, agent || t("report.perf.main")) : null,
+      h("div", {class: "pf-strip", role: "img", "aria-label": t("report.perf.strip") + (agent ? " · " + agent : "")}, calls.filter((call) => (call[5] || "") === agent).map(mark))));
     const counts = OUTCOMES.map((name) => [name, calls.filter((call) => call[3] === name).length]).filter(([, n]) => n);
     return [
-      h("div", {class: "pf-strip", role: "img", "aria-label": t("report.perf.strip")}, marks),
-      h("div", {class: "pf-axis sub"}, h("span", null, "0"), h("span", null, clock(end))),
+      lanes,
+      h("div", {class: "pf-axis sub" + (names.length > 1 ? " pf-axis-lanes" : "")}, h("span", null, "0"), h("span", null, clock(end))),
       h("div", {class: "pf-stack"}, counts.map(([name, n]) => h("i", {class: "pf-" + name, style: `flex:${n}`, title: t("report.perf.outcome." + name) + " " + n}))),
       h("div", {class: "legend"}, counts.map(([name, n]) => h("span", null, h("i", {class: "pf-" + name}), t("report.perf.outcome." + name) + " ", h("b", null, String(n)))),
         h("span", null, h("i", {class: "pf-flag-key"}), t("report.perf.flagged") + " ", h("b", null, String(flagged.size)))),
@@ -41,7 +44,7 @@ const PERF = (function () {
       const item = review.detail[id];
       if (!item) return h("span", {class: "tag"}, id);
       const box = h("details", {class: "pf-ev"});
-      const head = id.startsWith("t") ? t("report.perf.thought", {id}) : id + " · " + t("report.perf.outcome." + item.outcome) + (item.gate && item.gate.decision !== "passed" ? " · " + (item.gate.system || item.gate.rule) : "");
+      const head = id.startsWith("t") ? t("report.perf.thought", {id}) : id + (item.agent ? " · " + item.agent : "") + " · " + t("report.perf.outcome." + item.outcome) + (item.gate && item.gate.decision !== "passed" ? " · " + (item.gate.system || item.gate.rule) : "");
       box.append(h("summary", null, h("code", null, head)));
       box.addEventListener("toggle", () => {
         if (!box.open || box.childElementCount > 1) return;
@@ -60,7 +63,7 @@ const PERF = (function () {
     const list = only ? review.candidates.filter((item) => only.includes(item.id)) : review.candidates;
     if (!list.length) return null;
     return h("ol", {class: "pf-list"}, list.map((item) => h("li", null,
-      h("div", {class: "pf-line"}, tag(t("report.perf.rule." + item.rule), item.rule === "followed" ? "good" : "hot"), h("span", null, item.note)),
+      h("div", {class: "pf-line"}, tag(t("report.perf.rule." + item.rule), item.rule === "followed" ? "good" : "hot"), item.agent ? tag(item.agent) : null, h("span", null, item.note)),
       item.calls.length ? evidence(review, item.calls) : null)));
   }
 
@@ -105,7 +108,8 @@ const PERF = (function () {
     const nodes = [head,
       h("div", {class: "kpis"}, kpi(n.calls, t("report.perf.kpi.calls")), kpi(n.failed || 0, t("report.perf.kpi.failed")), kpi(n.refused || 0, t("report.perf.kpi.refused")),
         kpi(n.held || 0, t("report.perf.kpi.held")), kpi(review.candidates.length, t("report.perf.kpi.candidates")), kpi(clock(n.tool_s || 0), t("report.perf.kpi.tools"))),
-      h("h3", null, t("report.perf.calls")), strip(review)];
+      h("h3", null, t("report.perf.calls")), strip(review),
+      (review.agents || []).length ? h("p", {class: "sub"}, t("report.perf.subagents"), " ", (review.agents || []).map((item, n) => [n ? ", " : "", h("b", null, item.name), " " + t("report.perf.subagent.line", {n: item.calls, by: item.by || "?"})])) : null];
     if (review.source === "hook-log") nodes.push(h("p", {class: "sub"}, t("report.perf.hooklog")));
     if (review.findings) {
       if (review.findings.summary) nodes.push(h("h3", null, t("report.perf.summary")), h("p", {class: "pf-summary"}, review.findings.summary));

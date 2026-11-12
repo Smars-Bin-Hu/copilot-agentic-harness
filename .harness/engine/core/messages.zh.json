@@ -4108,5 +4108,8 @@
   "report.perf.priority.high": "高",
   "report.perf.priority.medium": "中",
   "report.perf.priority.low": "低",
-  "report.perf.outcome.person": "等人"
+  "report.perf.outcome.person": "等人",
+  "report.perf.main": "主 agent",
+  "report.perf.subagents": "子 agent：",
+  "report.perf.subagent.line": "（{n} 次调用，由 {by} 启动）"
 }

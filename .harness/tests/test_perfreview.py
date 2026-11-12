@@ -169,3 +169,28 @@ class PerformancePageTests(ReviewCase):
         self.assertIn("const PERF", page)
         self.assertIn(".pf-strip", page)
         self.assertIn("apr-subject", page)
+
+
+class SubagentTests(ReviewCase):
+    def test_a_subagent_has_its_own_calls_lane_and_candidates(self) -> None:
+        self.event(0, "user.message", content="Check the plan.")
+        self.call(2, "m1", "harness task review start")
+        agent = "33333333-aaaa-4bbb-8ccc-000000000003"
+        sub = lambda seconds, kind, **data: self.rows.append({"type": kind, "timestamp": zulu(self.at(seconds)), "agentId": agent, "data": data})
+        sub(3, "subagent.started", toolCallId="m1", agentName="reviewer", agentDisplayName="reviewer")
+        sub(3.1, "user.message", content="Review round 1.")
+        for n, seconds in enumerate((4, 6, 8)):
+            sub(seconds, "tool.execution_start", toolCallId=f"s{n}", toolName="bash", arguments={"command": "cat PLAN.md"})
+            sub(seconds + 0.5, "tool.execution_complete", toolCallId=f"s{n}", success=True, result={"content": "plan"})
+        self.call(10, "m2", "cat PLAN.md")  # the main agent's own call: not part of the subagent's loop
+        self.write()
+        self.cli_json("task", "performance", "subject", "--task", "apr-subject")
+        evidence = self.evidence()
+        self.assertEqual(len(evidence["prompts"]), 1, "the subagent's prompt is not the person's")
+        self.assertEqual([call["agent"] for call in evidence["calls"]], ["", "reviewer", "reviewer", "reviewer", ""])
+        self.assertEqual(evidence["agents"][0]["by"], "c1", "the main agent's call that started it")
+        self.assertEqual(evidence["agents"][0]["calls"], 3)
+        loops = [item for item in evidence["candidates"] if item["rule"] == "loop"]
+        self.assertEqual([(item["agent"], item["calls"]) for item in loops], [("reviewer", ["c2", "c3", "c4"])], "a loop is within one agent")
+        view = perfreview.page_view(".workspace/sandbox/tasks/subject", perfreview.latest_review(self.root, ".workspace/sandbox/tasks/subject"))
+        self.assertEqual([row[5] for row in view["review"]["strip"]], ["", "reviewer", "reviewer", "reviewer", ""])

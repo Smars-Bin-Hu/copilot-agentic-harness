@@ -4108,5 +4108,8 @@
   "report.perf.priority.high": "High",
   "report.perf.priority.medium": "Medium",
   "report.perf.priority.low": "Low",
-  "report.perf.outcome.person": "Waited for the person"
+  "report.perf.outcome.person": "Waited for the person",
+  "report.perf.main": "Main agent",
+  "report.perf.subagents": "Subagents:",
+  "report.perf.subagent.line": "({n} calls, started by {by})"
 }

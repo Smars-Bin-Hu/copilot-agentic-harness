@@ -1,0 +1,623 @@
+"""Agent Performance Review, layer 1 (1.7.41): the accounts and the facts of how the agent of one task worked. Code only, no judgement, no tokens spent.
+
+Read from what this computer keeps, for each session that picked the task up:
+  - Copilot's record (`events.jsonl`):
+      the prompts, and what the person typed;
+      what the harness added (`hook.end` `additionalContext`), the skills loaded (`skill.invoked`), Copilot's own system prompt (`system.message`);
+      every model call with its exact cost (`session.usage_record` `copilotUsage.totalNanoAiu`). What `session.usage_checkpoint` counts on top of those is the
+      summing-up of a compaction: it goes in as a model call of its own, at the moment it was counted, so the calls add up to the checkpoint;
+      the thinking summary (`reasoningText`), every tool call with its arguments and result, the compactions with their summary;
+      a subagent's own work: its rows carry `agentId`, which is also the session of its hook log.
+    The time and the cost of each prompt come from `copilot_events.read`, as the task report has them.
+  - the hook log: what the gate decided for a call (refused, held for the person).
+  - `.task/sent.jsonl`: what the board sent. A prompt's origin is read from it: the person's own words (typed on the board or in the editor), the board's opening of a
+    task (its "What to do" part is the person's), a relay of an approval, a wake, a compaction.
+  - task.json: the person's decisions (`tasktrace.decisions`).
+
+What it gives (`collect`): prompts (time, cost, origin, intervention), calls, thoughts, model calls, context (every text the agent was given, for `--find`), compactions,
+agents, decisions, facts (f1..: failed, refused, held, retry, repeat, slow, person, compaction, intervention) and the prompts worth reading.
+An intervention is a signal, not a verdict: the person's own words after the agent stopped, not as the answer to its question. The span before it is what to look at.
+Text is passed through `redact` and cut: a command, a result or a thought may hold a secret. Nothing leaves this computer. Never changes the reviewed task.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from core import copilot_events, messages, redact, tasks
+from core.logs import read_session
+from core.paths import cli_command, utc_now
+
+from . import common
+
+VERSION = 2
+NANO = copilot_events.NANO
+
+ARGS_CHARS = 600
+ERROR_CHARS = 900
+RESULT_CHARS = 400  # the result kept on a call; the whole of it (up to CONTEXT_CHARS) is in `context`
+THOUGHT_CHARS = 2000
+PROMPT_CHARS = 4000
+CONTEXT_CHARS = 20000  # one piece of context
+PLATFORM_CHARS = 200000  # Copilot's system prompt: long, once per session
+SAME_CALL_S = 4.0  # a hook line and a Copilot call that start this close together are the same call
+SIMILAR = 0.6  # word overlap of two commands that are the same try
+RETRY_WITHIN = 3  # calls after a failure looked at for the same try
+SLOW_S = 120.0
+SENT_WITHIN_S = 900.0  # a line of sent.jsonl and the prompt it became
+ASKED_TAIL = 300  # the end of what the agent said: a question there makes the person's next prompt an answer
+WORTH_MAX = 8
+DEAR_SHARE = 0.1  # a prompt with at least this share of the cost is worth reading when it is among the dearest
+TROUBLE = ("failed", "refused", "held", "retry", "repeat")
+WRITE_WORDS = ("create", "edit", "write", "replace", "patch", "insert", "delete", "move", "rename")
+
+WORD = re.compile(r"[A-Za-z0-9_.:/\\-]+")
+WHAT_TO_DO = re.compile(r"^What to do:\s*$", re.MULTILINE)  # the board's opening of a task: what follows is the person's (`vslink` create text)
+
+
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, command=cli_command(), **values)
+
+
+def clip(value: Any, limit: int) -> str:
+    text = redact.text(value)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def flat(text: Any) -> str:
+    return " ".join(str(text or "").split())
+
+
+def args_of(tool: str, arguments: Any) -> str:
+    """The arguments of a call in one line a person reads: the command, else the path, else the skill, else the arguments as JSON."""
+    if not isinstance(arguments, dict):
+        return clip(arguments, ARGS_CHARS)
+    for key in ("command", "cmd", "query", "pattern"):
+        if isinstance(arguments.get(key), str) and arguments[key].strip():
+            return clip(arguments[key], ARGS_CHARS)
+    for key in ("path", "filePath", "file_path", "file"):
+        if isinstance(arguments.get(key), str):
+            extra = f" {arguments['view_range']}" if arguments.get("view_range") else ""
+            return redact.path(arguments[key]) + extra
+    if tool == "skill" and arguments.get("skill"):
+        return f"skill {arguments['skill']}"
+    return clip(json.dumps(arguments, ensure_ascii=False, sort_keys=True), ARGS_CHARS)
+
+
+def result_text(data: Dict[str, Any]) -> str:
+    found = data.get("result")
+    if isinstance(found, dict):
+        found = found.get("content") if found.get("content") is not None else found.get("detailedContent")
+    if isinstance(found, list):
+        found = " ".join(str(part.get("text") if isinstance(part, dict) else part) for part in found)
+    return str(found or "")
+
+
+def words(text: str) -> set:
+    return {item.lower() for item in WORD.findall(text or "") if len(item) > 1}
+
+
+def similar(one: str, other: str) -> float:
+    left, right = words(one), words(other)
+    return len(left & right) / max(1, len(left | right)) if left and right else 0.0
+
+
+def writes(call: Dict[str, Any]) -> bool:
+    name = call["tool"].lower()
+    return any(word in name for word in WRITE_WORDS)
+
+
+# --- reading Copilot's record ----------------------------------------------------------------------------------------------------------------------------------
+
+def blank() -> Dict[str, Any]:
+    return {"messages": [], "thoughts": [], "said": [], "calls": [], "models": [], "context": [], "compactions": [], "agents": {}, "blocks": []}
+
+
+def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
+    """Add what one session's Copilot record holds to `out` (see `blank`). False when the file gives nothing."""
+    try:
+        handle = path.open(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    started: Dict[str, Dict[str, Any]] = {}
+    model_of: Dict[str, str] = {}  # toolCallId -> the model call whose message asked for it
+    thought_of: Dict[str, str] = {}
+    last_usage: Dict[str, Dict[str, Any]] = {}  # per agent: the latest model call, not yet tied to its message
+    last_hook: Dict[Tuple[str, str], str] = {}  # (agent session, hook type) -> the text last added: the same text again is not kept
+    counted = 0.0  # nano AIU of the model calls so far, against the checkpoints
+    compacting: Dict[str, Any] = {}
+    any_row = False
+
+    def context(at: float, where: str, agent: str, kind: str, ref: str, text: str, limit: int = CONTEXT_CHARS) -> None:
+        if text.strip():
+            out["context"].append({"at": at, "session": where, "agent": agent, "kind": kind, "ref": ref, "text": clip(text, limit)})
+
+    with handle:
+        for line in handle:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(row, dict) or not isinstance(row.get("data"), dict):
+                continue
+            kind, data, at = row.get("type", ""), row["data"], copilot_events.seconds(row.get("timestamp"))
+            if at is None:
+                continue
+            any_row = True
+            agent_id = str(row.get("agentId") or "")
+            if kind == "subagent.started" and agent_id:
+                out["agents"][agent_id] = {"id": agent_id, "name": str(data.get("agentDisplayName") or data.get("agentName") or "subagent"), "at": at, "by": str(data.get("toolCallId") or ""), "main": session}
+                continue
+            if agent_id and agent_id not in out["agents"]:
+                out["agents"][agent_id] = {"id": agent_id, "name": "subagent", "at": at, "by": "", "main": session}
+            agent = out["agents"][agent_id]["name"] if agent_id else ""
+            where = agent_id or session
+            if kind == "user.message":
+                if agent_id:
+                    context(at, where, agent, "brief", "", str(data.get("content") or ""))  # the subagent's task, as the main agent wrote it
+                else:
+                    out["messages"].append({"at": at, "session": session, "content": str(data.get("content") or "")})
+            elif kind == "system.message":
+                context(at, where, agent, "platform", "system", str(data.get("content") or ""), PLATFORM_CHARS)
+            elif kind == "hook.end":
+                added = (data.get("output") or {}).get("additionalContext") if isinstance(data.get("output"), dict) else None
+                hook = str(data.get("hookType") or "")
+                said = data.get("output") if isinstance(data.get("output"), dict) else {}
+                if said.get("decision") == "block" and isinstance(said.get("reason"), str) and not agent_id:  # a Stop hook kept the agent going: its reason comes back as the next prompt
+                    out["blocks"].append(said["reason"])
+                if isinstance(added, str) and added.strip() and last_hook.get((where, hook)) != added:
+                    last_hook[(where, hook)] = added
+                    context(at, where, agent, "harness", hook, added)
+            elif kind == "skill.invoked":
+                context(at, where, agent, "skill", str(data.get("name") or ""), str(data.get("content") or ""))
+            elif kind == "session.usage_record":
+                spent = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+                nano = copilot_events.number((spent.get("copilotUsage") or {}).get("totalNanoAiu")) if isinstance(spent.get("copilotUsage"), dict) else None
+                counted += nano or 0.0
+                item = {"id": "", "at": at, "session": where, "agent": agent, "model": str(spent.get("model") or ""), "aiu": (nano or 0.0) / NANO, "priced": nano is not None,
+                        "seconds": round((copilot_events.number(spent.get("duration")) or 0.0) / 1000, 1), "input": copilot_events.whole_number(spent.get("inputTokens")),
+                        "output": copilot_events.whole_number(spent.get("outputTokens")), "cache_read": copilot_events.whole_number(spent.get("cacheReadTokens")), "kind": "call", "calls": []}
+                out["models"].append(item)
+                last_usage[where] = item
+            elif kind == "session.usage_checkpoint":
+                total = copilot_events.number(data.get("totalNanoAiu"))
+                if total is not None and total - counted > 1e6:  # counted by Copilot but by no model call of the record: a compaction's summing-up
+                    out["models"].append({"id": "", "at": at, "session": session, "agent": "", "model": "", "aiu": (total - counted) / NANO, "priced": True, "seconds": 0.0,
+                                          "input": None, "output": None, "cache_read": None, "kind": "compaction", "calls": []})
+                    counted = total
+            elif kind == "assistant.message":
+                usage = last_usage.pop(where, None)
+                said = str(data.get("reasoningText") or "").strip()
+                thought = None
+                if said:
+                    thought = {"id": f"t?{session}:{len(out['thoughts']) + 1}", "at": at, "session": where, "agent": agent, "text": clip(said, THOUGHT_CHARS)}
+                    out["thoughts"].append(thought)
+                for request in data.get("toolRequests") or []:
+                    if isinstance(request, dict) and request.get("toolCallId"):
+                        ident = str(request["toolCallId"])
+                        if thought:
+                            thought_of[ident] = thought["id"]
+                        if usage is not None:
+                            usage["calls"].append(ident)
+                            model_of[ident] = str(id(usage))
+                if usage is not None:
+                    usage["id"] = str(id(usage))
+                content = str(data.get("content") or "").strip()
+                if content:
+                    out["said"].append({"at": at, "session": where, "agent": agent, "text": clip(content, PROMPT_CHARS)})
+            elif kind == "tool.execution_start":
+                ident = str(data.get("toolCallId") or "")
+                tool = str(data.get("toolName") or "")
+                call = {"id": f"c?{session}:{len(out['calls']) + 1}", "at": at, "prompt": 0, "session": where, "agent": agent, "ident": ident, "tool": tool, "args": args_of(tool, data.get("arguments")),
+                        "thought": thought_of.get(ident, ""), "model": model_of.get(ident, ""), "person": copilot_events.waits_for_person(tool, data.get("arguments")),
+                        "ok": None, "outcome": "running", "seconds": None, "error": "", "result": "", "result_tokens": None, "gate": None}
+                out["calls"].append(call)
+                started[ident] = call
+            elif kind == "tool.execution_complete":
+                call = started.pop(str(data.get("toolCallId") or ""), None)
+                if call is None:
+                    continue
+                error = data.get("error") if isinstance(data.get("error"), dict) else {}
+                metrics = ((data.get("toolTelemetry") or {}).get("metrics") or {}) if isinstance(data.get("toolTelemetry"), dict) else {}
+                call["seconds"] = round(max(0.0, at - call["at"]), 1)
+                call["ok"] = data.get("success") is not False
+                call["error"] = clip(str(error.get("message") or ""), ERROR_CHARS)
+                call["outcome"] = "ok" if call["ok"] else ("refused" if error.get("code") == "denied" else "failed")
+                whole = result_text(data) if call["ok"] else str(error.get("message") or "")
+                call["result"] = clip(whole, RESULT_CHARS) if call["ok"] else ""
+                call["result_tokens"] = copilot_events.whole_number(metrics.get("result_token_count")) if isinstance(metrics, dict) else None
+                context(at, where, agent, "result", call["id"], whole)
+            elif kind == "session.compaction_start" and not agent_id:
+                compacting = data
+            elif kind == "session.compaction_complete" and not agent_id:
+                done = copilot_events.compaction(compacting, data, at)
+                out["compactions"].append(dict(done, session=session))
+                context(at, session, "", "summary", "", str(data.get("summaryContent") or ""))
+                compacting = {}
+    for model in out["models"]:
+        if not model["id"]:
+            model["id"] = str(id(model))
+    return any_row
+
+
+def join_gate(root: Path, surface: str, session: str, calls: List[Dict[str, Any]]) -> None:
+    """Put the gate's decision of the hook log on the calls of this session: refused, held (it waits for the person), asked (VS Code asked the person); the rule and the system."""
+    rows = [row for row in read_session(root, surface, session) if row.get("event") == "PreToolUse"]
+    mine = [call for call in calls if call["session"] == session]
+    pairs: List[Tuple[float, int, int]] = []  # (how far apart, hook line, call): the closest pairs are taken first
+    for index, row in enumerate(rows):
+        at = copilot_events.seconds(row.get("at"))
+        if at is None:
+            continue
+        target = row.get("target") if isinstance(row.get("target"), dict) else {}
+        for number, call in enumerate(mine):
+            if str(row.get("tool_name") or "").lower() != call["tool"].lower() or abs(at - call["at"]) > SAME_CALL_S:
+                continue
+            same = target.get("command") and similar(str(target["command"]), call["args"]) > 0.8
+            pairs.append((abs(at - call["at"]) - (10.0 if same else 0.0), index, number))
+    rows_used, calls_used = set(), set()
+    for _score, index, number in sorted(pairs):
+        if index in rows_used or number in calls_used:
+            continue
+        rows_used.add(index)
+        calls_used.add(number)
+        row, call = rows[index], mine[number]
+        external = row.get("external") if isinstance(row.get("external"), dict) else {}
+        decision = str(row.get("decision") or "allow")
+        word = "held" if common.is_held(row) else "refused" if decision == "deny" else "asked" if decision == "ask" else "passed"
+        call["gate"] = {"decision": word, "rule": str(row.get("kind") or "") or ".".join(str(item) for item in (row.get("by") or [])), "system": str(external.get("system") or ""), "env": str(external.get("env") or "")}
+        if word == "held" and call["outcome"] == "refused":
+            call["outcome"] = "held"
+
+
+def from_hook_log(root: Path, surface: str, session: str, out: Dict[str, Any]) -> None:
+    """No Copilot record: the calls of the hook log, with no thinking, no arguments of a call that went through, no result, no cost."""
+    from . import tasktrace
+
+    for item in tasktrace.build(read_session(root, surface, session), 10**9)["entries"]:
+        at = copilot_events.seconds(item["at"]) or 0.0
+        if item["kind"] == "prompt":
+            out["messages"].append({"at": at, "session": session, "content": ""})
+            continue
+        gate = item["kind"] == "gate"
+        outcome = ("held" if item.get("decision") == "held" else "refused") if gate else ("ok" if item.get("ok") is not False else "failed")
+        out["calls"].append({"id": f"c?{session}:{len(out['calls']) + 1}", "at": at, "prompt": 0, "session": session, "agent": "", "ident": "", "tool": item["tool"], "args": clip(item.get("command") or " ".join(item.get("paths") or []), ARGS_CHARS),
+                             "thought": "", "model": "", "person": False, "ok": outcome == "ok", "outcome": outcome, "seconds": item.get("seconds"), "error": clip(item.get("reason") or item.get("error") or "", ERROR_CHARS),
+                             "result": "", "result_tokens": None, "gate": {"decision": outcome, "rule": item.get("rule", ""), "system": "", "env": ""} if gate else None})
+
+
+# --- the prompts: time, cost, origin ---------------------------------------------------------------------------------------------------------------------------
+
+def sent_lines(root: Path, task: str) -> List[Dict[str, Any]]:
+    """What the board sent to the chat of this task (`.task/sent.jsonl`): {at, kind, by, text}. The answers to the agent's questions (question, confirm) are not prompts."""
+    from . import chatsend
+
+    found: List[Dict[str, Any]] = []
+    try:
+        lines = chatsend.sent_file(root, task).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return found
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        at = copilot_events.seconds(row.get("at")) if isinstance(row, dict) else None
+        if at is None or row.get("kind") in ("question", "confirm") or not str(row.get("text") or "").strip():
+            continue
+        found.append({"at": at, "kind": str(row.get("kind") or ""), "by": str(row.get("by") or ""), "text": str(row["text"])})
+    return found
+
+
+def origin_of(content: str, at: float, sent: List[Dict[str, Any]], used: set, blocks: List[str] = ()) -> Tuple[str, str]:
+    """Where a prompt came from, and the person's own words in it. `person` (typed on the board), `editor` (typed in the editor: on no line of sent.jsonl), `create` (the board's
+    opening of a task: the person's words are its "What to do" part), `relay` (an approval passed on), `wake` (the board woke the agent with a decision), `compact`,
+    `harness` (a Stop hook kept the agent going: its reason is the prompt)."""
+    mine = flat(content)
+    if mine and any(flat(reason)[:200] == mine[:200] for reason in blocks):
+        return "harness", ""
+    best: Optional[Tuple[float, int]] = None
+    for index, item in enumerate(sent):
+        if index in used or abs(item["at"] - at) > SENT_WITHIN_S:
+            continue
+        theirs = flat(item["text"])
+        head = min(len(mine), len(theirs), 200)
+        if head and (mine[:head] == theirs[:head] or theirs[:head] in mine or mine[:head] in theirs):
+            gap = abs(item["at"] - at)
+            if best is None or gap < best[0]:
+                best = (gap, index)
+    if best is None:
+        return ("compact" if mine == copilot_events.COMPACT_TEXT else "editor"), content
+    used.add(best[1])
+    item = sent[best[1]]
+    if item["kind"] == "create":
+        part = WHAT_TO_DO.split(content, maxsplit=1)
+        return "create", (part[1].strip() if len(part) > 1 else content)
+    if item["kind"] == "go":
+        return "relay", ""
+    if item["kind"] == "compact":
+        return "compact", ""
+    if item["kind"] == "answer" and item["by"] == "board":
+        return "wake", ""
+    return "person", content  # answer, steer, command: the person's own words
+
+
+def asked(text: str) -> bool:
+    tail = text.strip()[-ASKED_TAIL:]
+    return "?" in tail or "？" in tail
+
+
+def prompts_of(path: Optional[Path], session: str, part: Dict[str, Any], sent: List[Dict[str, Any]], used: set) -> List[Dict[str, Any]]:
+    """The prompts of one session with their time and cost (`copilot_events.read`, as the task report counts them), their origin and the person's words."""
+    record = copilot_events.read(path) if path is not None else None
+    texts = {round(item["at"], 3): item["content"] for item in part["messages"]}
+    out: List[Dict[str, Any]] = []
+    if record is None:
+        for item in part["messages"]:
+            out.append({"n": 0, "at": item["at"], "end": item["at"], "session": session, "origin": "editor", "words": "", "text": "", "seconds": None, "work_s": None, "model_s": None,
+                        "tool_s": None, "person_s": None, "subagent_s": None, "aiu": None, "models": [], "skills": [], "compact": False})
+        return out
+    for item in record["prompts"]:
+        content = texts.get(round(item["at"], 3), "")
+        if item.get("compact"):
+            origin, said = "compact", ""
+        else:
+            origin, said = origin_of(content, item["at"], sent, used, part["blocks"])
+        tool_s = sum(tool["seconds"] for tool in item["tools"])
+        wall = max(0.0, item["end"] - item["at"])
+        out.append({"n": 0, "at": item["at"], "end": item["end"], "session": session, "origin": origin, "words": clip(said, PROMPT_CHARS), "text": clip(content, PROMPT_CHARS),
+                    "seconds": round(wall, 1), "work_s": round(max(0.0, wall - item["approval_s"]), 1), "model_s": round(item["model_s"], 1), "tool_s": round(tool_s, 1),
+                    "person_s": round(item["approval_s"], 1), "subagent_s": round(item["subagent_s"], 1), "aiu": round(item["aiu"], 4) if item["aiu"] is not None else None,
+                    "models": item["models"], "skills": [name for name in item["skills"] if name], "compact": bool(item.get("compact"))})
+    return out
+
+
+# --- one task --------------------------------------------------------------------------------------------------------------------------------------------------
+
+def sessions_of(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The sessions that picked the task up, oldest first: {session_id, surface, at} (`taskinsight.attaches`), one entry per session at its first pick-up."""
+    from . import taskinsight
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for item in sorted(taskinsight.attaches(data), key=lambda found: found["at"]):
+        out.setdefault(item["session_id"], item)
+    return list(out.values())
+
+
+def window(data: Dict[str, Any], prompts: List[Dict[str, Any]], picked: float) -> Tuple[float, float]:
+    """The time of the task in a session that may hold other tasks too: from the prompt that led to the pick-up to the last close (none: open)."""
+    from . import taskinsight
+
+    before = [item["at"] for item in prompts if item["at"] <= picked + 1.0]
+    closed = [at for at in taskinsight.closes(data) if at >= picked]
+    return (max(before) if before else picked), (max(closed) + 60.0 if closed and data.get("status") == "closed" else float("inf"))
+
+
+def number(out: Dict[str, Any]) -> None:
+    """Ids in time order over all sessions: prompts 1.., thoughts t1.., calls c1.., model calls m1.., context x1..; each says which prompt it came in."""
+    for key in ("prompts", "thoughts", "said", "calls", "models", "context", "compactions"):
+        out[key].sort(key=lambda item: item["at"])
+    for n, item in enumerate(out["prompts"], 1):
+        item["n"] = n
+    starts = [item["at"] for item in out["prompts"]]
+    which = lambda at: sum(1 for start in starts if start <= at + 0.5)  # noqa: E731
+    thoughts: Dict[str, str] = {}
+    for n, item in enumerate(out["thoughts"], 1):
+        thoughts[item["id"]] = f"t{n}"
+        item["id"] = f"t{n}"
+    models: Dict[str, str] = {}
+    for n, item in enumerate(out["models"], 1):
+        models[item["id"]] = f"m{n}"
+        item["id"] = f"m{n}"
+    calls: Dict[str, str] = {}
+    for n, item in enumerate(out["calls"], 1):
+        calls[item["id"]] = f"c{n}"
+        item["id"] = f"c{n}"
+        item["thought"] = thoughts.get(item["thought"], "")
+        item["model"] = models.get(item["model"], "")
+    by_ident = {call.pop("ident", ""): call["id"] for call in out["calls"]}
+    shares: Dict[str, int] = {}
+    for call in out["calls"]:
+        if call["model"]:
+            shares[call["model"]] = shares.get(call["model"], 0) + 1
+    cost = {item["id"]: item["aiu"] for item in out["models"]}
+    for call in out["calls"]:
+        call["aiu"] = round(cost[call["model"]] / shares[call["model"]], 4) if call["model"] in cost else None  # the model call that asked for it, shared by the calls it asked for
+    for item in out["models"]:
+        item["calls"] = [by_ident[ident] for ident in item["calls"] if ident in by_ident]
+    for n, item in enumerate(out["said"], 1):
+        item["id"] = f"a{n}"
+    for n, item in enumerate(out["context"], 1):
+        item["id"] = f"x{n}"
+        if item["kind"] == "result":
+            item["ref"] = calls.get(item["ref"], item["ref"])
+    for key in ("thoughts", "said", "calls", "models", "context", "compactions"):
+        for item in out[key]:
+            item["prompt"] = which(item["at"])
+    for agent in out["agents"]:
+        agent["by"] = by_ident.get(agent["by"], "")  # the main agent's call that started it
+        agent["calls"] = sum(1 for call in out["calls"] if call["session"] == agent["id"])
+        agent["aiu"] = round(sum(item["aiu"] for item in out["models"] if item["session"] == agent["id"]), 4)
+
+
+def interventions(out: Dict[str, Any]) -> None:
+    """Mark the prompts that are the person stepping in: their own words (typed on the board or in the editor), not the first prompt, and not the answer to a question
+    the agent's last words asked. A signal that the span before it may have gone wrong; never a verdict on the prompt."""
+    main = [item for item in out["said"] if not item["agent"]]
+    for prompt in out["prompts"]:
+        prompt["intervention"] = False
+        if prompt["n"] == 1 or prompt["origin"] not in ("person", "editor") or not prompt["words"].strip():
+            continue
+        last = [item for item in main if item["at"] < prompt["at"]]
+        said_before = [item["at"] for item in out["prompts"] if item["n"] < prompt["n"] and item["origin"] in ("create", "person", "editor")]
+        since = said_before[-1] if said_before else 0.0
+        waited = any(call["outcome"] == "held" and since <= call["at"] < prompt["at"] for call in out["calls"] if not call["agent"])  # a call held for the person since their last words: these words answer it
+        prompt["answers"] = (bool(last) and asked(last[-1]["text"])) or waited
+        prompt["intervention"] = not prompt["answers"]
+        if prompt["intervention"]:  # the span to look at: from the person's last words before it (or the opening) to it
+            said_before = [item["n"] for item in out["prompts"] if item["n"] < prompt["n"] and item["origin"] in ("create", "person", "editor")]
+            prompt["since"] = said_before[-1] if said_before else 1
+
+
+def facts(out: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """What happened, by fixed rules: nothing judged. Each: {id, fact, calls, prompt, agent, note}. Within one agent: a retry or a repeat is never across the main agent and a subagent."""
+    found: List[Tuple[float, Dict[str, Any]]] = []
+
+    def add(at: float, fact: str, ids: List[str], prompt: int, agent: str, note: str) -> None:
+        found.append((at, {"id": "", "fact": fact, "calls": ids, "prompt": prompt, "agent": agent, "note": note}))
+
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for call in out["calls"]:
+        groups.setdefault(call["session"], []).append(call)
+    for calls in groups.values():
+        seen: Dict[str, Dict[str, Any]] = {}
+        for index, call in enumerate(calls):
+            agent, prompt = call.get("agent", ""), call["prompt"]
+            if call["outcome"] in ("failed", "refused", "held"):
+                add(call["at"], call["outcome"], [call["id"]], prompt, agent, clip(flat(call["error"]), 160))
+            if call["outcome"] == "failed":
+                again = next((other for other in calls[index + 1: index + 1 + RETRY_WITHIN] if other["tool"] == call["tool"] and similar(other["args"], call["args"]) >= SIMILAR), None)
+                if again is not None:
+                    add(again["at"], "retry", [call["id"], again["id"]], again["prompt"], agent, say("perf.fact.retry", call=call["id"]))
+            key = re.sub(r"\s+", " ", call["tool"] + " " + call["args"]).strip().lower()
+            if writes(call):
+                seen = {}  # a write in between: the same read again may see something new
+            elif key in seen and seen[key]["outcome"] == "ok":
+                add(call["at"], "repeat", [seen[key]["id"], call["id"]], prompt, agent, say("perf.fact.repeat", call=seen[key]["id"]))
+            if not writes(call):
+                seen[key] = call
+            if call.get("person"):
+                add(call["at"], "person", [call["id"]], prompt, agent, say("perf.fact.person", seconds=int(call["seconds"] or 0)))
+            elif call["ok"] and (call["seconds"] or 0) >= SLOW_S:
+                add(call["at"], "slow", [call["id"]], prompt, agent, say("perf.fact.slow", seconds=int(call["seconds"])))
+    for item in out["compactions"]:
+        add(item["at"], "compaction", [], item["prompt"], "", say("perf.fact.compaction", before=item.get("before") or "?", after=item.get("after") or "?"))
+    for prompt in out["prompts"]:
+        if prompt.get("intervention"):
+            since = prompt.get("since") or prompt["n"] - 1
+            add(prompt["at"], "intervention", [], prompt["n"], "", say("perf.fact.intervention", span=str(since) if since >= prompt["n"] - 1 else f"{since}–{prompt['n'] - 1}"))
+    found.sort(key=lambda pair: pair[0])
+    return [dict(item, id=f"f{n}") for n, (_at, item) in enumerate(found, 1)]
+
+
+def worth(out: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The prompts worth reading, by cost and facts: the dearest, those with trouble, the one before an intervention, one with a compaction. Each: {prompt, why, aiu, seconds}."""
+    prompts = out["prompts"]
+    total = sum(item["aiu"] or 0.0 for item in prompts)
+    why: Dict[int, List[str]] = {}
+    score: Dict[int, float] = {}
+    for item in sorted((item for item in prompts if item["aiu"]), key=lambda item: -(item["aiu"] or 0.0))[:3]:
+        if total and item["aiu"] / total >= DEAR_SHARE:
+            why.setdefault(item["n"], []).append("dear")
+            score[item["n"]] = score.get(item["n"], 0.0) + item["aiu"] / total * 3
+    trouble: Dict[int, int] = {}
+    for fact in out["facts"]:
+        if fact["fact"] in TROUBLE:
+            trouble[fact["prompt"]] = trouble.get(fact["prompt"], 0) + (2 if fact["fact"] in ("retry", "repeat") else 1)
+        elif fact["fact"] == "intervention" and fact["prompt"] > 1:
+            for n in range(next((item.get("since") or fact["prompt"] - 1 for item in prompts if item["n"] == fact["prompt"]), fact["prompt"] - 1), fact["prompt"]):
+                if next((item["origin"] for item in prompts if item["n"] == n), "") in ("harness", "relay", "wake", "compact") and n != fact["prompt"] - 1:
+                    continue
+                why.setdefault(n, []).append("before-intervention")
+                score[n] = score.get(n, 0.0) + 2
+        elif fact["fact"] == "compaction" and fact["prompt"]:
+            why.setdefault(fact["prompt"], []).append("compaction")
+            score[fact["prompt"]] = score.get(fact["prompt"], 0.0) + 0.5
+    for n, weight in trouble.items():
+        if weight >= 2 and n:
+            why.setdefault(n, []).append("trouble")
+            score[n] = score.get(n, 0.0) + weight / 2
+    by_n = {item["n"]: item for item in prompts}
+    picked = sorted((n for n in why if n in by_n), key=lambda n: -score.get(n, 0.0))[:WORTH_MAX]
+    return [{"prompt": n, "why": why[n], "aiu": by_n[n]["aiu"], "seconds": by_n[n]["work_s"]} for n in sorted(picked)]
+
+
+def totals(root: Path, task: str, out: Dict[str, Any]) -> Dict[str, Any]:
+    calls, prompts = out["calls"], out["prompts"]
+    found: Dict[str, Any] = {"calls": len(calls), "prompts": len(prompts)}
+    for word in ("ok", "failed", "refused", "held", "running"):
+        found[word] = sum(1 for call in calls if call["outcome"] == word)
+    found["subagent_calls"] = sum(1 for call in calls if call.get("agent"))
+    for key in ("seconds", "work_s", "model_s", "tool_s", "person_s", "subagent_s", "aiu"):
+        values = [item[key] for item in prompts if item.get(key) is not None]
+        found[key] = round(sum(values), 4 if key == "aiu" else 1) if values else None
+    found["origins"] = {}
+    for item in prompts:
+        found["origins"][item["origin"]] = found["origins"].get(item["origin"], 0) + 1
+    found["interventions"] = sum(1 for item in prompts if item.get("intervention"))
+    found["compactions"] = len(out["compactions"])
+    found["models"] = sorted({item["model"] for item in out["models"] if item["model"]})
+    for fact in out["facts"]:
+        found.setdefault("facts", {})[fact["fact"]] = found.get("facts", {}).get(fact["fact"], 0) + 1
+    found.setdefault("facts", {})
+    found["quiet"] = not any(found["facts"].get(name) for name in TROUBLE) and not found["interventions"]
+    return found
+
+
+def collect(root: Path, task: str) -> Dict[str, Any]:
+    """The evidence of one task (no file written)."""
+    data = tasks.read(root, task)
+    if data is None:
+        raise common.CommandError(say("perf.no_task", task=task))
+    surface = str(data.get("surface") or "vscode")
+    out: Dict[str, Any] = {"version": VERSION, "task": task, "kind": data.get("kind", ""), "made_at": utc_now(), "sessions": [], "source": "copilot-events",
+                           "prompts": [], "thoughts": [], "said": [], "calls": [], "models": [], "context": [], "compactions": [], "agents": [], "decisions": []}
+    use_events = True
+    try:
+        from . import taskinsight
+
+        use_events = taskinsight.events_allowed(root)
+    except Exception:  # noqa: BLE001
+        pass
+    sent, used = sent_lines(root, task), set()
+    for picked in sessions_of(data):
+        session, surface = picked["session_id"], picked.get("surface") or surface
+        part = blank()
+        path = copilot_events.events_path(session) if use_events else None
+        if path is not None and read_events(path, session, part):
+            join_gate(root, surface, session, part["calls"])
+            for agent_id in part["agents"]:
+                join_gate(root, surface, agent_id, part["calls"])  # a subagent's gate decisions are in the hook log of its own session
+            source = "copilot-events"
+        elif read_session(root, surface, session):
+            path = None
+            from_hook_log(root, surface, session, part)
+            source = "hook-log"
+        else:
+            continue
+        prompts = prompts_of(path, session, part, sent, used)
+        start, end = window(data, prompts, picked["at"])
+        inside = lambda item: start - 0.5 <= item["at"] <= end  # noqa: E731
+        out["prompts"] += [item for item in prompts if inside(item)]
+        for key in ("thoughts", "said", "calls", "models", "context", "compactions"):
+            out[key] += [item for item in part[key] if inside(item) or (key == "context" and item["kind"] == "platform")]
+        out["agents"] += [item for item in part["agents"].values() if inside(item)]
+        out["sessions"].append({"id": session, "source": source})
+    number(out)
+    priced: Dict[int, float] = {}
+    for item in out["models"]:
+        if item["priced"]:
+            priced[item["prompt"]] = priced.get(item["prompt"], 0.0) + item["aiu"]
+    if priced:  # the model calls are exact and say when: a checkpoint can come after the next prompt began
+        for prompt in out["prompts"]:
+            prompt["aiu"] = round(priced.get(prompt["n"], 0.0), 4)
+    if out["sessions"] and all(item["source"] == "hook-log" for item in out["sessions"]):
+        out["source"] = "hook-log"
+    if not out["calls"] and not any(item["aiu"] for item in out["prompts"]):  # no call and no cost: nothing on this computer tells how the agent worked
+        raise common.CommandError(say("perf.no_calls", task=task))
+    try:
+        from . import tasktrace
+
+        out["decisions"] = [{key: (clip(value, ARGS_CHARS) if key == "command" else value) for key, value in item.items() if key != "files"}
+                            for item in tasktrace.decisions(root, data, task, [item["id"] for item in out["sessions"]])]
+    except Exception:  # noqa: BLE001 - the person's decisions are a help
+        out["decisions"] = []
+    out["started_at"] = min([call["at"] for call in out["calls"]] + [item["at"] for item in out["prompts"]])
+    interventions(out)
+    out["facts"] = facts(out)
+    out["worth"] = worth(out)
+    out["totals"] = totals(root, task, out)
+    return out

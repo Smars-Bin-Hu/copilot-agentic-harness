@@ -1,24 +1,24 @@
 {
-  "summary": "One to three sentences: how the task went, the biggest detour and its cost, whether the harness or the agent caused it.",
+  "summary": "One or two sentences: where the time and Credits went, how much was waste, and whose.",
+  "segments": [
+    {"id": "s1", "calls": "c10..c14", "verdict": "waste", "what": "Guessed the subcommand twice, then read the help."},
+    {"id": "s2", "prompt": 4, "verdict": "needed", "what": "Ran the six steps the person asked for."}
+  ],
   "findings": [
     {
-      "candidate": "f2",
-      "title": "Short: what happened",
-      "class": "harness",
-      "verdict": "confirmed",
-      "why": "The root cause in two or three sentences, citing what the evidence shows: the gate's words, the error, the thinking line.",
-      "evidence": ["c12", "t7", "c13"],
-      "impact": "2 extra calls, about 40 s",
-      "change": {"file": ".harness/toolpacks/<pack>/types/<type>.json", "what": "One sentence: what to change there."}
+      "segments": ["s1"],
+      "owner": "model",
+      "confidence": "likely",
+      "title": "Guessed a subcommand the skill names",
+      "why": "The skill loaded at x12 names `item show`; the thinking at t9 assumed `workitems`.",
+      "chain": {"said": "p2", "context": "x12", "thought": "t9", "action": "c10", "result": "invalid choice"},
+      "evidence": ["x12", "t9", "c10"]
     }
   ],
+  "prompts": [
+    {"prompt": 2, "original": "Comment on the ticket.", "problem": "It does not say which ticket or what to write.", "better": "Comment 'fixed in build 42' on ado:300104."}
+  ],
   "suggestions": [
-    {
-      "title": "Short name of the change",
-      "file": "the file to change",
-      "what": "What to change, in one sentence.",
-      "why": "Which findings it removes.",
-      "priority": "high"
-    }
+    {"for": "harness", "what": "Name the subcommands in the first lines of the ado skill.", "file": "toolpacks/ado/skills/ado/SKILL.md", "why": "Finding 1.", "priority": "high"}
   ]
 }

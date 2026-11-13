@@ -1,6 +1,6 @@
 ---
 name: harness-agent-performance-review
-description: 'Agent Performance Review: read how the agent of one task worked (every tool call, the gate''s answers, the thinking before each call), judge each spot the code marked as a detour with evidence (harness limit, agent mistake, environment, knowledge gap, or the guardrail working), and suggest what to change. Use only when the user starts it from the report page of a task or types /harness-agent-performance-review; an agent must not call it by itself. Keywords: agent performance review, detour, retry, why the agent, tool calls, thinking, harness or model.'
+description: 'Agent Performance Review: reason over how the agent of one task spent its time and Credits, find the waste, trace each waste back to what caused it, and say whose it was (the person''s words, the harness, the model, the environment, Copilot, the knowledge), with evidence; critique the prompts that caused waste and suggest changes. Use only when the user starts it from the report page of a task or types /harness-agent-performance-review; an agent must not call it by itself. Keywords: agent performance review, why so slow, why so expensive, detour, root cause, harness or model, prompt critique.'
 argument-hint: 'The task to review'
 disable-model-invocation: true
 type: workflow
@@ -16,12 +16,12 @@ board-order: 5
 
 # Agent Performance Review
 
-Review how the agent of another task worked: where it took a detour and why. The CLI reads the records and marks candidates; you judge each one with evidence and say what to change. The report page of the reviewed task draws your findings next to the data.
+Say why the agent of another task spent its time and Credits where it did, and whose that was. The code has done the accounts and found the facts; you reason only over the parts it picked, look up what you need, and judge.
 
 ## When to Use This Skill
 
 - The user pressed **Agent Performance Review** on the report page of a task, or typed `/harness-agent-performance-review <task>`.
-- Never on your own: it reads the whole record of a task and its thinking, which costs much more than a usual question.
+- Never on your own.
 
 It runs in a task of kind `rca` of its own (the board opens one, named `apr-<task>`). It reads the reviewed task and changes nothing of it.
 
@@ -31,28 +31,38 @@ It runs in a task of kind `rca` of its own (the board opens one, named `apr-<tas
 
 ## Step-by-Step Workflows
 
-1. Run `harness task performance <task to review> --task <this task>`. It writes `EVIDENCE.json` into this task's folder and prints `brief`: the numbers, the prompts, and each candidate (`f1`, `f2`...) with its calls (`c12`) in short. Subagents (the reviewer, the mapper) are in it too: their calls carry `agent`, and `brief.subagents` says which call of the main agent started each. Judge a subagent's detour like the main agent's, and name it in the finding.
-2. Look at `source` first. `hook-log`: Copilot's record of that task is not on this computer, so there is no thinking, no arguments of a call that went through and no result. **Tell the user this first**, and judge only what the hook log shows.
-3. Judge each candidate as [Judging](references/judging.md) says. Read a call or a thought whole when the brief is not enough: `harness task performance --call c12 --task <this task>`. You may read the reviewed task's files (`TASK.md`, `LOG.md`, `OUTBOX/`, the deliverable) for what it was asked and what it decided. Read no more than a verdict needs.
-4. Look past the candidates too: the list `outcomes` (every call that did not simply run) and the prompts. A detour no rule marked is a finding with `"candidate": ""`.
-5. Write `FINDINGS.json` in this task's folder, in the form of [the template](templates/FINDINGS.json). Then run `harness task performance --check --task <this task>` and fix every problem. `left` lists candidates no finding speaks of: judge them, or say in `summary` why they need no word.
-6. Write `RCA.md`: two or three sentences of summary, the findings that matter (with their call ids), and the suggestions. Say that the report page of the reviewed task shows it all with a chart: `/tasks/<task>/report.html` on the board.
-7. Run `harness task deliver --summary "<one or two sentences>"` and stop.
+All commands are `harness task performance ... --task <this task>`. They read `EVIDENCE.json` in this task's folder and write nothing else.
+
+1. **Collect and read the overview.** Run `harness task performance <task to review> --task <this task>`. It writes `EVIDENCE.json` and prints the overview: the accounts, a line per prompt (origin, agent time, Credits, calls, facts), the facts, `worth` (the prompts worth reading and why) and `read_tokens`.
+   - `source: hook-log`: Copilot's record is not on this computer. Tell the user first: there is no cost, thinking or result; judge only what is there.
+   - `quiet: true` and no prompt's cost looks wrong: write `FINDINGS.json` with a `summary` that says so and no segments, run `--check`, deliver. This is the cheap way out; take it when it is true.
+2. **Read only what is worth reading.** For each prompt in `worth`: `--prompt <n>`. The notes are in time order: what the person said, what the harness added (only what changed), skills, each thinking, call, result, what the agent said, the person's decisions, compactions, subagents. Read another prompt only when a trace leads there.
+3. **Cut each prompt you read into segments** (a stretch of calls with one purpose) and judge each `needed` or `waste`. Waste: work that a better instruction, context or choice would not have needed. Get a segment's cost with `--span c10..c14`: never estimate a cost yourself.
+4. **Trace each waste back**: what the person said → what was in the agent's context → what it thought → what it did → what came back. Test the context with `--find "<the right way, word for word>" --before <the first call of the segment>`: it says whether and where that text was in the agent's context, and whether a compaction had summed it up.
+5. **Say whose it was**, with a confidence, as [Attribution](references/attribution.md) says. One waste segment may have more than one owner.
+6. **Critique the person's prompts that caused waste**: the original, the problem, a better wording. Only those; see the attribution reference for which prompts are not judged.
+7. **Write `FINDINGS.json`** in this task's folder, in the form of [the template](templates/FINDINGS.json). Run `--check` and fix every problem. `waste` in its answer is the code's count of time and Credits by owner: use those numbers in your words.
+8. **Write `RCA.md`**: the summary, the waste in Credits and time by owner (from `--check`), the findings that matter with their ids, the suggestions. Say the page of the review shows it all: `/tasks/<task>/performance` on the board.
+9. Run `harness task deliver --summary "<one or two sentences>"` and stop.
 
 ## Gotchas
 
-- **A candidate is not a verdict.** The rules mark by shape (the same call twice, a refusal then another program). Many are fine: a retry after a fix, a second program on purpose. Say `not-a-problem` when the evidence shows that.
-- **Blame the harness only with evidence from the harness.** A refusal whose words did not give a way, a rule that forced an extra round, missing knowledge the agent had to dig for: cite the gate's words or the missing file. "The model was confused" needs a thinking line that shows it.
-- **Quote the thinking as it is, short.** The thinking is a summary Copilot keeps; it may be missing for a call. Never invent what the agent thought.
-- **The guardrail working is a finding too.** A refusal that stopped what had to be stopped is `class: guardrail`. Its cost (calls, minutes) is still worth a line.
-- **A suggestion names the file to change**, and says what to change in one sentence. Do not change it yourself: this task reads only. The user makes the change through a normal task.
-- **Nothing leaves this computer.** Do not paste thinking or commands into a ticket or a message.
+- **A fact is not a verdict.** A failed call, a repeat or a held call may be needed: a test that fails before the fix, a read after a write, a hold the person had to see. Judge the segment, not the fact.
+- **A short correction from the person is a signal, not a bad prompt.** It says the span before it went wrong; judge that span. Do not critique "No, use X" or "go on".
+- **"Model" and "harness" need evidence.** Model: the right way was in its context (`--find` gives the place: cite its `x`, `p` or `a` id) and it did not follow it. Harness: the right way was not in its context though the harness should have given it, or a harness step added a round that stopped nothing. Without the evidence, the confidence is `unsure`.
+- **`--find` finds words, not meaning.** Try the words the harness or the skill would use. Not found does not prove it was not there: say `likely`, not `certain`.
+- **Never estimate time or Credits.** Every number comes from `--span`, the overview or `--check`.
+- **Quote the thinking as it is, short.** It is a summary Copilot keeps and may be empty (often for a subagent). Never invent what the agent thought.
+- **Suggest; do not change.** A suggestion names who it is for and, for the harness or the knowledge, the file. The user changes it through a normal task.
+- **Nothing leaves this computer.** Do not paste thinking, commands or results into a ticket or a message.
 
 ## Troubleshooting
 
 | Issue | Solution |
 | --- | --- |
-| `is not an rca task` | Open this review as a task of kind `rca` (step "Prerequisites") |
-| `No tool call of <task> was found` | Neither Copilot's record nor the hook log has that task's sessions on this computer. Tell the user; there is nothing to review |
-| The candidates are hundreds | A red-team or a very long task. Judge the rules, not each spot: group by rule and gate rule, give one finding per group with two or three example ids |
-| `--check` says an id is unknown | Use only ids that are in `EVIDENCE.json`. Running `performance` again renumbers nothing for the same records, but a newer record adds calls |
+| `is not an rca task` | Open this review as a task of kind `rca` ("Prerequisites") |
+| `No tool call of <task> was found` | Nothing on this computer tells how that task's agent worked. Tell the user; there is nothing to review |
+| `There is no EVIDENCE.json of this version` | Run step 1 again |
+| A prompt says it is too long for the page | Read it with `--prompt <n>`; read its long pieces with `--call <x id>` only when the trace needs them |
+| Hundreds of facts (a red-team or a very long task) | Judge the kinds, not each one: one segment per stretch that repeats, two or three example ids |
+| `--check` says an id is unknown | Cite only ids the lookups gave you; they come from `EVIDENCE.json` |

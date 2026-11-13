@@ -1,0 +1,92 @@
+/* The Agent Performance Review page of a task (perfpage.js, 1.7.41). */
+#app{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
+.pf-head{margin:0 0 16px}
+.pf-head .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pf-head h1{font-size:20px;margin:0;font-weight:600;overflow-wrap:anywhere}
+.pf-summary{font-size:16px;line-height:1.55;margin:4px 0 12px}
+.tag.soft{opacity:.7}
+.tag.good{border-color:var(--good-line);background:var(--good-bg)}
+
+/* the owners: one colour each (light and dark), the same in the bar, the legend and the dot of a chip */
+.pf-o-person{--pf-c:var(--run)}
+.pf-o-harness{--pf-c:var(--hot-dot)}
+.pf-o-model{--pf-c:#9b6bdf}
+.pf-o-environment{--pf-c:var(--tool)}
+.pf-o-platform{--pf-c:var(--open-dot)}
+.pf-o-knowledge{--pf-c:var(--good-dot)}
+.pf-o-unknown{--pf-c:var(--other)}
+.pf-ownbar i,.legend i[class^="pf-o-"]{background:var(--pf-c)}
+#app .tag.pf-own::before{background:var(--pf-c);border:0;opacity:1;width:8px;height:8px}
+.pf-ownbar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:8px 0 6px;gap:2px}
+.pf-ownbar i{display:block;min-width:3px}
+
+/* the numbers: as many as there are, on as many lines as they need */
+#app .kpis.pf-kpis{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:4px 0;margin:8px 0 12px}
+#app .pf-kpis .kpi{border-left:0;padding:10px 14px 8px 0}
+#app .pf-kpis .kpi b{font-size:24px}
+
+/* a row per prompt */
+.pf-tools{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.pf-hint{cursor:help}
+.pf-prompts{display:flex;flex-direction:column;gap:2px}
+.pf-prow{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:44px 120px 16px minmax(80px,1fr) 70px minmax(0,220px) 16px;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer}
+.pf-prow:hover,.pf-prow[aria-expanded="true"]{background:var(--hover)}
+.pf-prow:focus-visible{outline:2px solid var(--ink)}
+.pf-pn{font-family:var(--mono);font-size:12px;color:var(--soft)}
+.pf-src{justify-self:start;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-src-person,.pf-src-editor,.pf-src-create{border-color:var(--usage)}
+.pf-src-harness{border-color:var(--hot-line)}
+.pf-flag-int{color:var(--hot);cursor:help}
+.pf-track{position:relative;height:12px;background:var(--track);border-radius:6px;overflow:hidden}
+.pf-track i{position:absolute;top:0;bottom:0;left:0;border-radius:6px}
+.pf-fill{background:var(--run);opacity:.7}
+.pf-lost{background:repeating-linear-gradient(135deg,var(--bad) 0 4px,transparent 4px 7px);opacity:.9}
+.pf-val{font-variant-numeric:tabular-nums;font-size:12.5px;text-align:right}
+.pf-mini{display:flex;gap:4px;overflow:hidden;white-space:nowrap}
+.pf-fact{font-size:11px;padding:0 6px;border-radius:9px;border:1px solid var(--line)}
+.pf-f-failed,.pf-f-refused,.pf-f-retry,.pf-f-repeat{border-color:var(--bad-line);background:var(--bad-bg)}
+.pf-f-held{border-color:var(--hot-line);background:var(--hot-bg)}
+.pf-star{color:var(--hot);cursor:help}
+.pf-words{margin:0 0 4px 60px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-notes pre{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:12px;line-height:1.45;background:var(--flat);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:4px 0 10px 60px;max-height:520px;overflow:auto}
+@media (max-width:760px){.pf-prow{grid-template-columns:34px 14px minmax(40px,1fr) 64px 14px}#app .pf-src,#app .pf-mini{display:none}.pf-words,.pf-notes pre{margin-left:0}.pf-crit-grid{grid-template-columns:1fr}.pf-chain li{grid-template-columns:1fr}.pf-lane-name{width:64px}.pf-axis{margin-left:72px}}
+
+/* findings, chains, evidence */
+.pf-group{margin:6px 0 14px}
+.pf-group h3{margin:6px 0}
+.pf-finding{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:6px 0}
+.pf-finding>summary{cursor:pointer;line-height:1.6}
+.pf-finding p{margin:6px 0}
+.pf-seg{font-size:12px}
+.pf-chain{list-style:none;padding:0;margin:8px 0;display:flex;flex-direction:column;gap:4px;border-left:2px solid var(--line2);padding-left:12px}
+.pf-chain li{display:grid;grid-template-columns:90px 1fr;gap:8px;align-items:start}
+.pf-evidence{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.pf-ev summary{cursor:pointer;font-size:12px}
+.pf-ev pre{white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:12px;background:var(--flat);border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin:4px 0;max-height:260px;overflow:auto}
+.pf-ev blockquote,.pf-crit blockquote{margin:4px 0;padding:4px 10px;border-left:3px solid var(--line2);white-space:pre-wrap}
+.pf-list{padding-left:20px;margin:6px 0}
+.pf-list>li{margin:0 0 10px}
+.pf-list p{margin:4px 0}
+.pf-line{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pf-list code,.pf-line code{font-family:var(--mono);font-size:12px}
+
+/* prompt critiques */
+.pf-crit{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0}
+.pf-crit-grid{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;align-items:start;margin-top:6px}
+.pf-crit-grid p{margin:4px 0}
+blockquote.pf-better{border-left-color:var(--good)}
+
+/* the call timeline */
+.pf-strip{position:relative;height:26px;border:1px solid var(--line);border-radius:6px;background:var(--flat);overflow:hidden;margin:3px 0}
+.pf-call{position:absolute;top:4px;bottom:4px;border-radius:2px;opacity:.85}
+.pf-axis{display:flex;justify-content:space-between;font-size:11px;margin-left:108px}
+.pf-lane{display:flex;align-items:center;gap:8px}
+.pf-lane .pf-strip{flex:1}
+.pf-lane-name{width:100px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.pf-ok{background:var(--good)}
+.pf-failed{background:var(--bad)}
+.pf-refused{background:var(--hot)}
+.pf-held{background:var(--approval)}
+.pf-person{background:repeating-linear-gradient(135deg,var(--approval) 0 3px,transparent 3px 7px)}
+.pf-running{background:var(--line)}
+.pf-facts>summary{cursor:pointer;font-weight:550}

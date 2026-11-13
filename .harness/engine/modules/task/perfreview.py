@@ -1,7 +1,7 @@
 """Agent Performance Review (1.7.41): the command an rca task uses to review how the agent of another task worked, and what the report page shows of it.
 
 Three layers, dearer as they go down (`perfdata` is the first):
-  1. accounts and facts: code, free. Where the time and the AIU went, what failed, was refused or held, was the same try again, where the person stepped in.
+  1. accounts and facts: code, free. Where the time and the Credits (AIU) went, what failed, was refused or held, was the same try again, where the person stepped in.
      The report page shows it without any review.
   2. lookups: code, called by the model of the review. Nothing is written but EVIDENCE.json:
        harness task performance <task> --task <review>     collect, write EVIDENCE.json, give the overview
@@ -55,7 +55,7 @@ def clock(seconds: Optional[float]) -> str:
 
 
 def aiu(value: Optional[float]) -> str:
-    return "-" if value is None else f"{value:.2f} AIU"
+    return "-" if value is None else f"{value:.2f} Credits"
 
 
 def share(part: Optional[float], whole: Optional[float]) -> float:
@@ -464,3 +464,121 @@ def latest_review(root: Path, subject: str) -> Optional[Dict[str, Any]]:  # `sub
         except common.CommandError:
             checked = None
     return {"task": name, "status": data.get("status", ""), "evidence": evidence, "findings": findings, "checked": checked}
+
+
+PAGE_CALLS = 3000  # the call timeline: a longer task shows its first calls of this many
+PAGE_TEXT = 600
+PAGE_NOTES = 1_500_000  # characters of prompt notes on the page; past this a prompt says to read it with --prompt
+PAGE_WORDS = 300
+
+
+def evidence_of(root: Path, subject: str, review: Optional[Dict[str, Any]]) -> Tuple[Optional[Dict[str, Any]], bool]:
+    """The evidence a page draws: the review's EVIDENCE.json when there is one (its ids are what the findings cite), else the task's own record read now. (evidence, live)."""
+    if review and review.get("evidence"):
+        return review["evidence"], False
+    try:
+        return perfdata.collect(root, subject), True
+    except common.CommandError:
+        return None, True
+
+
+def findings_view(review: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not review:
+        return None
+    checked = review.get("checked") or {}
+    return {"task": review["task"], "name": review["task"].rsplit("/", 1)[-1], "status": review["status"], "findings": review.get("findings"),
+            "ok": checked.get("ok"), "problems": len(checked.get("problems") or []), "waste": checked.get("waste")}
+
+
+def summary_view(root: Path, subject: str) -> Dict[str, Any]:
+    """The report page's small part (layer 1, free): the accounts, the facts, the dearest prompt, the newest review's one line. Never raises."""
+    out: Dict[str, Any] = {"subject": subject, "name": subject.rsplit("/", 1)[-1], "totals": None, "review": None}
+    try:
+        review = latest_review(root, subject)
+        out["review"] = findings_view(review)
+        evidence, out["live"] = evidence_of(root, subject, review)
+        if evidence is None:
+            return out
+        out["totals"] = evidence["totals"]
+        priced = [item for item in evidence["prompts"] if item.get("aiu")]
+        if len(priced) > 1:
+            dear = max(priced, key=lambda item: item["aiu"])
+            out["dear"] = {"prompt": dear["n"], "aiu": dear["aiu"], "share": share(dear["aiu"], evidence["totals"].get("aiu"))}
+        out["worth"] = len(evidence["worth"])
+        out["read_tokens"] = sum(len("\n".join(notes(evidence, item["prompt"]))) for item in evidence["worth"]) // 4
+    except Exception:  # noqa: BLE001 - a record that cannot be read leaves the rest of the report
+        pass
+    return out
+
+
+def page_data(root: Path, subject: str) -> Dict[str, Any]:
+    """The sub-page `/tasks/<task>/performance`: every prompt with its cost, origin and facts, the facts, the call timeline, the review's findings with the calls,
+    thoughts and context they cite, and the notes of each prompt (the same as `--prompt`)."""
+    review = latest_review(root, subject)
+    evidence, live = evidence_of(root, subject, review)
+    out: Dict[str, Any] = {"subject": subject, "name": subject.rsplit("/", 1)[-1], "live": live, "review": findings_view(review), "evidence": None}
+    if evidence is None:
+        return out
+    counts: Dict[int, Dict[str, int]] = {}
+    for fact in evidence["facts"]:
+        counts.setdefault(fact["prompt"], {})[fact["fact"]] = counts.get(fact["prompt"], {}).get(fact["fact"], 0) + 1
+    calls_in: Dict[int, int] = {}
+    for call in evidence["calls"]:
+        calls_in[call["prompt"]] = calls_in.get(call["prompt"], 0) + 1
+    worth = {item["prompt"]: item["why"] for item in evidence["worth"]}
+    prompts = []
+    left = PAGE_NOTES
+    for item in evidence["prompts"]:
+        lines = notes(evidence, item["n"])
+        size = sum(len(line) for line in lines)
+        prompts.append({key: item.get(key) for key in ("n", "origin", "intervention", "answers", "since", "aiu", "work_s", "person_s", "model_s", "tool_s", "subagent_s")}
+                       | {"words": clip(item["words"] if item["origin"] in ORIGIN_PERSON else item["text"], PAGE_WORDS), "calls": calls_in.get(item["n"], 0), "facts": counts.get(item["n"], {}),
+                          "worth": worth.get(item["n"], []), "notes": lines if size <= left else None})
+        left -= size if size <= left else 0
+    findings = (review or {}).get("findings") or {}
+    cited = {str(ident) for item in findings.get("findings") or [] if isinstance(item, dict) for ident in item.get("evidence") or []}
+    cited |= {ident for fact in evidence["facts"] for ident in fact["calls"]}
+    for item in findings.get("findings") or []:
+        chain = item.get("chain") if isinstance(item, dict) and isinstance(item.get("chain"), dict) else {}
+        cited |= {str(value) for value in chain.values() if isinstance(value, str) and IDS.match(value.strip())}
+    detail: Dict[str, Any] = {}
+    thoughts = {item["id"]: item for item in evidence["thoughts"]}
+    for call in evidence["calls"]:
+        if call["id"] in cited:
+            detail[call["id"]] = {"kind": "call", "tool": call["tool"], "args": clip(call["args"], PAGE_TEXT), "outcome": call["outcome"], "seconds": call["seconds"], "aiu": call.get("aiu"),
+                                  "error": clip(call["error"], PAGE_TEXT), "result": clip(call.get("result") or "", PAGE_TEXT), "gate": call.get("gate"), "prompt": call["prompt"], "agent": call.get("agent") or "",
+                                  "thought": clip(thoughts[call["thought"]]["text"], PAGE_TEXT) if call.get("thought") in thoughts else ""}
+    for key, kind in (("thoughts", "thought"), ("context", "context"), ("said", "said")):
+        for item in evidence[key]:
+            if item["id"] in cited:
+                detail[item["id"]] = {"kind": kind, "what": item.get("kind", kind), "ref": item.get("ref", ""), "text": clip(item["text"], PAGE_TEXT * 2), "prompt": item.get("prompt"), "agent": item.get("agent") or ""}
+    for item in evidence["prompts"]:
+        if f"p{item['n']}" in cited:
+            detail[f"p{item['n']}"] = {"kind": "prompt", "text": clip(item["text"], PAGE_TEXT * 2), "prompt": item["n"]}
+    start = float(evidence.get("started_at") or 0.0)
+    calls = evidence["calls"]
+    out["evidence"] = {
+        "source": evidence["source"], "made_at": evidence["made_at"], "totals": evidence["totals"], "prompts": prompts, "facts": evidence["facts"], "agents": evidence["agents"],
+        "strip": [[call["id"], round(call["at"] - start, 1), call["seconds"] or 0, "person" if call.get("person") and call["outcome"] == "ok" else call["outcome"], call["prompt"], call.get("agent") or ""] for call in calls[:PAGE_CALLS]],
+        "cut": max(0, len(calls) - PAGE_CALLS), "detail": detail,
+        "segments": segments_of(evidence, findings) if findings else {},
+    }
+    return out
+
+
+def segments_of(evidence: Dict[str, Any], findings: Dict[str, Any]) -> Dict[str, Any]:
+    """Each segment of FINDINGS.json with the prompt it falls in and its calls as `cA..cB`, and for a waste one its time and AIU (code's)."""
+    out: Dict[str, Any] = {}
+    for item in findings.get("segments") or []:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        calls = segment_calls(evidence, item)
+        found: Dict[str, Any] = {"span": calls, "verdict": item.get("verdict"), "what": str(item.get("what") or ""), "prompt": None}
+        if calls:
+            first = int(calls.split("..")[0][1:])
+            found["prompt"] = evidence["calls"][first - 1]["prompt"]
+            if item.get("verdict") == "waste":
+                cost = span(evidence, calls)
+                found.update(aiu=cost["aiu"], work_s=cost["work_s"])
+        out[str(item["id"])] = found
+    return out

@@ -203,6 +203,12 @@ class ExportTests(GateCase):
 
 
 class PageTests(GateCase):
+    def test_the_performance_page_is_served(self) -> None:  # 1.7.41: the Agent Performance Review page of a task, read only
+        status, data, _headers = self.request("GET", "/tasks/job1/performance")
+        self.assertEqual(status, 200)
+        self.assertEqual(page_data(data["text"])["perf"]["name"], "job1")
+        self.assertEqual(self.request("GET", "/tasks/no-such-task/performance")[0], 404)
+
     def test_the_served_report_has_buttons_and_the_file_on_disk_has_none(self) -> None:
         status, data, headers = self.request("GET", "/tasks/job1/report.html")
         self.assertEqual(status, 200)

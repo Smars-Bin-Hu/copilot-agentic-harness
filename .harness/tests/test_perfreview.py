@@ -4,6 +4,7 @@ review's model calls: overview, the notes of a prompt, a span, find, one call wh
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -284,3 +285,45 @@ class SubagentTests(ReviewCase):
         self.assertEqual(repeats, [("reviewer", ["c2", "c3"])], "a repeat is within one agent")
         self.assertEqual([place["what"] for place in perfreview.find(evidence, "Review round 1", "c3")["places"]], ["subagent brief"])
         self.assertEqual(perfreview.find(evidence, "Review round 1", "c4")["found"], 0, "the main agent never had the subagent's brief")
+
+
+class PageTests(ReviewCase):
+    def test_the_report_page_shows_the_free_accounts_before_any_review(self) -> None:
+        from modules.task import taskhtml
+
+        self.a_task()
+        os.environ["COPILOT_HOME"] = self.env["COPILOT_HOME"]
+        try:
+            summary = perfreview.summary_view(self.root, SUBJECT)
+            data = perfreview.page_data(self.root, SUBJECT)
+        finally:
+            os.environ.pop("COPILOT_HOME", None)
+        self.assertIsNone(summary["review"])
+        self.assertTrue(summary["live"], "no review: the task's own record, read now")
+        self.assertAlmostEqual(summary["totals"]["aiu"], self.spent / NANO, places=3)
+        self.assertEqual(summary["dear"]["prompt"], 1)
+        self.assertGreater(summary["read_tokens"], 0, "the start dialog says how much the review will read")
+        self.assertEqual([row["origin"] for row in data["evidence"]["prompts"]], ["create", "harness", "person", "relay"])
+        self.assertTrue(all(row["notes"] for row in data["evidence"]["prompts"]), "each prompt's notes are on the page")
+        self.assertIn("c3", data["evidence"]["detail"], "a call a fact names is there in full")
+        info = {"name": "subject", "task": SUBJECT, "kind": "dev", "tier": "", "status": "open", "source": "copilot-events", "span": {"from": "", "to": ""}, "as_of": "",
+                "prompts": [], "findings": [], "totals": {"active_s": 0, "waiting_s": 0, "model_s": None, "prompts": 0, "aiu": None, "premium_requests": None, "reviews": 0, "review_fails": 0}, "perf": summary}
+        self.assertIn("const PERF", taskhtml.task_page(info))
+        page = taskhtml.perf_page(data)
+        self.assertIn(".pf-prow", page)
+        self.assertIn("Comment on ticket 300104.", page)
+
+    def test_the_review_page_carries_the_findings_and_their_cost(self) -> None:
+        self.a_task()
+        self.collect()
+        (self.root / ".workspace/sandbox/tasks/apr-subject" / perfreview.FINDINGS).write_text(json.dumps({
+            "summary": "Guessed a subcommand.", "segments": [{"id": "s1", "calls": "c1..c2", "verdict": "waste", "what": "Guessed."}],
+            "findings": [{"segments": ["s1"], "owner": "model", "confidence": "likely", "title": "Guessed", "why": "It assumed.", "evidence": ["c1", "t1"], "chain": {"thought": "t1", "action": "c1"}}],
+            "suggestions": [{"for": "harness", "what": "Name the subcommands.", "priority": "high"}]}), encoding="utf-8")
+        data = perfreview.page_data(self.root, SUBJECT)
+        self.assertFalse(data["live"], "the review's EVIDENCE.json: its ids are what the findings cite")
+        self.assertEqual(data["review"]["waste"]["by_owner"]["model"]["aiu"], 3.0)
+        self.assertEqual(data["evidence"]["segments"]["s1"]["prompt"], 1)
+        self.assertIn("t1", data["evidence"]["detail"])
+        summary = perfreview.summary_view(self.root, SUBJECT)
+        self.assertEqual(summary["review"]["findings"]["summary"], "Guessed a subcommand.")

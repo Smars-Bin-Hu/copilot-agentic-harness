@@ -258,7 +258,7 @@ const CHAT = (function () {
     waiting = null;
   }
 
-  function create(preset) {  // preset: `true` for the sample of the lesson, or {name, kind, domains, text, note, back} for a skill; `back` opens the place the person came from
+  function create(preset) {  // preset: `true` for the sample of the lesson, or {name, kind, domains, text, note, thinking, back} for a skill; `back` opens the place the person came from
     const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set(), linkTypes: []};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
@@ -401,6 +401,7 @@ const CHAT = (function () {
         }
         drawKb();
         text.value = filled.text || "";
+        if (filled.thinking && [...thinking.options].some((option) => option.value === filled.thinking)) thinking.value = filled.thinking;  // a skill that needs it sets the thinking; the model stays the person's
         if (filled.note) blocked.after(h("p", {class: "sub"}, filled.note));
       }
       if (!found.ready) blocked.replaceChildren(h("p", null, t("board.new.off")), h("p", {class: "sub"}, t("board.vs.why." + (found.why || "starting"))));

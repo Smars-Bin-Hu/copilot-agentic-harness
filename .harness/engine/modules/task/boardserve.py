@@ -573,11 +573,13 @@ class Board:
         task = task_ops.resolve(self.root, name)
         info, now = taskboard.insight(self.root, task)
         info = taskboard.with_gate(self.root, task, info)
-        try:
-            info["perf"] = perfreview.page_view(task, perfreview.latest_review(self.root, task))  # the Agent Performance Review of this task (1.7.41)
-        except Exception:  # noqa: BLE001 - a review that cannot be read leaves the rest of the page
-            info["perf"] = {"subject": task, "review": None}
+        info["perf"] = perfreview.summary_view(self.root, task)  # the Agent Performance Review of this task (1.7.41): its free accounts, the review's one line; never raises
         return task, info, now
+
+    def perf_page(self, name: str) -> str:
+        """The Agent Performance Review page of a task (1.7.41): the accounts per prompt, the facts, the review's findings, the notes of each prompt, the call timeline."""
+        task = task_ops.resolve(self.root, name)
+        return taskhtml.perf_page(perfreview.page_data(self.root, task))
 
     def report_page(self, name: str) -> str:
         """The time-and-usage page as the server sends it: the Gate verdicts have buttons, and the page can be saved."""
@@ -1635,6 +1637,14 @@ def handler_for(board: Board) -> type:
                 except CommandError as error:
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead download
+                    return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            shown = re.fullmatch(r"/tasks/([^/]+)/performance", path)
+            if shown:  # the Agent Performance Review page (1.7.41): read only, drawn when asked
+                try:
+                    return self.send(200, board.perf_page(shown.group(1)).encode("utf-8"), "text/html; charset=utf-8")
+                except CommandError as error:
+                    return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
+                except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
             shown = re.fullmatch(r"/tasks/([^/]+)/report\.html", path)
             if shown:  # the report is drawn when asked: the verdicts are the latest and the buttons are there

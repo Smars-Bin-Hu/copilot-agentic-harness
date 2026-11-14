@@ -8,7 +8,8 @@ Read from what this computer keeps, for each session that picked the task up:
       summing-up of a compaction: it goes in as a model call of its own, at the moment it was counted, so the calls add up to the checkpoint;
       the thinking summary (`reasoningText`), every tool call with its arguments and result, the compactions with their summary;
       a subagent's own work: its rows carry `agentId`, which is also the session of its hook log.
-    The time and the cost of each prompt come from `copilot_events.read`, as the task report has them.
+    The time and the cost of each prompt come from `copilot_events.read`, as the task report has them (the credits by `copilot_events` CREDITS), and the prompts of the task
+    are the ones the task report counts (`taskinsight.task_sessions`): the review and the report give the same numbers.
   - the hook log: what the gate decided for a call (refused, held for the person).
   - `.task/sent.jsonl`: what the board sent. A prompt's origin is read from it: the person's own words (typed on the board or in the editor), the board's opening of a
     task (its "What to do" part is the person's), a relay of an approval, a wake, a compaction.
@@ -127,7 +128,7 @@ def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
     thought_of: Dict[str, str] = {}
     last_usage: Dict[str, Dict[str, Any]] = {}  # per agent: the latest model call, not yet tied to its message
     last_hook: Dict[Tuple[str, str], str] = {}  # (agent session, hook type) -> the text last added: the same text again is not kept
-    counted = 0.0  # nano AIU of the model calls so far, against the checkpoints
+    credits = copilot_events.Credits()  # the one rule of the credits (copilot_events CREDITS)
     compacting: Dict[str, Any] = {}
     any_row = False
 
@@ -175,19 +176,17 @@ def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
                 context(at, where, agent, "skill", str(data.get("name") or ""), str(data.get("content") or ""))
             elif kind == "session.usage_record":
                 spent = data.get("usage") if isinstance(data.get("usage"), dict) else {}
-                nano = copilot_events.number((spent.get("copilotUsage") or {}).get("totalNanoAiu")) if isinstance(spent.get("copilotUsage"), dict) else None
-                counted += nano or 0.0
-                item = {"id": "", "at": at, "session": where, "agent": agent, "model": str(spent.get("model") or ""), "aiu": (nano or 0.0) / NANO, "priced": nano is not None,
+                added = credits.row(kind, data)
+                item = {"id": "", "at": at, "session": where, "agent": agent, "model": str(spent.get("model") or ""), "aiu": added[0] if added else 0.0, "priced": added is not None,
                         "seconds": round((copilot_events.number(spent.get("duration")) or 0.0) / 1000, 1), "input": copilot_events.whole_number(spent.get("inputTokens")),
                         "output": copilot_events.whole_number(spent.get("outputTokens")), "cache_read": copilot_events.whole_number(spent.get("cacheReadTokens")), "kind": "call", "calls": []}
                 out["models"].append(item)
                 last_usage[where] = item
             elif kind == "session.usage_checkpoint":
-                total = copilot_events.number(data.get("totalNanoAiu"))
-                if total is not None and total - counted > 1e6:  # counted by Copilot but by no model call of the record: a compaction's summing-up
-                    out["models"].append({"id": "", "at": at, "session": session, "agent": "", "model": "", "aiu": (total - counted) / NANO, "priced": True, "seconds": 0.0,
+                added = credits.row(kind, data)
+                if added is not None:  # counted by Copilot but by no model call of the record: a compaction's summing-up, or an older record with no usage_record
+                    out["models"].append({"id": "", "at": at, "session": session, "agent": "", "model": "", "aiu": added[0], "priced": True, "seconds": 0.0,
                                           "input": None, "output": None, "cache_read": None, "kind": "compaction", "calls": []})
-                    counted = total
             elif kind == "assistant.message":
                 usage = last_usage.pop(where, None)
                 said = str(data.get("reasoningText") or "").strip()
@@ -351,7 +350,9 @@ def asked(text: str) -> bool:
 
 
 def prompts_of(path: Optional[Path], session: str, part: Dict[str, Any], sent: List[Dict[str, Any]], used: set) -> List[Dict[str, Any]]:
-    """The prompts of one session with their time and cost (`copilot_events.read`, as the task report counts them), their origin and the person's words."""
+    """The prompts of one session with their time and cost (`copilot_events.read` and `taskinsight.split`, as the task report counts them), their origin and the person's words."""
+    from . import taskinsight
+
     record = copilot_events.read(path) if path is not None else None
     texts = {round(item["at"], 3): item["content"] for item in part["messages"]}
     out: List[Dict[str, Any]] = []
@@ -366,35 +367,16 @@ def prompts_of(path: Optional[Path], session: str, part: Dict[str, Any], sent: L
             origin, said = "compact", ""
         else:
             origin, said = origin_of(content, item["at"], sent, used, part["blocks"])
-        tool_s = sum(tool["seconds"] for tool in item["tools"])
-        wall = max(0.0, item["end"] - item["at"])
+        parts = taskinsight.split(item)  # the time by what it went to, as the task report splits it
         out.append({"n": 0, "at": item["at"], "end": item["end"], "session": session, "origin": origin, "words": clip(said, PROMPT_CHARS), "text": clip(content, PROMPT_CHARS),
-                    "seconds": round(wall, 1), "work_s": round(max(0.0, wall - item["approval_s"]), 1), "model_s": round(item["model_s"], 1), "tool_s": round(tool_s, 1),
-                    "person_s": round(item["approval_s"], 1), "subagent_s": round(item["subagent_s"], 1), "aiu": round(item["aiu"], 4) if item["aiu"] is not None else None,
+                    "seconds": round(parts["active_s"], 1), "work_s": round(max(0.0, parts["active_s"] - parts["approval_s"]), 1), "model_s": round(parts["model_s"], 1),
+                    "tool_s": round(parts["tool_s"], 1), "person_s": round(parts["approval_s"], 1), "subagent_s": round(parts["subagent_s"], 1),
+                    "aiu": round(item["aiu"], 4) if item["aiu"] is not None else None,
                     "models": item["models"], "skills": [name for name in item["skills"] if name], "compact": bool(item.get("compact"))})
     return out
 
 
 # --- one task --------------------------------------------------------------------------------------------------------------------------------------------------
-
-def sessions_of(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """The sessions that picked the task up, oldest first: {session_id, surface, at} (`taskinsight.attaches`), one entry per session at its first pick-up."""
-    from . import taskinsight
-
-    out: Dict[str, Dict[str, Any]] = {}
-    for item in sorted(taskinsight.attaches(data), key=lambda found: found["at"]):
-        out.setdefault(item["session_id"], item)
-    return list(out.values())
-
-
-def window(data: Dict[str, Any], prompts: List[Dict[str, Any]], picked: float) -> Tuple[float, float]:
-    """The time of the task in a session that may hold other tasks too: from the prompt that led to the pick-up to the last close (none: open)."""
-    from . import taskinsight
-
-    before = [item["at"] for item in prompts if item["at"] <= picked + 1.0]
-    closed = [at for at in taskinsight.closes(data) if at >= picked]
-    return (max(before) if before else picked), (max(closed) + 60.0 if closed and data.get("status") == "closed" else float("inf"))
-
 
 def number(out: Dict[str, Any]) -> None:
     """Ids in time order over all sessions: prompts 1.., thoughts t1.., calls c1.., model calls m1.., context x1..; each says which prompt it came in."""
@@ -565,18 +547,21 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
     surface = str(data.get("surface") or "vscode")
     out: Dict[str, Any] = {"version": VERSION, "task": task, "kind": data.get("kind", ""), "made_at": utc_now(), "sessions": [], "source": "copilot-events",
                            "prompts": [], "thoughts": [], "said": [], "calls": [], "models": [], "context": [], "compactions": [], "agents": [], "decisions": []}
-    use_events = True
-    try:
-        from . import taskinsight
+    from . import taskinsight
 
+    try:
         use_events = taskinsight.events_allowed(root)
     except Exception:  # noqa: BLE001
-        pass
+        use_events = True
     sent, used = sent_lines(root, task), set()
-    for picked in sessions_of(data):
+    found = taskinsight.task_sessions(root, task, data, use_events)  # the prompts of the task, as the task report counts them
+    spans = taskinsight.owned_spans(found)
+    for picked in found:
         session, surface = picked["session_id"], picked.get("surface") or surface
+        if not spans.get(session):
+            continue
         part = blank()
-        path = copilot_events.events_path(session) if use_events else None
+        path = copilot_events.events_path(session) if use_events and picked["source"] == taskinsight.SOURCE_EVENTS else None
         if path is not None and read_events(path, session, part):
             join_gate(root, surface, session, part["calls"])
             for agent_id in part["agents"]:
@@ -589,21 +574,14 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
         else:
             continue
         prompts = prompts_of(path, session, part, sent, used)
-        start, end = window(data, prompts, picked["at"])
-        inside = lambda item: start - 0.5 <= item["at"] <= end  # noqa: E731
+        inside = lambda item, mine=spans[session]: any(start - 0.5 <= item["at"] < end for start, end in mine)  # noqa: E731
         out["prompts"] += [item for item in prompts if inside(item)]
+        opened = min((item["at"] for item in part["messages"]), default=float("inf"))  # what the session was given before its first prompt (system, sessionStart) stays in its context
         for key in ("thoughts", "said", "calls", "models", "context", "compactions"):
-            out[key] += [item for item in part[key] if inside(item) or (key == "context" and item["kind"] == "platform")]
+            out[key] += [item for item in part[key] if inside(item) or (key == "context" and (item["kind"] == "platform" or item["at"] < opened))]
         out["agents"] += [item for item in part["agents"].values() if inside(item)]
         out["sessions"].append({"id": session, "source": source})
     number(out)
-    priced: Dict[int, float] = {}
-    for item in out["models"]:
-        if item["priced"]:
-            priced[item["prompt"]] = priced.get(item["prompt"], 0.0) + item["aiu"]
-    if priced:  # the model calls are exact and say when: a checkpoint can come after the next prompt began
-        for prompt in out["prompts"]:
-            prompt["aiu"] = round(priced.get(prompt["n"], 0.0), 4)
     if out["sessions"] and all(item["source"] == "hook-log" for item in out["sessions"]):
         out["source"] = "hook-log"
     if not out["calls"] and not any(item["aiu"] for item in out["prompts"]):  # no call and no cost: nothing on this computer tells how the agent worked

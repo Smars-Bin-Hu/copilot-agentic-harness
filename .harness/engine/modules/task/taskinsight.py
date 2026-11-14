@@ -379,8 +379,9 @@ def shares(prompt: Dict[str, Any], entry: Dict[str, Any], parts: List[Tuple[str,
     spread("model_s", entry.get("model_s"), [(think["at"], think["seconds"]) for think in prompt.get("thinks") or []])
     spread("subagent_s", entry.get("subagent_s"), [(run["at"], run["seconds"]) for run in prompt.get("subagents") or []])
     calls = [(mark["at"], (mark.get("input_tokens") or 0) + (mark.get("output_tokens") or 0)) for mark in prompt.get("spends") or [] if "input_tokens" in mark or "output_tokens" in mark]
-    checkpoints = [(mark["at"], mark["aiu"]) for mark in prompt.get("spends") or [] if mark.get("aiu") is not None]
-    spread("aiu", prompt.get("aiu"), calls or checkpoints)  # Copilot adds the usage up at the end of a turn: the model calls say when it was spent
+    credits = [(mark["at"], mark["aiu"]) for mark in prompt.get("spends") or [] if mark.get("aiu") is not None]
+    exact = any(not mark.get("rest") for mark in prompt.get("spends") or [] if mark.get("aiu") is not None)  # each model call's own credits (copilot_events CREDITS)
+    spread("aiu", prompt.get("aiu"), credits if exact else (calls or credits))  # an older record has only the checkpoints, at the end of a turn: the tokens of the calls say when
     for key in ("input_tokens", "output_tokens"):
         spread(key, prompt.get(key), [(mark["at"], mark[key]) for mark in prompt.get("spends") or [] if mark.get(key) is not None])
     for tool in prompt.get("tools") or []:
@@ -550,15 +551,9 @@ def stage_table(parts: List[Dict[str, Any]], totals: Dict[str, Any]) -> List[Dic
     return out
 
 
-def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, steps: bool = False) -> Dict[str, Any]:
-    """The numbers of a task. `steps`: each prompt also says when it ended and when the model thought, for the Trace tab; a report stays the size it was."""
-    picked = attaches(data)
-    closed = closes(data)
-    marked = sorted((at, str(event.get("what", "")), str(event.get("detail", ""))) for at, event in ((copilot_events.seconds(event.get("at")), event) for event in data.get("events") or []) if at is not None)
-    events = [(at, what) for at, what, _detail in marked]
-    kind = str(data.get("kind") or "")
-    envs = tuple(env_names(root, task)) if kind == "test" else ()
-    paused = pauses(events)
+def task_sessions(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) -> List[Dict[str, Any]]:
+    """Each session that picked the task up, with its prompts and `mine` on each (`session_prompts`). The report and the Agent Performance Review count the same prompts."""
+    picked, closed = attaches(data), closes(data)
     sessions: List[Dict[str, Any]] = []
     seen = set()
     for item in picked:
@@ -567,6 +562,23 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, 
         seen.add(item["session_id"])
         moments = [other["at"] for other in picked if other["session_id"] == item["session_id"]]
         sessions.append(session_prompts(root, task, item["session_id"], item["surface"], moments, closed, use_events))
+    return sessions
+
+
+def owned_spans(sessions: List[Dict[str, Any]]) -> Dict[str, List[Tuple[float, float]]]:
+    """The times of the task in each session: from each prompt of the task to the next prompt of that session (none: open). What happened then is the task's."""
+    return {found["session_id"]: [(prompt["at"], prompt["next_at"] if prompt["next_at"] is not None else float("inf")) for prompt in found["prompts"] if prompt["mine"]]
+            for found in sessions}
+
+
+def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, steps: bool = False) -> Dict[str, Any]:
+    """The numbers of a task. `steps`: each prompt also says when it ended and when the model thought, for the Trace tab; a report stays the size it was."""
+    marked = sorted((at, str(event.get("what", "")), str(event.get("detail", ""))) for at, event in ((copilot_events.seconds(event.get("at")), event) for event in data.get("events") or []) if at is not None)
+    events = [(at, what) for at, what, _detail in marked]
+    kind = str(data.get("kind") or "")
+    envs = tuple(env_names(root, task)) if kind == "test" else ()
+    paused = pauses(events)
+    sessions = task_sessions(root, task, data, use_events)
 
     mine: List[Dict[str, Any]] = sorted((prompt for found in sessions for prompt in found["prompts"] if prompt["mine"]), key=lambda prompt: prompt["at"])
     rows_of = {found["session_id"]: found["rows"] for found in sessions}

@@ -95,6 +95,31 @@ class ReadTests(RoundCase):
         self.path.write_text(json.dumps(data), encoding="utf-8")
         self.assertEqual([(item["seconds"], item["aiu"]) for item in chatrounds.listing(self.root, self.task)], [(None, None)])  # not known: the page shows nothing
 
+    def test_a_late_checkpoint_does_not_move_the_credits_to_the_next_prompt(self) -> None:
+        """copilot_events CREDITS: each model call's credits go to the prompt it ran in (a subagent's too); only what no call counted goes by the checkpoint.
+        Live and the task report read it the same way."""
+        def spent(at: str, nano: float, agent: str = "") -> str:
+            row = {"type": "session.usage_record", "timestamp": at, "data": {"usage": {"model": "m", "inputTokens": 10, "outputTokens": 1, "copilotUsage": {"totalNanoAiu": nano}}}}
+            return json.dumps(dict(row, **({"agentId": agent} if agent else {}))) + "\n"
+        lines = [
+            event("user.message", "2026-10-02T10:00:00.000Z", content="p1"),
+            spent("2026-10-02T10:00:05.000Z", 3e9),
+            spent("2026-10-02T10:00:06.000Z", 1e9, agent="a1"),
+            event("user.message", "2026-10-02T10:01:00.000Z", content="p2"),
+            event("session.usage_checkpoint", "2026-10-02T10:01:01.000Z", totalNanoAiu=4e9),  # p1's calls, counted after p2 began
+            spent("2026-10-02T10:01:05.000Z", 2e9),
+            event("session.usage_checkpoint", "2026-10-02T10:01:30.000Z", totalNanoAiu=6.5e9),  # 0.5 that no call counted: p2's
+        ]
+        record(Path(self.home.name), SESSION, lines)
+        chatrounds._cache.clear()
+        self.assertEqual([item["aiu"] for item in chatrounds.listing(self.root, self.task)], [4.0, 2.5])
+        read = copilot_events.read(Path(self.home.name) / "session-state" / SESSION / "events.jsonl")
+        self.assertEqual([round(item["aiu"], 3) for item in read["prompts"]], [4.0, 2.5])
+        only_checkpoints = [line for line in lines if "usage_record" not in line]  # an older record: the checkpoints alone, as before
+        record(Path(self.home.name), SESSION, only_checkpoints)
+        chatrounds._cache.clear()
+        self.assertEqual([item["aiu"] for item in chatrounds.listing(self.root, self.task)], [None, 6.5])
+
     def test_a_wrong_number_finds_nothing(self) -> None:
         for number in (-1, 2, "0", True, None):
             self.assertIsNone(chatrounds.one(self.root, self.task, number), number)

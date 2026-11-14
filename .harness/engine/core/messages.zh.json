@@ -4065,7 +4065,6 @@
   "report.perf.unchecked": "FINDINGS.json 有 {n} 个问题：复盘的检查没通过。",
   "report.perf.norecord": "这台电脑上没有这个任务的 Copilot 记录。",
   "report.perf.quiet": "没有失败、被拒或重复的调用，人也没插手。",
-  "report.perf.dear": "第 {n} 条 prompt 花了 {aiu} Credits，占任务的 {share}。",
   "report.perf.kpi.aiu": "Credits",
   "report.perf.kpi.work": "Agent 用时",
   "report.perf.kpi.person": "等人",

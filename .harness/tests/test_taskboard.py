@@ -764,13 +764,17 @@ class InsightTests(BoardCase):
     def test_the_numbers_of_a_prompt_go_to_the_part_they_happened_in(self) -> None:
         prompt = {"at": 0.0, "end": 100.0, "aiu": 10.0, "input_tokens": 400, "output_tokens": 100, "thinks": [{"at": 5.0, "seconds": 10.0}, {"at": 60.0, "seconds": 30.0}],
                   "tools": [{"at": 10.0, "ok": True}, {"at": 70.0, "ok": False}, {"ok": True}], "subagents": [{"at": 80.0, "seconds": 15.0}],
-                  "spends": [{"at": 20.0, "input_tokens": 300, "output_tokens": 50}, {"at": 90.0, "input_tokens": 100, "output_tokens": 50}, {"at": 99.0, "aiu": 10.0}]}
+                  "spends": [{"at": 20.0, "input_tokens": 300, "output_tokens": 50}, {"at": 90.0, "input_tokens": 100, "output_tokens": 50}, {"at": 99.0, "aiu": 10.0, "rest": True}]}
         entry = {"n": 1, "active_s": 100.0, "model_s": 40.0, "subagent_s": 15.0}
         first, second = taskinsight.shares(prompt, entry, [("requirement", 0.0, 40.0), ("plan", 40.0, 100.0)])
         self.assertEqual((first["active_s"], first["model_s"], first["tool_calls"], first["input_tokens"]), (40.0, 10.0, 1, 300))
         self.assertEqual((second["model_s"], second["tool_calls"], second["failed_tool_calls"], second["subagents"], second["subagent_s"]), (30.0, 2, 1, 1, 15.0))  # a tool with no moment goes to the larger part
         self.assertAlmostEqual(first["aiu"], 7.0)  # by the model calls (350 of 500 tokens), not by the checkpoint at the end of the turn
         self.assertAlmostEqual(first["aiu"] + second["aiu"], 10.0)
+        prompt["spends"] = [{"at": 20.0, "aiu": 2.0}, {"at": 90.0, "aiu": 7.0}, {"at": 99.0, "aiu": 1.0, "rest": True}]  # each model call's own credits (copilot_events CREDITS)
+        first, second = taskinsight.shares(prompt, entry, [("requirement", 0.0, 40.0), ("plan", 40.0, 100.0)])
+        self.assertAlmostEqual(first["aiu"], 2.0)
+        self.assertAlmostEqual(second["aiu"], 8.0)
 
     def test_the_writes_of_req_and_plan_come_from_the_hook_and_from_copilots_record(self) -> None:
         data = {"doc_writes": [{"at": "2026-11-04T10:00:00+00:00", "doc": "req"}, {"at": "bad", "doc": "plan"}]}

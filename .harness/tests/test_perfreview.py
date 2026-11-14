@@ -299,7 +299,7 @@ class PageTests(ReviewCase):
         self.assertIsNone(summary["review"])
         self.assertTrue(summary["live"], "no review: the task's own record, read now")
         self.assertAlmostEqual(summary["totals"]["aiu"], self.spent / NANO, places=3)
-        self.assertEqual(summary["dear"]["prompt"], 1)
+        self.assertNotIn("dear", summary, "the dearest prompt is the report's own")
         self.assertGreater(summary["read_tokens"], 0, "the start dialog says how much the review will read")
         self.assertEqual([row["origin"] for row in data["evidence"]["prompts"]], ["create", "harness", "person", "relay"])
         self.assertTrue(all(row["notes"] for row in data["evidence"]["prompts"]), "each prompt's notes are on the page")
@@ -310,6 +310,18 @@ class PageTests(ReviewCase):
         page = taskhtml.perf_page(data)
         self.assertIn(".pf-prow", page)
         self.assertIn("Comment on ticket 300104.", page)
+
+    def test_the_report_and_the_review_count_the_same_credits(self) -> None:
+        """One rule (copilot_events CREDITS): the task report and the review give the task the same credits, and the review's prompts add up to the report's."""
+        from modules.task import taskinsight
+
+        self.a_task()
+        with mock.patch.dict(os.environ, {"COPILOT_HOME": self.env["COPILOT_HOME"]}):
+            report = taskinsight.of_task(self.root, SUBJECT, use_events=True)
+            evidence = perfreview.perfdata.collect(self.root, SUBJECT)
+        self.assertAlmostEqual(report["totals"]["aiu"], self.spent / NANO, places=2)
+        self.assertAlmostEqual(evidence["totals"]["aiu"], report["totals"]["aiu"], places=2)
+        self.assertAlmostEqual(sum(item["aiu"] for item in report["prompts"]), sum(item["aiu"] for item in evidence["prompts"]), places=2)
 
     def test_the_review_page_carries_the_findings_and_their_cost(self) -> None:
         self.a_task()

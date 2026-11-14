@@ -1,5 +1,5 @@
-// The small part of the Agent Performance Review on a task's report page (1.7.41). DATA.info.perf is perfreview.summary_view: the free accounts of the task (layer 1:
-// AIU, agent time, the facts), the dearest prompt, and the newest review's one line. The rest is on the review page (`/tasks/<task>/performance`, perfpage.js).
+// The small part of the Agent Performance Review on a task's report page (1.7.41). DATA.info.perf is perfreview.summary_view: the facts of the task (layer 1) and the
+// newest review's one line. The credits, the time and the dearest prompt are not repeated here: the report above has them, counted the same way. The rest is on the review page (`/tasks/<task>/performance`, perfpage.js).
 // A served page has the link to that page and the button that starts a review (an rca task, high thinking, the person's model).
 "use strict";
 
@@ -27,13 +27,11 @@ const PERF = (function () {
     const again = (facts.retry || 0) + (facts.repeat || 0);
     const waste = review && review.waste;
     nodes.push(h("div", {class: "kpis pf-kpis"},
-      kpi(amount(total.aiu), t("report.perf.kpi.aiu")), kpi(clock(total.work_s), t("report.perf.kpi.work")), total.person_s ? kpi(clock(total.person_s), t("report.perf.kpi.person")) : null,
       kpi(trouble, t("report.perf.kpi.trouble")), kpi(again, t("report.perf.kpi.again")), kpi(total.interventions || 0, t("report.perf.kpi.interventions")),
       waste ? kpi(percent(waste.share_aiu || 0), t("report.perf.kpi.waste")) : null));
     const lines = [];
     if (review && review.findings && review.findings.summary) lines.push(h("p", {class: "pf-summary"}, review.findings.summary));
     else if (total.quiet) lines.push(h("p", {class: "sub"}, t("report.perf.quiet")));
-    if (perf.dear) lines.push(h("p", {class: "sub"}, t("report.perf.dear", {n: perf.dear.prompt, aiu: amount(perf.dear.aiu), share: percent(perf.dear.share)})));
     if (review && !review.findings) lines.push(h("p", {class: "sub"}, t("report.perf.waiting")));
     if (review && review.findings && review.ok === false) lines.push(h("p", {class: "bad"}, t("report.perf.unchecked", {n: review.problems})));
     nodes.push(...lines);

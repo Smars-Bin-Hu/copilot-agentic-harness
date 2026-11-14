@@ -4065,7 +4065,6 @@
   "report.perf.unchecked": "FINDINGS.json has {n} problems: the review's check did not pass.",
   "report.perf.norecord": "Copilot's record of this task is not on this computer.",
   "report.perf.quiet": "Nothing failed, was refused or repeated, and the person did not step in.",
-  "report.perf.dear": "Prompt {n} cost {aiu} Credits: {share} of the task.",
   "report.perf.kpi.aiu": "Credits",
   "report.perf.kpi.work": "Agent time",
   "report.perf.kpi.person": "Waited for the person",

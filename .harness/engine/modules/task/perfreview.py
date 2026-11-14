@@ -491,7 +491,7 @@ def findings_view(review: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 
 
 def summary_view(root: Path, subject: str) -> Dict[str, Any]:
-    """The report page's small part (layer 1, free): the accounts, the facts, the dearest prompt, the newest review's one line. Never raises."""
+    """The report page's small part (layer 1, free): the facts and the newest review's one line. The credits, the time and the dearest prompt are the report's own (the same numbers). Never raises."""
     out: Dict[str, Any] = {"subject": subject, "name": subject.rsplit("/", 1)[-1], "totals": None, "review": None}
     try:
         review = latest_review(root, subject)
@@ -500,10 +500,6 @@ def summary_view(root: Path, subject: str) -> Dict[str, Any]:
         if evidence is None:
             return out
         out["totals"] = evidence["totals"]
-        priced = [item for item in evidence["prompts"] if item.get("aiu")]
-        if len(priced) > 1:
-            dear = max(priced, key=lambda item: item["aiu"])
-            out["dear"] = {"prompt": dear["n"], "aiu": dear["aiu"], "share": share(dear["aiu"], evidence["totals"].get("aiu"))}
         out["worth"] = len(evidence["worth"])
         out["read_tokens"] = sum(len("\n".join(notes(evidence, item["prompt"]))) for item in evidence["worth"]) // 4
     except Exception:  # noqa: BLE001 - a record that cannot be read leaves the rest of the report

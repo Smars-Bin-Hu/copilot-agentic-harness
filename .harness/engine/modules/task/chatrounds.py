@@ -1,8 +1,8 @@
 """The rounds of a task's chat (1.6.55): each prompt of the person, with all the text the agent wrote for it, for the Live tab.
 
 The record is Copilot's own `events.jsonl` (`core/copilot_events.py`). It has every model call's text, also what the chat window folds away, and it can be read with VS Code closed.
-Kept: the prompt, the agent's text, the names of the tools, when the round's last step ended and the credits it cost (1.6.98: the session's running total of
-`session.usage_checkpoint`, minus what it was before the round; a subagent's credits count with the round that started it). Left out: thinking, tool results, hooks and
+Kept: the prompt, the agent's text, the names of the tools, when the round's last step ended and the credits it cost (`copilot_events` CREDITS, the same rule as the
+task report: each model call's credits, a subagent's too, go to the round they ran in). Left out: thinking, tool results, hooks and
 the other usage numbers (they are in VS Code), and all a subagent says.
 
 When a task closes the rounds are saved in `.task/transcript.jsonl`, because Copilot's file is not ours to rely on. A closed task reads that file. `taskarchive.prune_transcripts` deletes
@@ -36,7 +36,7 @@ def transcript(root: Path, task: str) -> Path:
 def read_events(path: Path) -> List[Dict[str, Any]]:
     """The rounds of one events file, oldest first. A line it cannot read is skipped: the file is not ours."""
     rounds: List[Dict[str, Any]] = []
-    spent = 0.0  # the session's credits so far
+    credits = copilot_events.Credits()
     in_turn = False  # the main agent is in a turn: a compaction then is Copilot's own, not a /compact of the person
     with open(path, encoding="utf-8", errors="replace") as handle:
         for line in handle:
@@ -48,12 +48,10 @@ def read_events(path: Path) -> List[Dict[str, Any]]:
             found = event.get("data") if isinstance(event, dict) else None
             if not isinstance(found, dict) or not isinstance(kind, str):
                 continue
-            if kind == "session.usage_checkpoint":
-                total = copilot_events.number(found.get("totalNanoAiu"))
-                if total is not None:
-                    if rounds:
-                        rounds[-1]["aiu"] = (rounds[-1]["aiu"] or 0.0) + max(0.0, total / copilot_events.NANO - spent)
-                    spent = total / copilot_events.NANO
+            added = credits.row(kind, found)  # the credits of a model call (a subagent's too) or a checkpoint's rest: the round running then (copilot_events CREDITS)
+            if added is not None:
+                if rounds:
+                    rounds[-1]["aiu"] = (rounds[-1]["aiu"] or 0.0) + added[0]
                 continue
             if not event.get("agentId") and kind in ("user.message", "assistant.turn_start", "assistant.turn_end"):
                 in_turn = kind != "assistant.turn_end"  # from the message to the end of the turn (copilot_events.asked_compact)

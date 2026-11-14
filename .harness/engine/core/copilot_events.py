@@ -150,6 +150,45 @@ def whole_number(value: Any) -> Optional[int]:
     return int(found) if found is not None else None
 
 
+# CREDITS (1.7.41): how the credits (AIU) of a session are given to its prompts. The one rule: the task report, Live, Rounds and the Agent Performance Review all use it.
+#   1. Each model call's own credits (`session.usage_record` `copilotUsage.totalNanoAiu`, a subagent's too) go to the prompt that was running when the call was recorded.
+#   2. What a checkpoint (`session.usage_checkpoint` `totalNanoAiu`, the session's running total) counts on top of the calls so far goes to the prompt running when the
+#      checkpoint came: the summing-up of a compaction, or everything in an older record that has no `usage_record`.
+# The prompts then add up to the session's total. Only a checkpoint was used before: it often comes after the next prompt has begun, and a whole prompt's credits went
+# to the next one (seen on real records: 49.9 AIU shown as 0, and the next prompt shown with 90.3).
+REST_AIU = 0.001  # a checkpoint above the calls by less than this is rounding, not a rest
+
+
+def call_nano(data: Dict[str, Any]) -> Optional[float]:
+    """The nano AIU of one `session.usage_record`, or None when it gives none."""
+    spent = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    used = spent.get("copilotUsage") if isinstance(spent.get("copilotUsage"), dict) else {}
+    return number(used.get("totalNanoAiu"))
+
+
+class Credits:
+    """Rule 1 and 2 of CREDITS for a reader that walks the rows itself: `row` gives the credits a row adds to the prompt running then (None: none), and `kind` of it."""
+
+    def __init__(self) -> None:
+        self.counted = 0.0
+
+    def row(self, kind: str, data: Dict[str, Any]) -> Optional[Tuple[float, str]]:
+        if kind == "session.usage_record":
+            nano = call_nano(data)
+            if nano is None:
+                return None
+            self.counted += nano / NANO
+            return nano / NANO, "call"
+        if kind == "session.usage_checkpoint":
+            total = number(data.get("totalNanoAiu"))
+            if total is None:
+                return None
+            rest = total / NANO - self.counted
+            self.counted = max(self.counted, total / NANO)
+            return (rest, "rest") if rest > REST_AIU else None
+        return None
+
+
 def compaction(start: Dict[str, Any], done: Dict[str, Any], at: float) -> Dict[str, Any]:
     """One time Copilot summed up the conversation to make room. Numbers only: `summaryContent` is never taken."""
     before = whole_number(start.get("currentTokens"))
@@ -255,7 +294,8 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
     permissions: Dict[str, float] = {}
     hooks: Dict[str, float] = {}
     compacting: Dict[str, Any] = {}  # the start of a compaction; its numbers go with the complete event
-    usage = {"aiu": 0.0, "premium": 0.0}
+    usage = {"premium": 0.0}
+    credits = Credits()
     last_call: Dict[str, Dict[str, Any]] = {}  # the latest call of the main agent, by model: its cache is what the next call reads
     model = ""
     version = ""
@@ -286,6 +326,10 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                     "tokens": number(data.get("totalTokens")), "tool_calls": number(data.get("totalToolCalls")),
                 })
                 continue
+            added = credits.row(kind, data)  # every model call's credits, a subagent's too, and a checkpoint's rest (CREDITS)
+            if added is not None and current is not None:
+                current["aiu"] = (current["aiu"] or 0.0) + added[0]
+                current["spends"].append({"at": at, "aiu": added[0], **({"rest": True} if added[1] == "rest" else {})})
             if row.get("agentId"):
                 continue  # a subagent's own work
             if kind == "user.message":
@@ -384,12 +428,8 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                     current["cache_calls"].append(call)
                     last_call[call["model"]] = call
             elif kind == "session.usage_checkpoint":
-                total_aiu, total_premium = number(data.get("totalNanoAiu")), number(data.get("totalPremiumRequests"))
+                total_premium = number(data.get("totalPremiumRequests"))  # the credits of a checkpoint are counted above (CREDITS)
                 mark = {"at": at}
-                if total_aiu is not None:
-                    mark["aiu"] = max(0.0, total_aiu / NANO - usage["aiu"])
-                    current["aiu"] = (current["aiu"] or 0.0) + mark["aiu"]
-                    usage["aiu"] = total_aiu / NANO
                 if total_premium is not None:
                     mark["premium_requests"] = max(0.0, total_premium - usage["premium"])
                     current["premium_requests"] = (current["premium_requests"] or 0.0) + mark["premium_requests"]

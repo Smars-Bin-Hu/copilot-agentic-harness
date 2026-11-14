@@ -252,8 +252,17 @@ def overview(evidence: Dict[str, Any]) -> Dict[str, Any]:
     read = sum(len("\n".join(notes(evidence, item["prompt"]))) for item in worth) // 4
     account = (f"{total['prompts']} prompts, {total['calls']} calls ({total['failed']} failed, {total['refused']} refused, {total['held']} held), {aiu(total.get('aiu'))}, "
                f"work {clock(total.get('work_s'))} (model {clock(total.get('model_s'))}, tools {clock(total.get('tool_s'))}, subagents {clock(total.get('subagent_s'))}), person {clock(total.get('person_s'))}")
+    shape = evidence.get("makeup") or {}
+    context = [f"{item['part']} ({item['owner']}): {item['per_call']:,} tokens a call, {aiu(item['aiu'])} ({round(item['share'] * 100)}%)" for item in shape.get("parts") or []]
+    if shape:
+        context.insert(0, f"{shape['calls']} calls of the main agent, prompt {shape['prompt']['first']:,} → {shape['prompt']['last']:,} tokens, {aiu(shape['aiu'])} for the prompts"
+                       + ("" if shape["priced"] else " (no prices on the record: shared by tokens)") + (f"; {shape['left_out']} subagent calls left out" if shape["left_out"] else ""))
+        if shape.get("tools"):
+            context.append("tools: " + ", ".join(f"{name} {count}" for name, count in shape["tools"]["groups"].items()))
+        if shape.get("system"):
+            context.append("system: " + ", ".join(f"{item['part']} {item['tokens']:,}" for item in shape["system"][:6]))
     return {
-        "task": evidence["task"], "source": evidence["source"], "models": total.get("models") or [], "account": account,
+        "task": evidence["task"], "source": evidence["source"], "models": total.get("models") or [], "account": account, "context": context,
         "prompts": lines, "subagents": [f"{item['name']} (by {item['by'] or '?'}): {item['calls']} calls, {aiu(item.get('aiu'))}" for item in evidence["agents"]],
         "facts": total.get("facts") or {}, "quiet": total["quiet"],
         "worth": [f"P{item['prompt']} ({', '.join(item['why'])}) · {aiu(item['aiu'])} · {clock(item['seconds'])}" for item in worth], "read_tokens": read,

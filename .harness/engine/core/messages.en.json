@@ -4052,6 +4052,7 @@
   "perf.fact.person": "Waited {seconds} s for the person.",
   "perf.fact.slow": "The call ran {seconds} s.",
   "perf.fact.compaction": "Copilot summed up the chat: {before} → {after} tokens. What came before is now only in the summary.",
+  "perf.fact.context": "Each call of the main agent ({calls} calls) carried {fixed} tokens before any work: Copilot's tools {tools} ({n} tools: {groups}), Copilot's instructions {platform}, the harness's instructions {harness}; the harness added {added} more and the skills {skills}. Over the task: the tools cost {tools_aiu}, Copilot's instructions {platform_aiu}, all the harness's parts {harness_aiu}, of the {aiu} Credits the prompts cost.",
   "perf.fact.cold": "The cache had run out ({model}, {wait} after this model's call before it): its {tokens} tokens of context were read again at full price, {aiu} Credits.",
   "perf.fact.cold.priced": " Read from the cache, it would have cost {extra} less (Copilot's own prices).",
   "perf.fact.cold.extra": " A warm call of this model in the task costs about {usual}: about {extra} more.",
@@ -4166,6 +4167,7 @@
   "report.perf.fact.slow": "Slow",
   "report.perf.fact.person": "Waited for the person",
   "report.perf.fact.compaction": "Compaction",
+  "report.perf.fact.context": "Context",
   "report.perf.fact.cold": "Cache ran out",
   "report.perf.fact.intervention": "Person stepped in"
 }

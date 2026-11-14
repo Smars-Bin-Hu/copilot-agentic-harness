@@ -116,6 +116,15 @@ def writes(call: Dict[str, Any]) -> bool:
 def cache_extra(spent: Dict[str, Any]) -> Optional[float]:
     """What the tokens this model call wrote to the cache cost more than reading them from it, by Copilot's own prices (`copilotUsage.tokenDetails`: count, cost per batch,
     batch size, by token type). None when the record gives no prices. For a call whose cache had run out, that is what the wait cost."""
+    price = prices(spent)
+    if "cache_write" not in price or "cache_read" not in price:
+        return None
+    written, write_price = price["cache_write"]
+    return round(max(0.0, written * (write_price - price["cache_read"][1])) / NANO, 4)
+
+
+def prices(spent: Dict[str, Any]) -> Dict[str, Tuple[float, float]]:
+    """Copilot's own prices of one model call (`copilotUsage.tokenDetails`): token type -> (tokens, nano AIU per token)."""
     used = spent.get("copilotUsage") if isinstance(spent.get("copilotUsage"), dict) else {}
     price: Dict[str, Tuple[float, float]] = {}
     for item in used.get("tokenDetails") or []:
@@ -124,14 +133,38 @@ def cache_extra(spent: Dict[str, Any]) -> Optional[float]:
         count, cost, batch = (copilot_events.number(item.get(key)) for key in ("tokenCount", "costPerBatch", "batchSize"))
         if count is not None and cost is not None and batch:
             price[str(item.get("tokenType") or "")] = (count, cost / batch)
-    if "cache_write" not in price or "cache_read" not in price:
-        return None
-    written, write_price = price["cache_write"]
-    return round(max(0.0, written * (write_price - price["cache_read"][1])) / NANO, 4)
+    return price
+
+
+def billed(spent: Dict[str, Any]) -> List[List[float]]:
+    """How the prompt of one model call was billed, in the order of the prompt: [tokens, nano AIU per token] read from the cache, then written to it, then plain input.
+    The prompt is a prefix (tools, system, conversation), and the cache holds its start: so the tools and the system are mostly read from the cache."""
+    price = prices(spent)
+    return [[price[kind][0], price[kind][1]] for kind in ("cache_read", "cache_write", "input") if kind in price and price[kind][0]]
+
+
+def segments_of(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """What a checkpoint says the main conversation's prompt is made of (`promptCacheBreakState`), per model: the system prompt's parts and the tools."""
+    found = []
+    for item in data.get("promptCacheBreakState") or []:
+        if not isinstance(item, dict) or item.get("conversation") not in (None, "main") or not isinstance(item.get("models"), dict):
+            continue
+        for model in item["models"].values():
+            if not isinstance(model, dict):
+                continue
+            parts = [(str(part.get("segment") or "?"), copilot_events.whole_number(part.get("tokens")) or 0) for part in model.get("system_segments") or [] if isinstance(part, dict)]
+            groups: Dict[str, int] = {}
+            for tool in model.get("tools") or []:
+                name = str(tool.get("name") or "") if isinstance(tool, dict) else ""
+                group = name.rsplit("-", 1)[0] if "-" in name else "copilot"  # an MCP server's tools are named <server>-<tool>
+                groups[group] = groups.get(group, 0) + 1
+            found.append({"model": str(model.get("model") or ""), "system": parts, "tools_n": copilot_events.whole_number(model.get("tool_count")),
+                          "tools_tokens": copilot_events.whole_number(model.get("tool_tokens")), "groups": groups})
+    return found
 
 
 def blank() -> Dict[str, Any]:
-    return {"messages": [], "thoughts": [], "said": [], "calls": [], "models": [], "context": [], "compactions": [], "agents": {}, "blocks": []}
+    return {"messages": [], "thoughts": [], "said": [], "calls": [], "models": [], "context": [], "compactions": [], "agents": {}, "blocks": [], "fixed": []}
 
 
 def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
@@ -203,9 +236,12 @@ def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
                     caches[(where, item["model"])] = cache
                     item["cache"], item["gap_s"] = cache["state"], cache["gap_s"]
                     item["cache_extra"] = cache_extra(spent)
+                item["tools_n"], item["tools_tokens"] = copilot_events.whole_number(spent.get("availableToolCount")), copilot_events.whole_number(spent.get("toolTokenCount"))
+                item["billed"] = billed(spent)
                 out["models"].append(item)
                 last_usage[where] = item
             elif kind == "session.usage_checkpoint":
+                out["fixed"] += [dict(item, at=at, session=session) for item in segments_of(data)]
                 added = credits.row(kind, data)
                 if added is not None:  # counted by Copilot but by no model call of the record: a compaction's summing-up, or an older record with no usage_record
                     out["models"].append({"id": "", "at": at, "session": session, "agent": "", "model": "", "aiu": added[0], "priced": True, "seconds": 0.0,
@@ -512,6 +548,16 @@ def facts(out: Dict[str, Any]) -> List[Dict[str, Any]]:
             if extra is not None:
                 note += say("perf.fact.cold.extra", usual=round(usual, 2), extra=extra)
         found.append((item["at"], {"id": "", "fact": "cold", "calls": list(item["calls"]), "prompt": item["prompt"], "agent": item["agent"], "note": note, "model": item["id"], "extra": extra}))
+    shape = out.get("makeup")
+    part = {(item["part"], item["owner"]): item for item in (shape or {}).get("parts") or []}
+    tools, platform, harness = (part.get(key, {}) for key in (("tools", "platform"), ("instructions", "platform"), ("instructions", "harness")))
+    if tools.get("per_call") or platform.get("per_call"):  # what every call carried, when Copilot recorded it: the task's fact, after all the others, so a finding can name it
+        groups = ", ".join(f"{name} {count}" for name, count in (shape.get("tools") or {}).get("groups", {}).items())
+        add(float("inf"), "context", [], 0, "", say(
+            "perf.fact.context", calls=shape["calls"], fixed=tools["per_call"] + platform["per_call"] + harness["per_call"], tools=tools["per_call"],
+            n=(shape.get("tools") or {}).get("n") or "?", groups=groups or "?", platform=platform["per_call"], harness=harness["per_call"],
+            added=part[("added", "harness")]["per_call"], skills=part[("skills", "harness")]["per_call"], tools_aiu=round(tools["aiu"], 2), platform_aiu=round(platform["aiu"], 2),
+            harness_aiu=round(sum(item["aiu"] for item in shape["parts"] if item["owner"] == "harness"), 2), aiu=round(shape["aiu"], 2)))
     for item in out["compactions"]:
         add(item["at"], "compaction", [], item["prompt"], "", say("perf.fact.compaction", before=item.get("before") or "?", after=item.get("after") or "?"))
     for prompt in out["prompts"]:
@@ -520,6 +566,86 @@ def facts(out: Dict[str, Any]) -> List[Dict[str, Any]]:
             add(prompt["at"], "intervention", [], prompt["n"], "", say("perf.fact.intervention", span=str(since) if since >= prompt["n"] - 1 else f"{since}–{prompt['n'] - 1}"))
     found.sort(key=lambda pair: pair[0])
     return [dict(item, id=f"f{n}") for n, (_at, item) in enumerate(found, 1)]
+
+
+HARNESS_SEGMENTS = ("custom_instructions",)  # the system prompt's part that holds AGENTS.md and the instructions files: the harness's
+PARTS = (("tools", "platform"), ("instructions", "platform"), ("instructions", "harness"), ("added", "harness"), ("skills", "harness"), ("work", "work"))
+
+
+def spend(bill: List[List[float]], start: float, size: float) -> float:
+    """Nano AIU of the tokens start..start+size of a prompt billed as `bill` (see `billed`)."""
+    cost, at = 0.0, 0.0
+    for tokens, price in bill:
+        low, high = max(start, at), min(start + size, at + tokens)
+        if high > low:
+            cost += (high - low) * price
+        at += tokens
+    return cost
+
+
+def makeup(out: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """What the main agent's prompts were made of, call by call, and what each part cost over the task. Code only.
+    The tools and the system prompt's parts come from Copilot (`toolTokenCount` on each call, `promptCacheBreakState` at a checkpoint); what the harness added
+    (hook context) and the skills loaded are counted from their text (4 characters a token), carried by every later call of the session up to a compaction;
+    the rest of the prompt is the work: the person's words, the agent's own messages, the tool results. Subagents are left out: their system prompt is not recorded.
+    Each part's cost walks the call's bill in the order of the prompt (tools, system, conversation), so a part read from the cache costs what reading it costs."""
+    calls = [item for item in out["models"] if item["kind"] == "call" and item.get("input") and not item.get("agent")]
+    if not calls:
+        return None
+    added = [(item["at"], item["session"], "added" if item["kind"] == "harness" else "skills", len(item["text"]) // 4)
+             for item in out["context"] if item["kind"] in ("harness", "skill") and not item.get("agent")]
+    squeezed = [(item["at"], item["session"]) for item in out["compactions"]]
+    totals_of = {key: [0, 0.0] for key in PARTS}
+    sizes: Dict[Tuple[str, str], List[int]] = {key: [] for key in PARTS}
+    priced = True
+    snap: Optional[Dict[str, Any]] = None
+    for call in calls:
+        mine = [item for item in out["fixed"] if item["session"] == call["session"]]
+        same = [item for item in mine if item["model"] == call["model"]] or mine
+        if same:
+            snap = min(same, key=lambda item: abs(item["at"] - call["at"]))  # the system prompt barely changes in a session: the nearest checkpoint tells it
+        system = snap["system"] if snap and snap["session"] == call["session"] else []
+        since = max([at for at, where in squeezed if where == call["session"] and at <= call["at"]], default=float("-inf"))
+        size = {
+            ("tools", "platform"): call.get("tools_tokens") or (snap or {}).get("tools_tokens") or 0,
+            ("instructions", "platform"): sum(tokens for name, tokens in system if name not in HARNESS_SEGMENTS),
+            ("instructions", "harness"): sum(tokens for name, tokens in system if name in HARNESS_SEGMENTS),
+        }
+        for kind in ("added", "skills"):
+            size[(kind, "harness")] = sum(tokens for at, where, which, tokens in added if which == kind and where == call["session"] and since <= at < call["at"])
+        fixed = sum(size.values())
+        if fixed > call["input"]:  # counted text is a guess: never more than the prompt
+            scale = call["input"] / fixed
+            size = {key: int(value * scale) for key, value in size.items()}
+            fixed = sum(size.values())
+        size[("work", "work")] = call["input"] - fixed
+        bill = call.get("billed") or []
+        if not bill:
+            priced = False
+        at = 0
+        for key in PARTS:
+            if bill:
+                cost = spend(bill, at, size[key]) / NANO
+            else:  # no prices on the record: the call's credits by the share of its prompt (the output is in it too)
+                cost = call["aiu"] * size[key] / call["input"] if call["input"] else 0.0
+            totals_of[key][0] += size[key]
+            totals_of[key][1] += cost
+            sizes[key].append(size[key])
+            at += size[key]
+    middle = lambda values: sorted(values)[len(values) // 2] if values else 0  # noqa: E731
+    paid = sum(value[1] for value in totals_of.values())
+    found = {
+        "calls": len(calls), "left_out": sum(1 for item in out["models"] if item["kind"] == "call" and item.get("agent")), "priced": priced,
+        "parts": [{"part": part, "owner": owner, "per_call": middle(sizes[(part, owner)]), "tokens": totals_of[(part, owner)][0], "aiu": round(totals_of[(part, owner)][1], 4),
+                   "share": round(totals_of[(part, owner)][1] / paid, 3) if paid else 0.0} for part, owner in PARTS],
+        "prompt": {"first": calls[0]["input"], "last": calls[-1]["input"], "largest": max(item["input"] for item in calls)},
+        "aiu": round(paid, 4),
+    }
+    if snap:
+        found["system"] = [{"part": name, "tokens": tokens, "owner": "harness" if name in HARNESS_SEGMENTS else "platform"} for name, tokens in sorted(snap["system"], key=lambda pair: -pair[1])]
+        found["tools"] = {"n": calls[-1].get("tools_n") or snap.get("tools_n"), "tokens": calls[-1].get("tools_tokens") or snap.get("tools_tokens"),
+                          "groups": dict(sorted(snap["groups"].items(), key=lambda pair: -pair[1]))}
+    return found
 
 
 def worth(out: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -586,7 +712,7 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
         raise common.CommandError(say("perf.no_task", task=task))
     surface = str(data.get("surface") or "vscode")
     out: Dict[str, Any] = {"version": VERSION, "task": task, "kind": data.get("kind", ""), "made_at": utc_now(), "sessions": [], "source": "copilot-events",
-                           "prompts": [], "thoughts": [], "said": [], "calls": [], "models": [], "context": [], "compactions": [], "agents": [], "decisions": []}
+                           "prompts": [], "thoughts": [], "said": [], "calls": [], "models": [], "context": [], "compactions": [], "agents": [], "decisions": [], "fixed": []}
     from . import taskinsight
 
     try:
@@ -620,6 +746,7 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
         for key in ("thoughts", "said", "calls", "models", "context", "compactions"):
             out[key] += [item for item in part[key] if inside(item) or (key == "context" and (item["kind"] == "platform" or item["at"] < opened))]
         out["agents"] += [item for item in part["agents"].values() if inside(item)]
+        out["fixed"] += part["fixed"]  # what the session's prompt was made of: all of it, the calls of the task find the nearest
         out["sessions"].append({"id": session, "source": source})
     number(out)
     if out["sessions"] and all(item["source"] == "hook-log" for item in out["sessions"]):
@@ -635,6 +762,7 @@ def collect(root: Path, task: str) -> Dict[str, Any]:
         out["decisions"] = []
     out["started_at"] = min([call["at"] for call in out["calls"]] + [item["at"] for item in out["prompts"]])
     interventions(out)
+    out["makeup"] = makeup(out)
     out["facts"] = facts(out)
     out["worth"] = worth(out)
     out["totals"] = totals(root, task, out)

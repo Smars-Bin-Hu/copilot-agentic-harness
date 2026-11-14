@@ -35,6 +35,7 @@ A segment may have two owners: an unclear prompt and a model that guessed instea
 - Work the task needed, done once: reading what it had to read, a test that fails before the fix, a held call the person had to see.
 - A refusal that stopped what had to be stopped. Say so in a `needed` segment; its cost is the price of the guardrail.
 - The work of a call that hit a cold cache. Only the extra is waste: mark the segment `cold`.
+- What every call carried before any work (the `context` fact): a cost of each call, for a suggestion, not a segment.
 - Waiting for the person. It is the person's time, not the agent's; a long wait is worth a line only when the agent could have asked earlier or put its questions together.
 
 ## Suggestions

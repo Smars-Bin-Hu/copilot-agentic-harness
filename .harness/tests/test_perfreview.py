@@ -345,6 +345,33 @@ class ColdPriceTests(ReviewCase):
         self.assertEqual({owner: item["aiu"] for owner, item in checked["waste"]["by_owner"].items()}, {"harness": 12.0, "model": 12.0})
 
 
+class ContextTests(ReviewCase):
+    def test_what_each_call_carried_is_split_by_part_and_priced_in_the_order_of_the_prompt(self) -> None:
+        """The tools (`toolTokenCount`), the system prompt's parts (a checkpoint's `promptCacheBreakState`), what the harness added (its text) and the work (the rest).
+        The cache holds the start of the prompt: the parts at its start cost the read price, the work at its end the input price."""
+        per_token = lambda aiu: aiu * NANO * 1_000_000  # noqa: E731 - costPerBatch of a batch of a million
+        usage = {"availableToolCount": 5, "toolTokenCount": 300, "copilotUsage": {"totalNanoAiu": 28 * NANO, "tokenDetails": [
+            {"tokenType": "cache_read", "tokenCount": 800, "costPerBatch": per_token(0.01), "batchSize": 1_000_000},
+            {"tokenType": "input", "tokenCount": 200, "costPerBatch": per_token(0.1), "batchSize": 1_000_000}]}}
+        self.prompt(1, OPENING, added="rule " * 80, sent="create")  # 100 tokens the harness added, carried by both calls
+        self.turn(2, 28 * NANO, [("a1", "ado item show 300104", True, "Ticket 300104", "")], cache=usage)
+        self.turn(5, 28 * NANO, said="Done.", cache=usage)
+        state = [{"conversation": "main", "models": {"model-a": {"model": "model-a", "tool_count": 5, "tool_tokens": 300,
+                  "tools": [{"name": name} for name in ("bash", "view", "demo-search", "demo-read", "demo-write")],
+                  "system_segments": [{"segment": "tool_instructions", "tokens": 200}, {"segment": "custom_instructions", "tokens": 100}]}}}]
+        self.event(7, "session.usage_checkpoint", totalNanoAiu=self.spent, totalPremiumRequests=1, promptCacheBreakState=state)
+        self.write()
+        evidence = self.collect()
+        shape = evidence["makeup"]
+        self.assertEqual({(item["part"], item["owner"]): (item["per_call"], round(item["aiu"], 4)) for item in shape["parts"]},
+                         {("tools", "platform"): (300, 6.0), ("instructions", "platform"): (200, 4.0), ("instructions", "harness"): (100, 2.0),
+                          ("added", "harness"): (100, 2.0), ("skills", "harness"): (0, 0.0), ("work", "work"): (300, 42.0)})  # 100 read from the cache (1.0) and 200 plain input (20.0), twice
+        self.assertEqual(shape["tools"]["groups"], {"demo": 3, "copilot": 2}, "an MCP server's tools are named <server>-<tool>")
+        self.assertEqual([(item["fact"], item["prompt"]) for item in evidence["facts"]], [("context", 0)], "the task's, not a prompt's")
+        self.assertTrue(evidence["totals"]["quiet"], "what the calls carried is a fact, not trouble")
+        self.assertTrue(self.overview["context"][0].startswith("2 calls of the main agent"))
+
+
 class PageTests(ReviewCase):
     def test_the_report_page_shows_the_free_accounts_before_any_review(self) -> None:
         from modules.task import taskhtml

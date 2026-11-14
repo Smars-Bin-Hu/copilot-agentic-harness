@@ -4052,6 +4052,7 @@
   "perf.fact.person": "等人 {seconds} 秒。",
   "perf.fact.slow": "这次调用跑了 {seconds} 秒。",
   "perf.fact.compaction": "Copilot 压缩了对话：{before} → {after} tokens。之前的内容只剩摘要。",
+  "perf.fact.context": "主 agent 的每次调用（共 {calls} 次）在干活之前就带着 {fixed} 个 token：Copilot 的工具 {tools}（{n} 个工具：{groups}），Copilot 的说明 {platform}，harness 的说明 {harness}；harness 另外加了 {added}，skill {skills}。整个任务里：工具花了 {tools_aiu}，Copilot 的说明 {platform_aiu}，harness 的各部分合计 {harness_aiu}，prompt 一共花了 {aiu} Credits。",
   "perf.fact.cold": "缓存已过期（{model}，距这个模型的上一次调用 {wait}）：{tokens} 个 token 的上下文按全价重读，{aiu} Credits。",
   "perf.fact.cold.priced": "按 Copilot 自己的单价，如果从缓存读，会少花 {extra}。",
   "perf.fact.cold.extra": "这个任务里这个模型一次缓存命中的调用约 {usual}：多花了约 {extra}。",
@@ -4166,6 +4167,7 @@
   "report.perf.fact.slow": "慢",
   "report.perf.fact.person": "等人",
   "report.perf.fact.compaction": "压缩",
+  "report.perf.fact.context": "上下文",
   "report.perf.fact.cold": "缓存过期",
   "report.perf.fact.intervention": "人插手"
 }

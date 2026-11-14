@@ -63,12 +63,12 @@
     if (!rows.length) return null;
     const wasted = {};
     for (const item of Object.values(ev.segments || {})) {
-      if (item.verdict === "waste" && item.prompt) {
+      if (["waste", "cold"].includes(item.verdict) && item.prompt) {
         const mine = wasted[item.prompt] || (wasted[item.prompt] = {aiu: 0, work_s: 0, ids: []});
         mine.aiu += item.aiu || 0; mine.work_s += item.work_s || 0;
       }
     }
-    for (const [id, item] of Object.entries(ev.segments || {})) if (item.verdict === "waste" && item.prompt) wasted[item.prompt].ids.push(id);
+    for (const [id, item] of Object.entries(ev.segments || {})) if (["waste", "cold"].includes(item.verdict) && item.prompt) wasted[item.prompt].ids.push(id);
     const value = (row) => (metric === "aiu" ? row.aiu || 0 : row.work_s || 0);
     const box = h("div", {class: "pf-prompts"});
     const draw = () => {
@@ -146,7 +146,7 @@
         const segs = (item.segments || []).map((id) => [id, (ev.segments || {})[id]]).filter(([, seg]) => seg);
         return h("details", {class: "pf-finding"},
           h("summary", null, tag(t("report.perf.confidence." + item.confidence), item.confidence === "certain" ? "" : "soft"), " ", h("b", null, item.title || ""),
-            segs.map(([id, seg]) => h("span", {class: "sub pf-seg", title: seg.what}, " · " + (seg.verdict === "waste" ? t("report.perf.segment", {span: seg.span || id, aiu: amount(seg.aiu), time: clock(seg.work_s)}) : seg.span || id)))),
+            segs.map(([id, seg]) => h("span", {class: "sub pf-seg", title: seg.what}, " · " + (["waste", "cold"].includes(seg.verdict) ? t("report.perf.segment", {span: seg.span || id, aiu: amount(seg.aiu), time: clock(seg.work_s)}) : seg.span || id)))),
           item.why ? h("p", null, item.why) : null,
           chainOf(item.chain),
           (item.evidence || []).length ? [h("p", {class: "sub"}, t("report.perf.evidence")), evidence(item.evidence)] : null);
@@ -199,7 +199,7 @@
     if (!list.length) return null;
     const box = h("details", {class: "pf-facts"}, h("summary", null, t("report.perf.facts") + " · " + list.length, " ", h("span", {class: "sub", title: t("report.perf.facts.hint")}, "ⓘ")),
       h("ol", {class: "pf-list"}, list.map((item) => h("li", null,
-        h("div", {class: "pf-line"}, tag(t("report.perf.fact." + item.fact), ["failed", "refused", "retry", "repeat"].includes(item.fact) ? "hot" : ""), h("code", null, item.id),
+        h("div", {class: "pf-line"}, tag(t("report.perf.fact." + item.fact), ["failed", "refused", "retry", "repeat", "cold"].includes(item.fact) ? "hot" : ""), h("code", null, item.id),
           h("span", {class: "sub"}, "P" + item.prompt), item.agent ? tag(item.agent) : null, h("span", null, item.note)),
         item.calls.length ? evidence(item.calls) : null))));
     return card("", box);

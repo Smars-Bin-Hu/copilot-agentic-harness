@@ -34,7 +34,8 @@ EVIDENCE = "EVIDENCE.json"
 FINDINGS = "FINDINGS.json"
 OWNERS = ("person", "harness", "model", "environment", "platform", "knowledge")
 CONFIDENCE = ("certain", "likely", "unsure")
-VERDICTS = ("waste", "needed")
+VERDICTS = ("waste", "needed", "cold")  # cold: the work was needed, only what a cache that ran out cost more is waste (the `cold` fact's extra)
+WASTED = ("waste", "cold")
 PRIORITIES = ("high", "medium", "low")
 NEEDS_PROOF = ("model", "harness")  # these two owners need evidence, else the confidence can only be `unsure`
 
@@ -368,7 +369,9 @@ def check_findings(path: Path, evidence_path: Path) -> Dict[str, Any]:
         if item["id"] in segments:
             problems.append(say("perf.check.twice", id=item["id"]))
         segments[item["id"]] = dict(item, span=calls)
-        if calls and item.get("verdict") == "waste":
+        if calls and item.get("verdict") == "cold" and not cold_extra(evidence, calls):
+            problems.append(say("perf.check.cold", id=item["id"]))
+        if calls and item.get("verdict") in WASTED:
             first, last = (int(part[1:]) for part in calls.split(".."))
             for n in range(first, last + 1):
                 if n in taken:
@@ -401,7 +404,7 @@ def check_findings(path: Path, evidence_path: Path) -> Dict[str, Any]:
         if owner == "model" and sure == "certain" and not [ident for ident in cited if ident[0] in "xpa" and ident in known]:
             problems.append(say("perf.check.in_context", n=number))
     for ident, item in segments.items():
-        if item.get("verdict") == "waste" and ident not in blamed:
+        if item.get("verdict") in WASTED and ident not in blamed:
             problems.append(say("perf.check.unblamed", id=ident))
     prompts = {item["n"]: item for item in evidence["prompts"]}
     for number, item in enumerate(found.get("prompts") or [], 1):
@@ -416,14 +419,28 @@ def check_findings(path: Path, evidence_path: Path) -> Dict[str, Any]:
     return {"ok": not problems, "problems": problems, "waste": waste_of(evidence, segments, blamed)}
 
 
+def cold_extra(evidence: Dict[str, Any], calls: str) -> float:
+    """What the caches that ran out cost more in the calls cA..cB: the `extra` of each `cold` fact whose calls fall in them (0: none)."""
+    first, last = (int(part[1:]) for part in calls.split(".."))
+    inside = {f"c{n}" for n in range(first, last + 1)}
+    return round(sum(fact.get("extra") or 0.0 for fact in evidence.get("facts") or [] if fact["fact"] == "cold" and inside & set(fact["calls"])), 4)
+
+
+def segment_cost(evidence: Dict[str, Any], verdict: str, calls: str) -> Dict[str, Any]:
+    """The waste of one segment: a `waste` one all its time and AIU (`span`); a `cold` one only the extra its cold caches cost, and no time."""
+    if verdict == "cold":
+        return {"span": calls, "aiu": cold_extra(evidence, calls), "work_s": 0.0}
+    return span(evidence, calls)
+
+
 def waste_of(evidence: Dict[str, Any], segments: Dict[str, Dict[str, Any]], blamed: Dict[str, List[str]]) -> Dict[str, Any]:
     """The time and AIU of the waste segments, worked out by code; a segment with several owners is split evenly between them."""
     total = evidence.get("totals") or {}
     out: Dict[str, Any] = {"aiu": 0.0, "work_s": 0.0, "by_owner": {}, "segments": {}}
     for ident, item in segments.items():
-        if item.get("verdict") != "waste" or not item.get("span"):
+        if item.get("verdict") not in WASTED or not item.get("span"):
             continue
-        cost = span(evidence, item["span"])
+        cost = segment_cost(evidence, item["verdict"], item["span"])
         out["segments"][ident] = {"span": cost["span"], "aiu": cost["aiu"], "work_s": cost["work_s"]}
         out["aiu"] += cost["aiu"]
         out["work_s"] += cost["work_s"]
@@ -573,8 +590,8 @@ def segments_of(evidence: Dict[str, Any], findings: Dict[str, Any]) -> Dict[str,
         if calls:
             first = int(calls.split("..")[0][1:])
             found["prompt"] = evidence["calls"][first - 1]["prompt"]
-            if item.get("verdict") == "waste":
-                cost = span(evidence, calls)
+            if item.get("verdict") in WASTED:
+                cost = segment_cost(evidence, item["verdict"], calls)
                 found.update(aiu=cost["aiu"], work_s=cost["work_s"])
         out[str(item["id"])] = found
     return out

@@ -4027,6 +4027,7 @@
   "perf.check.list": "`{key}` must be a list.",
   "perf.check.segment": "Segment {n} needs an `id`.",
   "perf.check.segment_calls": "Segment {id} names no calls that are there: give `calls` as c10..c14, or `prompt`.",
+  "perf.check.cold": "Segment {id} is `cold`, but no call in it has a `cold` fact (a cache that ran out). Use `waste` or `needed`.",
   "perf.check.verdict": "Segment {id}: `verdict` must be one of {allowed}.",
   "perf.check.what": "Segment {id}: `what` is empty.",
   "perf.check.twice": "Segment {id} is there twice.",
@@ -4051,6 +4052,8 @@
   "perf.fact.person": "Waited {seconds} s for the person.",
   "perf.fact.slow": "The call ran {seconds} s.",
   "perf.fact.compaction": "Copilot summed up the chat: {before} → {after} tokens. What came before is now only in the summary.",
+  "perf.fact.cold": "The cache had run out ({model}, {wait} after this model's call before it): its {tokens} tokens of context were read again at full price, {aiu} Credits.",
+  "perf.fact.cold.extra": " A warm call of this model in the task costs about {usual}: about {extra} more.",
   "perf.fact.intervention": "The person stepped in after the agent stopped: look at prompt {span} before it.",
   "report.perf.title": "Agent Performance Review",
   "report.perf.start": "Agent Performance Review",
@@ -4119,6 +4122,7 @@
   "report.perf.worth": "Worth reading: {why}",
   "report.perf.why.dear": "dear",
   "report.perf.why.trouble": "trouble",
+  "report.perf.why.cold": "the cache ran out",
   "report.perf.why.before-intervention": "before the person stepped in",
   "report.perf.why.compaction": "compaction",
   "report.perf.notes.cut": "Too long for this page: read it with harness task performance --prompt {n}.",
@@ -4161,5 +4165,6 @@
   "report.perf.fact.slow": "Slow",
   "report.perf.fact.person": "Waited for the person",
   "report.perf.fact.compaction": "Compaction",
+  "report.perf.fact.cold": "Cache ran out",
   "report.perf.fact.intervention": "Person stepped in"
 }

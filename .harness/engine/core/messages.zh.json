@@ -4027,6 +4027,7 @@
   "perf.check.list": "`{key}` 必须是列表。",
   "perf.check.segment": "第 {n} 个段要有 `id`。",
   "perf.check.segment_calls": "段 {id} 没有指到存在的调用：`calls` 写成 c10..c14，或写 `prompt`。",
+  "perf.check.cold": "片段 {id} 标成了 `cold`，但它里面没有一个调用带 `cold` 事实（缓存过期）。改用 `waste` 或 `needed`。",
   "perf.check.verdict": "段 {id}：`verdict` 只能是 {allowed}。",
   "perf.check.what": "段 {id}：`what` 是空的。",
   "perf.check.twice": "段 {id} 出现了两次。",
@@ -4051,6 +4052,8 @@
   "perf.fact.person": "等人 {seconds} 秒。",
   "perf.fact.slow": "这次调用跑了 {seconds} 秒。",
   "perf.fact.compaction": "Copilot 压缩了对话：{before} → {after} tokens。之前的内容只剩摘要。",
+  "perf.fact.cold": "缓存已过期（{model}，距这个模型的上一次调用 {wait}）：{tokens} 个 token 的上下文按全价重读，{aiu} Credits。",
+  "perf.fact.cold.extra": "这个任务里这个模型一次缓存命中的调用约 {usual}：多花了约 {extra}。",
   "perf.fact.intervention": "agent 停下后人插手：看它前面的第 {span} 条 prompt。",
   "report.perf.title": "Agent Performance Review",
   "report.perf.start": "Agent Performance Review",
@@ -4119,6 +4122,7 @@
   "report.perf.worth": "值得看：{why}",
   "report.perf.why.dear": "贵",
   "report.perf.why.trouble": "不顺",
+  "report.perf.why.cold": "缓存过期",
   "report.perf.why.before-intervention": "人插手之前",
   "report.perf.why.compaction": "压缩",
   "report.perf.notes.cut": "太长，页面放不下：用 harness task performance --prompt {n} 读。",
@@ -4161,5 +4165,6 @@
   "report.perf.fact.slow": "慢",
   "report.perf.fact.person": "等人",
   "report.perf.fact.compaction": "压缩",
+  "report.perf.fact.cold": "缓存过期",
   "report.perf.fact.intervention": "人插手"
 }

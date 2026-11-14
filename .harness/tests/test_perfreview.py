@@ -58,10 +58,10 @@ class ReviewCase(HarnessTestCase):
         if sent:
             self.sent.append({"at": self.at(seconds - 0.5).isoformat(), "kind": sent, "text": content, **({"by": by} if by else {})})
 
-    def turn(self, seconds: float, nano: int, calls: List[Call] = (), thinking: str = "", said: str = "", agent: str = "", tool: str = "bash") -> None:
-        """One model call (its cost), the message it gave, and the calls it asked for, a second each."""
+    def turn(self, seconds: float, nano: int, calls: List[Call] = (), thinking: str = "", said: str = "", agent: str = "", tool: str = "bash", cache: Dict[str, Any] = None) -> None:
+        """One model call (its cost), the message it gave, and the calls it asked for, a second each. `cache`: the cache numbers of the call."""
         self.event(seconds, "assistant.turn_start", agent=agent, turnId="0")
-        self.event(seconds + 0.4, "session.usage_record", agent=agent, usage={"model": "model-a", "duration": 400, "inputTokens": 1000, "outputTokens": 50, "copilotUsage": {"totalNanoAiu": nano}})
+        self.event(seconds + 0.4, "session.usage_record", agent=agent, usage={"model": "model-a", "duration": 400, "inputTokens": 1000, "outputTokens": 50, "copilotUsage": {"totalNanoAiu": nano}, **(cache or {})})
         self.spent += nano
         self.event(seconds + 0.5, "assistant.message", agent=agent, content=said, reasoningText=thinking, toolRequests=[{"toolCallId": ident, "name": tool} for ident, *_ in calls])
         for n, (ident, command, ok, text, code) in enumerate(calls):
@@ -286,6 +286,37 @@ class SubagentTests(ReviewCase):
         self.assertEqual(repeats, [("reviewer", ["c2", "c3"])], "a repeat is within one agent")
         self.assertEqual([place["what"] for place in perfreview.find(evidence, "Review round 1", "c3")["places"]], ["subagent brief"])
         self.assertEqual(perfreview.find(evidence, "Review round 1", "c4")["found"], 0, "the main agent never had the subagent's brief")
+
+
+class ColdCacheTests(ReviewCase):
+    def test_a_cache_that_ran_out_is_a_fact_with_what_it_cost_more(self) -> None:
+        """The person came back after the cache had run out: the first call read the whole context again. A fact names it with the wait and the extra over a warm call."""
+        def cache(seconds: float, read: int) -> Dict[str, Any]:
+            return {"cacheReadTokens": read, "cacheWriteTokens": 1000 - read, "cacheExpiresAt": zulu(self.at(seconds + 300))}
+        self.prompt(1, OPENING, sent="create")
+        self.turn(2, NANO, cache=cache(2, 0))
+        self.turn(5, NANO, cache=cache(5, 900))
+        self.turn(8, NANO, [("a0", "ado --help", True, "usage: ado item show <id>", "")], said="Which ticket?", cache=cache(8, 900))
+        self.prompt(600, "Ticket 300104.", sent="answer")
+        self.turn(601, 9 * NANO, [("a1", "ado item show 300104", True, "Ticket 300104", "")], cache=cache(601, 0))
+        self.write()
+        evidence = self.collect()
+        cold = [item for item in evidence["facts"] if item["fact"] == "cold"]
+        self.assertEqual(len(cold), 1, "the first call of a session is not cold, a warm one neither")
+        self.assertEqual((cold[0]["prompt"], cold[0]["calls"], cold[0]["extra"]), (2, ["c2"], 8.0))
+        self.assertEqual(cold[0]["model"], "m4")
+        self.assertIn("1000", cold[0]["note"], "the tokens read again")
+        self.assertIn("cold", next(item["why"] for item in evidence["worth"] if item["prompt"] == 2))
+        self.assertFalse(evidence["totals"]["quiet"], "a cache that ran out is worth a look")
+        path = self.root / ".workspace/sandbox/tasks/apr-subject" / perfreview.FINDINGS
+        def check(verdict: str, calls: str) -> Dict[str, Any]:
+            path.write_text(json.dumps({"summary": "The person came back after the cache ran out.", "segments": [{"id": "s1", "calls": calls, "verdict": verdict, "what": "Read the ticket."}],
+                                        "findings": [{"segments": ["s1"], "owner": "harness", "confidence": "unsure", "title": "Asked late", "why": "It could have asked at the start."}]}), encoding="utf-8")
+            return self.cli_json("task", "performance", "--check", "--task", "apr-subject")
+        checked = check("cold", "c2..c2")
+        self.assertTrue(checked["ok"], checked["problems"])
+        self.assertEqual((checked["waste"]["aiu"], checked["waste"]["work_s"]), (8.0, 0.0), "only what the cache cost more, not the call's own work")
+        self.assertFalse(check("cold", "c1..c1")["ok"], "a cold segment needs a call with a cold cache")
 
 
 class PageTests(ReviewCase):

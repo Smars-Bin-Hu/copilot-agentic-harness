@@ -28,7 +28,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import copilot_events, messages, redact, tasks
+from core import copilot_events, messages, redact, render, tasks
 from core.logs import read_session
 from core.paths import cli_command, utc_now
 
@@ -52,7 +52,7 @@ SENT_WITHIN_S = 900.0  # a line of sent.jsonl and the prompt it became
 ASKED_TAIL = 300  # the end of what the agent said: a question there makes the person's next prompt an answer
 WORTH_MAX = 8
 DEAR_SHARE = 0.1  # a prompt with at least this share of the cost is worth reading when it is among the dearest
-TROUBLE = ("failed", "refused", "held", "retry", "repeat")
+TROUBLE = ("failed", "refused", "held", "retry", "repeat", "cold")
 WRITE_WORDS = ("create", "edit", "write", "replace", "patch", "insert", "delete", "move", "rename")
 
 WORD = re.compile(r"[A-Za-z0-9_.:/\\-]+")
@@ -129,6 +129,7 @@ def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
     last_usage: Dict[str, Dict[str, Any]] = {}  # per agent: the latest model call, not yet tied to its message
     last_hook: Dict[Tuple[str, str], str] = {}  # (agent session, hook type) -> the text last added: the same text again is not kept
     credits = copilot_events.Credits()  # the one rule of the credits (copilot_events CREDITS)
+    caches: Dict[Tuple[str, str], Dict[str, Any]] = {}  # (agent session, model) -> its latest model call's cache, as the task report reads it (copilot_events.cache_call)
     compacting: Dict[str, Any] = {}
     any_row = False
 
@@ -180,6 +181,10 @@ def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
                 item = {"id": "", "at": at, "session": where, "agent": agent, "model": str(spent.get("model") or ""), "aiu": added[0] if added else 0.0, "priced": added is not None,
                         "seconds": round((copilot_events.number(spent.get("duration")) or 0.0) / 1000, 1), "input": copilot_events.whole_number(spent.get("inputTokens")),
                         "output": copilot_events.whole_number(spent.get("outputTokens")), "cache_read": copilot_events.whole_number(spent.get("cacheReadTokens")), "kind": "call", "calls": []}
+                cache = copilot_events.cache_call(spent, at, caches.get((where, item["model"])))
+                if cache is not None:
+                    caches[(where, item["model"])] = cache
+                    item["cache"], item["gap_s"] = cache["state"], cache["gap_s"]
                 out["models"].append(item)
                 last_usage[where] = item
             elif kind == "session.usage_checkpoint":
@@ -475,6 +480,16 @@ def facts(out: Dict[str, Any]) -> List[Dict[str, Any]]:
                 add(call["at"], "person", [call["id"]], prompt, agent, say("perf.fact.person", seconds=int(call["seconds"] or 0)))
             elif call["ok"] and (call["seconds"] or 0) >= SLOW_S:
                 add(call["at"], "slow", [call["id"]], prompt, agent, say("perf.fact.slow", seconds=int(call["seconds"])))
+    for item in out["models"]:  # a cache that ran out: the whole context read again at full price
+        if item.get("cache") != "expired":
+            continue
+        warm = sorted(other["aiu"] for other in out["models"] if other.get("cache") == "warm" and other["model"] == item["model"] and other["session"] == item["session"])
+        usual = warm[len(warm) // 2] if warm else None  # the middle of this model's warm calls in the task: what the call costs with its cache
+        extra = round(item["aiu"] - usual, 2) if usual is not None and item["aiu"] > usual else None
+        note = say("perf.fact.cold", model=item["id"], wait=render.duration(item.get("gap_s")), tokens=item["input"] or 0, aiu=round(item["aiu"], 2))
+        if extra is not None:
+            note += say("perf.fact.cold.extra", usual=round(usual, 2), extra=extra)
+        found.append((item["at"], {"id": "", "fact": "cold", "calls": list(item["calls"]), "prompt": item["prompt"], "agent": item["agent"], "note": note, "model": item["id"], "extra": extra}))
     for item in out["compactions"]:
         add(item["at"], "compaction", [], item["prompt"], "", say("perf.fact.compaction", before=item.get("before") or "?", after=item.get("after") or "?"))
     for prompt in out["prompts"]:
@@ -505,6 +520,9 @@ def worth(out: Dict[str, Any]) -> List[Dict[str, Any]]:
                     continue
                 why.setdefault(n, []).append("before-intervention")
                 score[n] = score.get(n, 0.0) + 2
+        if fact["fact"] == "cold" and fact["prompt"]:  # one call that cost many: worth a look at what made the agent stop before it
+            why.setdefault(fact["prompt"], []).append("cold")
+            score[fact["prompt"]] = score.get(fact["prompt"], 0.0) + 1
         elif fact["fact"] == "compaction" and fact["prompt"]:
             why.setdefault(fact["prompt"], []).append("compaction")
             score[fact["prompt"]] = score.get(fact["prompt"], 0.0) + 0.5

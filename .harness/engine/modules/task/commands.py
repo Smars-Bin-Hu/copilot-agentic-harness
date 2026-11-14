@@ -23,7 +23,7 @@ from typing import Any, Dict
 from core import approval, messages, render, starticon, targets, tasks
 from core.paths import repo_root
 
-from . import accept, autorun, boardserve, common, intake, kbsetup, perfreview, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
+from . import accept, autorun, boardserve, common, intake, kbsetup, perfreview, perfroll, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
 
 
 def read_text_argument(path: str) -> str:
@@ -388,7 +388,7 @@ def register_task(subparsers: Any) -> None:
     deliver.add_argument("--skipped", action="append", default=[], help="a test environment the person skipped, on their word, and why (more than once)")
     deliver.add_argument("--todo-open", default="", help="why steps of TODO.md stay unticked (tick the ones that are done first)")
     performance = add("performance", "Agent Performance Review (only after the person started it with /harness-agent-performance-review): collect how the agent of another task worked into EVIDENCE.json of this rca task (--task) and give the overview; then look things up in it: --overview, --prompt <n>, --span <cA..cB>, --find <text> --before <c12|p7>, --call <id>; --check checks FINDINGS.json",
-                      lambda a: perfreview.run(repo_root(), a.subject, a.task, a.call, a.check, a.overview, a.prompt, a.span, a.find, a.before))
+                      lambda a: perfroll.run(repo_root(), a.days) if a.all else perfreview.run(repo_root(), a.subject, a.task, a.call, a.check, a.overview, a.prompt, a.span, a.find, a.before))
     performance.add_argument("subject", nargs="?", default="", help="the task to review (its name): collects EVIDENCE.json again")
     performance.add_argument("--overview", action="store_true", help="the accounts, a line per prompt, the facts and the prompts worth reading")
     performance.add_argument("--prompt", type=int, default=0, help="the notes of one prompt in time order (its number)")
@@ -397,6 +397,8 @@ def register_task(subparsers: Any) -> None:
     performance.add_argument("--before", default="", help="with --find: only what came before this call (c12) or prompt (p7), in that agent's context")
     performance.add_argument("--call", default="", help="one call (c12), thought (t4), piece of context (x9), message (a3), model call (m5) or fact (f2), whole")
     performance.add_argument("--check", action="store_true", help="check FINDINGS.json of this task against EVIDENCE.json; gives the waste in time and AIU")
+    performance.add_argument("--all", action="store_true", help="across the tasks on this computer: the refusals, failures, caches run out and what every call carried, grouped; and the reviewed tasks' waste by owner, findings and suggestions (no --task)")
+    performance.add_argument("--days", type=int, default=0, help="with --all: only tasks changed in the last N days")
     report = add("report", "write .workspace/reports/tasks/<name>/report.md (what was done) and report.html (where the time and usage went)", cmd_report)
     report.add_argument("--open", action="store_true", help="open the HTML page in the browser (a person at a terminal)")
     report.add_argument("--detail", action="store_true", help="add the slowest prompts, the tools and the checks to `insight` (more to read)")

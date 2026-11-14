@@ -372,6 +372,31 @@ class ContextTests(ReviewCase):
         self.assertTrue(self.overview["context"][0].startswith("2 calls of the main agent"))
 
 
+class RollupTests(ReviewCase):
+    def test_all_groups_what_keeps_coming_back_and_leaves_the_review_task_out(self) -> None:
+        """`--all`: the free layer groups the facts of every task (not the review task itself); the reviewed layer sums the checked reviews by owner
+        and groups their suggestions by whom they are for and the file."""
+        self.a_task()
+        self.collect()  # the review task apr-subject now `reviews` subject
+        path = self.root / ".workspace/sandbox/tasks/apr-subject" / perfreview.FINDINGS
+        path.write_text(json.dumps({
+            "summary": "A made-up subcommand.", "segments": [{"id": "s1", "calls": "c1..c2", "verdict": "waste", "what": "Tried a subcommand that does not exist, twice."}],
+            "findings": [{"segments": ["s1"], "owner": "harness", "confidence": "likely", "title": "The skill named no subcommand", "why": "Not in the context.", "evidence": ["c1"]},
+                         {"segments": ["s1"], "owner": "model", "confidence": "unsure", "title": "Guessed", "why": "It assumed."}],
+            "suggestions": [{"for": "harness", "what": "Name the subcommand in the skill.", "file": ".github/skills/demo/SKILL.md", "why": "Finding 1.", "priority": "high"},
+                            {"for": "harness", "what": "Say it once more.", "file": ".github/skills/demo/SKILL.md", "why": "Finding 1.", "priority": "low"}]}), encoding="utf-8")
+        found = self.cli_json("task", "performance", "--all")
+        free, reviewed = found["free"], found["reviewed"]
+        self.assertEqual((free["tasks"], free["no_record"]), (1, 0), json.dumps(free)[:600])
+        self.assertEqual([(row["what"], row["times"]) for row in free["failed"]], [("bash: ado: invalid choice: '…'", 2)], "the same error, numbers and names taken out")
+        self.assertEqual(len(free["refused"]), 1)
+        self.assertIn("ado-curl", free["refused"][0]["what"], "a refusal by the system it was for")
+        self.assertEqual(reviewed["reviews"], 1, json.dumps(reviewed)[:400])
+        self.assertEqual(set(reviewed["waste_by_owner"]), {"harness", "model"})
+        self.assertEqual({item["title"]: item["aiu"] for item in reviewed["findings"]}, {"The skill named no subcommand": 1.5, "Guessed": 1.5}, "c1..c2 is 3 Credits, split")
+        self.assertEqual([(row["file"], row["times"], row["tasks"], row["priority"]) for row in reviewed["suggestions"]], [(".github/skills/demo/SKILL.md", 2, 1, "high")])
+
+
 class PageTests(ReviewCase):
     def test_the_report_page_shows_the_free_accounts_before_any_review(self) -> None:
         from modules.task import taskhtml

@@ -489,7 +489,18 @@ def latest_review(root: Path, subject: str) -> Optional[Dict[str, Any]]:  # `sub
             checked = check_findings(folder / FINDINGS, folder / EVIDENCE)
         except common.CommandError:
             checked = None
-    return {"task": name, "status": data.get("status", ""), "evidence": evidence, "findings": findings, "checked": checked}
+    return {"task": name, "status": data.get("status", ""), "evidence": evidence, "findings": findings, "checked": checked, "cost": review_cost(root, name)}
+
+
+def review_cost(root: Path, name: str) -> Optional[Dict[str, Any]]:
+    """What the review itself cost: the credits and the agent time of its own task, as the task report counts them. None when its record cannot be read."""
+    try:
+        from . import taskinsight
+
+        total = taskinsight.of_task(root, name, use_events=taskinsight.events_allowed(root))["totals"]
+    except Exception:  # noqa: BLE001 - a help: the page shows the review without it
+        return None
+    return {"aiu": total.get("aiu"), "active_s": total.get("active_s")} if total.get("aiu") else None
 
 
 PAGE_CALLS = 3000  # the call timeline: a longer task shows its first calls of this many
@@ -513,7 +524,7 @@ def findings_view(review: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         return None
     checked = review.get("checked") or {}
     return {"task": review["task"], "name": review["task"].rsplit("/", 1)[-1], "status": review["status"], "findings": review.get("findings"),
-            "ok": checked.get("ok"), "problems": len(checked.get("problems") or []), "waste": checked.get("waste")}
+            "ok": checked.get("ok"), "problems": len(checked.get("problems") or []), "waste": checked.get("waste"), "cost": review.get("cost")}
 
 
 def summary_view(root: Path, subject: str) -> Dict[str, Any]:

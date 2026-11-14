@@ -131,7 +131,7 @@ def saved_report(info: Dict[str, Any], now: Optional[Dict[str, Any]] = None) -> 
 
 def perf_page(data: Dict[str, Any]) -> str:
     """The Agent Performance Review page of a task (1.7.41), served only: it reads nothing and has no buttons but a way back to the report."""
-    return build("perfpage.html", ["common.js", "perfpage.js"], say("report.perf.page.title", name=data["name"]), {"perf": data}, 0, ["page.css", "perfpage.css"])
+    return build("perfpage.html", ["common.js", "perf.js", "perfpage.js"], say("report.perf.page.title", name=data["name"]), {"perf": data}, 0, ["page.css", "perfpage.css"])
 
 
 def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: Optional[Dict[str, Any]] = None, hidden: int = 0) -> str:

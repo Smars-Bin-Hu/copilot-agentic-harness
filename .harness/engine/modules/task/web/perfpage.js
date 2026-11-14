@@ -23,7 +23,7 @@
   function head() {
     const back = h("a", {class: "act", href: "/tasks/" + encodeURIComponent(perf.name) + "/report.html"}, "← " + t("report.perf.back"));
     const facts = [];
-    if (review) facts.push(t("report.perf.by") + " ", h("a", {href: "/task/" + encodeURIComponent(review.name)}, review.name));
+    if (review) facts.push(t("report.perf.by") + " ", h("a", {href: "/task/" + encodeURIComponent(review.name)}, review.name), typeof PERF !== "undefined" && ev ? PERF.cost(review, ev.totals) : null);
     if (ev && ev.made_at) facts.push((facts.length ? " · " : "") + when(ev.made_at, 0, 16));
     return h("header", {class: "pf-head"}, h("div", {class: "row"}, back, h("h1", null, t("report.perf.page.title", {name: perf.name}))), facts.length ? h("p", {class: "sub"}, facts) : null);
   }

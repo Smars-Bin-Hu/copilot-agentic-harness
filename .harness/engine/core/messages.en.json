@@ -4168,6 +4168,7 @@
   "report.perf.fact.person": "Waited for the person",
   "report.perf.fact.compaction": "Compaction",
   "report.perf.fact.context": "Context",
+  "report.perf.cost.tip": "What this review cost: {aiu} Credits and {time} of its own task, {share} of what the reviewed task cost.",
   "report.perf.fact.cold": "Cache ran out",
   "report.perf.fact.intervention": "Person stepped in"
 }

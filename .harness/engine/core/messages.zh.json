@@ -4168,6 +4168,7 @@
   "report.perf.fact.person": "等人",
   "report.perf.fact.compaction": "压缩",
   "report.perf.fact.context": "上下文",
+  "report.perf.cost.tip": "这次 Review 自己的花费：它的任务用了 {aiu} Credits、{time}，是被 Review 任务花费的 {share}。",
   "report.perf.fact.cold": "缓存过期",
   "report.perf.fact.intervention": "人插手"
 }

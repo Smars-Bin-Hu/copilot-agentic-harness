@@ -37,11 +37,19 @@ const PERF = (function () {
     nodes.push(...lines);
     const row = h("div", {class: "row pf-actions"});
     if (web) row.append(h("a", {class: "act", href: "/tasks/" + encodeURIComponent(perf.name) + "/performance", title: t("report.perf.open.hint")}, t("report.perf.open")));
-    if (review) row.append(h("span", {class: "sub"}, t("report.perf.by") + " ", web ? h("a", {href: "/task/" + encodeURIComponent(review.name)}, review.name) : h("code", null, review.name)));
+    if (review) row.append(h("span", {class: "sub"}, t("report.perf.by") + " ", web ? h("a", {href: "/task/" + encodeURIComponent(review.name)}, review.name) : h("code", null, review.name), cost(review, total)));
     if (served && typeof CHAT !== "undefined") row.append(start(perf.name, perf.read_tokens, Boolean(review)));
     if (row.childElementCount) nodes.push(row);
     return card(title, nodes);
   }
 
-  return {section};
+  // What the review itself cost, against the task it reviewed: a short mark, the words on hover.
+  function cost(review, total) {
+    const spent = review.cost && review.cost.aiu;
+    if (!spent) return null;
+    const share = total && total.aiu ? percent(spent / total.aiu) : "";
+    return h("span", {class: "pf-cost", title: t("report.perf.cost.tip", {aiu: amount(spent), share: share || "?", time: clock(review.cost.active_s)})}, " · " + amount(spent) + " Credits" + (share ? " (" + share + ")" : ""));
+  }
+
+  return {section, cost};
 })();

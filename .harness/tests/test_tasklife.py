@@ -817,6 +817,7 @@ class MessageTests(unittest.TestCase):
             "ready.p.broken.short", "ready.p.unreadable.short", "ready.p.identity.", "gate.external.outbox.what", "gate.external.autorun.what",  # 1.7.38 (F1): the key is built from a base and a suffix (`.short`, `.one`, `.what`, `.unknown`)
             "desk.stmt.zone.",  # 1.7.38 (F3): the zone of a statement is the end of the key (read, write, ask, refuse; and `.tip`)
             "gate.external.unpinned.why.", "gate.external.hidden.", "gate.external.invalid", "gate.policy.unreadable.note",  # 1.7.38 (F2): the end of the key is the state of the call (`rules.py`, `external.py`, `failclosed.py`), or the key is written between single quotes inside an f-string (`fallback.py`)
+            "report.perf.owner.", "report.perf.confidence.", "report.perf.metric.", "report.perf.origin.", "report.perf.why.", "report.perf.chain.", "report.perf.priority.", "report.perf.outcome.", "report.perf.fact.",  # 1.7.41: the review page builds the key from an owner, an origin, a fact and so on (perfpage.js)
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table("zh") if f'"{name}"' not in source and not name.startswith(dynamic)]

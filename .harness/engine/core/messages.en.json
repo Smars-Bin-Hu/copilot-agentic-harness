@@ -4116,7 +4116,6 @@
   "report.perf.origin.tip.wake": "The board woke the agent with the person's decision.",
   "report.perf.origin.tip.compact": "A compaction the person asked for.",
   "report.perf.origin.tip.harness": "A Stop hook kept the agent going: its reason is the prompt.",
-  "report.perf.intervention": "Stepped in",
   "report.perf.intervention.tip": "The person's own words after the agent stopped, not as the answer to its question. A signal that the prompts before it may have gone wrong, not a verdict on these words.",
   "report.perf.worth": "Worth reading: {why}",
   "report.perf.why.dear": "dear",

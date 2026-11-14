@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -292,12 +293,9 @@ class PageTests(ReviewCase):
         from modules.task import taskhtml
 
         self.a_task()
-        os.environ["COPILOT_HOME"] = self.env["COPILOT_HOME"]
-        try:
+        with mock.patch.dict(os.environ, {"COPILOT_HOME": self.env["COPILOT_HOME"]}):
             summary = perfreview.summary_view(self.root, SUBJECT)
             data = perfreview.page_data(self.root, SUBJECT)
-        finally:
-            os.environ.pop("COPILOT_HOME", None)
         self.assertIsNone(summary["review"])
         self.assertTrue(summary["live"], "no review: the task's own record, read now")
         self.assertAlmostEqual(summary["totals"]["aiu"], self.spent / NANO, places=3)

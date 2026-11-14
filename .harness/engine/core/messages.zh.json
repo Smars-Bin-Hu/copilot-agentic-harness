@@ -4116,7 +4116,6 @@
   "report.perf.origin.tip.wake": "board 带着人的决定唤醒了 agent。",
   "report.perf.origin.tip.compact": "人要求的一次压缩。",
   "report.perf.origin.tip.harness": "Stop hook 让 agent 接着做：它的理由就是这条 prompt。",
-  "report.perf.intervention": "插手",
   "report.perf.intervention.tip": "agent 停下后人自己说的话，又不是在回答它的提问。说明前面几条 prompt 可能走偏了，不是在评价这句话。",
   "report.perf.worth": "值得看：{why}",
   "report.perf.why.dear": "贵",

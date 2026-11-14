@@ -319,6 +319,32 @@ class ColdCacheTests(ReviewCase):
         self.assertFalse(check("cold", "c1..c1")["ok"], "a cold segment needs a call with a cold cache")
 
 
+class ColdPriceTests(ReviewCase):
+    def test_copilots_own_prices_give_what_the_wait_cost_and_an_owner_counts_once(self) -> None:
+        """With `tokenDetails` the extra of a cold call is the tokens written to the cache times (write price - read price), not a guess from other calls.
+        Two findings of one owner on a segment do not double its share."""
+        def priced(seconds: float, read: int, written: int, nano: int) -> Dict[str, Any]:
+            details = [{"tokenType": "cache_read", "tokenCount": read, "costPerBatch": 10 * NANO, "batchSize": 1_000_000},
+                       {"tokenType": "cache_write", "tokenCount": written, "costPerBatch": 250 * NANO, "batchSize": 1_000_000}]
+            return {"cacheReadTokens": read, "cacheWriteTokens": written, "cacheExpiresAt": zulu(self.at(seconds + 300)), "copilotUsage": {"totalNanoAiu": nano, "tokenDetails": details}}
+        self.prompt(1, OPENING, sent="create")
+        self.turn(2, NANO, cache=priced(2, 0, 1000, NANO))
+        self.turn(5, NANO, [("a0", "ado --help", True, "usage: ado item show <id>", "")], said="Which ticket?", cache=priced(5, 1000, 0, NANO))
+        self.prompt(600, "Ticket 300104.", sent="answer")
+        self.turn(601, 30 * NANO, [("a1", "ado item show 300104", True, "Ticket 300104", "")], cache=priced(601, 0, 100_000, 30 * NANO))
+        self.write()
+        evidence = self.collect()
+        cold = [item for item in evidence["facts"] if item["fact"] == "cold"]
+        self.assertEqual([(item["calls"], item["extra"]) for item in cold], [(["c2"], 24.0)], "100000 tokens at 250 - 10 per million")
+        path = self.root / ".workspace/sandbox/tasks/apr-subject" / perfreview.FINDINGS
+        found = [{"segments": ["s1"], "owner": owner, "confidence": "unsure", "title": title, "why": "It could have asked at the start."}
+                 for owner, title in (("harness", "Asked late"), ("harness", "Two stops"), ("model", "Went on without leave"))]
+        path.write_text(json.dumps({"summary": "A cold cache.", "segments": [{"id": "s1", "calls": "c2..c2", "verdict": "cold", "what": "Read the ticket."}], "findings": found}), encoding="utf-8")
+        checked = self.cli_json("task", "performance", "--check", "--task", "apr-subject")
+        self.assertTrue(checked["ok"], checked["problems"])
+        self.assertEqual({owner: item["aiu"] for owner, item in checked["waste"]["by_owner"].items()}, {"harness": 12.0, "model": 12.0})
+
+
 class PageTests(ReviewCase):
     def test_the_report_page_shows_the_free_accounts_before_any_review(self) -> None:
         from modules.task import taskhtml

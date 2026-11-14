@@ -434,7 +434,7 @@ def segment_cost(evidence: Dict[str, Any], verdict: str, calls: str) -> Dict[str
 
 
 def waste_of(evidence: Dict[str, Any], segments: Dict[str, Dict[str, Any]], blamed: Dict[str, List[str]]) -> Dict[str, Any]:
-    """The time and AIU of the waste segments, worked out by code; a segment with several owners is split evenly between them."""
+    """The time and AIU of the waste segments, worked out by code; a segment with several owners is split evenly between them, each owner once however many findings name it."""
     total = evidence.get("totals") or {}
     out: Dict[str, Any] = {"aiu": 0.0, "work_s": 0.0, "by_owner": {}, "segments": {}}
     for ident, item in segments.items():
@@ -444,7 +444,7 @@ def waste_of(evidence: Dict[str, Any], segments: Dict[str, Dict[str, Any]], blam
         out["segments"][ident] = {"span": cost["span"], "aiu": cost["aiu"], "work_s": cost["work_s"]}
         out["aiu"] += cost["aiu"]
         out["work_s"] += cost["work_s"]
-        owners = [owner for owner in blamed.get(ident, []) if owner in OWNERS] or ["unknown"]
+        owners = list(dict.fromkeys(owner for owner in blamed.get(ident, []) if owner in OWNERS)) or ["unknown"]  # each owner once: two findings of one owner do not double its share
         for owner in owners:
             mine = out["by_owner"].setdefault(owner, {"aiu": 0.0, "work_s": 0.0})
             mine["aiu"] = round(mine["aiu"] + cost["aiu"] / len(owners), 4)

@@ -4053,6 +4053,7 @@
   "perf.fact.slow": "这次调用跑了 {seconds} 秒。",
   "perf.fact.compaction": "Copilot 压缩了对话：{before} → {after} tokens。之前的内容只剩摘要。",
   "perf.fact.cold": "缓存已过期（{model}，距这个模型的上一次调用 {wait}）：{tokens} 个 token 的上下文按全价重读，{aiu} Credits。",
+  "perf.fact.cold.priced": "按 Copilot 自己的单价，如果从缓存读，会少花 {extra}。",
   "perf.fact.cold.extra": "这个任务里这个模型一次缓存命中的调用约 {usual}：多花了约 {extra}。",
   "perf.fact.intervention": "agent 停下后人插手：看它前面的第 {span} 条 prompt。",
   "report.perf.title": "Agent Performance Review",

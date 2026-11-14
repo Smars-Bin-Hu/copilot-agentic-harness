@@ -4053,6 +4053,7 @@
   "perf.fact.slow": "The call ran {seconds} s.",
   "perf.fact.compaction": "Copilot summed up the chat: {before} → {after} tokens. What came before is now only in the summary.",
   "perf.fact.cold": "The cache had run out ({model}, {wait} after this model's call before it): its {tokens} tokens of context were read again at full price, {aiu} Credits.",
+  "perf.fact.cold.priced": " Read from the cache, it would have cost {extra} less (Copilot's own prices).",
   "perf.fact.cold.extra": " A warm call of this model in the task costs about {usual}: about {extra} more.",
   "perf.fact.intervention": "The person stepped in after the agent stopped: look at prompt {span} before it.",
   "report.perf.title": "Agent Performance Review",

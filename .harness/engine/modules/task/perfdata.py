@@ -113,6 +113,23 @@ def writes(call: Dict[str, Any]) -> bool:
 
 # --- reading Copilot's record ----------------------------------------------------------------------------------------------------------------------------------
 
+def cache_extra(spent: Dict[str, Any]) -> Optional[float]:
+    """What the tokens this model call wrote to the cache cost more than reading them from it, by Copilot's own prices (`copilotUsage.tokenDetails`: count, cost per batch,
+    batch size, by token type). None when the record gives no prices. For a call whose cache had run out, that is what the wait cost."""
+    used = spent.get("copilotUsage") if isinstance(spent.get("copilotUsage"), dict) else {}
+    price: Dict[str, Tuple[float, float]] = {}
+    for item in used.get("tokenDetails") or []:
+        if not isinstance(item, dict):
+            continue
+        count, cost, batch = (copilot_events.number(item.get(key)) for key in ("tokenCount", "costPerBatch", "batchSize"))
+        if count is not None and cost is not None and batch:
+            price[str(item.get("tokenType") or "")] = (count, cost / batch)
+    if "cache_write" not in price or "cache_read" not in price:
+        return None
+    written, write_price = price["cache_write"]
+    return round(max(0.0, written * (write_price - price["cache_read"][1])) / NANO, 4)
+
+
 def blank() -> Dict[str, Any]:
     return {"messages": [], "thoughts": [], "said": [], "calls": [], "models": [], "context": [], "compactions": [], "agents": {}, "blocks": []}
 
@@ -185,6 +202,7 @@ def read_events(path: Path, session: str, out: Dict[str, Any]) -> bool:
                 if cache is not None:
                     caches[(where, item["model"])] = cache
                     item["cache"], item["gap_s"] = cache["state"], cache["gap_s"]
+                    item["cache_extra"] = cache_extra(spent)
                 out["models"].append(item)
                 last_usage[where] = item
             elif kind == "session.usage_checkpoint":
@@ -485,10 +503,14 @@ def facts(out: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         warm = sorted(other["aiu"] for other in out["models"] if other.get("cache") == "warm" and other["model"] == item["model"] and other["session"] == item["session"])
         usual = warm[len(warm) // 2] if warm else None  # the middle of this model's warm calls in the task: what the call costs with its cache
-        extra = round(item["aiu"] - usual, 2) if usual is not None and item["aiu"] > usual else None
         note = say("perf.fact.cold", model=item["id"], wait=render.duration(item.get("gap_s")), tokens=item["input"] or 0, aiu=round(item["aiu"], 2))
-        if extra is not None:
-            note += say("perf.fact.cold.extra", usual=round(usual, 2), extra=extra)
+        if item.get("cache_extra") is not None:  # Copilot's own prices: what writing the context again cost over reading it from the cache
+            extra = round(item["cache_extra"], 2)
+            note += say("perf.fact.cold.priced", extra=extra)
+        else:  # an older record with no prices: against the middle of this model's warm calls in the task
+            extra = round(item["aiu"] - usual, 2) if usual is not None and item["aiu"] > usual else None
+            if extra is not None:
+                note += say("perf.fact.cold.extra", usual=round(usual, 2), extra=extra)
         found.append((item["at"], {"id": "", "fact": "cold", "calls": list(item["calls"]), "prompt": item["prompt"], "agent": item["agent"], "note": note, "model": item["id"], "extra": extra}))
     for item in out["compactions"]:
         add(item["at"], "compaction", [], item["prompt"], "", say("perf.fact.compaction", before=item.get("before") or "?", after=item.get("after") or "?"))

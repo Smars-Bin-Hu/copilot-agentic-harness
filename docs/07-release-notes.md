@@ -10,7 +10,9 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
-## Unreleased
+## 1.7.42 (2026-11-15)
+
+Open VS Code with identities the first time, code read for a card kept out of `DEV/`, and a write-back that asks git once for each repository.
 
 ### Added
 

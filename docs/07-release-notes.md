@@ -10,7 +10,9 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
-## Unreleased (on main after 1.7.40)
+## 1.7.41 (2026-11-15)
+
+Agent Performance Review: what a task cost and where it went, what every call carried, what keeps coming back across tasks, and what the review itself cost.
 
 ### Added
 

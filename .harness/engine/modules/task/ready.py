@@ -5,7 +5,7 @@ Two blocks (1.7.38, block B).
   without one the harness cannot work here. They are `checks`, each with `group: "required"` and `blocking: true`, and a `level` for its dot: ok, grey, yellow, red.
 - OPTIONAL, from the company: knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories (`core/readyitems.py`). They never block. `optional` holds the items and the
   `problems` to look at; each problem has the place that mends it.
-`problems.required` is what is not ok in the first block (the red block of the board after Enter), `vscode_button` says what the VS Code button of the screen is called (open, restart, identities), and `restart`
+`problems.required` is what is not ok in the first block (the red block of the board after Enter), `vscode_button` says what the VS Code button of the screen is called (open, open-identities, restart, identities), and `restart`
 what a restart that was asked for is doing (`vsrestart.py`).
 
 Nothing here waits on the outside world, so the server never hangs on it:
@@ -431,7 +431,8 @@ class Ready:
                     entry.update(self.connection_facts())
                 except Exception:  # noqa: BLE001 - the hover table is a detail
                     entry.update({"rows": [], "checking": False, "launch": False, "env_wrong": False})
-        identities = len([one for entry in listed if entry["key"] == "connections" for one in entry["names"] if one.get("saved") and one["state"] == "ok"])
+        held = set(conn_core.window_held(self.root))  # 1.7.42: a sign-in the program keeps itself (az) is not one a window can carry
+        identities = len([one for entry in listed if entry["key"] == "connections" for one in entry["names"] if one.get("saved") and one["state"] == "ok" and one["name"] in held])
         return {"items": listed, "identities": identities}
 
     def optional(self) -> Dict[str, Any]:
@@ -507,9 +508,10 @@ class Ready:
         return view["state"] in ("quitting", "opening") or (view["state"] == "failed" and 0 < view["since"] < QUIT_QUIET)
 
     def vscode_button(self, vscode: Dict[str, Any], identities: int) -> Dict[str, Any]:
-        """The VS Code button of the screen. `open`: no VS Code runs for this copy or at all; `restart`: one runs; `identities`: one runs and some connection has a sign-in saved and a test that passed. `up`: one runs."""
+        """The VS Code button of the screen. `open`: no VS Code runs for this copy or at all; `restart`: one runs; `identities`: one runs and some connection has a sign-in saved that a window holds and a test that passed;
+        `open-identities`: none runs and there is such a sign-in (1.7.42: the first open had no way to carry them, so it took two starts). `up`: one runs."""
         up = vscode["state"] in ("ok", "wait") or bool(vscode.get("connected")) or self.process_up()
-        kind = "identities" if up and identities else "restart" if up else "open"
+        kind = ("identities" if identities else "restart") if up else ("open-identities" if identities else "open")
         return {"kind": kind, "label": messages.text(f"ready.vs.{kind}"), "up": up, "identities": identities}
 
     # --- the answer -----------------------------------------------------------------------------------------------

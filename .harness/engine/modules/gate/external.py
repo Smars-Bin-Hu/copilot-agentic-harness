@@ -668,7 +668,7 @@ def _line_writer(line: str, inputs: List[str], ctx: "_Ctx", allowed: set, depth:
     return ""
 
 
-RESERVED_IN_TASK = (".task", "OUTBOX", "REVIEW", "SNAPSHOT")  # places of a task folder that only the harness writes (`gate.json` `cli_owned_paths`): an output file is never one of them
+RESERVED_IN_TASK = (".task", "OUTBOX", "REVIEW", "SNAPSHOT", "READ")  # places of a task folder that only the harness writes (`gate.json` `cli_owned_paths`): an output file is never one of them
 
 
 def _in_task_folder(path: str, ctx: "_Ctx") -> bool:

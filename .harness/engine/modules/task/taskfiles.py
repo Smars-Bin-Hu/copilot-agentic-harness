@@ -89,7 +89,8 @@ def listing(root: Path, task: str, folders: Optional[Tuple[str, ...]] = None) ->
     named = {entry.name.upper(): entry for entry in top if entry.is_dir()}
     order = [named[name.upper()] for name in (folders or FOLDERS) if name.upper() in named]
     if folders is None:
-        order += [entry for entry in top if entry.is_dir() and entry not in order and not ROUND_DEV.match(entry.name)] + [entry for entry in top if entry.is_file()]  # an earlier round has its own list
+        last = [entry for entry in top if entry.is_dir() and entry.name.upper() == tasks.READ_NAME]  # READ/ (1.7.42): code copied to be read, maybe hundreds of files: after the task's own, so MAX_LISTED does not cut those
+        order += [entry for entry in top if entry.is_dir() and entry not in order and entry not in last and not ROUND_DEV.match(entry.name)] + [entry for entry in top if entry.is_file()] + last  # an earlier round has its own list
     for start in order:
         for path in [start] if start.is_file() else sorted(start.rglob("*"), key=lambda item: [part.lower() for part in item.relative_to(base).parts]):
             relative = path.relative_to(base)

@@ -36,11 +36,14 @@ class FilesTests(FilesCase):
         (self.task / ".task" / "note.txt").write_text("state", encoding="utf-8")
         (self.task / ".scratch").mkdir()
         (self.task / ".scratch" / "x.txt").write_text("hidden", encoding="utf-8")
+        (self.task / "READ" / "repo").mkdir(parents=True)
+        (self.task / "READ" / "repo" / "b.sql").write_text("select 3;\n", encoding="utf-8")  # code fetched to read (1.7.42): last, after the files at the top
         listed = taskfiles.listing(self.root, TASK)
         self.assertEqual([(item["path"], item["kind"]) for item in listed], [
             ("REQ/brd.md", "markdown"), ("REQ/chart.png", "image"), ("REF/old.sql", "text"), ("DEV/repo/sql/a.sql", "text"), ("RUNS/DEV/dump.bin", "other"), ("RUNS/DEV/result.md", "markdown"),
             ("DEV-RUN/run.sh", "text"), ("TEST", "folder"),  # what the agent made on the way, and an empty folder
-            ("LOG.md", "markdown"), ("PLAN.md", "markdown"), ("REQ.md", "markdown"), ("TASK.md", "markdown"), ("TODO.md", "markdown")])  # the files at the top; never .task/ or a hidden name
+            ("LOG.md", "markdown"), ("PLAN.md", "markdown"), ("REQ.md", "markdown"), ("TASK.md", "markdown"), ("TODO.md", "markdown"),  # the files at the top; never .task/ or a hidden name
+            ("READ/repo/b.sql", "text")])
         self.assertEqual(taskdesk.desk(self.root, "job1")["files"], listed)
         self.assertEqual(taskfiles.listing(self.root, TASK, ("DEV",)), [{"path": "DEV/repo/sql/a.sql", "size": 10, "kind": "text"}])  # an earlier round lists only its own folder
 

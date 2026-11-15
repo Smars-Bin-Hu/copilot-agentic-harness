@@ -223,6 +223,26 @@ class FetchDiffTests(TaskCase):
         self.run_cli("task", "fetch", "--overwrite", "repo_b/src/a.sql")
         self.assertEqual(self.dev("repo_b/src/a.sql").read_text(encoding="utf-8"), "select 1;\n")
 
+    def test_fetch_to_read_copies_the_base_version_into_read_needs_no_plan_and_is_nothing_promote_sees(self) -> None:
+        """1.7.42: the code a card is written from. READ/, not DEV/: a copy only read never holds a write-back back. The commit is fixed as for any fetch, so later reads have the same lines."""
+        self.new()  # no plan approved
+        self.assertIn("计划", self.run_cli("task", "fetch", "repo_b/src/a.sql", ok=False)["stderr"])  # a fetch to change still needs the plan
+        result = self.run_cli("task", "fetch", "--read", "repo_b/src/a.sql")
+        self.assertEqual(result["read"], [f"{TASK}/READ/repo_b/src/a.sql"])
+        self.assertEqual((self.task / "READ" / "repo_b" / "src" / "a.sql").read_text(encoding="utf-8"), "select 1;\n")
+        self.assertFalse(self.dev("repo_b/src/a.sql").exists())
+        self.assertFalse((self.task / ".task" / "base" / "repo_b").exists())
+        data = self.data()
+        self.assertEqual(data["target_files"], {})  # promote has nothing of it
+        self.assertEqual(data["targets"]["repo_b"]["base_commit"], self.main_commit(self.repo_b))
+        (self.repo_b / "src" / "a.sql").write_text("select 9;\n", encoding="utf-8")
+        run_git(self.repo_b, "commit", "-qam", "moved on")
+        self.run_cli("task", "fetch", "--read", "repo_b/src/a.sql")
+        self.assertEqual((self.task / "READ" / "repo_b" / "src" / "a.sql").read_text(encoding="utf-8"), "select 1;\n")  # the commit fixed at the first read
+        for extra in ("--overwrite", "--rebase"):
+            self.assertIn("--read", self.run_cli("task", "fetch", "--read", extra, "repo_b/src/a.sql", ok=False)["stderr"])
+        self.assertIn("--read", self.run_cli("task", "fetch", "--read", "_manual/x.sql", "--from", "REF/x.sql", ok=False)["stderr"])
+
     def test_a_large_file_and_crlf_arrive_byte_for_byte_and_the_diff_holds_only_the_change(self) -> None:
         (self.repo_b / "big.sql").write_bytes(BIG.encode("utf-8"))
         (self.repo_b / "crlf.sql").write_bytes(b"select 1;\r\nselect 2;\r\n")
@@ -297,6 +317,23 @@ class PromoteTests(TaskCase):
         self.assertEqual(porcelain(self.repo_b), [])
         self.assertEqual(self.data()["promote"]["state"], "dry_run")
 
+    def test_a_file_left_as_fetched_is_not_promoted_and_its_repository_is_not_checked(self) -> None:
+        """1.7.42: a copy in DEV/ only read (a card's source). Its base moved on since the fetch: before, the dry run refused the whole promote and said to fetch it again."""
+        self.ready()
+        self.run_cli("task", "fetch", "repo_a/a.sql", "repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
+        (self.repo_a / "a.sql").write_text("select 'moved';\n", encoding="utf-8")
+        run_git(self.repo_a, "commit", "-qam", "moved on")
+        (self.repo_a / "dirty.txt").write_text("not committed\n", encoding="utf-8")  # a working tree that would stop a write there
+        result = self.run_cli("task", "promote", "--dry-run")
+        self.assertEqual([(f["path"], f["action"]) for f in result["files"]], [("repo_b/src/a.sql", "modify")])
+        self.assertEqual([repo["name"] for repo in result["repos"]], ["repo_b"])
+        self.assertEqual(result["untouched"], ["repo_a/a.sql"])
+        self.assertEqual(result["untouched_note"], messages.text("promote.untouched.note"))
+        self.dev("repo_b/src/a.sql", "select 1;\n")  # back as fetched: nothing left to write
+        refused = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
+        self.assertIn(messages.text("promote.nothing.untouched", count=2).strip(), refused)
+
     def test_the_real_run_needs_the_persons_approval_of_that_plan(self) -> None:
         self.ready()
         self.run_cli("task", "fetch", "repo_b/src/a.sql")
@@ -366,7 +403,7 @@ class PromoteTests(TaskCase):
         self.assertEqual(self.run_cli("task", "fetch", "repo_b/src/a.sql")["kept"], ["repo_b/src/a.sql"])  # the edit stays
         self.assertEqual(self.run_cli("task", "promote", "--dry-run")["files"][0]["action"], "modify")
         self.run_cli("task", "fetch", "--overwrite", "repo_b/src/a.sql")
-        self.assertIn("完全一样", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
+        self.assertIn("和 fetch 时一样", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])  # 1.7.42: as fetched is left out before the repository is looked at
         self.dev("repo_b/src/a.sql", "select 1, 2;\n")
         self.dev("notes/x.md", "n\n")
         message = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -143,6 +144,35 @@ class ReadingTests(unittest.TestCase):
         commit = targets.ref_commit(self.repo)
         self.assertEqual(commit, run_git(self.path, "rev-parse", "main"))
         self.assertRegex(targets.commit_date(self.repo, commit), r"^\d{4}-\d\d-\d\dT")
+
+    def test_the_tree_of_a_commit_is_read_once_and_answers_files_folders_and_names(self) -> None:
+        """1.7.42: one `git ls-tree -r -t` for a commit; what a promote asked git for each file and each folder is answered from it, the same as `tracked_files`."""
+        commit = targets.ref_commit(self.repo)
+        targets._TREES.clear()
+        with mock.patch.object(targets.gitread, "run", wraps=targets.gitread.run) as spy:
+            tree = targets.tree(self.repo, commit)
+            self.assertIs(targets.tree(self.repo, commit), tree)
+        self.assertEqual(spy.call_count, 1)
+        for relative in ("a.txt", "dir", "dir/b.txt", "nope", "dir/nope.txt"):
+            self.assertEqual(sorted(tree.files(relative)), sorted(targets.tracked_files(self.repo, commit, relative)), relative)
+        self.assertEqual(sorted(tree.names_in("")), [("blob", "a.txt"), ("tree", "dir")])
+        self.assertEqual(tree.names_in("dir"), [("blob", "b.txt")])
+        self.assertEqual(tree.names_in("nope"), [])
+        targets._TREES.clear()
+        for n in range(targets.TREES_KEPT + 3):  # a board that runs for days keeps only the newest
+            targets._TREES[("x", str(n))] = tree
+        targets.tree(self.repo, commit)
+        self.assertEqual(len(targets._TREES), targets.TREES_KEPT)
+        self.assertIn((str(self.repo.path), commit), targets._TREES)
+
+    def test_blobs_read_in_one_batch_are_not_asked_again(self) -> None:
+        commit = targets.ref_commit(self.repo)
+        blobs = [sha for _mode, sha, _path in targets.tracked_files(self.repo, commit, "dir") + targets.tracked_files(self.repo, commit, "a.txt")]
+        targets._BLOBS.clear()
+        with mock.patch.object(targets.gitread, "run", wraps=targets.gitread.run) as spy:
+            targets.read_blobs(self.repo, blobs + blobs)
+            self.assertEqual(sorted(targets.read_blob(self.repo, sha) for sha in blobs), [b"a\n", b"b\n"])
+        self.assertEqual(spy.call_count, 1)
 
     def test_a_missing_branch_is_an_empty_commit(self) -> None:
         self.assertEqual(targets.ref_commit(targets.Repo("r", self.path, "nope")), "")

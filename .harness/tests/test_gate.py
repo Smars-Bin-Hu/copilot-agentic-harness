@@ -453,7 +453,7 @@ class GateHookTests(HarnessTestCase):
     def test_cli_owned_files_cannot_be_written_by_the_agent(self) -> None:
         inside = self.enter_task()
         for relative in (f"{inside}/.task/task.json", f"{inside}/REVIEW/round-001/verdict.md", f"{inside}/SNAPSHOT/plan-1/manifest.json",
-                         f"{inside}/CHANGES.diff", f"{inside}/PROMOTE-PLAN.diff"):
+                         f"{inside}/CHANGES.diff", f"{inside}/PROMOTE-PLAN.diff", f"{inside}/READ/repo_b/src/a.sql"):  # READ/: code fetched to read (1.7.42)
             with self.subTest(relative):
                 output = self.pre("create_file", {"filePath": self.path(relative), "content": "{}"})
                 self.assertEqual(self.decision(output), "deny")

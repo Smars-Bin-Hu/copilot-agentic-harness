@@ -123,10 +123,11 @@ class PlanTests(PromoteCase):
     def test_a_file_the_same_as_main_is_skipped_and_nothing_to_write_is_refused(self) -> None:
         request_id = self.flow({"repo_b/src/a.sql": "select 1;\n", "repo_b/src/new.sql": "select 3;\n"}, fetched=["repo_b/src/a.sql"])
         result = self.dry_run(request_id)
-        self.assertEqual(sorted((f["path"], f["action"]) for f in result["files"]), [("repo_b/src/a.sql", "unchanged"), ("repo_b/src/new.sql", "create")])
+        self.assertEqual(sorted((f["path"], f["action"]) for f in result["files"]), [("repo_b/src/new.sql", "create")])  # 1.7.42: as fetched is left out before any check
+        self.assertEqual(result["untouched"], ["repo_b/src/a.sql"])
         self.end(request_id)
         alone = self.flow({"repo_b/src/a.sql": "select 1;\n"}, branch="feature/other")
-        self.assertIn("完全一样", self.refused("task", "promote", "--task", alone, "--dry-run"))
+        self.assertIn("和 fetch 时一样", self.refused("task", "promote", "--task", alone, "--dry-run"))
 
     def test_a_repository_only_read_is_left_out_and_holds_nothing_back(self) -> None:
         request_id = self.flow({"repo_b/src/a.sql": "select 1, 2;\n"}, fetched=["repo_b/src/a.sql", "repo_a/a.sql"])
@@ -141,6 +142,30 @@ class PlanTests(PromoteCase):
         self.end(first)
         two = self.dry_run(self.flow({"repo_b/src/a.sql": "select 1, 2;\n"}, branch="feature/other"))["plan_sha256"]
         self.assertNotEqual(one, two)
+
+
+class GitCallsTests(PromoteCase):
+    def test_the_checks_of_a_dry_run_ask_git_a_few_times_per_repository_not_once_per_file_or_folder(self) -> None:
+        """1.7.42: 40 new files six folders deep and a changed one took about 300 git processes, a second or more each on a work computer. The checks stay; the tree and the base
+        versions are read once for each repository."""
+        outputs = {f"repo_b/kb/domains/etl/objects/type{n % 4}/card_{n}.md": f"card {n}\n" for n in range(40)}
+        outputs["repo_b/src/a.sql"] = "select 1, 2;\n"
+        task = self.flow(outputs)
+        calls: List[List[str]] = []
+        real = promote_target.targets.gitread.run
+
+        def spy(path: Any, name: str, *arguments: str, **options: Any) -> bytes:
+            calls.append(list(arguments))
+            return real(path, name, *arguments, **options)
+
+        promote_target.targets._TREES.clear()
+        promote_target.targets._BLOBS.clear()
+        with mock.patch.object(promote_target.targets.gitread, "run", spy):
+            result = task_ops.run_promote(self.root, task, True)
+        self.assertEqual(len(result["files"]), 41)
+        self.assertEqual(len([call for call in calls if "ls-tree" in call]), 1)
+        self.assertEqual(len([call for call in calls if "cat-file" in call]), 1)
+        self.assertLess(len(calls), 12)
 
 
 class CheckTests(PromoteCase):

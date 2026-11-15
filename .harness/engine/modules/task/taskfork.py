@@ -28,7 +28,7 @@ MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 20 * 1024 * 1024
 # What is the old task's state, its approvals and checks, or code that belongs to it: never copied.
 LEFT_FILES = {tasks.TASK_FILE: "state", tasks.TODO_FILE: "state", "PROMOTE-PLAN.diff": "write-back"}
-LEFT_DIRS = {".task": "state", "DEV": "code", "SNAPSHOT": "checks", "REVIEW": "checks"}
+LEFT_DIRS = {".task": "state", "DEV": "code", "READ": "code", "SNAPSHOT": "checks", "REVIEW": "checks"}
 COPIED_DIRS = ("REQ", "REF", "RUNS", "TEST")
 COPIED_FILES = ("CHANGES.diff",)
 

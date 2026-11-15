@@ -84,6 +84,37 @@ assert.strictEqual(approvedCalls.has("ZZ99ZZ"), false);
         done = run_node(script)
         self.assertEqual(done.returncode, 0, done.stderr)
 
+    def test_the_close_button_hides_the_green_card_per_task_and_forgets_a_code_that_is_gone(self) -> None:
+        """1.7.42: × on the Approved card. Only the card goes (the approval stands); kept per task in this browser; a code no longer approved is dropped; no storage: kept while the page is open."""
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        source = between(desk, "  const CLOSED_KEY = ", "  function approvedCard() {")
+        script = r"""
+const assert = require("assert");
+let store = {};
+let broken = false;
+global.localStorage = {getItem: (key) => { if (broken) throw new Error("no"); return key in store ? store[key] : null; }, setItem: (key, value) => { if (broken) throw new Error("no"); store[key] = value; }};
+const desk = {name: "task-a"};
+""" + source + r"""
+closeApproved(["AB12CD"], new Set(["AB12CD", "EF34AB"]));
+assert.deepStrictEqual([...closedApproved()], ["AB12CD"]);
+desk.name = "task-b";
+assert.deepStrictEqual([...closedApproved()], []);  // another task's card is not closed
+desk.name = "task-a";
+closeApproved([], new Set(["EF34AB"]));  // AB12CD ran or ran out: forgotten
+assert.deepStrictEqual([...closedApproved()], []);
+assert.deepStrictEqual(JSON.parse(store["tk-approved-closed"]), {});
+broken = true;  // a browser that keeps nothing: closed while the page is open
+closeApproved(["GH56IJ"], null);
+assert.deepStrictEqual([...closedApproved()], ["GH56IJ"]);
+"""
+        done = run_node(script)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        card = between(desk, "  function approvedCard() {", "  // After \"Open <connection> for this task\"")
+        self.assertIn("const codes = listed.filter((code) => !closed.has(code));", card)  # the card shows only codes not closed, and tells only those
+        self.assertIn('tag(t("desk.outbox.approved"), "good"), shut)', card)
+        self.assertIn("closeApproved(codes, left); card.remove();", card)
+        self.assertNotIn("/api/", card.split("shut.addEventListener", 1)[1].split("\n", 1)[0])  # the × asks the server nothing: the approval stands
+
     def test_the_answer_to_approve_says_whether_the_agent_waited_and_the_card_uses_it(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
         self.assertIn('data.result.agent === "wait" ? "wait" : ""', desk)

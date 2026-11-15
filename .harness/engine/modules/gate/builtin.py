@@ -44,6 +44,7 @@ _JSON = r'''
   ".workspace/sandbox/tasks/*/REVIEW/**",
   ".workspace/sandbox/tasks/*/SNAPSHOT/**",
   ".workspace/sandbox/tasks/*/OUTBOX/**",
+  ".workspace/sandbox/tasks/*/READ/**",
   ".workspace/reports/**"
  ],
  "terminal": {

@@ -5,7 +5,7 @@
 //   kb      the knowledge base window:             DOCK.kbWindow(tab)
 //   term    a command the Terminal window runs:    TERM.run(line)
 //   sync    the company's copies: `company sync`, or with op prefix the company's word first (DOCK.syncCompany); the answer is a promise
-//   vscode  the VS Code button:                    open, restart, or restart with identities (vsAct)
+//   vscode  the VS Code button:                    open, open with identities, restart, or restart with identities (vsAct)
 // Needs common.js (h, t), serve.js (SERVE). The other windows are used when the page has them.
 "use strict";
 
@@ -27,8 +27,13 @@ const READY = (function () {
   // and its button quits VS Code (`quit` below, the same quit as Restart, with the same question when an agent works), waits until the board sees it gone, and opens it with the identities.
   // hooks: {onState(view, willOpen), opened()}; `willOpen`: this restart ends with VS Code open (not with the picker). The promise ends when the restart has ended (open) or the picker is up (identities);
   // it fails with the reason (`quiet`: the person cancelled).
+  // Open with identities (1.7.42): no VS Code runs, so the picker opens it with no quit first; its "Open without identities" is the plain Open.
   function vsAct(kind, hooks) {
     const given = hooks || {};
+    if (kind === "open-identities" && typeof SERVERS !== "undefined") {
+      const plain = () => vsAct("open", given).catch((error) => { if (given.fail && !error.quiet) given.fail(error); });
+      return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, null, plain));
+    }
     if (kind === "identities" && typeof SERVERS !== "undefined") {
       const quit = (note) => SERVE.restartVS({open: false, onState: (view) => { if (given.onState) given.onState(view, false); if (note) note(view); }}).then(() => waitGone());
       return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, quit));

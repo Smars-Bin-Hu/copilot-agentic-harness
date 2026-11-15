@@ -247,7 +247,7 @@ class RestartServedTests(ServeCase):
         cookie = self.pair()
         data = self.request("POST", "/api/ready", {}, cookie=cookie)[1]
         self.assertEqual(data["restart"]["state"], "quitting")
-        self.assertIn(data["vscode_button"]["kind"], ("open", "restart", "identities"))
+        self.assertIn(data["vscode_button"]["kind"], ("open", "open-identities", "restart", "identities"))
         self.assertEqual(data["vscode_button"]["label"], boardserve.messages.text("ready.vs." + data["vscode_button"]["kind"]))
 
 

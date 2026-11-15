@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## Unreleased
+
+### Added
+
+- **`task fetch --read`: code to read, not to change.** The file comes as the base branch has it (the lines `kb map` read), into `READ/<repository>/<path>` instead of `DEV/`. No plan is needed, the agent cannot edit it, and promote never sees it. The knowledge base skills that read code (`generic-kb-learn-batch`, `generic-kb-refresh`, `generic-kb-toolkit-audit`, `generic-kb-toolkit-design`) now fetch with it. On the Files tab `READ/` comes last; a review snapshot and a fork leave it out.
+- **× on the Approved card** of a task page. It closes the card when you will not tell the agent to run the command. Only the card goes: the approval stands until the agent runs the command or it runs out. The card stays closed in this browser after a reload; a command approved later has a card again.
+
+### Changed
+
+- **Open VS Code with identities, the first time too.** When VS Code is not running and a connection has a sign-in saved that the window holds, the button beside Enter is **Open VS Code with identities**: you tick the identities, and VS Code starts once with them. **Open without identities** is in the same window. Before, the first open had no identities, so carrying them took a second start (**Restart VS Code with identities**).
+- **A dry run, its approval and the promote ask git a few times for each repository, not once for each file.** The checks are the same (a file already on main, a file where a folder is needed, a name in another letter case), but they read the base branch's tree once (`git ls-tree -r -t`) and the base versions of the files in one `git cat-file --batch`. On a work computer, where a process costs a second or more, 45 files took about 300 git processes in each step, 600 in the approval (it checks twice); now about 10.
+- **Promote leaves out a file that is still as it was fetched.** Such a copy was only read (the code a knowledge base card was written from). Before, the dry run checked its repository too, and refused the whole write-back when that repository's base branch had moved on, could not be brought up to its remote, or had changes not committed; you had to delete the copies. Now they are listed as left out, and their repository is not checked.
+- **With identities** is offered only for a sign-in that the window holds: a Windows account or variables. A program that keeps its own sign-in (az) needs nothing from the window, and no longer turns the button into **Restart VS Code with identities**.
+
 ## 1.7.41 (2026-11-15)
 
 Agent Performance Review: what a task cost and where it went, what every call carried, what keeps coming back across tasks, and what the review itself cost.

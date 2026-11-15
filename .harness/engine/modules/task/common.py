@@ -162,13 +162,14 @@ def changed_lines(diff: List[str]) -> Tuple[int, int]:
 
 
 def copy_from_target(
-    root: Path, data: Dict[str, Any], specs: List[str], target: Path, limit: int, purpose: str, notes: Optional[List[str]] = None, rebase: bool = False
+    root: Path, data: Dict[str, Any], specs: List[str], target: Path, limit: int, purpose: str, notes: Optional[List[str]] = None, rebase: bool = False, record: bool = True
 ) -> List[Dict[str, str]]:
     """Files of target repositories as `base_ref` has them (the commit is fixed at the first read), not the working tree.
     `rebase`: the commit is fixed again, at what `base_ref` is now (after it was brought up to its remote): the way to take a file that changed on main since.
 
     A spec is `<repo>/<path>`: a file, or a folder (every tracked file under it). Records the repositories and the blob
-    of each file in `data`, so promote can tell later whether main moved under the files it is about to write.
+    of each file in `data`, so promote can tell later whether main moved under the files it is about to write. `record` False (a copy only to read, 1.7.42): the commit of the
+    repository is still fixed, so every read of the task has the same lines, but the file is not one promote looks at.
     """
     if not specs:
         return []
@@ -233,7 +234,8 @@ def copy_from_target(
             "blob": blob,
             "base_commit": commit,
         })
-        files[key] = {"blob": blob, "base_commit": commit}
+        if record:
+            files[key] = {"blob": blob, "base_commit": commit}
     return entries
 
 

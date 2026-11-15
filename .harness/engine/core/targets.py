@@ -280,8 +280,78 @@ def tracked_files(repo: Repo, commit: str, relative: str, timeout: int = DEFAULT
 
 
 def read_blob(repo: Repo, blob: str, timeout: int = DEFAULT_GIT_TIMEOUT) -> bytes:
-    """The bytes of a file as git stores it: no line-ending conversion."""
-    return git(repo, "cat-file", "blob", blob, timeout=timeout)
+    """The bytes of a file as git stores it: no line-ending conversion. One read in `read_blobs` before is not asked again."""
+    kept = _BLOBS.get((str(repo.path), blob))
+    if kept is not None:
+        return kept
+    return _keep_blob(repo, blob, git(repo, "cat-file", "blob", blob, timeout=timeout))
+
+
+# --- what a commit holds, read once (1.7.42) ------------------------------------------------------------------------------------------------------------------------
+# A promote asked git once for every file, and once more for every folder above a new file (is a file in the way, a name in another letter case?). On a work computer a
+# process costs a second or more: a dry run of 45 files started 300 of them. A commit and a blob never change, so what was read is kept for this process.
+
+TREES_KEPT = 8  # the trees of the newest commits read: a board that runs for days does not keep every commit it ever looked at
+BLOBS_KEPT_BYTES = 64 * 1024 * 1024
+_TREES: Dict[Tuple[str, str], "Tree"] = {}
+_BLOBS: Dict[Tuple[str, str], bytes] = {}
+
+
+class Tree:
+    """Every entry of a commit from one `git ls-tree -r -t`: files, links and submodules, and the folders too."""
+
+    def __init__(self, raw: str) -> None:
+        self.entries: Dict[str, Tuple[str, str, str]] = {}  # path -> (mode, type, sha)
+        self.children: Dict[str, List[Tuple[str, str]]] = {}  # folder ("" is the top) -> (type, name) of what it holds directly
+        for line in raw.split("\0"):
+            if not line:
+                continue
+            info, _, path = line.partition("\t")
+            mode, kind, sha = info.split(" ")
+            self.entries[path] = (mode, kind, sha)
+            folder, _, name = path.rpartition("/")
+            self.children.setdefault(folder, []).append((kind, name))
+
+    def files(self, relative: str) -> List[Tuple[str, str, str]]:
+        """What `tracked_files` answers: (mode, sha, path) of that file, or of everything under that folder."""
+        found = self.entries.get(relative)
+        if found is None:
+            return []
+        if found[1] != "tree":
+            return [(found[0], found[2], relative)]
+        prefix = relative + "/"
+        return [(mode, sha, path) for path, (mode, kind, sha) in self.entries.items() if kind != "tree" and path.startswith(prefix)]
+
+    def names_in(self, folder: str) -> List[Tuple[str, str]]:
+        """(type, name) of what `folder` holds directly ("" is the top); nothing when there is no such folder."""
+        return list(self.children.get(folder, []))
+
+
+def tree(repo: Repo, commit: str, timeout: int = DEFAULT_GIT_TIMEOUT) -> Tree:
+    """Everything `commit` holds, read with one git process the first time."""
+    key = (str(repo.path), commit)
+    if key not in _TREES:
+        raw = git(repo, "ls-tree", "-r", "-t", "-z", "--full-tree", commit, timeout=timeout).decode("utf-8", errors="replace")
+        while len(_TREES) >= TREES_KEPT:
+            _TREES.pop(next(iter(_TREES)))
+        _TREES[key] = Tree(raw)
+    return _TREES[key]
+
+
+def _keep_blob(repo: Repo, blob: str, content: bytes) -> bytes:
+    if sum(len(item) for item in _BLOBS.values()) + len(content) > BLOBS_KEPT_BYTES:
+        _BLOBS.clear()
+    _BLOBS[(str(repo.path), blob)] = content
+    return content
+
+
+def read_blobs(repo: Repo, blobs: List[str], timeout: int = DEFAULT_GIT_TIMEOUT) -> None:
+    """Read these blobs with one `git cat-file --batch` (a few hundred per process), so that `read_blob` has them without a process each."""
+    wanted = [blob for blob in dict.fromkeys(blobs) if blob and (str(repo.path), blob) not in _BLOBS]
+    if not wanted:
+        return
+    for blob, content in gitread.blobs(repo.path, repo.name, wanted, max(timeout, DEFAULT_GIT_TIMEOUT)).items():
+        _keep_blob(repo, blob, content)
 
 
 def text(repo: Repo, *arguments: str, timeout: int = DEFAULT_GIT_TIMEOUT) -> str:

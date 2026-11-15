@@ -4,7 +4,7 @@
 // Readiness: POST /api/ready every 3 s (a read; the server answers from caches and waits for nothing). Two blocks (1.7.38). Harness & Local is required: this copy is set up, this browser is paired, harness doctor has
 // no error, VS Code is open, Copilot is connected. Enter is allowed only when every one is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page.
 // From the company is optional (knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories): never a gate, but what is missing is said here with a link to the place that
-// mends it, and again in the block of the board after Enter (readybar.js). The VS Code button is always beside Enter: Open, Restart, or Restart with identities (vsrestart.py).
+// mends it, and again in the block of the board after Enter (readybar.js). The VS Code button is always beside Enter: Open, Open with identities, Restart, or Restart with identities (vsrestart.py).
 // A check that cannot run shows as failed with its reason; a board that does not answer shows a line saying so and the screen goes on asking.
 //
 // Showing it: once for each tab session (sessionStorage, in try/catch), not on a poll, a reload of the board or a way back from a task. A task page opened from a link skips it only when everything
@@ -580,7 +580,7 @@
     vsBtn.hidden = false;  // always there (the person decided, 1.7.38): Open, Restart, or Restart with identities
     vsBtn.disabled = going;
     vsBtn.classList.toggle("hot", !ready && !chk0.setup && Boolean(vs) && vs.state !== "ok");
-    vsBtn.title = going ? "" : t(up ? "board.enter.vs.restart.tip" : "board.enter.vs.open.tip");
+    vsBtn.title = going ? "" : t(up ? "board.enter.vs.restart.tip" : buttonKind() === "open-identities" ? "board.enter.vs.open-identities.tip" : "board.enter.vs.open.tip");
   }
   function fitList() {  // a short window: the list scrolls inside the room under the wordmark instead of running into it
     const wr = svg.getBoundingClientRect();
@@ -666,7 +666,7 @@
     button.disabled = true;
     ask("/api/launch", {}).then(() => { button.textContent = t("board.enter.launched"); }, (error) => { button.disabled = false; button.textContent = error.message; });
   });
-  // The VS Code button (1.7.38): Open when none runs, Restart when one does, Restart with identities when a sign-in is saved and its test passed. The board asks VS Code to quit the normal way and waits; it never kills it.
+  // The VS Code button (1.7.38): Open when none runs, Restart when one does, Restart with identities when a sign-in a window holds is saved and its test passed; Open with identities when none runs and there is such a sign-in (1.7.42). The board asks VS Code to quit the normal way and waits; it never kills it.
   vsBtn.addEventListener("click", () => {
     if (vsBtn.disabled) return;
     chk0.fail = ""; chk0.restarting = true; render();

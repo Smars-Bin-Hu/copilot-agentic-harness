@@ -363,15 +363,17 @@ const SERVERS = (function () {
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.
   // `before`: a function that closes the VS Code that runs (1.7.38, readyui.js `vsAct`); it runs after the person pressed the button, never before: a window that is cancelled changes nothing.
-  function choose(opened, before) {  // `opened`: what the page does once VS Code was started with the identities (the Enter screen waits for it, 1.7.19)
+  // `plain` (1.7.42): with no VS Code running, the window is the first step of Open; its "Open without identities" closes the window and opens VS Code without any.
+  function choose(opened, before, plain) {  // `opened`: what the page does once VS Code was started with the identities (the Enter screen waits for it, 1.7.19)
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const said = h("p", {class: "sub sv-plan"});
     const running = h("p", {class: "bad sv-plan", hidden: ""}, t("connections.open.running"));  // its own line: the plan does not write over it
     const closing = h("p", {class: "sub sv-plan", hidden: ""}, t("connections.open.restart.note"));  // with `before`: a VS Code that is open is closed first, the normal way
     const go = h("button", {type: "button", class: "act hot", disabled: ""}, t(before ? "connections.open.restart" : "connections.open.go"));
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const bare = plain ? h("button", {type: "button", class: "act"}, t("connections.open.plain")) : null;
     const primaryNote = h("p", {class: "sub sv-plan", hidden: ""}, t("connections.primary.note"));  // (1.7.39) shown with the "window's account" choice: one Windows account per window, what `harness as` does for the others
-    const view = SERVE.dialog([h("h2", null, t("connections.open.title")), h("p", {class: "sub"}, t("connections.open.lead")), h("div", {class: "win-body"}, list, primaryNote, said, running, closing), h("div", {class: "row win-foot"}, go, close)]);
+    const view = SERVE.dialog([h("h2", null, t("connections.open.title")), h("p", {class: "sub"}, t("connections.open.lead")), h("div", {class: "win-body"}, list, primaryNote, said, running, closing), h("div", {class: "row win-foot"}, go, bare, close)]);
     view.box.classList.add("wide", "sv-win");
     let rows = [], picked = kept("chosen", null), primary = kept("primary", ""), found0 = null;
     const marks = {};
@@ -415,14 +417,16 @@ const SERVERS = (function () {
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     go.addEventListener("click", () => {
       go.disabled = true; go.dataset.busy = "1";
+      if (bare) bare.disabled = true;  // VS Code is opening with the ticked identities: no second open
       if (before) close.disabled = true;  // once VS Code is on its way out there is no way back
-      const free = () => { delete go.dataset.busy; close.disabled = false; go.disabled = !picked.length; };
+      const free = () => { delete go.dataset.busy; close.disabled = false; if (bare) bare.disabled = false; go.disabled = !picked.length; };
       (before ? before((view) => { if (typeof READY !== "undefined") said.replaceChildren(READY.restartNote(view)); }) : Promise.resolve()).then(() => ask("open", {chosen: picked, primary})).then((done) => {
         said.replaceChildren(done.started ? t("connections.open.started", {n: done.direct.length + done.wrap.length}) : h("span", {class: "bad"}, done.why || ""));
         if (done.started) { if (opened) opened(); close.disabled = false; setTimeout(view.close, 2500); } else free();
       }, (error) => { said.replaceChildren(error && error.quiet ? "" : h("span", {class: "bad"}, (error && error.message) || String(error))); free(); });  // the person said no to the question about a working agent: VS Code was not touched
     });
     close.addEventListener("click", view.close);
+    if (bare) bare.addEventListener("click", () => { if (go.dataset.busy) return; view.close(); plain(); });
   }
 
   return {open, connectionsPanel, choose, summary};

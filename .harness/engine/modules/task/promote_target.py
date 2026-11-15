@@ -52,15 +52,8 @@ def _diff(old: bytes, new: bytes, name: str) -> Dict[str, Any]:
 
 
 def _names_in(repo: targets.Repo, commit: str, folder: str, timeout: int) -> List[Tuple[str, str]]:
-    """(type, name) of what `commit` has directly in `folder` ("" is the top)."""
-    spec = [f"{folder}/"] if folder else []
-    raw = targets.git(repo, "ls-tree", "-z", commit, "--", *spec, timeout=timeout).decode("utf-8", errors="replace")
-    found = []
-    for line in raw.split("\0"):
-        if line:
-            info, _, path = line.partition("\t")
-            found.append((info.split(" ")[1], path.rsplit("/", 1)[-1]))
-    return found
+    """(type, name) of what `commit` has directly in `folder` ("" is the top). From the tree read once (1.7.42), not a git process for each folder."""
+    return targets.tree(repo, commit, timeout).names_in(folder)
 
 
 def _file_problem(
@@ -68,7 +61,7 @@ def _file_problem(
 ) -> Tuple[str, str, Optional[bytes]]:
     """(problem, "", None) or ("", blob of the base branch or "", its bytes). "" blob means a new file."""
     recorded = target_files.get(key)
-    listed = targets.tracked_files(repo, commit, relative, timeout)
+    listed = targets.tree(repo, commit, timeout).files(relative)  # 1.7.42: the tree read once, not a git process for each file
     exact = [item for item in listed if item[2] == relative]
     if listed and not exact:
         return say("promote.file.folder", key=key, base_ref=repo.base_ref), "", None
@@ -166,6 +159,8 @@ def plan_files(
                     mine += direct_problems(repo, timeout)
                 elif branch and targets.valid_branch(branch) and targets.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", timeout=timeout, allow_failure=True).strip():
                     mine.append(say("promote.repo.branch_exists", branch=branch) + hints["rename_branch"])
+                held = targets.tree(repo, commit, timeout).entries  # 1.7.42: the base versions of the files that are there, read with one git process, not one each
+                targets.read_blobs(repo, [found[2] for found in (held.get(item["relative"]) for item in by_repo[name]) if found and found[1] == "blob"], timeout)
         except targets.TargetError as error:
             problems.append(messages.text("note.detail", what=name, detail=error))
             continue

@@ -1142,11 +1142,28 @@
     for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000 || (left && !left.has(code) && (seenCodes.has(code) || now - found.at > 6000))) { approvedCalls.delete(code); toldCodes.delete(code); seenCodes.delete(code); }
     for (const code of [...seenCodes]) if (left && !left.has(code)) seenCodes.delete(code);
   }
+  // The × of the card (1.7.42): the person will not tell the agent, so the card goes. Only the card: the approval stands until it is used or runs out. Kept in this browser, per task,
+  // so a new poll or a reload does not bring it back; a code approved later has a card again.
+  const CLOSED_KEY = "tk-approved-closed";
+  const closedApproved = () => { try { return new Set((JSON.parse(localStorage.getItem(CLOSED_KEY) || "{}") || {})[desk.name] || []); } catch (error) { return new Set(closedHere.get(desk.name) || []); } };
+  const closedHere = new Map();  // task -> codes, when this browser keeps no storage: the card stays closed until the page is left
+  function closeApproved(codes, live) {
+    const kept = [...new Set([...closedApproved(), ...codes])].filter((code) => !live || live.has(code) || codes.includes(code));  // a code no longer approved is not kept
+    closedHere.set(desk.name, kept);
+    try {
+      const all = JSON.parse(localStorage.getItem(CLOSED_KEY) || "{}") || {};
+      if (kept.length) all[desk.name] = kept; else delete all[desk.name];
+      localStorage.setItem(CLOSED_KEY, JSON.stringify(all));
+    } catch (error) { /* closed until the page is left */ }
+  }
   function approvedCard() {
     const now = Date.now();
     const left = Array.isArray(desk.approved) ? new Set(desk.approved.map((item) => item.code)) : null;  // null: a page without the list (a saved copy)
     pruneApproved(left, now);
-    const codes = [...new Set([...(left ? [...left] : []), ...approvedCalls.keys()])];
+    const closed = closedApproved();
+    const listed = [...new Set([...(left ? [...left] : []), ...approvedCalls.keys()])];
+    if (left && [...closed].some((code) => !listed.includes(code))) closeApproved([], new Set(listed));  // run or run out: forget it
+    const codes = listed.filter((code) => !closed.has(code));
     if (!codes.length || desk.past) return null;
     const titles = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.title]));
     const heardBy = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.told || ""]));  // "wait": its wait returned; "message": the board woke it (1.7.38)
@@ -1162,11 +1179,14 @@
       SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: t("desk.outbox.tell.body", {codes: codes.join(", ")}), step: "act"})
         .then(() => { codes.forEach((code) => toldCodes.add(code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"); });
     });
-    return h("section", {class: "tk-need strong tk-call done"},
-      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good")),
+    const shut = h("button", {type: "button", class: "act close", title: t("desk.outbox.approved.close"), "aria-label": t("desk.outbox.approved.close")}, "×");
+    const card = h("section", {class: "tk-need strong tk-call done"},
+      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good"), shut),
       codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, code), title ? h("span", {class: "tk-call-say"}, title) : null); }),  // each code stands in front of its own title (1.7.29)  // which call was approved (1.7.25)
       h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : viaWait ? "desk.outbox.told.wait" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
       viaWait ? null : h("div", {class: "tk-need-go tk-call-go"}, tell, said));  // the agent's wait returned and it goes on by itself: nothing to press
+    shut.addEventListener("click", () => { closeApproved(codes, left); card.remove(); });
+    return card;
   }
   // After "Open <connection> for this task" on a card (1.7.38): the connection is open, the command is not approved. A green card asks the person to tell the agent to run it again; it goes when the agent has.
   const toldOpened = new Set();

@@ -1222,6 +1222,19 @@ def state(root: Path) -> Dict[str, Any]:
     return found if isinstance(found, dict) else {}
 
 
+def window_held(root: Path) -> List[str]:
+    """The connections whose saved identity a window of VS Code can hold: a Windows account, or variables (1.7.42). Only these make "with identities" worth a choice:
+    a program that keeps its own sign-in (`tool`: az) needs nothing from the window."""
+    servers, known, env = listed(root), types(root), read_env(root)
+    out: List[str] = []
+    for alias, server in servers.items():
+        kind = known.get(str(server.get("type")))
+        identity = identity_of(env, alias, kind, server) if kind else {}
+        if identity and (delivery(kind, server)["identity"] == "netonly" or variables(kind, server, identity)):
+            out.append(alias)
+    return out
+
+
 def plan(root: Path, chosen: List[str], primary: str = "") -> Dict[str, Any]:
     """Which of the chosen identities this window holds itself (`direct`) and which go through `harness as` (`wrap`): one Windows account per window
     (the `primary`, else the first), one value per variable (the first that wants it). `missing`: chosen with nothing saved."""

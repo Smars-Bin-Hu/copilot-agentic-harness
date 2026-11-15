@@ -415,9 +415,10 @@ class ReadinessTests(TaskCase):
         self.assertFalse(found["ready"])
 
     def test_the_vscode_button_is_open_restart_or_restart_with_identities(self) -> None:
-        """Always there. Open: no VS Code runs. Restart: one runs (for this copy, or any, by the probe). With identities: and a connection has a sign-in saved and a test that passed."""
+        """Always there. Open: no VS Code runs. Restart: one runs (for this copy, or any, by the probe). With identities: and a connection has a sign-in saved that a window holds and a test that passed.
+        Open with identities (1.7.42): none runs and there is such a sign-in, so the first open carries them and VS Code does not start twice."""
         down = {"ready": False, "bound": 0, "unbound": 0, "why": "none"}
-        for status, running, identities, kind in ((down, False, 0, "open"), (down, True, 0, "restart"), (UP, None, 0, "restart"), (UP, False, 3, "identities"), (down, False, 3, "open"),
+        for status, running, identities, kind in ((down, False, 0, "open"), (down, True, 0, "restart"), (UP, None, 0, "restart"), (UP, False, 3, "identities"), (down, False, 3, "open-identities"),
                                                     ({"ready": False, "bound": 0, "unbound": 0, "why": "starting"}, False, 0, "restart")):
             check = ready.Ready(self.root, StubLink(status), clean, running=ready.Running(probe=lambda value=running: bool(value)))
             check.vs_running.look()
@@ -425,7 +426,7 @@ class ReadinessTests(TaskCase):
             button = check.vscode_button(vscode, identities)
             self.assertEqual((button["kind"], button["up"]), (kind, vscode["state"] in ("ok", "wait") or bool(running)), (status["why"], running, identities))
             self.assertEqual(button["label"], messages.text("ready.vs." + kind))
-        self.assertEqual([messages.table("en")["ready.vs." + kind] for kind in ("open", "restart", "identities")], ["Open VS Code", "Restart VS Code", "Restart VS Code with identities"])
+        self.assertEqual([messages.table("en")["ready.vs." + kind] for kind in ("open", "open-identities", "restart", "identities")], ["Open VS Code", "Open VS Code with identities", "Restart VS Code", "Restart VS Code with identities"])
 
     def test_the_words_of_the_vscode_button_do_not_jump_while_the_answer_of_the_probe_does(self) -> None:
         """1.7.38: with VS Code closed the button went Open, Restart with identities, Open: a helper process came and went. A new answer counts after it stood BUTTON_HOLD seconds."""
@@ -445,14 +446,14 @@ class ReadinessTests(TaskCase):
             kinds.append(kind)
             return kind
 
-        self.assertEqual(look(False), "open")
-        self.assertEqual(look(True, 3), "open")  # a helper shows up for a moment
-        self.assertEqual(look(False, 3), "open")
-        self.assertEqual(look(True, 3), "open")
-        self.assertEqual(look(True, ready.BUTTON_HOLD - 1), "open")  # it stood, but not long enough yet
+        self.assertEqual(look(False), "open-identities")
+        self.assertEqual(look(True, 3), "open-identities")  # a helper shows up for a moment
+        self.assertEqual(look(False, 3), "open-identities")
+        self.assertEqual(look(True, 3), "open-identities")
+        self.assertEqual(look(True, ready.BUTTON_HOLD - 1), "open-identities")  # it stood, but not long enough yet
         self.assertEqual(look(True, 2), "identities")  # it stands: a VS Code does run
         self.assertEqual(look(False, 3), "identities")  # and one that goes away for a moment changes nothing
-        self.assertEqual(look(False, ready.BUTTON_HOLD), "open")
+        self.assertEqual(look(False, ready.BUTTON_HOLD), "open-identities")
         up = {"ready": True, "bound": 1, "unbound": 0, "why": "ok"}
         check.link = StubLink(up)
         self.assertEqual(check.vscode_button(check.vscode(), 3)["kind"], "identities")  # a VS Code that is linked is never in doubt
@@ -765,8 +766,13 @@ class BlockPageTests(unittest.TestCase):
         # with identities the person chooses first: VS Code is closed by the picker's own button, after the choice (1.7.38, T1-14b), never before the picker is up
         self.assertIn("const quit = (note) => SERVE.restartVS({open: false", ui)
         self.assertRegex(ui, r"SERVERS\.choose\(\(\) => \{[^}]*\}, quit\)")
+        # with none running (1.7.42): the picker opens it with no quit first, and its other button is the plain Open
+        self.assertRegex(ui, r'kind === "open-identities"[^\n]*\n[^\n]*const plain = \(\) => vsAct\("open", given\)')
+        self.assertRegex(ui, r"SERVERS\.choose\(\(\) => \{[^}]*\}, null, plain\)")
         picker = (WEB / "servers.js").read_text(encoding="utf-8")
-        self.assertIn("function choose(opened, before)", picker)
+        self.assertIn("function choose(opened, before, plain)", picker)
+        self.assertIn('h("div", {class: "row win-foot"}, go, bare, close)', picker)
+        self.assertIn("view.close(); plain();", picker)
         self.assertIn("(before ? before(", picker)
         self.assertIn(": Promise.resolve()).then(() => ask(\"open\"", picker)  # quit, wait until it is gone, then open with the identities
         self.assertIn("error && error.quiet", picker)  # no to the question about a working agent: nothing was touched

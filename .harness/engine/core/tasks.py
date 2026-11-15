@@ -27,6 +27,7 @@ LOG_FILE = "LOG.md"
 REQ_FILE = "REQ.md"  # the requirement as the agent understands it; REQ/ holds the person's own documents
 PLAN_NAME = "PLAN.md"
 DEV_NAME = "DEV"
+READ_NAME = "READ"  # READ/<repo>/<path>: code of a target repository fetched only to be read (`task fetch --read`, 1.7.42), as the base branch has it; never promoted
 MANUAL_NAME = "_manual"  # DEV/_manual/<path>: made under the plan like the rest of DEV/, run by hand by the person, never promoted (1.6.110)
 STATE_DIR = ".task"
 STATE_NAME = "task.json"
@@ -68,6 +69,10 @@ def plan_file(root: Path, task: str) -> Path:
 
 def dev_dir(root: Path, task: str) -> Path:
     return task_dir(root, task) / DEV_NAME
+
+
+def read_dir(root: Path, task: str) -> Path:
+    return task_dir(root, task) / READ_NAME
 
 
 def base_dir(root: Path, task: str) -> Path:

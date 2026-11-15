@@ -162,6 +162,18 @@ class OneWindowTests(ConnectionsCase):
         connections.save(self.root, "db-ist", {"account": "corp\\A", "password": "x"})  # the same account: one window holds both
         self.assertEqual(connections.plan(self.root, ["db-dev", "db-ist"], primary="db-dev")["wrap"], [])
 
+    def test_only_a_sign_in_a_window_can_hold_counts_for_opening_with_identities(self) -> None:
+        """1.7.42: variables and a Windows account go with the window; a program that keeps its own sign-in (az) needs nothing from it, nor does a connection with nothing saved."""
+        put_type(self.root, dict(KIND, type="faketool", auth={"az": {"identity": "tool", "login": "fakedb login"}}))
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1"}, "db-ist": {"type": "fakedb", "env": "ist", "auth": "win", "host": "db2"},
+                      "db-qat": {"type": "fakedb", "env": "qat", "auth": "own", "host": "db3"}, "tickets": {"type": "faketool", "env": "dev", "auth": "az", "host": "t1"}})
+        self.assertEqual(connections.window_held(self.root), [])
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        connections.save(self.root, "db-ist", {"account": "CORP\\a", "password": "x"})
+        connections.save(self.root, "tickets", {}, who="alice@example.com")
+        self.assertTrue(connections.identity_of(connections.read_env(self.root), "tickets", connections.types(self.root)["faketool"], connections.listed(self.root)["tickets"]))  # it is signed in
+        self.assertEqual(sorted(connections.window_held(self.root)), ["db-dev", "db-ist"])
+
     def test_harness_as_runs_only_that_servers_commands_with_its_identity(self) -> None:
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
         done = self.cli("as", "db-dev", "--", "fakedb", "--host", "db1:5000", "--who")

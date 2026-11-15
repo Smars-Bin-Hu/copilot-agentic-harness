@@ -613,11 +613,15 @@ def fill_confirmation(root: Path, task: str, path: Path, text: str, data: Dict[s
 # --- fetch, delete, diff -------------------------------------------------------------------------
 
 
-def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False, rebase: bool = False, source: str = "") -> Dict[str, Any]:
+def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False, rebase: bool = False, source: str = "", read: bool = False) -> Dict[str, Any]:
     """`overwrite`: take the base version again over a file changed in DEV/. `rebase`: also fix the base again at what main is now (the file changed on main since): the version
-    is the new one, and what was changed in DEV/ is dropped, the agent makes the change again. `source`: the file a `_manual/<path>` is taken from."""
+    is the new one, and what was changed in DEV/ is dropped, the agent makes the change again. `source`: the file a `_manual/<path>` is taken from. `read`: only to read it (1.7.42)."""
     if not specs:
         raise CommandError(say("fetch.empty"))
+    if read:
+        if source.strip() or overwrite or rebase or any(tasks.is_manual(spec.strip()) for spec in specs):
+            raise CommandError(say("fetch.read.alone"))
+        return fetch_to_read(root, raw_task, specs)
     if source.strip() or any(tasks.is_manual(spec.strip()) for spec in specs):
         return fetch_by_hand(root, raw_task, specs, source, overwrite)
     overwrite = overwrite or rebase
@@ -660,6 +664,36 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False, 
     from core import kbstd  # read only when something was fetched
 
     cards = kbstd.knowledge_for(root, fetched + kept)
+    if cards:
+        result["kb_cards"] = cards
+        stale = [item["id"] for item in cards if item["stale"]]
+        result["kb_note"] = say("fetch.kb.stale", ids=", ".join(stale)) if stale else say("fetch.kb.cards")
+    return result
+
+
+def fetch_to_read(root: Path, raw_task: str, specs: List[str]) -> Dict[str, Any]:
+    """`task fetch --read` (1.7.42): files of a target repository as its base branch has them, copied to READ/<repo>/<path> to be read only (the code a knowledge base card is
+    written from). The lines are those of the base, as `kb map` read them. Not DEV/: promote never sees them, so a copy only read does not hold a write-back back, and no plan is needed."""
+    task = resolve(root, raw_task)
+    limit = common.policy(root)["fetch"]["max_files"]
+    synced: List[str] = []
+    with locked(root, task) as data:
+        require_open(data)
+        found = common.load_targets(root)
+        for spec in specs:
+            name, _, rest = spec.strip().replace("\\", "/").partition("/")
+            if name in found.repos and rest.strip("/"):
+                common.check_target_output(found, f"{name}/{rest.strip('/')}", "fetch")
+        entries = common.copy_from_target(root, data, specs, tasks.read_dir(root, task), limit, "read", synced, record=False)
+        keys = [entry["source"] for entry in entries]
+        if keys:
+            note(data, "fetch", messages.joined(keys) + " (read)")
+    result: Dict[str, Any] = {"task": task, "read": [f"{task}/{tasks.READ_NAME}/{key}" for key in keys], "note": say("fetch.read.note")}
+    if synced:
+        result["base_sync"] = synced
+    from core import kbstd  # read only when something was fetched
+
+    cards = kbstd.knowledge_for(root, keys)
     if cards:
         result["kb_cards"] = cards
         stale = [item["id"] for item in cards if item["stale"]]
@@ -834,13 +868,17 @@ def make_plan(root: Path, task: str, data: Dict[str, Any], sync: bool = False) -
     loose = [key for key, _path in found if "/" not in key]  # directly in DEV/: under no repository, so it is not written back
     by_hand = [key for key, _path in found if tasks.is_manual(key)]  # DEV/_manual/: the person runs it by hand
     items: List[Dict[str, Any]] = [{"key": key, "source": path, "sha256": common.sha256_file(path), "delete": False} for key, path in found if "/" in key and not tasks.is_manual(key)]
+    base = tasks.base_dir(root, task)
+    untouched = [item["key"] for item in items if (base / item["key"]).is_file() and common.sha256_file(base / item["key"]) == item["sha256"]]  # 1.7.42: as fetched, only read: nothing to write, and its repository is not checked
+    items = [item for item in items if item["key"] not in untouched]
     clash = [item["key"] for item in items if item["key"] in data["deletes"]]
     if clash:
         raise CommandError(say("promote.clash", key=clash[0]))
     items += [{"key": key, "source": None, "sha256": "", "delete": True} for key in data["deletes"]]
     if not items:
         raise CommandError(say("promote.nothing") + (say("promote.nothing.loose", loose=messages.joined(loose)) if loose else "")
-                           + (say("promote.nothing.manual", count=len(by_hand), task=task) if by_hand else ""))
+                           + (say("promote.nothing.manual", count=len(by_hand), task=task) if by_hand else "")
+                           + (say("promote.nothing.untouched", count=len(untouched)) if untouched else ""))
     branch = data.get("branch", "")
     notes: Optional[List[str]] = [] if sync else None
     repos, files = promote_target.plan_files(root, items, data["target_files"], branch, hints(), notes)
@@ -856,6 +894,9 @@ def make_plan(root: Path, task: str, data: Dict[str, Any], sync: bool = False) -
     if by_hand:
         result["by_hand"] = by_hand
         result["by_hand_note"] = say("promote.manual.note")
+    if untouched:
+        result["untouched"] = untouched
+        result["untouched_note"] = say("promote.untouched.note")
     return result
 
 

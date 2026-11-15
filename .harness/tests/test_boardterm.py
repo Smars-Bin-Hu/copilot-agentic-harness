@@ -235,5 +235,7 @@ class BoardPersonTests(unittest.TestCase):
 
         with self.assertRaises(approval.Refused) as caught:
             approval.ask("Approve", "abcdef", "no", reader=eof)
-        self.assertIn("Terminal", str(caught.exception))
+        from core import messages
+
+        self.assertEqual(str(caught.exception), messages.text("approval.no_input"), "the words that say the Terminal window has no keyboard, in the language set")
 

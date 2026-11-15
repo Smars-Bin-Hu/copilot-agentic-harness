@@ -936,7 +936,7 @@ class LinkedItems(TaskCase):
         """K3: `./x.sh`, `source`, `.`, `<`, `cat | bash`, `bash -x`, `pwsh -File`, a script outside the repository, a file that is not there, a file that is too big."""
         self.open_links()
         self.scripts()
-        outside = self.root.parent / "outside-bad.sh"
+        outside = self.root.parent / f"outside-bad-{self.root.name}.sh"  # its own name: two runs at once (3.9 and 3.12) share this folder
         outside.write_text("tracker --org demo comment 7 hi\n", encoding="utf-8")
         self.addCleanup(outside.unlink)
         for line in ("./tools/bad.sh", "source tools/bad.sh", ". ./tools/bad.sh", "bash < tools/bad.sh", "cat tools/bad.sh | bash", "cat tools/bad.sh | sh", "bash -x tools/bad.sh",

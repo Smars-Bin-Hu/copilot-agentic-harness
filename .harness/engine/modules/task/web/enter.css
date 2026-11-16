@@ -89,6 +89,11 @@ html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5
 .en-chk-l .ck{width:7px;height:7px;border-radius:50%;justify-self:center;background:var(--soft);opacity:.7}
 .en-chk-l .s-check .ck{background:none;border:1.5px solid var(--soft);border-top-color:transparent;width:9px;height:9px;opacity:1;animation:enspin .8s linear infinite}
 .en-chk-l .s-ok .ck{background:var(--good-dot);opacity:1}
+.en-chk-l li .pg{grid-column:2/-1;position:relative;height:3px;margin:4px 0 2px;border-radius:2px;overflow:hidden}  /* a line still at work (1.7.43) */
+.en-chk-l li .pg::before{content:"";position:absolute;inset:0;background:var(--soft);opacity:.3}
+.en-chk-l li .pg i{position:relative;display:block;height:100%;width:0;border-radius:inherit;background:var(--en-ink);opacity:.6;transition:width .6s ease}
+.en-chk-l li .pg.pg-any i{width:30%;animation:enslide 1.5s ease-in-out infinite alternate}
+@keyframes enslide{from{transform:translateX(0)}to{transform:translateX(233%)}}
 .en-chk-l .s-wait .ck{background:var(--hot-dot);opacity:1;animation:enbeat 1.2s ease-in-out infinite}
 .en-chk-l .s-fail .ck{background:var(--hot-dot);opacity:1;box-shadow:0 0 0 3px var(--hot-line)}
 .en-chk-l em.has-tip{cursor:help;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--soft)}

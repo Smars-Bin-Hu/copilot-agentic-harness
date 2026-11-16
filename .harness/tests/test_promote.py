@@ -168,6 +168,36 @@ class GitCallsTests(PromoteCase):
         self.assertLess(len(calls), 12)
 
 
+class ApproveTwiceTests(PromoteCase):
+    def test_the_plan_is_looked_at_again_only_when_time_passed_before_the_code(self) -> None:
+        """1.7.43: the board's code comes at once (the plan was read in its preview): one look. In a terminal the person reads first: a change meanwhile is still found."""
+        task = self.flow({"repo_b/src/a.sql": "select 1, 2;\n"})
+        self.dry_run(task)
+        plan = self.request(task)["promote"]["plan_sha256"]
+        looks: List[int] = []
+        real = task_ops.make_plan
+
+        def counted(*args: Any, **kwargs: Any) -> Any:
+            looks.append(1)
+            return real(*args, **kwargs)
+
+        with mock.patch.object(task_ops, "make_plan", counted), mock.patch.object(task_ops.approval, "ask", lambda *a, **k: None):
+            task_ops.approve_promote(self.root, task, reader=lambda _q: plan[:6], interactive=True, out=io.StringIO())
+        self.assertEqual(len(looks), 1)
+
+        other = self.flow({"repo_b/src/b.sql": "select 22;\n"}, fetched=["repo_b/src/b.sql"], branch="feature/other")
+        self.dry_run(other)
+
+        def slow_reader(_question: str) -> str:
+            self.dev("repo_b/src/b.sql", "select 23;\n", task=other)  # changed while the person read the screen
+            return ""
+
+        with mock.patch.object(task_ops, "RECHECK_AFTER", -1.0), mock.patch.object(task_ops.approval, "ask", lambda question, digest, refusal, reader: reader(question)):
+            with self.assertRaises(CommandError) as said:
+                task_ops.approve_promote(self.root, other, reader=slow_reader, interactive=True, out=io.StringIO())
+        self.assertEqual(str(said.exception), messages.text("promote.changed"))
+
+
 class CheckTests(PromoteCase):
     def say(self, request_id: str) -> str:
         return self.refused("task", "promote", "--task", request_id, "--dry-run")

@@ -468,6 +468,21 @@
 
   // The words of a restart that is going on: the VS Code line says so, and the button waits.
   function showRestart(view, willOpen) { chk0.restart = view; if (view.state === "done" && willOpen !== false) chk0.opened = Date.now(); render(); }
+  // A required line that is still at work has a bar under it (1.7.43): doctor takes a minute and more on a work computer, and "checking" alone looked stuck. Doctor tells its steps:
+  // the bar fills, the line says how far and how long, the hover names the step. Any other line waits for something it cannot count: the bar moves to and fro. `c` null: no bar.
+  function busyBar(li, em, c) {
+    let bar = li.querySelector(".pg");
+    if (!c) { if (bar) bar.remove(); return; }
+    if (!bar) { bar = h("div", {class: "pg"}, h("i")); li.insertBefore(bar, li.querySelector(".m")); }
+    const p = c.id === "doctor" && c.progress ? c.progress : null;
+    const known = Boolean(p && p.total > 0);
+    setClass(bar, "pg" + (known ? "" : " pg-any"));
+    const width = known ? Math.max(4, Math.round(100 * p.done / p.total)) + "%" : "";
+    if (bar.firstChild.style.width !== width) bar.firstChild.style.width = width;
+    if (!p) return;
+    setText(em, known ? t("board.enter.doctor.progress", {done: p.done, total: p.total, s: p.seconds}) : t("board.enter.doctor.seconds", {s: p.seconds}));
+    li.title = p.step ? t("board.enter.doctor.step", {step: p.step}) : "";
+  }
   const optionalCount = () => (chk0.last && chk0.last.optional ? chk0.last.optional.count : 0);
   function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks
     if (!list.children.length) build();
@@ -486,6 +501,7 @@
       li.title = id === "connections" && c && c.rows && c.rows.length ? "" : view.tip || "";  // the hover table has the same sentence at its foot: not a second bubble beside it
       li.dataset.fix = !req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? "1" : "";
       if (!req && c && c.names && c.names.length) { setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setText(em, view.tag || (view.state === "check" ? "" : "—")); }
+      busyBar(li, em, lit && req && (view.state === "check" || (view.state === "wait" && !(id === "copilot" && c.why === "vscode"))) ? c : null);
       const p = li.querySelector(".m");
       const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), id === "vscode" ? [chk0.restart && chk0.restart.state, chk0.restart && chk0.restart.why, chk0.fail] : "", c && c.integrity, c && c.launch, root.lang]);
       let note = view.note, soft = view.soft;

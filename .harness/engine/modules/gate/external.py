@@ -1155,7 +1155,11 @@ def _text_runners(text: str, bodies: List[Tuple[str, bool]], names: List[str], c
             folders = _after_cd(folders, tokens, at)
             continue
         if _program(tokens[at]) in _RUN_WRAPPERS:  # (1.7.38, C13 S5) `harness as x -- make -f - <<EOF`, `stdbuf -o0 make ...`: the runner behind a program that only starts it
-            at = next((index for index in range(at + 1, len(tokens)) if _program(tokens[index]) in TEXT_RUNNERS), at)
+            start = at + 1
+            if _program(tokens[at]) == "harness":  # 1.7.43: only `harness as <name> -- <command>` starts a program; `harness task link add ado:1` is no run of the build tool `task`
+                is_as = at + 1 < len(tokens) and tokens[at + 1] == "as"
+                start = (tokens.index("--", at) + 1 if "--" in tokens[at:] else at + 3) if is_as else len(tokens)  # after `--`, or after the name when it is left out
+            at = next((index for index in range(start, len(tokens)) if _program(tokens[index]) in TEXT_RUNNERS), at)
         runner, words = _runner_of(tokens, at)
         if runner not in TEXT_RUNNERS:
             continue

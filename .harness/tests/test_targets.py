@@ -174,6 +174,31 @@ class ReadingTests(unittest.TestCase):
             self.assertEqual(sorted(targets.read_blob(self.repo, sha) for sha in blobs), [b"a\n", b"b\n"])
         self.assertEqual(spy.call_count, 1)
 
+    def test_one_look_answers_what_four_git_calls_did(self) -> None:
+        """1.7.43: the base commit, the branch checked out, the changes not committed (changed, renamed, new, untracked) and the local branches, in two processes."""
+        def same() -> None:
+            seen = targets.look(self.repo)
+            self.assertEqual(seen["commit"], targets.ref_commit(self.repo))
+            self.assertEqual(seen["branch"], targets.current_branch(self.repo))
+            self.assertEqual(sorted(seen["dirty"]), sorted(targets.dirty_paths(self.repo)))
+            self.assertEqual(seen["heads"], set(run_git(self.path, "for-each-ref", "--format=%(refname:short)", "refs/heads").split()))
+
+        same()
+        (self.path / "a.txt").write_text("changed\n", encoding="utf-8")
+        (self.path / "new dir").mkdir()
+        (self.path / "new dir" / "c d.txt").write_text("untracked\n", encoding="utf-8")
+        run_git(self.path, "mv", "dir/b.txt", "dir/b2.txt")
+        same()
+        self.assertEqual(sorted(targets.look(self.repo)["dirty"]), ["a.txt", "dir/b2.txt", "new dir/c d.txt"])
+        run_git(self.path, "stash", "-u", "-q")
+        run_git(self.path, "branch", "feature/x")
+        run_git(self.path, "tag", "-a", "v1", "-m", "a tag")
+        same()
+        run_git(self.path, "checkout", "-q", "--detach")
+        same()
+        self.assertEqual(targets.look(targets.Repo("t", self.path, "v1"))["commit"], targets.ref_commit(targets.Repo("t", self.path, "v1")))  # an annotated tag: its commit
+        self.assertEqual(targets.look(targets.Repo("n", self.path, "nope"))["commit"], "")
+
     def test_a_missing_branch_is_an_empty_commit(self) -> None:
         self.assertEqual(targets.ref_commit(targets.Repo("r", self.path, "nope")), "")
 

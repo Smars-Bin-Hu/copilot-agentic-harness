@@ -983,6 +983,22 @@ def check_integrity(report: Report, root: Path) -> None:
         report.warn(say("doctor.integrity.failed", error=error))
 
 
+PROGRESS = "HARNESS_DOCTOR_PROGRESS"  # set by the board (1.7.43): each step is told on stderr as it starts, for the Enter screen's progress bar
+PROGRESS_MARK = "harness-doctor-step"
+STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'vscode_settings', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
+
+
+def tick(name: str) -> None:
+    """`harness-doctor-step <done>/<total> <step>` on stderr when the board asks for it; nothing for a person's run."""
+    if not os.environ.get(PROGRESS):
+        return
+    step = name.replace("check_", "")
+    try:
+        print(f"{PROGRESS_MARK} {STEPS.index(step)}/{len(STEPS)} {step}", file=sys.stderr, flush=True)
+    except (ValueError, OSError):  # a step not in the list, or a closed pipe: a helper never stops doctor
+        pass
+
+
 def run(root: Path, accept: bool = False) -> int:
     if accept:  # the person says the guardrail files are as they should be (cli.py: `harness doctor --accept`, a person at a terminal)
         from core import approval
@@ -1000,8 +1016,11 @@ def run(root: Path, accept: bool = False) -> int:
             print(say("doctor.integrity.accepted_changes", n=len(before), files=", ".join(before[: integrity.SHOWN]) + (f" (+{len(before) - integrity.SHOWN} more)" if len(before) > integrity.SHOWN else "")))
         print(say("doctor.integrity.accepted", n=done["files"], path=done["path"]))
     report = Report()
+    tick('check_python')
     check_python(report)
+    tick('check_interpreter')
     check_interpreter(report)
+    tick('check_short_command')
     check_short_command(report, root)
     try:
         registry = load_registry(root)
@@ -1010,39 +1029,65 @@ def run(root: Path, accept: bool = False) -> int:
         print(shown(report.lines))
         return 1
     report.ok(say("doctor.registry.ok"))
+    tick('check_files')
     check_files(report, root, "engine", registry["engine"]["files"])
+    tick('check_tool_kinds')
     check_tool_kinds(report)
+    tick('check_hook_config')
     check_hook_config(report, root, registry)
+    tick('check_hook_start')
     check_hook_start(report, root)
+    tick('check_messages')
     check_messages(report)
+    tick('check_hook_activity')
     check_hook_activity(report, root, registry)
+    tick('check_agents')
     check_agents(report, root)
+    tick('check_logs')
     check_logs(report, root, registry)
+    tick('check_unseen')
     check_unseen(report, root)
+    tick('check_overrides')
     check_overrides(report, root)
+    tick('check_output')
     sample = check_output(report, root)
+    tick('check_user')
     check_user(report, root)
     report.topic = "company"
+    tick('check_targets')
     check_targets(report, root)
     report.topic = ""
+    tick('check_location')
     check_location(report, root)
     report.topic = "company"
+    tick('check_knowledge_base')
     check_knowledge_base(report, root)
     report.topic = ""
+    tick('check_skills')
     check_skills(report, root)  # skills, packs and systems: the items of readyitems.py say more, so they are not counted twice
     report.topic = "copies"  # the board counts the copies itself (readyitems.sync_item), with a button; its count of doctor's notes leaves this line out
+    tick('check_company')
     check_company(report, root)
     report.topic = ""
+    tick('check_toolpacks')
     check_toolpacks(report, root)
+    tick('check_integrity')
     check_integrity(report, root)
+    tick('check_vscode_settings')
     check_vscode_settings(report, root)
     report.topic = "company"
+    tick('check_standards')
     check_standards(report, root)
     report.topic = ""
+    tick('check_task_names')
     check_task_names(report, root)
+    tick('check_optional_packages')
     check_optional_packages(report, root)
+    tick('check_vscode')
     check_vscode(report)
+    tick('check_systems')
     check_systems(report, root)
+    tick('modules')
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)
     print(shown(report.lines))

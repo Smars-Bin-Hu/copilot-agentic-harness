@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## Unreleased (on main after 1.7.42)
+
+### Changed
+
+- **The `harness doctor` line of the Enter screen shows how far it is.** A bar fills under it, the line says the step and the time (`12/29 · 40 s`), and the hover names the step it checks now. Before, it said only "checking", for a minute and more on a work computer. Another required line that waits for something (VS Code starting) has a bar that moves.
+- **Approving a promote is quicker.** The preview of the card asks git 4 times for a repository (was 6). After the code, the plan is not checked a second time at once (the promote checks it again before it writes); a person who reads the screen in a terminal for a while still gets the second check. After the code: 2 git processes, was 8. The message that tells the agent to go on is sent in the background: the approval answers at once, not after VS Code took the message (up to 25 s). A message that does not go leaves the "go on" card, as before.
+- **`harness task link add ado:<id>` is no longer refused.** The gate took `task` after `harness` for the build tool `task`, which runs text, and refused any `harness task` command whose words named a program it judges. Only `harness as <name> -- <command>` starts a program.
+- A renamed file not committed is named once in "changes not committed", not twice with a broken path.
+- **The board starts in a better order.** Start Harness says at once that the board is starting. The board answers the page before the browser opens, says its address in the terminal first, and starts `harness doctor` before the browser opens. Before, the browser opened first and waited, while the terminal said nothing yet.
+
 ## 1.7.42 (2026-11-15)
 
 Open VS Code with identities the first time, code read for a card kept out of `DEV/`, and a write-back that asks git once for each repository.

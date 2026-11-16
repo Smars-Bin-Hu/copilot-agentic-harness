@@ -416,6 +416,37 @@ class ServeLifeTests(TaskCase):
         thread.join(10)
         self.assertFalse(board_serve_file(self.root).exists())
 
+    def test_the_terminal_speaks_and_the_page_answers_before_the_browser_is_opened(self) -> None:
+        """1.7.43: the browser opened first and waited, while the terminal said nothing yet: it looked stuck. Now the board serves, says where, and only then opens the browser."""
+        out = io.StringIO()
+        seen: Dict[str, Any] = {}
+        started = threading.Event()
+        holder: Dict[str, Any] = {}
+        port = free_port()
+
+        def opener(link: str) -> bool:
+            seen["said"] = out.getvalue()
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            connection.request("GET", "/")
+            response = connection.getresponse()
+            seen["status"] = response.status
+            response.read()
+            connection.close()
+            return True
+
+        def ready(server: Any) -> None:
+            holder["server"] = server
+            started.set()
+
+        thread = threading.Thread(target=boardserve.serve, kwargs={"root": self.root, "port": port, "interactive": True, "out": out, "opener": opener, "ready": ready}, daemon=True)
+        thread.start()
+        self.assertTrue(started.wait(10))
+        holder["server"].shutdown()
+        thread.join(10)
+        self.assertIn(f"http://127.0.0.1:{port}/", seen["said"])
+        self.assertLess(seen["status"], 500)  # answered while the browser was being opened
+        self.assertFalse(thread.is_alive())
+
 
 class GateTests(TaskCase):
     def terminal(self, command: str) -> Dict[str, Any]:

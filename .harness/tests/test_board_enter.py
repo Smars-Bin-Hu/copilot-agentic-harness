@@ -260,6 +260,36 @@ class ReadinessTests(TaskCase):
         cli.write_text("print('[OK] fine')\nprint('{\"errors\": 0}')\n", encoding="utf-8")
         self.assertEqual(ready.run_doctor(self.root), {"errors": 0, "first": "", "failed": "", "lines": [], "warned": 0, "warning": "", "company": [], "company_n": 0})
 
+    def test_the_board_hears_the_steps_of_doctor_while_it_runs(self) -> None:
+        """1.7.43: "checking" alone for a minute looked stuck. With a `progress`, doctor is asked for its steps (HARNESS_DOCTOR_PROGRESS) and each is passed on as it comes; its answer is read as before."""
+        engine = self.root / ".harness" / "engine"
+        engine.mkdir(parents=True, exist_ok=True)
+        (engine / "cli.py").write_text("import os, sys\n"
+                                       "if os.environ.get('HARNESS_DOCTOR_PROGRESS'):\n"
+                                       "    sys.stderr.write('harness-doctor-step 0/3 python\\nharness-doctor-step 1/3 targets\\nnot a step\\nharness-doctor-step 2/3 systems\\n')\n"
+                                       "print('[ERROR] one')\nprint('{\"errors\": 1}')\nraise SystemExit(1)\n", encoding="utf-8")
+        heard: List[Any] = []
+        found = ready.run_doctor(self.root, progress=lambda done, total, step: heard.append((done, total, step)))
+        self.assertEqual(heard, [(0, 3, "python"), (1, 3, "targets"), (2, 3, "systems")])
+        self.assertEqual((found["errors"], found["first"], found["failed"]), (1, "one", ""))
+        self.assertEqual(ready.run_doctor(self.root)["errors"], 1)  # no progress asked: the plain run, nothing on stderr counts
+
+    def test_the_line_of_a_doctor_that_runs_says_how_far_it_is(self) -> None:
+        now = [10.0]
+        check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean, clock=lambda: now[0])
+        check.running = True  # the thread is not started: the line is looked at in the middle of a run
+        self.assertEqual(check.doctor_line(), {"state": "check", "why": "running"})
+        check.steps = {"done": 0, "total": 0, "step": "", "began": now[0]}
+        check.note_step(12, 29, "targets")
+        now[0] += 41.6
+        self.assertEqual(check.doctor_line(), {"state": "check", "why": "running", "progress": {"done": 12, "total": 29, "step": "targets", "seconds": 41}})
+        import doctor
+
+        source = (Path(doctor.__file__)).read_text(encoding="utf-8")
+        ticks = re.findall(r"tick\('(?:check_)?(\w+)'\)", source)
+        self.assertEqual(tuple(ticks), doctor.STEPS)  # every step is told, once, in the order of the list
+        self.assertEqual(doctor.PROGRESS_MARK, ready.PROGRESS_MARK)
+
     def test_the_doctor_of_the_board_marks_the_warnings_about_the_company_and_a_persons_run_does_not(self) -> None:
         """1.7.38: the board asks for `[WARN:company]` (HARNESS_DOCTOR_TOPICS); they go to the optional block, the errors alone to the required one."""
         engine = self.root / ".harness" / "engine"

@@ -496,7 +496,8 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.stopped()
         code = hashlib.sha256((self.task / "REQ.md").read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:6]
         done = self.board.act("confirm-req", NAME, "act", code=code)
-        self.assertEqual(done["agent"], "message")
+        self.assertEqual(done["agent"], "sending")  # 1.7.43: the message goes in the background
+        self.board.woken.join(10)
         self.assertEqual([item["text"] for item in self.link.sent], ["Requirement confirmed (REQ.md). Go on."])
         self.assertEqual(self.waiting_why(), "", "the mark of the wait is gone with the message")
 
@@ -505,7 +506,8 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.write_req()
         self.stopped()
         done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(with_req=True), with_req=True)
-        self.assertEqual(done["agent"], "message")
+        self.assertEqual(done["agent"], "sending")  # 1.7.43: the message goes in the background
+        self.board.woken.join(10)
         self.assertEqual([item["text"] for item in self.link.sent], ["Plan approved (PLAN.md). Go on with TODO.md."])
         self.assertEqual(self.waiting_why(), "")
         sent = (self.task / ".task" / "sent.jsonl").read_text(encoding="utf-8")
@@ -518,7 +520,8 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.run_cli("task", "promote", "--dry-run")
         self.stopped()
         done = self.board.act("approve-promote", NAME, "act", code=self.data()["promote"]["plan_sha256"][:6])
-        self.assertEqual(done["agent"], "message")
+        self.assertEqual(done["agent"], "sending")  # 1.7.43: the message goes in the background
+        self.board.woken.join(10)
         self.assertIn("Promote (write-back repo) approved", self.link.sent[-1]["text"])
 
     def test_when_the_chat_cannot_take_it_the_mark_stays_and_the_decision_stands(self) -> None:
@@ -527,7 +530,8 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.stopped()
         self.link.refuse = True
         done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(with_req=True), with_req=True)
-        self.assertEqual(done["agent"], "")
+        self.assertEqual(done["agent"], "sending")  # 1.7.43: the message goes in the background
+        self.board.woken.join(10)
         self.assertEqual(self.link.sent, [])
         self.assertEqual(self.waiting_why(), "go-plan", "the card still says: tell the agent to go on")
         self.assertTrue(self.data()["plan"]["approved_sha256"])

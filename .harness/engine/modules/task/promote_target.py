@@ -92,14 +92,19 @@ def _file_problem(
     return "", "", None
 
 
-def direct_problems(repo: targets.Repo, timeout: int) -> List[str]:
+def direct_problems(repo: targets.Repo, timeout: int, current: Optional[str] = None) -> List[str]:
     """What stops a knowledge base from being written on its base branch and committed."""
     found: List[str] = []
-    current = targets.current_branch(repo, timeout)
+    current = current if current is not None else targets.current_branch(repo, timeout)
     if current != repo.base_ref:
         found.append(say("promote.kb.branch", current=current, base_ref=repo.base_ref))
+    said = targets.git(repo, "config", "--get-regexp", r"^user\.(name|email)$", timeout=timeout, allow_failure=True).decode("utf-8", errors="replace")  # one process for both (1.7.43)
+    have: Dict[str, str] = {}
+    for line in said.splitlines():  # global first, then this repository: the last one counts, as for `git config --get` (an empty name here wins over a global one)
+        key, _, value = line.partition(" ")
+        have[key.lower()] = value.strip()
     for key in ("user.name", "user.email"):
-        if not targets.git(repo, "config", "--get", key, timeout=timeout, allow_failure=True).strip():
+        if not have.get(key):
             found.append(say("promote.kb.git_config", key=key))
     return found
 
@@ -146,18 +151,19 @@ def plan_files(
                 problems.append(messages.text("note.detail", what=name, detail=error))
                 continue
         try:
-            commit = targets.ref_commit(repo, timeout)
+            seen = targets.look(repo, timeout)  # 1.7.43: the base commit, the branch checked out, the changes not committed and the local branches, in two git processes
+            commit = seen["commit"]
             if not commit:
                 mine.append(say("promote.repo.no_branch", base_ref=repo.base_ref))
             else:
-                dirty = targets.dirty_paths(repo, timeout)
+                dirty = seen["dirty"]
                 if dirty:
                     shown = messages.joined(dirty[:PROBLEMS_SHOWN]) + (say("promote.repo.dirty.more", count=len(dirty)) if len(dirty) > PROBLEMS_SHOWN else "")
-                    whose = taskqueue.holder_text(root, repo, targets.current_branch(repo, timeout))
+                    whose = taskqueue.holder_text(root, repo, seen["branch"])
                     mine.append(say("promote.repo.dirty", shown=shown) + (whose or say("promote.repo.dirty.fix")))
                 if repo.knowledge_base:
-                    mine += direct_problems(repo, timeout)
-                elif branch and targets.valid_branch(branch) and targets.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", timeout=timeout, allow_failure=True).strip():
+                    mine += direct_problems(repo, timeout, seen["branch"])
+                elif branch and targets.valid_branch(branch) and branch in seen["heads"]:
                     mine.append(say("promote.repo.branch_exists", branch=branch) + hints["rename_branch"])
                 held = targets.tree(repo, commit, timeout).entries  # 1.7.42: the base versions of the files that are there, read with one git process, not one each
                 targets.read_blobs(repo, [found[2] for found in (held.get(item["relative"]) for item in by_repo[name]) if found and found[1] == "blob"], timeout)
@@ -205,7 +211,7 @@ def plan_files(
         if not mine:
             repos.append({
                 "name": name, "path": str(repo.path), "base_ref": repo.base_ref, "base_commit": commit,
-                "current_branch": targets.current_branch(repo, timeout), "files": entries, **({"direct": True} if repo.knowledge_base else {}),
+                "current_branch": seen["branch"], "files": entries, **({"direct": True} if repo.knowledge_base else {}),
             })
     repos.sort(key=lambda item: bool(item.get("direct")))  # a knowledge base is committed: it goes last, when the others are through
     for item in repos:

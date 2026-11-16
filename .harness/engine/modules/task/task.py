@@ -22,6 +22,7 @@ import os
 from datetime import datetime
 import re
 import shutil
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
@@ -38,6 +39,7 @@ SCHEMA_VERSION = 1
 EVENTS_KEPT = 200
 SESSIONS_KEPT = 100
 SKIP_TOP = ("_deleted",)
+RECHECK_AFTER = 3.0  # seconds: an approval answered later than this after its plan was looked at is looked at again before it is kept (a person reading the screen in a terminal)
 HINT_NAMES = ("fetch", "refetch", "set_branch", "rename_branch", "drop", "stray")
 
 
@@ -990,6 +992,7 @@ def approve_promote(
         raise CommandError(say("promote.approve.none"))
     require_plan(root, task, data)  # a write-back stands on an approved plan: not on one that changed, or whose requirement did
     result = make_plan(root, task, data)
+    checked = time.monotonic()
     if result["plan_sha256"] != data["promote"]["plan_sha256"]:
         raise CommandError(say("promote.approve.changed"))
     review = write_review(root, task, data, result)  # written again now: it is what gets approved
@@ -1011,7 +1014,7 @@ def approve_promote(
     typed(say("promote.question"), result["plan_sha256"], say("promote.refused"), reader)
     with locked(root, task) as again:
         require_open(again)
-        check = make_plan(root, task, again)
+        check = make_plan(root, task, again) if time.monotonic() - checked > RECHECK_AFTER else result  # 1.7.43: the board's code comes at once (the person read the plan in its preview): no second look then; the promote itself looks again
         if check["plan_sha256"] != result["plan_sha256"] or again["promote"].get("plan_sha256") != result["plan_sha256"]:
             raise CommandError(say("promote.changed"))
         again["promote"]["approved_plan_sha256"] = result["plan_sha256"]

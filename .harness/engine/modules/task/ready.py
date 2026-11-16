@@ -110,14 +110,62 @@ def crash_words(stderr: str, root: Path) -> str:
     return f"{name}:{frame.group(2)}: {lines[-1]}"
 
 
-def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
-    """`doctor` in a child process: `{errors, first, failed}`. `failed`: why it could not be run or read (empty when it ran). Never raises."""
+class _Done:
+    def __init__(self, returncode: int, stdout: bytes, stderr: bytes) -> None:
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def _run_with_steps(command: List[str], root: Path, env: Dict[str, str], flags: int, timeout: float, progress: Callable[[int, int, str], None]) -> _Done:
+    """The child `doctor`, its stderr read line by line while it runs: a line `doctor.PROGRESS_MARK <done>/<total> <step>` goes to `progress`, the rest is kept as its stderr (1.7.43)."""
+    child = subprocess.Popen(command, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, env=env, creationflags=flags)
+    out: List[bytes] = []
+    err: List[bytes] = []
+
+    def read_err() -> None:
+        for raw in iter(child.stderr.readline, b""):  # type: ignore[union-attr]
+            words = raw.decode("utf-8", errors="replace").split(None, 2)
+            if len(words) >= 2 and words[0] == PROGRESS_MARK and "/" in words[1]:
+                done, _, total = words[1].partition("/")
+                try:
+                    progress(int(done), int(total), words[2].strip() if len(words) > 2 else "")
+                except (ValueError, Exception):  # noqa: BLE001 - a progress line is a helper: never a reason to fail doctor
+                    pass
+                continue
+            err.append(raw)
+
+    readers = [threading.Thread(target=read_err, daemon=True), threading.Thread(target=lambda: out.append(child.stdout.read()), daemon=True)]  # type: ignore[union-attr]
+    for reader in readers:
+        reader.start()
+    try:
+        code = child.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait()
+        raise
+    for reader in readers:
+        reader.join(5)
+    for pipe in (child.stdout, child.stderr):
+        if pipe is not None:
+            pipe.close()
+    return _Done(code, b"".join(out), b"".join(err))
+
+
+PROGRESS_MARK = "harness-doctor-step"  # the line `doctor` writes on stderr at each step when HARNESS_DOCTOR_PROGRESS is set (1.7.43): the same word as doctor.PROGRESS_MARK
+
+
+def run_doctor(root: Path, timeout: Optional[float] = None, progress: Optional[Callable[[int, int, str], None]] = None) -> Dict[str, Any]:
+    """`doctor` in a child process: `{errors, first, failed}`. `failed`: why it could not be run or read (empty when it ran). Never raises.
+    `progress(done, total, step)` (1.7.43): called at each step while it runs, for the Enter screen's bar: on a work computer it takes a minute or more."""
     timeout = doctor_seconds(root) if timeout is None else timeout
     command = [sys.executable, str(root / ".harness" / "engine" / "cli.py"), "doctor"]
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PATH=shortcmd.fresh_path(), HARNESS_DOCTOR_TOPICS="1")  # what a new terminal sees: the person may have added the short command after the board started
     try:
-        done = subprocess.run(command, cwd=str(root), capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
+        if progress is not None:
+            env["HARNESS_DOCTOR_PROGRESS"] = "1"
+            done: Any = _run_with_steps(command, root, env, flags, timeout, progress)
+        else:
+            done = subprocess.run(command, cwd=str(root), capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         return {"errors": 0, "first": "", "failed": f"no answer in {timeout:g} s"}
     except (OSError, subprocess.SubprocessError) as error:
@@ -192,6 +240,7 @@ class Ready:
         self.clock = clock
         self.lock = threading.Lock()
         self.found: Optional[Dict[str, Any]] = None  # the kept result of doctor
+        self.steps: Dict[str, Any] = {}  # where the doctor that runs is: done, total, step, began (1.7.43)
         self.mark_seen: Optional[str] = None  # the mark of the configuration files when doctor last started (`config_mark`)
         self.at = 0.0
         self.running = False
@@ -231,9 +280,23 @@ class Ready:
             self.mark_seen = mark
         threading.Thread(target=self.run_doctor, name="ready-doctor", daemon=True).start()
 
+    def note_step(self, done: int, total: int, step: str) -> None:
+        with self.lock:
+            self.steps = {"done": max(0, min(done, total)), "total": max(total, 0), "step": step[:60], "began": self.steps.get("began", self.clock())}
+
+    def doctor_progress(self) -> Dict[str, Any]:
+        """While the first doctor runs (1.7.43): `{progress: {done, total, step, seconds}}` for the Enter screen's bar; `total` 0 before its first step is told."""
+        with self.lock:
+            steps = dict(self.steps)
+        if not steps:
+            return {}
+        return {"progress": {"done": steps.get("done", 0), "total": steps.get("total", 0), "step": steps.get("step", ""), "seconds": int(max(0.0, self.clock() - steps.get("began", self.clock())))}}
+
     def run_doctor(self) -> None:
+        with self.lock:
+            self.steps = {"done": 0, "total": 0, "step": "", "began": self.clock()}
         try:
-            found = self.doctor(self.root)
+            found = self.doctor(self.root, progress=self.note_step) if self.doctor is run_doctor else self.doctor(self.root)  # a doctor given by a test takes the root only
         except Exception as error:  # noqa: BLE001 - a doctor that breaks is a line that failed, not a dead thread
             found = {"errors": 0, "first": "", "failed": short(f"{type(error).__name__}: {error}")}
         with self.lock:
@@ -296,7 +359,7 @@ class Ready:
         with self.lock:
             found = self.found
         if found is None:
-            return {"state": "check", "why": "running"}
+            return {"state": "check", "why": "running", **self.doctor_progress()}
         if found["failed"]:
             return {"state": "fail", "why": "failed", "detail": found["failed"]}
         if found["errors"]:

@@ -289,6 +289,7 @@ class Board:
         self.code = os.environ.pop(RESTART_CODE, "") or secrets.token_urlsafe(12)  # after Restart board the page brings this code back; a new process holds no session
         self.next_code = ""
         self.server: Any = None
+        self.woken: Optional[threading.Thread] = None  # the last wake of an agent after a decision, sent in the background (1.7.43)
         self.opener: Callable[[str], Any] = webbrowser.open
         self.reopened = -REOPEN_EVERY
         self.sessions: set = set()
@@ -833,7 +834,9 @@ class Board:
                 pass
         noted(self.root, result.get("task") or task, action)
         if step == "act" and action in WAKING:  # 1.7.38, C13 RB-2: a decision that moves the task on wakes the agent by itself, as an approved call does: no second click on "tell the agent"
-            result["agent"] = self.wake_go(result.get("task") or task)
+            self.woken = threading.Thread(target=self.wake_go, args=(result.get("task") or task,), name="board-wake", daemon=True)  # 1.7.43: in the background; the decision is
+            self.woken.start()  # answered at once, not after VS Code took the message (up to JOB_WAIT on a work computer). A message that does not go leaves the "go on" card, as before
+            result["agent"] = "sending"
         if stood and stood.get("task"):
             place = self.place_of(stood)
             self.after_decision(str(stood["task"]), [(str(stood["code"]), place)], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
@@ -2146,29 +2149,35 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"port": board.port, "pid": os.getpid(), "started": utc_now()}), encoding="utf-8")
     address = f"http://127.0.0.1:{board.port}/"
-    opened = False
-    try:
-        opened = board.restarted or bool(opener(f"{address}#pair={board.code}"))  # after a restart the page is there, and asks for itself
-    except Exception:  # noqa: BLE001 - the person can pair by hand
-        opened = False
+    serving = threading.Thread(target=server.serve_forever, name="board-serve", daemon=True)
+    serving.start()  # 1.7.43: the page is answered as soon as the browser asks; before, the browser opened and waited until the terminal had said its lines
+    if ready is None:
+        board.ready.vs_running.get()  # is any VS Code running: the button of the Enter screen says Open or Restart from the first answer
+        board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104); 1.7.43: before the browser is asked to open, not after
+
     def button(action: str) -> str:  # the first line names the buttons as the board shows them (1.7.22), not as the command words
         key = "board.action." + action.replace(" ", "-")
         word = say(key)
         return action if word == key else word
 
-    print(say("serve.started", address=address, actions=", ".join(button(action) for action in board.actions)), file=out, flush=True)
+    print(say("serve.started", address=address, actions=", ".join(button(action) for action in board.actions)), file=out, flush=True)  # the terminal speaks first, then the browser opens (1.7.43)
+    opened = False
+    try:
+        opened = board.restarted or bool(opener(f"{address}#pair={board.code}"))  # after a restart the page is there, and asks for itself
+    except Exception:  # noqa: BLE001 - the person can pair by hand
+        opened = False
     print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
     if ready is not None:
         ready(server)
     else:
-        board.ready.vs_running.get()  # is any VS Code running: the button of the Enter screen says Open or Restart from the first answer
-        board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104), not from the page's first question
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:
-        server.serve_forever()
+        while serving.is_alive():
+            serving.join(0.5)  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too
     except KeyboardInterrupt:
         pass
     finally:
+        server.shutdown()
         board.sweeping.set()
         board.runner.stop_all()
         board.terminal.stop_all()

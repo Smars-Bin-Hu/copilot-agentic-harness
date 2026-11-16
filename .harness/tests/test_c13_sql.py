@@ -169,7 +169,8 @@ class FedThroughAnotherProgramTests(ShippedCase):
     def test_normal_commands_behind_other_programs_still_run(self) -> None:
         tool = self.script("print('hello')\n", "tool.py")
         for row in (f"uv run python {tool}", "poetry run pytest -q", "find . -name '*.py' -exec python3 -m py_compile {} \\;", "stdbuf -o0 ls -la", "git log -1",
-                    "echo bash", "grep -n bash notes.txt", "xargs -n1 echo < /dev/null", "setsid ls", "timeout 5 python3 -c 'print(1)'"):
+                    "echo bash", "grep -n bash notes.txt", "xargs -n1 echo < /dev/null", "setsid ls", "timeout 5 python3 -c 'print(1)'",
+                    "harness task link add sqlcmd:1", "harness task set-domain --task t d; harness task link add sqlcmd:2"):  # 1.7.43: `task` after `harness` is its own subcommand, not the build tool
             self.assertEqual(self.answer(row), "pass", row)
 
 

@@ -7,5 +7,6 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+echo Starting the harness board. On a slow computer this takes a little while: the browser opens when it is ready.
 call .harness\bin\harness.cmd task board
 if errorlevel 1 pause

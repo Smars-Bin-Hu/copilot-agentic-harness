@@ -378,10 +378,48 @@ def dirty_paths(repo: Repo, timeout: int = DEFAULT_GIT_TIMEOUT) -> List[str]:
     """Paths with uncommitted changes, untracked files included. Empty means a clean working tree."""
     raw = git(repo, "status", "--porcelain", "-z", "--untracked-files=all", timeout=timeout)
     found = []
-    for entry in raw.decode("utf-8", errors="replace").split("\0"):
+    entries = raw.decode("utf-8", errors="replace").split("\0")
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
         if len(entry) > 3:
             found.append(entry[3:])
+            if entry[0] in "RC":  # a rename or a copy: the path it came from follows, without a status (1.7.43: it was read as a path of its own)
+                index += 1
     return found
+
+
+def look(repo: Repo, timeout: int = DEFAULT_GIT_TIMEOUT) -> Dict[str, Any]:
+    """What a promote asks of a repository before it writes, with two git processes, not four (1.7.43): `{commit, branch, dirty, heads}`, the answers of
+    `ref_commit`, `current_branch`, `dirty_paths`, and the names of the local branches. A base that no ref spells (a sha) is asked of git as before."""
+    raw = git(repo, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all", timeout=timeout).decode("utf-8", errors="replace").split("\0")
+    branch, dirty = "(detached)", []
+    index = 0
+    while index < len(raw):
+        entry = raw[index]
+        index += 1
+        if entry.startswith("# branch.head "):
+            branch = entry[len("# branch.head "):] or "(detached)"
+        elif entry[:2] == "1 ":
+            dirty.append(entry.split(" ", 8)[-1])
+        elif entry[:2] == "2 ":
+            dirty.append(entry.split(" ", 9)[-1])
+            index += 1  # the path it had before follows
+        elif entry[:2] == "u ":
+            dirty.append(entry.split(" ", 10)[-1])
+        elif entry[:2] in ("? ", "! "):
+            dirty.append(entry[2:])
+    refs: Dict[str, str] = {}
+    for line in git(repo, "for-each-ref", "--format=%(refname) %(objectname) %(*objectname)", timeout=timeout).decode("utf-8", errors="replace").splitlines():
+        parts = line.split(" ")
+        if len(parts) >= 2:
+            refs[parts[0]] = parts[2] if len(parts) > 2 and parts[2] else parts[1]  # a tag that names a tag object: the commit it points at
+    name = repo.base_ref
+    spelled = [name] if name.startswith("refs/") else [f"refs/{name}", f"refs/tags/{name}", f"refs/heads/{name}", f"refs/remotes/{name}", f"refs/remotes/{name}/HEAD"]  # the order git reads a name in
+    commit = next((refs[ref] for ref in spelled if ref in refs), None)
+    return {"commit": commit if commit is not None else ref_commit(repo, timeout), "branch": branch, "dirty": dirty,
+            "heads": {ref[len("refs/heads/"):] for ref in refs if ref.startswith("refs/heads/")}}
 
 
 def summary(repo: Repo, timeout: int = DEFAULT_GIT_TIMEOUT) -> Dict[str, Any]:

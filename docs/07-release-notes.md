@@ -10,7 +10,9 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
-## Unreleased (on main after 1.7.42)
+## 1.7.43 (2026-11-15)
+
+A board that shows what it is doing: doctor's progress on the Enter screen, a start that answers at once, a quicker promote approval, and `harness task link` no longer refused by the gate.
 
 ### Changed
 

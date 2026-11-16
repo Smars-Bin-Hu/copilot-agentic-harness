@@ -11,7 +11,7 @@
 
 **Make GitHub Copilot carry a task from start to finish the way your team works: it follows the rules, stays inside its boundaries, and leaves a record you can review.**
 
-[Talk to the agent on the board](#talk-to-the-agent-on-the-board) · [What you get](#what-you-get) · [Get started](#get-started) · [See it](#see-it) · [What you must plug in](#what-you-must-plug-in) · [Docs](#docs) · [Release notes](docs/07-release-notes.md)
+[Talk to the agent on the board](#talk-to-the-agent-on-the-board) · [See it](#see-it) · [What you get](#what-you-get) · [Get started](#get-started) · [What you must plug in](#what-you-must-plug-in) · [Docs](#docs) · [Release notes](docs/07-release-notes.md)
 
 <p align="center">
   <img alt="The task board as a lobby: each open task is a small agent on the floor, at work, waiting for you, or resting. Point at one for its stages and buttons" src="docs/images/board.png" width="760">
@@ -40,6 +40,43 @@
 
 The rules still hold: the gate checks every call, and approvals stay yours.
 
+## See it
+
+All pictures are from a made-up team's tasks, on the real board.
+
+<table>
+<tr>
+<td width="50%"><a href="docs/images/enter.png"><img alt="The Enter screen: the robot over the word HARNESS, Ready, and two lines: Harness and Local, and what the company brings" src="docs/images/enter.png"></a><br><sub><b>Start.</b> Double-click Start Harness. It checks what the harness needs on this computer, and what the company brings.</sub></td>
+<td width="50%"><a href="docs/images/get-ready.png"><img alt="Get ready: the short command tested, then a form for your name, repositories and knowledge base" src="docs/images/get-ready.png"></a><br><sub><b>Get ready.</b> Set up in the browser. No agent runs.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/how-can-i-help.png"><img alt="The question mark panel on the board: ask, the course, the first lesson, everything you can ask for" src="docs/images/how-can-i-help.png"></a><br><sub><b>How can I help?</b> Ask, start a lesson, or see every skill.</sub></td>
+<td width="50%"><a href="docs/images/kb-overview.png"><img alt="The knowledge base window: the steps, the next one, five numbers and a table of domains" src="docs/images/kb-overview.png"></a><br><sub><b>The knowledge base.</b> The steps, the next one, and each domain with its cards. A <a href="docs/images/kb-map.png">map</a> shows how domains hang together.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/task-overview.png"><img alt="A task page: the stages, the reviewer's checks, what waits for you and the buttons to answer it" src="docs/images/task-overview.png"></a><br><sub><b>A task page.</b> Stages, the reviewer's checks, and what waits for you with a button for each answer.</sub></td>
+<td width="50%"><a href="docs/images/task-intake.png"><img alt="The Intake tab: drop Word and Excel files, paste a table, pick the files to keep" src="docs/images/task-intake.png"></a><br><sub><b>Intake.</b> Drop Word, Excel and PDF files; paste a table; trim, pick and delete files before the agent reads them.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/task-review.png"><img alt="The Review tab: one failed check with its findings, then two passes" src="docs/images/task-review.png"></a><br><sub><b>Independent checks.</b> Each round: what the reviewer was given, what it found, its verdict.</sub></td>
+<td width="50%"><a href="docs/images/task-test.png"><img alt="The Test tab: one sub-tab per environment, runs with the commands, the words you gave and screenshots" src="docs/images/task-test.png"></a><br><sub><b>Testing.</b> One sub-tab per environment, each run with its commands, your words, screenshots and the verdict.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/task-changes.png"><img alt="The Changes tab: the diff and the write-back the last dry run prepared" src="docs/images/task-changes.png"></a><br><sub><b>Write-back.</b> The diff, and exactly what goes into the repository when you approve.</sub></td>
+<td width="50%"><a href="docs/images/report.png"><img alt="The task analysis: working time, waiting time, prompts, Credits, key points and the Agent Performance Review" src="docs/images/report.png"></a><br><sub><b>Where the time went.</b> Working and waiting, every prompt, Credits, the checks.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/tools.png"><img alt="The Tool packs window: ado and sqlserver used by the company, demotracker not used, each with its connection type, skills and the programs it needs" src="docs/images/tools.png"></a><br><sub><b>Tool packs.</b> The outside systems the agent can work with, and what each brings.</sub></td>
+<td width="50%"><a href="docs/images/held-write.png"><img alt="A task page with an outside call waiting for approval: a write to orders-dev on DEV, the statement that will run, a code to type, Approve and Do not approve" src="docs/images/held-write.png"></a><br><sub><b>A write waits for you.</b> The system, the environment and the exact statement. The agent waits for your answer.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/performance.png"><img alt="The Agent Performance Review page: Credits, agent time, failed, refused and held calls, retries, each prompt with its cost and origin, every call in time" src="docs/images/performance.png"></a><br><sub><b>Agent Performance Review.</b> What each prompt cost, where it came from, what failed or was tried again.</sub></td>
+<td width="50%"></td>
+</tr>
+</table>
+
+More pictures, in the order of a task's life, are in the [overview](docs/00-overview.md#4-follow-and-steer-it-in-the-browser).
+
 ## What you get
 
 - **Set up in the browser.** Double-click **Start Harness** and fill in **Get ready**: the short command, your code repositories, your knowledge base. No agent runs and you edit no file.
@@ -52,6 +89,9 @@ The rules still hold: the gate checks every call, and approvals stay yours.
 - **Independent checks, counted by code.** Write `[review]=2` and the work must pass two checks in a row by a reviewer that never saw the author's reasoning. Every round, its findings and its verdict are on the **Review** tab.
 - **Tests that leave evidence.** A test task has one guide with a section per environment (DEV, IST, UAT). You run it, paste the output and screenshots on the page, and the agent judges each criterion against what you brought. Run 1, Run 2: all kept.
 - **Safe write-back.** The harness writes only the files to change, to a new branch, uncommitted. It keeps a patch, a snapshot and a restore command.
+- **Outside systems through tool packs.** A tool pack brings a program, the rules the gate judges it by, and skills: SQL Server and Azure DevOps ship with the harness, and your knowledge base turns them on. The connections (DEV, IST, a ticket project) are listed once for the team; passwords and tokens stay on your computer.
+- **A write outside waits for you.** The agent reads a database or a ticket by itself. A write or a procedure is held: the task page shows the system, the environment and the exact statement, and runs it only after you type the code. The agent waits for your answer instead of going around it.
+- **Agent Performance Review.** The report of every task shows, at no cost, the calls that failed, were refused or held, the same try made again, and where you stepped in. One button starts a review that says why the agent spent its time and Credits where it did, with evidence, and what to change.
 - **Time and cost in view.** Where the time went (working, waiting for you), every prompt, every tool, the usage Copilot records. Per task, from the hook log, not from the agent's word.
 - **Moves with you.** `/harness-reinstall` carries tasks, runtime settings and the knowledge base to a new copy of the harness.
 
@@ -105,6 +145,7 @@ After that, daily use takes one sentence: press **New task** on the board, or te
 | **Progress lives only in the chat.** Once the context is compacted or you start a new session, nobody knows where the task stood | **One directory per task.** The requirement, plan, progress and results are files. A new session reads `TASK.md` and continues |
 | **It grades its own work.** Ask it to check its own output and it always says everything is fine | **Independent checks, counted by code.** You write `[review]=n` and the result must pass n checks in a row. The reviewer never sees the author's reasoning |
 | **Confirmation pop-ups can't be trusted.** One click on "Allow in this Session" and there is no confirmation any more | **A person approves the key actions.** The plan, write-back to a repository and git write commands are confirmed in your own terminal. `push` can never be approved |
+| **It reaches databases and tickets unchecked.** Once it has a terminal, it can run any write on any server it can sign in to | **Outside calls are judged by code.** Each system is listed with its environments. Reads pass; a write or a procedure waits for your code; what the gate cannot judge does not pass |
 | **Changing a company repository is risky.** It may commit or push by mistake | **Safe write-back.** The harness takes only the files to be changed and writes to a new branch without committing. It keeps a patch, a snapshot and a restore command |
 | **"Done" comes without evidence.** What changed and who checked it are hard to trace afterwards | **Visible and reviewable.** Every session has a log and every task has a report. `harness task list` shows which tasks are waiting for you |
 | **Cost is hard to control.** Small tasks go through the same heavy process | **Saves time and money.** Commands do the deterministic work instead of the model, the agent reads only what it needs, and small tasks skip the heavy process |
@@ -112,35 +153,6 @@ After that, daily use takes one sentence: press **New task** on the board, or te
 There is more: queued write-back when several tasks target the same repository, tasks that update the knowledge base, parallel chunked reading (`/generic-mapreduce`), and autorun, which works through a checklist unattended (beta). See [features](docs/02-features.md) for the full list.
 
 > The gate checks the text of a command. It **prevents mistakes; it does not stop someone who is trying to get around it**. Do not treat it as a sandbox.
-
-## See it
-
-All pictures are from a made-up team's tasks, on the real board.
-
-<table>
-<tr>
-<td width="50%"><a href="docs/images/enter.png"><img alt="The Enter screen: the robot over the word HARNESS and a line for each check" src="docs/images/enter.png"></a><br><sub><b>Start.</b> Double-click Start Harness. One line for each thing the harness needs.</sub></td>
-<td width="50%"><a href="docs/images/get-ready.png"><img alt="Get ready: the short command tested, then a form for your name, repositories and knowledge base" src="docs/images/get-ready.png"></a><br><sub><b>Get ready.</b> Set up in the browser. No agent runs.</sub></td>
-</tr>
-<tr>
-<td width="50%"><a href="docs/images/how-can-i-help.png"><img alt="The question mark panel on the board: ask, the course, the first lesson, everything you can ask for" src="docs/images/how-can-i-help.png"></a><br><sub><b>How can I help?</b> Ask, start a lesson, or see every skill.</sub></td>
-<td width="50%"><a href="docs/images/kb-overview.png"><img alt="The knowledge base window: the steps, the next one, five numbers and a table of domains" src="docs/images/kb-overview.png"></a><br><sub><b>The knowledge base.</b> The steps, the next one, and each domain with its cards. A <a href="docs/images/kb-map.png">map</a> shows how domains hang together.</sub></td>
-</tr>
-<tr>
-<td width="50%"><a href="docs/images/task-overview.png"><img alt="A task page: the stages, the reviewer's checks, what waits for you and the buttons to answer it" src="docs/images/task-overview.png"></a><br><sub><b>A task page.</b> Stages, the reviewer's checks, and what waits for you with a button for each answer.</sub></td>
-<td width="50%"><a href="docs/images/task-intake.png"><img alt="The Intake tab: drop Word and Excel files, paste a table, pick the files to keep" src="docs/images/task-intake.png"></a><br><sub><b>Intake.</b> Drop Word, Excel and PDF files; paste a table; trim, pick and delete files before the agent reads them.</sub></td>
-</tr>
-<tr>
-<td width="50%"><a href="docs/images/task-review.png"><img alt="The Review tab: one failed check with its findings, then two passes" src="docs/images/task-review.png"></a><br><sub><b>Independent checks.</b> Each round: what the reviewer was given, what it found, its verdict.</sub></td>
-<td width="50%"><a href="docs/images/task-test.png"><img alt="The Test tab: one sub-tab per environment, runs with the commands, the words you gave and screenshots" src="docs/images/task-test.png"></a><br><sub><b>Testing.</b> One sub-tab per environment, each run with its commands, your words, screenshots and the verdict.</sub></td>
-</tr>
-<tr>
-<td width="50%"><a href="docs/images/task-changes.png"><img alt="The Changes tab: the diff and the write-back the last dry run prepared" src="docs/images/task-changes.png"></a><br><sub><b>Write-back.</b> The diff, and exactly what goes into the repository when you approve.</sub></td>
-<td width="50%"><a href="docs/images/report.png"><img alt="The task analysis: working time, waiting time, every prompt, the tools" src="docs/images/report.png"></a><br><sub><b>Where the time went.</b> Working and waiting, every prompt, the tools, the checks.</sub></td>
-</tr>
-</table>
-
-More pictures, in the order of a task's life, are in the [overview](docs/00-overview.md#4-follow-and-steer-it-in-the-browser).
 
 ## What you must plug in
 
@@ -167,7 +179,7 @@ If you'd rather not read docs, the board and the lessons above are enough.
 | [07 Release notes](docs/07-release-notes.md) | [**What changed in each version.**](docs/07-release-notes.md) Additions, changes and retirements |
 | [08 Knowledge base](docs/08-knowledge-base.md) | [**Build it from your code and keep it true.**](docs/08-knowledge-base.md) The idea, the steps, how you know the map is right, what you can change |
 | [09 Preparing an intake](docs/09-intake.md) | [**Business documents as files the agent can read.**](docs/09-intake.md) Word and Excel to Markdown and CSV without AI, `INTAKE.md`, trimming, pasting a table, the review of the requirement |
-| [10 Skills](docs/10-skills.md) | [**Which skill is for what.**](docs/10-skills.md) All 32 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
+| [10 Skills](docs/10-skills.md) | [**Which skill is for what.**](docs/10-skills.md) Every skill sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
 | [11 Tool calling check](docs/11-tool-calling-check.md) | [**Before the agent reaches outside systems.**](docs/11-tool-calling-check.md) A probe folder and a list of checks for your work computer: do hooks run, can an MCP server start, do MCP, extension and terminal calls reach a hook, can a hook refuse them |
 | [12 Guardrails and the gate](docs/12-guardrails-and-gate.md) | [**What the agent may do outside, and why.**](docs/12-guardrails-and-gate.md) A guardrail, not a sandbox: what passes, what waits for you, who answers (code, not the model), the two checkpoints and what comes next |
 | [13 Tool packs and MCP servers](docs/13-tool-packs-and-mcp.md) | [**Why a tool pack and not only an MCP server.**](docs/13-tool-packs-and-mcp.md) Whether the company can use it, who holds "a write waits for the person", the skills, and the cost |

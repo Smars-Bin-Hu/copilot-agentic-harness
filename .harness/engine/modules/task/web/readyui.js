@@ -50,6 +50,7 @@ const READY = (function () {
     else if (fix.to === "term" && typeof TERM !== "undefined") TERM.run(fix.run);
     else if (fix.to === "sync" && typeof DOCK !== "undefined") return DOCK.syncCompany(fix.op).then(() => { if (given.done) given.done(); });  // an error goes to the caller: the button says it
     else if (fix.to === "vscode") vsAct(fix.kind, given).catch((error) => { if (given.fail && !error.quiet) given.fail(error); });
+    else if (fix.to === "doctor") return SERVE.post("/api/doctor-again", {}).then(() => { if (given.done) given.done(); });  // 1.7.45: doctor runs now; the line shows its progress at the next look
     return undefined;
   }
 

@@ -525,7 +525,8 @@
             const links = view.notes.map((n) => n.fix).filter((fix) => { if (!fix || !fix.to || seen.has(fix.label)) return false; seen.add(fix.label); return true; });
             links.forEach((fix, index) => nodes.push(index ? " · " : gap, READY.link(fix, {done: () => poll(), onState: showRestart, opened: () => { chk0.opened = Date.now(); }, fail: (error) => { chk0.fail = error.message; render(); }}, fix.short || fix.label)));
           }
-          if (id === "doctor" && c && c.integrity) nodes.push(" ", READY.acceptButton(() => poll()));  // guardrail files not as accepted (1.7.39): the board accepts them after listing them
+          if (id === "doctor" && c && c.integrity) nodes.push(" ", READY.acceptButton(() => poll()));
+          else if (id === "doctor" && c && c.state === "fail") nodes.push(" ", READY.link({to: "doctor"}, {done: () => poll()}, t("board.enter.doctor.again")));  // 1.7.45: run doctor now, not when its wait is over  // guardrail files not as accepted (1.7.39): the board accepts them after listing them
           if (!req && c && c.launch) { const b = h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")); nodes.push(h("br"), t("board.enter.m.systems.launch"), h("br"), b); }
           p.replaceChildren(...nodes);
         }

@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from . import approval, gitread, kbstd, messages, skillcheck, standards, targets
 from .paths import runtime_dir
 from .registry import harness_version
+from . import procrun
 
 CONFIG_FILE = "company.json"
 MANIFEST_FILE = "manifest.json"
@@ -152,7 +153,7 @@ def read_json(path: Path) -> Dict[str, Any]:
 
 def git(folder: Path, *arguments: str) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(gitread.command(folder, arguments), capture_output=True, timeout=GIT_SECONDS, env=gitread.env(), check=False)
+        return procrun.run(gitread.command(folder, arguments), capture_output=True, timeout=GIT_SECONDS, env=gitread.env(), check=False)
     except (OSError, subprocess.SubprocessError) as error:
         raise CompanyError(say("company.git_failed", error=error)) from None
 

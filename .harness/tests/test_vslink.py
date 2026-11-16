@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -553,3 +554,38 @@ class NoVsCodeTests(ServeCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BusyHostTests(LinkCase):
+    """1.7.45: on a busy computer one answer of VS Code that does not come is not a lost VS Code, and a row keeps its chat while the connection comes back."""
+
+    def test_a_list_the_host_did_not_answer_keeps_the_connection_until_three_in_a_row(self) -> None:
+        fails = {"left": 0}
+
+        def listing(_params: Dict[str, Any]) -> Dict[str, Any]:
+            if fails["left"]:
+                fails["left"] -= 1
+                raise ahp.AhpError("listSessions: no answer in 20 s")
+            return {"items": self.items}
+
+        self.host.answers["listSessions"] = listing
+        with mock.patch.object(vslink, "RELIST_EVERY", 0.2), mock.patch.object(vslink, "SLOW_RETRY", 0.1):
+            self.link.start()
+            self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+            fails["left"] = vslink.SLOW_LIMIT - 1
+            self.assertTrue(until(lambda: fails["left"] == 0))
+            self.assertTrue(until(lambda: self.link.slow == 0))  # the next list was answered
+            self.assertEqual((self.link.drops(), self.opened), (0, 1))  # two slow answers: the same connection
+            fails["left"] = vslink.SLOW_LIMIT
+            self.assertTrue(until(lambda: self.link.drops() == 1), self.link.drops())  # three in a row: given up, and opened again
+
+    def test_a_row_keeps_its_chat_for_a_while_after_the_connection_went_away(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.row()["chat"].get("state") == "idle"), self.row())
+        self.host.close()
+        self.assertTrue(until(lambda: not self.link.status()["ready"]))
+        kept = self.row()["chat"]
+        self.assertEqual((kept["bound"], kept["state"], kept.get("kept")), (True, "idle", True))
+        self.assertEqual(self.link.live(TASK, "rev-1"), {"rev": "rev-1", "same": True})  # the Live tab keeps what it shows
+        with mock.patch.object(vslink, "KEEP_SHOWN", 0.0):
+            self.assertFalse(self.row()["chat"]["bound"])  # and after a while it says the link is lost, as before

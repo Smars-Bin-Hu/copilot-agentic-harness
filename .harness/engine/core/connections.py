@@ -32,6 +32,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from . import clip, messages, netonly
 from . import systems as outside
 from .paths import utc_now
+from . import procrun
 
 POLICY = "connections"
 ENV_FILE = Path(".harness") / ".env"
@@ -878,7 +879,7 @@ def run_with(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, s
             return None, say("connections.test.no_identity")
         return netonly.run(identity["account"], identity["password"], line, cwd, extra, timeout)
     try:
-        done = subprocess.run(line, shell=True, cwd=str(cwd), env={**os.environ, **extra}, capture_output=True, text=True, errors="replace", timeout=timeout)
+        done = procrun.run(line, shell=True, cwd=str(cwd), env={**os.environ, **extra}, capture_output=True, text=True, errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, f"no answer in {int(timeout)} s"
     except (OSError, ValueError) as error:

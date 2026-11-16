@@ -320,11 +320,11 @@ class SlowCodeCommandTests(unittest.TestCase):
         import subprocess
 
         from core import ahp
-        with mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("code", 25)):
+        with mock.patch("core.procrun.run", side_effect=subprocess.TimeoutExpired("code", 25)):
             with self.assertRaises(ahp.NotReady) as caught:
                 ahp.run_code("code", ["agent", "endpoints"])
         self.assertEqual(caught.exception.why, "cli-slow")
-        with mock.patch("subprocess.run", side_effect=OSError("gone")):
+        with mock.patch("core.procrun.run", side_effect=OSError("gone")):
             with self.assertRaises(ahp.NotReady) as caught:
                 ahp.run_code("code", ["agent", "endpoints"])
         self.assertEqual(caught.exception.why, "cli-failed")

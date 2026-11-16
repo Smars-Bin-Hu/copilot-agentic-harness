@@ -53,6 +53,9 @@ UNDO_WAIT = 12.0  # seconds a Withdraw waits for the turn it stopped to end
 HURRY_FOR = 60.0  # seconds after the board opens VS Code in which the link looks for the host every HURRY_EVERY seconds, not after the grown wait (1.7.19)
 HURRY_EVERY = 1.0
 SUB_FOLLOW = 3  # chats of subagents followed for each bound chat, the newest (1.6.105)
+SLOW_LIMIT = 3  # 1.7.45: calls in a row the host did not answer in time before the connection is given up; one slow answer of a busy computer is not a lost VS Code
+SLOW_RETRY = 30.0  # seconds before a list the host did not answer in time is asked again
+KEEP_SHOWN = 120.0  # 1.7.45: seconds the rows keep the chat they showed after the connection went away, while it comes back and the chats are found again, so a task does not flash idle
 
 
 def enabled_by_policy(root: Path) -> bool:
@@ -170,6 +173,9 @@ class VsLink:
         self.listed_at = 0.0
         self.problem: Tuple[str, float] = ("", 0.0)  # what the host last said that means Copilot is not usable: ("provider" | "client" | "", when); the Enter screen shows it
         self.dirty = True
+        self.slow = 0  # calls in a row the host did not answer in time (SLOW_LIMIT)
+        self.shown: Dict[str, Dict[str, Any]] = {}  # task -> what its row showed of the chat when the connection went away (KEEP_SHOWN)
+        self.lost_at = 0.0
 
     # --- the page side: reads only ------------------------------------------------------------------------------------------
 
@@ -213,10 +219,13 @@ class VsLink:
             return {"models": len(self.models) if self.ready else 0, "problem": kind if kind and time.monotonic() - at < PROBLEM_FOR else ""}
 
     def chat_of(self, task: str, name: str = "") -> Dict[str, Any]:
-        """What a row or a task page shows of the chat: `{bound, why, state, title, model, how}` and, when the chat said something, `sub` and `recent`."""
+        """What a row or a task page shows of the chat: `{bound, why, state, title, model, how}` and, when the chat said something, `sub` and `recent`.
+        Shortly after the connection went away (KEEP_SHOWN), a chat that is not found again yet is shown as it was, with `kept: true` (1.7.45)."""
         with self.lock:
             binding = self.bound.get(task) if self.ready else None
             if not binding:
+                if task in self.shown and time.monotonic() - self.lost_at < KEEP_SHOWN:
+                    return dict(self.shown[task], kept=True)
                 return {"bound": False, "why": self.unbound.get(task, "") if self.ready else self.why}
             summary = self.sessions.get(binding["session"]) or {}
             cached = self.chats.get(binding["chat"]) or {}
@@ -243,6 +252,8 @@ class VsLink:
         when nothing changed the answer is only `{rev, same: true}`. `task` is the folder name of the task."""
         with self.lock:
             binding = self.bound.get(task) if self.ready else None
+            if not binding and last and task in self.shown and time.monotonic() - self.lost_at < KEEP_SHOWN:
+                return {"rev": last, "same": True}  # 1.7.45: the connection came and goes: the page keeps what it shows for a while
             if not binding:
                 why = self.unbound.get(task, "") if self.ready else self.why
                 rev = "x:" + why
@@ -462,7 +473,11 @@ class VsLink:
                 pass
             finally:
                 link.close()
+                kept = self.keep_shown()
                 with self.lock:
+                    if kept:  # a connection that went away before it was ready keeps what an earlier one left
+                        self.shown, self.lost_at = kept, time.monotonic()
+                    self.slow = 0
                     self.losses += 1 if self.ready else 0
                     self.ready, self.why = False, "lost"
                     self.chats.clear()
@@ -543,7 +558,7 @@ class VsLink:
             self._jobs(link)
             now = time.monotonic()
             if now - self.listed_at >= (EXPECT_EVERY if self.expect else RELIST_EVERY):
-                self._list(link)
+                self._calm(lambda: self._list(link))
                 self._models(link)
                 read_models = now
             elif now - read_models >= MODELS_EVERY:
@@ -553,6 +568,29 @@ class VsLink:
                 last = now
                 self.dirty = False
                 self._look(link)
+
+    def _calm(self, step: Callable[[], None]) -> None:
+        """One step of the loop whose call the host may not answer in time (1.7.45): that is a slow host, not a lost one, until SLOW_LIMIT of them come in a row.
+        A closed connection is lost at once."""
+        try:
+            step()
+            self.slow = 0
+        except ahp.ConnectionClosed:
+            raise
+        except ahp.AhpError:
+            self.slow += 1
+            if self.slow >= SLOW_LIMIT:
+                raise
+            self.listed_at = time.monotonic() - RELIST_EVERY + SLOW_RETRY  # asked again soon, not at once
+
+    def keep_shown(self) -> Dict[str, Dict[str, Any]]:
+        """What the rows show of their chats now, for the open tasks that have one: kept for a while after the connection goes away. Never raises."""
+        try:
+            with self.lock:
+                tasks_now = list(self.bound) if self.ready else []
+            return {task: chat for task in tasks_now for chat in [self.chat_of(task)] if chat.get("bound")}
+        except Exception:  # noqa: BLE001 - a helper: the rows then say the link is lost, as before
+            return {}
 
     def _notice(self, note: Dict[str, Any]) -> None:
         method, params = str(note.get("method") or ""), note.get("params") or {}

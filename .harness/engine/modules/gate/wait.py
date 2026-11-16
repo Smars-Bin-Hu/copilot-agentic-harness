@@ -32,6 +32,7 @@ from core.systems import verb_word
 
 from . import external
 from .commands import CommandError
+from core import procrun
 
 EVERY = (5, 600)
 TIMEOUT = (10, 7200)
@@ -86,7 +87,7 @@ def run_wait(root: Path, command: str, until: str, every: int = 30, timeout: int
     if bad:
         raise CommandError(say("wait.not_read", verb=verb_word(bad[0].verb), system=bad[0].system))
     target = out_path(root, out, task)
-    run = runner or (lambda text: subprocess.run(text, shell=True, cwd=str(root), capture_output=True, text=True, errors="replace", timeout=ROUND_SECONDS))
+    run = runner or (lambda text: procrun.run(text, shell=True, cwd=str(root), capture_output=True, text=True, errors="replace", timeout=ROUND_SECONDS))
     started = clock()
     rounds = 0
     last = ""

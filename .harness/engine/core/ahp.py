@@ -29,6 +29,7 @@ import time
 import uuid
 from typing import Any, Callable, Deque, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import quote, unquote, urlparse
+from . import procrun
 
 PROTOCOL = "1.1.0"
 CLI_TIMEOUT = 25  # seconds for `code agent endpoints` and `code <folder>`
@@ -107,7 +108,7 @@ def run_code(code: str, arguments: List[str], timeout: float = CLI_TIMEOUT, extr
     env.update(extra or {})
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
-        done = subprocess.run([code] + arguments, capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
+        done = procrun.run([code] + arguments, capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         raise NotReady("cli-slow", f"no answer in {timeout:g} s") from None  # a busy computer, or a VS Code that is still starting: the link tries again, the person waits (1.7.41)
     except (OSError, subprocess.SubprocessError) as error:

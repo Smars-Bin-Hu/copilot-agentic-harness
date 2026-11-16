@@ -10,6 +10,26 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.45 (2026-11-16)
+
+A busy work computer: the harness no longer adds to the load, a time limit holds on Windows, and a task does not flash idle when VS Code answers late.
+
+### Added
+
+- **A wheel in the terminal while the browser opens the board.** Start Harness shows `| Waiting for the browser to open the board... 3 s` until the page has opened and paired, then says it opened. After 60 s with no page it says how to open the address by hand. Not shown when the output is not a terminal.
+- **Check again on the `harness doctor` line.** On the Enter screen and in the red block of the board: doctor runs now, not when its wait is over.
+
+### Changed
+
+- **The board runs doctor much less often when it fails.** Before, a doctor that failed or found errors ran again 20 s after it ended: on a busy computer it ran nearly all the time. Now it waits 1, 2, 5, then 10 minutes; after no answer in time, 10 minutes. A changed configuration file or Check again runs it at once. Enter still waits for a clean doctor.
+- **The board's doctor runs below normal priority** (Windows) or with `nice` (macOS, Linux), and so does what it starts: VS Code and Copilot come first. It no longer probes the outside connections or looks for VS Code: the board checks both itself. `harness doctor` in a terminal checks everything, as before.
+- **A time limit holds on Windows.** A connection test, a probe, the `code` command, git and the gate's wait used to end only the process they started, then wait for its output: a `sqlcmd`, `az` or git that it had started kept running and the wait went on far past the limit. Now the whole tree ends at the limit.
+- **"doctor could not run" says where it stopped** (`no answer in 300 s; it stopped at the step targets`) and when it runs again.
+- **A git that gives no answer in time is asked once more** before doctor reports it, and the error says the computer may be busy.
+- **One late answer of VS Code no longer drops the connection.** The board gives up only after three in a row. When the connection does go, a task keeps the chat it showed for up to two minutes while the board finds it again, instead of showing idle.
+- **A page that stopped waiting no longer prints a traceback** (`ConnectionAbortedError`, WinError 10053) in the board's terminal.
+- **One Chinese line fixed** (`fetch --read`): "promote 从不写回" named the old feature; it now says what promote does not do.
+
 ## 1.7.44 (2026-11-16)
 
 Counts and checks on SQL Server that only read no longer wait for you, and the README shows 1.7.

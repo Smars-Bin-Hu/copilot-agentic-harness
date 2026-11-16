@@ -20,6 +20,7 @@ from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
 from core.events import CONFIG_KEYS
 from core.state import TRACKED_EVENTS
+from core import procrun
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -82,7 +83,7 @@ def check_interpreter(report: Report) -> None:
         report.error(say("doctor.interpreter.missing", name=name, consequence=consequence))
         return
     try:
-        result = subprocess.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=INTERPRETER_SECONDS)
+        result = procrun.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=INTERPRETER_SECONDS)
         problem = "" if result.returncode == 0 and result.stdout.strip() == "1" else say("doctor.interpreter.exit", code=result.returncode)
     except Exception as error:
         problem = f"{type(error).__name__}"
@@ -598,7 +599,10 @@ def check_task_names(report: Report, root: Path) -> None:
 
 
 def check_vscode(report: Report) -> None:
-    """Can the board reach VS Code (1.6)? A warning at most: the board works without it. One `code` process and one connection, as `doctor` is run by hand and seldom."""
+    """Can the board reach VS Code (1.6)? A warning at most: the board works without it. One `code` process and one connection, as `doctor` is run by hand and seldom.
+    The board's own run (1.7.45) leaves it out: the board's VS Code line says it, from the link it keeps open."""
+    if os.environ.get(TOPICS):
+        return
     if ahp.switched_off():
         report.ok(say("doctor.vscode.off"))
         return
@@ -771,7 +775,7 @@ def check_systems(report: Report, root: Path) -> None:
         systems = config.load_policy(root, "tools").get("systems") or {}
         errors = external.validate(systems)
         found = external.warnings(systems) if not errors else []
-        reached = system_reach(root, systems) if not errors else {}
+        reached = system_reach(root, systems) if not errors and not os.environ.get(TOPICS) else {}  # 1.7.45: the board's own run does not probe again: the board looks at the connections itself (reachcheck.py)
     except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
         report.warn(say("doctor.systems.unreadable", error=error))
         return
@@ -835,9 +839,10 @@ def check_targets(report: Report, root: Path) -> None:
     for name in found.names():
         repo = found.repos[name]
         try:
-            info = targets.summary(repo, found.timeout)
+            info = target_summary(repo, found.timeout)
         except targets.TargetError as error:
-            report.error(say("doctor.target.error", name=name, error=error))
+            busy = isinstance(error.__cause__, subprocess.TimeoutExpired)
+            report.error(say("doctor.target.busy" if busy else "doctor.target.error", name=name, error=error))
             continue
         if not info["has_base_ref"]:
             report.error(say("doctor.target.no_branch", name=name, base_ref=repo.base_ref))
@@ -847,6 +852,16 @@ def check_targets(report: Report, root: Path) -> None:
         report.ok(say("doctor.target.info", kind=kind, name=name, base_ref=repo.base_ref, commit=info["base_commit"], date=info["base_commit_date"][:10], branch=info["current_branch"], state=state))
         if repo.knowledge_base and info["current_branch"] != repo.base_ref:
             report.warn(say("doctor.target.kb_branch", name=name, base_ref=repo.base_ref))
+
+
+def target_summary(repo: Any, timeout: int) -> Dict[str, Any]:
+    """`targets.summary`, asked once more when git gave no answer in time (1.7.45): on a busy work computer the first git start of a while can be slow, and the next one is not."""
+    try:
+        return targets.summary(repo, timeout)
+    except targets.TargetError as error:
+        if not isinstance(error.__cause__, subprocess.TimeoutExpired):
+            raise
+    return targets.summary(repo, timeout)
 
 
 def check_location(report: Report, root: Path) -> None:

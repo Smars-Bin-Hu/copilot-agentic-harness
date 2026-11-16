@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from . import messages
+from . import procrun
 
 DEFAULT_TIMEOUT = 30
 PATHS_PER_CALL = 200  # a Windows command line ends near 32 000 characters
@@ -35,7 +36,7 @@ def command(path: Path, arguments: List[str]) -> List[str]:
 def run(path: Path, name: str, *arguments: str, timeout: int = DEFAULT_TIMEOUT, allow_failure: bool = False, data: Optional[bytes] = None) -> bytes:
     """`git -C <path> ...`: its stdout. Raises GitError on failure unless `allow_failure` (then a failure gives b"")."""
     try:
-        done = subprocess.run(command(path, list(arguments)), input=data, capture_output=True, timeout=timeout, env=env(), check=False)
+        done = procrun.run(command(path, list(arguments)), input=data, capture_output=True, timeout=timeout, env=env(), check=False)
     except (FileNotFoundError, PermissionError) as error:  # PermissionError: PATH is empty and the folder holds a directory called `git`
         raise GitError(messages.text("target.git.missing")) from error
     except subprocess.TimeoutExpired as error:

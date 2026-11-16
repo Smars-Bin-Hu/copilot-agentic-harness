@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import os
 import subprocess
 import sys
@@ -33,11 +34,13 @@ from core import connections as conn_core
 from core import reach, systems as outside
 
 from . import reachcheck
+from core import procrun
 
 LINES = 6  # errors of doctor shown at the end of the setup
 DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_seconds` in the policy `task` (1.6.104: 90 was too short for a work computer that took 80 s)
 DOCTOR_LIMITS = (30.0, 1800.0)
-RETRY_FAILED = 20.0  # a doctor that failed or found errors is run again no sooner than this
+RETRY_FAILED = (60.0, 120.0, 300.0, 600.0)  # 1.7.45: a doctor that failed or found errors is run again after 1, 2, 5, then every 10 minutes (it was every 20 s: on a busy work computer doctor ran without a stop); Check again, or a changed configuration file, runs it at once
+RETRY_TIMEOUT = 600.0  # a doctor that gave no answer in time is run again after 10 minutes, not sooner: the computer was busy
 REFRESH_CLEAN = 600.0  # a clean doctor is looked at again after this long
 FOLDERS_FOR = 10.0  # seconds the optional items are kept
 RUNNING_KEEP = 8.0  # seconds the answer "a VS Code runs on this computer" is kept
@@ -117,7 +120,7 @@ class _Done:
 
 def _run_with_steps(command: List[str], root: Path, env: Dict[str, str], flags: int, timeout: float, progress: Callable[[int, int, str], None]) -> _Done:
     """The child `doctor`, its stderr read line by line while it runs: a line `doctor.PROGRESS_MARK <done>/<total> <step>` goes to `progress`, the rest is kept as its stderr (1.7.43)."""
-    child = subprocess.Popen(command, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, env=env, creationflags=flags)
+    child = subprocess.Popen(command, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, env=env, creationflags=flags, **({} if os.name == "nt" else {"start_new_session": True}))  # its own group: at the deadline doctor and what it started end together (1.7.45)
     out: List[bytes] = []
     err: List[bytes] = []
 
@@ -139,7 +142,7 @@ def _run_with_steps(command: List[str], root: Path, env: Dict[str, str], flags: 
     try:
         code = child.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        child.kill()
+        procrun.end_tree(child)  # 1.7.45: not doctor alone; a probe it started (sqlcmd, az, git) would stay and keep the computer busy
         child.wait()
         raise
     for reader in readers:
@@ -158,16 +161,18 @@ def run_doctor(root: Path, timeout: Optional[float] = None, progress: Optional[C
     `progress(done, total, step)` (1.7.43): called at each step while it runs, for the Enter screen's bar: on a work computer it takes a minute or more."""
     timeout = doctor_seconds(root) if timeout is None else timeout
     command = [sys.executable, str(root / ".harness" / "engine" / "cli.py"), "doctor"]
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    flags = (getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)) if os.name == "nt" else 0  # 1.7.45: below normal, and what it starts too: VS Code and Copilot come first
+    if os.name != "nt" and shutil.which("nice"):
+        command = ["nice", "-n", "10", *command]
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PATH=shortcmd.fresh_path(), HARNESS_DOCTOR_TOPICS="1")  # what a new terminal sees: the person may have added the short command after the board started
     try:
         if progress is not None:
             env["HARNESS_DOCTOR_PROGRESS"] = "1"
             done: Any = _run_with_steps(command, root, env, flags, timeout, progress)
         else:
-            done = subprocess.run(command, cwd=str(root), capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
+            done = procrun.run(command, cwd=str(root), capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
-        return {"errors": 0, "first": "", "failed": f"no answer in {timeout:g} s"}
+        return {"errors": 0, "first": "", "failed": f"no answer in {timeout:g} s", "timeout": timeout}
     except (OSError, subprocess.SubprocessError) as error:
         return {"errors": 0, "first": "", "failed": short(f"{type(error).__name__}: {error}")}
     text = done.stdout.decode("utf-8", errors="replace")
@@ -242,6 +247,7 @@ class Ready:
         self.found: Optional[Dict[str, Any]] = None  # the kept result of doctor
         self.steps: Dict[str, Any] = {}  # where the doctor that runs is: done, total, step, began (1.7.43)
         self.mark_seen: Optional[str] = None  # the mark of the configuration files when doctor last started (`config_mark`)
+        self.misses = 0  # doctor runs in a row that failed or found errors: the wait before the next one grows (RETRY_FAILED)
         self.at = 0.0
         self.running = False
         self.optional_kept: Any = None  # (what the items read, when, the answer)
@@ -273,12 +279,21 @@ class Ready:
             if self.running:
                 return
             now = self.clock()
-            again = self.found is None or now - self.at >= (REFRESH_CLEAN if not self.found["errors"] and not self.found["failed"] else RETRY_FAILED) or (bool(mark) and mark != self.mark_seen)  # a configuration file changed: ask again now, not in ten minutes
+            again = self.found is None or now - self.at >= self.next_wait() or (bool(mark) and mark != self.mark_seen)  # a configuration file changed: ask again now, not in ten minutes
             if not again:
                 return
             self.running = True
             self.mark_seen = mark
         threading.Thread(target=self.run_doctor, name="ready-doctor", daemon=True).start()
+
+    def next_wait(self) -> float:
+        """Seconds after the last doctor before the next (1.7.45): 10 minutes when it was clean, or gave no answer in time; else 1, 2, 5, then 10 minutes as it keeps failing."""
+        found = self.found or {}
+        if not found.get("errors") and not found.get("failed"):
+            return REFRESH_CLEAN
+        if found.get("timeout"):
+            return RETRY_TIMEOUT
+        return RETRY_FAILED[min(max(self.misses, 1), len(RETRY_FAILED)) - 1]
 
     def note_step(self, done: int, total: int, step: str) -> None:
         with self.lock:
@@ -300,6 +315,10 @@ class Ready:
         except Exception as error:  # noqa: BLE001 - a doctor that breaks is a line that failed, not a dead thread
             found = {"errors": 0, "first": "", "failed": short(f"{type(error).__name__}: {error}")}
         with self.lock:
+            if found.get("timeout"):  # 1.7.45: where it stopped, and when it is tried again
+                step = str(self.steps.get("step") or "") or "-"
+                found = dict(found, failed=messages.text("ready.doctor.timeout", seconds=f"{found['timeout']:g}", step=step))
+            self.misses = self.misses + 1 if found.get("errors") or found.get("failed") else 0
             self.found, self.at, self.running = found, self.clock(), False
 
     # --- the required checks ---------------------------------------------------------------------------------------
@@ -387,9 +406,19 @@ class Ready:
         return {"state": "ok", "why": "ok", "n": 0}
 
     def drop_doctor(self) -> None:
-        """What doctor said is old (a sync was done): the next question runs it again."""
+        """What doctor said is old (a sync was done, or the person pressed Check again): the next question runs it again."""
         with self.lock:
             self.at = -1e9
+
+    def doctor_again(self) -> bool:
+        """Check again, pressed by the person (1.7.45): doctor runs now, not when its wait is over. False when one runs already."""
+        with self.lock:
+            busy = self.running
+        if busy:
+            return False
+        self.drop_doctor()
+        self.start_doctor()
+        return True
 
     def drop_optional(self) -> None:
         """What the optional items said is old (a sync was done, F3 FB1-b): the next question reads them again at once, so a yellow note that a sync mended is gone on the poll that follows it, not when the kept answer runs out."""
@@ -601,6 +630,7 @@ class Ready:
                 text, reason = say("ready.r.paired"), say("ready.r.paired.why")
             elif key == "doctor":
                 text, reason = (say("ready.r.doctor.failed"), line.get("detail", "")) if why == "failed" else (say("ready.r.doctor.errors.one" if line.get("n") == 1 else "ready.r.doctor.errors", n=line.get("n", "")), line.get("detail", ""))
+                fix = {} if line.get("integrity") else {"to": "doctor", "label": say("board.enter.doctor.again")}  # 1.7.45: run it now, not when its wait is over; guardrail files have their own button
             elif key == "vscode":
                 if state == "wait":
                     text, reason = say("ready.r.vscode.wait"), say(f"board.enter.m.vscode.{why}")

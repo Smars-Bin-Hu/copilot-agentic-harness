@@ -88,6 +88,10 @@ MAX_EDIT_BODY = 3 * 1024 * 1024  # `/api/fileop`: one text file the person edits
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 REOPEN_EVERY = 3.0  # seconds
+GONE = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)  # the browser closed the connection while the board was still answering (WinError 10053 on Windows)
+OPEN_WAIT = 60.0  # seconds the terminal turns its wheel for the browser to open the board (1.7.45); after it, it says how to open the page by hand
+WHEEL = "|/-\\"
+WHEEL_EVERY = 0.15
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 SETTINGS = ("review set", "task allow", "task link", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
 WAKING = ("confirm-req", "approve-plan", "approve-promote")  # the decisions of the person that wake the agent by themselves (1.7.38, C13 RB-2)
@@ -293,6 +297,7 @@ class Board:
         self.opener: Callable[[str], Any] = webbrowser.open
         self.reopened = -REOPEN_EVERY
         self.sessions: set = set()
+        self.first_pair = threading.Event()  # a browser paired: the wheel in the terminal stops (1.7.45)
         self.lock = threading.Lock()
         self.wall_window = threading.Lock()  # one folder window at a time
         self.language_stamp: List[int] = []
@@ -385,7 +390,8 @@ class Board:
             self.code = ""
             token = secrets.token_urlsafe(24)
             self.sessions.add(token)
-            return token
+        self.first_pair.set()
+        return token
 
     def paired(self, token: str) -> bool:
         with self.lock:
@@ -1593,8 +1599,11 @@ def handler_for(board: Board) -> type:
                 self.send_header("Content-Security-Policy", CSP)
             for name, value in (extra or {}).items():
                 self.send_header(name, value)
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.end_headers()
+                self.wfile.write(body)
+            except GONE:  # 1.7.45: the page went away before the answer (it gave up waiting, or the tab was closed): nobody is left to answer, and no traceback in the terminal
+                self.close_connection = True
 
         def answer(self, status: int, data: Dict[str, Any], extra: Optional[Dict[str, str]] = None) -> None:
             if status == 200:
@@ -1880,6 +1889,10 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": board.terminal.act(data)})
                 except CommandError as error:
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/doctor-again":  # (1.7.45) Check again on the doctor line: run doctor now, not when its wait is over. The paired browser only: it starts a program
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                return self.answer(200, {"started": board.ready.doctor_again()})
             if path == "/api/integrity":  # (1.7.39) accept the guardrail files as they are now, after the page listed them: the paired browser only. The agent has no cookie, and in a terminal it is refused (`doctor --accept`)
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -2121,6 +2134,14 @@ def sync_on_start(root: Path) -> None:
         pass
 
 
+class Server(http.server.ThreadingHTTPServer):
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        """A browser that closed its connection is not an error to print (1.7.45); anything else is printed as before."""
+        if isinstance(sys.exc_info()[1], GONE):
+            return
+        super().handle_error(request, client_address)
+
+
 def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,
           link: Optional[vslink.VsLink] = None) -> Dict[str, Any]:
     """Run until Ctrl+C. `opener`, `ready` and `link` exist for the tests: `ready` gets the server once it listens; `link`, a link made by hand (a fake host, or none)."""
@@ -2134,7 +2155,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     board = Board(root, everything, port or found["port"], found["actions"], link, found["refresh"])
     board.opener = opener
     try:
-        server = board.server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
+        server = board.server = Server(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:
         running = running_board(root)  # two starts at one moment: the first was not in the file yet when this one looked
         if running:
@@ -2166,10 +2187,13 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         opened = board.restarted or bool(opener(f"{address}#pair={board.code}"))  # after a restart the page is there, and asks for itself
     except Exception:  # noqa: BLE001 - the person can pair by hand
         opened = False
-    print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
     if ready is not None:
+        print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         ready(server)
+    elif opened and not board.restarted and terminal(out):  # 1.7.45: a wheel turns until the browser has opened the page and paired, then the Enter key is read
+        threading.Thread(target=wait_for_browser, args=(board, address, out), daemon=True).start()
     else:
+        print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:
         while serving.is_alive():
@@ -2190,6 +2214,41 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     if board.next_code:
         relaunch(board.next_code)
     return {"served": address, "stopped": True}
+
+
+def terminal(out: Any) -> bool:
+    try:
+        return bool(out.isatty())
+    except Exception:  # noqa: BLE001 - not a terminal then
+        return False
+
+
+def wait_for_browser(board: Board, address: str, out: Any, limit: float = OPEN_WAIT, every: float = WHEEL_EVERY) -> bool:
+    """A wheel in the terminal while the browser opens the board (on a slow computer, many seconds): it stops when the page paired, or after `limit` seconds with how to open
+    the page by hand. Then Enter is read for a new code, as before. Whether the page paired."""
+    began = time.monotonic()
+    shown = 0
+    turn = 0
+    while not board.first_pair.wait(every):
+        seconds = time.monotonic() - began
+        if seconds >= limit:
+            break
+        line = f"{WHEEL[turn % len(WHEEL)]} " + say("serve.waiting", seconds=int(seconds))
+        turn += 1
+        try:
+            out.write("\r" + line + " " * max(0, shown - len(line)))
+            out.flush()
+        except (OSError, ValueError):  # a closed terminal: the wheel is a helper
+            break
+        shown = len(line)
+    paired = board.first_pair.is_set()
+    try:
+        out.write("\r" + " " * shown + "\r")
+        print(say("serve.opened" if paired else "serve.not_seen", address=address), file=out, flush=True)
+    except (OSError, ValueError):
+        pass
+    wait_for_enter(board, address, out, early=0.0 if not paired else EARLY_ENTER)
+    return paired
 
 
 def wait_for_enter(board: Board, address: str, out: Any, early: float = EARLY_ENTER) -> None:

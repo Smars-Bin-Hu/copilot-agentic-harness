@@ -11,6 +11,7 @@ import threading
 import time
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 from typing import Any, Dict, Optional, Tuple
 
@@ -505,3 +506,78 @@ class PairingKeyTests(unittest.TestCase):
         self.assertEqual((board.made, board.code), (2, "code2"))
         self.assertIn("code2", said)
 
+
+class WaitForBrowserTests(unittest.TestCase):
+    """1.7.45: a wheel turns in the terminal until the browser has opened the board and paired; after a limit it says how to open the page by hand."""
+
+    class Board(PairingKeyTests.Board):
+        def __init__(self) -> None:
+            super().__init__()
+            self.first_pair = threading.Event()
+
+    def run_with(self, board, limit: float) -> tuple:
+        out = io.StringIO()
+        with mock.patch("sys.stdin", io.StringIO("")):
+            paired = boardserve.wait_for_browser(board, "http://127.0.0.1:1/", out, limit=limit, every=0.01)
+        return paired, out.getvalue()
+
+    def test_the_wheel_stops_when_the_page_pairs_and_says_it_opened(self) -> None:
+        board = self.Board()
+        threading.Timer(0.2, board.first_pair.set).start()
+        paired, said = self.run_with(board, limit=30)
+        self.assertTrue(paired)
+        self.assertIn("\r| ", said)
+        self.assertIn(boardserve.say("serve.waiting", seconds=0), said)
+        last = said.rsplit("\r", 1)[-1]
+        self.assertTrue(last.startswith(boardserve.say("serve.opened")), last)
+
+    def test_after_the_limit_it_says_how_to_open_the_page(self) -> None:
+        paired, said = self.run_with(self.Board(), limit=0.1)
+        self.assertFalse(paired)
+        self.assertIn("http://127.0.0.1:1/", said.rsplit("\r", 1)[-1])
+        self.assertIn(boardserve.say("serve.not_seen", address="http://127.0.0.1:1/"), said)
+
+    def test_a_pairing_sets_the_event(self) -> None:
+        board = boardserve.Board.__new__(boardserve.Board)
+        board.lock, board.code, board.sessions, board.first_pair = threading.Lock(), "abc", set(), threading.Event()
+        self.assertIsNone(board.pair("wrong"))
+        self.assertFalse(board.first_pair.is_set())
+        self.assertTrue(board.pair("abc"))
+        self.assertTrue(board.first_pair.is_set())
+
+
+
+class PageGoneTests(unittest.TestCase):
+    """1.7.45: a page that closed its connection before the answer (WinError 10053 on Windows) prints no traceback in the board's terminal."""
+
+    class Gone:
+        def write(self, data: bytes) -> None:
+            raise ConnectionAbortedError(10053, "An established connection was aborted by the software in your host machine")
+
+    def handler(self) -> Any:
+        kind = boardserve.handler_for(types.SimpleNamespace(port=1, root=Path(".")))
+        found = kind.__new__(kind)
+        found.request_version, found.requestline, found.command, found.close_connection = "HTTP/1.1", "POST /api/board HTTP/1.1", "POST", False
+        found.wfile = self.Gone()
+        return found
+
+    def test_an_answer_to_a_page_that_went_away_is_dropped_quietly(self) -> None:
+        found = self.handler()
+        found.send(200, b"{}", "application/json")
+        self.assertTrue(found.close_connection)
+
+    def test_the_server_prints_nothing_for_a_closed_connection_and_the_rest_as_before(self) -> None:
+        server = boardserve.Server.__new__(boardserve.Server)
+        printed = io.StringIO()
+        with mock.patch("sys.stderr", printed):
+            for error in (ConnectionAbortedError(10053, "aborted"), BrokenPipeError(), ConnectionResetError()):
+                try:
+                    raise error
+                except OSError:
+                    server.handle_error(None, ("127.0.0.1", 1))
+            self.assertEqual(printed.getvalue(), "")
+            try:
+                raise ValueError("a real fault")
+            except ValueError:
+                server.handle_error(None, ("127.0.0.1", 1))
+        self.assertIn("a real fault", printed.getvalue())

@@ -97,6 +97,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.vscode/` | `settings.json` (turns on hooks, `AGENTS.md` and instruction files in Copilot Chat) and `mcp.json` (MCP servers; none shipped) |
 | `.harness/bin/` | The launchers of the short command: `harness` (macOS/Linux), `harness.cmd` (Windows); `harness.icns`, `harness.ico`: the icon of Start Harness |
 | `.harness/engine/core/kbdetail.py` | What the knowledge base window fills in after `kb status` (1.6.86): stale cards, form errors, the last read of a domain, the gaps; asks git, so on a thread of its own |
+| `.harness/engine/core/procrun.py` | A program run with a time limit that holds on Windows too (1.7.45): at the limit the whole tree ends (`taskkill /T /F`, or the process group), and its output is not waited for past a short grace. Use it, not `subprocess.run(timeout=)`, for any program that may start another (a shell, `code.cmd`, git, `az`, `sqlcmd`) |
 | `.harness/engine/core/starticon.py` | The icon of Start Harness (1.6.83): the first start puts it on `Start Harness.command` (macOS) or makes the shortcut `Start Harness.lnk` (Windows), which is not in git. `web/icon.png`: the same robot in the header of the board and on the browser tab, inside each page |
 | `.harness/eval/` | Fixed scenarios (`scenarios/`) and recorded samples of real hook input (`fixtures/`) |
 | `.harness/tests/` | All the tests: `python -m unittest discover -s .harness/tests` (`python3` on macOS/Linux) |

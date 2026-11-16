@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import schema
+from . import procrun
 
 ALLOW, TASK, OUTBOX, HUMAN, DENY = "allow", "task", "outbox", "human", "deny"
 DECISIONS = (ALLOW, TASK, OUTBOX, HUMAN, DENY)  # from loosest to strictest
@@ -254,7 +255,7 @@ def environments(systems: Dict[str, Any], only_openable: bool = False) -> Dict[s
 def run_probe(command: str, cwd: Optional[Path] = None) -> Tuple[Optional[int], str]:
     """(exit code, output) of a probe, run in the shell as a person would type it. (None, why) when it could not run or took too long."""
     try:
-        done = subprocess.run(command, shell=True, cwd=str(cwd) if cwd else None, capture_output=True, text=True, errors="replace", timeout=PROBE_SECONDS)
+        done = procrun.run(command, shell=True, cwd=str(cwd) if cwd else None, capture_output=True, text=True, errors="replace", timeout=PROBE_SECONDS)
     except subprocess.TimeoutExpired:
         return None, f"no answer in {PROBE_SECONDS} s"
     except (OSError, ValueError) as error:

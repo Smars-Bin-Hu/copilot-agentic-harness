@@ -795,3 +795,53 @@ class LayoutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BusyComputerTests(unittest.TestCase):
+    """1.7.45: the board's own doctor run does not do again what the board checks itself, and a git that gave no answer in time is asked once more."""
+
+    def test_the_boards_run_does_not_probe_the_systems_or_look_for_vscode_and_a_persons_run_does(self) -> None:
+        from unittest import mock
+
+        import doctor
+
+        for board, probed in (("1", False), ("", True)):
+            report = doctor.Report()
+            with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ, {doctor.TOPICS: board}), mock.patch("modules.gate.external.validate", return_value=[]), \
+                    mock.patch("modules.gate.external.warnings", return_value=[]), mock.patch("core.config.load_policy", return_value={"systems": {"mine": {}}}), \
+                    mock.patch.object(doctor, "system_reach", return_value={}) as reach, mock.patch.object(doctor.ahp, "switched_off", return_value=False), mock.patch.object(doctor.ahp, "find_code", return_value="") as find:
+                doctor.check_systems(report, Path(folder))
+                doctor.check_vscode(report)
+            self.assertEqual((reach.called, find.called), (probed, probed), board)
+
+    def test_a_git_that_did_not_answer_in_time_is_asked_once_more_and_a_real_fault_is_not(self) -> None:
+        from unittest import mock
+
+        import doctor
+        from core import targets
+
+        def slow() -> None:
+            try:
+                raise subprocess.TimeoutExpired("git", 30)
+            except subprocess.TimeoutExpired as error:
+                raise targets.TargetError("git rev-parse did not end within 30 seconds") from error
+
+        good = {"has_base_ref": True}
+        answers = iter([None, good])
+
+        def once_slow(*_args: object) -> dict:
+            found = next(answers)
+            if found is None:
+                slow()
+            return found
+
+        with mock.patch.object(doctor.targets, "summary", side_effect=once_slow) as summary:
+            self.assertEqual(doctor.target_summary(object(), 30), good)
+        self.assertEqual(summary.call_count, 2)
+        with mock.patch.object(doctor.targets, "summary", side_effect=lambda *_args: slow()) as summary, self.assertRaises(targets.TargetError) as caught:
+            doctor.target_summary(object(), 30)
+        self.assertEqual(summary.call_count, 2)
+        self.assertIsInstance(caught.exception.__cause__, subprocess.TimeoutExpired)  # check_targets says it as a busy computer
+        with mock.patch.object(doctor.targets, "summary", side_effect=targets.TargetError("not a git repository")) as summary, self.assertRaises(targets.TargetError):
+            doctor.target_summary(object(), 30)
+        self.assertEqual(summary.call_count, 1)

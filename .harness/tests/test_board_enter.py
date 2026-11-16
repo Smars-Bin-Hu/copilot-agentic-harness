@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import re
 import tempfile
 import threading
@@ -225,13 +227,65 @@ class ReadinessTests(TaskCase):
         self.assertEqual((found["ready"], line(found, "doctor")["why"], line(found, "doctor")["n"], line(found, "doctor")["detail"]), (False, "errors", 2, "policy x is broken"))
         self.assertEqual(line(found, "doctor")["level"], "red")
         problem = found["problems"]["required"][0]  # what the red block of the board says
-        self.assertEqual((problem["key"], problem["level"], problem["text"], problem["why"], problem["fix"]), ("doctor", "red", messages.text("ready.r.doctor.errors", n=2), "policy x is broken", {}))
+        self.assertEqual((problem["key"], problem["level"], problem["text"], problem["why"], problem["fix"]), ("doctor", "red", messages.text("ready.r.doctor.errors", n=2), "policy x is broken", {"to": "doctor", "label": messages.text("board.enter.doctor.again")}))
         check.answer(True)
         self.assertEqual(len(runs), 1)
-        now[0] += ready.RETRY_FAILED + 1
+        for waited, count in ((ready.RETRY_FAILED[0], 2), (ready.RETRY_FAILED[1], 3), (ready.RETRY_FAILED[2], 4), (ready.RETRY_FAILED[3], 5), (ready.RETRY_FAILED[3], 6)):  # 1.7.45: 1, 2, 5, then 10 minutes
+            now[0] += waited - 1
+            check.answer(True)
+            self.assertEqual(len(runs), count - 1, f"not before {waited} s")
+            now[0] += 2
+            check.answer(True)
+            self.assertTrue(until(lambda: len(runs) == count and not check.running))
+
+    def test_a_doctor_with_no_answer_says_where_it_stopped_and_waits_ten_minutes(self) -> None:
+        now, runs = [100.0], []
+
+        def doctor(_root: Path) -> Dict[str, Any]:
+            runs.append(1)
+            check.note_step(17, 29, "targets")
+            return {"errors": 0, "first": "", "failed": "no answer in 300 s", "timeout": 300.0}
+
+        check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), doctor, clock=lambda: now[0])
+        found = settled(check)
+        self.assertEqual(line(found, "doctor")["detail"], messages.text("ready.doctor.timeout", seconds="300", step="targets"))
+        self.assertFalse(found["ready"])  # still red: Enter waits for a clean doctor
+        now[0] += ready.RETRY_FAILED[0] + 1
         check.answer(True)
-        until(lambda: len(runs) == 2 and not check.running)
+        self.assertEqual(len(runs), 1)
+        now[0] += ready.RETRY_TIMEOUT
+        check.answer(True)
+        self.assertTrue(until(lambda: len(runs) == 2 and not check.running))
+
+    def test_check_again_runs_doctor_now_and_not_twice_at_once(self) -> None:
+        now, runs, gate = [100.0], [], threading.Event()
+
+        def doctor(_root: Path) -> Dict[str, Any]:
+            runs.append(1)
+            if len(runs) == 2:
+                gate.wait(5)
+            return {"errors": 1, "first": "x", "failed": ""}
+
+        check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), doctor, clock=lambda: now[0])
+        settled(check)
+        self.assertTrue(check.doctor_again())
+        self.assertTrue(until(lambda: len(runs) == 2))
+        self.assertFalse(check.doctor_again())  # one runs already
+        gate.set()
+        self.assertTrue(until(lambda: not check.running))
         self.assertEqual(len(runs), 2)
+
+    def test_the_board_starts_doctor_below_normal_priority(self) -> None:
+        engine = self.root / ".harness" / "engine"
+        engine.mkdir(parents=True, exist_ok=True)
+        (engine / "cli.py").write_text("print('{\"errors\": 0}')\n", encoding="utf-8")
+        with mock.patch.object(ready.procrun, "run", wraps=ready.procrun.run) as run:
+            ready.run_doctor(self.root)
+        command, flags = run.call_args.args[0], run.call_args.kwargs.get("creationflags", 0)
+        if os.name == "nt":
+            self.assertTrue(flags & subprocess.BELOW_NORMAL_PRIORITY_CLASS)
+        elif ready.shutil.which("nice"):
+            self.assertEqual(command[:3], ["nice", "-n", "10"])
 
     def test_a_doctor_that_cannot_run_is_a_failed_line_with_its_reason_not_an_error_of_the_request(self) -> None:
         def broken(_root: Path) -> Dict[str, Any]:

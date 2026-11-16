@@ -49,6 +49,24 @@ class CutTests(unittest.TestCase):
         self.assertEqual(texts(""), [])
         self.assertEqual(texts("  \n -- only a comment\n"), [])
 
+    def test_a_set_option_or_a_use_at_the_front_is_a_statement_of_its_own(self) -> None:
+        """1.7.44: the server needs no `;` after `SET <option> ON|OFF` or `USE <db>`; the rest is judged on its own, and the person sees each part as it was written."""
+        found = statements.split("USE [Acme DW] set nocount, xact_abort on\nSELECT 'a' FROM t")
+        self.assertEqual([item.text for item in found], ["USE Acme_DW", "set nocount, xact_abort on", "SELECT '' FROM t"])
+        self.assertEqual([item.raw for item in found], ["USE [Acme DW]", "", "SELECT 'a' FROM t"])
+        self.assertEqual(texts("SET IDENTITY_INSERT dbo.t ON SELECT 1"), ["SET IDENTITY_INSERT dbo.t ON SELECT 1"])  # not an option list: left whole
+        self.assertEqual(texts("DECLARE @n INT, @s NVARCHAR(10) = 'x' SET @n = 0 SELECT @n"), ["DECLARE @n INT, @s NVARCHAR(10) = ''", "SET @n = 0", "SELECT @n"])
+        self.assertEqual(statements.split("DECLARE @s NVARCHAR(10) = 'it''s' SELECT 1")[0].raw, "DECLARE @s NVARCHAR(10) = 'it''s'")
+        self.assertEqual(texts("SET @n = 1 + (SELECT 1)"), ["SET @n = 1 + (SELECT 1)"])  # the next word starts no statement: not cut
+        self.assertEqual(texts("DECLARE @x AS INT SELECT @x"), ["DECLARE @x AS INT", "SELECT @x"])
+        found = statements.split("SET @n = (SELECT COUNT(*) FROM t WHERE c = ')(' ) SELECT @n")  # closed by its own bracket; one inside a string does not count
+        self.assertEqual([item.text for item in found], ["SET @n = (SELECT COUNT(*) FROM t WHERE c = '' )", "SELECT @n"])
+        self.assertEqual(found[0].raw, "SET @n = (SELECT COUNT(*) FROM t WHERE c = ')(' )")
+        self.assertEqual(texts("SET @n = (SELECT 1) + 2 SELECT 1"), ["SET @n = (SELECT 1) + 2 SELECT 1"])
+        self.assertEqual(texts("DECLARE @x INT = 5, @y VARCHAR(10)"), ["DECLARE @x INT = 5, @y VARCHAR(10)"])
+        self.assertEqual(texts("SET NOCOUNT ON"), ["SET NOCOUNT ON"])
+        self.assertEqual(texts("CREATE PROCEDURE p AS SET NOCOUNT ON SELECT 1"), ["CREATE PROCEDURE p AS SET NOCOUNT ON SELECT 1"])  # a definition stays one statement
+
     def test_a_line_of_go_cuts_a_batch_with_or_without_a_count(self) -> None:
         self.assertEqual(texts("SELECT 1\nGO\nSELECT 2\n  go 5  \nSELECT 3\nGO -- done"), ["SELECT 1", "SELECT 2", "SELECT 3"])
 

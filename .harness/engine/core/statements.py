@@ -79,6 +79,60 @@ def _batch(text: str) -> List[Statement]:
     return _cut(text, True)
 
 
+# (1.7.44) A statement that is complete in its own words: `SET <option>[, <option>] ON|OFF`, `USE <database>`, `DECLARE @a <type>[(n)] [= <constant>][, ...]` and `SET @a = <constant>`. The server
+# needs no `;` after one, so `SET NOCOUNT ON SELECT ...` is two statements to it, and is cut so here too: each part is judged by the lists on its own. Only these bounded forms are cut off the front; a cut
+# never joins anything, so a write still meets the lists whole (`SET @a = 1 + (SELECT ...)` leaves `+ (SELECT ...)`, which is on no list).
+_CONSTANT = r"(?:-?\d+(?:\.\d+)?|N?''|NULL|@\w+)"
+_DECLARED = r"@\w+ (?:AS )?[A-Za-z_]\w*(?: ?\( ?(?:\d+|MAX)(?: ?, ?\d+)? ?\))?(?: ?= ?" + _CONSTANT + r")?"
+_BOUNDED = r"SET [A-Za-z_]+(?: ?, ?[A-Za-z_]+)* (?:ON|OFF)|DECLARE " + _DECLARED + r"(?: ?, ?" + _DECLARED + r")*|SET @\w+ ?= ?" + _CONSTANT
+_NEXT = r" (?=(?:SELECT|WITH|SET|DECLARE|USE|IF|PRINT|INSERT|UPDATE|DELETE|MERGE|EXEC|EXECUTE|CREATE|ALTER|DROP|TRUNCATE|BEGIN|END|RETURN|GRANT|REVOKE|DENY|WHILE|RAISERROR|THROW|WAITFOR|BACKUP|RESTORE|KILL|DBCC|COMMIT|ROLLBACK|SAVE|GOTO|OPEN|FETCH|CLOSE|DEALLOCATE|BREAK|CONTINUE|BULK|CHECKPOINT|RECONFIGURE|SHUTDOWN|SETUSER|REVERT|ENABLE|DISABLE)\b)"  # a cut only where the next word starts a statement: `DECLARE @x AS INT` is not `DECLARE @x AS` and `INT`
+_LEADING = re.compile(r"^(" + _BOUNDED + r"|USE \w+)" + _NEXT, re.IGNORECASE)
+_LEADING_RAW = re.compile(r"^(" + _BOUNDED.replace("N?''", "N?'(?:[^']|'')*'") + r"|USE (?:\[[^\]]*\]|\"[^\"]*\"|\w+))" + _NEXT, re.IGNORECASE)
+
+
+_ASSIGNED = re.compile(r"^SET @\w+ ?= ?\(", re.IGNORECASE)
+_NEXT_WORD = re.compile(r"^" + _NEXT[1:], re.IGNORECASE)
+
+
+def _assigned_end(text: str) -> int:
+    """`SET @a = ( <query> )` and the next statement after it (1.7.44): the index after the closing bracket, found by depth with strings and quoted names skipped; -1 when the text is not so."""
+    if not _ASSIGNED.match(text):
+        return -1
+    depth, index = 0, _ASSIGNED.match(text).end() - 1
+    while index < len(text):
+        char = text[index]
+        if char in "'\"[":
+            index = _closing(text, index, "]" if char == "[" else char)
+            continue
+        depth += {"(": 1, ")": -1}.get(char, 0)
+        index += 1
+        if depth == 0:
+            return index if text[index:index + 1] == " " and _NEXT_WORD.match(text[index + 1:]) else -1
+    return -1
+
+
+def _leading(item: Statement) -> List[Statement]:
+    """`item` with each complete statement at its front (`_LEADING`, `_assigned_end`) taken off as a statement of its own."""
+    out: List[Statement] = []
+    text, raw = item.text, item.raw
+    while True:
+        head = _LEADING.match(text)
+        if head:
+            cut, head_raw = head.end(), _LEADING_RAW.match(raw) if raw else None
+            cut_raw = head_raw.end() if head_raw else -1
+        else:
+            cut = _assigned_end(text)
+            if cut < 0:
+                break
+            cut_raw = _assigned_end(raw) if raw else -1
+        piece, piece_raw = text[:cut].rstrip(), raw[:cut_raw].rstrip() if cut_raw >= 0 else ""
+        out.append(Statement(piece, raw=piece_raw if piece_raw and piece_raw != piece else ""))
+        text = text[cut:].lstrip()
+        raw = raw[cut_raw:].lstrip() if cut_raw >= 0 else ""
+    out.append(Statement(text, odd=item.odd, raw=raw if raw and raw != text else ""))
+    return out
+
+
 def _cut(text: str, at_semicolon: bool) -> List[Statement]:
     out: List[Statement] = []
     current: List[str] = []
@@ -93,7 +147,8 @@ def _cut(text: str, at_semicolon: bool) -> List[Statement]:
         current.clear()
         shown.clear()
         if statement:
-            out.append(Statement(statement, odd=odd or "$(" in statement, raw=written if written != statement else ""))  # a `$(name)` no `:setvar` or `-v` of the call fills: the gate cannot see the statement, so it asks (1.7.38, C13 SQL)
+            item = Statement(statement, odd=odd or "$(" in statement, raw=written if written != statement else "")  # a `$(name)` no `:setvar` or `-v` of the call fills: the gate cannot see the statement, so it asks (1.7.38, C13 SQL)
+            out.extend(_leading(item) if at_semicolon else [item])
         odd = False
 
     while index < len(text):

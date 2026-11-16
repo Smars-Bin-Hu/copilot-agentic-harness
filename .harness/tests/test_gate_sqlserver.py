@@ -23,7 +23,7 @@ CASES = [
  ("WITH c AS (SELECT 1 a) DELETE FROM c", "ask"),
  ("USE AcmeDW", "read"), ("SET NOCOUNT ON", "read"), ("SET ANSI_NULLS ON; SET QUOTED_IDENTIFIER ON", "read"),
  ("PRINT 'hello'", "read"), ("DECLARE @x INT", "read"), ("DECLARE @x INT = 5, @y VARCHAR(10)", "read"), ("DECLARE @s NVARCHAR(MAX) = 'x'", "read"),
- ("SET @x = 5", "read"), ("SET @x = 'abc'", "read"), ("SET @x = (SELECT 1)", "ask"), ("DECLARE @t TABLE (id int)", "ask"),
+ ("SET @x = 5", "read"), ("SET @x = 'abc'", "read"), ("DECLARE @t TABLE (id int)", "ask"),
  ("EXEC sp_help 'dbo.t'", "read"), ("exec sp_helptext dbo.usp_x", "read"), ("EXEC sp_columns @table_name = 't'", "read"), ("EXEC sp_tables", "read"), ("EXEC master.dbo.sp_help 't'", "read"),
  ("EXEC sp_who", "ask"), ("EXEC sp_configure 'x', 1", "ask"),
  ("SELECT a INTO b FROM c", "ask"), ("SELECT 1 UPDATE t SET a = 1", "ask"), ("SELECT 1 DELETE FROM t", "ask"), ("SELECT NEXT VALUE FOR s", "ask"),
@@ -46,6 +46,17 @@ CASES = [
  (":listvar\nSELECT 1", "ask"), (":on error exit\nSELECT 1", "read"), (":ON ERROR IGNORE\nSELECT 1", "read"), (":r other.sql", "ask"),
  ("BEGIN TRAN", "write"), ("GRANT SELECT ON t TO u", "ask"), ("WAITFOR DELAY '00:00:10'", "ask"), ("ALTER TABLE t ADD c int", "write"), ("ALTER TABLE t DROP COLUMN c", "ask"),
  ("IF 1 = 1 DROP TABLE t", "ask"), ("IF 1 = 1 UPDATE t SET a = 1 WHERE b = 2", "ask"),
+ # 1.7.44: a variable set from a query that only reads, an IF whose condition and branches only read, and a SET option or a USE with no `;` before the next statement (the server needs none).
+ # `SET @x = (SELECT 1)` was `ask` until 1.7.44: a count kept in a variable held every batch of a learning task on DEV for the person
+ ("SET @x = (SELECT 1)", "read"), ("DECLARE @n INT; SET @n = (SELECT COUNT(*) FROM dbo.a); SELECT @n", "read"), ("SET @n = ( WITH c AS (SELECT 1 a) SELECT COUNT(*) FROM c )", "read"),
+ ("SET @n = (SELECT a FROM t) UPDATE t SET a = 1 WHERE b = 2", "write"), ("SET @n = (SELECT a INTO x FROM t)", "ask"), ("SET @n = (SELECT 1); EXEC dbo.p", "write"),
+ ("IF EXISTS (SELECT 1 FROM dbo.a) SELECT COUNT(*) FROM dbo.a", "read"), ("IF OBJECT_ID('dbo.a') IS NOT NULL SELECT COUNT(*) FROM dbo.a ELSE SELECT 0", "read"),
+ ("IF NOT EXISTS (SELECT 1 FROM a) BEGIN SELECT 'none' END", "read"), ("IF 1 = 1 SELECT 1 ELSE EXEC dbo.p", "ask"), ("IF 1 = 1 RAISERROR('x', 16, 1)", "ask"), ("IF 1 = 1 SELECT 1 WAITFOR DELAY '00:01'", "ask"),
+ ("IF EXISTS (SELECT 1 FROM a) SELECT * INTO b FROM a", "ask"),
+ ("SET NOCOUNT ON SELECT COUNT(*) FROM dbo.a", "read"), ("SET NOCOUNT ON\nSELECT COUNT(*) FROM dbo.a", "read"), ("set nocount on select 1", "read"), ("SET ANSI_NULLS, QUOTED_IDENTIFIER ON SELECT 1", "read"),
+ ("USE [AcmeDW] SET NOCOUNT ON SELECT 1", "read"), ("SET NOCOUNT ON DELETE FROM t", "ask"), ("SET NOCOUNT ON UPDATE t SET a = 1 WHERE b = 2", "write"), ("SET IMPLICIT_TRANSACTIONS ON SELECT 1", "ask"),
+ ("SET IDENTITY_INSERT dbo.t ON SELECT 1", "ask"), ("SET ARITHIGNORE ON", "read"),
+ ("DECLARE @n INT SET @n = (SELECT COUNT(*) FROM dbo.a) IF @n > 0 SELECT @n", "read"), ("SET @n = (SELECT 1) DELETE FROM t", "ask"), ("DECLARE @n INT = 0 DROP TABLE t", "write"),
  # 1.7.38 (C13 F2, M1): a condition that is true whatever the row holds is no WHERE. A guard against a slip, not a wall: `WHERE id > 0` still passes (docs/12)
  ("UPDATE t SET a = 1 WHERE (1=1)", "ask"), ("UPDATE t SET a = 1 WHERE 1<2", "ask"), ("UPDATE t SET a = 1 WHERE 2>1", "ask"), ("UPDATE t SET a = 1 WHERE NOT 1=0", "ask"), ("UPDATE t SET a = 1 WHERE NOT(1=0)", "ask"),
  ("UPDATE t SET a = 1 WHERE 'a'='a'", "ask"), ("UPDATE t SET a = 1 WHERE col=col", "ask"), ("UPDATE t SET a = 1 WHERE t.col = t.col", "ask"), ("UPDATE t SET a = 1 WHERE ((1 = 1))", "ask"),
@@ -82,7 +93,7 @@ class SampleListsTests(unittest.TestCase):
     def test_a_pattern_is_not_a_pass_by_a_word_in_the_tail(self) -> None:
         """No statement of the read list may hide a statement of the write list in its tail (the server needs no semicolon between them), and none of the write list one that is on no list."""
         for tail in ("UPDATE t SET a = 1", "DELETE FROM t", "INSERT INTO t VALUES (1)", "EXEC dbo.p", "MERGE t USING u ON 1 = 1 WHEN MATCHED THEN DELETE", "CREATE TABLE t (a int)", "GRANT ALL ON t TO u"):
-            for head in ("SELECT 1", "WITH c AS (SELECT 1 a) SELECT * FROM c", "PRINT 'x'"):
+            for head in ("SELECT 1", "WITH c AS (SELECT 1 a) SELECT * FROM c", "PRINT 'x'", "SET @x = (SELECT 1)", "IF 1 = 1 SELECT 1", "IF EXISTS (SELECT 1 FROM a) SELECT 1", "SET NOCOUNT ON SELECT 1"):
                 self.assertNotEqual(zone(f"{head} {tail}"), "read", f"{head} {tail}")
         for head in ("INSERT INTO t VALUES (1)", "UPDATE t SET a = 1 WHERE b = 2", "DELETE FROM t WHERE b = 2"):
             for tail in ("DELETE FROM t", "UPDATE t SET a = 1", "EXEC dbo.p", "CREATE TABLE t (a int)", "GRANT ALL ON t TO u"):

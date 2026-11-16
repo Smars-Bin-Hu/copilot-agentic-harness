@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.44 (2026-11-16)
+
+Counts and checks on SQL Server that only read no longer wait for you, and the README shows 1.7.
+
+### Changed
+
+- **More reads pass on SQL Server (the `sqlserver` tool pack, 1.3.1).** A variable set from a query that only reads (`SET @n = (SELECT COUNT(*) FROM t)`), and an `IF` whose condition and branches only read (`IF EXISTS (SELECT …) SELECT …`, `IF OBJECT_ID('…') IS NOT NULL SELECT …`), are on the read list. Before, each waited for your code: a learning task that counts rows batch by batch asked you every batch. `SET ARITHIGNORE` and a list of options (`SET ANSI_NULLS, QUOTED_IDENTIFIER ON`) are reads too. A write in any part still waits.
+- **A statement with no `;` after it is judged on its own.** The server needs no `;` after `SET NOCOUNT ON`, `USE db`, `DECLARE @n INT` or `SET @n = …`, so a script with `SET NOCOUNT ON` on one line and a `SELECT` on the next held the whole text as one statement on no list. Now these are cut from what follows where the next word starts a statement, each part is judged on its own, and the card shows each as it was written. `SET NOCOUNT ON DELETE FROM t` still waits: the `DELETE` is judged whole.
+- The README and its pictures are those of the 1.7.43 board, with three new ones (tool packs, a write that waits for you, Agent Performance Review); **See it** comes right after talking to the agent. `docs/10` lists all 34 skills.
+
 ## 1.7.43 (2026-11-15)
 
 A board that shows what it is doing: doctor's progress on the Enter screen, a start that answers at once, a quicker promote approval, and `harness task link` no longer refused by the gate.

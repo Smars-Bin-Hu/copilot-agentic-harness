@@ -1,11 +1,11 @@
 # 10. The skills: which one is for what
 
-A skill is a short instruction file that the agent loads when it fits the job. This repository ships 32 of them, in `.github/skills/`. This page sorts them by who uses them and what for.
+A skill is a short instruction file that the agent loads when it fits the job. This repository ships 34 of them, in `.github/skills/`. This page sorts them by who uses them and what for.
 
 Two things to know first:
 
 - **You can type any skill by name**, as `/name` in the Chat window. Most of the time you do not need to: say what you want, and the agent loads the right skill itself.
-- **Seven skills start only when you type them.** They cost a lot, change the way a task runs, or are for the harness owner. The agent must not call them on its own. They are marked **you type it** below.
+- **Eight skills start only when you type them.** They cost a lot, change the way a task runs, or are for the harness owner. The agent must not call them on its own. They are marked **you type it** below.
 
 Skills of your own business domains are not in this list. They sit in the knowledge base: see [the last section](#6-your-own-skills).
 
@@ -47,6 +47,7 @@ The agent loads these from what you say. You rarely type them.
 | `generic-req-review` | Reads the files in the task's `REQ/` folder, writes `REQ.md` from them, checks it against the knowledge base, and lists what is unclear until you confirm | "Read the requirement and check it for gaps" |
 | `generic-impact-analysis` | Before the plan: finds everything a change touches (who uses this table, column, job) in all target repositories and the knowledge base | "What else does this affect?" |
 | `generic-code-standards` | Checks the task's code against your company's code standards and fixes what does not comply | "Check the code style" |
+| `generic-evidence-run` | Gets a fact from DEV, IST or another environment by running the command itself: a read runs, a write or a procedure waits for you. The output is saved whole in the task as numbered evidence (`E1`, `E2`) and cited where the fact is used | "Check the row count in DEV" |
 | `generic-test-guide` | After write-back and a PR: opens a test task, writes `TEST-GUIDE.md` for DEV, IST and UAT, then judges the results you bring back | "Make the test guide", "here are the IST results" |
 | `harness-task-fork` | Starts the next task from a finished one (RCA to development, development to test, defects to development). The old conclusions are copied, the old state is not | "The RCA is done, now develop it" |
 | `generic-capture-knowledge` | After a task: drafts what a future agent would get wrong as knowledge base entries or skill gotchas. It only drafts; you approve | "Write down what we learned" |

@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.8.1 (2026-11-17)
+
+On a slow work computer, calls of one session no longer wait out and get refused, and two of them can no longer write the same task file at once.
+
+### Changed
+
+- **The session and task locks are locks of the system now.** A lock is freed when the process that held it ends, and a process that is still working keeps it however long it takes. Before, a lock older than 5 seconds was taken as left behind and removed: on a computer that scans every file it reads, a `harness task fetch` holding it longer let a second one in, and one fetch record was lost (the promote dry-run was refused, and the work in `DEV/` was done again). The lock files are in the system's temp folder, not next to the data.
+- **A call waits up to 20 seconds for a lock**, not 7. Calls made side by side wait for each other; on a slow computer the fourth or fifth one was refused as "the harness was busy". 20 seconds stays under the hook's own 30-second limit.
+- The agent fetches several files in one `harness task fetch`, not in a loop and not in calls side by side, and changes the files `task new` made (`REQ.md`, `LOG.md`, `TODO.md`) with an edit, not a create.
+
 ## 1.8.0 (2026-11-17)
 
 A new autorun: the default agent only schedules, a worker does each step in a fresh context, and the board keeps the run going.

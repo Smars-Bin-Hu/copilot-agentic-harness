@@ -70,6 +70,8 @@ What each tier has:
 - `medium`: adds `REQ.md`, `REQ/`, `REF/`, `LOG.md`.
 - `full`: adds `TODO.md`, `DEV/`, `TEST/`.
 
+`task new` makes these files from templates. They exist already: change them with an edit, never with a create.
+
 ### 4. Do what the output says
 
 - First read the `TASK.md` that `read_first` in the output points to, then what it points to.

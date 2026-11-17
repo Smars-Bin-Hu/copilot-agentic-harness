@@ -303,7 +303,7 @@ class Board:
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
         self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
-        self.brain = superbrain.Brain(root, self.link, self.rows)  # 1.8.1: the super agent chat (`/api/super/ask`, `/api/super/talk`)
+        self.brain = superbrain.Brain(root, self.link, self.rows, served=lambda: self.served)  # 1.8.1: the super agent chat (`/api/super/ask`, `/api/super/talk`)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
         self.restarter = vsrestart.Restart(launchenv.vscode_running, self.open_vscode, gone=self.link.hurry, chats=lambda: self.other_chats([]))  # the VS Code button of the screen (1.7.38): quit, wait, open
         self.ready.restart = self.restarter

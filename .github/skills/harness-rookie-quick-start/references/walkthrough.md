@@ -80,6 +80,6 @@ Last, use this table to tell them which other features start only when they type
 | `[review]=n` | An independent check; you just used it |
 | `/harness-task-report` | Explains where the time and usage of a task went |
 | `/generic-mapreduce` | When there is a lot to read: splits it into parts and reads them in parallel. Expensive; it asks you first |
-| `/harness-autorun` | After the plan is approved, lets the agent work down the list without stopping (beta). The real switch is on the task's page, with a code |
+| `/harness-autorun` | After the plan is approved, lets the agent work down the list without stopping (beta). The real switch is Start on the task's page (models, spend limit, code) |
 
 To learn how it works inside, type `/harness-rookie-wondering`.

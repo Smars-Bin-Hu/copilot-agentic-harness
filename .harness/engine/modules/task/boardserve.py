@@ -52,7 +52,7 @@ import time
 import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
@@ -71,7 +71,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import accept, autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import accept, autorun, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
 from .common import CommandError
@@ -150,7 +150,6 @@ def runner(root: Path, action: str, task: str) -> Callable[..., Dict[str, Any]]:
         "review extend": lambda **kw: taskreview.extend(root, task, 2, **kw),
         "review waive": lambda **kw: taskreview.waive(root, task, **kw),
         "review dismiss": lambda **kw: taskreview.dismiss(root, task, **kw),
-        "autorun on": lambda **kw: autorun.turn_on(root, task, **kw),
         "recover": lambda **kw: task_ops.recover(root, task, **kw),
         "approve-action": lambda **kw: outbox.approve_action(root, **kw),  # a call to an outside system held in the outbox (1.7.7): the person reads the command and types its code
     }  # `review set` is not here: it asks no code (see `Board.act`)
@@ -742,8 +741,8 @@ class Board:
             result["agent"] = {code: place for code, place in stood}
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False, voids: Any = None) -> Dict[str, Any]:
-        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`;
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False, voids: Any = None, no_wake: bool = False) -> Dict[str, Any]:
+        """Run one action. `no_wake` (approve-plan only, 1.8): the person will switch autorun on next, so the board sends the agent nothing. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`;
         `seen` for `approve-action` only: what the person saw when they pressed View (`outbox.approve_action`)."""
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
@@ -803,10 +802,9 @@ class Board:
             result = tasklife.pause(self.root, task, interactive=True, force=still) if action == "pause" else tasklife.resume(self.root, task, interactive=True)
             noted(self.root, result.get("task") or task, action)
             return result
+        if action == "autorun on":  # 1.8, step 9: autorun starts from its own form (`/api/autorun/on`: the models, the spend limit, the Start order), not from the code window of an approval
+            raise CommandError(say("serve.autorun.form"))
         call = runner(self.root, action, task)
-        if action == "autorun on" and still:  # its own check reads the hook log only
-            alone = call
-            call = lambda **kw: alone(force=True, **kw)  # noqa: E731
         if action == "approve-plan" and with_req:
             plain = call
             call = lambda **kw: plain(with_req=True, **kw)  # noqa: E731 - the requirement and the plan, one code
@@ -839,7 +837,14 @@ class Board:
             except Exception:  # noqa: BLE001 - the call is approved; a missing line must not undo it in the person's eyes
                 pass
         noted(self.root, result.get("task") or task, action)
-        if step == "act" and action in WAKING:  # 1.7.38, C13 RB-2: a decision that moves the task on wakes the agent by itself, as an approved call does: no second click on "tell the agent"
+        if step == "act" and action == "approve-plan" and no_wake:  # 1.8: the plan is approved, the agent is not woken: the person starts autorun next. The task notes it; the "go on" mark stays
+            try:
+                with task_ops.locked(self.root, task_ops.resolve(self.root, str(result.get("task") or task))) as held:
+                    task_ops.note(held, "approve-plan-nowake", "no message sent to the agent")
+            except Exception:  # noqa: BLE001 - the plan is approved; a missing line must not undo it
+                pass
+            result["agent"] = "none"
+        elif step == "act" and action in WAKING:  # 1.7.38, C13 RB-2: a decision that moves the task on wakes the agent by itself, as an approved call does: no second click on "tell the agent"
             self.woken = threading.Thread(target=self.wake_go, args=(result.get("task") or task,), name="board-wake", daemon=True)  # 1.7.43: in the background; the decision is
             self.woken.start()  # answered at once, not after VS Code took the message (up to JOB_WAIT on a work computer). A message that does not go leaves the "go on" card, as before
             result["agent"] = "sending"
@@ -1342,6 +1347,71 @@ class Board:
             pass
         return {"stopped": True, "chat": done.get("title", "")}
 
+    # --- autorun (1.8, step 9): the Start form, the run card, Stop ------------------------------------------------------
+
+    def autorun_on(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """`step` preview: what the Start form draws (`autorun_board.form`), and what the terminal would say before it asks for the code. Else (act): check the body again, switch autorun on with the typed code (`autorun.turn_on`
+        with `options`, so nothing is asked but the code), then give the Start order to the link thread: Allow all, `/compact` when the chat has history, `/harness-autorun` with the chosen scheduler model.
+        The chat is the task's own, as it is: no new chat. A person's click only (a paired browser)."""
+        if "autorun on" not in self.actions:
+            raise CommandError(say("serve.action.off", action="autorun on"))
+        task = task_ops.resolve(self.root, str(data.get("task", "")))
+        still = self.idle("autorun on", task)  # the hook log alone cannot say the agent has stopped: VS Code's word wins (1.6.105)
+        models = self.link.model_list()
+        if str(data.get("step", "act")) == "preview":
+            return self.autorun_form(task, models, still)
+        options = autorun_board.options_of(self.root, data, models)
+        why = self.link.check(task, "config")  # the chat must be there to be set up and woken
+        if why:
+            raise CommandError(self.refusal(why))
+        out = io.StringIO()
+        result = autorun.turn_on(self.root, task, reader=lambda _asked: str(data.get("code", "")), interactive=True, out=out, force=still, options=options)
+        noted(self.root, task, "autorun on")
+        allow = ""
+        choices = [item["id"] for item in (self.link.chat_options(task).get("autoApprove") or {}).get("choices") or []]
+        if not choices or chatnew.PERMISSIONS["allow-all"] in choices:  # the host did not say what it offers: try; it says what it offers: only a value it lists
+            allow = chatnew.PERMISSIONS["allow-all"]
+        self.link.start_order(task, options["manager_model"], allow)
+        return {"autorun": result["autorun"], "next": say("autorun.board.started"), "open_steps": result["open_steps"], "max_steps": result["max_steps"], "minutes": result["minutes"], "budget": result["budget"]}
+
+    def autorun_form(self, task: str, models: List[Dict[str, Any]], still: bool) -> Dict[str, Any]:
+        found = autorun_board.form(self.root, task, models)
+        found["screen"], found["ask"] = [], ""
+        found["blocked"] = self.refusal(self.link.check(task, "config")) if self.link.check(task, "config") else ""
+        if not found["problems"]:
+            out = io.StringIO()
+
+            def stop(asked: str) -> str:
+                raise Preview(asked)
+
+            try:
+                autorun.turn_on(self.root, task, reader=stop, interactive=True, out=out, force=still, options={"budget": None})
+            except Preview as asked:
+                found["screen"], found["ask"] = [line for line in out.getvalue().splitlines() if line.strip()], asked.asked
+            except CommandError as error:
+                found["problems"] = [str(error)]
+        return found
+
+    def autorun_stop(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Stop on the run card: autorun off as the person (reason `person`), then the turn the chat runs is stopped the way the Stop button does it. The relay then finds autorun off and sends nothing."""
+        task = task_ops.resolve(self.root, str(data.get("task", "")))
+        result = autorun.turn_off(self.root, task, "", interactive=True)
+        self.link.cancel_start(task)
+        noted(self.root, task, "autorun stop")
+        stopped = False
+        try:
+            self.link.dispatch("stop", task)
+            stopped = True
+        except vslink.Refused:
+            pass  # no turn runs, or no chat to reach: autorun is off, which is what was asked
+        except Exception:  # noqa: BLE001 - the run is off; the person may stop the chat in VS Code
+            pass
+        return {"autorun": result["autorun"], "next": result["next"], "chat_stopped": stopped}
+
+    def autorun_card(self, task: str) -> Dict[str, Any]:
+        """The run card of the task page: `autorun_board.card`. A read; the paired browser only, as the other two."""
+        return autorun_board.card(self.root, task_ops.resolve(self.root, task))
+
     @staticmethod
     def compact_refusal(why: str) -> str:
         """Compact has its own words: the send ones tell a person to copy and paste, and there is nothing to paste here."""
@@ -1650,6 +1720,14 @@ def handler_for(board: Board) -> type:
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead download
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            if path == "/api/autorun":  # the run card of a task page (1.8 step 9): status and the run ledger paired by call. A read, but the steps of a task are for the paired browser
+                if not board.paired(self.token()):
+                    return self.send(403, json.dumps({"error": say("serve.pair.needed"), "unpaired": True}).encode("utf-8"), "application/json; charset=utf-8")
+                try:
+                    found = parse_qs(urlparse(self.path).query).get("task", [""])[0]
+                    return self.answer(200, {"ok": True, "card": board.autorun_card(found)})
+                except Exception as error:  # noqa: BLE001 - the page keeps what it shows
+                    return self.answer(404, {"ok": False, "error": str(error)})
             shown = re.fullmatch(r"/tasks/([^/]+)/performance", path)
             if shown:  # the Agent Performance Review page (1.7.41): read only, drawn when asked
                 try:
@@ -1785,6 +1863,16 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
                     return self.answer(409, {"error": str(error)})
+            if path in ("/api/autorun/on", "/api/autorun/stop"):  # 1.8 step 9: switch autorun on (with the form) or stop it from the run card: the paired browser, nothing else
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.autorun_on(data) if path.endswith("/on") else board.autorun_stop(data)
+                    if path.endswith("/stop") or str(data.get("step", "act")) == "act":
+                        print(say("serve.did", action=path[len("/api/"):], task=task_ops.name_of(task_ops.resolve(board.root, str(data.get("task", ""))))), flush=True)
+                    return self.answer(200, {"ok": True, **result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
+                    return self.answer(409, {"ok": False, "error": str(error)})
             if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/rewind", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -2071,7 +2159,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"), bool(data.get("void")), data.get("voids"))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"), bool(data.get("void")), data.get("voids"), bool(data.get("no_wake")))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

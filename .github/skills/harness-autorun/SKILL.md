@@ -1,6 +1,6 @@
 ---
 name: harness-autorun
-description: 'autorun (beta): the agent that holds a task works down TODO.md without the user watching every step, and stops only for what a person must decide. This skill takes the user through getting ready and switching autorun on, and sets the rules while it runs. Use only when the user clearly types /harness-autorun; an agent must not call it by itself. Keywords: autorun, unattended, run to the end, keep going, no need to watch.'
+description: 'autorun (beta): the default agent only schedules: a worker does one TODO step per call, a step it cannot settle is parked as [?] with its question in QUESTIONS.md, and all questions are asked together at the end. This skill takes the user through getting ready and switching autorun on, and sets the scheduling rules while it runs. Use only when the user clearly types /harness-autorun; an agent must not call it by itself. Keywords: autorun, unattended, run to the end, keep going, no need to watch.'
 argument-hint: 'Task name (optional; the current task by default)'
 disable-model-invocation: true
 type: workflow
@@ -14,88 +14,96 @@ board-order: 7
 
 # autorun: working down the list (beta)
 
-Autorun is a mode of a task. Once it is on, every time you want to stop, the hook judges by the facts: if steps are left, it makes you go on; if a person has to decide, it lets you stop and records the reason in the task.
+Autorun is a mode of a task. The default agent does not do the steps itself: it calls the `worker` once per step of `TODO.md`, ticks the step, and goes on. A step that cannot be settled is parked (`[?]`) with its question in `QUESTIONS.md`. The questions are asked together at the end.
 
-It hands over control, so only the user can switch it on: the user runs `harness task autorun on` in their own terminal and types the code. You cannot.
+It hands over control, so only the user can switch it on: the board's Start button, or `harness task autorun on` in their own terminal (they read the steps and limits, and type the code). You cannot.
+
+The file formats (`TODO.md`, `QUESTIONS.md`) and who may write what are in [workspace.instructions.md](../../instructions/workspace.instructions.md).
 
 ## When to Use This Skill
 
 **Use it only when the user types `/harness-autorun`.** You cannot call it yourself, and you cannot suggest "let's just switch autorun on" to save effort.
 
-It fits when:
-
-- The plan is approved, what is left is doing it step by step, and nothing on the way needs the user to choose.
-- The user will be away for a while and only wants to see one whole diff on return.
-
-It does not fit when:
-
-- The requirement or the design is not settled. Settle it with the user first.
-- The user has to look at every step before the next. Then work as usual.
+It fits when the plan is approved, what is left is doing it step by step, and the user will be away and wants to see one diff on return. It does not fit when the requirement or design is not settled, or when the user wants to look at every step.
 
 ## Prerequisites
 
-All four are needed before switching on. `cannot_turn_on` of `harness task autorun status` lists what is missing.
+All are needed before switching on. `cannot_turn_on` of `harness task autorun status` lists what is missing.
 
-- The session holds a task, and the task is at the full tier (it has a `TODO.md`).
+- The session holds a task at the full tier (it has a `TODO.md`).
 - `PLAN.md` is approved by the user and has not changed since.
-- `TODO.md` has unticked steps, one line `- [ ] ...` each, written so that they can simply be done.
-- Independent checks are on for the task: the user has sent a prompt with `[review]=n`.
+- `TODO.md` has open steps, written as in [the preparation list](references/prepare.md).
+- Independent checks are on: the user has sent a prompt with `[review]=n`.
 
 ## Step-by-Step Workflows
 
-### A. Getting ready and switching on
+**The chat that schedules must use a Claude model.** The worker is a Claude agent and needs the chat's `create` and `edit` file tools; a chat on another model family (Copilot Fusion may pick one) has other file tools, and the worker then cannot write a file. A chat that exists does not read a changed `worker.agent.md` again: open a new chat after any change to it.
+
+### A. Getting ready (before it is on)
 
 1. Run `harness task autorun status` and look at `cannot_turn_on`.
-2. Supply what is missing, following the [preparation list](references/prepare.md). **Ask the user everything that needs asking in this step**: you cannot ask while autorun runs.
-3. Show the user `TODO.md`: are the steps right, is the order right, is there anything they want to do themselves.
-4. Tell the user three things, then stop and wait:
-   - Run `harness task autorun on` in their own terminal, read the steps and the limits on the screen, and type the code.
-   - When it will stop (see C below).
-   - After it is done there is one thing left for them: read the whole diff and approve the write-back.
-5. When the user says it is on, start with the first unticked step.
+2. **Ask the questions first, with the skill `generic-grill-me`, before you plan.** Ask until no doubt is left: nobody can be asked while it runs, and every open point costs a parked step later.
+3. Write `REQ.md`, `PLAN.md` and `TODO.md` as in [prepare.md](references/prepare.md). Give the hard steps a `(model: x)`.
+4. Show the user `TODO.md`. Tell them to approve `PLAN.md` on the task page, then switch autorun on: Start on the board, or `harness task autorun on` in the terminal.
+5. Tell them what they come back to: the questions (asked once), then the whole diff to approve. Then stop and wait.
 
-### B. What to do while autorun runs
+### B. The scheduling loop
 
-- **Work down `TODO.md` from the top.** When a step is done, tick it in `TODO.md` and update `TASK.md`.
-- **Write decisions into `LOG.md`.** For what the plan left open and you decided, add a line: what you decided, and why. The user goes over it on return.
-- **Do not ask the user, and do not wait for the user.** Nobody is watching.
-- **Do not change the confirmation line of `REQ.md` yourself.** If it is not confirmed, note it in `LOG.md`.
-- **Do not promote.** Nothing is written back on the way. The write-back plan is made only when everything is done.
-- **When every step is ticked**: as the hook says, first pass the independent check (`harness task review start`, call `reviewer`, fix and check again if it does not pass), then run `harness task promote --dry-run`, give the user the link to `PROMOTE-PLAN.diff`, and stop. When `DEV/` holds only `DEV/_manual/` (run by hand), there is no promote: hand the run over with `harness task handoff run`, and stop.
-- **When you cannot go on, stop. Do not force it.** Run `harness task autorun off --reason "<where it is stuck, and what the user has to decide>"`, then tell the user in a sentence or two. See [When to stop by yourself](references/when-to-stop.md).
+You only schedule and keep the record. Take the first open step (not `[x]`, not `[?]`) and:
 
-### C. When it stops
+1. Call `worker` with the step text and the task path. If the step has `(model: x)`, that is its model.
+2. Read the reply. The worker must have run the check the step's SOP names and reported the result. If it did not, call it again for the check.
+3. Tick the step in `TODO.md`, update `TASK.md`, and add one line to `LOG.md`. Every step gets its line, with no exception. Go to the next step.
 
-The code judges all of these by the facts. It is not up to you:
+Three hard rules:
+
+- **A failed call is retried once.** A worker call that fails is called again. If it fails again, mark the step `[?]`, write the reason into `QUESTIONS.md` with `took: none`, and go on.
+- **`QUESTION:` goes into the file.** A reply `QUESTION: <q> | took: <x or none>` is written into `QUESTIONS.md` as the next `Qn`. `took: none`: mark the step `[?]` and go on. Otherwise tick the step and keep the question for the end.
+- **A held call does not park a step.** A `[held: ...]` line in `QUESTIONS.md` (`took: held`) is written by a hook. If the worker finished the step another way, tick it. Only the worker's own `took: none` parks a step.
+- **You never fix a finding.** Reviewer findings go to the worker as its next call. You do not change `DEV/` yourself.
+
+Also:
+
+- Do not ask the user, do not wait, do not promote. Do not change the confirmation line of `REQ.md`.
+- A call the gate refuses is not a stop. Mark the step `[?]` and go on. The exception: a worker call refused because autorun is off. Stop at once, do not park the remaining steps, and tell the user.
+- **When no open step is left**: ask all open questions at once, with one `ask_user` (the hook lets it through only now). Write each answer into `QUESTIONS.md`, turn the `[?]` back to `[ ]`, and go on with them.
+- **When every step is ticked and no question is open** (held lines included: ask them first, even when every step is ticked): run the independent check (`harness task review start`, call `reviewer`). Send its findings to the worker. Then `harness task promote --dry-run`, give the user the link to `PROMOTE-PLAN.diff`, and stop. When `DEV/` holds only `DEV/_manual/`, there is no promote: `harness task handoff run`, and stop.
+
+### C. Park, do not stop
+
+The code judges the stops (table below). You park a step; you do not stop the run. Run `harness task autorun off --reason "<why>"` **only when going on would do harm**: see [when-to-stop.md](references/when-to-stop.md).
 
 | Reason | The fact |
 | --- | --- |
-| Done | Every step is ticked, the check passed, and the write-back plan is made (or there is nothing to write back) |
-| The plan changed | `PLAN.md` is no longer the version the user approved |
-| Checks used up | The independent checks are used up without a pass |
-| Refused | The gate refused twice during this autorun |
-| A limit is reached | Pushed on 20 times, or 120 minutes have passed |
-| No progress | Pushed on 3 times in a row with no newly ticked step and no new check |
-| You said you cannot go on | `task autorun off --reason` |
-| The user switched it off | The user ran `task autorun off` in the terminal |
+| `done` | No open step, questions answered, check passed, write-back plan made |
+| `plan` | `PLAN.md` is no longer the approved version |
+| `review` | The independent checks are used up without a pass |
+| `handoff` | Waiting for a result the user must run |
+| `stalled` | Several rounds with no progress (a parked step counts as progress) |
+| `time` | The time limit passed |
+| `steps` | Pushes plus relays reached the cap (based on the number of steps) |
+| `budget` | The spend limit the user chose is reached |
+| `error` | The board's relay failed three times in a row |
+| `person` | The user switched it off or pressed stop |
+| `agent` | You ran `autorun off` because going on would do harm |
 
-The numbers are under `autorun` in `.harness/policies/task.json`. After it stops, the board shows the reason.
+The numbers are under `autorun` in `.harness/policies/task.json`. The board shows the reason.
 
 ## Gotchas
 
-- **Do not take a detour to avoid a refusal.** A refusal by the gate means the step is out of scope. Change it once as the reason says; if that does not work either, run `autorun off --reason`.
-- **Do not change `PLAN.md`.** A change ends the approval: autorun stops at once, and `DEV/` cannot be written any more. Changing the plan is the user's business.
-- **Do not tick steps just to show progress.** Whether a step is really done, the reviewer checks, and the user reads the diff.
-- **Do not settle a trade-off the plan does not cover and go on.** Small implementation details you may decide and note in `LOG.md`; a trade-off that changes the result (which table to use, whether to drop a field) means stop.
-- **Do not call a subagent other than the reviewer.** Autorun opens up no other subagent.
-- **A new session carries on the same run.** It reads `TASK.md` and `TODO.md`, and the counts and the time go on.
+- **Do not take a detour around a refusal.** Park the step.
+- **Do not change `PLAN.md`.** A change ends the approval and the run stops.
+- **Do not tick a step the worker did not finish.** The reviewer and the user check it.
+- **Do not settle a trade-off the plan does not cover.** The worker takes a safe way and reports it in `took`, or you park the step. The user decides at the end.
+- **Do not call a subagent other than `worker` and `reviewer`.**
+- **A new session carries on the same run.** Read `TASK.md`, `TODO.md` and `QUESTIONS.md`.
 
 ## Troubleshooting
 
 | Issue | Solution |
 | --- | --- |
-| `task autorun on` says it cannot be switched on | Supply what it lists; each item says the next step |
-| You stopped and were not pushed on | Autorun has stopped already. Run `harness task autorun status`, read the reason under `stopped`, and tell the user |
-| You are pushed on, but it should stop | `harness task autorun off --reason "<why>"` |
-| The user is back and wants it to go on | The user runs `harness task autorun on` once more (the counts and the time start again) |
-| The user wants to see progress on the way | Let them run `harness task list --watch` or `harness task autorun status` in the terminal |
+| `task autorun on` says it cannot be switched on | Supply what it lists |
+| The run stopped | `harness task autorun status`, read `stopped`, tell the user |
+| You must stop it | `harness task autorun off --reason "<why>"` |
+| The user is back and wants it to go on | They switch it on again (Start, or `harness task autorun on`) |
+| The user wants to see progress | `harness task list --watch` or `harness task autorun status` |

@@ -12,12 +12,14 @@ A subagent is another agent that the main agent calls. It works in **its own ses
 | --- | --- | --- |
 | An independent point of view | A check by someone who has not seen the author's reasoning | **Done**: the reviewer |
 | Parallel work | Reading many files at the same time, a summary of each | **Done**: `/generic-mapreduce` and the read-only mapper, for reading only |
-| Working unattended | Working down a list, stopping only for what a person must decide | **Done (beta)**: autorun. It is a mode of a task, not an agent: the Stop hook pushes the agent that holds the task on to the next step, by the facts |
+| Working unattended | Working down a list, stopping only for what a person must decide | **Done (beta)**: autorun. It is a mode of a task. The default agent only schedules; the `worker` subagent does one step per call in a fresh context |
 
 ### 10.2 The rules now
 
 - The reviewer: needs a task, a `[review]=n` written by the user, and `task review start` first (checks on).
 - The mapper: needs the user to type `/generic-mapreduce`. The hook lets it through by reading **the user's prompt** (the engine writes into the prompt which skill the user called) and gives this session a number of calls (4 by default, within 60 minutes), one less with every call. The agent writing the command itself does not count, so it can neither switch it on nor go over.
+- The worker: only the default agent of a task with autorun on can call it. It does one `TODO.md` step and hands back one line. A step it cannot settle is parked `[?]` with its question in `QUESTIONS.md`; all questions are asked once, at the end, before the independent check.
+- Autorun has three layers: the scheduler calling the worker, the Stop hook (pushes the scheduler on, by the facts), and the board relay (sends the next message when the chat stops, and `/compact` at the compact percent). The spend limit is chosen at Start and kept per run in the task. The scheduling chat must use a Claude model.
 - Other subagents: always refused.
 - A session in admin mode: cannot call a subagent.
 - The platform's own semantic search (`search_code_subagent`) is a tool and is not limited.

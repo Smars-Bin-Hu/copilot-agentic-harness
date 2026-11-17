@@ -26,9 +26,10 @@ REVIEW_DIR = "REVIEW"
 MANIFEST = "manifest.json"
 DEFAULTS = {"keep_days": 14, "max_file_mb": 5}
 # Not results: the CLI's own files, the person's material, the files that only say where the work stands.
+# QUESTIONS.md (autorun) is answered after the last check: answering must not undo the passes (1.8).
 # COMMIT-MESSAGE.md is written after the checks, for the person's commit: a check of it would undo the passes (1.5.34).
 SKIP_TOP = (tasks.STATE_DIR, *tasks.PERSON_DIRS, SNAPSHOT_DIR.lower(), REVIEW_DIR.lower(), "_deleted", tasks.READ_NAME.lower(), "out")  # READ/: code copied to be read (1.7.42); OUT/: what was sent to an outside system (1.7.46): neither is work of the task
-SKIP_FILES = (tasks.TASK_FILE.lower(), tasks.TODO_FILE.lower(), tasks.LOG_FILE.lower(), tasks.CHANGES_NAME.lower(), tasks.REVIEW_NAME.lower(), commitmsg.FILE.lower())
+SKIP_FILES = (tasks.TASK_FILE.lower(), tasks.TODO_FILE.lower(), tasks.LOG_FILE.lower(), "questions.md", tasks.CHANGES_NAME.lower(), tasks.REVIEW_NAME.lower(), commitmsg.FILE.lower())
 
 
 def settings(root: Path) -> Dict[str, Any]:

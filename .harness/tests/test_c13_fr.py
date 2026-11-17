@@ -331,7 +331,7 @@ class EngineCannotLoadTests(unittest.TestCase):
 
         kinds = json.loads((REPO / ".harness" / "engine" / "adapters" / "tool_kinds.json").read_text(encoding="utf-8"))["surfaces"]["vscode"]["tools"]
         for name, kind in kinds.items():
-            self.assertEqual(hook.may_pass(name, {}), kind in ("read", "search", "meta", "web", "skill", "subagent"), (name, kind))
+            self.assertEqual(hook.may_pass(name, {}), kind in ("read", "search", "meta", "ask", "web", "skill", "subagent"), (name, kind))
 
 
 class IntegrityTests(unittest.TestCase):

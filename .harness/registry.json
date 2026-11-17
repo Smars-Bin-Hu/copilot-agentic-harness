@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.7.46",
-  "released": "2026-11-16",
+  "version": "1.8.0",
+  "released": "2026-11-17",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -97,6 +97,7 @@
         "PreToolUse",
         "PostToolUse",
         "SubagentStart",
+        "SubagentStop",
         "Stop"
       ],
       "enforcement": [
@@ -133,9 +134,14 @@
         ".harness/standards/code-standards.md",
         ".github/agents/reviewer.agent.md",
         ".github/agents/mapper.agent.md",
+        ".github/agents/worker.agent.md",
         ".github/skills/generic-mapreduce/",
         ".github/skills/harness-autorun/",
         ".harness/tests/test_autorun.py",
+        ".harness/tests/test_autorun_hooks.py",
+        ".harness/tests/test_autorun_spend.py",
+        ".harness/tests/test_autorun_relay.py",
+        ".harness/tests/test_autorun_board.py",
         ".harness/tests/test_mapreduce.py",
         ".harness/tests/test_task.py",
         ".harness/tests/test_task_manual.py",
@@ -158,6 +164,7 @@
         ".harness/tests/test_chatnew.py",
         ".harness/tests/test_chatsend.py",
         ".harness/tests/test_chatask.py",
+        ".harness/tests/test_chatask_sub.py",
         ".harness/tests/test_gatereview.py",
         ".harness/tests/test_health.py",
         ".harness/tests/test_chatctx.py",

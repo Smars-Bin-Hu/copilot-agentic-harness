@@ -87,6 +87,7 @@ SHELL_CSS = "shell.css"  # the pages that have shell.js (the board and the task 
 DESK_CSS = "desk.css"  # the task page (desk.js) gets its shell last: the slim header, the info line, the tabs by function, the cards of waits
 ENTER_CSS = "enter.css"  # the served pages (enter.js) get the Enter screen after the shell
 ROUNDS_CSS = "rounds.css"  # the served task page (rounds.js) gets the earlier rounds of the chat
+AUTORUN_CSS = "autorun.css"  # the served pages that have autorun.js get the Start dialog and the run card
 RUN_CSS = "run.css"  # the served task page (run.js) gets the panel of a running command
 LIVE_CSS = "live.css"  # the served task page (live.js, reply.js) gets the stream of the Live tab and the reply panel after its shell
 SPACE_CSS = "space.css"  # the pages that have space.js get the 3D stage behind the page last ...
@@ -102,7 +103,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
         "/*THEME*/": read("theme.js"),
-        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])]),
+        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *([AUTORUN_CSS] if "autorun.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])]),
         "<!--DATA-->": as_json(data),
         "/*JS*/": "\n".join(read(name) for name in scripts),
     }
@@ -138,7 +139,7 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
-    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "readybar.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
+    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "readybar.js", "autorun.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
     return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"])
 
 
@@ -157,6 +158,6 @@ def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> s
     """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
     Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
     if serve is not None:
-        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "stmts.js", "batch.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
+        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "stmts.js", "batch.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "autorun.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
     page = build("desk.html", ["common.js", "status.js", "highlight.js", "stmts.js", "diffview.js", "space.js", "wall.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

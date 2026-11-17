@@ -7,7 +7,10 @@
                                    (`task review start`). A session that holds none, or is in admin mode: no subagent.
                                    The one other subagent is the read-only `mapper`, and only after the user typed
                                    `/generic-mapreduce`: that prompt gives the session a number of calls (mapreduce.py)
-  SubagentStart                    the reviewer is told where its package is; a mapper is told it only reads
+  SubagentStart                    the reviewer is told where its package is; a mapper is told it only reads; the worker of a task in autorun, its task and its rule
+  SubagentStop                     the worker's call ends: the `end` line of the run ledger (autorun.py)
+  PreToolUse(ask)                  a task in autorun: the question tool is refused while TODO.md has an open step, and always for the worker; the time a person
+                                   takes to answer is added back to the run
   UserPromptSubmit (rewind)        a message of the person: a restore point of the task folder (rewind.py)
   PostToolUse                      a write inside the task is remembered; a write of its REQ.md or PLAN.md is noted with its time (once a prompt
                                    each, for the stages of the report); the reviewer's answer closes the open check
@@ -22,7 +25,9 @@ Hook failures are fail-open: hook.py rolls back this module's state changes and 
 
 from __future__ import annotations
 
+import json
 import re
+import time
 
 from typing import Any, Dict, List, Optional
 
@@ -237,6 +242,8 @@ def on_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
     data = open_task(ctx)
     if data is None:
         return Decision(permission="deny", reason=say("rules.subagent.no_task", called=called, agent=taskreview.AGENT), facts={"kind": "subagent"})
+    if called.lower() == WORKER:
+        return worker_call(event, ctx, data)
     if called.lower() != taskreview.AGENT:
         return Decision(permission="deny", reason=say("review.call.other", agent=taskreview.AGENT, called=called), facts={"kind": "task-subagent"})
     if taskreview.state_of(data)["n"] == 0:
@@ -246,12 +253,41 @@ def on_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
     return None
 
 
+WORKER = "worker"  # autorun.WORKER; the name is needed before autorun.py is imported
+
+
+def tool_input_of(event: HookEvent) -> Dict[str, Any]:
+    given = event.raw.get("tool_input", event.raw.get("toolArgs"))
+    if isinstance(given, str):
+        try:
+            given = json.loads(given)
+        except ValueError:
+            given = {}
+    return given if isinstance(given, dict) else {}
+
+
+def worker_call(event: HookEvent, ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
+    """The worker is called (autorun.py has the five checks). A refusal here is not a gate refusal and does not end the run. A call that is let through opens a line of the run ledger. Without autorun it is refused."""
+    from . import autorun
+
+    given = tool_input_of(event)
+    text = autorun.on_subagent_call(ctx.root, data["task"], given)
+    if text:
+        return Decision(permission="deny", reason=text, facts={"kind": "autorun-call"})
+    autorun.ledger_start(ctx.root, data["task"], given, event.session_id)
+    return None
+
+
 def on_subagent_start(event: HookEvent, ctx: Context) -> Optional[Decision]:
     from . import taskreview
 
     if event.agent_type.strip().lower() == mapreduce.AGENT:
         return Decision(context=say("mapreduce.start.context") + "\n" + say("rules.language"))
     data = open_task(ctx)
+    if data is not None and event.agent_type.strip().lower() == WORKER:
+        if not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
+            return None
+        return Decision(context=say("autorun.start.worker", task=data["task"]) + "\n" + say("rules.language"))
     if data is None or event.agent_type.strip().lower() != taskreview.AGENT:
         return None
     waiting = taskreview.pending(data)
@@ -270,10 +306,15 @@ def on_task_write(event: HookEvent, ctx: Context) -> None:
     if data is None or event.tool_kind not in ("edit", "create"):
         return
     name = data["task"].lower().rstrip("/")
+    worker = is_subagent_session(ctx) and isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"
     for raw in event.paths:
         for relative in repo_paths.repo_relative(raw, ctx.root, event.cwd):
             if relative is None or not relative.lower().startswith(name + "/"):
                 continue
+            if worker:
+                from . import autorun
+
+                autorun.tally_add(ctx.root, data["task"], "files", relative[len(name) + 1 :])  # what this worker call changed, for its `end` line
             state = relay(ctx)
             state["wrote"] = True
             if relative.lower() == f"{name}/{tasks.TASK_FILE}".lower():
@@ -439,16 +480,73 @@ def note_asking(event: HookEvent, ctx: Context) -> None:
         pass
 
 
-def autorun_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
-    """A task in autorun (M13-1): the facts say whether the agent is pushed on to the next step or may stop."""
+def autorun_stop(ctx: Context, data: Dict[str, Any], active: bool = False) -> Optional[Decision]:
+    """A task in autorun (M13-1): the facts say whether the agent is pushed on to the next step or may stop. `active` is `stop_hook_active` of the Stop event: the count of blocks in a row starts again when it is false."""
     if not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
         return None
     from . import autorun
 
-    text = autorun.on_stop(ctx.root, data["task"])
+    text = autorun.on_stop(ctx.root, data["task"], active)
     if text is None:
         return None  # it ends here; the task says why, and the Stop goes on as any other
     return Decision(block=True, reason=text, facts={"kind": "autorun"})
+
+
+def autorun_goes_on(ctx: Context, data: Dict[str, Any]) -> bool:
+    """The task was in autorun at this Stop and still is: `on_stop` let the Stop through without ending the run. Nothing is read for a task that was not."""
+    if not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
+        return False
+    found = tasks.read(ctx.root, data["task"])
+    return bool(found) and isinstance(found.get("autorun"), dict) and found["autorun"].get("state") == "on"
+
+
+def on_ask_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """The question tool in a task in autorun. Refused while TODO.md has an open step, and always for the worker; not a gate refusal and never a reason to stop.
+    Let through (no open step): the moment is kept, and the time until the answer is added back to the run (`note_ask_return`)."""
+    if ctx.admin:
+        return None
+    data = open_task(ctx)
+    if data is None or not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
+        return None
+    from . import autorun
+
+    if is_subagent_session(ctx):
+        return Decision(permission="deny", reason=say("autorun.deny.ask_worker"), facts={"kind": "autorun-ask"})
+    if autorun.open_steps_of(autorun.steps_of(ctx.root, data["task"])):
+        return Decision(permission="deny", reason=say("autorun.deny.ask", task=data["task"]), facts={"kind": "autorun-ask"})
+    ctx.module_state(NAME)["ask_since"] = time.time()
+    return None
+
+
+def note_ask_return(ctx: Context) -> None:
+    """The question tool returned: a person answered. Their time does not count against the run. Without the mark of its start (or in a task that is not in autorun) nothing happens."""
+    mine = (ctx.state.get("modules") or {}).get(NAME) or {}  # not module_state(): a task with no mark has nothing to write
+    since = mine.pop("ask_since", None)
+    if not isinstance(since, (int, float)) or is_subagent_session(ctx) or ctx.admin:
+        return
+    data = open_task(ctx)
+    if data is None or not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
+        return
+    from . import autorun
+
+    autorun.add_wait(ctx.root, data["task"], time.time() - float(since))
+
+
+def on_subagent_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """The worker's call ended: the `end` line of the run ledger."""
+    if event.agent_type.strip().lower() != WORKER:
+        return None
+    data = open_task(ctx)
+    if data is None or not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
+        return None
+    from . import autorun
+
+    raw = event.raw
+    # Copilot (recorded 2026-11-17): the reply is `response` and the end is `stopReason`/`stop_reason`; `last_assistant_message` is the Claude Code name.
+    message = next((str(raw[key]) for key in ("response", "last_assistant_message", "lastAssistantMessage") if raw.get(key)), "")
+    stop = next((str(raw[key]) for key in ("stop_reason", "stopReason") if raw.get(key)), "")
+    autorun.ledger_end(ctx.root, data["task"], message, stop)
+    return None
 
 
 def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
@@ -457,9 +555,12 @@ def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
     data = open_task(ctx)
     if data is None:
         return None
-    pushed = autorun_stop(ctx, data)
+    pushed = autorun_stop(ctx, data, event.stop_hook_active)
     if pushed is not None:
         return pushed  # autorun: on to the next step, however often the agent has been pushed before
+    if autorun_goes_on(ctx, data):
+        mark_waiting(ctx, data, True)  # the cap of blocks in a row, or a pit stop: no block; the board wakes the agent. The run stays on
+        return None
     if event.stop_hook_active:
         mark_waiting(ctx, data, True)  # the second Stop of a block: this time the agent does stop
         return None
@@ -476,7 +577,13 @@ def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
 
 
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    if event.event == "PreToolUse" and event.tool_kind == "ask":
+        refused = on_ask_call(event, ctx)
+        if refused is not None:
+            return refused  # refused: the person is not asked, so the board is not told "asking"
     note_asking(event, ctx)
+    if event.event == "SubagentStop":
+        return on_subagent_stop(event, ctx)
     if event.event == "SessionStart":
         return Decision(context=prompt_text(ctx))
     if event.event == "UserPromptSubmit":
@@ -486,6 +593,8 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.event == "SubagentStart":
         return on_subagent_start(event, ctx)
     if event.event == "PostToolUse":
+        if event.tool_kind == "ask":
+            note_ask_return(ctx)
         on_task_write(event, ctx)
         return on_review_done(event, ctx)
     if event.event == "Stop":

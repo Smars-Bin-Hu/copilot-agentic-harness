@@ -37,6 +37,8 @@ SUB_TAIL = 256 * 1024  # the end of a subagent's hook log
 MAX_SUBAGENTS = 12  # the newest ones
 ROWS_KEPT = 2000  # the lines the tree sends, the newest; an older prompt keeps its numbers
 ROWS_PER_PROMPT = 300
+RUN_ROWS_KEPT = 8000  # a task that has had an autorun run (1.8, step 9): one prompt holds the whole run, with a worker for each step, and every worker is shown
+RUN_ROWS_PER_PROMPT = 6000
 PROBLEMS_KEPT = 100
 FRESH_S = 10.0  # the files change all the time while the agent works: the tree is read again at most this often
 SAME_CALL_S = 3.0  # the hook and Copilot's record see the start of one call within this
@@ -183,8 +185,14 @@ def decisions(root: Path, data: Dict[str, Any], task: str, sessions: Optional[Li
         return []
 
 
-def subagents(root: Path, session: str, since: float) -> List[Tuple[str, str, float]]:
-    """(agent id, name, start) of the subagents the record of the session says began since `since`, the newest MAX_SUBAGENTS, oldest first. Never raises."""
+def has_run(data: Dict[str, Any]) -> bool:
+    """Has the task had an autorun run? Its workers are many (a step each): the Trace lists all of them, not the newest MAX_SUBAGENTS."""
+    run = data.get("autorun") if isinstance(data, dict) else None
+    return isinstance(run, dict) and bool(run.get("started_at"))
+
+
+def subagents(root: Path, session: str, since: float, limit: int = MAX_SUBAGENTS) -> List[Tuple[str, str, float]]:
+    """(agent id, name, start) of the subagents the record of the session says began since `since`, the newest `limit`, oldest first. Never raises."""
     try:
         if not bool((config.policy_or_empty(root, "task").get("report") or {}).get("copilot_events", True)):
             return []
@@ -214,7 +222,7 @@ def subagents(root: Path, session: str, since: float) -> List[Tuple[str, str, fl
             if len(_found) >= 50:
                 _found.clear()
             held = _found[key] = (stamp, list(out.values()))
-        return sorted((item for item in held[1] if item[2] >= since), key=lambda item: item[2])[-MAX_SUBAGENTS:]
+        return sorted((item for item in held[1] if item[2] >= since), key=lambda item: item[2])[-limit:]
     except Exception:  # noqa: BLE001 - Copilot's file is not ours; the Trace is the main session alone then
         return []
 
@@ -225,7 +233,7 @@ def problem(item: Dict[str, Any]) -> bool:
 
 def entries_of(root: Path, surface: str, session: str, since: str) -> List[Dict[str, Any]]:
     """Every call and refusal of a session and of its subagents, whatever the size of the logs."""
-    names = {agent: name for agent, name, _at in subagents(root, session, 0.0)}
+    names = {agent: name for agent, name, _at in subagents(root, session, 0.0, sys.maxsize)}
     found = build(common.read_session(root, surface, session), sys.maxsize)["entries"]
     for child in common.child_sessions(root, surface, session, since):
         found += build(child["rows"], sys.maxsize, names.get(child["session_id"]) or str(child["rows"][0].get("agent_type") or "subagent"))["entries"]
@@ -288,9 +296,10 @@ def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
             if row["kind"] in ("gate", "tool") and problem(row):
                 node["blocked" if row["kind"] == "gate" else "failed"] += 1
                 problems.append(dict(row, prompt=node["n"]))
-    left = ROWS_KEPT
+    kept, per = (RUN_ROWS_KEPT, RUN_ROWS_PER_PROMPT) if has_run(data) else (ROWS_KEPT, ROWS_PER_PROMPT)
+    left = kept
     for node in reversed(nodes):
-        room = min(ROWS_PER_PROMPT, left)
+        room = min(per, left)
         node["cut"] = max(0, len(node["rows"]) - room)
         node["rows"] = node["rows"][-room:] if room else []
         left -= len(node["rows"])
@@ -355,8 +364,8 @@ def flat(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
         entries, cut = entries[over:], cut + over
         found = {"entries": entries, "cut": cut}
     names = []
-    for agent, name, _at in subagents(root, session, copilot_events.seconds(since) or 0.0):
-        mine = build([row for row in read_tail(session_log_path(root, surface, agent), SUB_TAIL) if str(row.get("at") or "") >= since], SHOWN, name)
+    for agent, name, _at in subagents(root, session, copilot_events.seconds(since) or 0.0, sys.maxsize if has_run(data) else MAX_SUBAGENTS):
+        mine = build([row for row in read_tail(session_log_path(root, surface, agent), SUB_TAIL) if str(row.get("at") or "") >= since], RUN_ROWS_KEPT if has_run(data) else SHOWN, name)
         entries += mine["entries"]
         cut += mine["cut"]
         if name not in names:
@@ -364,5 +373,5 @@ def flat(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     if not names:
         return found
     entries.sort(key=lambda item: str(item.get("at") or ""))  # a stable sort: the same instant keeps the order each part had
-    over = max(0, len(entries) - SHOWN)
+    over = max(0, len(entries) - (RUN_ROWS_KEPT if has_run(data) else SHOWN))
     return {"entries": entries[over:], "cut": cut + over, "sources": names}

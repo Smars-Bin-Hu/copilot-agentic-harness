@@ -24,8 +24,16 @@ POLICY_SCHEMA = {
         "autorun": {
             "type": "object",
             "properties": {
-                "max_steps": {"type": "integer", "minimum": 1}, "minutes": {"type": "integer", "minimum": 1},
-                "max_denies": {"type": "integer", "minimum": 1}, "max_stalls": {"type": "integer", "minimum": 1},
+                "minutes": {"type": "integer", "minimum": 1}, "max_stalls": {"type": "integer", "minimum": 1},
+                "steps_per_todo": {"type": "integer", "minimum": 1}, "stop_cap": {"type": "integer", "minimum": 1},
+                "compact_percent": {"type": "integer", "minimum": 0, "maximum": 100},
+                "relay": {
+                    "type": "object",
+                    "properties": {
+                        "grace_seconds": {"type": "integer", "minimum": 0}, "max_errors": {"type": "integer", "minimum": 1},
+                        "backoff": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1},
+                    },
+                },
             },
         },
         "mapreduce": {

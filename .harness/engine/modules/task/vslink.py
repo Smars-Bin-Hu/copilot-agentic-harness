@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import copy
 import datetime
 import os
 import queue
@@ -33,7 +34,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from core import ahp, config, launchenv, tasks
 from core.paths import utc_now
 
-from . import chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
+from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
@@ -55,6 +56,8 @@ HURRY_EVERY = 1.0
 SUB_FOLLOW = 3  # chats of subagents followed for each bound chat, the newest (1.6.105)
 SLOW_LIMIT = 3  # 1.7.45: calls in a row the host did not answer in time before the connection is given up; one slow answer of a busy computer is not a lost VS Code
 SLOW_RETRY = 30.0  # seconds before a list the host did not answer in time is asked again
+RELAY_EVERY = 1.0  # 1.8: seconds between two looks at the bound chats of tasks in autorun (relay and pit stop)
+RELAY_HOLD = 10.0  # 1.8: seconds a relay that was refused (the chat changed, was not idle) waits before it is tried again
 KEEP_SHOWN = 120.0  # 1.7.45: seconds the rows keep the chat they showed after the connection went away, while it comes back and the chats are found again, so a task does not flash idle
 
 
@@ -135,7 +138,7 @@ class Job:
 
 
 # "": any state: a setting of the chat holds from its next turn; a Withdraw stops a running turn first (1.6.99); Try again and taking back a queued message are checked by the thread
-NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle"}
+NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": ""}  # relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
 
 
 class VsLink:
@@ -165,6 +168,7 @@ class VsLink:
         self.bound: Dict[str, Dict[str, Any]] = {}  # task -> binding
         self.unbound: Dict[str, str] = {}  # task -> why
         self.chats: Dict[str, Dict[str, Any]] = {}  # chat resource -> {state, tool_at}
+        self.sub_seen: Dict[str, str] = {}  # id of an item in a subagent's chat -> when first seen (the start of its wait)
         self.sess: Dict[str, Dict[str, Any]] = {}  # session resource of a bound chat -> {channel, state (trimmed: inputNeeded), seen: {item id: when first seen}}
         self.limits: Dict[str, Dict[str, int]] = {}  # model id -> what decides its context window, every model the host lists (for the context meter)
         self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
@@ -176,6 +180,10 @@ class VsLink:
         self.slow = 0  # calls in a row the host did not answer in time (SLOW_LIMIT)
         self.shown: Dict[str, Dict[str, Any]] = {}  # task -> what its row showed of the chat when the connection went away (KEEP_SHOWN)
         self.lost_at = 0.0
+        self.relay_at = 0.0  # monotonic time of the last look at the autorun chats
+        self.relay_hold: Dict[str, float] = {}  # task -> monotonic time before which its relay is not tried again
+        self.starts: Dict[str, Dict[str, Any]] = {}  # 1.8 step 9: task -> the Start order of the board (`autorun_start`), done here on the thread; memory only
+        self.start_at = 0.0  # monotonic time of the last look at the Start orders
 
     # --- the page side: reads only ------------------------------------------------------------------------------------------
 
@@ -277,6 +285,34 @@ class VsLink:
         held = self.sess.get(binding["session"]) or {}
         return [item for item in (held.get("state") or {}).get("subchats") or [] if item.get("parent") == binding["chat"]][-SUB_FOLLOW:]
 
+    def _sub_targets(self, binding: Dict[str, Any]) -> List[Dict[str, str]]:
+        """The subagent calls that run now in the bound chat, with the chat of each subagent (1.8): from the running `task` calls of the chat's turn (`chatask.sub_calls`), and the chats the session
+        lists for a call that still runs. `{chat, agent, call}`. A call that ended is not here: its chat is let go at the next look. The caller holds the lock."""
+        main = self.chats.get(binding["chat"])
+        if not main:
+            return []
+        found = chatask.sub_calls(main["state"])
+        running = {str(call.get("toolCallId")) for call in self._running_calls(main["state"]) if call.get("status") in chatask.RUNNING}
+        for sub in self._subs_of(binding):  # the session says which chat a call made (`origin`); the call must still run in the chat of the task
+            if sub["call"] in running and all(item["chat"] != sub["chat"] for item in found):
+                found.append({"chat": sub["chat"], "agent": chatask.one_line(sub.get("title") or "", 60), "call": sub["call"]})
+        return found
+
+    @staticmethod
+    def _running_calls(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+        active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else {}
+        return [part["toolCall"] for part in active.get("responseParts") or [] if isinstance(part, dict) and isinstance(part.get("toolCall"), dict)]
+
+    def _sub_items(self, binding: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """The tool calls that wait for a confirmation in the chats of the running subagents, as items (`chatask.sub_item`). The caller holds the lock."""
+        items = []
+        for target in self._sub_targets(binding):
+            cached = self.chats.get(target["chat"])
+            item = chatask.sub_item(target["chat"], target["agent"], cached["state"]) if cached else None
+            if item:
+                items.append(item)
+        return items
+
     def context_card(self, task: str) -> Dict[str, Any]:
         """For the context card of the task page: `parts` (what the context holds, `chatctx.parts`; None: the chat says nothing) and `cost` (credits of the session; None: not known)."""
         with self.lock:
@@ -365,7 +401,7 @@ class VsLink:
             if not binding:
                 return "unsure" if self.unbound.get(task) == "ambiguous" else "unbound"
             state = ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status"))
-            if NEEDS[kind] and state != NEEDS[kind]:
+            if NEEDS[kind] and state != NEEDS[kind] and not (kind in ("confirm", "answer") and self._sub_targets(binding)):  # a subagent's chat can wait while the chat of the task says "in progress"
                 return "not-" + NEEDS[kind]
             return ""
 
@@ -400,12 +436,15 @@ class VsLink:
         with self.lock:
             binding = self.bound.get(task) if self.ready else None
             held = self.sess.get(binding["session"]) if binding else None
-            if not binding or held is None:
+            if not binding:
                 return None
-            view, count = chatask.first_for(held["state"].get("inputNeeded"), binding["chat"])
+            subs = self._sub_targets(binding)
+            items = list((held["state"].get("inputNeeded") if held else None) or []) + self._sub_items(binding)  # 1.8: a confirmation in a running subagent's chat is the task's too
+            view, count = chatask.first_for(items, [binding["chat"]] + [item["chat"] for item in subs])
             if view is None:
                 return None
-            return dict(view, count=count, since=held["seen"].get(view["id"]) or utc_now())
+            since = (held["seen"].get(view["id"]) if held else None) or self.sub_seen.setdefault(view["id"], utc_now())
+            return dict(view, count=count, since=since)
 
     def respond(self, kind: str, task: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Allow or deny a tool call (`confirm`), or answer a question (`answer`), on the thread. `payload`: {id, digest, tool_call_id | request_id, approved | answers}. Raises Refused
@@ -568,6 +607,101 @@ class VsLink:
                 last = now
                 self.dirty = False
                 self._look(link)
+                self._autorun(link)
+            self._starts(link)  # its own pace (RELAY_EVERY): a Start order does not wait for the next look at the tasks
+
+    def start_order(self, task: str, model: Dict[str, Any], allow: str) -> None:
+        """1.8, step 9: the board switched autorun on. The thread does the Start order (Allow all, `/compact` when the chat has history, `/harness-autorun` with `model`) on the bound chat as it is, and nothing else
+        sends to that chat until the order has reached its last stage (the relay waits). `allow`: the host's value for Allow all, or "" to leave it."""
+        with self.lock:
+            self.starts[task] = autorun_start.new_order(model, allow, datetime.datetime.now(datetime.timezone.utc))
+        self.hurry()
+        self.wake.set()
+
+    def cancel_start(self, task: str) -> None:
+        with self.lock:
+            self.starts.pop(task, None)
+
+    def starting(self, task: str) -> bool:
+        """Is the Start order of this task before its last stage (the relay and the pit stop keep away)?"""
+        with self.lock:
+            return (self.starts.get(task) or {}).get("stage") in autorun_start.BEFORE_VERIFY
+
+    def _starts(self, link: ahp.Connection) -> None:
+        """Do the next step of each Start order. A failure here never stops the link; an order that fails ends the run (`autorun_start.fail`)."""
+        now = time.monotonic()
+        with self.lock:
+            orders = list(self.starts.items())
+        if not orders or now - self.start_at < RELAY_EVERY:
+            return
+        self.start_at = now
+        for task, order in orders:
+            try:
+                with self.lock:
+                    binding = self.bound.get(task)
+                    held = self.chats.get(binding["chat"]) if binding else None
+                    state = copy.deepcopy(held["state"]) if held else None
+                    status = ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status")) if binding else ""
+                if state is None:
+                    continue
+
+                def do(kind: str, text: str, model: Optional[Dict[str, Any]], plan: Optional[Dict[str, Any]], task: str = task) -> Optional[BaseException]:
+                    job = Job(kind, task, text, model, plan)
+                    self._do(link, job)  # on this thread: it looks at the binding and the chat again, and refuses rather than guess
+                    if isinstance(job.error, ahp.AhpError):
+                        self.host_said(job.error)
+                    return job.error
+
+                autorun_start.step(self.root, task, order, state, status, do)
+            except ahp.ConnectionClosed:
+                raise
+            except Exception:  # noqa: BLE001 - a helper: the order is tried again at the next look
+                pass
+            with self.lock:
+                if order.get("stage") == "over" and self.starts.get(task) is order:
+                    del self.starts[task]
+
+    def _autorun(self, link: ahp.Connection) -> None:
+        """1.8, steps 7 and 8 of autorun: for each bound task whose autorun is on, look at its chat and, when the run needs it, wake the agent (relay) or end a turn to compact (pit stop). `autorun_relay.step` decides;
+        only this thread sends. Only bound chats of tasks in autorun are looked at, about once a second; a failure here never stops the link."""
+        now = time.monotonic()
+        if now - self.relay_at < RELAY_EVERY:
+            return
+        self.relay_at = now
+        with self.lock:
+            bound = [(task, binding["chat"], binding["session"]) for task, binding in self.bound.items() if binding.get("chat")]
+        for task, chat, resource in bound:
+            if self.relay_hold.get(task, 0.0) > now or self.starting(task):
+                continue
+            try:
+                data = tasks.read(self.root, task)
+                if not data or not autorun.is_on(data):
+                    self.relay_hold.pop(task, None)
+                    continue
+                with self.lock:
+                    held = self.chats.get(chat)
+                    state = copy.deepcopy(held["state"]) if held else None
+                    status = ahp.status_name((self.sessions.get(resource) or {}).get("status"))
+                    windows = dict(self.limits)
+                if state is None:
+                    continue
+                sent: List[Optional[BaseException]] = []
+
+                def send(text: str, model: Optional[Dict[str, Any]], task: str = task) -> Optional[BaseException]:
+                    job = Job("relay", task, text, model)
+                    self._do(link, job)  # on this thread: it looks at the binding and the chat again, and refuses rather than guess
+                    sent.append(job.error)
+                    return job.error
+
+                autorun_relay.step(self.root, task, state, status, windows, send)
+                if sent and sent[0] is not None:
+                    if isinstance(sent[0], ahp.AhpError):
+                        self.host_said(sent[0])
+                    self.relay_hold[task] = time.monotonic() + RELAY_HOLD
+            except ahp.ConnectionClosed:
+                raise
+            except Exception:  # noqa: BLE001 - a helper: the run waits for the next look
+                self.relay_hold[task] = time.monotonic() + RELAY_HOLD
 
     def _calm(self, step: Callable[[], None]) -> None:
         """One step of the loop whose call the host may not answer in time (1.7.45): that is a slow host, not a lost one, until SLOW_LIMIT of them come in a row.
@@ -661,7 +795,10 @@ class VsLink:
             raise Refused("changed")  # another chat may have picked the task up a moment ago: nothing goes to the old one
         state = ahp.status_name(sessions[binding["session"]].get("status"))
         if NEEDS[kind] and state != NEEDS[kind]:
-            raise Refused("not-" + NEEDS[kind])
+            with self.lock:
+                subagent = kind in ("confirm", "answer") and bool(self._sub_targets(binding))
+            if not subagent:
+                raise Refused("not-" + NEEDS[kind])
         return binding
 
     def _initiator(self, link: ahp.Connection, resource: str, state: Dict[str, Any]) -> str:
@@ -728,6 +865,10 @@ class VsLink:
             if job.cancelled:
                 raise Refused("timeout")
             binding = self._recheck(link, job.task, job.kind)
+            if job.kind == "relay":  # a chat that ended in an error takes the next message (measured: status 34, then 33)
+                with self.lock:
+                    if ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status")) not in ("idle", "error"):
+                        raise Refused("not-idle")
             if job.kind in ("confirm", "answer"):
                 return self._respond(link, job, binding)
             chat, resource = binding["chat"], binding["session"]
@@ -762,14 +903,14 @@ class VsLink:
                     message["model"] = job.model  # on every message: the host keeps the last one, whoever sent it
                 if job.attachments:
                     message["attachments"] = job.attachments  # the host keeps a copy of each and lists its own address in the chat
-                if job.kind == "send":
+                if job.kind in ("send", "relay"):
                     action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
                 else:  # steer goes into the turn that runs; queue (1.6.99) waits for its end, and Copilot sends it then as the next turn
                     action = {"type": "chat/pendingMessageSet", "kind": "queued" if job.kind == "queue" else "steering", "id": str(uuid.uuid4()), "message": message}
             link.dispatch(chat, action)
             with self.lock:
                 known = self.sessions.get(resource)
-                if job.kind == "send":
+                if job.kind in ("send", "relay"):
                     if known is not None:
                         known["status"] = ahp.IN_PROGRESS | (int(known.get("status") or 0) & (ahp.IS_READ | ahp.ARCHIVED))  # not idle at once: a second send finds it busy
                     ahp.reduce_chat(held["state"], {**action, "message": {key: value for key, value in message.items() if key != "attachments"}})  # the bytes are not kept here
@@ -885,9 +1026,12 @@ class VsLink:
         """Allow, deny or answer one waiting item of the chat of a task. The session is read again from the host first, and the item must be there, in this chat, and be what the page
         showed (the same `digest`): else nothing is sent. The person confirms one `toolCallId` (or one request), never whatever is pending."""
         plan = job.plan or {}
+        if str(plan.get("id") or "").startswith(chatask.SUB):
+            return self._respond_sub(link, job, binding)
         with self.lock:
             held = self.sess.get(binding["session"])
             channel = held["channel"] if held else ""
+            subs = {target["chat"] for target in self._sub_targets(binding)}
         if held is None or not channel:
             raise Refused("ask-gone")  # the session of the chat could not be read: nothing is answered blind
         try:
@@ -901,7 +1045,7 @@ class VsLink:
             held["state"] = fresh
             self._stamp(held)
         item = chatask.find(fresh["inputNeeded"], str(plan.get("id") or ""))
-        if item is None or item.get("chat") != binding["chat"]:
+        if item is None or item.get("chat") not in ({binding["chat"]} | subs):
             raise Refused("ask-gone")
         view = chatask.shown(item)
         wanted = "confirm" if job.kind == "confirm" else "question"
@@ -1036,11 +1180,54 @@ class VsLink:
                 self.scanned[resource] = str(item.get("modifiedAt") or "")
             self.dirty = True
 
+    def _respond_sub(self, link: ahp.Connection, job: Job, binding: Dict[str, Any]) -> None:
+        """Allow or deny a tool call that waits in the chat of a running subagent (1.8). The chat is read again from the host; the call must still be pending there, the call of the subagent must still run
+        in the chat of the task, and it must be what the page showed. The decision goes to the subagent's chat, not to the chat of the task."""
+        plan = job.plan or {}
+        parts = str(plan.get("id") or "").split("|")
+        chat = parts[1] if len(parts) == 3 else ""
+        with self.lock:
+            target = next((item for item in self._sub_targets(binding) if item["chat"] == chat), None)
+        if target is None or job.kind != "confirm":
+            raise Refused("ask-gone")
+        try:
+            link.unsubscribe(chat)
+        except ahp.ConnectionClosed:
+            raise
+        except ahp.AhpError:
+            pass
+        fresh = ahp.trimmed(link.subscribe(chat))
+        with self.lock:
+            cached = self.chats.get(chat)
+            if cached is None:
+                cached = self.chats[chat] = {"state": fresh, "tool_at": ""}
+            cached["state"] = fresh
+            cached["rev"] = cached.get("rev", 0) + 1
+        item = chatask.sub_item(chat, target["agent"], fresh)
+        if item is None or item["id"] != plan.get("id"):
+            raise Refused("ask-gone")
+        view = chatask.shown(item)
+        if view is None or view["kind"] != "confirm" or view["digest"] != plan.get("digest") or view["tool_call_id"] != plan.get("key"):
+            raise Refused("ask-changed")
+        if job.cancelled:
+            raise Refused("timeout")
+        link.dispatch(chat, chatask.confirm_action(item, bool(plan.get("approved"))))
+        with self.lock:
+            for call in self._running_calls(cached["state"]):
+                if call.get("toolCallId") == view["tool_call_id"]:
+                    call["status"] = "running" if plan.get("approved") else "failed"  # the card goes at once; the host pushes the same
+            self.sub_seen.pop(item["id"], None)
+            self.dirty = True
+            known = self.sessions.get(binding["session"])
+            title = str((known or {}).get("title") or binding.get("title") or "")
+        job.result = {"chat": chat, "title": title, "view": view, "line": ""}
+
     def _subscribe(self, link: ahp.Connection) -> None:
         with self.lock:
             wanted = {binding["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat")}
             wanted.update({item["chat"]: item["session"] for item in self.created})  # a chat the board just made stays subscribed until its task is bound
             wanted.update({sub["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat") for sub in self._subs_of(binding)})  # what its subagents do (1.6.105)
+            wanted.update({target["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat") for target in self._sub_targets(binding)})  # 1.8: the chat of a subagent whose call runs: for its confirmations
             have = set(self.chats)
         for chat in have - set(wanted):
             try:
@@ -1051,6 +1238,7 @@ class VsLink:
                 pass
             with self.lock:
                 self.chats.pop(chat, None)
+                self.sub_seen = {key: when for key, when in self.sub_seen.items() if key.split("|")[1:2] != [chat]}
         for chat in set(wanted) - have:
             try:
                 state = ahp.trimmed(link.subscribe(chat))

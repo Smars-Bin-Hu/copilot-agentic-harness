@@ -31,7 +31,7 @@ The plan, the requirement and the promote you approve with the **Approve plan**,
 | `task recover` | A write-back failed partway and the task went to `partial` |
 | `task review extend` / `waive` | The checks are used up: you decide to check more or to let it through |
 | `task queue` | When several tasks write to the same repository: who holds it, who waits, what you do next |
-| `task autorun on` / `off` / `status` | autorun (beta): working down `TODO.md`. Only you can run `on`, in the terminal |
+| `task autorun on` / `off` / `status` | autorun (beta): a scheduler and a worker for each step of `TODO.md`. Only you can run `on` (terminal, or Start on the task page) |
 | `task pause` / `resume` | A task you do not want to deal with for now: put it aside, and the board stops pushing and the time does not count as "waiting for you". Take it up again when you are ready |
 | `approve-command` | A git write command of the agent was refused, and you decide to approve it |
 | `admin on` / `off` / `status` | Switching admin mode when extending the harness |

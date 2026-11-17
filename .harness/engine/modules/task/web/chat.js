@@ -421,6 +421,7 @@ const CHAT = (function () {
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const said = h("div", {class: "bad"});
     const view = SERVE.dialog([h("h2", null, t("board.action.confirm") + " \u00b7 " + row.name), h("p", null, t("board.ask.confirm.hint")),
+      found.agent ? h("p", {class: "sub"}, t("board.ask.agent", {agent: found.agent})) : null,  // a subagent's call (1.8)
       found.title ? h("p", {class: "sub"}, found.title) : null, found.intention ? h("p", null, found.intention) : null,
       h("pre", {class: "send-preview"}, found.command || "-"),
       h("p", {class: "sub"}, t("board.ask.call", {tool: found.tool || "-", id: found.tool_call_id})), found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null,

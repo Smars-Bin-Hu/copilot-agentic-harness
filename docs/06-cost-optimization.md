@@ -18,7 +18,7 @@ One thing first: the harness's own log records no token counts, only the numbers
 
 - **Tasks have three tiers.** Q&A has just a `TASK.md`, or no task at all; an RCA or a design has a few more files; only a task that changes a target repository has `DEV/`, a plan approval and a write-back. A small task does not go through the heavy flow.
 - **Independent checks are off by default.** They run only when you write `[review]=n`, and you decide how many. Without the mark you pay nothing for checks.
-- **There are two subagents only, both switched on by you.** The reviewer needs your `[review]=n`; the mapper needs you to type `/generic-mapreduce`, tells you first how much more it costs, sends mappers only after you agree, and sends 4 at most in one run (`mapreduce.max_agents` in `task.json`). The agent cannot switch them on. In B13 the orchestration of several agents was measured at about 4.5 times the usage (see section 9), so 1.1 dropped it.
+- **There are three subagents only, all switched on by you.** The worker belongs to autorun, which you start with a spend limit. The reviewer needs your `[review]=n`; the mapper needs you to type `/generic-mapreduce`, tells you first how much more it costs, sends mappers only after you agree, and sends 4 at most in one run (`mapreduce.max_agents` in `task.json`). The agent cannot switch them on. In B13 the orchestration of several agents was measured at about 4.5 times the usage (see section 9), so 1.1 dropped it.
 - **You pick the model.** The advice: a strong model for thinking, plans and approaches; a medium model for doing. The reviewer uses Sonnet by default, as written in `.github/agents/reviewer.agent.md`; a company can change it.
 
 ## 3. Read less: let the model read only what it needs

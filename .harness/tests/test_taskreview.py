@@ -401,6 +401,16 @@ class SnapshotTests(ReviewCase):
         self.result("more", "DESIGN.md")
         self.assertNotEqual(tasksnap.results_digest(self.root, JOB), second)
 
+    def test_questions_md_is_not_a_result_but_dev_is(self) -> None:
+        self.job()
+        self.check(PASS)
+        digest = tasksnap.results_digest(self.root, JOB)
+        (self.folder() / "QUESTIONS.md").write_text("# Open questions\n\n- [x] Q1 (step 1) ok? | took: none | answer: yes\n", encoding="utf-8")
+        self.assertEqual(tasksnap.results_digest(self.root, JOB), digest)
+        self.assertFalse(tasksnap.is_result("QUESTIONS.md"))
+        self.result("changed", "DEV/a.sql")
+        self.assertNotEqual(tasksnap.results_digest(self.root, JOB), digest)
+
     def test_an_earlier_version_can_be_found_again(self) -> None:
         self.job()
         self.check(FAIL)

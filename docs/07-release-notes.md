@@ -10,6 +10,37 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.8.0 (2026-11-17)
+
+A new autorun: the default agent only schedules, a worker does each step in a fresh context, and the board keeps the run going.
+
+### Added
+
+- **A `worker` subagent.** In autorun the default agent calls it once for each open step of `TODO.md`. The worker does that one step, hands back one line and is gone, so a long run does not fill one chat. Only the default agent of a task with autorun on can call it.
+- **Parked steps and one list of questions.** A step that cannot be settled is marked `[?]` and its question goes to `QUESTIONS.md`; the run goes on. A call the gate holds for you is listed there as `[held: ...]` and does not park the step. All questions are asked once, at the end, before the independent check.
+- **A Start form on the task page** (and `harness task autorun on` in a terminal). You pick the scheduler model and the worker model, the compact percent, the minutes, and a spend limit: no limit, or the recommended Credits, or twice or four times that. Then you type the code. Start sets Allow all, compacts the chat if it has history, and sends `/harness-autorun` with the model you chose. The form offers Claude models only.
+- **A spend limit.** The run stops with `budget` when the spend reaches the limit. It is per run and kept in the task, not in a policy.
+- **The board relay.** When the chat stops, the board sends the next message after 15 seconds, with the same model. After an error it waits 60, 300 and 900 seconds and stops after 3 (`error`). At the compact percent it has the chat end its turn and sends `/compact` (a pit stop). With no board there is no relay.
+- **A run card on the task page.** Steps done, parked and left, spend of the limit, time left, relays, pit stops, warnings and questions. The step list comes from the run ledger `.task/autorun-run.jsonl`, written by code: one start line and one end line for each worker call. A click on a step opens Trace at that call. **Stop** is on the card.
+- **New policy fields under `autorun` in `task.json`:** `steps_per_todo`, `stop_cap`, `compact_percent` and `relay` (`grace_seconds`, `backoff`, `max_errors`).
+- **The worker's tool confirmation shows on the board.** A tool of a subagent that needs a yes can now be approved there.
+- **The approve-plan dialog asks** "I will switch autorun on next: do not wake the agent", so the approval does not start another turn.
+
+### Changed
+
+- **The default agent only schedules.** In autorun it writes `TODO.md`, `TASK.md`, `LOG.md` and `QUESTIONS.md` only; the worker writes the rest of the task folder.
+- **The scheduling chat must use a Claude model.** With a GPT model the Claude worker gets no file tools.
+- **A refusal by the gate no longer stops the run.** The step is parked and the run goes on.
+- **`stalled` counts worker calls in a row with no progress.** A parked step counts as progress. `steps` caps calls and relays together: the larger of 20 and `steps_per_todo` times the steps of `TODO.md`.
+- **`agent` is narrower.** It is for going on would do harm, no longer for "cannot go on". The reasons now are `done`, `plan`, `review`, `handoff`, `stalled`, `time`, `steps`, `budget`, `error`, `person` and `agent`.
+- **There are three subagents:** the reviewer, the mapper and the worker.
+- **The default run time is 480 minutes** (it was 120). You can change it at Start.
+
+### Retired
+
+- **The old autorun.** The default agent doing every step itself, pushed on by the Stop hook, is gone. The Stop hook still pushes the scheduler on, as the second layer.
+- **`autorun.max_denies` and the `denied` stop reason.** A refusal now parks the step. If you set `max_denies` in an override file, remove it.
+
 ## 1.7.46 (2026-11-16)
 
 The Enter screen has a light look over a wallpaper; what the agent sends to Azure DevOps is kept in `OUT/` of the task.

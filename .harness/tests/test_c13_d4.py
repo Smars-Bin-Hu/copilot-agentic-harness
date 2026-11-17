@@ -513,6 +513,18 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         sent = (self.task / ".task" / "sent.jsonl").read_text(encoding="utf-8")
         self.assertIn("Plan approved", sent)
 
+    def test_approving_the_plan_with_no_wake_sends_nothing_and_the_task_notes_it(self) -> None:
+        self.write_plan()
+        self.write_req()
+        self.stopped()
+        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(with_req=True), with_req=True, no_wake=True)
+        self.assertEqual(done["agent"], "none")
+        self.assertIsNone(getattr(self.board, "woken", None))
+        self.assertEqual(self.link.sent, [])
+        self.assertTrue(self.data()["plan"]["approved_sha256"])
+        self.assertIn("approve-plan-nowake", [event["what"] for event in self.data()["events"]])
+        self.assertEqual(self.waiting_why(), "go-plan", "the card still offers the button, for the person who changes their mind")
+
     def test_approving_the_promote_wakes_the_agent(self) -> None:
         self.ready()
         self.fetch("repo_b/src/a.sql")

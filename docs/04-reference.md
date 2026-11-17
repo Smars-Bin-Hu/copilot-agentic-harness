@@ -97,9 +97,9 @@ A command only a person may run needs a terminal with a keyboard and a screen, o
 | `task set-branch` | Changes the name of the feature branch. The format is `feature/` plus letters, digits and underscores (60 characters at most), with no `-`, `.` or `/`. It defaults to the name of the task folder, with characters that do not fit turned into `_` (`my-task` becomes `feature/my_task`); a new round of the task adds `_r2`, `_r3` |
 | `task promote` | Writes the files under `DEV/<repository>/` back to a new branch of each target repository; `--dry-run` only lists the plan and writes the diff to `PROMOTE-PLAN.diff`; it first brings main up to its remote as `task fetch` does, so a file someone changed on the remote since the fetch is found and refused. Files right at the root of `DEV/`, under `DEV/_manual/` (run by hand), and files still as they were fetched (only read) are not written back, and the repository of a file only read is not checked; with only those, it is refused and says to hand the run over. With independent checks on and not enough passes, it is refused |
 | `task queue` | The write-back queue: for every target repository, which branch it is on now, whether it is clean, which task wrote files back that are not committed yet, which tasks wait behind it, and what you do next |
-| `task autorun on` | Switches autorun on (beta): the agent works down `TODO.md` and stops only when a person has to decide. It needs an approved plan, unticked steps and `[review]=n`. Terminal only, with a typed code |
+| `task autorun on` | Switches autorun on (beta): the default agent schedules and the `worker` subagent does one step of `TODO.md` per call; the run stops only when a person has to decide. It asks for the models, the compact percent, the minutes and the spend limit. It needs an approved plan, unticked steps and `[review]=n`. Typed code; the board has the same Start form |
 | `task autorun off` | Switches autorun off. You switch it off directly in the terminal; an agent has to add `--reason` and say where it is stuck |
-| `task autorun status` | Whether it is on, how many steps were done, how many times it was pushed on, why it stopped; when it is off, what is still missing |
+| `task autorun status` | Whether it is on, steps done, parked and left, the spend, relays, why it stopped; when it is off, what is still missing |
 | `task pause` | Puts a task aside for now: the board no longer says it waits for you, and the paused time does not count as "waiting for you". Terminal only. Refused while the agent is in the middle of a turn (a session holds the task, made a call in the last 5 minutes and has not stopped): stop the agent in VS Code first, or add `--force` |
 | `task resume` | Goes on with a paused task: what it waited for goes on from where it stood, without the time aside. A prompt in its session resumes it by itself too. Terminal only |
 | `task offwork` / `task onwork` | The person only (in a terminal or with the board's buttons Off work / Back to work): `offwork` pauses every open task that is not at work and not under autorun, all at once, and names the ones it left; `onwork` takes back only the tasks `offwork` paused (`paused.by` is `offwork`), so a task paused by hand stays paused |
@@ -221,10 +221,14 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | task.json | `transcript.keep_days` | How many days after the archive a task's saved chat is kept (0: always) |
 | task.json | `snapshots.keep_days` | How many days the snapshots at the gates are kept |
 | task.json | `snapshots.max_file_mb` | For a file above this size, a snapshot records only the sha256 and does not copy it |
-| task.json | `autorun.max_steps` | How many times at most a hook pushes the agent on during autorun |
-| task.json | `autorun.minutes` | How many minutes autorun runs at most |
-| task.json | `autorun.max_denies` | After how many refusals by the gate autorun stops |
-| task.json | `autorun.max_stalls` | After how many pushes in a row with no progress it stops |
+| task.json | `autorun.minutes` | How many minutes autorun runs at most (the person can change it when starting) |
+| task.json | `autorun.max_stalls` | After how many worker calls in a row with no progress (a parked step counts as progress) the run stops |
+| task.json | `autorun.steps_per_todo` | The cap of pushes and relays is the larger of 20 and this number times the steps of `TODO.md` |
+| task.json | `autorun.stop_cap` | After how many Stop blocks in a row the hook lets the agent stop and the board relays (Copilot drops the ninth) |
+| task.json | `autorun.compact_percent` | At which share of the context the board has the turn end and compacts. `0` switches it off |
+| task.json | `autorun.relay.grace_seconds` | How long an idle chat waits before the board sends the next message |
+| task.json | `autorun.relay.backoff` | Seconds to wait after the first, second and third relay error |
+| task.json | `autorun.relay.max_errors` | After how many relay errors in a row the run stops (`error`) |
 | task.json | `mapreduce.max_agents` | After the user types `/generic-mapreduce` once, how many times the mapper can be called at most. `0` switches it off |
 | task.json | `mapreduce.minutes` | Within how many minutes these calls are valid |
 | task.json | `report.prompt_chars` | On the task analysis page, how many characters from the start of what you typed are kept for each prompt (on the page only, not given to the agent). The default is 300. The row shows one line; the mouse over it shows all that is kept. `0` shows none |
@@ -277,12 +281,12 @@ They are set in [.github/hooks/harness.json](../.github/hooks/harness.json), and
 | --- | --- |
 | `SessionStart`, `UserPromptSubmit` | task (injects the session id, the rules and the language; with a task, injects how far the task is; reads `[review]=n`, and `[ZH]` or `[EN]` for the language of the replies of the session) |
 | `userPromptTransformed` | No module handles it; the core puts back what `UserPromptSubmit` told the prompt when it is missing from the text the model gets. VS Code's own reminders (to rename the chat) take the one place of `additionalContext`, and ours is lost there. Its key is camelCase: it has no VS Code name |
-| `PreToolUse` | task (subagents: with a task and checks on, lets the reviewer through; after the user types `/generic-mapreduce`, lets the mapper through and counts the calls), gate (guardrails, the write scope of a task, target repositories, dangerous commands) |
+| `PreToolUse` | task (subagents: with a task and checks on, lets the reviewer through; in a task with autorun on, lets the worker through; after the user types `/generic-mapreduce`, lets the mapper through and counts the calls), gate (guardrails, the write scope of a task, target repositories, dangerous commands) |
 | `PostToolUse` | task (notes the writes in a task; after the reviewer answers, writes the verdict to disk) |
 | `PostToolUseFailure` | observe (when a tool call fails there is only this event, no `PostToolUse`; the log records the tool name and the error the platform gives) |
 | `SubagentStart` | task (tells the reviewer where the review package is; tells the mapper it is read only and hands in a summary only) |
 | `SubagentStop` | No module handles it; the core uses it to note the end of a subagent |
-| `Stop` | task (blocks once when the work does not have enough passes, or when task files were written and `TASK.md` was not updated; with autorun on for the task, makes the agent go on with the next step by the facts, or lets it stop and records the reason) |
+| `Stop` | task (blocks once when the work does not have enough passes, or when task files were written and `TASK.md` was not updated; with autorun on for the task, makes the scheduler go on with the next step by the facts, or lets it stop and records the reason; after `stop_cap` blocks in a row it lets go and the board relays) |
 
 ## Runtime files
 

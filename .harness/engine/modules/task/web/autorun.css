@@ -1,0 +1,48 @@
+/* Autorun on the board (1.8, step 9; autorun.js): the Start dialog and the run card of the task page. Colour means state only: green = on, amber = waits for you or a warning, red = failed. */
+.ar-card{margin:0 0 12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);min-width:0}
+.ar-card.on{border-color:var(--good-line);border-left:3px solid var(--good-dot)}
+.ar-card[hidden]{display:none}
+.ar-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
+.ar-head h2{margin:0;font-size:14.5px;min-width:0;overflow-wrap:anywhere}
+.ar-head .ar-sp{flex:1}
+.ar-counts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:8px}
+.ar-bar{flex:1 1 140px;min-width:100px;height:6px;border-radius:3px;background:var(--track);display:flex;overflow:hidden}
+.ar-bar i{display:block;height:100%}.ar-bar .d{background:var(--good-dot)}.ar-bar .p{background:var(--hot-dot)}
+.ar-now{margin:8px 0 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ar-facts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:8px;font-size:12.5px;color:var(--soft)}
+.ar-facts b{color:var(--ink);font-weight:550}
+.ar-spend{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.ar-spend .ar-thin{width:70px;height:4px;border-radius:2px;background:var(--track);overflow:hidden;flex:none}.ar-spend .ar-thin i{display:block;height:100%;background:var(--good-dot)}.ar-spend .ar-thin.hot i{background:var(--hot-dot)}
+.ar-warn{margin:8px 0 0;color:var(--hot);overflow-wrap:anywhere}
+.ar-why{margin:8px 0 0;overflow-wrap:anywhere}
+.ar-q{margin:8px 0 0}.ar-q a{color:inherit}
+.ar-steps{margin-top:10px}
+.ar-steps>summary{cursor:pointer;font-size:12.5px;color:var(--soft);width:max-content;max-width:100%}
+.ar-rows{margin-top:6px;max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.ar-rows table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ar-rows th{position:sticky;top:0;background:var(--card);text-align:left;font-weight:500;color:var(--soft);padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.ar-rows td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.ar-rows tr:last-child td{border-bottom:0}
+.ar-rows tbody tr{cursor:pointer}.ar-rows tbody tr:hover td,.ar-rows tbody tr:focus-visible td{background:var(--hover)}
+.ar-rows td.n,.ar-rows td.num{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+.ar-rows td.t{max-width:0;width:100%;min-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ar-rows td.m{white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;color:var(--soft)}
+.ar-cut{margin:6px 0 0}
+/* the Start dialog */
+.dialog.ar-dlg{max-width:min(640px,calc(100% - 32px))}
+.ar-list{margin:8px 0;padding:0;list-style:none;max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.ar-list li{display:flex;align-items:baseline;gap:8px;padding:4px 8px;border-bottom:1px solid var(--line);min-width:0;font-size:12.5px}.ar-list li:last-child{border-bottom:0}
+.ar-list .n{flex:none;color:var(--soft);min-width:2.2em;text-align:right;font-variant-numeric:tabular-nums}
+.ar-list .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ar-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;margin:10px 0}
+.ar-grid label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--soft);min-width:0}
+.ar-grid select,.ar-grid input{font:inherit;font-size:13px;height:28px;box-sizing:border-box;width:100%;min-width:0;padding:0 8px;border:1px solid var(--line2);border-radius:7px;background:var(--card);color:var(--ink)}
+.ar-budget{margin:8px 0;padding:0;border:0;min-width:0}
+.ar-budget legend{padding:0;font-size:12.5px;color:var(--soft);cursor:help}
+.ar-opt{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:5px 0;font-size:13px;cursor:pointer}
+.ar-opt input{margin:0}
+.ar-info{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--line2);font-size:11px;color:var(--soft);cursor:help;vertical-align:middle;margin-left:4px;background:none;padding:0}
+/* the Trace tab: the calls of the step the person clicked */
+.ar-trace-note{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:0 0 10px}
+.tr-hit{background:var(--run-bg);box-shadow:inset 3px 0 0 var(--run)}
+@media (max-width:520px){.ar-rows .opt{display:none}.ar-grid{grid-template-columns:minmax(0,1fr)}.ar-card{padding:10px 10px}}

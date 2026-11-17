@@ -721,6 +721,8 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         call = {"toolCallId": action.get("toolCallId"), "toolName": action.get("toolName"), "displayName": action.get("displayName"), "intention": action.get("intention"), "status": "streaming"}
         if action.get("invocationMessage") is not None:
             call["invocationMessage"] = action["invocationMessage"]
+        if isinstance(action.get("_meta"), dict):
+            call["_meta"] = action["_meta"]  # a running `task` call names its subagent's chat here (1.8)
         parts.append({"kind": "toolCall", "toolCall": call})
     elif kind in ("chat/toolCallReady", "chat/toolCallComplete"):
         for part in parts:
@@ -736,7 +738,7 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
                             call[field] = found
                 else:
                     call["status"] = "running" if action.get("confirmed") else "pending-confirmation"
-                    for field in ("toolInput", "intention", "invocationMessage"):
+                    for field in ("toolInput", "intention", "invocationMessage", "confirmationTitle", "options", "_meta"):
                         if action.get(field) is not None:
                             call[field] = action[field]
     elif kind == "chat/usage" and isinstance(action.get("usage"), dict):

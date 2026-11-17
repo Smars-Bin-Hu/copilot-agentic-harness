@@ -46,6 +46,13 @@ const SERVE = (function () {
         () => Promise.reject(Object.assign(new Error(t("board.serve.stopped")), {offline: true})));  // offline: no answer at all (not a refusal); pollEvery counts these
   }
 
+  // A read of this server (GET) once the pairing of this load is done: the run card of autorun (`/api/autorun?task=`). A refusal shows the note for an unpaired browser; no answer at all is `offline`, as for `post`.
+  const read = (path) => ready.then(() => fetch(path, {credentials: "same-origin"}).then((response) => response.json().then((data) => {
+    if (response.ok) return data;
+    if (data.unpaired) unpairedNote();
+    return Promise.reject(Object.assign(new Error(data.error || response.status), {data}));
+  }), () => Promise.reject(Object.assign(new Error(t("board.serve.stopped")), {offline: true}))));
+
   // A POST with a deadline and nothing else: no bar for an unpaired browser, no reload. The Enter screen asks with it: a stalled server is an error line there, never a hang.
   function call(path, body, seconds) {
     const control = window.AbortController ? new AbortController() : null;
@@ -279,6 +286,7 @@ const SERVE = (function () {
     if (item.action === "confirm") return CHAT.confirm(row);  // the chat waits for a tool to be allowed (B75)
     if (item.action === "question") return CHAT.question(row);
     if (item.action === "stop") return CHAT.stop(row);
+    if (item.action === "autorun on") return AUTORUN.start(row);  // autorun.js: the Start form (models, spend limit, the code), not the code window of an approval
     if (item.action === "close") return close(row);
     if (item.action === "archive") return archive([row.name], serve.archive_to);
     // A plan stands on a confirmed requirement: the plan alone is refused, so one code confirms the requirement and approves the plan (1.7.38, C11 T2-11: no window of its own before the code; the window with the code says it).
@@ -302,16 +310,18 @@ const SERVE = (function () {
       const yes = h("button", {class: "act hot", type: "button"}, t("board.serve.confirm"));
       const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
       const said = h("div", {class: "bad"});
+      const quiet = item.action === "approve-plan" ? h("input", {type: "checkbox"}) : null;  // 1.8: approve, but do not wake the agent: autorun comes next
+      const quietRow = quiet ? h("label", {class: "sub", title: t("board.plan.nowake.tip")}, quiet, " " + t("board.plan.nowake")) : null;
       // What the terminal would show can be long (a promote lists every file): it scrolls in its own box, so the code and the buttons stay in view.
       const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), joint ? h("p", null, t("board.plan.req")) : null,
         joint && (row.req_sections || []).length ? h("p", {class: "bad"}, t("desk.req.unfinished", {sections: row.req_sections.join(", ")})) : null,  // the card says it; so does the window the code is typed in
         h("div", {class: "screen"}, data.result.screen.map((line) => h("p", {class: "sub"}, line))),
-        h("p", null, data.result.ask), input, h("div", {class: "row"}, yes, no), said]);
+        h("p", null, data.result.ask), input, quietRow, h("div", {class: "row"}, yes, no), said]);
       no.addEventListener("click", view.close);
       const send = () => {
         yes.disabled = true;
         yes.textContent = t("board.serve.working");
-        post("/api/act", {...body, step: "act", code: input.value.trim()}).then(() => { view.close(); done(); },
+        post("/api/act", {...body, step: "act", code: input.value.trim(), ...(quiet && quiet.checked ? {no_wake: true} : {})}).then(() => { view.close(); done(); },
           (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; yes.textContent = t("board.serve.confirm"); });
       };
       yes.addEventListener("click", send);
@@ -458,5 +468,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner(true));
   }
 
-  return {call, file, stay, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, restartVS, restartWhy, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
+  return {call, read, file, stay, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, restartVS, restartWhy, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
 })();

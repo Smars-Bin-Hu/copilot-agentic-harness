@@ -59,7 +59,7 @@ The agent loads these from what you say. You rarely type them.
 |---|---|---|
 | `/harness-task-report` | Shows the task board and where the time and usage of one task went | The report reads logs and costs tokens |
 | `/harness-agent-performance-review` | Says why the agent of one task spent its time and Credits where it did, how much was waste and whose (your words, the harness, the model, the environment, Copilot, the knowledge), critiques the prompts that caused waste and suggests changes. Also the button on a task's report page | It reads only the prompts the code picked; the dialog says about how much. Pick the model; high thinking is set |
-| `/harness-autorun` | Autorun (beta): the agent works down `TODO.md` without you watching, and stops only for what a person must decide | It changes how a task runs; only you may switch it on |
+| `/harness-autorun` | Autorun (beta): a scheduler and a worker do `TODO.md` step by step without you watching; questions are asked at the end | It changes how a task runs; only you may switch it on |
 | `/generic-goal-driven` | Long work that spans sessions: central idea, step list, progress pointer and change log kept as files; waits for your "passed" after each step | It is a whole way of working, not an everyday tool |
 | `/generic-mapreduce` | Splits a big reading job into parts for read-only mappers, then puts the answers together | Expensive: several subagents run at once |
 | `/generic-workflow-build` | Builds the skills of an approved workflow design | It writes many files; you approve the design first |

@@ -47,7 +47,7 @@ How it divides the work with `harness-rookie-quick-start`: quick-start takes a b
 | 7 | guardrails | Which files cannot be changed, who can change them, how they are guarded | [07-guardrails.md](references/07-guardrails.md) |
 | 8 | Permissions and sandbox | Asking versus refusing, approval in the terminal, the gate is not a sandbox, admin | [08-permission-sandbox.md](references/08-permission-sandbox.md) |
 | 9 | Tasks and their life cycle | The task folder, kinds and tiers, handover, two approvals, several rounds | [09-task-lifecycle.md](references/09-task-lifecycle.md) |
-| 10 | Subagents | When one is worth it, why there are only the reviewer and the mapper | [10-subagents.md](references/10-subagents.md) |
+| 10 | Subagents | When one is worth it, why there are only the reviewer, the mapper and the worker | [10-subagents.md](references/10-subagents.md) |
 | 11 | Independent checks | `[review]=n`, how they are counted, the limit, the waiver | [11-review.md](references/11-review.md) |
 | 12 | observe and report | Logs, statistics, reports, doctor, eval | [12-observe-report.md](references/12-observe-report.md) |
 | 13 | Common commands | Those for people, those for agents, when to use which | [13-commands.md](references/13-commands.md) |

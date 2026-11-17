@@ -113,6 +113,7 @@ There are two only, both switched on by you; the agent cannot switch them on.
 
 - **reviewer**: the independent check. It needs a task, a `[review]=n` you wrote, and `task review start` first.
 - **mapper**: reading in parallel chunks, read only. It needs you to type `/generic-mapreduce`; see below.
+- **worker**: does one step of `TODO.md` in autorun. Only the default agent of a task with autorun on can call it; see [autorun](#autorun-working-down-the-list-beta-only-you-can-switch-it-on).
 - Every other subagent is refused. A session in admin mode cannot call a subagent.
 - The platform's own semantic search is a tool and is not under this limit.
 
@@ -131,15 +132,22 @@ For a job that needs a lot of reading and can be split into parts that have noth
 
 After the plan is approved, what is left is doing it step by step. Autorun lets the agent work down `TODO.md` without you watching every step, and you come back to one whole diff.
 
-- **Only you can switch it on**: run `harness task autorun on` in the terminal; the screen lists the steps not done yet and the limits, and you type the code. When an agent runs this command, it is refused.
+- **Who does what**: the default agent only schedules. For each open step it calls the subagent `worker`, which does that one step in a fresh context and hands back one line. The run does not fill up one long chat.
+- **Only you can switch it on**: on the task page press **Start autorun**, or run `harness task autorun on` in a terminal. You pick the scheduler model and the worker model, the compact percent, the minutes and a spend limit, then type the code. When an agent runs this command, it is refused.
+- **Which models**: the scheduling chat must use a Claude model. With a GPT model the Claude worker gets no file tools. The Start form offers Claude models only.
+- **Spend limit**: no limit, or the recommended Credits, or twice or four times that. The limit is per run and is kept in the task, not in a policy.
+- **What Start does**: it sets Allow all, compacts the chat if it has history, then sends `/harness-autorun` with the model you chose.
 - **Needed before switching on**: an approved plan, unticked steps in `TODO.md`, and independent checks (`[review]=n`, n at least 1). Type `/harness-autorun`, and the agent takes you through getting these ready.
-- **How it moves on**: every time the agent wants to stop, a hook looks at the facts. If unticked steps are left, it makes the agent do the next one; when the steps are all ticked, it makes it pass the independent check; when the check has passed, it makes it produce the write-back plan, and then it stops.
-- **When it stops** (the code judges all of these): it is done; the plan changed; the checks are used up without a pass; the gate refused 2 times; it was pushed on 20 times; 120 minutes have passed; 3 times in a row with no progress; the agent itself says it cannot go on (`task autorun off --reason`); you switch it off (`task autorun off`).
-- **The scope stays the same**: it can write the task folder only, the plan is the version you approved, and git and the target repositories stay out of reach as before. Nothing is written back on the way.
+- **A step that cannot be settled is parked**: it is marked `[?]` and its question goes to `QUESTIONS.md`; the run goes on with the next step. A call the gate holds for you is listed there as `[held: ...]` and does not park the step. All questions are asked once, at the end, before the independent check.
+- **Three layers keep it going**: (1) the scheduler calls the worker step by step; (2) when the scheduler wants to stop early, the Stop hook looks at the facts and pushes it on; (3) the board relays when the chat stops (after 15 seconds, same model), waits 60, 300 and 900 seconds after an error and stops after 3, and at the compact percent it has the chat end its turn and sends `/compact` (a pit stop). With no board there is no relay.
+- **The run card** (on the task page): steps done, parked and left, spend of the limit, time left, relays, pit stops, warnings and questions. The step list comes from the run ledger `.task/autorun-run.jsonl`, written by code: one start line and one end line per worker call. A click on a step opens Trace at that call. **Stop** is on the card.
+- **When it stops** (the code judges all of these): `done`; `plan` (the plan changed); `review` (the checks are used up without a pass); `handoff` (you must run something outside); `stalled` (3 calls in a row with no progress); `time`; `steps` (the cap of calls); `budget` (the spend limit); `error` (3 relay errors); `person` (you stopped it); `agent` (going on would do harm). A refusal by the gate no longer stops the run.
+- **The scope stays the same**: the default agent writes only `TODO.md`, `TASK.md`, `LOG.md` and `QUESTIONS.md`; the worker writes the rest of the task folder. Git and the target repositories stay out of reach as before. Nothing is written back on the way.
+- **A worker's confirmation shows on the board.** When a tool of the worker needs a yes, you can approve it on the board.
 - **When it is done**: the write-back still needs your `task approve-promote`. The reason for the stop shows on the board (`task list`).
 - **It carries on after a change of session**: the state is in the task, and after a new session picks the task up, the counts and the time go on.
 - **Why it is beta**: whether it or "a person watching to the end" is better has not been evaluated yet. The numbers of the limits are under `autorun` in `task.json`.
-- **It is not the same as Copilot's own Autopilot**: that one is "every tool call is agreed to automatically". The board does not offer it, nor Copilot's Plan: a task has its own plan and autorun. Both can still be chosen in VS Code; the stops of autorun do not rely on "asking you", so they hold there too.
+- **It is not the same as Copilot's own Autopilot**: that one is "every tool call is agreed to automatically". The board does not offer it, nor Copilot's Plan: a task has its own plan and autorun. Start sets Allow all for the run; the stops of autorun do not rely on "asking you", so they hold.
 
 ## Admin mode: extending and debugging the harness (optional)
 
@@ -214,7 +222,7 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 | Check code against your company's standards | `generic-code-standards` (asks first) |
 | Read a lot in parallel | `/generic-mapreduce` (you start it) |
 | Work a long goal over many sessions | `/generic-goal-driven` (you start it) |
-| Let the agent work down a list unattended (beta) | `/harness-autorun` (you start it) |
+| Let the agent work down a list unattended (beta) | `/harness-autorun`; start it on the task page |
 | Turn a routine you repeat into skills | `generic-workflow-design` (asks first), then `/generic-workflow-build` (you start it) |
 | Make, check or repair a skill | `generic-build-new-skill` |
 | Make the toolkit for the repository map | `generic-kb-toolkit-design` (asks first), then `/generic-kb-toolkit-build` (you start it) |

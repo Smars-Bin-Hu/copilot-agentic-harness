@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from support import HarnessTestCase, payload, pre_tool, subagent_start
@@ -32,6 +33,14 @@ class BreakerUnitTests(unittest.TestCase):
         self.assertEqual(reasons[0][2], "same reason")
         self.assertIn("同一个拒绝已出现 3 次", reasons[2][2])
         self.assertIn("same reason", reasons[2][2])
+
+    def test_the_autorun_ask_deny_is_counted_nowhere(self) -> None:
+        state: Dict[str, Any] = {}
+        for _ in range(5):
+            decision = Decision(permission="deny", reason="write it in QUESTIONS.md", facts={"kind": "autorun-ask"})
+            self.assertIsNone(breaker.apply(Path("/nowhere"), state, self.event(), decision))
+            self.assertEqual(decision.reason, "write it in QUESTIONS.md")
+        self.assertEqual(state.get("denials", {}), {})
 
     def test_other_decisions_are_not_counted(self) -> None:
         from pathlib import Path

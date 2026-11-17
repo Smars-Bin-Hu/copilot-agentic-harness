@@ -47,6 +47,8 @@ def apply(root: Path, state: Dict[str, Any], event: HookEvent, decision: Decisio
     """Count a PreToolUse deny. From the limit on, change `decision.reason` in place. Returns the log entry, or None."""
     if event.event != "PreToolUse" or decision.permission != "deny" or not decision.reason:
         return None
+    if decision.facts.get("kind") == "autorun-ask":
+        return None  # autorun tells the agent to write the question down and go on: that deny is counted nowhere (design 11)
     limit = repeat_limit(root)
     key = hashlib.sha256(decision.reason.encode("utf-8")).hexdigest()[:12]
     counts = state.setdefault("denials", {})

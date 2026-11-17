@@ -21,7 +21,7 @@ import json
 import os
 import re
 
-from core import calls, govern, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
+from core import autorunfiles, calls, govern, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
 from core import systems as systems_mod
 from core.paths import board_serve_port
 from core.context import Context
@@ -72,11 +72,17 @@ def check_task_write(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return None  # a task that is gone or closed binds nobody
     approved = tasks.plan_approved(ctx.root, task, data)
     dev = f"{task}/{tasks.DEV_NAME}"
+    autorun_on = isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"  # a task in autorun: who writes what is fixed (the default agent: four files; the worker: not those)
+    worker = bool(ctx.state.get("parent_session_id"))
     for raw in event.paths:
         for relative in repo_paths.repo_relative(raw, ctx.root, event.cwd):
             shown = relative if relative is not None else raw
             if relative is None or not _within(relative, task) or relative.lower() in (task.lower(), dev.lower()):
                 return Decision(permission="deny", reason=rules.task_outside(shown, task), facts={"kind": "task-scope"})
+            if autorun_on:
+                limited = _autorun_write(relative, task, shown, worker)
+                if limited:
+                    return limited
             if _within(relative, dev):
                 if not approved:
                     again = tasks.plan_req_changed(ctx.root, task, data)  # approved before, for a requirement that is another one now
@@ -85,6 +91,21 @@ def check_task_write(event: HookEvent, ctx: Context) -> Optional[Decision]:
             top = relative[len(task) :].strip("/").split("/", 1)[0]
             if top.lower() in tasks.PERSON_DIRS:
                 return Decision(permission="deny", reason=rules.task_person_files(shown, task), facts={"kind": "task-scope"})
+    return None
+
+
+AUTORUN_FILES = tuple(name.lower() for name in (tasks.TODO_FILE, tasks.TASK_FILE, tasks.LOG_FILE, autorunfiles.QUESTIONS_FILE))
+
+
+def _autorun_write(relative: str, task: str, shown: str, worker: bool) -> Optional[Decision]:
+    """A task in autorun (design 11, D2). The default agent writes TODO.md, TASK.md, LOG.md and QUESTIONS.md of the task and nothing else: the rest is the worker's. The worker writes
+    anything the rules above allow except those four. Not a stop: the agent parks the step."""
+    below = relative[len(task) :].strip("/")
+    four = "/" not in below and below.lower() in AUTORUN_FILES
+    if worker and four:
+        return Decision(permission="deny", reason=messages.text("autorun.deny.write_worker", shown=shown), facts={"kind": "autorun-write"})
+    if not worker and not four:
+        return Decision(permission="deny", reason=messages.text("autorun.deny.write", task=task, shown=shown), facts={"kind": "autorun-write"})
     return None
 
 
@@ -701,12 +722,37 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     """The gate. When the whole handler raises (hook.py then counts the gate as having no opinion, and the call goes through), a call to a program or an MCP tool of a tool pack is refused instead (1.7.38, C13 F2)."""
     try:
-        return _handle(event, ctx)
+        decided = _handle(event, ctx)
     except Exception as error:  # noqa: BLE001 - see above; everything else is left as it was: the error is raised again
         refused = failclosed.decision(ctx.root, event, error)
         if refused is not None:
             return refused
         raise
+    if decided is not None and decided.permission in ("deny", "ask") and event.event == "PreToolUse" and ctx.state.get("parent_session_id"):
+        park_worker_call(event, ctx, decided)
+    return decided
+
+
+# What the worker may not do and the agent that called it must not hand to a person: nothing to decide there.
+NOT_PARKED = ("autorun-write", "task-scope", "write-no-path")
+
+
+def park_worker_call(event: HookEvent, ctx: Context, decided: Decision) -> None:
+    """The gate held (or refused) a call of the worker of a task in autorun: it goes to QUESTIONS.md as a held line, and into the tally of the call. Never in the way of the gate."""
+    try:
+        task = ctx.state.get("active_task")
+        data = tasks.read(ctx.root, task) if task else None
+        if data is None or not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
+            return
+        kind = str(decided.facts.get("kind") or "")
+        held = decided.permission == "ask" or kind == "git-approval" or (isinstance(decided.facts.get("external"), dict) and decided.facts["external"].get("decision") in ("outbox", "human"))
+        if kind in NOT_PARKED:
+            autorunfiles.tally_add(ctx.root, task, "denied")
+            return
+        summary = event.command or ", ".join(event.paths) or event.tool_name
+        autorunfiles.park_held_call(ctx.root, task, event.tool_name, summary, denied=not held)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:

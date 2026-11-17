@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.7.46-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.8.0-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -150,7 +150,7 @@ After that, daily use takes one sentence: press **New task** on the board, or te
 | **"Done" comes without evidence.** What changed and who checked it are hard to trace afterwards | **Visible and reviewable.** Every session has a log and every task has a report. `harness task list` shows which tasks are waiting for you |
 | **Cost is hard to control.** Small tasks go through the same heavy process | **Saves time and money.** Commands do the deterministic work instead of the model, the agent reads only what it needs, and small tasks skip the heavy process |
 
-There is more: queued write-back when several tasks target the same repository, tasks that update the knowledge base, parallel chunked reading (`/generic-mapreduce`), and autorun, which works through a checklist unattended (beta). See [features](docs/02-features.md) for the full list.
+There is more: queued write-back when several tasks target the same repository, tasks that update the knowledge base, parallel chunked reading (`/generic-mapreduce`), and autorun, where a scheduler and a worker for each step work through a checklist unattended (beta). See [features](docs/02-features.md) for the full list.
 
 > The gate checks the text of a command. It **prevents mistakes; it does not stop someone who is trying to get around it**. Do not treat it as a sandbox.
 
@@ -235,4 +235,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.7.46 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.8.0 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

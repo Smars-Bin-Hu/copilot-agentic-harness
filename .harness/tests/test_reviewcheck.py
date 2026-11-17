@@ -146,7 +146,7 @@ class GateTests(ReviewCase):
     def test_autorun_stops_while_a_run_is_handed_to_the_person(self) -> None:
         data = {"autorun": {"state": "on", "until": "2999-01-01T00:00:00+00:00"}, "handoff": {"what": "run", "env": "DEV"}}
         info = {"passes": 0, "n": 0, "waived": False, "pending_round": None, "checks_used": 0, "checks_limit": 0}
-        with mock.patch.object(autorun.tasks, "plan_approved", return_value=True), mock.patch.object(autorun, "denies", return_value=0):
+        with mock.patch.object(autorun.tasks, "plan_approved", return_value=True):
             self.assertEqual(autorun.stop_reason(self.root, JOB, data, info), "handoff")
             data.pop("handoff")
             self.assertNotEqual(autorun.stop_reason(self.root, JOB, data, info), "handoff")

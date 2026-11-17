@@ -158,7 +158,7 @@ class ToolKindsFileTests(unittest.TestCase):
         data = common.tool_kinds()
         for surface, body in data["surfaces"].items():
             for tool, kind in body["tools"].items():
-                self.assertIn(kind, {"read", "edit", "create", "terminal", "search", "subagent", "mcp", "web", "skill", "meta"}, f"{surface}:{tool}")
+                self.assertIn(kind, {"read", "edit", "create", "terminal", "search", "subagent", "mcp", "web", "skill", "meta", "ask"}, f"{surface}:{tool}")
         self.assertTrue(data["surfaces"]["vscode"]["verified"])
         self.assertEqual(list(data["surfaces"]), ["vscode"])
 

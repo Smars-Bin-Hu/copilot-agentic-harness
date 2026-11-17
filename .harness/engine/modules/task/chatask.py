@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import redact
 
 CONFIRM, CHAT_INPUT = "toolConfirmation", "chatInput"
+SUB = "sub|"  # the start of the id of an item that waits in a subagent's chat
 PENDING = "pending-confirmation"
 KINDS = ("single-select", "multi-select", "text", "boolean", "number", "integer")
 MAX_COMMAND = 400  # characters of a command shown on the page and kept in the history
@@ -83,6 +84,34 @@ def question_view(question: Any) -> Optional[Dict[str, Any]]:
             "free": question["kind"] in ("single-select", "multi-select") and question.get("allowFreeformInput") is not False}  # VS Code's own rule: a list takes typed words unless it says it does not
 
 
+RUNNING = ("running", "streaming", "pending-confirmation")  # the states of a tool call that has not ended
+
+
+def sub_calls(state: Any) -> List[Dict[str, str]]:
+    """The subagent calls that run now in a chat state (1.8): a `task` tool call whose `_meta` names the chat of its subagent (`subagentChatUri`). `{chat, agent, call}`, oldest first."""
+    active = state.get("activeTurn") if isinstance(state, dict) else None
+    found = []
+    for part in (active.get("responseParts") if isinstance(active, dict) else None) or []:
+        call = part.get("toolCall") if isinstance(part, dict) else None
+        meta = (call.get("_meta") if isinstance(call, dict) else None) or (part.get("_meta") if isinstance(part, dict) else None)
+        if isinstance(call, dict) and isinstance(meta, dict) and meta.get("subagentChatUri") and call.get("status") in RUNNING:
+            found.append({"chat": str(meta["subagentChatUri"]), "agent": one_line(meta.get("subagentAgentName") or "", 60), "call": str(call.get("toolCallId") or "")})
+    return found
+
+
+def sub_item(chat: str, agent: str, state: Any) -> Optional[Dict[str, Any]]:
+    """The oldest tool call of a subagent's chat that waits for a confirmation, as an `inputNeeded` item that `shown` and `confirm_action` take (1.8). The id starts with `sub|`: it names the chat, so
+    the thread knows to read that chat again and to send the answer to it. None: nothing waits there."""
+    active = state.get("activeTurn") if isinstance(state, dict) else None
+    if not isinstance(active, dict) or not active.get("id"):
+        return None
+    for part in active.get("responseParts") or []:
+        call = part.get("toolCall") if isinstance(part, dict) else None
+        if isinstance(call, dict) and call.get("status") == PENDING and call.get("toolCallId"):
+            return {"id": f"{SUB}{chat}|{call['toolCallId']}", "chat": chat, "kind": CONFIRM, "turnId": active["id"], "toolCall": call, "agent": agent}
+    return None
+
+
 def shown(item: Any) -> Optional[Dict[str, Any]]:
     """An `inputNeeded` item as the page shows it, or None when it is not one of the two kinds (or is not whole). `digest` names what was shown: a changed item has another."""
     if not isinstance(item, dict) or not item.get("id") or not item.get("chat"):
@@ -92,7 +121,7 @@ def shown(item: Any) -> Optional[Dict[str, Any]]:
         if not isinstance(call, dict) or call.get("status") != PENDING or not call.get("toolCallId") or not item.get("turnId"):
             return None
         whole = command_of(call)
-        return {"kind": "confirm", "id": str(item["id"]), "tool_call_id": str(call["toolCallId"]), "tool": one_line(call.get("toolName") or "", 60), "title": one_line(call.get("confirmationTitle") or "", MAX_LINE),
+        return {"kind": "confirm", **({"agent": one_line(item["agent"], 60)} if item.get("agent") else {}), "id": str(item["id"]), "tool_call_id": str(call["toolCallId"]), "tool": one_line(call.get("toolName") or "", 60), "title": one_line(call.get("confirmationTitle") or "", MAX_LINE),
                 "intention": one_line(call.get("intention") or "", MAX_LINE), "command": clip(whole, MAX_COMMAND), "digest": digest_of(item["id"], item["turnId"], call["toolCallId"], call.get("toolName"), whole)}
     if item.get("kind") == CHAT_INPUT:
         request = item.get("request")
@@ -189,7 +218,8 @@ def find(items: Any, ident: str) -> Optional[Dict[str, Any]]:
     return next((item for item in items or [] if isinstance(item, dict) and item.get("id") == ident), None)
 
 
-def first_for(items: Any, chat: str) -> Tuple[Optional[Dict[str, Any]], int]:
+def first_for(items: Any, chat: Any) -> Tuple[Optional[Dict[str, Any]], int]:
     """The oldest item of this chat that is one of the two kinds, and how many there are. The page shows one at a time: the one answered first."""
-    mine = [view for view in (shown(item) for item in items or [] if isinstance(item, dict) and item.get("chat") == chat) if view]
+    chats = {chat} if isinstance(chat, str) else set(chat)  # the chat of the task and, while their calls run, the chats of its subagents
+    mine = [view for view in (shown(item) for item in items or [] if isinstance(item, dict) and item.get("chat") in chats) if view]
     return (mine[0] if mine else None), len(mine)

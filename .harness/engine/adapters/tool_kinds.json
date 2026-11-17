@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Tool name -> tool kind, per surface. Kinds: read, edit, create, terminal, search, subagent, mcp, web, skill, meta. Unknown tools get kind 'other'.",
+  "description": "Tool name -> tool kind, per surface. Kinds: read, edit, create, terminal, search, subagent, mcp, web, skill, meta, ask. Unknown tools get kind 'other'.",
   "surfaces": {
     "vscode": {
       "verified": true,
@@ -30,8 +30,8 @@
         "skill": "skill",
         "tool_search_tool": "meta",
         "task_complete": "meta",
-        "AskUserQuestion": "meta",
-        "ask_user": "meta",
+        "AskUserQuestion": "ask",
+        "ask_user": "ask",
         "multi_replace_string_in_file": "edit",
         "insert_edit_into_file": "edit",
         "apply_patch": "edit",

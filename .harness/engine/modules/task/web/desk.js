@@ -556,7 +556,8 @@
     ui.tabs = h("div", {class: "tk-tabs"});
     ui.pane = h("div", {class: "pane tk-pane"});
     ui.live = typeof LIVE !== "undefined" ? LIVE.node : h("div", {hidden: ""});  // the stream of the Live tab: made once, outside the part that is drawn again, so its animations go on
-    ui.surface = h("section", {class: "tk-surface"}, ui.wait, ui.tabs, ui.live, ui.pane);
+    ui.run = typeof AUTORUN !== "undefined" ? AUTORUN.node : h("div", {hidden: ""});  // the run card of autorun (autorun.js): made once, it keeps its own list open and scrolled
+    ui.surface = h("section", {class: "tk-surface"}, ui.run, ui.wait, ui.tabs, ui.live, ui.pane);
     ui.foot = h("div", {class: "tk-foot"});
     ui.root = h("div", {class: "tk"}, ui.head, ui.info, ui.forks.node, SHELL.banner(), ui.surface, ui.foot);
     app.replaceChildren(ui.root);
@@ -1061,7 +1062,7 @@
     const asked = (item) => h("div", {class: "tk-peek-q"}, item.title !== found.message ? h("b", null, item.title) : null, item.message && item.message !== item.title ? h("p", {class: "sub"}, item.message) : null,
       item.options.length ? h("ul", null, item.options.map((option) => h("li", null, option.label))) : null, item.free ? h("p", {class: "sub"}, t("desk.ask.peek.free")) : null);
     return {sig: JSON.stringify(found), build: () => h("div", {class: "tk-peek"}, found.kind === "confirm"
-      ? [found.title ? h("b", null, found.title) : null, found.intention ? h("p", {class: "sub"}, found.intention) : null, h("pre", {class: "send-preview"}, found.command || "-"), h("p", {class: "sub"}, t("board.ask.call", {tool: found.tool || "-", id: found.tool_call_id}))]
+      ? [found.agent ? h("p", {class: "sub"}, t("board.ask.agent", {agent: found.agent})) : null, found.title ? h("b", null, found.title) : null, found.intention ? h("p", {class: "sub"}, found.intention) : null, h("pre", {class: "send-preview"}, found.command || "-"), h("p", {class: "sub"}, t("board.ask.call", {tool: found.tool || "-", id: found.tool_call_id}))]
       : [h("b", null, found.message), (found.questions || []).map(asked)],
     found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null)};
   }
@@ -2460,7 +2461,28 @@
     return h("li", {class: "tr-decision " + item.what}, stamp, h("div", {class: "what"}, body || h("div", null, ...head, mark ? [" ", mark] : null)));
   }
 
+  // A click on a step of the run card (autorun.js) opens this tab with the calls of that worker marked (1.8, step 9). The Trace cannot be filtered: the prompt that holds the call is opened and the calls in its time window are marked and scrolled to.
+  let traceMark = null;  // {n, start, end, time, opened, scrolled}: the window of one worker call, in ms
+  const inMark = (at) => { const moment = Date.parse(at); return traceMark !== null && moment >= traceMark.start - 1500 && moment <= traceMark.end + 1500; };
+  function traceAt(item) {
+    traceMark = {n: item.step === null || item.step === undefined ? "-" : item.step, start: Date.parse(item.start), end: item.end ? Date.parse(item.end) : Date.now() + 3600000, time: when(item.start, 11, 19), opened: false, scrolled: false};
+    if (!visible("trace")) { traceMark = null; return; }
+    if (current === "trace") { draw(true); pull(); return; }
+    goTab("trace");
+  }
+  function scrollToMark() {
+    if (!traceMark || current !== "trace" || traceMark.scrolled || !(desk.trace && desk.trace.tree && desk.trace.tree.prompts && desk.trace.tree.prompts.length)) return;
+    const hit = app.querySelector(".tr-hit");
+    traceMark.scrolled = true;
+    if (hit) { const box = hit.closest("details"); if (box) box.open = true; setTimeout(() => hit.scrollIntoView({block: "center"}), 0); }
+    else { const note = app.querySelector(".ar-trace-note"); if (note) note.append(h("span", {class: "sub"}, t("desk.autorun.trace.missing"))); }
+  }
   function traceRow(item) {
+    const row = traceRowPlain(item);
+    if (traceMark && (item.source || item.kind === "subagent") && inMark(item.at)) row.classList.add("tr-hit");
+    return row;
+  }
+  function traceRowPlain(item) {
     const stamp = h("span", {class: "when sub"}, when(item.at, 5, 19));
     if (item.kind === "prompt") return h("li", {class: "tr-prompt"}, stamp, h("div", {class: "what sub"}, t("desk.trace.prompt")));
     if (item.kind === "think") return h("li", {class: "tr-think"}, stamp, h("div", {class: "what sub"}, t("desk.trace.think"), " \u00b7 " + spent(item.seconds)));
@@ -2531,6 +2553,15 @@
   function trace() {
     const found = desk.trace, tree = found.tree;
     const notes = (desk.warn || []).map((item) => h("p", {class: "warn-note"}, tag("\u26a0", "warn"), " ", t("board.warn." + item.rule, {n: item.n})));
+    if (traceMark) {
+      const clear = h("button", {type: "button", class: "act"}, t("desk.autorun.trace.clear"));
+      clear.addEventListener("click", () => { traceMark = null; draw(true); });
+      notes.push(h("div", {class: "ar-trace-note"}, tag(t("desk.autorun.trace.focus", {n: traceMark.n, time: traceMark.time}), "run"), clear));
+      if (tree && tree.prompts && !traceMark.opened) {  // the prompt that holds the call: the newest one that began before it
+        const holder = tree.prompts.filter((node) => Date.parse(node.at) <= traceMark.start + 1500).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] || tree.prompts[0];
+        if (holder) { traceOpen.set(holder.n, true); traceMark.opened = true; }
+      }
+    }
     if (tree && tree.prompts && tree.prompts.length) return [h("p", {class: "hint top"}, t("desk.trace.hint.tree")), notes, traceStats(tree.stats), traceProblems(tree), h("div", {class: "tr-tree"}, tree.prompts.map((node, index) => promptNode(node, index === 0)))];
     return [h("p", {class: "hint top"}, t("desk.trace.hint")), notes, h("ol", {class: "timeline trace"}, found.entries.slice().reverse().map(traceRow)), found.cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: found.cut})) : null];
   }
@@ -2594,6 +2625,7 @@
       ? {key: field.dataset.keep, start: field.selectionStart, end: field.selectionEnd, way: field.selectionDirection || "none"} : null;
     paintHead();
     paintLive();
+    if (typeof AUTORUN !== "undefined") AUTORUN.watch({task: desk.name, run: served() && !saved && !desk.past && Boolean(desk.autorun || desk.autorun_run), on: Boolean(desk.autorun), onTrace: traceAt});
     fill(ui.tabs, nav());
     fill(ui.pane, body());
     ui.pane.hidden = !ui.pane.firstChild;
@@ -2608,6 +2640,7 @@
         try { again.setSelectionRange(typing.start, typing.end, typing.way); } catch (error) { /* a field that takes no range */ }
       }
     }
+    scrollToMark();
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);
       window.scrollTo(0, y);

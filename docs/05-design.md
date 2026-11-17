@@ -113,8 +113,8 @@ Why your exact words are not kept: a prompt may leave things out or be unclear, 
 Several agents are worth it only when they buy one of three things: an independent point of view, parallel work, or working unattended. So:
 
 - **There is no dedicated dispatching agent.** Whoever dispatches has to understand the task, and the one who moves a task forward is the agent that holds it.
-- **There are two subagents only.** The reviewer buys an independent point of view: it has not seen the author's reasoning and looks only at the requirement, the work and the diff. The mapper buys parallel work: several read-only readers each read one part and hand in a summary only (`/generic-mapreduce`).
-- **Working unattended is not an agent; it is a mode of a task** (autorun, beta). The one who moves the task forward is still the agent that holds it; the Stop hook makes it go on or lets it stop, by the facts.
+- **There are three subagents only.** The reviewer buys an independent point of view: it has not seen the author's reasoning and looks only at the requirement, the work and the diff. The mapper buys parallel work: several read-only readers each read one part and hand in a summary only (`/generic-mapreduce`). The worker buys a fresh context for each step of an autorun, so a long run does not fill one chat.
+- **Working unattended is a mode of a task** (autorun, beta). The default agent only schedules; the worker does one step per call in a fresh context. Three layers keep it going: the scheduler calling the worker, the Stop hook, and the board relay. A step that cannot be settled is parked and asked at the end; the code, not a model, says when the run stops.
 - **All three have to be switched on by the user**: they cost money or hand over control.
 - **Agents do not pass messages to each other; they all read and write the files of the task folder.** A subagent has no state and cannot ask back. People can read the files too, and the work can go on after a break. The reviewer's input is the review package, and a hook writes its output to disk.
 

@@ -71,7 +71,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import superbrain, superpreview, superview
+from . import superbrain, superpreview, superroute, superview
 from . import accept, autorun, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
@@ -2098,7 +2098,15 @@ def handler_for(board: Board) -> type:
                     return self.answer(500, {"error": str(error)})
             if path == "/api/super":  # the super agent view (1.8.1): what waits for the person across the open tasks, from the same rows as /api/board; a read, with the same checks
                 try:
-                    return self.answer(200, superview.build(board.rows()))
+                    result = board.rows()
+                    view = superview.build(result)
+                    paths = {superview.name_of(row): str(row["task"]) for row in result.get("rows") or []}
+                    for item in view["items"]:
+                        if item["why"] in ("stopped", "accept", "cancelled") and item["task"] in paths:
+                            said = superroute.said_of(board.link, paths[item["task"]])  # the agent's last words, from what the link holds
+                            if said:
+                                item["said"] = said
+                    return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(500, {"error": str(error)})
             if path == "/api/board":

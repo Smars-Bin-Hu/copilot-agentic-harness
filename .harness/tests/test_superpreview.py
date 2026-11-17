@@ -15,11 +15,22 @@ from modules.task import superpreview
 
 class PlainTests(unittest.TestCase):
     def test_markdown_marks_go_and_long_lines_are_cut(self) -> None:
-        lines = superpreview.plan_lines("# Plan\n\n1. **Add** the `col` to [a.sql](x.md)\n   - sub step\n- [ ] " + "w" * 300 + "\n```\n- in code\n```\n")
+        lines = superpreview.plan_lines("# Plan\n\n1. **Add** the `col` to [a.sql](x.md)\n   - sub step\n- [ ] " + "w" * 300 + "\n```\n- in code\n```\n")["other"]
         self.assertEqual(lines[:2], ["Plan", "Add the col to a.sql"])
         self.assertEqual(len(lines), 3)
         self.assertLessEqual(len(lines[2]), superpreview.MAX_CHARS)
         self.assertTrue(lines[2].endswith("…"))
+
+    def test_underscores_and_stars_inside_names_stay_and_wrapping_marks_go(self) -> None:
+        self.assertEqual(superpreview.plain("Edit `usp_load_orders_header.sql` and src/my_file_name.py"), "Edit usp_load_orders_header.sql and src/my_file_name.py")
+        self.assertEqual(superpreview.plain("usp_load_orders_header.sql"), "usp_load_orders_header.sql")
+        self.assertEqual(superpreview.plain("**bold** and _soft_ and __strong__ and *it*"), "bold and soft and strong and it")
+        self.assertEqual(superpreview.plain("a * b and snake_case_word"), "a * b and snake_case_word")
+
+    def test_numbered_steps_are_preferred_over_headings_and_bullets(self) -> None:
+        found = superpreview.plan_lines("# Plan\n\n## Steps\n1. Fetch it\n2) Add it\n- a file note\n   3. indented\n## Files\n- x.sql\n")
+        self.assertEqual(found["numbered"], ["Fetch it", "Add it"])
+        self.assertEqual(found["other"], ["Plan", "Steps", "Fetch it", "Add it", "a file note", "Files", "x.sql"])
 
 
 class PreviewCase(ServeCase):
@@ -36,7 +47,9 @@ class PreviewCase(ServeCase):
 class PlanTests(PreviewCase):
     def test_headings_and_steps_come_as_plain_lines(self) -> None:
         self.write_plan("# Plan\n\n## Steps\n1. Fetch `a.sql`\n2. Add the column\n   - a sub step\n- Run the checks\n\nsome prose\n")
-        self.assertEqual(self.look({"task": TASK, "kind": "plan"}), {"ok": True, "lines": ["Plan", "Steps", "Fetch a.sql", "Add the column", "Run the checks"], "more": False})
+        self.assertEqual(self.look({"task": TASK, "kind": "plan"}), {"ok": True, "lines": ["Fetch a.sql", "Add the column"], "more": False, "total": 2})
+        self.write_plan("# Plan\n\n## Steps\n- Run the checks\n- Then more\n")
+        self.assertEqual(self.look({"task": TASK, "kind": "plan"}), {"ok": True, "lines": ["Plan", "Steps", "Run the checks", "Then more"], "more": False, "total": 4})  # headings only when nothing is numbered
 
     def test_at_most_twelve_lines_and_more_says_so(self) -> None:
         self.write_plan("\n".join(f"{n}. step {n}" for n in range(1, 13)) + "\n")
@@ -45,6 +58,7 @@ class PlanTests(PreviewCase):
         self.write_plan("\n".join(f"{n}. step {n}" for n in range(1, 16)) + "\n")
         found = self.look({"task": TASK, "kind": "plan"})
         self.assertEqual((len(found["lines"]), found["more"], found["lines"][-1]), (12, True, "step 12"))
+        self.assertEqual(found["total"], 15)
 
     def test_a_plan_with_no_usable_line_or_no_file_is_missing(self) -> None:
         self.write_plan("just prose\n\n#\n-\n")

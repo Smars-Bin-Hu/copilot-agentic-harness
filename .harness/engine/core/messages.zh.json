@@ -1705,7 +1705,7 @@
   "super.reply.ph": "回复这个问题",
   "super.reply.send": "发送",
   "super.reply.tip": "Enter 发送，Shift+Enter 换行",
-  "super.reply.done": "你已回复",
+  "super.reply.done": "已回复",
   "super.route.ph": "问 {task}",
   "super.route.waiting": "已问，等回答…",
   "super.route.queued": "已问，排队中：当前这一轮结束后回答",

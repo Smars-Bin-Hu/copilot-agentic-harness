@@ -255,8 +255,10 @@ const SUPER = (function () {
 
     // A chat that asks the person, or a held outside call: the real question or command is in `detail`, the `title` is a generic line. Show the detail as the message when there is one.
     const asksPerson = (item) => ["confirm", "question", "asking", "outbox"].includes(item.why) && Boolean(item.detail);
-    const mainOf = (item) => (asksPerson(item) ? item.detail : item.title);
+    const said = (item) => (item.said && !asksPerson(item) ? String(item.said) : "");  // the agent's last words of a stopped, accepted or cancelled task
+    const mainOf = (item) => (asksPerson(item) ? item.detail : said(item) || item.title);
     const fullOf = (item) => (asksPerson(item) ? item.detail : "");
+    const saidLong = (item) => String(said(item)).split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 60)), 0) > 8;
 
     // One item of the board: who it comes from, what it is, its buttons. Its buttons are drawn again only when the row of the task changed what they would be.
     function sigFor(item) {
@@ -327,7 +329,7 @@ const SUPER = (function () {
     function previewFill(box, item, kind, result) {
       const list = (kind === "plan" ? result.lines : result.files) || [];
       if (!result || result.ok !== true || !list.length) return;
-      const count = list.length + (result.more ? "+" : "");
+      const count = kind === "plan" && result.total ? result.total : list.length + (result.more ? "+" : "");
       const sum = kind === "plan" ? t("super.preview.plan.sum", {n: count}) : t(list.length === 1 && !result.more ? "super.preview.changes.one" : "super.preview.changes.sum", {n: count});
       box.replaceChildren(h("summary", null, sum), h("ul", {class: "sa-pvlist"}, ...previewRows(kind, result)),
         taskLink(item.task, t(kind === "plan" ? "super.preview.plan.open" : "super.preview.changes.open") + " \u2197", "sa-pvopen"));
@@ -347,10 +349,14 @@ const SUPER = (function () {
       const waited = h("span", {class: "sa-when"});
       const what = h("div", {class: "sa-what"}, mainOf(item));
       what.title = fullOf(item);
-      if (asksPerson(item)) {  // the question or command itself is the message: a few lines, the rest on a click
+      if (said(item)) what.replaceChildren(...linked(said(item)));
+      let saidMore = null;
+      if (said(item)) what.classList.add("said");
+      if (said(item) && saidLong(item)) { saidMore = h("button", {type: "button", class: "sa-askmore"}, t("super.more")); saidMore.addEventListener("click", () => { what.classList.add("open"); saidMore.hidden = true; }); }
+      if (asksPerson(item) || saidLong(item)) {  // the question or command itself is the message: a few lines, the rest on a click
         what.classList.add("ask");
         what.tabIndex = 0;
-        const flip = () => what.classList.toggle("open");
+        const flip = () => { what.classList.toggle("open"); if (saidMore) saidMore.hidden = what.classList.contains("open"); };
         what.addEventListener("click", flip);
         what.addEventListener("keydown", (event) => { if (isEnter(event)) { event.preventDefault(); flip(); } });
       }
@@ -359,7 +365,7 @@ const SUPER = (function () {
       const more = !asksPerson(item) && item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
       const node = h("div", {class: "sa-row item", "data-task": item.task, "data-id": item.id},
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
-        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, note, more, acts));
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, saidMore, note, more, acts));
       const entry = {item, node, acts, waited, what, note, sig: "", clicked: ""};
       if (item.why === "stopped") node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
       const preview = previewBox(item);
@@ -394,7 +400,7 @@ const SUPER = (function () {
         const entry = known.get(item.id);
         if (!entry || entry.done) continue;
         entry.item = item;
-        if (entry.what.textContent !== mainOf(item)) { entry.what.textContent = mainOf(item); entry.what.title = fullOf(item); }
+        if (entry.what.textContent !== mainOf(item)) { if (said(item)) entry.what.replaceChildren(...linked(said(item))); else entry.what.textContent = mainOf(item); entry.what.title = fullOf(item); }
         drawWaited(entry);
         if (entry.sig !== sigOf(entry)) drawActs(entry);
       }

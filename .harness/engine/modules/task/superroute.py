@@ -4,7 +4,7 @@
          break into the turn that runs). The question is recorded in today's super record, under `asks`. `why`: `empty`, `long`, `unknown`, `paused`, `nochat`, `asleep`, `error`, or the reason
          of `vslink.Refused` as it is.
   read   `read(brain, rec)`: take the answers into `rec["asks"]` from what the link already holds of each task's chat (the cache; no call to the host). True when something changed.
-  An ask is `{id, task, text, at, state, turn, answer, answer_at, end}` (+ `why` on `failed`). `state`: sent, queued, answered, failed. `sent` and `sent_ts` are kept in the record only.
+  An ask is `{id, task, text, at, state, turn, answer, answer_at, end}` (+ `why` on `failed`). `state`: sent, queued, answered, failed. `path` (the task folder; older records hold it in `task`), `sent` and `sent_ts` are kept in the record only. The page gets `task` as the short name.
 """
 
 from __future__ import annotations
@@ -27,9 +27,22 @@ OPEN = ("sent", "queued")
 PUBLIC = ("id", "task", "text", "at", "state", "turn", "answer", "answer_at", "end", "why")
 
 
+def short(task: str) -> str:
+    """The short name (the folder name) of a task path; a name that has no folder part stays as it is."""
+    return str(task).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or str(task)
+
+
+def path_of(entry: Dict[str, Any]) -> str:
+    """The task folder an entry belongs to: `path` when the record has it, else `task` (older records hold the path there)."""
+    return str(entry.get("path") or entry["task"])
+
+
 def public(entry: Dict[str, Any]) -> Dict[str, Any]:
-    """The entry as the page and the history see it."""
-    return {key: entry[key] for key in PUBLIC if key in entry}
+    """The entry as the page and the history see it: `task` is the short name, as everywhere else in the super view."""
+    out = {key: entry[key] for key in PUBLIC if key in entry}
+    if "task" in out:
+        out["task"] = short(out["task"])
+    return out
 
 
 def valid(entry: Any) -> bool:
@@ -95,7 +108,7 @@ def ask(brain: Any, data: Dict[str, Any]) -> Dict[str, Any]:
             pass
         return refusal("error")
     state = "sent" if kind == "send" else "queued"
-    entry = {"id": "ask-" + uuid.uuid4().hex[:12], "task": task, "text": words, "at": utc_now(), "state": state, "turn": str(done.get("turn") or "") if kind == "send" else "",
+    entry = {"id": "ask-" + uuid.uuid4().hex[:12], "task": short(task), "path": task, "text": words, "at": utc_now(), "state": state, "turn": str(done.get("turn") or "") if kind == "send" else "",
              "answer": "", "answer_at": "", "end": "", "sent": text, "sent_ts": time.time()}
     with brain.lock:
         rec = brain.load()
@@ -161,7 +174,7 @@ def read(brain: Any, rec: Dict[str, Any]) -> bool:
     for entry in rec["asks"]:
         if entry.get("state") not in OPEN:
             continue
-        task = str(entry["task"])
+        task = path_of(entry)
         if task not in snapshots:
             snapshots[task] = chat_state(brain.link, task)
         snapshot = snapshots[task]
@@ -190,3 +203,18 @@ def read(brain: Any, rec: Dict[str, Any]) -> bool:
                 entry["why"] = end
             changed = True
     return changed
+
+
+MAX_SAID = 1200  # characters of the agent's last words sent to the page
+
+
+def said_of(link: Any, task: str) -> str:
+    """The agent's last words in the task's chat: the text parts of the last ended turn, from what the link holds (no call to the host), cut to `MAX_SAID`; an empty string when the link does not know the chat."""
+    snapshot = chat_state(link, task)
+    if not snapshot:
+        return ""
+    for turn in reversed(snapshot["turns"]):
+        words = text_of(turn)
+        if words:
+            return words if len(words) <= MAX_SAID else words[: MAX_SAID - 1].rstrip() + "…"
+    return ""

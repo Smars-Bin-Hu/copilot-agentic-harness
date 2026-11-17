@@ -15,7 +15,7 @@ from test_boardserve import ServeCase
 from test_superview import result, row
 
 from core import ahp
-from modules.task import chatsend, superbrain, superroute, task as task_ops, tasklife, vslink
+from modules.task import boardserve, chatsend, superbrain, superroute, task as task_ops, tasklife, vslink
 
 CHAT, SESSION = "ahp-chat:/job", "ahp-session:/job"
 
@@ -103,10 +103,23 @@ class SentTests(RouteCase):
         self.assertTrue(self.vs.sent[0]["text"].startswith(superroute.MARKER + "\n"))
         asks = self.talk()["asks"]
         self.assertEqual(len(asks), 1)
-        self.assertEqual((asks[0]["id"], asks[0]["task"], asks[0]["text"], asks[0]["state"], asks[0]["turn"], asks[0]["answer"], asks[0]["end"]), (found["id"], TASK, "why is step 2 slow?", "sent", "turn-1", "", ""))
+        self.assertEqual((asks[0]["id"], asks[0]["task"], asks[0]["text"], asks[0]["state"], asks[0]["turn"], asks[0]["answer"], asks[0]["end"]), (found["id"], task_ops.name_of(TASK), "why is step 2 slow?", "sent", "turn-1", "", ""))
         self.assertTrue(asks[0]["at"])
         self.assertNotIn("sent", asks[0])  # what was sent and when stay in the record only
         self.assertNotIn("sent_ts", asks[0])
+        self.assertNotIn("path", asks[0])
+        self.assertNotIn("/", asks[0]["task"])  # the short name: a filter on it finds the row
+
+    def test_an_old_record_with_the_path_in_task_reads_as_the_short_name_and_still_gets_its_answer(self) -> None:
+        self.route({"task": TASK, "text": "old?"})
+        path = self.root / ".harness" / "runtime" / "super.json"
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        stored["asks"][0]["task"] = TASK  # as 1.8.2 wrote it before: the folder path, no `path`
+        del stored["asks"][0]["path"]
+        path.write_text(json.dumps(stored), encoding="utf-8")
+        self.assertEqual(self.talk()["asks"][0]["task"], task_ops.name_of(TASK))
+        self.vs.finish("old answer")
+        self.assertEqual(self.talk()["asks"][0]["answer"], "old answer")
 
     def test_the_marker_is_the_one_the_gate_knows_and_zh_comes_after_it(self) -> None:
         self.assertEqual(superroute.MARKER, "/harness-ask")
@@ -174,6 +187,33 @@ class AnswerTests(RouteCase):
         with mock.patch.object(superroute, "LOST_AFTER", -1.0):
             self.assertEqual(self.talk()["asks"][0]["state"], "sent")
         self.vs.ready = True
+
+
+class SaidTests(RouteCase):
+    def test_the_last_ended_turns_words_are_found_and_cut(self) -> None:
+        self.assertEqual(superroute.said_of(self.vs, TASK), "")  # no turn yet
+        self.vs.chats[CHAT]["state"]["turns"] = [{"id": "t1", "state": "complete", "responseParts": [{"kind": "toolCall"}, {"kind": "markdown", "content": "Which table: a or b?"}]}]
+        self.assertEqual(superroute.said_of(self.vs, TASK), "Which table: a or b?")
+        self.vs.chats[CHAT]["state"]["turns"].append({"id": "t2", "state": "complete", "responseParts": [{"kind": "markdown", "content": "x" * 3000}]})
+        said = superroute.said_of(self.vs, TASK)
+        self.assertEqual(len(said), superroute.MAX_SAID)
+        self.assertTrue(said.endswith("…"))
+
+    def test_a_chat_the_link_does_not_know_says_nothing(self) -> None:
+        self.assertEqual(superroute.said_of(self.vs, ".workspace/sandbox/tasks/other"), "")
+        self.vs.ready = False
+        self.assertEqual(superroute.said_of(self.vs, TASK), "")
+
+    def test_a_stopped_item_carries_said_in_api_super(self) -> None:
+        self.vs.chats[CHAT]["state"]["turns"] = [{"id": "t1", "state": "complete", "responseParts": [{"kind": "markdown", "content": "Shall I go on?"}]}]
+        rows = result(row(TASK, "stopped", name=task_ops.name_of(TASK)), row(TASK + "x", "plan", name="other"))
+        with mock.patch.object(boardserve.Board, "rows", return_value=rows):
+            items = self.request("POST", "/api/super", {})[1]["items"]
+            self.assertEqual([(item["task"], item["why"], item.get("said")) for item in items], [("other", "plan", None), ("job1", "stopped", "Shall I go on?")])  # only a stopped, accepted or cancelled wait has the words
+            self.vs.chats.clear()  # the link does not know the chat now
+            item = self.request("POST", "/api/super", {})[1]["items"][1]
+        self.assertEqual(item["why"], "stopped")
+        self.assertNotIn("said", item)
 
 
 class RefusalTests(RouteCase):
@@ -269,7 +309,7 @@ class HistoryTests(RouteCase):
         found = brain.history_day("2026-11-17")
         self.assertTrue(found["ok"])
         self.assertEqual(found["messages"], [])
-        self.assertEqual([(item["id"], item["task"], item["text"], item["state"], item["answer"], item["end"]) for item in found["asks"]], [(sent["id"], TASK, "status?", "answered", "All good.", "complete")])
+        self.assertEqual([(item["id"], item["task"], item["text"], item["state"], item["answer"], item["end"]) for item in found["asks"]], [(sent["id"], task_ops.name_of(TASK), "status?", "answered", "All good.", "complete")])
         self.assertNotIn("sent", found["asks"][0])
 
     def test_a_day_with_asks_and_no_chat_with_the_super_agent_is_kept(self) -> None:

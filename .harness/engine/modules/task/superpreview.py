@@ -1,6 +1,6 @@
 """A short look at a task's plan or changes for the super agent view (1.8.2, step 6): `/api/super/preview` `{task, kind}`.
 
-  plan     `{ok: true, lines, more}`: the headings and the step lines of PLAN.md as plain text, each cut short, at most `MAX_LINES`.
+  plan     `{ok: true, lines, more, total}`: the numbered steps of PLAN.md (the headings and top-level bullets when it has none) as plain text, each cut short, at most `MAX_LINES`; `total` counts them all.
   changes  `{ok: true, files: [{path, added, removed, action}], more}`: the files a promote would change; unchanged files and DEV/_manual/ files are left out.
 `why` when not ok: `unknown` (no open task of that name), `kind`, `missing` (nothing to show), `error`. It only reads.
 """
@@ -20,6 +20,7 @@ MAX_CHARS = 160
 MAX_PLAN_BYTES = 256 * 1024
 HEADING = re.compile(r"^#{1,6}\s+(.*)$")
 ITEM = re.compile(r"^(?:[-*+]|\d+[.)])\s+(.*)$")
+NUMBERED = re.compile(r"^\d+[.)]\s+\S")
 FENCE = re.compile(r"^(```|~~~)")
 
 
@@ -27,14 +28,17 @@ def plain(text: str) -> str:
     """One line of Markdown as plain text: links, emphasis, code marks and checkboxes dropped, spaces joined, cut to `MAX_CHARS`."""
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"^\[[ xX?]\]\s*", "", text)
-    text = re.sub(r"[`*_~]+", "", text)
+    text = re.sub(r"`+", "", text)
+    text = re.sub(r"(\*{1,3}|~~)(?=\S)(.+?)(?<=\S)\1", r"\2", text)  # emphasis that wraps text
+    text = re.sub(r"(?<![\w/.\\])(_{1,3})(?=\S)(.+?)(?<=\S)\1(?![\w])", r"\2", text)  # _emphasis_ at a word edge, never inside an identifier or a path
     text = " ".join(text.split())
     return text if len(text) <= MAX_CHARS else text[: MAX_CHARS - 1].rstrip() + "…"
 
 
-def plan_lines(text: str) -> List[str]:
-    """Every heading and every top-level (not indented) list item of the text, in order, as plain text; empty ones skipped."""
+def plan_lines(text: str) -> Dict[str, Any]:
+    """`{numbered, other}`: the top-level numbered items of the text, and every heading and top-level (not indented) list item, in order, as plain text; empty ones skipped."""
     out: List[str] = []
+    numbered: List[str] = []
     fenced = False
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -47,7 +51,9 @@ def plan_lines(text: str) -> List[str]:
         shown = plain(found.group(1)) if found else ""
         if shown:
             out.append(shown)
-    return out
+            if NUMBERED.match(line):
+                numbered.append(shown)
+    return {"numbered": numbered, "other": out}
 
 
 def open_task(root: Any, raw: Any) -> str:
@@ -67,10 +73,11 @@ def plan(root: Any, task: str) -> Dict[str, Any]:
     path = tasks.plan_file(root, task)
     if not path.is_file():
         return {"ok": False, "why": "missing"}
-    lines = plan_lines(path.read_bytes()[:MAX_PLAN_BYTES].decode("utf-8", errors="replace"))
+    found = plan_lines(path.read_bytes()[:MAX_PLAN_BYTES].decode("utf-8", errors="replace"))
+    lines = found["numbered"] or found["other"]  # the numbered steps; headings and bullets only when there are none
     if not lines:
         return {"ok": False, "why": "missing"}
-    return {"ok": True, "lines": lines[:MAX_LINES], "more": len(lines) > MAX_LINES}
+    return {"ok": True, "lines": lines[:MAX_LINES], "more": len(lines) > MAX_LINES, "total": len(lines)}
 
 
 def changes(root: Any, task: str) -> Dict[str, Any]:

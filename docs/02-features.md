@@ -255,7 +255,8 @@ The third button of the board's header. It is never the default and the board do
 - **Answer and ask**: a task that stopped with a question has a reply box under its message. With one task's avatar filter on, or with `@name` at the start, the input asks that task; its answer comes back as a message from the task. That turn is read only: the gate refuses writes, and the task keeps what it waited for.
 - **Previews**: a plan approval shows the plan's steps, a promote approval the changed files with their added and removed lines (click to unfold).
 - **Steer and Stop**: right click a task's avatar while it works.
-- **Pop-out**: the button in the header opens a small window that stays on top of other windows (Document Picture-in-Picture: Chrome and Edge only; company policy may block it).
+- **Proposals**: ask the super agent for anything (archive, pause, autorun, checks, work for a task, a new task). It never acts: its answer ends with a card of the board's own buttons, checked against the board as it is now, and nothing happens until you press.
+- **Pop-out**: (1.8.3: also the reply box, previews, asking a task, and Steer / Stop from its list) the button in the header opens a small window that stays on top of other windows (Document Picture-in-Picture: Chrome and Edge only; company policy may block it).
 
 ### The board: lobby and list
 

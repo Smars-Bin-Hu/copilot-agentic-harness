@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.8.3 (2026-11-17)
+
+Ask the super agent for anything: it does nothing itself and sends back a card of the board's own buttons. The pop-out gets the 1.8.2 features.
+
+### Added
+
+- **Proposal cards.** Ask the super agent to archive tasks, pause one, start autorun, set independent checks, send a task some work, or start a new task. Its answer ends with a card: board actions use the board's own buttons (a code or a dialog is asked as on the board), a message for a task is an editable box with **Send**, a new task opens the New task window filled in. Nothing happens until you press. Each item is checked against the board as it is now; one the board would not offer shows its reason and no button. Several of the same simple action (archive, pause, resume, close, checks) get **Do all**.
+- **The pop-out does what the view does.** A task that stopped with a question shows its words and a reply box; plan and promote approvals fold a preview; **Ask** asks the task of the card (or `@name`); right click a task in the list for **Steer** and **Stop**.
+
+### Changed
+
+- **The super agent knows the closed tasks** the board still shows, so it can propose to archive them. It still only reads, and it never says it did something.
+
 ## 1.8.2 (2026-11-17)
 
 The super agent view becomes the place to work: answer a task, ask it a question, see the plan or the changes before you approve, steer or stop it.

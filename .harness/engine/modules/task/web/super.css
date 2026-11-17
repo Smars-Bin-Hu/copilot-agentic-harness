@@ -1,15 +1,14 @@
 /* The super agent view of the board (1.8.1): a messenger-like window, the avatars of the tasks, and the pet that walks over it. Colours come from tokens.css only. super.js, pet.js. */
-.sa{position:relative;display:flex;flex-direction:column;max-width:700px;width:100%;margin:6px auto 0;min-height:460px;--lb-work:var(--good-dot);--lb-you:var(--hot-dot);--lb-rest:var(--soft);--lb-left:var(--hot-dot)}
+.sa{position:relative;display:flex;flex-direction:column;max-width:720px;width:100%;box-sizing:border-box;margin:6px auto 0;min-height:520px;--lb-work:var(--good-dot);--lb-you:var(--hot-dot);--lb-rest:var(--soft);--lb-left:var(--hot-dot)}
 .sa[hidden]{display:none}
-.sa-head{display:flex;align-items:flex-start;gap:12px;padding:2px 14px 0;flex:none;min-height:62px}
-.sa-slot{width:48px;height:62px;flex:none}
+.sa-head{display:flex;align-items:flex-start;gap:12px;padding:2px 14px 0;flex:none;min-height:44px}
 .sa-who{min-width:0;flex:1;padding-top:6px}
 .sa-name{font-weight:650;font-size:15px}
 .sa-line{font-size:12.5px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sa-w{color:var(--hot);font-weight:600}
 .sa-cost{margin-top:8px;border:1px solid var(--line2);border-radius:999px;padding:1px 9px;font-size:12px;color:var(--soft);white-space:nowrap;cursor:help}
 .sa-cost.full{color:var(--bad);border-color:var(--bad-line)}
-.sa-lane{flex:none;height:34px}
+.sa-lane{flex:none;height:98px;border-bottom:1px solid var(--line)}
 .sa-team{display:flex;gap:10px;overflow-x:auto;padding:6px 14px 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);scrollbar-width:thin;flex:none}
 .sa-mate{flex:none;width:58px;text-align:center;position:relative;background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer}
 .sa-ring{position:relative;width:46px;height:46px;border-radius:50%;margin:0 auto;display:grid;place-items:center;background:var(--card);border:2px solid var(--line2);font-size:12px;color:var(--soft)}
@@ -60,6 +59,11 @@ a.sa-task:hover{text-decoration:underline}
 .sa-row.item.done .sa-why{border-color:var(--line2);background:transparent;color:var(--soft)}
 .sa-when{font-size:11.5px;color:var(--soft);white-space:nowrap}
 .sa-what{white-space:pre-wrap}
+.sa-what.ask{cursor:pointer;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden;font-family:var(--mono);font-size:12.5px;word-break:break-word}
+.sa-what.ask.open{display:block;max-height:260px;overflow:auto}
+.sa-note{margin-top:5px;font-size:12px;color:var(--soft)}
+.sa-note[hidden]{display:none}
+.sa-next{font-size:12.5px;color:var(--soft)}
 .sa-text{white-space:pre-wrap}
 .sa-more{margin:5px 0 0}
 .sa-more summary{font-size:12px;color:var(--soft);cursor:pointer;width:max-content}
@@ -87,7 +91,7 @@ a.sa-task:hover{text-decoration:underline}
 /* the letter the pet carries, flying between the avatar, the pet and the stream */
 .sa-letter{position:absolute;z-index:6;width:16px;height:12px;border-radius:2px;background:var(--hot-dot);box-shadow:0 2px 6px var(--shade);pointer-events:none;transition:left .7s cubic-bezier(.3,.7,.4,1),top .7s cubic-bezier(.5,-.4,.6,1),opacity .6s}
 /* the pet */
-.sa-pet{position:absolute;left:0;top:0;width:48px;z-index:5;padding:0;margin:0;border:0;background:none;color:inherit;cursor:pointer;transition-property:transform;transition-timing-function:cubic-bezier(.45,.05,.35,1);--c:var(--good-dot);--ex:0px;--ey:0px}
+.sa-pet{position:absolute;left:0;top:0;width:84px;z-index:5;padding:0;margin:0;border:0;background:none;color:inherit;cursor:pointer;transition-property:transform;transition-timing-function:cubic-bezier(.45,.05,.35,1);--c:var(--good-dot);--ex:0px;--ey:0px}
 .sa-pet:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:12px}
 .sa-pet.m-sleep{--c:var(--soft)}
 .sa-pet.m-tired{--c:var(--bad)}
@@ -100,7 +104,7 @@ a.sa-task:hover{text-decoration:underline}
 .sa-pet.flip .sa-pet-body svg{transform:scaleX(-1)}
 .sa-pet.hop .sa-pet-body{animation:sahop .6s cubic-bezier(.3,1.5,.5,1)}
 @keyframes sastep{from{transform:translateY(0)}to{transform:translateY(-3px)}}
-@keyframes sahop{0%,100%{transform:translateY(0)}40%{transform:translateY(-12px)}}
+@keyframes sahop{0%,100%{transform:translateY(0)}40%{transform:translateY(-18px)}}
 .sa-pet .lb-bot{--c:var(--good-dot)}
 .sa-pet.m-sleep .lb-bot{--c:var(--soft)}
 .sa-pet.m-tired .lb-bot{--c:var(--bad)}
@@ -115,16 +119,16 @@ a.sa-task:hover{text-decoration:underline}
 .sa-pet.m-sleep .lb-zz{opacity:1;animation:lbzz 3s ease-in-out infinite}
 .sa-pet.m-tired .lb-eye{animation:none!important;opacity:.45}
 .sa-pet.m-tired .lb-floaty{animation-duration:6s}
-.sa-zz{position:absolute;right:-4px;top:2px;font:700 11px var(--sans);color:var(--soft);opacity:0;pointer-events:none;letter-spacing:2px}
+.sa-zz{position:absolute;right:-6px;top:4px;font:700 15px var(--sans);color:var(--soft);opacity:0;pointer-events:none;letter-spacing:2px}
 .sa-pet.m-sleep .sa-zz{opacity:1;animation:sazz 3s ease-in-out infinite}
 @keyframes sazz{0%{transform:translate(0,0);opacity:0}30%{opacity:1}100%{transform:translate(8px,-12px);opacity:0}}
-.sa-batt{position:absolute;right:-8px;top:-2px;width:22px;height:11px;display:none;fill:var(--bad);stroke:var(--bad);overflow:visible}
+.sa-batt{position:absolute;right:-10px;top:-2px;width:32px;height:16px;display:none;fill:var(--bad);stroke:var(--bad);overflow:visible}
 .sa-batt rect:first-child{fill:none}
 .sa-pet.m-tired .sa-batt{display:block}
-.sa-hold{position:absolute;right:-6px;top:56%;width:14px;height:10px;border-radius:2px;background:var(--hot-dot);display:none;box-shadow:0 1px 4px var(--shade)}
+.sa-hold{position:absolute;right:-8px;top:56%;width:22px;height:15px;border-radius:2px;background:var(--hot-dot);display:none;box-shadow:0 1px 4px var(--shade)}
 .sa-pet.carry .sa-hold{display:block}
-.sa-say{position:absolute;left:46px;top:-8px;background:var(--pop);border:1px solid var(--line2);border-radius:10px 10px 10px 2px;padding:2px 8px;font-size:12px;white-space:nowrap;opacity:0;transform:scale(.6);transform-origin:0 100%;transition:opacity .2s,transform .2s;pointer-events:none;color:var(--ink);box-shadow:var(--shadow)}
-.sa-pet.left .sa-say{left:auto;right:46px;border-radius:10px 10px 2px 10px;transform-origin:100% 100%}
+.sa-say{position:absolute;left:80px;top:-4px;background:var(--pop);border:1px solid var(--line2);border-radius:10px 10px 10px 2px;padding:2px 8px;font-size:12px;white-space:nowrap;opacity:0;transform:scale(.6);transform-origin:0 100%;transition:opacity .2s,transform .2s;pointer-events:none;color:var(--ink);box-shadow:var(--shadow)}
+.sa-pet.left .sa-say{left:auto;right:80px;border-radius:10px 10px 2px 10px;transform-origin:100% 100%}
 .sa-say.on{opacity:1;transform:none}
 @media (max-width:560px){
  .sa-head{padding:2px 10px 0}
@@ -133,7 +137,7 @@ a.sa-task:hover{text-decoration:underline}
  .sa-mini{display:none}
  .sa-bub{max-width:100%}
  .sa-new{padding:3px 7px}
- .sa-lane{height:30px}
+ .sa-lane{height:94px}
 }
 @media (prefers-reduced-motion:reduce){.sa *,.sa-pet,.sa-letter{animation:none!important;transition:none!important}}
 .sa-badge{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:6px;border-radius:9px;background:var(--hot-dot);color:var(--bg);font-size:11px;font-weight:700;padding:0 5px;box-sizing:border-box;vertical-align:1px}

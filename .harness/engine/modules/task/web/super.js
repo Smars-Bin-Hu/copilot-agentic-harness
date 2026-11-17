@@ -36,7 +36,6 @@ const SUPER = (function () {
   function create(options) {
     const rowsOf = options.rows;
     const sv = h("section", {class: "sa", hidden: "", "aria-label": t("super.name")});
-    const slot = h("div", {class: "sa-slot"});
     const lineEl = h("div", {class: "sa-line"});
     const costEl = h("span", {class: "sa-cost", hidden: ""});
     const lane = h("div", {class: "sa-lane", "aria-hidden": "true"});
@@ -51,7 +50,7 @@ const SUPER = (function () {
     const newTask = SERVE.runs("create") ? h("button", {type: "button", class: "sa-new", title: t("super.new.tip")}, t("super.new.go")) : null;
     const send = h("button", {type: "button", class: "sa-send", title: t("super.send"), "aria-label": t("super.send")}, "↑");
     const box = h("div", {class: "sa-box"}, field, newTask, send);
-    sv.append(h("div", {class: "sa-head"}, slot, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl), lane, team, filterEl, banner,
+    sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl), team, lane, filterEl, banner,
       h("div", {class: "sa-streamwrap"}, stream, pill), quick, h("div", {class: "sa-input"}, box));
 
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
@@ -161,6 +160,11 @@ const SUPER = (function () {
       }
     }
 
+    // A chat that asks the person, or a held outside call: the real question or command is in `detail`, the `title` is a generic line. Show the detail as the message when there is one.
+    const asksPerson = (item) => ["confirm", "question", "asking", "outbox"].includes(item.why) && Boolean(item.detail);
+    const mainOf = (item) => (asksPerson(item) ? item.detail : item.title);
+    const fullOf = (item) => (asksPerson(item) ? item.detail : "");
+
     // One item of the board: who it comes from, what it is, its buttons. Its buttons are drawn again only when the row of the task changed what they would be.
     function sigOf(entry) {
       const row = rowFor(entry.item.task);
@@ -171,6 +175,9 @@ const SUPER = (function () {
       const buttons = entry.item.actions.map((item) => (item.action === "answer"
         ? h("a", {class: "act hot live", href: taskUrl(entry.item.task), target: "_blank", rel: "noopener", "data-label": t("board.action.answer")}, t("board.action.answer"))  // the reply panel is on the task page: a new tab, not this one
         : actionButton(row, item)));
+      const joint = entry.item.why === "plan" && Boolean(row.req_unconfirmed);  // one code confirms the requirement and approves the plan (the approve-plan window does it)
+      entry.note.hidden = !joint;
+      entry.note.textContent = joint ? t("super.plan.joint") : "";
       entry.acts.replaceChildren(...buttons, taskLink(entry.item.task, t("super.open") + " ↗", "act sa-open"));
       entry.sig = sigOf(entry);
     }
@@ -182,13 +189,22 @@ const SUPER = (function () {
     function build(item) {
       const why = h("span", {class: "sa-why"}, t(WHY[item.why] || "super.why.other"));
       const waited = h("span", {class: "sa-when"});
-      const what = h("div", {class: "sa-what"}, item.title);
+      const what = h("div", {class: "sa-what"}, mainOf(item));
+      what.title = fullOf(item);
+      if (asksPerson(item)) {  // the question or command itself is the message: a few lines, the rest on a click
+        what.classList.add("ask");
+        what.tabIndex = 0;
+        const flip = () => what.classList.toggle("open");
+        what.addEventListener("click", flip);
+        what.addEventListener("keydown", (event) => { if (isEnter(event)) { event.preventDefault(); flip(); } });
+      }
+      const note = h("div", {class: "sa-note", hidden: ""});
       const acts = h("div", {class: "sa-acts"});
-      const more = item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
+      const more = !asksPerson(item) && item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
       const node = h("div", {class: "sa-row item", "data-task": item.task, "data-id": item.id},
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
-        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, more, acts));
-      const entry = {item, node, acts, waited, what, sig: "", clicked: ""};
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, note, more, acts));
+      const entry = {item, node, acts, waited, what, note, sig: "", clicked: ""};
       acts.addEventListener("click", (event) => { const button = event.target.closest("button, a.act"); if (button && button.dataset.label) entry.clicked = plain(button.dataset.label); });
       drawActs(entry);
       drawWaited(entry);
@@ -201,20 +217,23 @@ const SUPER = (function () {
       queued.delete(item.id);
       add(entry.node, down);
     }
-    function fold(entry) {
+    function fold(entry, next) {
       entry.done = true;
       entry.node.classList.add("done");
       entry.waited.textContent = "";
-      entry.acts.replaceChildren(h("span", {class: "sa-ok"}, "✓ " + (entry.clicked ? t("super.done.you", {action: entry.clicked}) : t("super.done.elsewhere")) + " · " + stamp()));
+      entry.note.hidden = true;
+      // The task has another wait now (a row has one): it is not settled, it moved on. The person's own click is still the better thing to say.
+      const line = entry.clicked ? "✓ " + t("super.done.you", {action: entry.clicked}) : next ? "→ " + t("super.done.next", {kind: t(WHY[next.why] || "super.why.other")}) : "✓ " + t("super.done.elsewhere");
+      entry.acts.replaceChildren(h("span", {class: next && !entry.clicked ? "sa-next" : "sa-ok"}, line + " · " + stamp()));
     }
     function reconcile(items) {
       const ids = new Set(items.map((item) => item.id));
-      for (const [id, entry] of known) if (!entry.done && !ids.has(id)) fold(entry);
+      for (const [id, entry] of known) if (!entry.done && !ids.has(id)) fold(entry, items.find((item) => item.task === entry.item.task));
       for (const item of items) {
         const entry = known.get(item.id);
         if (!entry || entry.done) continue;
         entry.item = item;
-        if (entry.what.textContent !== item.title) entry.what.textContent = item.title;
+        if (entry.what.textContent !== mainOf(item)) { entry.what.textContent = mainOf(item); entry.what.title = fullOf(item); }
         drawWaited(entry);
         if (entry.sig !== sigOf(entry)) drawActs(entry);
       }
@@ -231,8 +250,8 @@ const SUPER = (function () {
     const thinkingNow = () => Boolean((talk && talk.state === "thinking") || (localThink && Date.now() - localThink < 90000));
     const petFree = () => Boolean(pet) && shown && !still() && !document.hidden && moodNow() === "calm";
     function home() {
-      const box = hostBox(), at = slot.getBoundingClientRect(), size = pet.size();
-      return {x: at.left - box.left, y: at.bottom - box.top - size.h};
+      const box = hostBox(), at = lane.getBoundingClientRect(), size = pet.size();  // its own floor: the lane under the avatars, clear of the header
+      return {x: at.left - box.left + 12, y: at.bottom - box.top - size.h};
     }
     function standAt(target) {
       const box = hostBox(), at = target.getBoundingClientRect(), floor = lane.getBoundingClientRect(), size = pet.size();

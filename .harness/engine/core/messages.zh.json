@@ -1701,6 +1701,8 @@
   "super.details": "详情",
   "super.done.you": "你：{action}",
   "super.done.elsewhere": "已在别处处理",
+  "super.done.next": "下一步：{kind}",
+  "super.plan.joint": "这一个 code 同时确认需求，需求还没有确认。",
   "super.new": "新消息",
   "super.empty.title": "没有等你的事。",
   "super.empty.text": "任务需要你时，消息会出现在这里。",

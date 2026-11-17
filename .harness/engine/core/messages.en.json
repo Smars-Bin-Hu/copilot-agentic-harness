@@ -1701,6 +1701,8 @@
   "super.details": "Details",
   "super.done.you": "You: {action}",
   "super.done.elsewhere": "Settled elsewhere",
+  "super.done.next": "Next: {kind}",
+  "super.plan.joint": "This one code also confirms the requirement, which is not confirmed yet.",
   "super.new": "New message",
   "super.empty.title": "Nothing waits for you.",
   "super.empty.text": "A message comes here when a task needs you.",

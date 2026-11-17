@@ -430,6 +430,7 @@
   "gate.task.outside": "任务 {task} 进行中，只能在任务目录 `{task}/` 里写，你要写的是 `{relative}`。笔记、RCA、设计和只读查询写在任务目录根下；代码在计划批准后写在 `{task}/DEV/` 下：要 promote 的放 `DEV/<仓库名>/<路径>`，用户手动运行的放 `DEV/_manual/<路径>`。",
   "gate.task.person_files": "`{relative}` 在任务 {task} 的 `REQ/`、`REF/` 或 `INBOX/` 里。那是用户给的材料，只读。要记笔记或写成果，写在任务目录 `{task}/` 根下。",
   "gate.board.request": "拒绝：这是在请求端口 {port} 上的看板服务，它的按钮只属于用户。不要调用它。看板上有要改的，告诉用户。",
+  "gate.super.refused": "已拒绝：super agent 只读和对话，不改任何东西。要操作，请用 board 上的按钮。",
   "gate.terminal.denied": "这条终端命令被拒绝：{why}。不要重试同类命令。需要时，停下来告诉用户原因，由用户自己运行。",
   "gate.external.subagent": "你是 {agent} 子 agent：对外部系统只能读。这个对 {place} 的「{verb}」操作被拒绝，不论主 agent 被允许了什么：用户的放行不属于你。命令：{call}\n不要重试。按保存下来的输出判断，并在回答里写明你没能核对的部分。",
   "gate.external.unlinked": "已拒绝：这条命令要写 {system} 的 {ref}，可这个任务没有关联它。任务只能写它关联的条目。用户要的就是这一个的话：{step}命令：{call}",

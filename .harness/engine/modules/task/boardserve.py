@@ -71,6 +71,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
+from . import superview
 from . import accept, autorun, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
@@ -2056,6 +2057,11 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.pick_wall_folder())
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the settings panel
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/super":  # the super agent view (1.8.1): what waits for the person across the open tasks, from the same rows as /api/board; a read, with the same checks
+                try:
+                    return self.answer(200, superview.build(board.rows()))
+                except Exception as error:  # noqa: BLE001 - the page keeps what it shows
+                    return self.answer(500, {"error": str(error)})
             if path == "/api/board":
                 try:
                     return self.answer(200, board.rows())

@@ -27,7 +27,7 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, scriptcheck, shellwords, targetfault, terminal
+from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, scriptcheck, shellwords, superagent, targetfault, terminal
 from . import policy as gate_policy
 from .policy import POLICY_NAME, Compiled, validate_policy
 
@@ -756,6 +756,10 @@ def park_worker_call(event: HookEvent, ctx: Context, decided: Decision) -> None:
 
 
 def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    superagent.mark(event, ctx)  # 1.8.1: the chat the board opens to talk about the tasks is known by its first message
+    refused_super = superagent.check(event, ctx)
+    if refused_super is not None:
+        return refused_super
     if event.event == "SessionStart" or (event.event in ("PostToolUse", "PostToolUseFailure") and event.tool_kind == "terminal"):
         watch_reach(event, ctx)
         return wrapped_context(ctx) if event.event == "SessionStart" else first_reach(event, ctx)

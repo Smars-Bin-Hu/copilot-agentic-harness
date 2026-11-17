@@ -227,10 +227,106 @@ const SUPER = (function () {
     function addAgent(message) {
       const judgment = h("span", {class: "sa-judg", title: t("super.judgment.tip"), "aria-label": t("super.judgment.tip")}, "◇");
       const row = h("div", {class: "sa-row"}, h("span", {class: "sa-mini boss"}, PET.face("calm", "", 0, true)),
-        h("div", {class: "sa-bub agent"}, h("div", {class: "sa-fw"}, h("b", null, t("super.name")), judgment, message.at ? h("span", {class: "sa-when"}, when(message.at, 11, 16)) : null), h("div", {class: "sa-text"}, linked(message.text))));
+        h("div", {class: "sa-bub agent"}, h("div", {class: "sa-fw"}, h("b", null, t("super.name")), judgment, message.at ? h("span", {class: "sa-when"}, when(message.at, 11, 16)) : null), h("div", {class: "sa-text"}, linked(message.text)), actCard(message)));
       chatRows.push(row);
       add(row);
       foldChat();
+    }
+    // The proposal card (1.8.3) under an agent message: one row per proposal the server checked (`proposals`, superact.py). The card presses nothing by itself.
+    // Each button is the board's own (`actionButton`) or posts the one endpoint the board posts; a refused proposal shows its reason and no button.
+    // The card is drawn again in place when its proposals change (the server checks them at every poll); words typed in a Send box stay.
+    const ACT = new Map();  // message id -> {box, sig, list, drafts, pressed, done}
+    const ACT_ALL = ["archive", "pause", "resume", "close", "review set"];  // "Do all" only for what needs no code and no dialog of its own
+    const ACT_WHY = {unknown: "super.act.why.unknown", state: "super.act.why.state", kind: "super.act.why.kind", n: "super.act.why.n", text: "super.act.why.text", paused: "super.act.why.paused", closed: "super.act.why.closed", empty: "super.act.why.empty", long: "super.act.why.long", name: "super.act.why.name", taken: "super.act.why.taken", bad: "super.act.why.bad"};
+    const actSig = (list) => JSON.stringify(list || []);
+    const actWhat = (one) => (one.kind === "send" ? t("super.act.send.to", {task: one.task})
+      : one.kind === "new" ? t("super.act.new", {name: one.name})
+      : one.action === "review set" ? t("super.act.set.what", {task: one.task, n: one.n})
+      : one.action === "steer" ? t("super.act.steer.what", {task: one.task})
+      : one.action === "stop" ? t("super.act.stop.what", {task: one.task})
+      : t("board.action." + String(one.action).replace(" ", "-")) + " · " + one.task);
+    const actBad = (error) => SERVE.reasons((error && error.message) || String(error));
+    function actRow(state, one, at) {
+      const mark = () => { state.done.set(at, stamp()); actDraw(state); emit(); };
+      const said = h("div", {class: "bad sa-actbad"});
+      if (state.done.has(at)) return h("div", {class: "sa-actrow done"}, "✓ " + actWhat(one) + " · " + state.done.get(at));
+      if (one.ok === false) {
+        if (state.pressed.has(at) && one.kind === "action") return h("div", {class: "sa-actrow done"}, "✓ " + actWhat(one) + " · " + state.pressed.get(at));  // pressed on the board's button; the state it needed is gone now
+        return h("div", {class: "sa-actrow no"}, one.task ? taskLink(one.task) : null, h("span", {class: "sa-actwhy"}, t(ACT_WHY[one.why] || ACT_WHY.bad)));
+      }
+      const post = (button, call) => {
+        button.disabled = true; said.replaceChildren();
+        call().then(mark, (error) => { button.disabled = false; said.replaceChildren(...actBad(error)); });
+      };
+      if (one.kind === "new") {
+        const go = h("button", {type: "button", class: "act hot live"}, t("super.act.new.go"));
+        go.addEventListener("click", () => { state.pressed.set(at, stamp()); CHAT.create({name: one.name, kind: one.task_kind, text: one.text}); });
+        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), h("span", {class: "sa-actkind"}, one.task_kind || "dev"), go), h("div", {class: "sa-acttext"}, one.text));
+      }
+      if (one.kind === "send") {
+        const box = h("textarea", {class: "sa-reply-box sa-acttextbox", rows: "3", maxlength: 2000, "aria-label": t("super.act.send.tip")});
+        box.value = state.drafts.has(at) ? state.drafts.get(at) : (one.text || "");
+        box.addEventListener("input", () => state.drafts.set(at, box.value));
+        const go = h("button", {type: "button", class: "act hot live"}, t("super.act.send.go"));
+        go.addEventListener("click", () => {
+          const text = box.value.trim();
+          if (!text) return;
+          post(go, () => (mateMenuWorks(one.task) ? SERVE.post("/api/queue", {task: one.task, text, lang: ""}) : SERVE.post("/api/send", {task: one.task, kind: "answer", body: text, note: "", lang: "", step: "act"})));
+        });
+        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), h("div", {class: "sa-reply"}, box, go), said);
+      }
+      let button;
+      if (one.action === "review set") {
+        button = h("button", {type: "button", class: "act hot live"}, t("super.act.set", {n: one.n}));
+        button.addEventListener("click", () => post(button, () => SERVE.post("/api/act", {action: "review set", task: one.task, n: one.n, step: "act"})));
+      } else if (one.action === "steer") {
+        button = h("button", {type: "button", class: "act hot live"}, t("super.act.steer"));
+        button.addEventListener("click", () => post(button, () => mateSteer(one.task, one.text || "")));
+      } else if (one.action === "stop") {
+        button = h("button", {type: "button", class: "act hot live"}, t("super.act.stop"));
+        button.addEventListener("click", () => post(button, () => mateStop(one.task)));
+      } else {
+        button = actionButton(rowFor(one.task), {action: one.action});
+        button.addEventListener("click", () => state.pressed.set(at, stamp()));  // the board's button does the work (and asks its code or dialog); the next check shows the result
+      }
+      return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, taskLink(one.task), button), one.action === "steer" && one.text ? h("div", {class: "sa-acttext"}, one.text) : null, said);
+    }
+    function actAll(state) {
+      const groups = new Map();
+      (state.list || []).forEach((one, at) => { if (one.kind === "action" && one.ok && ACT_ALL.includes(one.action) && !state.done.has(at)) { const key = one.action === "review set" ? "review set:" + one.n : one.action; groups.set(key, [...(groups.get(key) || []), [one, at]]); } });
+      const found = [...groups.values()].find((group) => group.length > 1);
+      if (!found) return null;
+      const said = h("div", {class: "bad sa-actbad"});
+      const go = h("button", {type: "button", class: "act hot live"}, t("super.act.all", {n: found.length}));
+      go.addEventListener("click", async () => {
+        go.disabled = true; said.replaceChildren();
+        if (found[0][0].action === "archive") { SERVE.archive(found.map(([one]) => one.task), ""); go.disabled = false; return; }  // one dialog for all names, as the board's
+        for (const [one, at] of found) {
+          try { await SERVE.post("/api/act", {action: one.action, task: one.task, ...(one.action === "review set" ? {n: one.n} : {}), step: "act"}); state.done.set(at, stamp()); }
+          catch (error) { said.replaceChildren(h("b", null, one.task + ": "), ...actBad(error)); go.disabled = false; actDraw(state); emit(); return; }
+        }
+        actDraw(state); emit();
+      });
+      return h("div", {class: "sa-actrow sa-actall"}, go, said);
+    }
+    function actDraw(state) {
+      const rows = (state.list || []).map((one, at) => actRow(state, one, at));
+      const all = actAll(state);
+      state.box.replaceChildren(h("div", {class: "sa-acthd"}, t("super.act.head")), ...rows, ...(all ? [all] : []));
+      state.sig = actSig(state.list);
+    }
+    function actCard(message) {
+      if (!message || !Array.isArray(message.proposals) || !message.proposals.length) return null;
+      const state = {box: h("div", {class: "sa-act"}), sig: "", list: message.proposals, drafts: new Map(), pressed: new Map(), done: new Map()};
+      ACT.set(message.id, state);
+      actDraw(state);
+      return state.box;
+    }
+    function actRefresh(message) {
+      const state = ACT.get(message.id);
+      if (!state || !Array.isArray(message.proposals) || actSig(message.proposals) === state.sig) return;
+      state.list = message.proposals;
+      actDraw(state);
     }
     let typing = null;
     function typingBubble(on) {
@@ -241,7 +337,8 @@ const SUPER = (function () {
     }
     function mergeTalk(list) {
       for (const message of list || []) {
-        if (!message || seenTalk.has(message.id)) continue;
+        if (message && seenTalk.has(message.id)) { actRefresh(message); continue; }
+        if (!message) continue;
         seenTalk.add(message.id);
         if (message.role === "you") {
           const at = pendingYou.indexOf(message.kind === "summary" ? SUMMARY_ASKED : message.text);  // a summary request is shown with the button's own label

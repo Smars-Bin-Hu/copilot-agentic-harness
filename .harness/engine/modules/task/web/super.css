@@ -257,3 +257,15 @@ a.sa-task:hover{text-decoration:underline}
 .sa-mateline{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:4px 8px}
 .sa-matebad{padding:2px 6px;font-size:12px}
 .sa-matebad:empty{display:none}
+/* the proposal card (1.8.3) under an agent message */
+.sa-act{margin-top:8px;border:1px solid var(--line2);border-radius:10px;padding:6px 8px;display:flex;flex-direction:column;gap:6px}
+.sa-acthd{font-size:12px;opacity:.7}
+.sa-actrow{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sa-acthead{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.sa-actwhat{font-weight:600}
+.sa-actkind{font-size:12px;opacity:.7}
+.sa-acttext{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;opacity:.85;max-height:7.5em;overflow:auto}
+.sa-actrow.done{opacity:.65}
+.sa-actrow.no{flex-direction:row;flex-wrap:wrap;gap:6px;opacity:.75}
+.sa-actwhy{font-size:13px;overflow-wrap:anywhere}
+.sa-actbad{flex:1 1 100%}

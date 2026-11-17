@@ -933,6 +933,8 @@ class VsLink:
         action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
         with self.lock:
             self.super_chat = {"session": resource, "chat": chat}
+        if job.cancelled:  # the page was told it timed out while the chat was being made: keep the chat, send nothing (no spend nobody waits for)
+            raise Refused("timeout")
         link.dispatch(chat, action)
         with self.lock:
             ahp.reduce_chat(held["state"], action)

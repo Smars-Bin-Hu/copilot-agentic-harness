@@ -189,6 +189,15 @@ class RefusalTests(BrainCase):
         self.assertEqual(self.brain.summary(), {"ok": False, "why": "asleep"})
         self.assertEqual((self.link.sent, self.brain.talk()["state"]), ([], "asleep"))
 
+    def test_a_chat_made_after_a_timeout_is_kept_and_used_next(self) -> None:
+        """The wait ended while the link was making the chat: the next ask goes to that chat, not to a second one (its spend stays in one place)."""
+        self.link.refuse = vslink.Refused("timeout")
+        self.link.super_chat = {"session": "ahp-session:/late", "chat": "ahp-chat:/late"}
+        self.assertEqual(self.brain.ask("hi"), {"ok": False, "why": "timeout"})
+        self.link.refuse = None
+        self.assertEqual(self.brain.ask("hi"), {"ok": True})
+        self.assertEqual((self.link.made, self.link.sent[-1]["plan"]["chat"]), (0, "ahp-chat:/late"))
+
     def test_a_link_that_refuses_is_told_in_the_same_words(self) -> None:
         for why, wanted in (("off", "asleep"), ("not-ready", "asleep"), ("not-idle", "busy"), ("timeout", "timeout")):
             self.link.refuse = vslink.Refused(why)

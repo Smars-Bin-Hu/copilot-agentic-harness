@@ -41,6 +41,8 @@ Before adding one, answer: which failure does it prevent? Why can the default ag
 
 A session with no task cannot call the reviewer. A session with a task must run `task review start` before calling it. The mapper does not depend on a task, only on whether the user typed `/generic-mapreduce`. Every other subagent is refused.
 
+The `super` agent is not a subagent. The board opens one chat a day with it (the prompt starts with `/harness-super`) and feeds it. It only reads and talks: it never changes task state, and the person presses every button. The gate keeps that chat to reading (`modules/gate/superagent.py`). Its spend limit is `super.daily_credits` in `task.json`.
+
 ## Models
 
 - The reviewer and the mapper use Sonnet and fall back to Haiku: they run whether the main model is Sonnet or Opus.

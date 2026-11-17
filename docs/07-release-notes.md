@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.8.1 (2026-11-17)
+
+A super agent view on the board: what waits for you across all tasks, a chat that knows them, and a window that stays on top.
+
+### Added
+
+- **A Super agent view** (the third button next to Lobby and List; the board still opens as before). What waits for you comes as short messages with the board's own buttons, so a question or a plan approval is answered there. A strip of task avatars shows each task's state and filters the messages. A small robot walks over the view (3D, or flat when the browser has no WebGL).
+- **A chat with the super agent.** The board opens one Copilot chat a day with the `super` agent (read and search tools only, Claude Haiku 5.5) and feeds it the state of your tasks. Ask it a question, or press **Sum up today**, which shows what it cost. The first time you open the view in a day and something waits, it sums up by itself.
+- **A daily limit.** `super.daily_credits` in `task.json` (50 by default; `0` switches the chat off). At the limit the board sends no new message; the view still works.
+- **A pop-out.** The button in the header of the view opens a small window that stays on top of other windows (Chrome and Edge only). It has the same buttons. A window that needs a code (approvals, a new task) is shown in the board page, and the pop-out says so.
+
+### Changed
+
+- **The gate keeps the super agent chat to reading.** A session whose first prompt starts with `/harness-super` may only read and run a few read-only harness commands.
+- **The super agent is not a subagent.** It never presses a button and never changes task state.
+
 ## 1.8.0 (2026-11-17)
 
 A new autorun: the default agent only schedules, a worker does each step in a fresh context, and the board keeps the run going.

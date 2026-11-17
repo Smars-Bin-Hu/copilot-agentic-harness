@@ -440,6 +440,14 @@ const SUPER = (function () {
       drawStatus(); drawBanner(); drawInput(); applyMood();
       first = false;
       emit();
+      morning();
+    }
+    // The first open of the day: the agent sums up what waits, once a day in this browser, when it is free and nobody talked to it yet today (about 0.2 Credits).
+    function morning() {
+      if (!shown || !talk || talk.state !== "idle" || (talk.messages || []).length || !((data && data.items) || []).length) return;
+      const today = new Date().toISOString().slice(0, 10);
+      try { if (localStorage.getItem("super.morning") === today) return; localStorage.setItem("super.morning", today); } catch (error) { return; }  // no storage: no automatic call, the button stays
+      ask({kind: "summary"}, t("super.quick.summary"));
     }
     function poll() {
       if (!live() || SERVE.busy()) return Promise.resolve();

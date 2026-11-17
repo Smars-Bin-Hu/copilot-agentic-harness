@@ -114,7 +114,7 @@ There are two only, both switched on by you; the agent cannot switch them on.
 - **reviewer**: the independent check. It needs a task, a `[review]=n` you wrote, and `task review start` first.
 - **mapper**: reading in parallel chunks, read only. It needs you to type `/generic-mapreduce`; see below.
 - **worker**: does one step of `TODO.md` in autorun. Only the default agent of a task with autorun on can call it; see [autorun](#autorun-working-down-the-list-beta-only-you-can-switch-it-on).
-- Every other subagent is refused. A session in admin mode cannot call a subagent.
+- Every other subagent is refused. The board's `super` chat is not a subagent: see [the super agent view](#the-super-agent-view). A session in admin mode cannot call a subagent.
 - The platform's own semantic search is a tool and is not under this limit.
 
 ### Reading in parallel chunks: `/generic-mapreduce`
@@ -242,6 +242,16 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 ## The task page in the browser
 
 Run `harness task board` in your own terminal. It serves the board of every task and a page for each one; the pages and the pictures are in the [overview](00-overview.md#4-follow-and-steer-it-in-the-browser). What an agent writes is drawn as text only: nothing in a task file can run on the page or send anything elsewhere.
+
+### The super agent view
+
+The third button of the board's header. It is never the default and the board does not keep the choice.
+
+- **Messages**: what waits for you across all open tasks, each with the board's own buttons. The agent never presses them: you do.
+- **Avatars**: a round avatar for each task shows its state; a click filters the messages to that task.
+- **The pet**: a small robot walks over the view. It stands still when the page is hidden or the system reduces motion.
+- **Chat**: ask a question, or press **Sum up today**. The board opens one Copilot chat a day with the `super` agent, which only reads. The limit is `super.daily_credits` in `task.json`; the view works without the chat.
+- **Pop-out**: the button in the header opens a small window that stays on top of other windows (Document Picture-in-Picture: Chrome and Edge only; company policy may block it).
 
 ### The board: lobby and list
 

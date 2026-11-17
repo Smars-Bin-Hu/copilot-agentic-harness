@@ -276,6 +276,12 @@ class Brain:
             self.link.host_said(error)
         with self.lock:
             self.sending = False
+            if why == "timeout":  # the chat may have been made after the wait ended: keep it, so the next ask does not make a second one
+                made = getattr(self.link, "super_chat", None)
+                rec = self.load()
+                if isinstance(made, dict) and made.get("chat") and not rec["chat"]:
+                    rec.update(session=str(made.get("session") or ""), chat=str(made["chat"]))
+                    self.save(rec)
             if why:
                 return {"ok": False, "why": why}
             rec = self.load()  # the day may have turned while the host was told: the turn belongs to the chat that got it

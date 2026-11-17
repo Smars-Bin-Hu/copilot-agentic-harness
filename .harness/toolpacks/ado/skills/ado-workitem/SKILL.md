@@ -36,17 +36,17 @@ ado tags                  the tags in use
 1. Have a task, and link the item to it: no task yet (a small ticket job) → open a Q&A task first (skill `harness-my-task`); then `harness task link add --task <task> ado:<id>` (`--task` when several tasks are open). A write to an item the task is not linked to is refused.
 2. Run one of:
    ```
-   ado comment 12345 --text "line one\nline two"   (`\n` is a line break, `\\` one backslash, any other backslash stays; or --file .workspace/sandbox/tasks/<task>/comment.md: write the text there first, the path from the repository root)
+   ado comment 12345 --text "line one\nline two"   (`\n` is a line break, `\\` one backslash, any other backslash stays; or --file <the file of the next paragraph>)
    ado update 12345 --state Resolved --tag urgent --untag old --field priority=2
    ado link 12345 --to 12300 --type parent      --to is the parent of 12345; child | related too
    ado unlink 12345 --to 12300
    ado attach 12345 --file <path>
    ado create --type Bug --title "…" --area "<path>" --iteration "<path>" --parent 12345 --tag x
    ```
-   When the text has a Windows path or a regular expression, write it to a file in the task's RUNS folder and pass `--file <that file>` (the path from the repository root).
+   A text that is long, or has a Windows path or a regular expression, goes in a file first and `--file <that file>` names it. Keep every file you send in `OUT/ado/<id>/` of the task folder, one new file per write, named `<yyyymmdd-hhmmss>-comment.md` (the time from `date +%Y%m%d-%H%M%S`; never reuse or overwrite one: they are the record of what was sent). The path is from the repository root: `.workspace/sandbox/tasks/<task>/OUT/ado/<id>/<name>`. Not at the root of the task folder.
 3. The gate holds the write: do as the hold says (tell the user what waits, wait for the answer, and run the same command again once it is approved). When the user opened the linked items for the task, a write to them runs at once; a new item always waits. There is no delete.
 
-**Test result as a comment**: write the result (what was run, what came back, the evidence ids E1, E2 of `generic-evidence-run`) into `comment.md` in the task folder, then `ado comment <id> --file .workspace/sandbox/tasks/<task>/comment.md`. `ado attach <id> --file <path>` adds a file (a log, a screenshot) when the text is too long. Before `update --state`, read `ado item <id>` and `ado states --type <type>`; a workflow may allow only some moves.
+**Test result as a comment**: write the result (what was run, what came back, the evidence ids E1, E2 of `generic-evidence-run`) into a new file in `OUT/ado/<id>/` (as in step 2), then `ado comment <id> --file <that file>`. `ado attach <id> --file <path>` adds a file (a log, a screenshot) when the text is too long. Before `update --state`, read `ado item <id>` and `ado states --type <type>`; a workflow may allow only some moves.
 
 ## Gotchas
 

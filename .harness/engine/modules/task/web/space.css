@@ -15,7 +15,7 @@ html:not(.has-wall) #wp{opacity:0}
 #wp .wl.inst{transition:none}
 #wp::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,var(--sp-veil));z-index:3}
 html.en-open #wp::after{background:radial-gradient(70% 60% at 50% 45%,rgba(0,0,0,.30),rgba(0,0,0,.66))}
-html.en-open[data-theme="light"] #wp::after{background:radial-gradient(70% 60% at 50% 45%,rgba(0,0,0,.42),rgba(0,0,0,.74))}
+html.en-open[data-theme="light"] #wp::after{background:radial-gradient(70% 60% at 50% 45%,rgba(255,255,255,.58),rgba(255,255,255,.82))}  /* a white veil, like the light glass: dark ink reads on a bright or a dark picture */
 /* a browser that cannot draw the daylight twin itself (wall.js bakes it into the picture): the twin is made with a filter */
 html[data-theme="light"].twin-css #wp .wl{filter:invert(1) hue-rotate(180deg) contrast(.55) brightness(1.42) saturate(1.25)}
 

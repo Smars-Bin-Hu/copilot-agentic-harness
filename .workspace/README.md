@@ -24,6 +24,7 @@ What a task folder holds:
 | `DEV/_manual/<path>` | Code you run by hand (on a server, in a database), written back later or by others; promote leaves it | The agent (after the plan is approved) |
 | `READ/<repository>/<path>` | Code of a target repository fetched only to be read (`task fetch --read`), as its base branch has it: what a knowledge base card is written from. Never written back | The CLI |
 | `TEST/` | Test cases and results | The agent |
+| `OUT/<system>/<item>/` | What the agent wrote to send to an outside system, one new file per send (an `ado` comment text: `OUT/ado/<id>/<time>-comment.md`): the record of what was sent. Never promoted | The agent |
 | `REVIEW/round-NNN/` | Only with independent checks on: the review package and the reviewer's verdict | The CLI and the hook |
 | `SNAPSHOT/<gate>-<time>/` | The work as saved when the plan is approved, before every check and before a write-back | The CLI |
 | `OUTBOX/<code>-<system>.md` | A call to an outside system waiting for the user's approval (`approve-action`): the action, the exact command, its state | The hook |

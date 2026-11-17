@@ -180,7 +180,7 @@
     return parts.length === 3 && parts.every((x) => !isNaN(x)) ? parts : fallback;
   }
   function palette() {  // the light theme draws over a light page: normal blending with a warm ink; the dark one adds light
-    FX.light = root.getAttribute("data-theme") === "light" && !root.classList.contains("has-wall");  // over a picture the screen is dark in both themes
+    FX.light = root.getAttribute("data-theme") === "light";
     FX.fx = triple("--en-fx", FX.fx); FX.hot = triple("--en-hot", FX.hot); FX.flash = triple("--en-flash", FX.flash);
   }
   const fxOn = () => Boolean(ctx) && !still();

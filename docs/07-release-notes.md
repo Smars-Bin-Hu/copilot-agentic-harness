@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.46 (2026-11-16)
+
+The Enter screen has a light look over a wallpaper; what the agent sends to Azure DevOps is kept in `OUT/` of the task.
+
+### Changed
+
+- **The light theme now shows on the Enter screen over a wallpaper.** Before, the screen stayed dark in both themes. Now the light theme has a white veil over the picture, dark letters, light glass for the READY list and the buttons, and the robot in its light colours. The dark theme and the screen with no wallpaper look as before. Switching the theme changes it at once.
+- **The `ado` skill keeps what it sends to Azure DevOps in `OUT/ado/<id>/` of the task folder** (ado 0.4.14). Before, the text of a comment went into one `comment.md` at the root of the task folder, and the next comment wrote over it. Now each write is a new file, `<time>-comment.md`, so the folder root stays clean and every text that was sent is kept. `OUT/` is not part of the work the independent check looks at: a comment sent after a PASS does not undo it.
+
 ## 1.7.45 (2026-11-16)
 
 A busy work computer: the harness no longer adds to the load, a time limit holds on Windows, and a task does not flash idle when VS Code answers late.

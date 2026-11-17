@@ -9,8 +9,8 @@
 html.en-open{overflow:hidden}
 html.en-open main{visibility:hidden}
 html.en-open body{height:100vh;overflow:hidden}  /* the page under the screen is not a page to scroll: no scroll height of its own (1.7.28) */
-/* over a picture the screen is dark in both themes: light letters, warm light */
-html.has-wall #enter{--en-ink:var(--enw-ink);--en-cap:rgba(245,246,247,.78);--en-m0:rgba(255,255,255,.97);--en-m1:rgba(255,255,255,.55);--en-rim:rgba(255,255,255,.35);--en-spot:rgba(255,255,255,.96);--en-sheen:rgba(255,255,255,.03);--en-floor:rgba(0,0,0,.35);
+/* over a picture in the dark theme: light letters, warm light (the light theme keeps its own tokens, over a white veil) */
+html[data-theme="dark"].has-wall #enter{--en-ink:var(--enw-ink);--en-cap:rgba(245,246,247,.78);--en-m0:rgba(255,255,255,.97);--en-m1:rgba(255,255,255,.55);--en-rim:rgba(255,255,255,.35);--en-spot:rgba(255,255,255,.96);--en-sheen:rgba(255,255,255,.03);--en-floor:rgba(0,0,0,.35);
  --en-fx:255,214,150;--en-hot:255,170,70;--en-flash:255,255,255;--soft:var(--enw-soft);--good:var(--enw-good);--good-dot:var(--enw-good-dot);--hot:var(--enw-hot);--hot-dot:var(--enw-hot-dot);--bad:var(--enw-bad);--ink:var(--enw-ink);--line:rgba(255,255,255,.14);--line2:rgba(255,255,255,.24);
  --robot-body:var(--enw-body);--robot-head:var(--enw-head);--robot-line:var(--enw-line);--robot-visor:var(--enw-visor)}
 .en-ground{position:absolute;inset:0}  /* the studio itself is in the 3D stage (space.css), so it can turn */
@@ -18,11 +18,12 @@ html.has-wall #enter{--en-ink:var(--enw-ink);--en-cap:rgba(245,246,247,.78);--en
 #enter .en-sp{stop-color:var(--en-spot)}#enter .en-m0{stop-color:var(--en-m0)}#enter .en-m1{stop-color:var(--en-m1)}
 #enter .en-rim{fill:none;stroke:var(--en-rim)}
 
-/* the list sits on a dark backing over a picture: the amber and grey lines hold their contrast on any picture */
-html.has-wall .en-chk{padding:12px 14px;border-radius:14px;background:rgba(8,9,10,.58)}
-html.has-wall .en-chk-l .m{background:rgba(8,9,10,.5)}
-html[data-theme="light"]:not(.has-wall) .en-chk-l .m:not(.soft){background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
-html[data-theme="light"]:not(.has-wall) .en-chk-l .m.soft{background:rgba(255,255,255,.6)}  /* a note is calm: not the amber of a line that needs you (1.7.29) */
+/* the list sits on a backing over a picture: dark in the dark theme, the light glass of the lobby in the light one, so the lines hold their contrast on any picture */
+html.has-wall .en-chk{padding:12px 14px;border-radius:14px}
+html[data-theme="dark"].has-wall .en-chk{background:rgba(8,9,10,.58)}
+html[data-theme="dark"].has-wall .en-chk-l .m{background:rgba(8,9,10,.5)}
+html[data-theme="light"] .en-chk-l .m:not(.soft){background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
+html[data-theme="light"] .en-chk-l .m.soft{background:rgba(255,255,255,.6)}  /* a note is calm: not the amber of a line that needs you (1.7.29) */
 .en-ref{transition:opacity .4s ease}html.en-notready .en-ref{opacity:0 !important}  /* the intro animation holds its last value, so it must be forced */  /* the list grows up into the reflection when something needs you: no reflection then (1.7.29) */
 
 /* top right: only the greeting (the search is the fixed one of shell.css, which keeps the room at the right) */
@@ -188,7 +189,7 @@ html[lang="zh"] .en-chk-l .gh-tag{letter-spacing:.04em;font-size:11px}
 .en-chk-l .l-grey .t{opacity:.82}
 .en-chk-l li.row.has-fix:not(.s-check) .t:hover{text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .en-chk-l .m.bad{background:var(--bad-bg);border-color:var(--bad-line);color:var(--bad)}
-html[data-theme="light"]:not(.has-wall) .en-chk-l .m.bad{background:linear-gradient(var(--bad-bg),var(--bad-bg)),rgba(255,255,255,.9)}
+html[data-theme="light"] .en-chk-l .m.bad{background:linear-gradient(var(--bad-bg),var(--bad-bg)),rgba(255,255,255,.9)}
 .en-link{display:inline;padding:0;border:0;background:none;font:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .en-link:hover{opacity:.75}.en-link:focus-visible{outline:2px solid var(--en-ink);outline-offset:2px;border-radius:3px}
 .sy-d.none{background:transparent;border:1.5px solid var(--soft);opacity:.85}
@@ -211,7 +212,7 @@ html[lang="zh"] .en-chk-l.folded:not(.unfold):not(:hover) li.gh{font-size:12.5px
 .en-vs.hot{background:var(--en-btn);color:var(--en-btn-ink);border-color:transparent;box-shadow:0 14px 34px rgba(0,0,0,.3)}
 .en-vs:disabled{opacity:.6;cursor:default;box-shadow:none}
 .en-vs:focus-visible{outline:2px solid var(--en-ink);outline-offset:3px}
-html.has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);color:var(--en-ink);border-color:rgba(255,255,255,.3)}
+html[data-theme="dark"].has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);color:var(--en-ink);border-color:rgba(255,255,255,.3)}
 .en-foot{grid-template-columns:minmax(min(420px,100%),1fr) auto minmax(0,1fr)}
 @media (max-width:1279px){.en-hint{display:none}}
 @media (max-width:1100px){.en-cta{order:-1}.en-foot{grid-template-columns:minmax(0,1fr)}}

@@ -15,6 +15,8 @@ html.has-wall .lb-top,html.has-wall .kpis,html.has-wall .board-list,html.has-wal
  -webkit-backdrop-filter:blur(26px) saturate(1.35);backdrop-filter:blur(26px) saturate(1.35)}
 html[data-theme="light"].has-wall .lb-top,html[data-theme="light"].has-wall .kpis,html[data-theme="light"].has-wall .board-list,html[data-theme="light"].has-wall .lb-scene,html[data-theme="light"].has-wall .tk-head,html[data-theme="light"].has-wall .tk-surface{
  -webkit-backdrop-filter:blur(34px) saturate(1.6) brightness(1.06);backdrop-filter:blur(34px) saturate(1.6) brightness(1.06)}
+/* the Enter screen (enter.css) in the light theme: the list and the buttons are the same glass */
+html[data-theme="light"].has-wall .en-chk,html[data-theme="light"].has-wall .en-vs:not(.hot){background:var(--glass);border:1px solid var(--glass-line);-webkit-backdrop-filter:blur(34px) saturate(1.6) brightness(1.06);backdrop-filter:blur(34px) saturate(1.6) brightness(1.06)}
 /* the header floats on the picture instead of running edge to edge */
 html.has-wall .lb-top,html.has-wall .tk-head{top:0;margin:12px 0 0;padding:12px 18px;border-radius:18px}  /* 12 px down at rest, stuck at the top edge when scrolled */
 html.has-wall .tk-head{padding:10px 16px}

@@ -386,7 +386,7 @@ class SnapshotTests(ReviewCase):
     def test_what_is_a_result_and_what_is_not(self) -> None:
         yes = ("RCA.md", "REQ.md", "PLAN.md", "DEV/repo/a.sql", "TEST/case.md", "notes/x.md")
         no = ("TASK.md", "TODO.md", "LOG.md", ".task/task.json", "REQ/brd.md", "REF/log.txt", "REVIEW/round-001/verdict.md", "SNAPSHOT/a/manifest.json",
-              "CHANGES.diff", "PROMOTE-PLAN.diff", "DEV_r1/repo/a.sql", "PLAN_r1.md", "_deleted/x", "READ/repo/a.sql")
+              "CHANGES.diff", "PROMOTE-PLAN.diff", "DEV_r1/repo/a.sql", "PLAN_r1.md", "_deleted/x", "READ/repo/a.sql", "OUT/ado/300105/20261116-211655-comment.md")
         self.assertEqual([name for name in yes if not tasksnap.is_result(name)], [])
         self.assertEqual([name for name in no if tasksnap.is_result(name)], [])
 

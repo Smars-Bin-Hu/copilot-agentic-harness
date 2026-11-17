@@ -50,12 +50,13 @@ const SUPER = (function () {
     const newTask = SERVE.runs("create") ? h("button", {type: "button", class: "sa-new", title: t("super.new.tip")}, t("super.new.go")) : null;
     const send = h("button", {type: "button", class: "sa-send", title: t("super.send"), "aria-label": t("super.send")}, "↑");
     const box = h("div", {class: "sa-box"}, field, newTask, send);
+    const complete = h("div", {class: "sa-comp", role: "listbox", hidden: "", "aria-label": t("super.route.pick")});
     // The pop-out (companion.js): a small window that stays on top of every other window. Only where the browser can open one (Document Picture-in-Picture: Chrome, Edge).
     const popUp = typeof COMPANION !== "undefined" ? h("button", {type: "button", class: "sa-pop"}, "⇱") : null;
     const streamWrap = h("div", {class: "sa-streamwrap"}, stream, pill);
     const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => linked(text)) : null;  // the earlier days (superhist.js)
     sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
-      streamWrap, quick, h("div", {class: "sa-input"}, box));
+      streamWrap, quick, h("div", {class: "sa-input"}, complete, box));
 
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], localThink = 0, failed = "";
@@ -125,6 +126,7 @@ const SUPER = (function () {
       const clear = filterEl.querySelector(".sa-x");
       if (clear) clear.addEventListener("click", () => setFilter(""));
       applyFilter();
+      drawInput();
     }
     function applyFilter() {
       let visible = 0;
@@ -519,13 +521,14 @@ const SUPER = (function () {
     }
     const talkOff = () => (!talk ? "none" : moodNow() === "sleep" ? "asleep" : moodNow() === "tired" ? "limit" : "");
     function drawInput() {
-      const off = talkOff(), blocked = Boolean(off) || thinkingNow();
+      const routing = Boolean(filter);  // one task's avatar is on: the input asks that task, whatever the super chat's state
+      const off = routing ? "" : talkOff(), blocked = routing ? false : Boolean(off) || thinkingNow(), quickOff = Boolean(talkOff()) || thinkingNow();
       field.disabled = Boolean(off);
-      field.placeholder = off ? t(OFF[off]) : t("super.input.ph");
+      field.placeholder = off ? t(OFF[off]) : routing ? t("super.route.ph", {task: filter}) : t("super.input.ph");
       field.title = field.placeholder;
       send.disabled = blocked;
       box.classList.toggle("off", Boolean(off));
-      quick.hidden = Boolean(off);
+      quick.hidden = Boolean(talkOff());
       if (!quick.children.length) {
         for (const [key, body] of [["super.quick.next", () => ({text: t("super.quick.next")})], ["super.quick.summary", () => ({kind: "summary"})]]) {
           const button = h("button", {type: "button"}, t(key));
@@ -533,7 +536,8 @@ const SUPER = (function () {
           quick.append(button);
         }
       }
-      for (const button of quick.children) button.disabled = blocked;
+      for (const button of quick.children) button.disabled = quickOff;
+      routeComplete();
     }
     async function ask(body, text) {
       if (talkOff() || thinkingNow()) return;
@@ -556,8 +560,119 @@ const SUPER = (function () {
       }
       poll();
     }
-    send.addEventListener("click", () => ask(null));
-    field.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); ask(null); } });
+    // ---------- asking one task (1.8.2): the filter, or "@name" in the first words ----------
+    const ROUTE_ASKS = new Map();  // ask id -> the row of an ask: {ask, sig, open, node, line, answer, more}
+    const routeKey = (why) => (Object.prototype.hasOwnProperty.call(TEXT, "super.route.why." + why) ? "super.route.why." + why : "super.route.why.other");
+    const routeEstimate = (text) => String(text).split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 60)), 0);  // the lines an answer takes, about
+    let routeBusy = false, routePick = -1, routeNames = [];
+    // Where the typed words go: the task of the filter, or the task named after "@" (the name ends at a space or a mark, not inside a longer name), else the super chat (null).
+    function routeTarget(typed) {
+      if (filter) return {task: filter, text: typed};
+      if (!typed.startsWith("@")) return null;
+      for (const name of mates.map((mate) => mate.task).sort((a, b) => b.length - a.length)) {
+        if (!typed.startsWith("@" + name) || /[\w-]/.test(typed.charAt(name.length + 1))) continue;
+        return {task: name, text: typed.slice(name.length + 1).replace(/^[\s,:;]+/, "").trim()};
+      }
+      return null;
+    }
+    async function routeSend(target, typed) {
+      routeBusy = true;
+      field.value = "";
+      field.style.height = "auto";
+      routeComplete();
+      let why = "";
+      if (!target.text) why = "empty";
+      else {
+        try {
+          const result = await SERVE.call("/api/super/route", {task: target.task, text: target.text, lang: ""}, 10);
+          if (!result || result.ok === false) why = (result && result.why) || "other";
+        } catch (error) {
+          why = error && error.status === 403 ? "unpaired" : error && error.data && typeof error.data === "object" && error.data.why ? error.data.why : "other";
+        }
+      }
+      routeBusy = false;
+      if (why) {  // refused: say why in the stream, the words go back into the input
+        if (!field.value) field.value = typed;
+        field.dispatchEvent(new Event("input"));
+        addSys(t(routeKey(why)));
+        return;
+      }
+      poll().then(schedule, schedule);
+    }
+    function submit() {
+      const typed = field.value.trim();
+      if (!typed || routeBusy) return;
+      const target = routeTarget(typed);
+      if (target) routeSend(target, typed); else ask(null);
+    }
+    // The ask rows: one per ask, drawn again in place when its state changes (never added twice).
+    function routeBuild(item) {
+      const kind = (mates.find((mate) => mate.task === item.task) || {}).kind;
+      const line = h("div", {class: "sa-askline"}), answer = h("div", {class: "sa-text sa-ans"}), more = h("button", {type: "button", class: "sa-askmore", hidden: ""}, t("super.more"));
+      const entry = {ask: item, sig: "", open: false, line, answer, more};
+      more.addEventListener("click", () => { entry.open = true; routeDraw(entry, entry.ask); });
+      entry.node = h("div", {class: "sa-row askrow", "data-task": item.task, "data-ask": item.id},
+        h("span", {class: "sa-mini hot"}, PET.face("you", kind, 0)),
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), item.at ? h("span", {class: "sa-when"}, when(item.at, 11, 16)) : null),
+          h("div", {class: "sa-text sa-q"}, item.text), line, answer, more));
+      return entry;
+    }
+    function routeDraw(entry, item) {
+      entry.ask = item;
+      const sig = JSON.stringify([item.state, item.answer, item.why, item.end, entry.open]);
+      if (sig === entry.sig) return;
+      entry.sig = sig;
+      const failedAsk = item.state === "failed", partial = item.state === "answered" || failedAsk ? String(item.answer || "") : "";
+      entry.node.classList.toggle("fail", failedAsk);
+      entry.line.className = "sa-askline" + (failedAsk ? " bad" : "");
+      entry.line.textContent = item.state === "sent" ? t("super.route.waiting") : item.state === "queued" ? t("super.route.queued") : failedAsk ? t(routeKey(item.why || item.end)) : "";
+      entry.line.hidden = !entry.line.textContent;
+      entry.answer.hidden = !partial;
+      entry.answer.replaceChildren(...(partial ? linked(partial) : []));
+      const long = routeEstimate(partial) > 12;
+      entry.answer.classList.toggle("sa-ansclip", long && !entry.open);
+      entry.more.hidden = !(long && !entry.open);
+    }
+    // The messages and the asks in one time order: an ask lands among the messages by its time.
+    function routeMerge(messages, asks) {
+      const fresh = (asks || []).filter((item) => item && item.id && !ROUTE_ASKS.has(item.id)).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+      for (const item of fresh) {
+        mergeTalk((messages || []).filter((message) => message && !seenTalk.has(message.id) && String(message.at || "") <= String(item.at || "")));
+        const entry = routeBuild(item);
+        ROUTE_ASKS.set(item.id, entry);
+        chatRows.push(entry.node);
+        add(entry.node, true);
+        foldChat();
+      }
+      mergeTalk(messages || []);
+      for (const item of asks || []) { const entry = item && ROUTE_ASKS.get(item.id); if (entry) routeDraw(entry, item); }
+    }
+    // "@" completion: the open task names, filtered as the person types; ArrowUp/ArrowDown move, Enter or Tab pick, Esc closes, a click picks.
+    function routeComplete() {
+      const word = /^@([^\s]*)$/.exec(field.value);
+      routeNames = !filter && word ? mates.map((mate) => mate.task).filter((name) => name.toLowerCase().includes(word[1].toLowerCase())).slice(0, 8) : [];
+      if (routePick >= routeNames.length) routePick = routeNames.length - 1;
+      if (routePick < 0 && routeNames.length) routePick = 0;
+      complete.hidden = !routeNames.length;
+      complete.replaceChildren(...routeNames.map((name, at) => h("div", {class: "sa-opt" + (at === routePick ? " on" : ""), role: "option", "aria-selected": String(at === routePick), "data-task": name}, name)));
+    }
+    function routeChoose(name) {
+      field.value = "@" + name + " ";
+      routePick = -1;
+      routeComplete();
+      field.focus();
+    }
+    complete.addEventListener("mousedown", (event) => event.preventDefault());
+    complete.addEventListener("click", (event) => { const opt = event.target.closest(".sa-opt"); if (opt) routeChoose(opt.dataset.task); });
+    field.addEventListener("keydown", (event) => {  // before the Enter-sends handler below: it stops that one while the list is open
+      if (complete.hidden) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); routePick = (routePick + (event.key === "ArrowDown" ? 1 : -1) + routeNames.length) % routeNames.length; routeComplete(); }
+      else if (isEnter(event) || event.key === "Tab") { event.preventDefault(); event.stopImmediatePropagation(); routeChoose(routeNames[Math.max(0, routePick)]); }
+      else if (event.key === "Escape") { event.preventDefault(); routePick = -1; routeNames = []; complete.hidden = true; }
+    });
+    field.addEventListener("input", () => { routePick = -1; routeComplete(); });
+    send.addEventListener("click", submit);
+    field.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); submit(); } });
     field.addEventListener("input", () => { field.style.height = "auto"; field.style.height = Math.min(120, field.scrollHeight) + "px"; });
     if (newTask) newTask.addEventListener("click", () => { const text = field.value.trim(); CHAT.create(text ? {text} : undefined); field.value = ""; });  // the text moved into the new-task dialog
 
@@ -568,7 +683,7 @@ const SUPER = (function () {
       talk = spoken && typeof spoken === "object" && spoken.state ? spoken : null;
       drawTeam(result.mates || []);
       if (talk && talk.state !== "thinking" && localThink && Date.now() - localThink > 4000) localThink = 0;  // the server is done (a message, or nothing to say)
-      mergeTalk(talk ? talk.messages : []);
+      routeMerge(talk ? talk.messages : [], talk ? talk.asks : []);
       reconcile(result.items || []);
       drawOrbit();
       applyFilter();

@@ -222,3 +222,16 @@ a.sa-task:hover{text-decoration:underline}
 .sa-reply-box{flex:1 1 220px;min-width:0;resize:vertical;font:inherit;padding:5px 8px;box-sizing:border-box}
 .sa-reply-bad{flex:1 1 100%}
 .sa-row.done .sa-reply{display:none}
+/* asking one task (1.8.2): the "@" list over the input, and the rows of an ask */
+.sa-input{position:relative}
+.sa-comp{position:absolute;left:14px;right:14px;bottom:calc(100% - 6px);max-width:320px;max-height:200px;overflow:auto;background:var(--card);border:1px solid var(--line2);border-radius:10px;box-shadow:0 4px 14px var(--shade);padding:3px;z-index:5}
+.sa-comp[hidden]{display:none}
+.sa-opt{padding:4px 9px;border-radius:7px;font-size:13px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-opt.on,.sa-opt:hover{background:var(--btn);color:var(--btn-ink)}
+.sa-q{white-space:pre-wrap}
+.sa-askline{margin-top:4px;font-size:12px;color:var(--soft)}
+.sa-askline[hidden],.sa-ans[hidden],.sa-askmore[hidden]{display:none}
+.sa-askline.bad{color:var(--bad,#b3261e)}
+.sa-ans{margin-top:6px;padding-top:6px;border-top:1px solid var(--line);white-space:pre-wrap}
+.sa-ans.sa-ansclip{max-height:calc(12 * 1.45em);overflow:hidden}
+.sa-askmore{margin-top:4px;border:1px solid var(--line2);background:transparent;border-radius:999px;padding:1px 10px;font:inherit;font-size:12px;color:var(--soft);cursor:pointer}

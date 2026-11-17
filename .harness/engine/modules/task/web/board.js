@@ -538,7 +538,7 @@
   // The pill that says whether VS Code is linked is SHELL.vsPill (shell.js): the same state as the banner and the dimmed buttons.
   const cli = DATA.cli || "harness";
 
-  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); drawShift(); lobby.update(rows, live); }
+  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); drawShift(); lobby.update(rows, live); drawBadge(); }
 
   search.addEventListener("input", () => { view.query = search.value; keep.set("query", search.value); drawTable(); });
   kinds.addEventListener("change", () => { view.kind = kinds.value; keep.set("kind", view.kind); drawTable(); });
@@ -555,36 +555,50 @@
   // The card of a robot (lobby.js) is the row of the list again: the same marks (status.js), the same numbers (`figures`), the same buttons (`actionStrip`).
   const lobby = Lobby.create({href: (row) => (DATA.serve && row.status !== "new" ? "/task/" + encodeURIComponent(row.name)
     : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : ""), figures, actions: actionStrip, live, first: firstTask, go: bigNewTask});
-  let mode = keep.get("mode", "lobby") === "list" ? "list" : "lobby";
+  let mode = keep.get("mode", "lobby") === "list" ? "list" : "lobby";  // "super" is never kept: the board opens as before
   const controls = h("div", {class: "controls"}, chips, roundBox, kinds, search, clear);
   const modeButtons = {};
-  const seg = h("div", {class: "lb-seg", role: "group"}, ["lobby", "list"].map((name) => {
-    const button = h("button", {type: "button"}, t(name === "lobby" ? "board.mode.lobby" : "board.mode.list"));
+  // The super agent view (1.8.1, super.js): a served board only. It is one more way to look at the board, picked in the bar; the pick is not kept.
+  const superView = typeof SUPER !== "undefined" && DATA.serve ? SUPER.create({rows: () => rows}) : null;
+  const badge = h("span", {class: "sa-badge", hidden: ""});
+  const modeNames = superView ? ["lobby", "list", "super"] : ["lobby", "list"];
+  const seg = h("div", {class: "lb-seg", role: "group"}, modeNames.map((name) => {
+    const button = h("button", {type: "button", title: name === "super" ? t("board.mode.super.tip") : null}, t(name === "lobby" ? "board.mode.lobby" : name === "list" ? "board.mode.list" : "board.mode.super"), name === "super" ? badge : null);
     button.addEventListener("click", () => setMode(name));
     modeButtons[name] = button;
     return button;
   }));
-  function setMode(name) { mode = name; keep.set("mode", name); drawMode(); }
+  function setMode(name) { mode = name; if (name !== "super") keep.set("mode", name); drawMode(); }
+  function drawBadge() {
+    if (!superView) return;
+    const count = SUPER.waiting(rows);
+    badge.hidden = !count;
+    badge.textContent = count;
+    badge.title = t("board.mode.super.badge", {n: count});
+  }
   function drawMode() {
     for (const name of Object.keys(modeButtons)) modeButtons[name].classList.toggle("on", name === mode);
     const asList = mode === "list";
     for (const part of [kpis, controls, pick, tableBox]) part.hidden = !asList;
     more.hidden = !asList || !hidden;
-    lobby.node.hidden = asList;
-    if (asList) lobby.hide();
+    lobby.node.hidden = mode !== "lobby";
+    if (mode !== "lobby") lobby.hide();
+    if (superView) { if (mode === "super") superView.show(); else superView.hide(); }
   }
 
   app.replaceChildren(
     h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), ...(typeof READYBAR !== "undefined" ? [READYBAR.node()] : []), SHELL.banner(), said,
-    elsewhereBox, kpis, controls, lobby.node,
+    elsewhereBox, kpis, controls, lobby.node, ...(superView ? [superView.node] : []),
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint"), DATA.serve ? null : " ", DATA.serve ? null : stampNote), copyright());
   draw();
   drawMode();
   SHELL.vs(vscode);
+  if (superView) superView.setVscode(vscode);
   // What Cmd+K can open on the board: its tasks, the two views and the filters (it only changes what is shown; it never acts on a task).
   SHELL.provide(() => ({tasks: rows,
-    views: [{id: "list", label: t("board.shell.view.list"), kw: "list table", run: () => setMode("list")}, {id: "lobby", label: t("board.shell.view.lobby"), kw: "lobby robots floor", run: () => setMode("lobby")}],
+    views: [{id: "list", label: t("board.shell.view.list"), kw: "list table", run: () => setMode("list")}, {id: "lobby", label: t("board.shell.view.lobby"), kw: "lobby robots floor", run: () => setMode("lobby")},
+      ...(superView ? [{id: "super", label: t("board.shell.view.super"), kw: "super agent messages inbox chat", run: () => setMode("super")}] : [])],
     filters: FILTERS.map((name) => ({id: name, label: t("board.filter." + name), run: () => { view.filter = name; keep.set("filter", name); setMode("list"); drawControls(); drawTable(); }}))}));
 
   function refresh(strict) {  // strict: an unanswered request is thrown (the poll counts it); a click's refresh ignores it
@@ -602,6 +616,7 @@
     archiveTo = data.archive_to || "";
     paintElsewhere(DATA.serve ? data.held_elsewhere || [] : []);
     SHELL.vs(data.vscode);
+    if (superView) superView.setVscode(data.vscode);
     if (DATA.serve) { DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); }
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
     if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else { paintStamp(); paintSpace(data.space); }

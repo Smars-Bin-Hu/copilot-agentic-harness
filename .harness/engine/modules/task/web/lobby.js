@@ -377,5 +377,5 @@ const Lobby = (function () {
     return {node: scene, update, hide};
   }
 
-  return {create};
+  return {create, robot};  // `robot`: the flat robot, for the pet of the super agent view (pet.js) and its avatars (super.js)
 })();

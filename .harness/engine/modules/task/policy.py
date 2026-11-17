@@ -1,4 +1,4 @@
-"""task.json: how many files a fetch may copy, the contributor line of the commit message, the TASK.md reminder, the checks of `[review]=n`, the snapshots, what the report reads, how many mappers `/generic-mapreduce` may call."""
+"""task.json: how many files a fetch may copy, the contributor line of the commit message, the TASK.md reminder, the checks of `[review]=n`, the snapshots, what the report reads, how many mappers `/generic-mapreduce` may call, the daily Credits of the super agent chat."""
 
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ POLICY_SCHEMA = {
                 },
             },
         },
+        "super": {"type": "object", "properties": {"daily_credits": {"type": "number", "minimum": 0}}},
         "mapreduce": {
             "type": "object",
             "properties": {"max_agents": {"type": "integer", "minimum": 0}, "minutes": {"type": "integer", "minimum": 1}},

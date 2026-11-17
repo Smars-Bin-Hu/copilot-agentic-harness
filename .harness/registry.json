@@ -144,6 +144,7 @@
         ".harness/tests/test_autorun_board.py",
         ".harness/tests/test_gate_super.py",
         ".harness/tests/test_superview.py",
+        ".harness/tests/test_superbrain.py",
         ".harness/tests/test_mapreduce.py",
         ".harness/tests/test_task.py",
         ".harness/tests/test_task_manual.py",

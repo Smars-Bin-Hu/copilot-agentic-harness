@@ -71,7 +71,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import superview
+from . import superbrain, superview
 from . import accept, autorun, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
@@ -303,6 +303,7 @@ class Board:
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
         self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
+        self.brain = superbrain.Brain(root, self.link, self.rows)  # 1.8.1: the super agent chat (`/api/super/ask`, `/api/super/talk`)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
         self.restarter = vsrestart.Restart(launchenv.vscode_running, self.open_vscode, gone=self.link.hurry, chats=lambda: self.other_chats([]))  # the VS Code button of the screen (1.7.38): quit, wait, open
         self.ready.restart = self.restarter
@@ -2057,6 +2058,18 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.pick_wall_folder())
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the settings panel
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/super/ask":  # the super agent chat (1.8.1): the person's words, or a request for the summary; {ok: true} or {ok: false, why: asleep | limit | busy | empty | long | timeout | error}. It spends Credits and sends to a chat: the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    return self.answer(200, board.brain.summary() if data.get("kind") == "summary" else board.brain.ask(data.get("text")))
+                except Exception as error:  # noqa: BLE001 - the page shows the refusal
+                    return self.answer(500, {"error": str(error)})
+            if path == "/api/super/talk":  # the conversation of today, the state, the spend and the limit: a read
+                try:
+                    return self.answer(200, board.brain.talk())
+                except Exception as error:  # noqa: BLE001 - the page keeps what it shows
+                    return self.answer(500, {"error": str(error)})
             if path == "/api/super":  # the super agent view (1.8.1): what waits for the person across the open tasks, from the same rows as /api/board; a read, with the same checks
                 try:
                     return self.answer(200, superview.build(board.rows()))

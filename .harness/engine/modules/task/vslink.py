@@ -138,7 +138,7 @@ class Job:
 
 
 # "": any state: a setting of the chat holds from its next turn; a Withdraw stops a running turn first (1.6.99); Try again and taking back a queued message are checked by the thread
-NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": ""}  # relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
+NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": "", "super": ""}  # relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
 
 
 class VsLink:
@@ -184,6 +184,7 @@ class VsLink:
         self.relay_hold: Dict[str, float] = {}  # task -> monotonic time before which its relay is not tried again
         self.starts: Dict[str, Dict[str, Any]] = {}  # 1.8 step 9: task -> the Start order of the board (`autorun_start`), done here on the thread; memory only
         self.start_at = 0.0  # monotonic time of the last look at the Start orders
+        self.super_chat: Optional[Dict[str, str]] = None  # 1.8.1: the super agent chat the board owns ({session, chat}); it is kept subscribed while set; memory only (`superbrain` keeps it in a file)
 
     # --- the page side: reads only ------------------------------------------------------------------------------------------
 
@@ -384,6 +385,38 @@ class VsLink:
         self.wake.set()
         if not job.done.wait(CREATE_WAIT):
             job.cancelled = True  # a thread that has not begun must not make a chat the person was told failed
+            raise Refused("timeout")
+        if job.error is not None:
+            self.host_said(job.error)
+            raise job.error
+        return job.result
+
+    def super_watch(self, session: str, chat: str) -> None:
+        """1.8.1: keep this chat (the super agent's) subscribed, from the next look. Empty `chat`: let go."""
+        with self.lock:
+            self.super_chat = {"session": session, "chat": chat} if session and chat else None
+            self.dirty = True
+        self.wake.set()
+
+    def super_view(self) -> Optional[Dict[str, Any]]:
+        """1.8.1, from the cache: `{state, status}` of the super agent chat (`state`: its trimmed snapshot, None until it is read; `status`: idle, busy, input, error, unknown), or None when the link is not ready or no chat is watched."""
+        with self.lock:
+            if not self.enabled or not self.ready or not self.super_chat:
+                return None
+            held = self.chats.get(self.super_chat["chat"])
+            return {"state": copy.deepcopy(held["state"]) if held else None, "status": ahp.status_name((self.sessions.get(self.super_chat["session"]) or {}).get("status"))}
+
+    def super_send(self, plan: Dict[str, Any], text: str) -> Dict[str, Any]:
+        """1.8.1: send one turn to the super agent chat on the thread, making the chat first when `plan` names none. `plan`: {session, chat (both empty: make one), agent (file uri), model, approve}.
+        The answer: {session, chat, turn}. Raises Refused (`off`, `not-ready`, `not-idle`, `timeout`) or the host's error."""
+        why = self.create_blocked()
+        if why:
+            raise Refused(why)
+        job = Job("super", "", text, plan.get("model"), plan)
+        self.jobs.put(job)
+        self.wake.set()
+        if not job.done.wait(CREATE_WAIT):
+            job.cancelled = True  # a thread that has not begun must not send what the person was told failed
             raise Refused("timeout")
         if job.error is not None:
             self.host_said(job.error)
@@ -858,10 +891,67 @@ class VsLink:
         self._list(link)  # marks the board dirty
         job.result = {"session": resource, "chat": chat, "initiator": initiator, "turn": str(action["turnId"])}
 
+    def _super(self, link: ahp.Connection, job: Job) -> None:
+        """1.8.1: one turn for the super agent chat. The chat is made with the custom agent (`agent.uri` in `createSession` and in the message), Allow all, no worktree; the model goes on the message.
+        A chat that exists must have no running turn (`not-idle`). The chat is kept subscribed (`super_chat`), so the board reads the reply from the cache."""
+        plan = job.plan or {}
+        if job.cancelled:
+            raise Refused("timeout")
+        agent = {"uri": str(plan["agent"])}
+        resource, chat = str(plan.get("session") or ""), str(plan.get("chat") or "")
+        stub: Optional[Dict[str, Any]] = None
+        if not resource or not chat:
+            resource = "ahp-session:/" + str(uuid.uuid4())
+            link.call("createSession", {"channel": resource, "provider": ahp.LOCAL_PROVIDER, "workingDirectories": [ahp.folder_uri(self.root)], "agent": agent,
+                                        "config": {"isolation": "folder", "mode": "interactive", "autoApprove": str(plan.get("approve") or "autoApprove")}})
+            state = link.subscribe(resource)
+            chat = str(state.get("defaultChat") or "")
+            if not chat:
+                raise ahp.AhpError("createSession: no chat in the new session")
+            held = {"state": ahp.trimmed(link.subscribe(chat)), "tool_at": ""}
+            stub = {"resource": resource, "provider": ahp.LOCAL_PROVIDER, "title": "", "status": ahp.IN_PROGRESS, "defaultChat": chat, "chats": [{"resource": chat}],
+                    "workingDirectories": [ahp.folder_uri(self.root)], "modifiedAt": ahp.utc_stamp()}
+            with self.lock:
+                self.expect[resource] = {"stub": stub, "until": time.monotonic() + EXPECT_FOR}  # the host lists it only once the first turn runs
+                self.chats[chat] = held
+                self.sess[resource] = {"channel": resource, "state": ahp.trimmed_session(state), "seen": {}}
+        else:
+            with self.lock:
+                held = self.chats.get(chat)
+                known = self.sessions.get(resource)
+            if held is None:
+                held = {"state": ahp.trimmed(link.subscribe(chat)), "tool_at": ""}
+                with self.lock:
+                    self.chats[chat] = held
+            with self.lock:
+                busy = bool(held["state"].get("activeTurn")) or ahp.status_name((known or {}).get("status")) in ("busy", "input")
+            if busy:
+                raise Refused("not-idle")
+        message: Dict[str, Any] = {"text": job.text, "origin": {"kind": "user"}, "agent": agent}
+        if job.model:
+            message["model"] = job.model
+        action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
+        with self.lock:
+            self.super_chat = {"session": resource, "chat": chat}
+        link.dispatch(chat, action)
+        with self.lock:
+            ahp.reduce_chat(held["state"], action)
+            if stub is not None:
+                self.sessions.setdefault(resource, dict(stub))
+            known = self.sessions.get(resource)
+            if known is not None:
+                known["status"] = ahp.IN_PROGRESS | (int(known.get("status") or 0) & (ahp.IS_READ | ahp.ARCHIVED))
+            chatlive.stamp(held, action, int(time.time() * 1000))
+            held["rev"] = held.get("rev", 0) + 1
+            self.dirty = True
+        job.result = {"session": resource, "chat": chat, "turn": str(action["turnId"])}
+
     def _do(self, link: ahp.Connection, job: Job) -> None:
         try:
             if job.kind == "create":
                 return self._create(link, job)
+            if job.kind == "super":
+                return self._super(link, job)
             if job.cancelled:
                 raise Refused("timeout")
             binding = self._recheck(link, job.task, job.kind)
@@ -1226,6 +1316,8 @@ class VsLink:
         with self.lock:
             wanted = {binding["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat")}
             wanted.update({item["chat"]: item["session"] for item in self.created})  # a chat the board just made stays subscribed until its task is bound
+            if self.super_chat:
+                wanted[self.super_chat["chat"]] = self.super_chat["session"]  # 1.8.1: the super agent chat, so its replies are read from the cache
             wanted.update({sub["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat") for sub in self._subs_of(binding)})  # what its subagents do (1.6.105)
             wanted.update({target["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat") for target in self._sub_targets(binding)})  # 1.8: the chat of a subagent whose call runs: for its confirmations
             have = set(self.chats)

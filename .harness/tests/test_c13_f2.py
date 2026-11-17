@@ -1550,7 +1550,7 @@ class HarnessCloseTests(BothCase):
               "python3 -c \"import subprocess; subprocess.run(['harness','task','close','--task','x'])\"", "PYTHONPATH=.harness/engine python3 -c \"import cli; cli.main(['task','close'])\"", "node -e \"require('child_process').execSync('harness task close')\"",
               "perl -e 'system(\"harness\", \"task\", \"close\")'", "python3 -c \"import os; os.system('harness task close')\"", "ruby -e 'system(\"harness task close\")'")
     OTHER = ("harness task approve-plan --task x", "harness 'task' 'approve-plan'", "harness task confirm-req", "harness task approve-promote --task x", "harness approve-action 123", "harness 'approve-action' 123", "harness admin on", "harness 'admin' 'on'",
-             "harness task review set --task x", "harness task autorun on", "harness task allow --env dev", "harness task board")
+             "harness task review set --task x", "harness task autorun on", "harness task allow --env dev", "harness task allow --conn db1 --on", "harness task allow --links --on", "harness 'task' 'allow' --conn db1 --on", "harness task board")
 
     def test_every_spelling_of_close_is_refused_with_the_way(self) -> None:
         for line in self.CLOSE:

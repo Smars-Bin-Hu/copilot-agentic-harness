@@ -59,7 +59,7 @@ class ValidationTests(TaskCase):
 
     def test_the_mode_and_the_folder_cannot_be_asked_for(self) -> None:
         found = self.plan(mode="autopilot", isolation="worktree", provider="claude", workingDirectories=["file:///etc"])
-        self.assertEqual(sorted(found), ["approve", "domain_choice", "domains", "kind", "lang", "links", "model", "name", "new_domains", "permission", "source", "text"])  # nothing of them is carried
+        self.assertEqual(sorted(found), ["approve", "domain_choice", "domains", "kind", "lang", "links", "model", "name", "new_domains", "permission", "skill", "source", "text", "then"])  # nothing of them is carried
 
     def test_the_name_follows_the_rules_of_task_new_and_is_not_taken(self) -> None:
         for name in ("", "  ", "a/b", "a\\b", ".hidden", "a b", "x" * 81, "..", "a;b", "$(x)", "-x"):
@@ -165,6 +165,70 @@ class MessageTests(TaskCase):
 def add_domains(root: Any, *names: str) -> None:
     for name in names:
         (root / "knowledge-base" / "domains" / name).mkdir(parents=True, exist_ok=True)
+
+
+def with_skills(root: Path, *names: str) -> None:
+    """The skills a test names, copied into its harness folder: a task folder of a test has no `.github/skills` of its own."""
+    import shutil
+
+    for name in names:
+        shutil.copytree(REPO / ".github" / "skills" / name, root / ".github" / "skills" / name, dirs_exist_ok=True)
+
+
+class SkillTests(TaskCase):
+    """1.8.2: a task made from the board's window for a skill. A skill only a person starts (`disable-model-invocation`) cannot be loaded by the agent, so the first message only opens
+    the task and the board sends `/<skill> <words>` next; any other skill is named in the first message, as before."""
+
+    APR = "harness-agent-performance-review"
+
+    def setUp(self) -> None:
+        super().setUp()
+        with_skills(self.root, self.APR, "generic-kb-refresh")
+
+    def plan(self, **change: Any) -> Dict[str, Any]:
+        return chatnew.validate(self.root, {**GOOD, "kind": "rca", **change}, MODELS)
+
+    def test_a_skill_only_a_person_starts_is_sent_after_the_task_is_open_not_named_in_the_first_message(self) -> None:
+        found = self.plan(skill=self.APR, text="Task to review: job1.")
+        self.assertEqual(found["then"], f"/{self.APR} Task to review: job1.")
+        first = chatnew.first_message(found)
+        self.assertIn("Open the task, then end your turn", first)
+        self.assertNotIn("Use the skill " + self.APR, first)
+        self.assertIn("harness-my-task", first)  # the task is still opened the usual way
+
+    def test_the_second_message_keeps_the_slash_first_and_the_language_mark_last(self) -> None:
+        self.assertEqual(self.plan(skill=self.APR, text="Task to review: job1.", lang="zh")["then"], f"/{self.APR} Task to review: job1. [ZH]")
+        self.assertEqual(self.plan(skill=self.APR, text="a\nb")["then"], f"/{self.APR} a b")  # one line: the words cannot start another instruction
+
+    def test_a_skill_the_agent_may_load_is_named_in_the_first_message_and_nothing_follows(self) -> None:
+        found = self.plan(skill="generic-kb-refresh", text="Domain: sales.")
+        self.assertEqual(found["then"], "")
+        self.assertTrue(chatnew.first_message(found).endswith("What to do:\nUse the skill generic-kb-refresh. Domain: sales."))
+
+    def test_a_skill_needs_no_words_and_an_unknown_one_is_refused(self) -> None:
+        self.assertEqual(self.plan(skill=self.APR, text="")["then"], f"/{self.APR}")
+        for name in ("no-such-skill", "../x", "Harness-My-Task"):
+            with self.subTest(name=name), self.assertRaises(CommandError) as caught:
+                self.plan(skill=name)
+            self.assertEqual(str(caught.exception), refused("skill", skill=name))
+
+    def test_the_preview_shows_the_second_message_even_while_a_field_is_wrong(self) -> None:
+        good = chatnew.preview(self.root, {**GOOD, "kind": "rca", "skill": self.APR, "text": "Task to review: job1."}, MODELS)
+        self.assertEqual((good["problem"], good["then"]), ("", f"/{self.APR} Task to review: job1."))
+        bad = chatnew.preview(self.root, {**GOOD, "name": "", "kind": "rca", "skill": self.APR, "text": ""}, MODELS)
+        self.assertTrue(bad["problem"])
+        self.assertEqual(bad["then"], f"/{self.APR}")
+        self.assertIn("Open the task, then end your turn", bad["text"])
+
+    def test_every_board_skill_that_opens_a_task_and_only_a_person_starts_gets_a_second_message(self) -> None:
+        from core import skillboard
+        from modules.task import skillsend
+
+        found = [item["name"] for item in skillboard.skills(REPO) if item["opens"] == "task" and skillsend.user_only(REPO, item["name"])]
+        self.assertIn(self.APR, found)
+        for name in found:
+            with self.subTest(name=name):
+                self.assertEqual(chatnew.follow_up(REPO, name, "", "en"), f"/{name}")
 
 
 class DomainTests(TaskCase):
@@ -571,6 +635,44 @@ class CreateTests(CreateCase):
         time.sleep(1.0)  # a pass of the thread at least
         self.assertEqual(self.vs.waiting_names(), ["fresh-load"])
         self.assertNotEqual((self.data(f"{tasks.TASKS_DIR}/something-else").get("chat") or {}).get("how"), "board")
+
+
+class SkillFollowUpTests(CreateCase):
+    def setUp(self) -> None:
+        super().setUp()
+        with_skills(self.root, "harness-agent-performance-review", "generic-kb-refresh")
+
+    def test_the_board_sends_the_skill_once_the_first_turn_is_over_and_only_once(self) -> None:
+        apr = "harness-agent-performance-review"
+        result = self.make(kind="rca", skill=apr, text="Task to review: job1.")[1]["result"]
+        self.assertEqual(result["then"], f"/{apr} Task to review: job1.")
+        self.assertTrue(until(lambda: self.vs.waiting_names() == ["fresh-load"]))
+        self.prompt("start", session="sess-fresh")
+        self.new(name="fresh-load", session="sess-fresh")  # the first turn opens the task
+        fresh = f"{tasks.TASKS_DIR}/fresh-load"
+        self.assertTrue(until(lambda: (self.data(fresh).get("chat") or {}).get("how") == "board"), self.data(fresh))
+
+        def sent() -> List[str]:
+            return [item["action"]["message"]["text"] for item in self.dispatched() if item["channel"] == self.new_chat and item["action"].get("type") == "chat/turnStarted"]
+
+        time.sleep(1.5)
+        self.assertEqual(sent(), [result["text"]])  # the chat is still busy with its first turn: nothing more yet
+        resource = self.made[0]["channel"]
+        for item in self.items:
+            if item.get("resource") == resource:
+                item["status"] = 1
+        self.host.push({"jsonrpc": "2.0", "method": "root/sessionSummaryChanged", "params": {"session": resource, "changes": {"status": 1}}})
+        self.assertTrue(until(lambda: sent() == [result["text"], result["then"]]), sent())
+        time.sleep(1.5)
+        self.assertEqual(sent(), [result["text"], result["then"]])  # once
+        lines = [json.loads(line) for line in (self.root / fresh / ".task" / "sent.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([(line["kind"], line["text"]) for line in lines], [("create", result["text"]), ("send", result["then"])])
+        self.assertEqual(lines[-1]["model"], {"id": "claude-haiku-5.5", "config": {"thinkingLevel": "low"}})  # the model of the dialog
+
+    def test_a_task_made_for_any_other_skill_gets_no_second_message(self) -> None:
+        result = self.make(kind="kb", skill="generic-kb-refresh", text="Domain: sales.")[1]["result"]
+        self.assertEqual(result["then"], "")
+        self.assertIn("Use the skill generic-kb-refresh.", result["text"])
 
 
 class KnowledgeBaseServerTests(CreateCase):

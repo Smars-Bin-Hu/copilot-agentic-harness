@@ -59,8 +59,11 @@ def validate(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], wait
     source = text_field(data, "source")
     if source and source not in known_names(root):
         raise refusal("source", source=source)
+    skill = text_field(data, "skill")  # a skill of the board's window that opens a task (1.8.2)
+    if skill and not skillsend().known(root, skill):
+        raise refusal("skill", skill=skill[:80])
     text = text_field(data, "text")
-    if not text:
+    if not text and not skill:
         raise refusal("text.empty")
     if len(text) > MAX_TEXT:
         raise refusal("text.long", limit=MAX_TEXT)
@@ -73,9 +76,24 @@ def validate(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], wait
     if permission not in PERMISSIONS:
         raise refusal("permission")
     model = model_of(data, models)
-    return {"name": name, "kind": kind, "source": source, "text": text, "lang": lang, "permission": permission, "approve": PERMISSIONS[permission], "model": model,
+    then = follow_up(root, skill, text, lang)
+    return {"name": name, "kind": kind, "source": source, "text": text, "skill": skill, "then": then, "lang": lang, "permission": permission, "approve": PERMISSIONS[permission], "model": model,
             "links": links_of(data, root), "domains": domains_of(root, data), "domain_choice": bool(intake.kb_domains(root)),
             "new_domains": [item for item in domains_of(root, data) if not domainskills.find(domainskills.domains(root), item)]}
+
+
+def skillsend() -> Any:
+    from . import skillsend as module  # it imports this module
+
+    return module
+
+
+def follow_up(root: Any, skill: str, text: str, lang: str) -> str:
+    """The second message of a task made for a skill only a person starts (`disable-model-invocation`): `/<skill> <what the person typed>`, which the board sends once the
+    first turn (open the task) is over. An agent cannot load such a skill, so "Use the skill" in the first message would leave it stuck (1.8.2). Empty for any other skill."""
+    if not skill or not skillsend().user_only(root, skill):
+        return ""
+    return skillsend().message(root, {"skill": skill, "words": text, "lang": lang})
 
 
 def links_of(data: Dict[str, Any], root: Any = None) -> List[str]:
@@ -127,7 +145,7 @@ def preview(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], waiti
     message grow while typing; the message is made by the same `first_message` as the real one, which is made only from a plan `validate` passed."""
     try:
         plan = validate(root, data, models, waiting)
-        return {"text": first_message(plan), "problem": "", "model": plan["model"] or {}, "permission": plan["permission"]}
+        return {"text": first_message(plan), "then": plan["then"], "problem": "", "model": plan["model"] or {}, "permission": plan["permission"]}
     except CommandError as error:
         problem = str(error)
     def word(key: str) -> str:
@@ -139,7 +157,15 @@ def preview(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], waiti
             "text": word("text")[:MAX_TEXT] or "<what to do>", "links": [item for item in (links_text(data.get("links"))) if toolpacks.LINK.match(item)][:MAX_LINKS], "lang": word("lang") if word("lang") in chatsend.LANGS else "en",
             "domains": list(dict.fromkeys(found for found in (domainskills.find(known, item.strip()) or (item.strip() if word("kind") == "kb" and domainskills.NAME.match(item.strip()) else None) for item in wanted if isinstance(item, str)) if found))[:MAX_DOMAINS],
             "domain_choice": bool(known), "new_domains": [item for item in wanted if isinstance(item, str) and not domainskills.find(known, item.strip())]}
-    return {"text": first_message(plan), "problem": problem, "model": {}, "permission": DEFAULT_PERMISSION}
+    skill = word("skill")
+    plan["skill"] = skill if skillsend().known(root, skill) else ""
+    if plan["skill"] and plan["text"] == "<what to do>":
+        plan["text"] = ""
+    try:
+        plan["then"] = follow_up(root, plan["skill"], plan["text"], plan["lang"])
+    except CommandError:
+        plan["then"] = f"/{plan['skill']}"
+    return {"text": first_message(plan), "then": plan["then"], "problem": problem, "model": {}, "permission": DEFAULT_PERMISSION}
 
 
 def model_of(data: Dict[str, Any], models: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -180,9 +206,15 @@ def first_message(plan: Dict[str, Any]) -> str:
                 "The name and the kind are given: do not ask for them.\n"
                 f"- Task name: {plan['name']}\n- Kind: {plan['kind']}")
     head += domain_line(plan)
+    what = plan["text"]
+    if plan.get("then"):
+        what = (f"Open the task, then end your turn: do nothing else. The board then sends /{plan['skill']} in this chat, and the work starts there. "
+                "It is a skill only the person starts: do not try to load it.")
+    elif plan.get("skill"):
+        what = f"Use the skill {plan['skill']}." + (f" {plan['text']}" if plan["text"] else "")
     if plan.get("links"):
         head += f"\n- Tickets to link: {', '.join(plan['links'])} (run harness task link add <ref> --task <name> for each once the task is open; do not ask)"
-    return chatsend.compose(head + "\n\nWhat to do:\n" + plan["text"], plan["lang"], [])
+    return chatsend.compose(head + "\n\nWhat to do:\n" + what, plan["lang"], [])
 
 
 def domain_line(plan: Dict[str, Any]) -> str:

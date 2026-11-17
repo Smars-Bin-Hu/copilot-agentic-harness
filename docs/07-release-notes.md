@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.8.2 (2026-11-17)
+
+A skill only you can start now works from its button on the board.
+
+### Changed
+
+- **Agent Performance Review starts from its button.** The skill is one only you can start (`disable-model-invocation: true`), so the agent cannot load it; the button told the agent "Use the skill ..." and it stopped and asked you to type `/harness-agent-performance-review`. Now, for any skill like that which opens a task, the first message only opens the task; when that turn is over, the board sends `/<skill> <your words>` to the same chat, once, with the model you chose. The new-task window shows both messages. A skill the agent may load is named in the first message, as before; a skill that opens a chat already started with `/<skill>`.
+
 ## 1.8.1 (2026-11-17)
 
 On a slow work computer, calls of one session no longer wait out and get refused, and two of them can no longer write the same task file at once.

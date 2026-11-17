@@ -31,7 +31,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from core import ahp, config, launchenv, tasks
+from core import ahp, config, launchenv, messages, tasks
 from core.paths import utc_now
 
 from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
@@ -184,6 +184,8 @@ class VsLink:
         self.relay_hold: Dict[str, float] = {}  # task -> monotonic time before which its relay is not tried again
         self.starts: Dict[str, Dict[str, Any]] = {}  # 1.8 step 9: task -> the Start order of the board (`autorun_start`), done here on the thread; memory only
         self.start_at = 0.0  # monotonic time of the last look at the Start orders
+        self.follow: Dict[str, Dict[str, Any]] = {}  # 1.8.2: task -> the second message of a chat made for a skill only a person starts (`chatnew.follow_up`), sent when the first turn is over; memory only
+        self.follow_at = 0.0
 
     # --- the page side: reads only ------------------------------------------------------------------------------------------
 
@@ -609,6 +611,7 @@ class VsLink:
                 self._look(link)
                 self._autorun(link)
             self._starts(link)  # its own pace (RELAY_EVERY): a Start order does not wait for the next look at the tasks
+            self._follow(link)
 
     def start_order(self, task: str, model: Dict[str, Any], allow: str) -> None:
         """1.8, step 9: the board switched autorun on. The thread does the Start order (Allow all, `/compact` when the chat has history, `/harness-autorun` with `model`) on the bound chat as it is, and nothing else
@@ -626,6 +629,46 @@ class VsLink:
         """Is the Start order of this task before its last stage (the relay and the pit stop keep away)?"""
         with self.lock:
             return (self.starts.get(task) or {}).get("stage") in autorun_start.BEFORE_VERIFY
+
+    def _follow(self, link: ahp.Connection) -> None:
+        """1.8.2: send `/<skill> <words>` to a chat the board made for a skill only a person starts, once its first turn (open the task) is over: the chat is bound to the task and idle.
+        Sent once; a chat that never comes back idle within `chatnew.KEEP_PENDING` is let go, with a line on the task. A failure here never stops the link."""
+        now = time.monotonic()
+        with self.lock:
+            items = list(self.follow.items())
+        if not items or now - self.follow_at < RELAY_EVERY:
+            return
+        self.follow_at = now
+        for task, item in items:
+            try:
+                if now - item["clock"] > chatnew.KEEP_PENDING:
+                    with self.lock:
+                        self.follow.pop(task, None)
+                    with task_ops.locked(self.root, task) as data:
+                        task_ops.note(data, "send", messages.text("create.follow.lost", text=chatsend.summary(item["text"])))
+                    continue
+                with self.lock:
+                    binding = self.bound.get(task)
+                    status = ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status")) if binding else ""
+                if not binding or binding.get("chat") != item["chat"] or status != "idle":
+                    continue
+                job = Job("send", task, item["text"], item["model"])
+                self._do(link, job)  # on this thread: it looks at the binding and the chat again, and refuses rather than guess
+                if job.error is not None:
+                    if isinstance(job.error, ahp.AhpError):
+                        self.host_said(job.error)
+                    continue
+                with self.lock:
+                    self.follow.pop(task, None)
+                done = job.result or {}
+                chatsend.record(self.root, task, {"at": utc_now(), "task": task, "kind": "send", "chat": done.get("chat", ""), "title": done.get("title", ""), "turn": done.get("turn", ""),
+                                                  "text": item["text"], "model": item["model"] or {}})
+                with task_ops.locked(self.root, task) as data:
+                    task_ops.note(data, "send", (done.get("title") or "-")[:60] + ": " + chatsend.summary(item["text"]))
+            except ahp.ConnectionClosed:
+                raise
+            except Exception:  # noqa: BLE001 - a helper: tried again at the next look
+                pass
 
     def _starts(self, link: ahp.Connection) -> None:
         """Do the next step of each Start order. A failure here never stops the link; an order that fails ends the run (`autorun_start.fail`)."""
@@ -839,7 +882,7 @@ class VsLink:
             message["attachments"] = job.attachments
         action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
         made = {"name": plan["name"], "kind": plan["kind"], "source": plan["source"], "lang": plan["lang"], "permission": plan["permission"], "model": job.model, "text": job.text, "files": chatsend.listed(job.attachments or []),
-                "session": resource, "chat": chat, "title": "", "clock": time.monotonic(), "keep_model": plan.get("keep_model", True)}
+                "session": resource, "chat": chat, "title": "", "clock": time.monotonic(), "keep_model": plan.get("keep_model", True), "then": plan.get("then") or ""}
         stub = {"resource": resource, "provider": ahp.LOCAL_PROVIDER, "title": "", "status": ahp.IN_PROGRESS, "defaultChat": chat, "chats": [{"resource": chat}],
                 "workingDirectories": [ahp.folder_uri(self.root)], "modifiedAt": ahp.utc_stamp()}
         with self.lock:
@@ -1130,6 +1173,9 @@ class VsLink:
                     task_ops.note(data, "create", chatsend.summary(made["text"]))
             except Exception:  # noqa: BLE001 - the binding is made; a missing line of history must not undo it
                 pass
+            if made.get("then"):
+                with self.lock:
+                    self.follow[entry["task"]] = {"text": made["then"], "model": made["model"], "chat": made["chat"], "clock": time.monotonic()}
 
     @staticmethod
     def _name_chat(link: ahp.Connection, chat: str, name: str) -> None:

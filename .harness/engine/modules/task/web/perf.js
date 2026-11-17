@@ -6,7 +6,7 @@
 const PERF = (function () {
   function start(name, tokens, again) {
     const go = h("button", {type: "button", class: again ? "first-link" : "act hot", title: t("report.perf.start.hint")}, t(again ? "report.perf.again" : "report.perf.start"));
-    go.addEventListener("click", () => CHAT.create({name: ("apr-" + name + (again ? "-2" : "")).slice(0, 80), kind: "rca", text: t("report.perf.start.text", {task: name}),
+    go.addEventListener("click", () => CHAT.create({name: ("apr-" + name + (again ? "-2" : "")).slice(0, 80), kind: "rca", skill: "harness-agent-performance-review", text: t("report.perf.start.text", {task: name}),
       note: t("report.perf.start.note", {tokens: amount(tokens || 0)}), thinking: "high"}));
     return go;
   }

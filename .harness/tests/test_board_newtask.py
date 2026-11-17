@@ -55,7 +55,7 @@ class DialogTests(unittest.TestCase):
     def test_the_preview_is_the_servers_text_and_is_not_a_field(self) -> None:
         create = source("chat.js").split("function create(preset)")[1].split("// \"Allow . deny\"")[0]
         self.assertIn('const preview = h("pre", {class: "send-preview"}', create)  # a <pre>: read only
-        self.assertIn("preview.textContent = found.text;", create)
+        self.assertIn("preview.textContent = found.text + (found.then ? ", create)  # the second message a skill gets (1.8.2) is the server's too
         self.assertIn("state.ready = !found.blocked && !found.problem;", create)
         self.assertNotRegex(create, r"preview\.(contentEditable|setAttribute\(\"contenteditable)")
         self.assertNotIn("first_message", create)  # no second template in the page

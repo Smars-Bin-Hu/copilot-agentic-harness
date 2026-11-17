@@ -258,8 +258,8 @@ const CHAT = (function () {
     waiting = null;
   }
 
-  function create(preset) {  // preset: `true` for the sample of the lesson, or {name, kind, domains, text, note, thinking, back} for a skill; `back` opens the place the person came from
-    const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set(), linkTypes: []};
+  function create(preset) {  // preset: `true` for the sample of the lesson, or {name, kind, domains, text, skill, note, thinking, back} for a skill; `back` opens the place the person came from; `text` is then only the words for the skill
+    const state = {skill: "", lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set(), linkTypes: []};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
     const kind = h("select", {class: "send-body"});
@@ -303,7 +303,7 @@ const CHAT = (function () {
       h("div", {class: "new-actions"}, problem, said, h("div", {class: "row send-actions"}, go, no))]);  // the bar stays in view: the reason the button is dim is read there, not below the long message
     view.box.classList.add("new-wide");
     files.zone(view.box);
-    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: grill.checked ? text.value.trimEnd() + "\n\nFirst use the skill generic-grill-me: ask me what is unclear." : text.value, model: model.value, thinking: thinking.value, context: sizes.chosen(), lang: state.lang, domains: Array.from(state.domains), links: links.value});
+    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: grill.checked ? text.value.trimEnd() + "\n\nFirst use the skill generic-grill-me: ask me what is unclear." : text.value, model: model.value, thinking: thinking.value, context: sizes.chosen(), lang: state.lang, domains: Array.from(state.domains), links: links.value, skill: state.skill});
     // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.
     function drawKb() {
       const list = state.domainList;
@@ -331,7 +331,7 @@ const CHAT = (function () {
       clearTimeout(state.timer);
       state.timer = setTimeout(() => {
         ask("/api/create", body("preview")).then((found) => {
-          preview.textContent = found.text;  // the server's own message, grown from the fields as they are now (a field not right yet is a <placeholder>); read only
+          preview.textContent = found.text + (found.then ? "\n\n" + t("board.new.then") + "\n" + found.then : "");  // the server's own message, grown from the fields as they are now (a field not right yet is a <placeholder>); read only
           problem.replaceChildren(...(found.problem ? SERVE.reasons(found.problem) : []));  // quiet: it is what is missing now, not a failure
           state.ready = !found.blocked && !found.problem;
           blocked.replaceChildren(...(found.blocked ? SERVE.reasons(found.blocked) : []));
@@ -401,6 +401,7 @@ const CHAT = (function () {
         }
         drawKb();
         text.value = filled.text || "";
+        state.skill = filled.skill || "";  // the server makes "Use the skill", or the /<skill> it sends once the task is open (1.8.2)
         if (filled.thinking && [...thinking.options].some((option) => option.value === filled.thinking)) thinking.value = filled.thinking;  // a skill that needs it sets the thinking; the model stays the person's
         if (filled.note) blocked.after(h("p", {class: "sub"}, filled.note));
       }

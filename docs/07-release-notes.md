@@ -35,6 +35,7 @@ A new autorun: the default agent only schedules, a worker does each step in a fr
 - **`agent` is narrower.** It is for going on would do harm, no longer for "cannot go on". The reasons now are `done`, `plan`, `review`, `handoff`, `stalled`, `time`, `steps`, `budget`, `error`, `person` and `agent`.
 - **There are three subagents:** the reviewer, the mapper and the worker.
 - **The default run time is 480 minutes** (it was 120). You can change it at Start.
+- **The gate refuses every spelling of `task allow` to the agent.** Since 1.7.38 the command takes `--conn` or `--links`, but the person-only rule still matched only the old `--env`. Now `--conn`, `--links` and `--off` are the person's too.
 
 ### Retired
 

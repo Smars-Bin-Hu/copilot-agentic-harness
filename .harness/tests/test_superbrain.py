@@ -312,7 +312,7 @@ class TalkTests(BrainCase):
         self.assertEqual([(item["role"], item["text"]) for item in growing], [("you", "what waits?"), ("agent", "Plan of task-001")])
         self.link.finish("Plan of task-001 first.")
         talk = self.brain.talk()
-        self.assertEqual(set(talk), {"state", "spent", "limit", "messages"})
+        self.assertEqual(set(talk), {"state", "spent", "limit", "messages", "asks"})
         self.assertEqual([(item["id"], item["role"], item["text"]) for item in talk["messages"]], [("turn-1:you", "you", "what waits?"), ("turn-1:agent", "agent", "Plan of task-001 first.")])
         self.assertTrue(all(item["at"] for item in talk["messages"]))
         self.assertEqual((talk["state"], talk["limit"]), ("idle", 50.0))

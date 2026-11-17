@@ -28,7 +28,7 @@ from core import ahp, config, copilot_events
 from core.paths import runtime_dir, utc_now
 from core.state import atomic_write
 
-from . import autorun_spend, superview, vslink
+from . import autorun_spend, superroute, superview, vslink
 
 MARKER = "/harness-super"  # the same as `modules/gate/superagent.MARKER`: the gate knows the chat by its first message
 AGENT_FILE = ".github/agents/super.agent.md"
@@ -151,7 +151,7 @@ class Brain:
     # -- the file --
 
     def fresh(self) -> Dict[str, Any]:
-        return {"day": self.now().date().isoformat(), "session": "", "chat": "", "sdk": "", "exchanges": [], "turn_nano": {}, "cost": {"session": "", "pos": 0, "nano": 0}, "prior_nano": 0}
+        return {"day": self.now().date().isoformat(), "session": "", "chat": "", "sdk": "", "exchanges": [], "asks": [], "turn_nano": {}, "cost": {"session": "", "pos": 0, "nano": 0}, "prior_nano": 0}
 
     def load(self) -> Dict[str, Any]:
         """The record of today. A file of another day, or one that cannot be read, gives a new one (no chat: the next turn makes it)."""
@@ -169,18 +169,20 @@ class Brain:
             return self.fresh()
         base = self.fresh()
         base.update({key: found[key] for key in base if key in found})
+        base["asks"] = [item for item in base["asks"] if superroute.valid(item)] if isinstance(base["asks"], list) else []
         return base
 
     def keep(self, rec: Dict[str, Any]) -> bool:
         """Put a day that ended into the history (an empty day is not kept). False when it could not be written: `super.json` then stays as it is, and the next load tries again."""
         exchanges = [item for item in rec.get("exchanges") or [] if isinstance(item, dict) and item.get("turn")]
-        if not exchanges:
+        asks = [superroute.public(item) for item in rec.get("asks") or [] if superroute.valid(item)]
+        if not exchanges and not asks:
             return True
         day = str(rec["day"])
         if (history_dir(self.root, True) / f"{day}.json").exists():
             return True  # kept before and archived since
         record = {"day": day, "spent": round(self.spent(rec), 3),
-                  "exchanges": [{key: item.get(key) for key in ("turn", "kind", "you", "you_at", "agent", "agent_at", "end")} for item in exchanges]}
+                  "exchanges": [{key: item.get(key) for key in ("turn", "kind", "you", "you_at", "agent", "agent_at", "end")} for item in exchanges], "asks": asks}
         try:
             atomic_write(history_dir(self.root) / f"{day}.json", record)
         except OSError:
@@ -227,7 +229,8 @@ class Brain:
                 if found:
                     rec["sdk"] = found[-1]
                     changed = True
-        return self.read_events(rec) or changed
+        moved = self.read_events(rec)
+        return superroute.read(self, rec) or moved or changed  # the answers of the questions asked to tasks too
 
     def read_events(self, rec: Dict[str, Any]) -> bool:
         """Move the cost forward from the events file of the Copilot session of the chat (new whole lines only). False when nothing is known or nothing moved."""
@@ -275,7 +278,7 @@ class Brain:
             messages = messages_of(rec["exchanges"], self.partial)
             ready = bool(self.link.status().get("ready"))
             state = "asleep" if not ready else "thinking" if self.running(rec) else "tired" if spent >= limit else "idle"
-            return {"state": state, "spent": round(spent, 3), "limit": limit, "messages": messages}
+            return {"state": state, "spent": round(spent, 3), "limit": limit, "messages": messages, "asks": [superroute.public(item) for item in rec["asks"]]}
 
     # -- the history of earlier days --
 
@@ -289,7 +292,7 @@ class Brain:
                 for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
                     found = self.read_day(path)
                     if found:
-                        days.append({"day": found["day"], "turns": len(found["exchanges"]), "spent": found.get("spent") or 0, "archived": archived})
+                        days.append({"day": found["day"], "turns": len(found["exchanges"]) + len(found["asks"]), "spent": found.get("spent") or 0, "archived": archived})
             days.sort(key=lambda one: one["day"], reverse=True)
             return {"days": days}
 
@@ -301,6 +304,7 @@ class Brain:
         if not isinstance(found, dict) or found.get("day") != path.stem or not isinstance(found.get("exchanges"), list):
             return None
         found["exchanges"] = [item for item in found["exchanges"] if isinstance(item, dict) and item.get("turn") and isinstance(item.get("you"), str)]
+        found["asks"] = [item for item in found.get("asks") or [] if superroute.valid(item)] if isinstance(found.get("asks"), list) else []
         return found
 
     def where(self, day: str) -> Optional[Path]:
@@ -319,7 +323,7 @@ class Brain:
             found = self.read_day(path) if path else None
             if not found:
                 return {"ok": False, "why": "missing"}
-            return {"ok": True, "day": day, "spent": found.get("spent") or 0, "archived": path.parent.name == "archived", "messages": messages_of(found["exchanges"])}
+            return {"ok": True, "day": day, "spent": found.get("spent") or 0, "archived": path.parent.name == "archived", "messages": messages_of(found["exchanges"]), "asks": [superroute.public(item) for item in found["asks"]]}
 
     def history_act(self, day: Any, action: Any) -> Dict[str, Any]:
         """Archive an earlier day (hidden from the list), restore it, or delete it for good. `{ok: true}`, or `{ok: false, why: missing | today | action | error}`."""
@@ -353,6 +357,10 @@ class Brain:
         if len(words) > MAX_TEXT:
             return {"ok": False, "why": "long"}
         return self.turn("ask", "Person asks: " + words, words)
+
+    def route(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """A question to one task's chat, read only (1.8.2): `{task, text, lang}`. `{ok: true, id, state}` or `{ok: false, why}`; see `superroute`."""
+        return superroute.ask(self, data)
 
     def summary(self) -> Dict[str, Any]:
         """A request for the short summary (the morning one, or when the person presses for it)."""

@@ -2065,6 +2065,13 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.brain.summary() if data.get("kind") == "summary" else board.brain.ask(data.get("text")))
                 except Exception as error:  # noqa: BLE001 - the page shows the refusal
                     return self.answer(500, {"error": str(error)})
+            if path == "/api/super/route":  # 1.8.2: the person's question to one task's chat ({task, text, lang}); read only for that turn. {ok: true, id, state} or {ok: false, why: unknown | paused | nochat | asleep | empty | long | error | a refusal of the link}. The paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    return self.answer(200, board.brain.route(data))
+                except Exception as error:  # noqa: BLE001 - the page shows the refusal
+                    return self.answer(500, {"error": str(error)})
             if path == "/api/super/talk":  # the conversation of today, the state, the spend and the limit: a read
                 try:
                     return self.answer(200, board.brain.talk())

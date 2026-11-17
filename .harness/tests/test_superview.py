@@ -47,6 +47,10 @@ class BuildTests(unittest.TestCase):
         out = superview.build(result(row("a", "plan", 3, state="working")))
         self.assertEqual((out["mates"][0]["state"], out["mates"][0]["count"], len(out["items"])), ("you", 1, 1))
 
+    def test_the_short_name_not_the_folder_path(self) -> None:
+        out = superview.build(result(row(".workspace/sandbox/tasks/fix-a", "plan", 3, name="fix-a")))
+        self.assertEqual((out["mates"][0]["task"], out["items"][0]["task"], out["items"][0]["id"].split("|")[0]), ("fix-a", "fix-a", "fix-a"))
+
     def test_a_go_mark_waits_for_nobody(self) -> None:
         out = superview.build(result(row("a", "go-plan", 3, state="working")))
         self.assertEqual((out["mates"][0]["state"], out["items"]), ("work", []))
@@ -95,8 +99,8 @@ class RouteTests(ServeCase):
         self.assertEqual(status, 200)
         self.assertLessEqual({"status", "mates", "items"}, set(data))
         self.assertEqual(data["status"]["watching"], 1)
-        self.assertEqual([mate["task"] for mate in data["mates"]], [TASK])
-        self.assertEqual(data["items"][0]["task"], TASK)
+        self.assertEqual([mate["task"] for mate in data["mates"]], [TASK.rsplit("/", 1)[-1]])
+        self.assertEqual(data["items"][0]["task"], TASK.rsplit("/", 1)[-1])
         board_rows = self.request("POST", "/api/board", {})[1]["rows"]
         self.assertEqual(data["items"][0]["why"], board_rows[0]["waiting_why"])
 

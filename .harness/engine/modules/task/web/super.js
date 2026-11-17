@@ -60,6 +60,7 @@ const SUPER = (function () {
     const known = new Map();  // item id -> {item, node, acts, waited, sig, clicked}
     const queued = new Set();
     const seenTalk = new Set();
+    const SUMMARY_ASKED = "\u0000summary";  // stands for a summary request in pendingYou: the server writes its own words for it
     const pendingYou = [];  // what the person typed, until the agent's list has it too
 
     // ---------- small helpers ----------
@@ -149,9 +150,9 @@ const SUPER = (function () {
         if (!message || seenTalk.has(message.id)) continue;
         seenTalk.add(message.id);
         if (message.role === "you") {
-          const at = pendingYou.indexOf(message.text);
+          const at = pendingYou.indexOf(message.kind === "summary" ? SUMMARY_ASKED : message.text);  // a summary request is shown with the button's own label
           if (at >= 0) { pendingYou.splice(at, 1); continue; }
-          typingBubble(false); addYou(message.text, message.at);
+          typingBubble(false); addYou(message.kind === "summary" ? t("super.quick.summary") : message.text, message.at);
         } else {
           typingBubble(false);
           if (localThink && Date.parse(message.at || "") >= localThink - 5000) localThink = 0;
@@ -372,7 +373,8 @@ const SUPER = (function () {
       if (!typed) return;
       if (!text) field.value = "";
       if (filter) setFilter("");
-      pendingYou.push(typed);
+      const mine = body && body.kind === "summary" ? SUMMARY_ASKED : typed;
+      pendingYou.push(mine);
       addYou(typed, new Date().toISOString());
       localThink = Date.now();
       applyMood(); drawInput(); schedule();
@@ -380,7 +382,7 @@ const SUPER = (function () {
       try { result = await SERVE.call("/api/super/ask", body || {text: typed}, 10); } catch (error) { result = (error && error.data && typeof error.data === "object" && error.data.why) ? error.data : {ok: false, why: "none"}; }
       if (result && result.ok === false) {
         localThink = 0;
-        const at = pendingYou.indexOf(typed); if (at >= 0) pendingYou.splice(at, 1);
+        const at = pendingYou.indexOf(mine); if (at >= 0) pendingYou.splice(at, 1);
         addSys(t(OFF[result.why] || OFF.none));
         applyMood(); drawInput();
       }
@@ -389,7 +391,7 @@ const SUPER = (function () {
     send.addEventListener("click", () => ask(null));
     field.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); ask(null); } });
     field.addEventListener("input", () => { field.style.height = "auto"; field.style.height = Math.min(120, field.scrollHeight) + "px"; });
-    if (newTask) newTask.addEventListener("click", () => { const text = field.value.trim(); CHAT.create(text ? {text} : undefined); });
+    if (newTask) newTask.addEventListener("click", () => { const text = field.value.trim(); CHAT.create(text ? {text} : undefined); field.value = ""; });  // the text moved into the new-task dialog
 
     // ---------- asking the server ----------
     function apply(result, spoken) {

@@ -23,10 +23,15 @@ def group_of(why: str) -> int:
     return 0 if why in BLOCKS else 1 if why in DECISIONS else 2
 
 
+def name_of(row: Dict[str, Any]) -> str:
+    """The task's short name (the folder name), as the page shows it and `/task/<name>` takes it; `task` of a row is its path."""
+    return str(row.get("name") or row["task"])
+
+
 def item_of(row: Dict[str, Any]) -> Dict[str, Any]:
     why, since = str(row.get("waiting_why") or ""), str(row.get("waiting_since") or "")
     return {
-        "id": f"{row['task']}|{why}|{since}", "task": row["task"], "why": why, "since": since, "waited_s": row.get("waited_s"),
+        "id": f"{name_of(row)}|{why}|{since}", "task": name_of(row), "why": why, "since": since, "waited_s": row.get("waited_s"),
         "title": row.get("waiting") or "", "detail": row.get("waiting_tip") or "",
         "actions": [dict(action) for action in row.get("actions") or [] if action.get("action") in ANSWERS],
     }
@@ -48,7 +53,7 @@ def build(result: Dict[str, Any]) -> Dict[str, Any]:
         counts[item["task"]] = counts.get(item["task"], 0) + 1
     mates: List[Dict[str, Any]] = []
     for row in open_rows:
-        count = counts.get(row["task"], 0)
-        mates.append({"task": row["task"], "kind": row.get("kind") or "", "state": "you" if count else "work" if row.get("state") == "working" else "idle", "count": count})
+        count = counts.get(name_of(row), 0)
+        mates.append({"task": name_of(row), "kind": row.get("kind") or "", "state": "you" if count else "work" if row.get("state") == "working" else "idle", "count": count})
     tally = [mate["state"] for mate in mates]
     return {"status": {"watching": len(mates), "working": tally.count("work"), "waiting": tally.count("you"), "idle": tally.count("idle"), "as_of": result.get("as_of") or ""}, "mates": mates, "items": items}

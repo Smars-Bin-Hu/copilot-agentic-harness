@@ -218,6 +218,34 @@ const SUPER = (function () {
       entry.waited.textContent = seconds === null || seconds === undefined ? "" : t("super.waited", {time: clock(seconds)});
       entry.waited.title = entry.item.since ? when(entry.item.since, 0, 19) : "";
     }
+    // The reply box of a "stopped" item (the agent ended its turn with a question in text): the answer goes to the task's chat through /api/send, the item folds as answered.
+    // On a refusal (409 and the like) the reasons show under the box and the words stay.
+    function replyBox(entry) {
+      const box = h("textarea", {class: "sa-reply-box", rows: "2", placeholder: t("super.reply.ph"), title: t("super.reply.tip")});
+      const send = h("button", {type: "button", class: "act hot sa-reply-go"}, t("super.reply.send"));
+      const said = h("div", {class: "bad sa-reply-bad"});
+      let busy = false;
+      const go = () => {
+        const text = box.value.trim();
+        if (!text || busy) return;
+        busy = true;
+        send.disabled = true;
+        said.replaceChildren();
+        SERVE.post("/api/send", {task: entry.item.task, kind: "answer", lang: "", note: "", body: text, step: "act"}).then(() => {
+          busy = false;
+          entry.clicked = t("super.reply.done");
+          fold(entry, null);
+          emit();
+        }, (error) => {
+          busy = false;
+          send.disabled = false;
+          said.replaceChildren(...SERVE.reasons((error && error.message) || String(error)));
+        });
+      };
+      send.addEventListener("click", go);
+      box.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); go(); } });
+      return h("div", {class: "sa-reply"}, box, send, said);
+    }
     function build(item) {
       const why = h("span", {class: "sa-why"}, t(WHY[item.why] || "super.why.other"));
       const waited = h("span", {class: "sa-when"});
@@ -237,6 +265,7 @@ const SUPER = (function () {
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
         h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, note, more, acts));
       const entry = {item, node, acts, waited, what, note, sig: "", clicked: ""};
+      if (item.why === "stopped") node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
       acts.addEventListener("click", (event) => { const button = event.target.closest("button, a.act"); if (button && button.dataset.label) entry.clicked = plain(button.dataset.label); });
       drawActs(entry);
       drawWaited(entry);

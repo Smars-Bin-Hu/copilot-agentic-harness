@@ -216,3 +216,9 @@ a.sa-task:hover{text-decoration:underline}
 .sa-earlier:hover{color:var(--ink);background:var(--hover)}
 .sa-earlier[hidden]{display:none}
 .sa-folded{display:none!important}
+
+/* the reply box of a "stopped" item */
+.sa-reply{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;margin-top:7px}
+.sa-reply-box{flex:1 1 220px;min-width:0;resize:vertical;font:inherit;padding:5px 8px;box-sizing:border-box}
+.sa-reply-bad{flex:1 1 100%}
+.sa-row.done .sa-reply{display:none}

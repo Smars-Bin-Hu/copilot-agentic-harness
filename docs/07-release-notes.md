@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.8.2 (2026-11-17)
+
+The super agent view becomes the place to work: answer a task, ask it a question, see the plan or the changes before you approve, steer or stop it.
+
+### Added
+
+- **Answer a task in the view.** When a task stops with a question in text, its message has a reply box. Your words go to the task's chat, and the message folds as answered.
+- **Ask a task a question.** With one task's avatar filter on, the input asks that task. With "All", start with `@name` (a list of task names opens after `@`). The question shows as a message from the task, "asked, waiting", and then its answer (about 12 lines, then **Show more**). A task that works gets the question after its turn.
+- **Previews before you approve.** A plan approval shows the plan's steps; a promote approval shows the files it changes with their added and removed lines. Click the summary line to unfold it; the full plan and diff stay on the task page.
+- **Steer and Stop from an avatar.** Right click a task's avatar: **Steer…** sends one line into its running turn, **Stop** stops it. Both only while the task works.
+
+### Changed
+
+- **A question to a task is read only.** A message that starts with `/harness-ask` (the board sends it) makes that one turn read only: the gate refuses every write and every write command, and the task keeps what it waited for. The next normal message lifts it.
+
 ## 1.8.1 (2026-11-17)
 
 A super agent view on the board: what waits for you across all tasks, a chat that knows them, and a window that stays on top.

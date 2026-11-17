@@ -190,10 +190,10 @@ def note_harness(ctx: Context, event: HookEvent) -> None:
 
 
 def ask_marked(prompt: str) -> bool:
-    """The prompt starts with the ask marker (the gate's `askturn`)."""
-    from modules.gate import askturn
+    """The prompt starts with the ask marker (`core/askmark.py`; the gate's `askturn` makes the turn read only)."""
+    from core import askmark
 
-    return askturn.is_marker(prompt)
+    return askmark.is_marker(prompt)
 
 
 def in_ask_turn(ctx: Context) -> bool:

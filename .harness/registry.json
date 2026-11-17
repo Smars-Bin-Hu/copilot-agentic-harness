@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.8.1",
+  "version": "1.8.2",
   "released": "2026-11-17",
   "copyright": "Smars Hu",
   "contributors": [
@@ -147,6 +147,10 @@
         ".harness/tests/test_gate_super.py",
         ".harness/tests/test_superview.py",
         ".harness/tests/test_superbrain.py",
+        ".harness/tests/test_superroute.py",
+        ".harness/tests/test_superpreview.py",
+        ".harness/tests/test_gate_ask.py",
+        ".harness/tests/test_task_askturn.py",
         ".harness/tests/test_mapreduce.py",
         ".harness/tests/test_task.py",
         ".harness/tests/test_task_manual.py",

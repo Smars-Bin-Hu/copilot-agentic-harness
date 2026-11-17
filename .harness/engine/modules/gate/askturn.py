@@ -9,18 +9,13 @@ from __future__ import annotations
 from typing import Optional
 
 from core import messages
+from core.askmark import MARKER, is_marker  # noqa: F401 - the marker lives in core: the task module needs it too
 from core.context import Context
 from core.events import Decision, HookEvent
 
 from . import superagent
 
-MARKER = "/harness-ask"
 KEY = "ask"
-
-
-def is_marker(prompt: str) -> bool:
-    text = prompt.lstrip()
-    return text.startswith(MARKER) and (len(text) == len(MARKER) or text[len(MARKER)].isspace())
 
 
 def mark(event: HookEvent, ctx: Context) -> None:

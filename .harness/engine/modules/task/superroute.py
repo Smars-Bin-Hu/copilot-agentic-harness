@@ -14,12 +14,12 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from core import tasks
+from core.askmark import MARKER  # the gate makes the turn that starts with it read only
 from core.paths import utc_now
 
 from . import chatsend, task as task_ops, tasklife, vslink
 from .common import CommandError
 
-MARKER = "/harness-ask"  # the same as `modules/gate/askturn.MARKER`: the gate makes the turn that starts with it read only
 MAX_ASK = 1000  # characters of what the person types
 LOST_AFTER = 180.0  # seconds after which a question that the chat shows nowhere is given up
 OPEN = ("sent", "queued")

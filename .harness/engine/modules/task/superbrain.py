@@ -28,7 +28,7 @@ from core import ahp, config, copilot_events
 from core.paths import runtime_dir, utc_now
 from core.state import atomic_write
 
-from . import autorun_spend, superroute, superview, vslink
+from . import autorun_spend, superact, superroute, superview, vslink
 
 MARKER = "/harness-super"  # the same as `modules/gate/superagent.MARKER`: the gate knows the chat by its first message
 AGENT_FILE = ".github/agents/super.agent.md"
@@ -98,15 +98,39 @@ def how_long(seconds: Any) -> str:
     return f"{hours}h{minutes % 60:02d}m" if hours < 24 else f"{hours // 24}d{hours % 24}h"
 
 
-def digest(view: Dict[str, Any], at: str = "") -> str:
+CLOSED_CHARS = 300  # of the digest, for the line of the closed tasks
+
+
+def closed_names(result: Any) -> List[str]:
+    """The names of the closed tasks the board still shows (not archived), in board order."""
+    rows = result.get("rows") if isinstance(result, dict) else None
+    return [superview.name_of(row) for row in rows or [] if isinstance(row, dict) and row.get("status") == "closed"]
+
+
+def closed_line(names: List[str]) -> str:
+    if not names:
+        return ""
+    line = "Closed (not archived): "
+    shown: List[str] = []
+    for index, name in enumerate(names):
+        more = len(names) - index - 1
+        one = clip(name, CLIP_NAME)
+        if len(line) + len(", ".join(shown + [one])) + (len(f" (+{more} more)") if more else 0) > CLOSED_CHARS and shown:
+            return line + ", ".join(shown) + f" (+{len(names) - index} more)"
+        shown.append(one)
+    return line + ", ".join(shown)
+
+
+def digest(view: Dict[str, Any], at: str = "", closed: Optional[List[str]] = None) -> str:
     """The text the agent is given about the tasks, from `superview.build`: a head, then one line for each open task, the ones that wait for the person first (longest wait first). At most DIGEST_CHARS."""
     status, mates, items = view.get("status") or {}, view.get("mates") or [], view.get("items") or []
     by_task = {item["task"]: item for item in items}
     order = [mate for item in items for mate in mates if mate["task"] == item["task"]]
     order += [mate for mate in mates if mate["task"] not in by_task]
     head = f"Open tasks: {len(mates)} ({status.get('waiting', 0)} wait for the person, {status.get('working', 0)} working, {status.get('idle', 0)} idle)." + (f" As of {at}." if at else "")
+    tail = closed_line(closed or [])
     lines: List[str] = []
-    size = len(head)
+    size = len(head) + (len(tail) + 1 if tail else 0)
     for index, mate in enumerate(order):
         item = by_task.get(mate["task"])
         line = f"- {clip(mate['task'], CLIP_NAME)} ({clip(mate.get('kind'), 20)}): {STATES.get(mate['state'], mate['state'])}"
@@ -118,7 +142,7 @@ def digest(view: Dict[str, Any], at: str = "") -> str:
             break
         lines.append(line)
         size += len(line) + 1
-    return "\n".join([head] + lines) if lines else head + "\nNo task is open."
+    return "\n".join([head] + lines + ([tail] if tail else [])) if lines else "\n".join([head, "No task is open."] + ([tail] if tail else []))
 
 
 # --- the chat ------------------------------------------------------------------------------------------------------------
@@ -138,10 +162,11 @@ def turn_nano(turn: Dict[str, Any]) -> Optional[float]:
 class Brain:
     """One per board. `link`: the `VsLink`; `rows`: what `BoardServer.rows()` is (called when a digest is made); `now`: the local time (the tests set it)."""
 
-    def __init__(self, root: Path, link: Any, rows: Callable[[], Dict[str, Any]], now: Optional[Callable[[], datetime]] = None) -> None:
+    def __init__(self, root: Path, link: Any, rows: Callable[[], Dict[str, Any]], now: Optional[Callable[[], datetime]] = None, served: Optional[Callable[[], Any]] = None) -> None:
         self.root = Path(root)
         self.link = link
         self.rows = rows
+        self.served = served  # what the board server runs from the page (`BoardServer.served`); None: not known (proposals of `review set` are then judged by the row alone)
         self.now = now or datetime.now
         self.lock = threading.RLock()
         self.sending = False
@@ -275,10 +300,31 @@ class Brain:
             if self.sync(rec):
                 self.save(rec)
             limit, spent = limit_of(self.root), self.spent(rec)
-            messages = messages_of(rec["exchanges"], self.partial)
+            messages = self.shown(messages_of(rec["exchanges"], self.partial), True)
             ready = bool(self.link.status().get("ready"))
             state = "asleep" if not ready else "thinking" if self.running(rec) else "tired" if spent >= limit else "idle"
             return {"state": state, "spent": round(spent, 3), "limit": limit, "messages": messages, "asks": [superroute.public(item) for item in rec["asks"]]}
+
+    def shown(self, messages: List[Dict[str, Any]], proposals: bool) -> List[Dict[str, Any]]:
+        """The agent's messages as the person sees them: the proposal block is cut out of `text`; with `proposals`, a message that had a block gets `proposals`, checked against the rows of this moment."""
+        found: Optional[Dict[str, Any]] = None
+        out: List[Dict[str, Any]] = []
+        for message in messages:
+            if message["role"] != "agent":
+                out.append(message)
+                continue
+            text, raw = superact.split(message["text"])
+            message = dict(message, text=text)
+            if proposals and raw is not None:
+                if found is None:
+                    try:
+                        found = self.rows()
+                    except Exception:  # noqa: BLE001 - no rows: nothing can be judged
+                        found = {}
+                served = self.served() if callable(self.served) else None
+                message["proposals"] = superact.check(raw, found.get("rows") if isinstance(found, dict) else None, list(served) if served is not None else None)
+            out.append(message)
+        return out
 
     # -- the history of earlier days --
 
@@ -323,7 +369,7 @@ class Brain:
             found = self.read_day(path) if path else None
             if not found:
                 return {"ok": False, "why": "missing"}
-            return {"ok": True, "day": day, "spent": found.get("spent") or 0, "archived": path.parent.name == "archived", "messages": messages_of(found["exchanges"]), "asks": [superroute.public(item) for item in found["asks"]]}
+            return {"ok": True, "day": day, "spent": found.get("spent") or 0, "archived": path.parent.name == "archived", "messages": self.shown(messages_of(found["exchanges"]), False), "asks": [superroute.public(item) for item in found["asks"]]}
 
     def history_act(self, day: Any, action: Any) -> Dict[str, Any]:
         """Archive an earlier day (hidden from the list), restore it, or delete it for good. `{ok: true}`, or `{ok: false, why: missing | today | action | error}`."""
@@ -378,11 +424,13 @@ class Brain:
             if self.running(rec):
                 return {"ok": False, "why": "busy"}
             try:
-                view = superview.build(self.rows())
+                found = self.rows()
+                view = superview.build(found)
+                closed = closed_names(found)
             except Exception:  # noqa: BLE001 - no digest, no turn
                 return {"ok": False, "why": "error"}
             self.sending = True
-        message = f"{MARKER}\n{digest(view, self.now().strftime('%H:%M'))}\n\n{request}"
+        message = f"{MARKER}\n{digest(view, self.now().strftime('%H:%M'), closed)}\n\n{request}"
         done: Dict[str, Any] = {}
         why = ""
         try:

@@ -147,6 +147,7 @@
         ".harness/tests/test_gate_super.py",
         ".harness/tests/test_superview.py",
         ".harness/tests/test_superbrain.py",
+        ".harness/tests/test_superact.py",
         ".harness/tests/test_superroute.py",
         ".harness/tests/test_superpreview.py",
         ".harness/tests/test_gate_ask.py",

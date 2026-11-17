@@ -28,6 +28,7 @@
       ".github/skills/harness-vscode-updates/",
       ".harness/eval/fixtures/hooks/copilot-sdk/",
       ".harness/tests/test_breaker.py",
+      ".harness/tests/test_winretry.py",
       ".harness/tests/test_docs.py",
       ".harness/tests/test_skillcheck.py",
       ".harness/tests/test_render.py",

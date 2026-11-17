@@ -29,6 +29,7 @@ from . import common, taskstages
 ATTACH_EVENTS = ("start", "resume", "new-round")
 SESSION_IN_DETAIL = re.compile(r"(?:会话|session) (\S+)")  # the note of either language (`task.note.session`)
 MATCH_SECONDS = 5.0  # a user message in Copilot's record and its UserPromptSubmit in the hook log are the same prompt
+HOOK_EARLY_SECONDS = 30.0  # the hook may log a prompt this much before Copilot writes its message: 6 s on a work PC (2026-11-17), and the second prompt was taken for a queued one
 TOP = 5
 FINDINGS_KEPT = 8
 CACHE_CALLS_KEPT = 500  # the model calls the cache chart draws: the latest ones
@@ -161,12 +162,16 @@ def model_runs(calls: List[Dict[str, Any]]) -> Dict[str, Any]:
 def from_events(record: Dict[str, Any], hook_prompts: List[Dict[str, Any]], picked_up: List[float]) -> List[Dict[str, Any]]:
     """Copilot's record cut into the user's prompts, each with `mine`."""
     found: List[Dict[str, Any]] = []
+    used: set = set()  # each prompt of the hook log is one message of the record
     for prompt in record["prompts"]:
         if prompt.get("compact"):  # no hook runs for /compact: it belongs where the prompt before it does (1.6.113)
             prompt["mine"] = bool(found[-1]["mine"]) if found else bool(picked_up) and prompt["at"] >= picked_up[0]
             found.append(prompt)
             continue
-        near = [item for item in hook_prompts if abs(item["at"] - prompt["at"]) <= MATCH_SECONDS]
+        near = sorted((item for index, item in enumerate(hook_prompts) if index not in used and -HOOK_EARLY_SECONDS <= item["at"] - prompt["at"] <= MATCH_SECONDS),
+                      key=lambda item: abs(item["at"] - prompt["at"]))
+        if near:
+            used.add(next(index for index, item in enumerate(hook_prompts) if item is near[0]))
         before = next((item for item in reversed(found) if not item.get("compact")), None)  # a queued message goes on with a message, never with a /compact
         if hook_prompts and not near and before is not None:
             merge(before, prompt)

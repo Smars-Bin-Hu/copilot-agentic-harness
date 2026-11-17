@@ -29,6 +29,9 @@ SCHEMA_VERSION = 3
 LOCK_TIMEOUT_SECONDS = 7.0
 # A critical section takes milliseconds. A lock older than this belongs to a killed process (I-9).
 LOCK_STALE_SECONDS = 5.0
+# Windows refuses a file or folder for a moment while another process still has it open or deletes it (WinError 5): the board reading a state
+# file, an antivirus scan, a lock folder that was just removed. Seen on a work PC (2026-11-17): a hook that met it could not decide, and its call was refused.
+REPLACE_RETRY_SECONDS = 1.0
 # Safety nets so a missing SubagentStop does not leave entries behind for a later child session to claim.
 SUBAGENT_ACTIVE_TTL_SECONDS = 1800.0
 PENDING_PROMPT_TTL_SECONDS = 300.0
@@ -131,13 +134,26 @@ def atomic_write(path: Path, value: Any, compact: bool = False) -> None:
         handle.write("\n")
         temporary = handle.name
     try:
-        os.replace(temporary, str(path))
+        _replace(temporary, str(path))
     except Exception:
         try:
             os.unlink(temporary)
         except OSError:
             pass
         raise
+
+
+def _replace(source: str, target: str) -> None:
+    """`os.replace`, tried again for a moment when Windows refuses it because another process has the target open (REPLACE_RETRY_SECONDS)."""
+    deadline = time.monotonic() + REPLACE_RETRY_SECONDS
+    while True:
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.02)
 
 
 def _clear_if_stale(lock: Path) -> None:
@@ -161,7 +177,7 @@ def state_lock(path: Path) -> Iterator[None]:
         try:
             lock.mkdir()
             break
-        except FileExistsError:
+        except (FileExistsError, PermissionError):  # Windows: a lock folder that another process is removing is refused, not "exists" (REPLACE_RETRY_SECONDS)
             _clear_if_stale(lock)
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"Timed out waiting for state lock: {lock}")

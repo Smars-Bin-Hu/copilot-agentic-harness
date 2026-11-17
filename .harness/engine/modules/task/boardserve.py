@@ -71,7 +71,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import superbrain, superview
+from . import superbrain, superpreview, superview
 from . import accept, autorun, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
@@ -2072,6 +2072,10 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.brain.route(data))
                 except Exception as error:  # noqa: BLE001 - the page shows the refusal
                     return self.answer(500, {"error": str(error)})
+            if path == "/api/super/preview":  # 1.8.2: a short look at a task's plan or changes ({task, kind: plan | changes}). {ok: true, lines | files, more} or {ok: false, why: unknown | kind | missing | error}. A read, but of task files: the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                return self.answer(200, superpreview.preview(board.root, data))
             if path == "/api/super/talk":  # the conversation of today, the state, the spend and the limit: a read
                 try:
                     return self.answer(200, board.brain.talk())

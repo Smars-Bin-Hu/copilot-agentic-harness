@@ -43,6 +43,8 @@ A session with no task cannot call the reviewer. A session with a task must run 
 
 The `super` agent is not a subagent. The board opens one chat a day with it (the prompt starts with `/harness-super`) and feeds it. It only reads and talks: it never changes task state, and the person presses every button. The gate keeps that chat to reading (`modules/gate/superagent.py`). Its spend limit is `super.daily_credits` in `task.json`.
 
+A message that starts with `/harness-ask` is a question from the person through the board. Answer it from what you know and can read, in at most 150 words. Change nothing and write no file (no `LOG.md`, no `TODO.md`): the gate refuses writes in that turn (`modules/gate/askturn.py`). The next normal message lifts it.
+
 ## Models
 
 - The reviewer and the mapper use Sonnet and fall back to Haiku: they run whether the main model is Sonnet or Opus.

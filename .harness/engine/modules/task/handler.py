@@ -189,12 +189,31 @@ def note_harness(ctx: Context, event: HookEvent) -> None:
         pass
 
 
+def ask_marked(prompt: str) -> bool:
+    """The prompt starts with the ask marker (the gate's `askturn`)."""
+    from modules.gate import askturn
+
+    return askturn.is_marker(prompt)
+
+
+def in_ask_turn(ctx: Context) -> bool:
+    """The gate marked this turn as a question: its mark is in the session state, until the next normal prompt. A mark that cannot be read counts as not marked (the gate refuses the writes then)."""
+    try:
+        return bool(ctx.state["modules"]["gate"]["ask"])
+    except (KeyError, TypeError):
+        return False
+
+
 def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.from_subagent or event.continuation:
         # A subagent call message, or the reason of a Stop block fed back by the engine. Not the user.
         if event.continuation and not ctx.admin:
             note_harness(ctx, event)
         return None
+    if not ctx.admin and ask_marked(event.prompt):
+        # 1.8.2: a question from the person through the board (`/harness-ask`). The turn is read-only and leaves the task as it was: no wait or delivery cleared, no resume, no restore point, no new count.
+        data = open_task(ctx)
+        return Decision(context=prompt_text(ctx), facts={"kind": "task", "task": data["task"]} if data is not None else {})
     asked = user_review(event)
     state = ctx.module_state(NAME)
     state["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
@@ -555,6 +574,8 @@ def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
     data = open_task(ctx)
     if data is None:
         return None
+    if in_ask_turn(ctx):
+        return None  # the end of a question turn: the task waits for what it waited for, and nothing is asked of the agent
     pushed = autorun_stop(ctx, data, event.stop_hook_active)
     if pushed is not None:
         return pushed  # autorun: on to the next step, however often the agent has been pushed before

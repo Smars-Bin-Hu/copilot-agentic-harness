@@ -27,7 +27,7 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, scriptcheck, shellwords, superagent, targetfault, terminal
+from . import approvals, askturn, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, scriptcheck, shellwords, superagent, targetfault, terminal
 from . import policy as gate_policy
 from .policy import POLICY_NAME, Compiled, validate_policy
 
@@ -760,6 +760,10 @@ def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     refused_super = superagent.check(event, ctx)
     if refused_super is not None:
         return refused_super
+    askturn.mark(event, ctx)  # 1.8.2: a question to a task through the board makes that one turn read-only
+    refused_ask = askturn.check(event, ctx)
+    if refused_ask is not None:
+        return refused_ask
     if event.event == "SessionStart" or (event.event in ("PostToolUse", "PostToolUseFailure") and event.tool_kind == "terminal"):
         watch_reach(event, ctx)
         return wrapped_context(ctx) if event.event == "SessionStart" else first_reach(event, ctx)

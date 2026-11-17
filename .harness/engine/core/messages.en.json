@@ -431,6 +431,7 @@
   "gate.task.person_files": "`{relative}` is in `REQ/`, `REF/` or `INBOX/` of task {task}. Those hold what the user gave and are read only. Write notes and results at the root of the task folder `{task}/`.",
   "gate.board.request": "Refused: this asks the board server on port {port}, and its buttons are the user's. Do not call it. If something on the board should change, tell the user.",
   "gate.super.refused": "Refused: the super agent only reads and talks. It does not change anything. Use the buttons on the board to act.",
+  "gate.ask.refused": "Refused: this turn is a question from the person through the board. Answer it and change nothing. If work is needed, say so: the person sends a normal message.",
   "gate.terminal.denied": "This terminal command is refused: {why}. Do not retry with a command of the same kind. If it is needed, stop and tell the user why: the user runs it.",
   "gate.external.subagent": "You are the {agent} subagent: you may only read outside systems. This {verb} on {place} is refused, whatever the main agent was allowed: the user's leave is not yours. Command: {call}\nDo not retry it. Judge by the saved output, and say in your answer what you could not check.",
   "gate.external.unlinked": "Refused: this writes {ref} of {system}, and this task does not name it. A task writes only the items it is linked to. If the user means this one: {step} Command: {call}",

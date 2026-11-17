@@ -33,6 +33,13 @@ def one(item: Any, **more: Any) -> Dict[str, Any]:
 
 
 class SplitTests(BrainCase):
+    def test_many_opening_tags_cost_no_more_than_any_text(self) -> None:
+        import time
+        began = time.monotonic()
+        shown, items = superact.split("hi " + superact.OPEN * 200000)
+        self.assertLess(time.monotonic() - began, 2.0)
+        self.assertEqual((shown, items), ("hi", None))
+
     def test_a_block_nested_too_deep_or_too_big_is_one_bad_item_and_never_an_error(self) -> None:
         for raw in ("[" * 10000, "[" + ",".join(["1"] * 20000) + "]"):
             shown, items = superact.split("hello " + superact.OPEN + raw + superact.CLOSE)

@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import superview, tasklife
@@ -23,18 +22,28 @@ MAX_BLOCK = 40000  # characters of one block: more is one bad item, not parsed
 TASK_KINDS = ("qa", "rca", "design", "dev", "test", "kb", "other")
 BOARD_ACTIONS = {"confirm-req", "approve-plan", "approve-promote", "recover", "review extend", "review waive", "approve-action", "send", "answer", "accept", "review dismiss", "review set",
                  "autorun on", "pause", "resume", "close", "archive", "confirm", "question", "steer", "stop", "dismiss action", "task allow", "task link", "test runner"}
-BLOCK = re.compile(re.escape(OPEN) + r"(.*?)" + re.escape(CLOSE), re.S)
 BAD = {"kind": "bad", "ok": False, "why": "bad"}
 
 
 def split(text: Any) -> Tuple[str, Optional[List[Any]]]:
-    """The text the person sees, and the raw items of the last block. A block that is not closed (the answer is still written) is cut out too and gives no items."""
+    """The text the person sees, and the raw items of the last block. A block that is not closed (the answer is still written) is cut out too and gives no items.
+    One pass over the text with `find` (no regex): an answer full of opening tags costs the same as any other text."""
     whole = str(text or "")
-    blocks = BLOCK.findall(whole)
-    shown = BLOCK.sub("", whole)
-    if OPEN in shown:
-        shown = shown[:shown.index(OPEN)]
-    shown = shown.replace(CLOSE, "").strip()  # a stray closing tag (a nested block) is not shown either
+    parts: List[str] = []
+    blocks: List[str] = []
+    pos = 0
+    while True:
+        at = whole.find(OPEN, pos)
+        if at < 0:
+            parts.append(whole[pos:])
+            break
+        parts.append(whole[pos:at])
+        end = whole.find(CLOSE, at + len(OPEN))
+        if end < 0:
+            break  # not closed: the rest is cut out
+        blocks.append(whole[at + len(OPEN):end])
+        pos = end + len(CLOSE)
+    shown = "".join(parts).replace(CLOSE, "").strip()  # a stray closing tag (a nested block) is not shown either
     if not blocks:
         return shown, None
     if len(blocks[-1]) > MAX_BLOCK:

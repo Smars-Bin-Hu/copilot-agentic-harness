@@ -33,6 +33,15 @@ def one(item: Any, **more: Any) -> Dict[str, Any]:
 
 
 class SplitTests(BrainCase):
+    def test_a_block_nested_too_deep_or_too_big_is_one_bad_item_and_never_an_error(self) -> None:
+        for raw in ("[" * 10000, "[" + ",".join(["1"] * 20000) + "]"):
+            shown, items = superact.split("hello " + superact.OPEN + raw + superact.CLOSE)
+            self.assertEqual((shown, items), ("hello", [None]))
+
+    def test_a_stray_closing_tag_is_not_shown(self) -> None:
+        shown, _items = superact.split("x " + superact.OPEN + superact.OPEN + "[]" + superact.CLOSE + superact.CLOSE)
+        self.assertNotIn(superact.CLOSE, shown)
+
     def test_the_block_is_cut_out_and_only_the_last_one_counts(self) -> None:
         shown, raw = superact.split("Do this.\n" + block({"kind": "x"}) + "\nand\n" + block({"kind": "send"}))
         self.assertEqual((shown, raw), ("Do this.\n\nand", [{"kind": "send"}]))

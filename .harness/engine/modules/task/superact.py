@@ -19,6 +19,7 @@ from .common import CommandError
 OPEN, CLOSE = "<harness-proposals>", "</harness-proposals>"
 MAX_ITEMS = 8
 MAX_TEXT = 2000
+MAX_BLOCK = 40000  # characters of one block: more is one bad item, not parsed
 TASK_KINDS = ("qa", "rca", "design", "dev", "test", "kb", "other")
 BOARD_ACTIONS = {"confirm-req", "approve-plan", "approve-promote", "recover", "review extend", "review waive", "approve-action", "send", "answer", "accept", "review dismiss", "review set",
                  "autorun on", "pause", "resume", "close", "archive", "confirm", "question", "steer", "stop", "dismiss action", "task allow", "task link", "test runner"}
@@ -33,12 +34,14 @@ def split(text: Any) -> Tuple[str, Optional[List[Any]]]:
     shown = BLOCK.sub("", whole)
     if OPEN in shown:
         shown = shown[:shown.index(OPEN)]
-    shown = shown.strip()
+    shown = shown.replace(CLOSE, "").strip()  # a stray closing tag (a nested block) is not shown either
     if not blocks:
         return shown, None
+    if len(blocks[-1]) > MAX_BLOCK:
+        return shown, [None]
     try:
         found = json.loads(blocks[-1])
-    except ValueError:
+    except Exception:  # noqa: BLE001 - not JSON, or nested too deep (RecursionError): one bad item, never an error of the whole talk
         return shown, [None]
     if not isinstance(found, list) or len(found) > MAX_ITEMS:
         return shown, [None]

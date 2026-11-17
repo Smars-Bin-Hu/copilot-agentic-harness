@@ -117,6 +117,71 @@ const SUPER = (function () {
       const mate = event.target.closest(".sa-mate");
       if (mate) setFilter(mate.dataset.task === filter ? "" : mate.dataset.task);
     });
+    // ---------- the menu of an avatar (1.8.2): right click or the menu key. Steer and Stop, only while the task works ----------
+    let mateMenuNode = null, mateMenuFrom = null;
+    const mateMenuWorks = (task) => Boolean((mates.find((mate) => mate.task === task) || {}).state === "work" || rowFor(task).state === "working");
+    function mateMenuClose(back) {
+      if (!mateMenuNode) return;
+      mateMenuNode.remove();
+      mateMenuNode = null;
+      removeEventListener("pointerdown", mateMenuOutside, true);
+      removeEventListener("keydown", mateMenuKey, true);
+      if (back && mateMenuFrom && mateMenuFrom.isConnected) mateMenuFrom.focus();
+    }
+    function mateMenuOutside(event) { if (mateMenuNode && !mateMenuNode.contains(event.target)) mateMenuClose(false); }
+    function mateMenuKey(event) {
+      if (!mateMenuNode) return;
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); mateMenuClose(true); return; }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const list = [...mateMenuNode.querySelectorAll("button.sa-skin, input.sa-mateline")].filter((node) => !node.disabled && !node.closest("[hidden]"));
+      if (!list.length) return;
+      event.preventDefault();
+      const at = list.indexOf(document.activeElement);
+      list[(at + (event.key === "ArrowDown" ? 1 : -1) + list.length) % list.length].focus();
+    }
+    function mateMenuOpen(mate) {
+      mateMenuClose(false);
+      const task = mate.dataset.task, works = mateMenuWorks(task);
+      const item = (key, onClick) => {
+        const node = h("button", {type: "button", role: "menuitem", class: "sa-skin sa-mateitem"}, t(key));
+        node.disabled = !works;
+        node.title = works ? "" : t(MATE.idle);
+        node.addEventListener("click", onClick);
+        return node;
+      };
+      const said = h("div", {class: "bad sa-matebad"});
+      const line = h("input", {type: "text", class: "sa-mateline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task}), "aria-label": t("super.mate.steer.ph", {task})});
+      const lineRow = h("div", {class: "sa-materow", hidden: ""}, line);
+      let busy = false;
+      const send = (path, body, line) => {
+        if (busy) return;
+        busy = true;
+        said.replaceChildren();
+        SERVE.post(path, body).then(() => { mateMenuClose(true); addSys(line); }, (error) => { busy = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
+      };
+      const steer = item("super.mate.steer", () => { lineRow.hidden = false; line.focus(); });
+      const stop = item("super.mate.stop", () => send("/api/stop", {task}, t("super.mate.stopped", {task})));
+      line.addEventListener("keydown", (event) => {
+        if (!isEnter(event) || event.shiftKey || !line.value.trim()) return;
+        event.preventDefault();
+        send("/api/steer", {task, text: line.value.trim(), lang: ""}, t("super.mate.steered", {task}));
+      });
+      mateMenuNode = h("div", {class: "sa-skins sa-matemenu", role: "menu", "aria-label": t("super.mate.menu", {task})}, h("div", {class: "sa-skins-head"}, task), steer, lineRow, stop, said);
+      mateMenuFrom = mate;
+      sv.append(mateMenuNode);
+      const box = hostBox(), at = mate.getBoundingClientRect(), size = {w: mateMenuNode.offsetWidth, h: mateMenuNode.offsetHeight};
+      mateMenuNode.style.left = clamp(at.left - box.left, 0, Math.max(0, box.width - size.w)) + "px";
+      mateMenuNode.style.top = clamp(at.bottom - box.top + 4, 0, Math.max(0, box.height - size.h)) + "px";
+      (works ? steer : mateMenuNode).focus();
+      addEventListener("pointerdown", mateMenuOutside, true);
+      addEventListener("keydown", mateMenuKey, true);
+    }
+    team.addEventListener("contextmenu", (event) => {
+      const mate = event.target.closest(".sa-mate");
+      if (!mate || !mate.dataset.task) return;
+      event.preventDefault();
+      mateMenuOpen(mate);
+    });
     function setFilter(task) {
       filter = task;
       teamSig = "";
@@ -248,6 +313,35 @@ const SUPER = (function () {
       box.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); go(); } });
       return h("div", {class: "sa-reply"}, box, send, said);
     }
+    // The preview under a "plan" or "promote" message (1.8.2): asked once per item id, shown folded as one line; a refusal or nothing to show draws nothing.
+    const PREVIEW_ASKED = new Set();
+    const previewKind = (item) => (item.why === "plan" ? "plan" : item.why === "promote" ? "changes" : "");
+    function previewRows(kind, result) {
+      const list = kind === "plan" ? result.lines : result.files;
+      const rows = (list || []).map((one) => (kind === "plan"
+        ? h("li", null, String(one))
+        : h("li", null, h("span", {class: "sa-pvpath"}, one.path), " ", h("span", {class: "sa-pvadd"}, "+" + one.added), " ", h("span", {class: "sa-pvdel"}, "\u2212" + one.removed), one.action === "delete" ? h("em", {class: "sa-pvgone"}, " " + t("super.preview.deleted")) : null)));
+      if (result.more) rows.push(h("li", {class: "sa-pvmore"}, t("super.preview.more")));
+      return rows;
+    }
+    function previewFill(box, item, kind, result) {
+      const list = (kind === "plan" ? result.lines : result.files) || [];
+      if (!result || result.ok !== true || !list.length) return;
+      const count = list.length + (result.more ? "+" : "");
+      const sum = kind === "plan" ? t("super.preview.plan.sum", {n: count}) : t(list.length === 1 && !result.more ? "super.preview.changes.one" : "super.preview.changes.sum", {n: count});
+      box.replaceChildren(h("summary", null, sum), h("ul", {class: "sa-pvlist"}, ...previewRows(kind, result)),
+        taskLink(item.task, t(kind === "plan" ? "super.preview.plan.open" : "super.preview.changes.open") + " \u2197", "sa-pvopen"));
+      box.hidden = false;
+    }
+    function previewBox(item) {
+      const kind = previewKind(item);
+      if (!kind) return null;
+      const box = h("details", {class: "sa-pv", hidden: ""});
+      if (PREVIEW_ASKED.has(item.id)) return box;
+      PREVIEW_ASKED.add(item.id);
+      SERVE.call("/api/super/preview", {task: item.task, kind}, 8).then((result) => previewFill(box, item, kind, result || {}), () => {});
+      return box;
+    }
     function build(item) {
       const why = h("span", {class: "sa-why"}, t(WHY[item.why] || "super.why.other"));
       const waited = h("span", {class: "sa-when"});
@@ -268,6 +362,8 @@ const SUPER = (function () {
         h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, note, more, acts));
       const entry = {item, node, acts, waited, what, note, sig: "", clicked: ""};
       if (item.why === "stopped") node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
+      const preview = previewBox(item);
+      if (preview) node.querySelector(".sa-bub").insertBefore(preview, acts);
       acts.addEventListener("click", (event) => { const button = event.target.closest("button, a.act"); if (button && button.dataset.label) entry.clicked = plain(button.dataset.label); });
       drawActs(entry);
       drawWaited(entry);
@@ -744,6 +840,7 @@ const SUPER = (function () {
     }
     function hide() {
       shown = false;
+      mateMenuClose(false);
       sv.hidden = true;
       if (!watchers) clearTimeout(pollTimer);
       patrolToken++;

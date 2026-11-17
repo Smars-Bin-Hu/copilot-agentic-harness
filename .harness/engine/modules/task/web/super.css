@@ -235,3 +235,23 @@ a.sa-task:hover{text-decoration:underline}
 .sa-ans{margin-top:6px;padding-top:6px;border-top:1px solid var(--line);white-space:pre-wrap}
 .sa-ans.sa-ansclip{max-height:calc(12 * 1.45em);overflow:hidden}
 .sa-askmore{margin-top:4px;border:1px solid var(--line2);background:transparent;border-radius:999px;padding:1px 10px;font:inherit;font-size:12px;color:var(--soft);cursor:pointer}
+/* the preview of a plan or a promote (1.8.2): folded under the message */
+.sa-pv{margin-top:6px;font-size:12.5px}
+.sa-pv[hidden]{display:none}
+.sa-pv summary{cursor:pointer;color:var(--soft);width:max-content}
+.sa-pvlist{margin:5px 0 4px;padding-left:18px}
+.sa-pvlist li{margin:1px 0;overflow-wrap:anywhere}
+.sa-pvpath{font:12px var(--mono)}
+.sa-pvadd{color:var(--good-dot)}
+.sa-pvdel{color:var(--bad,#b3261e)}
+.sa-pvgone,.sa-pvmore{color:var(--soft)}
+.sa-pvopen{font-size:12px}
+.sa-row.done .sa-pv{display:none}
+/* the menu of an avatar (1.8.2): the look of the pet's skin menu */
+.sa-matemenu{min-width:190px;max-width:280px}
+.sa-matemenu .sa-skin:disabled{opacity:.5;cursor:default;background:none}
+.sa-materow{padding:2px 2px 4px}
+.sa-materow[hidden]{display:none}
+.sa-mateline{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:4px 8px}
+.sa-matebad{padding:2px 6px;font-size:12px}
+.sa-matebad:empty{display:none}

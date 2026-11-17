@@ -106,7 +106,7 @@ const COMPANION = (function () {
       clearTimeout(state.bubTimer);
       const close = h("button", {type: "button", class: "cp-x", title: t("super.pop.close"), "aria-label": t("super.pop.close")}, "×");
       close.addEventListener("click", () => bub.classList.remove("on"));
-      bub.replaceChildren(close, question ? h("span", {class: "cp-you"}, t("super.pop.you", {text: question})) : null, h("span", {class: "cp-ans"}, answer), h("span", {class: "cp-judg", title: t("super.judgment.tip")}, "◇"));
+      bub.replaceChildren(...[close, question ? h("span", {class: "cp-you"}, t("super.pop.you", {text: question})) : null, h("span", {class: "cp-ans"}, answer), h("span", {class: "cp-judg", title: t("super.judgment.tip")}, "◇")].filter(Boolean));
       bub.classList.add("on");
       state.bubTimer = later(() => bub.classList.remove("on"), 14000);
     }
@@ -139,7 +139,7 @@ const COMPANION = (function () {
       const w = snap.items.length, mood = snap.mood;
       return h("div", {class: "cp-stat"}, h("span", null, dot("run"), t("super.pop.run", {n: snap.working})), h("span", null, dot("wait"), t("super.pop.wait", {n: w})),
         mood === "sleep" ? h("span", null, "· " + cap(t("super.line.asleep"))) : mood === "tired" ? h("span", null, "· " + cap(t("super.line.tired"))) : null,
-        snap.cost ? h("span", {class: "cp-cost" + (snap.costFull ? " full" : ""), title: t("super.cost.tip")}, snap.cost) : null);
+        snap.cost ? h("span", {class: "cp-cost"}, PET.battery(snap.cost)) : null);
     }
     function buttons(item) {
       const nodes = pop.buttonsFor(item);

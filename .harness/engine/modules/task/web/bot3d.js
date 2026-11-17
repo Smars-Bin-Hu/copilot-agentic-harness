@@ -1,5 +1,5 @@
 // The robot of the Enter screen in 3D (1.6.76): one canvas, one fragment shader that draws the robot of enter.js from distances, no library and no model file.
-// BOT3D.make(box) puts the canvas in `box` and returns {draw, colours}; null when the browser has no WebGL, and enter.js keeps its flat robot. It costs nothing while the picture does not change.
+// BOT3D.make(box, {boss}) puts the canvas in `box` and returns {draw, colours}; `boss` adds the super agent's gear (1.8.1), in `--sa-gear`, after the skin `view.skin` given to `draw` (pet.js); null when the browser has no WebGL, and enter.js keeps its flat robot. It costs nothing while the picture does not change.
 "use strict";
 
 const BOT3D = (function () {
@@ -13,8 +13,8 @@ precision mediump float;
 uniform vec2 size;
 uniform mat3 turn, nod;
 uniform vec2 arm, look;
-uniform float blink, glow;
-uniform vec3 cBody, cHead, cLine, cVisor, cLight;
+uniform float blink, glow, skin;
+uniform vec3 cBody, cHead, cLine, cVisor, cLight, cGear;
 const float CAMERA = 260., HIGH = 115., MIDDLE = 4.5, FAR = 330.;
 const vec3 NECK = vec3(0., -5., 0.), SHOULDER = vec3(28., -13., 0.);
 
@@ -27,7 +27,7 @@ float plate(vec3 p, vec2 half_, float corner, float depth) {
 }
 vec3 inHead(vec3 q) { return nod * (q - NECK) + NECK; }
 
-// The distance to the robot, and which part: 1 body, 2 head, 3 visor, 4 line, 5 bulb.
+// The distance to the robot, and which part: 1 body, 2 head, 3 visor, 4 line, 5 bulb, 6 gear (BOSS only, in cGear), 7 neon frame (in cLine).
 vec2 world(vec3 p) {
   vec3 q = turn * p, h = inHead(q);
   vec2 best = vec2(box(q - vec3(0., -24., 0.), vec3(20., 21., 15.), 13.), 1.);
@@ -43,6 +43,53 @@ vec2 world(vec3 p) {
   if (d < best.x) best = vec2(d, 4.);
   d = length(h - vec3(0., 47., 0.)) - 3.6;
   if (d < best.x) best = vec2(d, 5.);
+#ifdef BOSS
+  // the super agent (1.8.1): its gear depends on the skin (skin, pet.js): 0 commander, 1 ninja, 2 pilot, 3 mecha, 4 neon
+  vec3 e = vec3(abs(h.x), h.y, h.z);
+  if (skin < .5) {  // a headset that hugs the head, a microphone at the mouth, a ring of light round the bulb
+    vec3 b = h - vec3(0., 15., -8.);
+    vec2 hoop = vec2(b.x, b.y * 1.2);
+    d = max((length(vec2(length(hoop) - 29., b.z)) - 2.4) * .8, -b.y);
+    if (d < best.x) best = vec2(d, 4.);
+    d = rod(e, vec3(24., 14., -3.), vec3(30.5, 14., -3.), 7.5);
+    if (d < best.x) best = vec2(d, 6.);
+    d = min(rod(h, vec3(-30., 9., 3.), vec3(-27., 3., 16.), 1.4), rod(h, vec3(-27., 3., 16.), vec3(-14., 1., 22.), 1.4));
+    if (d < best.x) best = vec2(d, 4.);
+    d = length(h - vec3(-12.5, 1., 22.5)) - 2.8;
+    if (d < best.x) best = vec2(d, 5.);
+    vec3 r = h - vec3(0., 47., 0.);
+    d = length(vec2(length(r.xz) - 7., r.y)) - 1.;
+    if (d < best.x) best = vec2(d, 5.);
+  } else if (skin < 1.5) {  // a headband with its knot and two tails at the side
+    float head = box(h - vec3(0., 16., 0.), vec3(26., 21., 18.), 15.);
+    d = max(head - 1.8, abs(h.y - 30.) - 3.2);
+    d = min(d, length(h - vec3(-27., 29., -5.)) - 3.6);
+    d = min(d, min(rod(h, vec3(-28., 29., -6.), vec3(-39., 21., -10.), 1.7), rod(h, vec3(-28., 28., -5.), vec3(-36., 14., -4.), 1.7)));
+    if (d < best.x) best = vec2(d, 6.);
+  } else if (skin < 2.5) {  // goggles pushed up on the forehead, on a strap
+    float head = box(h - vec3(0., 16., 0.), vec3(26., 21., 18.), 15.);
+    d = max(head - 1., abs(h.y - 31.) - 1.6);
+    if (d < best.x) best = vec2(d, 4.);
+    d = rod(e, vec3(9.5, 31., 12.), vec3(9.5, 31., 19.), 6.2);
+    if (d < best.x) best = vec2(d, 6.);
+    d = rod(e, vec3(9.5, 31., 19.), vec3(9.5, 31., 20.2), 4.4);
+    if (d < best.x) best = vec2(d, 5.);
+  } else if (skin < 3.5) {  // a V crest with a gem, and armour on the shoulders
+    d = rod(e, vec3(2., 27., 17.), vec3(21., 45., 11.), 1.9);
+    if (d < best.x) best = vec2(d, 6.);
+    d = length(h - vec3(0., 27., 18.)) - 3.4;
+    if (d < best.x) best = vec2(d, 5.);
+    d = box(vec3(abs(q.x), q.y, q.z) - vec3(27., -8., 0.), vec3(8., 4.5, 9.), 3.5);
+    if (d < best.x) best = vec2(d, 6.);
+  } else {  // a crown of spikes that fans out over the head, and a frame of light round the visor, both glowing
+    vec3 c = e - vec3(0., 32., 2.);
+    d = min(min(rod(c, vec3(5., 0., 0.), vec3(9., 15., 2.), 2.1), rod(c, vec3(12., -1., 0.), vec3(21., 11., 1.), 2.1)), rod(c, vec3(18., -4., 0.), vec3(30., 4., 0.), 1.9));
+    if (d < best.x) best = vec2(d, 6.);
+    vec3 v = h - vec3(0., 16., 18.);
+    d = max(plate(v, vec2(22., 14.), 11., 1.), -plate(v, vec2(19.5, 11.5), 9., 4.));
+    if (d < best.x) best = vec2(d, 7.);
+  }
+#endif
   return best;
 }
 vec3 normalAt(vec3 p) {
@@ -70,7 +117,7 @@ void main() {
   }
   vec3 p = from + ray * t, n = normalAt(p), q = turn * p, h = inHead(q);
   float part = hit.y, facing = max(dot(n, -ray), 0.);
-  vec3 light = normalize(vec3(-.45, .7, .8)), base = part < 1.5 ? cBody : part < 2.5 ? cHead : part < 3.5 ? cVisor : part < 4.5 ? cLine : cLight;
+  vec3 light = normalize(vec3(-.45, .7, .8)), base = part < 1.5 ? cBody : part < 2.5 ? cHead : part < 3.5 ? cVisor : part < 4.5 ? cLine : part < 5.5 ? cLight : part < 6.5 ? cGear : cLine;
   float lit = .62 + .42 * max(dot(n, light), 0.) + .08 * n.y;
   vec3 colour = base * lit + vec3(.32) * pow(max(dot(reflect(-light, n), -ray), 0.), part > 2.5 && part < 3.5 ? 26. : 44.) * (part > 2.5 && part < 3.5 ? 1.2 : .5);
   if (part < 2.5) {  // lacquer, on a dark robot only: it lifts the shape off a dark page, where a light robot needs nothing
@@ -81,7 +128,9 @@ void main() {
     float softbox = smoothstep(.42, .5, r.y) * smoothstep(.92, .8, r.y) * smoothstep(.62, .4, abs(r.x + .15));
     colour += dark * (vec3(.5, .56, .66) * rim * (.3 + .7 * sky) + vec3(1.) * spot * .8 + vec3(.72, .78, .86) * softbox * .16);
   }
-  if (part > 4.5) colour = cLight;
+  if (part > 4.5 && part < 5.5) colour = cLight;
+  if (part > 5.5 && skin > 3.5) { vec3 own = part < 6.5 ? cGear : cLine; colour = mix(colour, own * 1.15, .6) + own * glow * .3 * (1. - facing); }  // neon: the crown and the frame glow
+  if (part > 5.5 && part < 6.5 && skin < .5 && abs(h.x) > 30.) colour = mix(colour, cLight, smoothstep(pixel, -pixel, length(h.yz - vec2(14., -3.)) - 2.6));  // the lamp on each ear cup
   if (part > 2.5 && part < 3.5) {  // the eyes are on the visor
     float eye = length(vec2(abs(h.x - look.x) - 8., (h.y - 16. - look.y) / max(blink, .08))) - 4.3;
     colour += cLight * glow * .35 * exp(-max(eye, 0.) * .32);
@@ -109,12 +158,12 @@ void main() {
     return new Float32Array([cy * cz + sy * sx * sz, -cy * sz + sy * sx * cz, sy * cx, cx * sz, cx * cz, -sx, -sy * cz + cy * sx * sz, sy * sz + cy * sx * cz, cy * cx]);
   }
 
-  function make(box) {
+  function make(box, options) {
     const canvas = h("canvas", {class: "en-bot3d"});
     const gl = canvas.getContext("webgl", {alpha: true, premultipliedAlpha: true, antialias: false, powerPreference: "low-power", failIfMajorPerformanceCaveat: true});
     if (!gl) return null;
     const stage = (type, text) => { const shader = gl.createShader(type); gl.shaderSource(shader, text); gl.compileShader(shader); return gl.getShaderParameter(shader, gl.COMPILE_STATUS) ? shader : null; };
-    const vertex = stage(gl.VERTEX_SHADER, VERTEX), fragment = stage(gl.FRAGMENT_SHADER, FRAGMENT);
+    const vertex = stage(gl.VERTEX_SHADER, VERTEX), fragment = stage(gl.FRAGMENT_SHADER, (options && options.boss ? "#define BOSS 1\n" : "") + FRAGMENT);
     if (!vertex || !fragment) return null;
     const program = gl.createProgram();
     gl.attachShader(program, vertex);
@@ -128,7 +177,7 @@ void main() {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     const at = (name) => gl.getUniformLocation(program, name);
-    const place = {size: at("size"), turn: at("turn"), nod: at("nod"), arm: at("arm"), look: at("look"), blink: at("blink"), glow: at("glow"), body: at("cBody"), head: at("cHead"), line: at("cLine"), visor: at("cVisor"), light: at("cLight")};
+    const place = {size: at("size"), turn: at("turn"), nod: at("nod"), arm: at("arm"), look: at("look"), blink: at("blink"), glow: at("glow"), skin: at("skin"), body: at("cBody"), head: at("cHead"), line: at("cLine"), visor: at("cVisor"), light: at("cLight"), gear: at("cGear")};
     let last = "", gone = false;
     canvas.addEventListener("webglcontextlost", () => { gone = true; box.classList.add("flat"); });
     function fit() {
@@ -149,12 +198,13 @@ void main() {
       set(place.line, "--robot-line", [.1, .11, .12]);
       set(place.visor, "--robot-visor", [.1, .11, .13]);
       set(place.light, "--c", [.2, .75, .45]);
+      set(place.gear, "--sa-gear", [.12, .37, .82]);
       last = "";
     }
     function draw(view) {
       if (gone) return;
       fit();
-      const key = [view.yaw, view.pitch, view.headYaw, view.headPitch, view.roll, view.arm, view.eyeX, view.eyeY, view.blink, view.glow].map((value) => value.toFixed(3)).join();
+      const key = [view.yaw, view.pitch, view.headYaw, view.headPitch, view.roll, view.arm, view.eyeX, view.eyeY, view.blink, view.glow, view.skin || 0].map((value) => value.toFixed(3)).join();
       if (key === last || !canvas.width) return;
       last = key;
       gl.uniformMatrix3fv(place.turn, false, turning(view.yaw, view.pitch, 0));
@@ -163,6 +213,7 @@ void main() {
       gl.uniform2f(place.look, view.eyeX, view.eyeY);
       gl.uniform1f(place.blink, view.blink);
       gl.uniform1f(place.glow, view.glow);
+      gl.uniform1f(place.skin, view.skin || 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     box.append(canvas);

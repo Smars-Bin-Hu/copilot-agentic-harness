@@ -2070,6 +2070,21 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.brain.talk())
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(500, {"error": str(error)})
+            if path == "/api/super/history":  # the earlier days of the super agent chat: the list, or one day ({day}); a read, as /api/super/talk is
+                try:
+                    return self.answer(200, board.brain.history_day(data.get("day")) if data.get("day") else board.brain.history())
+                except Exception as error:  # noqa: BLE001 - the panel says it could not read
+                    return self.answer(500, {"error": str(error)})
+            if path == "/api/super/history/act":  # archive, restore or delete an earlier day: it changes files, so the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.brain.history_act(data.get("day"), data.get("action"))
+                    if result.get("ok"):
+                        print(say("serve.did", action=f"super history {data.get('action')}", task=str(data.get("day"))), flush=True)
+                    return self.answer(200, result)
+                except Exception as error:  # noqa: BLE001 - the panel shows the refusal
+                    return self.answer(500, {"error": str(error)})
             if path == "/api/super":  # the super agent view (1.8.1): what waits for the person across the open tasks, from the same rows as /api/board; a read, with the same checks
                 try:
                     return self.answer(200, superview.build(board.rows()))

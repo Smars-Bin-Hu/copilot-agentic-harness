@@ -249,8 +249,9 @@ The third button of the board's header. It is never the default and the board do
 
 - **Messages**: what waits for you across all open tasks, each with the board's own buttons. The agent never presses them: you do.
 - **Avatars**: a round avatar for each task shows its state; a click filters the messages to that task.
-- **The pet**: a small robot walks over the view. It stands still when the page is hidden or the system reduces motion.
+- **The pet**: a small robot in a headset rests in the top right corner of the view and flies out only when it has something to do, with one dot circling it for each task (red: stops work, amber: waits for you, green: works). Click it: it shows the next thing that waits; click again to open that task. Double-click: it sums up today. Drag it onto an avatar: only that task's messages. Right-click it to change its skin: Commander, Ninja, Pilot, Mecha or Neon (each with its own colours and gear; the super agent's avatars wear it too; this browser remembers it). A battery in the header shows the Credits the super agent has left today; point at it for the numbers. Its eyes follow the pointer. It stands still when the page is hidden or the system reduces motion.
 - **Chat**: ask a question, or press **Sum up today**. The board opens one Copilot chat a day with the `super` agent, which only reads. The limit is `super.daily_credits` in `task.json`; the view works without the chat.
+- **History**: a long day shows its latest 40 messages, with **Show earlier** for the rest. When a new day starts, the day before goes into the history (`.harness/runtime/super-history/`). The clock button in the header lists the earlier days: open one to read it, **Archive** it (hidden under **Archived**, where **Restore** brings it back) or **Delete** it (a second click confirms). Nothing is deleted by itself. Today cannot be deleted: its record holds the day's spend.
 - **Pop-out**: the button in the header opens a small window that stays on top of other windows (Document Picture-in-Picture: Chrome and Edge only; company policy may block it).
 
 ### The board: lobby and list

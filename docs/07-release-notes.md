@@ -16,9 +16,10 @@ A super agent view on the board: what waits for you across all tasks, a chat tha
 
 ### Added
 
-- **A Super agent view** (the third button next to Lobby and List; the board still opens as before). What waits for you comes as short messages with the board's own buttons, so a question or a plan approval is answered there. A strip of task avatars shows each task's state and filters the messages. A small robot walks over the view (3D, or flat when the browser has no WebGL).
+- **A Super agent view** (the third button next to Lobby and List; the board still opens as before). What waits for you comes as short messages with the board's own buttons, so a question or a plan approval is answered there. A strip of task avatars shows each task's state and filters the messages. A small robot in a headset rests in the top right corner (3D, or flat when the browser has no WebGL) and flies out only when it has something to do, with a dot per task circling it. One click shows the next thing that waits for you, and a second opens it; a double click sums up today; dropping it on an avatar shows only that task. A right click changes its skin (Commander, Ninja, Pilot, Mecha, Neon); the super agent's avatars change with it.
 - **A chat with the super agent.** The board opens one Copilot chat a day with the `super` agent (read and search tools only, Claude Haiku 5.5) and feeds it the state of your tasks. Ask it a question, or press **Sum up today**, which shows what it cost. The first time you open the view in a day and something waits, it sums up by itself.
-- **A daily limit.** `super.daily_credits` in `task.json` (50 by default; `0` switches the chat off). At the limit the board sends no new message; the view still works.
+- **A daily limit.** `super.daily_credits` in `task.json` (50 by default; `0` switches the chat off). At the limit the board sends no new message; the view still works. A battery in the view's header shows what is left today; point at it for the Credits spent and left.
+- **The chat's history.** Each day is kept when the next one starts. The clock button in the header lists the earlier days to read, archive or delete; a long day folds its older messages behind **Show earlier**.
 - **A pop-out.** The button in the header of the view opens a small window that stays on top of other windows (Chrome and Edge only). It has the same buttons. A window that needs a code (approvals, a new task) is shown in the board page, and the pop-out says so.
 
 ### Changed

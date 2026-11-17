@@ -6,6 +6,9 @@
   turn     `ask(text)` / `summary()`: `/harness-super` (the mark the gate knows the chat by), the digest, then the person's words. Refused, with the reason in `why`, when VS Code is not linked (`asleep`),
            when the day's spend reached the limit (`limit`), or when a turn is running (`busy`). `empty`, `long`, `timeout` and `error` are the other reasons.
   talk     `talk()`: the state (`asleep`, `thinking`, `tired`, `idle`), the Credits spent today, the limit, and the conversation read back from the turns of the chat.
+  history  When a new day starts, the conversation of the day before is kept in `.harness/runtime/super-history/<day>.json` (what was said, and what the day spent) before `super.json` starts again.
+           `history()` lists the days, newest first; `history_day(day)` reads one back; `history_act(day, action)` archives one (into `archived/`, hidden from the list), restores it, or deletes it.
+           Today is never in the history: its record holds the spend of the day, so the daily limit cannot be undone by a delete. Nothing is deleted by itself.
   spend    The Credits of the day: the sum of the `usage._meta.copilotUsage.totalNanoAiu` of the turns that ended, or what the events file of the chat's Copilot session says (read from where it was last read,
            `autorun_spend.lines_of`), whichever is more. The limit is `super.daily_credits` of `policies/task.json` (50). At the limit nothing new is sent; code notices are not affected.
 """
@@ -13,6 +16,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import threading
 import time
 from datetime import datetime
@@ -42,6 +47,27 @@ STATES = {"you": "needs the person", "work": "working", "idle": "idle"}
 
 def file_of(root: Path) -> Path:
     return runtime_dir(root) / "super.json"
+
+
+DAY = re.compile(r"\d{4}-\d{2}-\d{2}$")
+ACTIONS = ("archive", "restore", "delete")
+
+
+def history_dir(root: Path, archived: bool = False) -> Path:
+    base = runtime_dir(root) / "super-history"
+    return base / "archived" if archived else base
+
+
+def messages_of(exchanges: List[Dict[str, Any]], partial: str = "") -> List[Dict[str, Any]]:
+    """The person's and the agent's messages of a day, oldest first: `{id, role: you|agent, text, at}`, `kind: summary` on a request for the summary, `end` on an answer that did not complete normally.
+    `partial`: the running turn's text so far, for the last exchange that has no answer yet."""
+    messages: List[Dict[str, Any]] = []
+    for item in exchanges:
+        messages.append({"id": item["turn"] + ":you", "role": "you", "text": item["you"], "at": item["you_at"], **({"kind": item["kind"]} if item.get("kind") != "ask" else {})})
+        text = (item.get("agent") if item.get("end") else partial) or ""
+        if item.get("end") or text:
+            messages.append({"id": item["turn"] + ":agent", "role": "agent", "text": text, "at": item.get("agent_at") or item["you_at"], **({"end": item["end"]} if item.get("end") not in ("", "complete", None) else {})})
+    return messages
 
 
 def agent_uri(root: Path) -> str:
@@ -135,10 +161,31 @@ class Brain:
             found = None
         if not isinstance(found, dict) or found.get("day") != self.now().date().isoformat() or not isinstance(found.get("exchanges"), list):
             self.watched = ""
+            if isinstance(found, dict) and isinstance(found.get("exchanges"), list) and DAY.match(str(found.get("day") or "")):  # a day that ended: into the history, then a new record
+                fresh = self.fresh()
+                if self.keep(found):
+                    self.save(fresh)
+                return fresh
             return self.fresh()
         base = self.fresh()
         base.update({key: found[key] for key in base if key in found})
         return base
+
+    def keep(self, rec: Dict[str, Any]) -> bool:
+        """Put a day that ended into the history (an empty day is not kept). False when it could not be written: `super.json` then stays as it is, and the next load tries again."""
+        exchanges = [item for item in rec.get("exchanges") or [] if isinstance(item, dict) and item.get("turn")]
+        if not exchanges:
+            return True
+        day = str(rec["day"])
+        if (history_dir(self.root, True) / f"{day}.json").exists():
+            return True  # kept before and archived since
+        record = {"day": day, "spent": round(self.spent(rec), 3),
+                  "exchanges": [{key: item.get(key) for key in ("turn", "kind", "you", "you_at", "agent", "agent_at", "end")} for item in exchanges]}
+        try:
+            atomic_write(history_dir(self.root) / f"{day}.json", record)
+        except OSError:
+            return False
+        return True
 
     def save(self, rec: Dict[str, Any]) -> None:
         try:
@@ -219,21 +266,84 @@ class Brain:
 
     def talk(self) -> Dict[str, Any]:
         """`{state, spent, limit, messages}`: `state` is asleep (VS Code is not linked), thinking (a turn runs), tired (today's limit is reached) or idle; `messages`: the person's and the agent's, oldest first,
-        `{id, role: you|agent, text, at}` (`kind: summary` on a request for the summary, `end` on an answer that did not complete normally; the running turn's text so far is shown as it grows)."""
+        as `messages_of` gives them (the running turn's text so far is shown as it grows)."""
         with self.lock:
             rec = self.load()
             if self.sync(rec):
                 self.save(rec)
             limit, spent = limit_of(self.root), self.spent(rec)
-            messages: List[Dict[str, Any]] = []
-            for item in rec["exchanges"]:
-                messages.append({"id": item["turn"] + ":you", "role": "you", "text": item["you"], "at": item["you_at"], **({"kind": item["kind"]} if item.get("kind") != "ask" else {})})
-                text = (item.get("agent") if item.get("end") else self.partial) or ""
-                if item.get("end") or text:
-                    messages.append({"id": item["turn"] + ":agent", "role": "agent", "text": text, "at": item.get("agent_at") or item["you_at"], **({"end": item["end"]} if item.get("end") not in ("", "complete", None) else {})})
+            messages = messages_of(rec["exchanges"], self.partial)
             ready = bool(self.link.status().get("ready"))
             state = "asleep" if not ready else "thinking" if self.running(rec) else "tired" if spent >= limit else "idle"
             return {"state": state, "spent": round(spent, 3), "limit": limit, "messages": messages}
+
+    # -- the history of earlier days --
+
+    def history(self) -> Dict[str, Any]:
+        """`{days: [{day, turns, spent, archived}]}`, newest first, the archived ones too (the page shows them on request). A file that cannot be read is left out."""
+        with self.lock:
+            self.load()  # a day that just ended goes into the history first
+            days = []
+            for archived in (False, True):
+                folder = history_dir(self.root, archived)
+                for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+                    found = self.read_day(path)
+                    if found:
+                        days.append({"day": found["day"], "turns": len(found["exchanges"]), "spent": found.get("spent") or 0, "archived": archived})
+            days.sort(key=lambda one: one["day"], reverse=True)
+            return {"days": days}
+
+    def read_day(self, path: Path) -> Optional[Dict[str, Any]]:
+        try:
+            found = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(found, dict) or found.get("day") != path.stem or not isinstance(found.get("exchanges"), list):
+            return None
+        found["exchanges"] = [item for item in found["exchanges"] if isinstance(item, dict) and item.get("turn") and isinstance(item.get("you"), str)]
+        return found
+
+    def where(self, day: str) -> Optional[Path]:
+        for archived in (False, True):
+            path = history_dir(self.root, archived) / f"{day}.json"
+            if path.is_file():
+                return path
+        return None
+
+    def history_day(self, day: Any) -> Dict[str, Any]:
+        """One earlier day: `{ok, day, spent, archived, messages}` (as `messages_of` gives them), or `{ok: false, why: missing}`."""
+        day = str(day or "")
+        with self.lock:
+            self.load()  # a day that just ended goes into the history first
+            path = self.where(day) if DAY.match(day) else None
+            found = self.read_day(path) if path else None
+            if not found:
+                return {"ok": False, "why": "missing"}
+            return {"ok": True, "day": day, "spent": found.get("spent") or 0, "archived": path.parent.name == "archived", "messages": messages_of(found["exchanges"])}
+
+    def history_act(self, day: Any, action: Any) -> Dict[str, Any]:
+        """Archive an earlier day (hidden from the list), restore it, or delete it for good. `{ok: true}`, or `{ok: false, why: missing | today | action | error}`."""
+        day, action = str(day or ""), str(action or "")
+        if action not in ACTIONS:
+            return {"ok": False, "why": "action"}
+        if day == self.now().date().isoformat():
+            return {"ok": False, "why": "today"}
+        with self.lock:
+            self.load()
+            path = self.where(day) if DAY.match(day) else None
+            if not path:
+                return {"ok": False, "why": "missing"}
+            try:
+                if action == "delete":
+                    path.unlink()
+                else:
+                    target = history_dir(self.root, action == "archive") / f"{day}.json"
+                    if target != path:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        os.replace(path, target)
+            except OSError:
+                return {"ok": False, "why": "error"}
+            return {"ok": True}
 
     def ask(self, text: Any) -> Dict[str, Any]:
         """The person's words go to the agent with the digest. `{ok: true}` or `{ok: false, why}`."""

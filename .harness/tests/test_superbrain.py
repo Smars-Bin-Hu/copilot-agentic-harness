@@ -338,6 +338,57 @@ class TalkTests(BrainCase):
         self.assertEqual(self.brain.ask("one"), {"ok": True})
 
 
+class HistoryTests(BrainCase):
+    def roll(self) -> str:
+        """Talk once, then let the day end: returns the day that ended."""
+        self.brain.ask("what waits?")
+        self.link.finish("Plan of task-001 first.")
+        self.brain.talk()
+        day = self.when.date().isoformat()
+        self.when = self.when + timedelta(days=1)
+        return day
+
+    def test_a_day_that_ended_is_kept_and_read_back_and_today_starts_empty(self) -> None:
+        day = self.roll()
+        self.assertEqual(self.brain.talk()["messages"], [])
+        stored = json.loads((self.root / ".harness" / "runtime" / "super.json").read_text(encoding="utf-8"))
+        self.assertEqual((stored["day"], stored["exchanges"]), (self.when.date().isoformat(), []))
+        self.assertEqual(self.brain.history(), {"days": [{"day": day, "turns": 1, "spent": 0.24, "archived": False}]})
+        found = self.brain.history_day(day)
+        self.assertEqual((found["ok"], found["archived"], found["spent"]), (True, False, 0.24))
+        self.assertEqual([(item["role"], item["text"]) for item in found["messages"]], [("you", "what waits?"), ("agent", "Plan of task-001 first.")])
+        self.assertEqual(self.brain.history()["days"][0]["day"], day)  # read again: still one day, not kept twice
+
+    def test_a_day_with_nothing_said_is_not_kept(self) -> None:
+        self.brain.talk()
+        self.when = self.when + timedelta(days=1)
+        self.assertEqual(self.brain.history(), {"days": []})
+
+    def test_archive_restore_and_delete(self) -> None:
+        day = self.roll()
+        self.assertEqual(self.brain.history_act(day, "archive"), {"ok": True})
+        self.assertEqual(self.brain.history()["days"][0]["archived"], True)
+        self.assertTrue(self.brain.history_day(day)["archived"])
+        self.assertEqual(self.brain.history_act(day, "restore"), {"ok": True})
+        self.assertEqual(self.brain.history()["days"][0]["archived"], False)
+        self.assertEqual(self.brain.history_act(day, "archive"), {"ok": True})
+        self.assertEqual(self.brain.history_act(day, "delete"), {"ok": True})  # an archived day can be deleted too
+        self.assertEqual(self.brain.history(), {"days": []})
+        self.assertEqual(self.brain.history_day(day), {"ok": False, "why": "missing"})
+        self.assertEqual(self.brain.history_act(day, "delete"), {"ok": False, "why": "missing"})
+
+    def test_today_a_bad_day_or_a_bad_action_is_refused_and_a_broken_file_is_left_out(self) -> None:
+        day = self.roll()
+        today = self.when.date().isoformat()
+        self.assertEqual(self.brain.history_act(today, "delete"), {"ok": False, "why": "today"})  # its record holds the spend of the day
+        self.assertEqual(self.brain.history_act(day, "burn"), {"ok": False, "why": "action"})
+        for bad in ("../super", "", None, "2026-1-1"):
+            self.assertEqual(self.brain.history_day(bad), {"ok": False, "why": "missing"})
+            self.assertEqual(self.brain.history_act(bad, "delete"), {"ok": False, "why": "missing"})
+        (superbrain.history_dir(self.root) / "2020-01-01.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual([one["day"] for one in self.brain.history()["days"]], [day])
+
+
 class FilesTests(unittest.TestCase):
     def test_the_mark_is_the_one_the_gate_knows_and_the_agent_has_only_read_tools(self) -> None:
         self.assertEqual(superbrain.MARKER, superagent.MARKER)
@@ -360,6 +411,17 @@ class RouteTests(ServeCase):
         status, data, _ = self.request("POST", "/api/super/talk", {})
         self.assertEqual(status, 200)
         self.assertEqual((data["state"], data["messages"], data["limit"], data["spent"]), ("asleep", [], 50.0, 0.0))
+
+    def test_the_history_is_a_read_and_its_actions_need_a_paired_browser(self) -> None:
+        for path in ("/api/super/history", "/api/super/history/act"):
+            self.assertEqual(self.request("POST", path, {}, header=False)[0], 403)
+            self.assertEqual(self.request("POST", path, {}, origin="https://evil.example")[0], 403)
+        status, data, _ = self.request("POST", "/api/super/history", {})
+        self.assertEqual((status, data["days"]), (200, []))
+        self.assertEqual(self.request("POST", "/api/super/history", {"day": "2026-01-01"})[1]["why"], "missing")
+        self.assertEqual(self.request("POST", "/api/super/history/act", {"day": "2026-01-01", "action": "delete"})[0], 403)  # no cookie
+        found = self.request("POST", "/api/super/history/act", {"day": "2026-01-01", "action": "delete"}, cookie=self.pair())[1]
+        self.assertEqual((found["ok"], found["why"]), (False, "missing"))
 
     def test_with_no_link_to_vs_code_the_answer_is_asleep(self) -> None:
         cookie = self.pair()

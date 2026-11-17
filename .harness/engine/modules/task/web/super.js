@@ -1,6 +1,6 @@
 // The super agent view of the board (1.8.1): one window like a messenger. Everything that waits for the person comes as a short message with its buttons (from `/api/super`, built by
 // superview.py out of the rows of the board); a strip of round avatars shows the state of every open task (green dashed ring: at work, amber with a count: waits for you, grey: idle) and
-// a click shows only that task's messages; a robot (pet.js) walks over the view, looks at the avatars, and fetches a letter when a new message arrives. A message that is answered folds
+// a click shows only that task's messages; a robot (pet.js) rests in the top right corner and flies out to an avatar to fetch a letter when a new message arrives. A message that is answered folds
 // into one "✓" line. Under the stream: two quick asks and an input to ask the agent or start a new task.
 //
 // The buttons of a message are the buttons of the board (`actionButton`, common.js): the same code, the same endpoints, the same code field for an approval; this file makes no action of its own.
@@ -14,7 +14,7 @@ const SUPER = (function () {
   const WHY = {confirm: "super.why.confirm", question: "super.why.question", asking: "super.why.asking", outbox: "super.why.outbox", autorun: "super.why.autorun", req: "super.why.req", plan: "super.why.plan",
     promote: "super.why.promote", review: "super.why.review", recover: "super.why.recover", accept: "super.why.accept", commit: "super.why.commit", stopped: "super.why.stopped", cancelled: "super.why.cancelled"};
   const MATE = {you: "super.mate.you", work: "super.mate.work", idle: "super.mate.idle"};
-  const SAYS = ["super.pet.say.1", "super.pet.say.2", "super.pet.say.3", "super.pet.say.4"];
+  const BLOCKS = new Set(["confirm", "question", "asking", "outbox", "autorun"]);  // superview.py: these stop running work; their dot on the pet is red
   const OFF = {asleep: "super.off.asleep", limit: "super.off.limit", busy: "super.off.busy", off: "super.off.off", none: "super.off.none"};
   const query = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   const still = () => Boolean(query && query.matches) || document.documentElement.classList.contains("lite");
@@ -38,12 +38,12 @@ const SUPER = (function () {
     const sv = h("section", {class: "sa", hidden: "", "aria-label": t("super.name")});
     const lineEl = h("div", {class: "sa-line"});
     const costEl = h("span", {class: "sa-cost", hidden: ""});
-    const lane = h("div", {class: "sa-lane", "aria-hidden": "true"});
     const team = h("div", {class: "sa-team", role: "group", "aria-label": t("super.team")});
     const filterEl = h("div", {class: "sa-filter", hidden: ""});
     const banner = h("div", {class: "sa-banner", hidden: "", role: "status"});
     const empty = h("div", {class: "sa-empty"});
-    const stream = h("div", {class: "sa-stream", role: "log", "aria-live": "polite"}, empty);
+    const earlier = h("button", {type: "button", class: "sa-earlier", hidden: ""});  // a long day: the older exchanges are folded behind it (FOLD)
+    const stream = h("div", {class: "sa-stream", role: "log", "aria-live": "polite"}, earlier, empty);
     const pill = h("button", {type: "button", class: "sa-newpill", hidden: ""}, "↓ " + t("super.new"));
     const quick = h("div", {class: "sa-quick"});
     const field = h("textarea", {class: "sa-field", rows: 1, maxlength: 2000, placeholder: t("super.input.ph"), "aria-label": t("super.input.ph")});
@@ -52,12 +52,15 @@ const SUPER = (function () {
     const box = h("div", {class: "sa-box"}, field, newTask, send);
     // The pop-out (companion.js): a small window that stays on top of every other window. Only where the browser can open one (Document Picture-in-Picture: Chrome, Edge).
     const popUp = typeof COMPANION !== "undefined" ? h("button", {type: "button", class: "sa-pop"}, "⇱") : null;
-    sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, popUp), team, lane, filterEl, banner,
-      h("div", {class: "sa-streamwrap"}, stream, pill), quick, h("div", {class: "sa-input"}, box));
+    const streamWrap = h("div", {class: "sa-streamwrap"}, stream, pill);
+    const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => linked(text)) : null;  // the earlier days (superhist.js)
+    sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
+      streamWrap, quick, h("div", {class: "sa-input"}, box));
 
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], localThink = 0, failed = "";
     let pollTimer = 0, patrolToken = 0, noticeBusy = false, chain = Promise.resolve(), lastMate = "";
+    let pointing = null, holdUntil = 0;  // the item the pet showed on a click (a second click soon after opens its task); the pet stays put until holdUntil
     let watchers = 0;  // the pop-out window is one: while it is open the data keeps coming, shown or not
     const live = () => shown || watchers > 0;
     const doneLog = [];  // what was settled while this page is open: {task, text, at}
@@ -126,7 +129,7 @@ const SUPER = (function () {
     function applyFilter() {
       let visible = 0;
       for (const node of stream.children) {
-        if (node === empty) continue;
+        if (node === empty || node === earlier) continue;
         node.hidden = Boolean(filter) && node.dataset.task !== filter;
         if (!node.hidden) visible++;
       }
@@ -136,13 +139,29 @@ const SUPER = (function () {
 
     // ---------- the messages ----------
     function addSys(text) { add(h("div", {class: "sa-sys"}, text)); }
+    // A long day: the chat shows its last FOLD messages; the older ones are behind "Show earlier" (the task items are never folded).
+    const FOLD = 40, chatRows = [];
+    let unfolded = false;
+    function foldChat() {
+      const hide = unfolded ? 0 : Math.max(0, chatRows.length - FOLD);
+      chatRows.forEach((node, at) => node.classList.toggle("sa-folded", at < hide));
+      earlier.hidden = !hide;
+      earlier.textContent = hide ? t("super.earlier", {n: hide}) : "";
+    }
+    earlier.addEventListener("click", () => { unfolded = true; foldChat(); });
     function addYou(text, at) {
-      add(h("div", {class: "sa-row me"}, h("div", {class: "sa-bub", title: at ? when(at, 11, 16) : null}, text)), true);
+      const row = h("div", {class: "sa-row me"}, h("div", {class: "sa-bub", title: at ? when(at, 11, 16) : null}, text));
+      chatRows.push(row);
+      add(row, true);
+      foldChat();
     }
     function addAgent(message) {
       const judgment = h("span", {class: "sa-judg", title: t("super.judgment.tip"), "aria-label": t("super.judgment.tip")}, "◇");
-      add(h("div", {class: "sa-row"}, h("span", {class: "sa-mini boss"}, PET.face("calm", "", 0, true)),
-        h("div", {class: "sa-bub agent"}, h("div", {class: "sa-fw"}, h("b", null, t("super.name")), judgment, message.at ? h("span", {class: "sa-when"}, when(message.at, 11, 16)) : null), h("div", {class: "sa-text"}, linked(message.text)))));
+      const row = h("div", {class: "sa-row"}, h("span", {class: "sa-mini boss"}, PET.face("calm", "", 0, true)),
+        h("div", {class: "sa-bub agent"}, h("div", {class: "sa-fw"}, h("b", null, t("super.name")), judgment, message.at ? h("span", {class: "sa-when"}, when(message.at, 11, 16)) : null), h("div", {class: "sa-text"}, linked(message.text))));
+      chatRows.push(row);
+      add(row);
+      foldChat();
     }
     let typing = null;
     function typingBubble(on) {
@@ -263,14 +282,16 @@ const SUPER = (function () {
     // ---------- the pet ----------
     const moodNow = () => (talk ? (talk.state === "asleep" ? "sleep" : talk.state === "tired" ? "tired" : "calm") : vsDown ? "sleep" : "calm");
     const thinkingNow = () => Boolean((talk && talk.state === "thinking") || (localThink && Date.now() - localThink < 90000));
-    const petFree = () => Boolean(pet) && shown && !still() && !document.hidden && moodNow() === "calm";
+    const petFree = () => Boolean(pet) && shown && !still() && !document.hidden && moodNow() === "calm" && !pet.held();
     function home() {
-      const box = hostBox(), at = lane.getBoundingClientRect(), size = pet.size();  // its own floor: the lane under the avatars, clear of the header
-      return {x: at.left - box.left + 12, y: at.bottom - box.top - size.h};
+      const box = hostBox(), size = pet.size();  // its corner: top right, beside the header and the avatars, which leave room for it (super.css)
+      return {x: Math.max(0, box.width - size.w - 6), y: 2};
     }
     function standAt(target) {
-      const box = hostBox(), at = target.getBoundingClientRect(), floor = lane.getBoundingClientRect(), size = pet.size();
-      return {x: clamp(at.left + at.width / 2 - box.left - size.w / 2, 0, Math.max(0, box.width - size.w)), y: floor.bottom - box.top - size.h + 3};
+      // beside the avatar, low in the avatar strip, so the avatar itself stays in sight: to its right, or to its left near the end of the strip
+      const box = hostBox(), at = target.getBoundingClientRect(), size = pet.size(), right = at.right - box.left - 6;
+      const x = right + size.w <= box.width ? right : at.left - box.left - size.w + 6;
+      return {x: clamp(x, 0, Math.max(0, box.width - size.w)), y: Math.max(2, team.getBoundingClientRect().bottom - box.top - size.h), face: x === right ? -1 : 1};
     }
     function visibleMates() {
       const area = team.getBoundingClientRect();
@@ -294,7 +315,8 @@ const SUPER = (function () {
         await wait(200);
         pet.look(0, .5);
         pet.say(t("super.pet.way"), 1000);
-        await pet.walkTo(standAt(mate).x, standAt(mate).y, 0);
+        const stand = standAt(mate);
+        await pet.walkTo(stand.x, stand.y, stand.face);
         if (!petFree()) { addItem(item, true); return; }
         mate.classList.add("ping");
         const a = centre(mate), p = pet.at(), size = pet.size();
@@ -314,31 +336,111 @@ const SUPER = (function () {
         pet.hop();
       } finally { noticeBusy = false; pet.look(0, 0); }
     }
-    function canPatrol() { return petFree() && !noticeBusy && !thinkingNow() && !SERVE.open(); }
+    function canPatrol() { return petFree() && !noticeBusy && !thinkingNow() && !SERVE.open() && Date.now() > holdUntil; }
     async function patrol(token) {
       while (token === patrolToken) {
-        await wait(2400 + Math.random() * 2600);
+        await wait(15000 + Math.random() * 15000);  // it rests in its corner; now and then it flies to a task that waits for you and back
         if (token !== patrolToken) return;
         if (!canPatrol()) continue;
-        const list = visibleMates().filter((node) => node.dataset.task !== lastMate);
-        if (!list.length || Math.random() < .2) { const back = home(); pet.look(0, 0); await pet.walkTo(back.x, back.y, 0); lastMate = ""; continue; }
+        const list = visibleMates().filter((node) => node.dataset.state === "you" && node.dataset.task !== lastMate);
+        if (!list.length) { lastMate = ""; continue; }
         const mate = list[Math.floor(Math.random() * list.length)];
         lastMate = mate.dataset.task;
         const spot = standAt(mate);
-        pet.look(0, .6);
-        await pet.walkTo(spot.x, spot.y, 0);
+        pet.look(spot.face * .6, .3);
+        await pet.walkTo(spot.x, spot.y, spot.face);
         if (token !== patrolToken || !canPatrol()) continue;
-        if (mate.dataset.state === "you" && Math.random() < .6) pet.say(t("super.pet.waits"), 1300);
-        else if (mate.dataset.state === "work" && Math.random() < .3) pet.say(t("super.pet.busy"), 1000);
-        await wait(1200 + Math.random() * 1400);
+        pet.say(t("super.pet.waits"), 1300);
+        await wait(1600);
+        if (token !== patrolToken || noticeBusy || Date.now() <= holdUntil || pet.held()) continue;
+        const back = home(); pet.look(0, 0); await pet.walkTo(back.x, back.y, 0);
       }
     }
+    // One click: the pet shows the next thing that waits (the first open item, in the order of superview.py) and flies beside its task. A second click soon after opens the task.
+    // It is code only: no model, no Credits, in any mood.
+    function nextEntry() {
+      const open = ((data && data.items) || []).map((item) => known.get(item.id)).filter((entry) => entry && !entry.done);
+      return open.find((entry) => !entry.node.hidden) || open[0] || null;
+    }
     function petClick() {
-      const mood = moodNow();
-      if (mood === "sleep") { pet.say(t("super.pet.zz"), 1500); return; }
-      if (mood === "tired") { pet.say(t("super.pet.tired"), 1700); return; }
-      pet.hop(); pet.wave(1100);
-      pet.say(t(SAYS[Math.floor(Math.random() * SAYS.length)]), 2000);
+      if (noticeBusy) return;
+      const shownBefore = pointing && Date.now() < pointing.until ? known.get(pointing.id) : null;
+      if (shownBefore && !shownBefore.done) {
+        pointing = null;
+        pet.wave(900);
+        pet.say(t("super.pet.open", {task: shownBefore.item.task}), 1500);
+        window.open(taskUrl(shownBefore.item.task), "_blank", "noopener");
+        return;
+      }
+      const entry = nextEntry();
+      for (const node of stream.querySelectorAll(".sa-spot")) node.classList.remove("sa-spot");
+      if (!entry) {
+        pointing = null;
+        const mood = moodNow();
+        if (mood === "sleep") pet.say(t("super.pet.zz"), 1500);
+        else if (mood === "tired") pet.say(t("super.pet.tired"), 1700);
+        else { pet.hop(); pet.wave(1100); pet.say(t("super.pet.clear"), 2200); }
+        return;
+      }
+      if (entry.node.hidden) setFilter("");
+      pointing = {id: entry.item.id, until: Date.now() + 8000};
+      holdUntil = pointing.until;
+      entry.node.classList.add("sa-spot");
+      setTimeout(() => entry.node.classList.remove("sa-spot"), 8000);
+      entry.node.scrollIntoView({block: "nearest", behavior: still() ? "auto" : "smooth"});
+      pet.say(t("super.pet.next", {task: entry.item.task, why: t(WHY[entry.item.why] || "super.why.other")}), 3200);
+      // it flies beside the task's avatar, looks at it, and goes back to its corner when it has said its line
+      const mate = mateOf(entry.item.task), token = pointing;
+      if (mate && !still()) {
+        const spot = standAt(mate);
+        pet.walkTo(spot.x, spot.y, spot.face).then(() => { pet.look(spot.face * .7, .4); return wait(3000); }).then(() => {
+          if (pointing !== token || noticeBusy || pet.held()) return;
+          const back = home(); pet.look(0, 0); pet.walkTo(back.x, back.y, 0);
+        });
+      }
+    }
+    // A double click: the agent sums up today, as the button does (about 0.2 Credits).
+    function petDouble() {
+      pointing = null;
+      if (thinkingNow()) { pet.say(t("super.pet.thinking"), 1600); return; }
+      if (talkOff()) { pet.say(t("super.pet.cant"), 1800); return; }
+      pet.hop();
+      pet.say(t("super.pet.summing"), 1500);
+      ask({kind: "summary"}, t("super.quick.summary"));
+    }
+    // Let go over an avatar: only that task's messages ("All" shows all again). Then it flies back to its corner.
+    function petDrop(x, y) {
+      pet.node.style.pointerEvents = "none";
+      const under = document.elementFromPoint(x, y);
+      pet.node.style.pointerEvents = "";
+      const mate = under && under.closest ? under.closest(".sa-mate") : null;
+      if (mate && team.contains(mate)) {
+        const task = mate.dataset.task || "";
+        setFilter(task);
+        pet.hop();
+        pet.say(task ? t("super.pet.only", {task}) : t("super.pet.all"), 1800);
+      }
+      holdUntil = Date.now() + 2500;
+      const back = home();
+      pet.walkTo(back.x, back.y, 0);
+    }
+    // Its eyes follow the pointer over the view (one 3D frame per animation frame at most).
+    let eyeFrame = 0, eyeAt = null;
+    sv.addEventListener("pointermove", (event) => {
+      eyeAt = event;
+      if (eyeFrame || !pet) return;
+      eyeFrame = requestAnimationFrame(() => {
+        eyeFrame = 0;
+        if (!pet || !shown || noticeBusy || pet.held()) return;
+        const at = pet.node.getBoundingClientRect();
+        pet.look(clamp((eyeAt.clientX - at.left - at.width / 2) / 260, -1, 1), clamp((eyeAt.clientY - at.top - at.height * .35) / 200, -1, 1));
+      });
+    });
+    sv.addEventListener("pointerleave", () => { if (pet && !noticeBusy && !pet.held()) pet.look(0, 0); });
+    function drawOrbit() {
+      if (!pet) return;
+      const blocked = new Set(((data && data.items) || []).filter((item) => BLOCKS.has(item.why)).map((item) => item.task));
+      pet.orbit(mates.map((mate) => (blocked.has(mate.task) ? "block" : MATE[mate.state] ? mate.state : "idle")));
     }
     function applyMood() {
       if (!pet) return;
@@ -363,12 +465,9 @@ const SUPER = (function () {
         if (status.as_of) lineEl.append(" · " + t("super.line.updated", {time: when(status.as_of, 11, 16)}));
       }
       lineEl.title = lineEl.textContent;
-      if (talk && talk.limit) {
-        costEl.hidden = false;
-        costEl.textContent = t("super.cost", {spent: amount(talk.spent || 0), limit: amount(talk.limit)});
-        costEl.title = t("super.cost.tip");
-        costEl.classList.toggle("full", mood === "tired");
-      } else costEl.hidden = true;
+      const cost = costNow();
+      costEl.hidden = !cost;
+      costEl.replaceChildren(...(cost ? [PET.battery(cost)] : []));
     }
     function drawBanner() {
       const mood = moodNow();
@@ -382,6 +481,12 @@ const SUPER = (function () {
       const open = kind === "sleep" ? h("button", {type: "button", class: "act"}, t("super.banner.open")) : null;
       if (open) open.addEventListener("click", () => { open.disabled = true; SERVE.openVS().then(() => { setTimeout(() => { open.disabled = false; }, 1500); }, (error) => { open.disabled = false; SERVE.failed(error); }); });
       banner.replaceChildren(...[h("span", null, text), open].filter(Boolean));
+    }
+    // Today's Credits of the super agent, for its battery: what is left, and the numbers for the tooltip. Null when it has no limit.
+    function costNow() {
+      if (!talk || !talk.limit) return null;
+      const spent = talk.spent || 0, left = Math.max(0, talk.limit - spent), numbers = {spent: amount(spent), limit: amount(talk.limit), left: amount(left)};
+      return {left: left / talk.limit, full: moodNow() === "tired", tip: t("super.cost.tip", numbers), label: t("super.cost.label", numbers)};
     }
     const talkOff = () => (!talk ? "none" : moodNow() === "sleep" ? "asleep" : moodNow() === "tired" ? "limit" : "");
     function drawInput() {
@@ -436,6 +541,7 @@ const SUPER = (function () {
       if (talk && talk.state !== "thinking" && localThink && Date.now() - localThink > 4000) localThink = 0;  // the server is done (a message, or nothing to say)
       mergeTalk(talk ? talk.messages : []);
       reconcile(result.items || []);
+      drawOrbit();
       applyFilter();
       drawStatus(); drawBanner(); drawInput(); applyMood();
       first = false;
@@ -477,7 +583,12 @@ const SUPER = (function () {
       shown = true;
       sv.hidden = false;
       fit();
-      if (!pet) { pet = PET.create(sv); pet.onClick(petClick); }
+      if (!pet) {
+        pet = PET.create(sv);
+        pet.node.title = t("super.pet.tip");
+        pet.onClick(petClick); pet.onDouble(petDouble); pet.onDrop(petDrop);
+        drawOrbit();
+      }
       pet.run(true);
       const back = home();
       pet.place(back.x, back.y);
@@ -498,7 +609,7 @@ const SUPER = (function () {
     function snapshot() {
       const status = (data && data.status) || {};
       return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work").length, watching: status.watching || 0, failed,
-        mood: moodNow(), thinking: thinkingNow(), off: talkOff(), cost: talk && talk.limit ? t("super.cost", {spent: amount(talk.spent || 0), limit: amount(talk.limit)}) : "", costFull: moodNow() === "tired",
+        mood: moodNow(), thinking: thinkingNow(), off: talkOff(), cost: costNow(),
         messages: talk ? (talk.messages || []).filter((message) => message && message.role !== "you") : [], mates, loaded: data !== null};
     }
     function watch(on) {

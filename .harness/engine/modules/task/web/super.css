@@ -1,15 +1,21 @@
 /* The super agent view of the board (1.8.1): a messenger-like window, the avatars of the tasks, and the pet that walks over it. Colours come from tokens.css only. super.js, pet.js. */
-.sa{position:relative;display:flex;flex-direction:column;max-width:720px;width:100%;box-sizing:border-box;margin:6px auto 0;min-height:520px;--lb-work:var(--good-dot);--lb-you:var(--hot-dot);--lb-rest:var(--soft);--lb-left:var(--hot-dot)}
+.sa{position:relative;display:flex;flex-direction:column;max-width:720px;width:100%;box-sizing:border-box;margin:6px auto 0;min-height:520px;--lb-work:var(--good-dot);--lb-you:var(--hot-dot);--lb-rest:var(--soft);--lb-left:var(--hot-dot);--sa-perch:128px}  /* --sa-perch: the pet's corner, top right, that the header and the avatars leave free */
 .sa[hidden]{display:none}
-.sa-head{display:flex;align-items:flex-start;gap:12px;padding:2px 14px 0;flex:none;min-height:44px}
+.sa-head{display:flex;align-items:flex-start;gap:12px;padding:2px calc(var(--sa-perch) + 14px) 0 14px;flex:none;min-height:44px}
 .sa-who{min-width:0;flex:1;padding-top:6px}
 .sa-name{font-weight:650;font-size:15px}
 .sa-line{font-size:12.5px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sa-w{color:var(--hot);font-weight:600}
-.sa-cost{margin-top:8px;border:1px solid var(--line2);border-radius:999px;padding:1px 9px;font-size:12px;color:var(--soft);white-space:nowrap;cursor:help}
-.sa-cost.full{color:var(--bad);border-color:var(--bad-line)}
-.sa-lane{flex:none;height:98px;border-bottom:1px solid var(--line)}
-.sa-team{display:flex;gap:10px;overflow-x:auto;padding:6px 14px 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);scrollbar-width:thin;flex:none}
+.sa-cost{margin-top:12px;display:inline-flex}
+.sa-cost[hidden]{display:none}
+/* the battery of today's Credits (PET.battery): green, amber under a half, red under a fifth and when the limit is reached; the numbers on hover */
+.sa-cell{position:relative;display:inline-block;width:26px;height:13px;box-sizing:border-box;padding:1.5px;border:1.5px solid var(--soft);border-radius:4px;cursor:help;flex:none}
+.sa-cell::after{content:"";position:absolute;right:-4.5px;top:3px;width:2.5px;height:4px;border-radius:0 1.5px 1.5px 0;background:var(--soft)}
+.sa-cell i{display:block;height:100%;min-width:1.5px;border-radius:1.5px;background:var(--good-dot)}
+.sa-cell.mid i{background:var(--hot-dot)}
+.sa-cell.low i,.sa-cell.full i{background:var(--bad)}
+.sa-cell.full{border-color:var(--bad)}.sa-cell.full::after{background:var(--bad)}
+.sa-team{display:flex;gap:10px;overflow-x:auto;padding:6px calc(var(--sa-perch) + 8px) 10px 14px;min-height:84px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);scrollbar-width:thin;flex:none}
 .sa-mate{flex:none;width:58px;text-align:center;position:relative;background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer}
 .sa-ring{position:relative;width:46px;height:46px;border-radius:50%;margin:0 auto;display:grid;place-items:center;background:var(--card);border:2px solid var(--line2);font-size:12px;color:var(--soft)}
 .sa-ring svg{width:40px;height:40px;overflow:hidden;transition:transform .2s}
@@ -91,28 +97,73 @@ a.sa-task:hover{text-decoration:underline}
 /* the letter the pet carries, flying between the avatar, the pet and the stream */
 .sa-letter{position:absolute;z-index:6;width:16px;height:12px;border-radius:2px;background:var(--hot-dot);box-shadow:0 2px 6px var(--shade);pointer-events:none;transition:left .7s cubic-bezier(.3,.7,.4,1),top .7s cubic-bezier(.5,-.4,.6,1),opacity .6s}
 /* the pet */
-.sa-pet{position:absolute;left:0;top:0;width:84px;z-index:5;padding:0;margin:0;border:0;background:none;color:inherit;cursor:pointer;transition-property:transform;transition-timing-function:cubic-bezier(.45,.05,.35,1);--c:var(--good-dot);--ex:0px;--ey:0px}
+.sa-pet{position:absolute;left:0;top:0;width:var(--sa-perch);z-index:5;padding:0;margin:0;border:0;background:none;color:inherit;cursor:pointer;padding-bottom:12px;touch-action:none;user-select:none;-webkit-user-select:none;transition-property:transform;transition-timing-function:cubic-bezier(.45,.05,.35,1);--c:var(--good-dot);--sa-gear:var(--run);--sa-orb:calc(var(--sa-perch) * .48);--ex:0px;--ey:0px}
 .sa-pet:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:12px}
 .sa-pet.m-sleep{--c:var(--soft)}
 .sa-pet.m-tired{--c:var(--bad)}
-.sa-pet-body{position:relative;width:100%}
+.sa-pet-body{position:relative;width:100%;animation:sahover 2.6s ease-in-out infinite alternate}
 .sa-pet-body svg{width:100%;height:auto;display:block;overflow:visible}
-.sa-pet-body canvas{display:block;width:100%;aspect-ratio:100/106}
+.sa-pet-body canvas{position:relative;z-index:1;display:block;width:100%;aspect-ratio:100/106;transition:transform .35s}
 .sa-pet-body.solid svg,.sa-pet-body.flat canvas{display:none}
 .sa-pet-body.flat svg{display:block}
-.sa-pet.walk .sa-pet-body{animation:sastep .34s ease-in-out infinite alternate}
+.sa-pet.walk canvas{transform:rotate(7deg)}
+.sa-pet.walk.flip canvas{transform:rotate(-7deg)}
 .sa-pet.flip .sa-pet-body svg{transform:scaleX(-1)}
 .sa-pet.hop .sa-pet-body{animation:sahop .6s cubic-bezier(.3,1.5,.5,1)}
-@keyframes sastep{from{transform:translateY(0)}to{transform:translateY(-3px)}}
+.sa-pet.held{cursor:grabbing;z-index:7}
+.sa-pet.held .sa-pet-body{animation:saswing .5s ease-in-out infinite alternate;transform-origin:50% 0}
+@keyframes sahover{from{transform:translateY(0)}to{transform:translateY(-6px)}}
+@keyframes saswing{from{transform:rotate(-7deg)}to{transform:rotate(7deg)}}
+/* it hovers: a shadow on the floor that shrinks as it rises, a flame under it in the colour of its mood */
+.sa-shadow{position:absolute;left:50%;bottom:2px;width:calc(var(--sa-perch) * .52);height:10px;border-radius:50%;background:radial-gradient(closest-side,var(--shade),transparent);transform:translateX(-50%);pointer-events:none;animation:sashade 2.6s ease-in-out infinite alternate}
+@keyframes sashade{from{transform:translateX(-50%) scale(1);opacity:.75}to{transform:translateX(-50%) scale(.72);opacity:.4}}
+.sa-pet.held .sa-shadow{opacity:0;animation:none}
+.sa-jet{position:absolute;z-index:0;left:50%;top:86%;width:calc(var(--sa-perch) * .19);height:calc(var(--sa-perch) * .16);transform:translateX(-50%);border-radius:40% 40% 50% 50%/30% 30% 70% 70%;background:radial-gradient(ellipse at 50% 15%,var(--c),transparent 72%);transform-origin:50% 0;pointer-events:none;animation:sajet .2s ease-in-out infinite alternate}
+@keyframes sajet{from{opacity:.5;transform:translateX(-50%) scaleY(.8)}to{opacity:.95;transform:translateX(-50%) scaleY(1.15)}}
+.sa-pet.walk .sa-jet,.sa-pet.held .sa-jet{height:calc(var(--sa-perch) * .23)}
+.sa-pet.m-sleep .sa-jet{opacity:.15;animation:none}
+/* one dot per task circles its waist: red stops work, amber waits for you, green works, grey rests */
+.sa-orbit{position:absolute;left:50%;top:70%;width:0;height:0;pointer-events:none}
+.sa-dot{position:absolute;left:-5px;top:-5px;width:10px;height:10px;border-radius:50%;background:var(--soft);color:transparent;box-shadow:0 0 7px 1px currentColor;animation:saorb 9s linear infinite}
+.sa-dot.work{background:var(--good-dot);color:var(--good-dot)}
+.sa-dot.you{background:var(--hot-dot);color:var(--hot-dot)}
+.sa-dot.block{background:var(--bad);color:var(--bad)}
+@keyframes saorb{
+ 0%{transform:scaleY(.26) rotate(0deg) translateX(var(--sa-orb)) rotate(0deg) scaleY(3.846);z-index:2;opacity:.85}
+ 25%{transform:scaleY(.26) rotate(90deg) translateX(var(--sa-orb)) rotate(-90deg) scaleY(3.846);z-index:2;opacity:1}
+ 50%{transform:scaleY(.26) rotate(180deg) translateX(var(--sa-orb)) rotate(-180deg) scaleY(3.846);z-index:2;opacity:.85}
+ 50.01%{transform:scaleY(.26) rotate(180deg) translateX(var(--sa-orb)) rotate(-180deg) scaleY(3.846);z-index:0;opacity:.85}
+ 75%{transform:scaleY(.26) rotate(270deg) translateX(var(--sa-orb)) rotate(-270deg) scaleY(3.846);z-index:0;opacity:.4}
+ 100%{transform:scaleY(.26) rotate(360deg) translateX(var(--sa-orb)) rotate(-360deg) scaleY(3.846);z-index:0;opacity:.85}}
+.sa-pet.off .sa-pet-body,.sa-pet.off .sa-shadow,.sa-pet.off .sa-jet,.sa-pet.off .sa-dot,.lite .sa-dot{animation-play-state:paused}
+/* its skins (pet.js SKINS, right click): the colours; the gear is in the shader (bot3d.js). The commander takes the theme's own */
+.sa-skin,.lb-bot.sa-boss{--sa-gear:var(--run)}
+.sa-pet.skin-ninja,.sa-skin.skin-ninja,.lb-bot.skin-ninja{--robot-body:#2a2d34;--robot-head:#31353e;--robot-line:#15171b;--robot-visor:#0b0c0f;--sa-gear:#d8343c}
+.sa-pet.skin-pilot,.sa-skin.skin-pilot,.lb-bot.skin-pilot{--robot-body:#e6d8b8;--robot-head:#efe4c9;--robot-line:#5a4127;--robot-visor:#1d1a16;--sa-gear:#b8862b}
+.sa-pet.skin-mecha,.sa-skin.skin-mecha,.lb-bot.skin-mecha{--robot-body:#eef1f5;--robot-head:#f6f7f9;--robot-line:#c8303a;--robot-visor:#18233a;--sa-gear:#e2b23a}
+.sa-pet.skin-neon,.sa-skin.skin-neon,.lb-bot.skin-neon{--robot-body:#1c1e2c;--robot-head:#24273b;--robot-line:#2de2e6;--robot-visor:#07080e;--sa-gear:#ff3ea5}
+.sa-skins{position:absolute;z-index:8;display:flex;flex-direction:column;gap:2px;min-width:150px;padding:6px;background:var(--pop);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--shadow)}
+.sa-skins-head{font-size:11px;color:var(--soft);padding:2px 6px 4px}
+.sa-skin{display:flex;align-items:center;gap:8px;padding:5px 8px;border:0;border-radius:7px;background:none;color:var(--ink);font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.sa-skin:hover,.sa-skin:focus-visible{background:var(--raise);outline:none}
+.sa-skin[aria-checked=true]{font-weight:600}
+.sa-skin[aria-checked=true]::after{content:"\2713";margin-left:auto;color:var(--soft)}
+.sa-swatch{flex:none;width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,var(--robot-head) 0 55%,var(--sa-gear) 55%);box-shadow:inset 0 0 0 1px var(--robot-line)}
+/* the item the pet shows on a click */
+.sa-row.sa-spot .sa-bub{outline:2px solid var(--hot-dot);outline-offset:2px}
 @keyframes sahop{0%,100%{transform:translateY(0)}40%{transform:translateY(-18px)}}
 .sa-pet .lb-bot{--c:var(--good-dot)}
 .sa-pet.m-sleep .lb-bot{--c:var(--soft)}
 .sa-pet.m-tired .lb-bot{--c:var(--bad)}
-.sa-pet .sa-cap{fill:var(--run)}
-.sa-pet .sa-set{stroke:var(--robot-line);stroke-width:2.4;stroke-linecap:round}
-.sa-pet .sa-clip{fill:var(--raise);stroke:var(--robot-line);stroke-width:1.2}
-.sa-pet .sa-clip-l{stroke:var(--soft);stroke-width:1.2;fill:none}
-.sa-mini.boss .sa-cap{fill:var(--run)}.sa-mini.boss .sa-set{stroke:var(--robot-line);stroke-width:2.4;fill:none}
+/* the gear of the super agent on a flat robot (pet.js dress: the avatars, the flat pet, the pop-out's), in its skin */
+.sa-boss .sa-cap{fill:var(--sa-gear)}
+.sa-boss .sa-set{stroke:var(--robot-line);stroke-width:2.4;stroke-linecap:round;fill:none}
+.sa-boss .sa-gs{stroke:var(--sa-gear);stroke-width:3.4;stroke-linecap:round;fill:none}
+.sa-boss .sa-rim{stroke:var(--robot-line);stroke-width:1.2}
+.sa-boss .sa-lens{fill:var(--c,var(--good-dot))}
+.sa-boss .sa-frame{fill:none;stroke:var(--robot-line);stroke-width:2.6}
+.sa-boss .sa-clip{fill:var(--raise);stroke:var(--robot-line);stroke-width:1.2}
+.sa-boss .sa-clip-l{stroke:var(--soft);stroke-width:1.2;fill:none}
 .sa-pet.waving .lb-arm.lb-r{transform:rotate(-150deg)}
 .sa-pet.m-sleep .lb-eye{animation:none!important;transform:scaleY(.12)}
 .sa-pet.m-sleep .lb-headg{transform:translateY(5px) rotate(4deg);transform-box:fill-box;transform-origin:50% 100%}
@@ -127,18 +178,41 @@ a.sa-task:hover{text-decoration:underline}
 .sa-pet.m-tired .sa-batt{display:block}
 .sa-hold{position:absolute;right:-8px;top:56%;width:22px;height:15px;border-radius:2px;background:var(--hot-dot);display:none;box-shadow:0 1px 4px var(--shade)}
 .sa-pet.carry .sa-hold{display:block}
-.sa-say{position:absolute;left:80px;top:-4px;background:var(--pop);border:1px solid var(--line2);border-radius:10px 10px 10px 2px;padding:2px 8px;font-size:12px;white-space:nowrap;opacity:0;transform:scale(.6);transform-origin:0 100%;transition:opacity .2s,transform .2s;pointer-events:none;color:var(--ink);box-shadow:var(--shadow)}
-.sa-pet.left .sa-say{left:auto;right:80px;border-radius:10px 10px 2px 10px;transform-origin:100% 100%}
+.sa-say{position:absolute;left:calc(var(--sa-perch) - 4px);top:-4px;width:max-content;max-width:230px;background:var(--pop);border:1px solid var(--line2);border-radius:10px 10px 10px 2px;padding:2px 8px;font-size:12px;opacity:0;transform:scale(.6);transform-origin:0 100%;transition:opacity .2s,transform .2s;pointer-events:none;color:var(--ink);box-shadow:var(--shadow)}
+.sa-pet.left .sa-say{left:auto;right:calc(var(--sa-perch) - 4px);border-radius:10px 10px 2px 10px;transform-origin:100% 100%}
 .sa-say.on{opacity:1;transform:none}
 @media (max-width:560px){
- .sa-head{padding:2px 10px 0}
- .sa-team,.sa-stream,.sa-filter,.sa-quick,.sa-input{padding-left:10px;padding-right:10px}
+ .sa{--sa-perch:96px}
+ .sa-head{padding:2px calc(var(--sa-perch) + 10px) 0 10px}
+ .sa-team{padding-left:10px;padding-right:calc(var(--sa-perch) + 6px)}
+ .sa-stream,.sa-filter,.sa-quick,.sa-input{padding-left:10px;padding-right:10px}
  .sa-banner{margin-left:10px;margin-right:10px}
  .sa-mini{display:none}
  .sa-bub{max-width:100%}
  .sa-new{padding:3px 7px}
- .sa-lane{height:94px}
 }
-@media (prefers-reduced-motion:reduce){.sa *,.sa-pet,.sa-letter{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){.sa *,.sa-pet,.sa-letter{animation:none!important;transition:none!important}.sa .sa-dot{animation:saorb 9s linear infinite paused!important}}
 .sa-badge{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:6px;border-radius:9px;background:var(--hot-dot);color:var(--bg);font-size:11px;font-weight:700;padding:0 5px;box-sizing:border-box;vertical-align:1px}
 .sa-badge[hidden]{display:none}
+/* the earlier days of the chat (superhist.js): a panel over the messages; a long day folds its older messages behind "Show earlier" */
+.sa-histbtn.on{color:var(--ink);background:var(--hover)}
+.sa-hist{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;background:var(--bg)}
+.sa-hist[hidden]{display:none}
+.sa-hist-top{display:flex;align-items:center;gap:6px;padding:8px 10px 8px 14px;border-bottom:1px solid var(--line);flex:none}
+.sa-hist-top .sa-sp{flex:1}
+.sa-hist-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sa-hist-back,.sa-hist-link,.sa-hist-x,.sa-hist-act{border:0;background:none;color:var(--soft);font:inherit;font-size:12.5px;cursor:pointer;padding:3px 7px;border-radius:6px;white-space:nowrap;flex:none}
+.sa-hist-back:hover,.sa-hist-link:hover,.sa-hist-x:hover,.sa-hist-act:hover{background:var(--hover);color:var(--ink)}
+.sa-hist-act.bad.armed{color:var(--bad);font-weight:600}
+.sa-hist-note{color:var(--bad);font-size:12.5px;padding:6px 14px;flex:none}
+.sa-hist-note[hidden]{display:none}
+.sa-hist-body{flex:1;min-height:0;overflow:auto;padding:8px 14px 12px;overscroll-behavior:contain}
+.sa-hrow{display:flex;align-items:center;gap:2px;border-bottom:1px solid var(--line)}
+.sa-hday{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;text-align:left;border:0;background:none;color:var(--ink);font:inherit;padding:9px 6px;cursor:pointer;border-radius:6px}
+.sa-hday span{color:var(--soft);font-size:12.5px;white-space:nowrap}
+.sa-hday:hover{background:var(--hover)}
+.sa-hist-empty{color:var(--soft);padding:28px 6px;text-align:center}
+.sa-earlier{display:block;margin:0 auto 12px;border:1px solid var(--line2);background:transparent;color:var(--soft);border-radius:999px;padding:3px 12px;font:inherit;font-size:12.5px;cursor:pointer}
+.sa-earlier:hover{color:var(--ink);background:var(--hover)}
+.sa-earlier[hidden]{display:none}
+.sa-folded{display:none!important}

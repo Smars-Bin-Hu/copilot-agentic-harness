@@ -19,8 +19,7 @@ html body.cp-doc{margin:0;padding:0;min-height:0;height:100vh;overflow:hidden;ba
 .cp-stat{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--soft);margin-bottom:7px;flex-wrap:wrap}
 .cp-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
 .cp-dot.run{background:var(--good-dot)}.cp-dot.wait{background:var(--hot-dot)}
-.cp-cost{margin-left:auto;font-size:11px;cursor:help}
-.cp-cost.full{color:var(--bad)}
+.cp-cost{margin-left:auto;display:inline-flex}
 .cp-meta{color:var(--soft);font-size:12px}
 .cp-pill{width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:6px 2px;font:inherit;font-size:13px;display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer}
 .cp-pill b{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:10px;background:var(--hot-dot);color:var(--bg);font-size:12px;padding:0 5px;box-sizing:border-box}
@@ -83,10 +82,6 @@ a.cp-task:hover{text-decoration:underline}
 .cp-perch.hop svg{animation:cphop .5s cubic-bezier(.3,1.6,.5,1) 1}
 .cp.m-sleep .cp-perch .lb-bot{--c:var(--soft)}
 .cp.m-tired .cp-perch .lb-bot{--c:var(--bad)}
-.cp-perch .sa-cap{fill:var(--run)}
-.cp-perch .sa-set{stroke:var(--robot-line);stroke-width:2.4;stroke-linecap:round}
-.cp-perch .sa-clip{fill:var(--raise);stroke:var(--robot-line);stroke-width:1.2}
-.cp-perch .sa-clip-l{stroke:var(--soft);stroke-width:1.2;fill:none}
 .cp-perch .lb-pose-sit .lb-floaty,.cp-perch .lb-pose-idle .lb-floaty{animation:none}
 .cp-perch .lb-pose-sit .lb-shadow,.cp-perch .lb-pose-idle .lb-shadow{opacity:0}
 .cp-perch .lb-pose-sit .lb-feet,.cp-perch .lb-pose-idle .lb-feet{transform-box:fill-box;transform-origin:50% 0;animation:cpswing 3.2s ease-in-out infinite}

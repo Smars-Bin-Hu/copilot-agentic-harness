@@ -10,7 +10,7 @@
 
 const COMPANION = (function () {
   const OFF = {asleep: "super.off.asleep", limit: "super.off.limit", busy: "super.off.busy", off: "super.off.off", none: "super.off.none"};
-  const SIZE = {pill: [300, 150], card: [360, 400], list: [380, 420]};
+  const SIZE = {pill: [300, 150], card: [360, 470], list: [380, 420]};
   let win = null;
 
   // "": it can open; else the reason, for the hover of the button.
@@ -34,7 +34,7 @@ const COMPANION = (function () {
     const timers = new Set();
     const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); if (alive) fn(); }, ms); timers.add(id); return id; };
     let alive = true;
-    const state = {view: "card", cur: "", snap: pop.snapshot(), known: new Set(), seenMsg: new Set(), sig: "", quiet: 0, pose: "", doneN: 0, askRow: false, dialog: false, bubTimer: 0, lastAsk: ""};
+    const state = {view: "card", cur: "", snap: pop.snapshot(), known: new Set(), seenMsg: new Set(), sig: "", quiet: 0, pose: "", replies: new Map(), previews: new Map(), qaOpen: new Set(), menu: null, doneN: 0, askRow: false, dialog: false, bubTimer: 0, lastAsk: ""};
     const cap = (text) => String(text || "").replace(/\s*(\.{3}|…)$/, "");
 
     // ---------- the document of the window ----------
@@ -150,6 +150,20 @@ const COMPANION = (function () {
       const mate = (state.snap.mates || []).find((one) => one.task === item.task);
       return h("span", {class: "cp-av"}, PET.face("you", mate ? mate.kind : "", 0));
     }
+    // The reply box and the preview are the super view's own (pop.replyFor, pop.previewFor); one made per item, so a redraw keeps the typed words and the open fold.
+    function cached(store, item, make) {
+      if (!store.has(item.id)) store.set(item.id, make(item));
+      return store.get(item.id);
+    }
+    // The last ask of this card's task and its answer: a few lines, the rest on a click.
+    function asked(item) {
+      const list = pop.asksOf(item.task), last = list[list.length - 1];
+      if (!last) return null;
+      const open = state.qaOpen.has(last.id), answer = last.answer ? String(last.answer) : "";
+      const ans = answer ? h("div", {class: "cp-qans" + (open ? " open" : ""), title: open ? "" : t("super.more")}, answer) : null;
+      if (ans) ans.addEventListener("click", () => { ans.classList.toggle("open"); if (ans.classList.contains("open")) state.qaOpen.add(last.id); else state.qaOpen.delete(last.id); });
+      return h("div", {class: "cp-qa"}, h("div", {class: "cp-qq"}, t("super.pop.you", {text: last.text})), last.line ? h("div", {class: "cp-qline" + (last.state === "failed" ? " bad" : "")}, last.line) : null, ans);
+    }
     function card(item, at, w) {
       const main = pop.mainOf(item), asks = pop.asksPerson(item);
       const what = h("div", {class: "cp-text" + (asks ? " ask" : ""), title: pop.fullOf(item)}, main);
@@ -160,9 +174,10 @@ const COMPANION = (function () {
       prev.addEventListener("click", () => move(-1)); next.addEventListener("click", () => move(1));
       const acts = h("div", {class: "cp-acts"}, buttons(item));
       acts.addEventListener("click", () => { wake(); setTimeout(() => { try { window.focus(); } catch (error) { /* the page may keep its place */ } }, 0); });  // an approval opens its window in the page
+      const reply = cached(state.replies, item, pop.replyFor), preview = cached(state.previews, item, pop.previewFor), qa = asked(item);
       const node = h("div", {class: "cp-card" + (state.fresh === item.id ? " fresh" : "")},
         h("div", {class: "cp-head"}, avatar(item), pop.taskLink(item.task, undefined, "cp-task"), h("span", {class: "cp-why"}, "· " + pop.why(item)), h("span", {class: "cp-nav"}, prev, (at + 1) + "/" + w, next)),
-        what, note ? h("div", {class: "cp-note"}, h("span", {class: "cp-judg", title: t("super.judgment.tip")}, "◇"), " " + note) : null, more, acts, h("div", {class: "cp-keys"}, t("super.pop.keys")));
+        what, note ? h("div", {class: "cp-note"}, h("span", {class: "cp-judg", title: t("super.judgment.tip")}, "◇"), " " + note) : null, more, qa, reply, preview, acts, h("div", {class: "cp-keys"}, t("super.pop.keys")));
       state.fresh = "";
       return node;
     }
@@ -170,12 +185,14 @@ const COMPANION = (function () {
       const mate = (state.snap.mates || []).find((one) => one.task === item.task);
       const node = h("button", {type: "button", class: "cp-row"}, h("span", {class: "cp-av"}, PET.face("you", mate ? mate.kind : "", 0)),
         h("span", {class: "cp-et"}, h("b", {title: item.task}, item.task), h("span", null, pop.why(item) + " · " + cap(item.title))), h("span", {class: "cp-go"}, "›"));
+      node.title = t("super.pop.row.tip");
       node.addEventListener("click", () => { state.cur = item.id; state.curTask = item.task; state.view = "card"; setView("card"); });
+      node.addEventListener("contextmenu", (event) => { event.preventDefault(); menuOpen(item.task, node); });  // a right click, or the menu key on the focused row
       return node;
     }
     function draw(force) {
       const snap = state.snap, w = snap.items.length, at = current(), item = snap.items[at];
-      const sig = JSON.stringify([state.view, w, snap.items.map((one) => one.id + "|" + pop.mainOf(one)), item ? pop.sigFor(item) : "", item ? item.id : "", snap.done.length, snap.working, snap.mood, snap.cost, snap.failed, snap.off, snap.loaded, state.dialog]);
+      const sig = JSON.stringify([state.view, w, snap.items.map((one) => one.id + "|" + pop.mainOf(one)), item ? pop.sigFor(item) : "", item ? item.id : "", item && state.view === "card" ? pop.asksOf(item.task).slice(-1).map((one) => [one.id, one.state, one.answer, one.line]) : "", snap.done.length, snap.working, snap.mood, snap.cost, snap.failed, snap.off, snap.loaded, state.dialog]);
       drawPet();
       listBtn.classList.toggle("on", state.view === "list");
       root.className = root.className.replace(/\bv-\w+\b/g, "").trim() + " v-" + state.view;
@@ -194,14 +211,72 @@ const COMPANION = (function () {
         content = [stat(snap), h("div", {class: "cp-clear"}, t("super.pop.clear"), h("br"), h("span", {class: "cp-meta"}, t("super.pop.clear.sub"))),
           snap.done.length ? h("div", {class: "cp-today"}, h("span", {class: "cp-meta"}, t("super.pop.today")), ...snap.done.slice(-3).reverse().map((one) => h("span", {class: "cp-ok"}, one.task + " · " + one.text))) : null];
       } else content = [stat(snap), card(item, at, w)];
+      const typing = doc.activeElement;
       body.replaceChildren(...content.filter(Boolean));
+      if (typing && typing !== doc.body && typing.isConnected && body.contains(typing)) typing.focus();  // a redraw does not take the focus from a reply box
+      drawFoot();
+    }
+    // ---------- list view: right click on a row, Steer and Stop (pop.steer, pop.stop), while the task works ----------
+    function menuClose() {
+      if (!state.menu) return;
+      state.menu.remove();
+      state.menu = null;
+    }
+    function menuOpen(task, anchor) {
+      menuClose();
+      const works = pop.mateWorks(task);
+      const said = h("div", {class: "bad cp-menubad"});
+      const line = h("input", {type: "text", class: "cp-menuline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task}), "aria-label": t("super.mate.steer.ph", {task})});
+      const lineRow = h("div", {class: "cp-menurow", hidden: ""}, line);
+      const item = (key, onClick) => {
+        const node = h("button", {type: "button", role: "menuitem", class: "cp-menuitem"}, t(key));
+        node.disabled = !works;
+        node.title = works ? "" : t("super.pop.menu.none");
+        node.addEventListener("click", onClick);
+        return node;
+      };
+      let busy = false;
+      const run = (call, toasted) => {
+        if (busy) return;
+        busy = true;
+        said.replaceChildren();
+        call().then(() => { menuClose(); toast(toasted); }, (error) => { busy = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
+      };
+      const steer = item("super.mate.steer", () => { lineRow.hidden = false; line.focus(); });
+      const stop = item("super.mate.stop", () => run(() => pop.stop(task), t("super.mate.stopped", {task})));
+      line.addEventListener("keydown", (event) => {
+        if (!isEnter(event) || event.shiftKey || !line.value.trim()) return;
+        event.preventDefault();
+        run(() => pop.steer(task, line.value.trim()), t("super.mate.steered", {task}));
+      });
+      const menu = h("div", {class: "cp-menu", role: "menu", "aria-label": t("super.mate.menu", {task})}, h("div", {class: "cp-menuhead", title: task}, task), steer, lineRow, stop, said);
+      state.menu = menu;
+      root.append(menu);
+      const box = root.getBoundingClientRect(), at = anchor.getBoundingClientRect();
+      menu.style.left = Math.max(6, Math.min(at.left - box.left + 8, box.width - menu.offsetWidth - 6)) + "px";
+      menu.style.top = Math.max(6, Math.min(at.bottom - box.top - 2, box.height - menu.offsetHeight - 6)) + "px";
+      (works ? steer : menu).focus();
+    }
+    // The task of the card on show: a typed question goes to it; "" without a card (the super chat answers).
+    function cardTask() {
+      const list = items();
+      return state.view === "card" && list.length ? list[Math.min(Math.max(current(), 0), list.length - 1)].task : "";
+    }
+    // "@name words": the name is one of the open tasks and ends at a space, the end or , : ; (longest name first, as the super view reads it).
+    function nameIn(text) {
+      if (!text.startsWith("@")) return null;
+      for (const name of (state.snap.mates || []).map((mate) => mate.task).sort((a, b) => b.length - a.length)) {
+        if (text.startsWith("@" + name) && /^($|[\s,:;])/.test(text.slice(name.length + 1))) return {task: name, text: text.slice(name.length + 1).replace(/^[\s,:;]+/, "").trim()};
+      }
+      return null;
     }
     function drawFoot() {
-      const snap = state.snap, off = snap.off, blocked = Boolean(off) || snap.thinking;
+      const snap = state.snap, off = snap.off;
       ask.disabled = Boolean(off);
       ask.title = off ? t(OFF[off] || OFF.none) : t("super.pop.ask.tip");
-      go.disabled = blocked; field.disabled = Boolean(off);
-      field.placeholder = off ? t(OFF[off] || OFF.none) : t("super.input.ph");
+      go.disabled = Boolean(off); field.disabled = Boolean(off);
+      const target = cardTask();
+      field.placeholder = off ? t(OFF[off] || OFF.none) : target ? t("super.route.ph", {task: target}) : t("super.input.ph");
       askRow.hidden = !state.askRow || Boolean(off);
       if (make) make.disabled = false;
     }
@@ -247,6 +322,19 @@ const COMPANION = (function () {
     function send() {
       const text = field.value.trim();
       if (!text || go.disabled) return;
+      const named = nameIn(text), task = named ? named.task : cardTask();
+      if (task) {  // one task is asked: its answer shows in its card
+        field.value = "";
+        go.disabled = true;
+        pop.askTask(task, named ? named.text : text).then((result) => {
+          go.disabled = false;
+          if (!alive) return;
+          if (!result.ok) { if (!field.value) field.value = text; toast(result.text); }
+          draw(true);
+        });
+        return;
+      }
+      if (state.snap.thinking) return;
       state.lastAsk = text; field.value = ""; state.askRow = false;
       pop.ask(text);
       drawFoot();
@@ -278,6 +366,7 @@ const COMPANION = (function () {
     // ---------- keys ----------
     doc.addEventListener("keydown", (event) => {
       wake();
+      if (event.key === "Escape" && state.menu) { menuClose(); return; }
       if (event.ctrlKey || event.metaKey || event.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) { if (event.key === "Escape" && event.target === field) { state.askRow = false; drawFoot(); } return; }
       const key = event.key.toLowerCase();
       if (key === "arrowright") { if (items().length) { if (state.view !== "card") setView("card"); move(1); } }
@@ -289,6 +378,7 @@ const COMPANION = (function () {
       } else if (key === "r") { const refuse = body.querySelector('.cp-acts [data-action="dismiss-action"]'); if (refuse && !refuse.disabled) refuse.click(); }
     });
     for (const name of ["pointermove", "pointerdown"]) doc.addEventListener(name, wake);
+    doc.addEventListener("pointerdown", (event) => { if (state.menu && !state.menu.contains(event.target)) menuClose(); }, true);
 
     // ---------- the quiet minute, and the end ----------
     const tick = setInterval(() => { if (!alive) return; if (moodOf() === "calm" && state.quiet < 60 && ++state.quiet === 60) drawPet(); }, 1000);
@@ -300,6 +390,7 @@ const COMPANION = (function () {
       timers.clear();
       unsubscribe();
       look.disconnect();
+      menuClose();
       watchDialog.disconnect();
       pop.watch(false);
       removeEventListener("pagehide", close);

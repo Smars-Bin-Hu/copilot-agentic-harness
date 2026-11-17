@@ -1815,6 +1815,8 @@
   "super.pop.dialog.go": "Show it",
   "super.pop.you": "You: {text}",
   "super.pop.close": "Close",
+  "super.pop.row.tip": "Click: open the card. Right click: Steer, Stop",
+  "super.pop.menu.none": "Steer and Stop work while the task is at work.",
   "board.offwork": "Off work · {count}",
   "board.offwork.hint": "Pause every open task that is not at work, so the night is not counted as waiting. Back to work takes them back.",
   "board.onwork": "Back to work · {count}",

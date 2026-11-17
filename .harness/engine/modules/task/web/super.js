@@ -120,6 +120,8 @@ const SUPER = (function () {
     // ---------- the menu of an avatar (1.8.2): right click or the menu key. Steer and Stop, only while the task works ----------
     let mateMenuNode = null, mateMenuFrom = null;
     const mateMenuWorks = (task) => Boolean((mates.find((mate) => mate.task === task) || {}).state === "work" || rowFor(task).state === "working");
+    const mateSteer = (task, text) => SERVE.post("/api/steer", {task, text, lang: ""});  // the menu's and the pop-out's
+    const mateStop = (task) => SERVE.post("/api/stop", {task});
     function mateMenuClose(back) {
       if (!mateMenuNode) return;
       mateMenuNode.remove();
@@ -153,18 +155,18 @@ const SUPER = (function () {
       const line = h("input", {type: "text", class: "sa-mateline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task}), "aria-label": t("super.mate.steer.ph", {task})});
       const lineRow = h("div", {class: "sa-materow", hidden: ""}, line);
       let busy = false;
-      const send = (path, body, line) => {
+      const send = (call, line) => {
         if (busy) return;
         busy = true;
         said.replaceChildren();
-        SERVE.post(path, body).then(() => { mateMenuClose(true); addSys(line); }, (error) => { busy = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
+        call.then(() => { mateMenuClose(true); addSys(line); }, (error) => { busy = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
       };
       const steer = item("super.mate.steer", () => { lineRow.hidden = false; line.focus(); });
-      const stop = item("super.mate.stop", () => send("/api/stop", {task}, t("super.mate.stopped", {task})));
+      const stop = item("super.mate.stop", () => send(mateStop(task), t("super.mate.stopped", {task})));
       line.addEventListener("keydown", (event) => {
         if (!isEnter(event) || event.shiftKey || !line.value.trim()) return;
         event.preventDefault();
-        send("/api/steer", {task, text: line.value.trim(), lang: ""}, t("super.mate.steered", {task}));
+        send(mateSteer(task, line.value.trim()), t("super.mate.steered", {task}));
       });
       mateMenuNode = h("div", {class: "sa-skins sa-matemenu", role: "menu", "aria-label": t("super.mate.menu", {task})}, h("div", {class: "sa-skins-head"}, task), steer, lineRow, stop, said);
       mateMenuFrom = mate;
@@ -303,6 +305,7 @@ const SUPER = (function () {
         SERVE.post("/api/send", {task: entry.item.task, kind: "answer", lang: "", note: "", body: text, step: "act"}).then(() => {
           busy = false;
           entry.clicked = t("super.reply.done");
+          reply.classList.add("sent");  // the same box in the pop-out goes too
           fold(entry, null);
           emit();
         }, (error) => {
@@ -313,10 +316,11 @@ const SUPER = (function () {
       };
       send.addEventListener("click", go);
       box.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); go(); } });
-      return h("div", {class: "sa-reply"}, box, send, said);
+      const reply = h("div", {class: "sa-reply"}, box, send, said);
+      return reply;
     }
     // The preview under a "plan" or "promote" message (1.8.2): asked once per item id, shown folded as one line; a refusal or nothing to show draws nothing.
-    const PREVIEW_ASKED = new Set();
+    const PREVIEW_ASKED = new Map();  // item id -> the answer (a promise): the view and the pop-out both draw from it
     const previewKind = (item) => (item.why === "plan" ? "plan" : item.why === "promote" ? "changes" : "");
     function previewRows(kind, result) {
       const list = kind === "plan" ? result.lines : result.files;
@@ -339,9 +343,8 @@ const SUPER = (function () {
       const kind = previewKind(item);
       if (!kind) return null;
       const box = h("details", {class: "sa-pv", hidden: ""});
-      if (PREVIEW_ASKED.has(item.id)) return box;
-      PREVIEW_ASKED.add(item.id);
-      SERVE.call("/api/super/preview", {task: item.task, kind}, 8).then((result) => previewFill(box, item, kind, result || {}), () => {});
+      if (!PREVIEW_ASKED.has(item.id)) PREVIEW_ASKED.set(item.id, SERVE.call("/api/super/preview", {task: item.task, kind}, 8).then((result) => result || {}, () => ({})));
+      PREVIEW_ASKED.get(item.id).then((result) => previewFill(box, item, kind, result));
       return box;
     }
     function build(item) {
@@ -679,21 +682,22 @@ const SUPER = (function () {
       }
       return null;
     }
+    // One ask to one task (the view's and the pop-out's): "" when it went, else the reason code.
+    async function routeAsk(task, text) {
+      if (!text) return "empty";
+      try {
+        const result = await SERVE.call("/api/super/route", {task, text, lang: ""}, 10);
+        return !result || result.ok === false ? (result && result.why) || "other" : "";
+      } catch (error) {
+        return error && error.status === 403 ? "unpaired" : error && error.data && typeof error.data === "object" && error.data.why ? error.data.why : "other";
+      }
+    }
     async function routeSend(target, typed) {
       routeBusy = true;
       field.value = "";
       field.style.height = "auto";
       routeComplete();
-      let why = "";
-      if (!target.text) why = "empty";
-      else {
-        try {
-          const result = await SERVE.call("/api/super/route", {task: target.task, text: target.text, lang: ""}, 10);
-          if (!result || result.ok === false) why = (result && result.why) || "other";
-        } catch (error) {
-          why = error && error.status === 403 ? "unpaired" : error && error.data && typeof error.data === "object" && error.data.why ? error.data.why : "other";
-        }
-      }
+      const why = await routeAsk(target.task, target.text);
       routeBusy = false;
       if (why) {  // refused: say why in the stream, the words go back into the input
         if (!field.value) field.value = typed;
@@ -866,7 +870,16 @@ const SUPER = (function () {
       if (on && watchers === 1 && !shown) poll().then(schedule, schedule);
       if (!watchers && !shown) clearTimeout(pollTimer);
     }
-    const pop = {snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: (item) => t(WHY[item.why] || "super.why.other"), jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
+    // The pop-out's calls (companion.js): the same pieces as the view, never a copy of them.
+    const replyFor = (item) => { const entry = item && item.why === "stopped" ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };
+    const previewFor = (item) => previewBox(item);
+    const asksOf = (task) => ((talk && talk.asks) || []).filter((one) => one && one.task === task).map((one) => ({...one, line: one.state === "sent" ? t("super.route.waiting") : one.state === "queued" ? t("super.route.queued") : one.state === "failed" ? t(routeKey(one.why || one.end)) : ""}));
+    async function askTask(task, text) {
+      const why = await routeAsk(task, String(text || "").trim());
+      if (!why) poll().then(schedule, schedule);
+      return {ok: !why, why, text: why ? t(routeKey(why)) : ""};
+    }
+    const pop = {replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: (item) => t(WHY[item.why] || "super.why.other"), jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
       taskLink, ask: (text) => ask(null, text), watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, openVS: () => SERVE.openVS()};
     if (popUp) {
       const reason = COMPANION.unsupported();

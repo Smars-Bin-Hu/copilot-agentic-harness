@@ -100,3 +100,25 @@ a.cp-task:hover{text-decoration:underline}
 @keyframes cptoast{0%{opacity:0;transform:translate(-50%,6px)}20%{opacity:1;transform:translate(-50%,0)}80%{opacity:1}100%{opacity:0}}
 @keyframes cpdot{50%{transform:translateY(-3px);opacity:.4}}
 @media (prefers-reduced-motion:reduce){.cp *,.cp-card{animation:none!important;transition:none!important}}
+/* 1.8.3: the reply box and the folded preview of the super view inside the card, the last ask of a task, and the Steer / Stop menu of a list row. Nothing may pass the window's width. */
+.cp-card{min-width:0;overflow:hidden}
+.cp-card .sa-reply{margin-top:6px}
+.cp-card .sa-reply-box{flex:1 1 100%;max-height:120px}
+.cp-card .sa-reply.sent{display:none}
+.cp-card .sa-pv{margin:6px 0;max-height:150px;overflow:auto}
+.cp-card .sa-pvlist{padding-left:16px}
+.cp-card .sa-pvpath{overflow-wrap:anywhere}
+.cp-qa{margin:6px 0;padding:5px 8px;border-radius:8px;background:var(--kbd);font-size:12px;min-width:0}
+.cp-qq{color:var(--soft);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.cp-qline{margin-top:3px;overflow-wrap:anywhere}
+.cp-qans{margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere;cursor:pointer;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:8;line-clamp:8;overflow:hidden}
+.cp-qans.open{display:block;max-height:220px;overflow:auto}
+.cp-menu{position:absolute;z-index:12;width:min(250px,calc(100% - 12px));box-sizing:border-box;background:var(--pop);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--glass-shadow);padding:4px;display:flex;flex-direction:column;gap:2px}
+.cp-menuhead{padding:3px 8px;font:12px var(--mono);color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-menuitem{border:0;background:none;color:var(--ink);font:inherit;font-size:13px;text-align:left;padding:5px 8px;border-radius:7px;cursor:pointer}
+.cp-menuitem:hover:not(:disabled),.cp-menuitem:focus-visible{background:var(--hover);outline:none}
+.cp-menuitem:disabled{opacity:.5;cursor:default}
+.cp-menurow[hidden]{display:none}
+.cp-menuline{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--line2);background:var(--bg);color:var(--ink);border-radius:7px}
+.cp-menubad{font-size:12px;padding:0 8px;overflow-wrap:anywhere}
+.cp-menubad:empty{display:none}

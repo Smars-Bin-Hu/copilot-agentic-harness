@@ -1815,6 +1815,8 @@
   "super.pop.dialog.go": "显示",
   "super.pop.you": "你：{text}",
   "super.pop.close": "关闭",
+  "super.pop.row.tip": "点击：打开卡片。右键：Steer、Stop",
+  "super.pop.menu.none": "任务在运行时才能 Steer 和 Stop。",
   "board.offwork": "下班 · {count}",
   "board.offwork.hint": "把所有不在工作的未关闭任务一起搁置，夜里的时间不算等待。上班时一起恢复。",
   "board.onwork": "上班 · {count}",

@@ -658,7 +658,9 @@ const SUPER = (function () {
     }
     // ---------- asking one task (1.8.2): the filter, or "@name" in the first words ----------
     const ROUTE_ASKS = new Map();  // ask id -> the row of an ask: {ask, sig, open, node, line, answer, more}
-    const routeKey = (why) => (Object.prototype.hasOwnProperty.call(TEXT, "super.route.why." + why) ? "super.route.why." + why : "super.route.why.other");
+    const ROUTE_WHY = {unknown: "super.route.why.unknown", paused: "super.route.why.paused", nochat: "super.route.why.nochat", asleep: "super.route.why.asleep", empty: "super.route.why.empty",
+      long: "super.route.why.long", error: "super.route.why.error", lost: "super.route.why.lost", cancelled: "super.route.why.cancelled", unpaired: "super.route.why.unpaired"};  // written out: a search for a key finds its place
+    const routeKey = (why) => ROUTE_WHY[why] || "super.route.why.other";
     const routeEstimate = (text) => String(text).split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 60)), 0);  // the lines an answer takes, about
     let routeBusy = false, routePick = -1, routeNames = [];
     // Where the typed words go: the task of the filter, or the task named after "@" (the name ends at a space or a mark, not inside a longer name), else the super chat (null).
@@ -666,7 +668,7 @@ const SUPER = (function () {
       if (filter) return {task: filter, text: typed};
       if (!typed.startsWith("@")) return null;
       for (const name of mates.map((mate) => mate.task).sort((a, b) => b.length - a.length)) {
-        if (!typed.startsWith("@" + name) || /[\w-]/.test(typed.charAt(name.length + 1))) continue;
+        if (!typed.startsWith("@" + name) || !/^($|[\s,:;])/.test(typed.slice(name.length + 1))) continue;  // the name ends at a space, the end or , : ; (not inside a longer name such as job.v2)
         return {task: name, text: typed.slice(name.length + 1).replace(/^[\s,:;]+/, "").trim()};
       }
       return null;

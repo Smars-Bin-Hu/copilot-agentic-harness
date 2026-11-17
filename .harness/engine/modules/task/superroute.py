@@ -21,6 +21,7 @@ from . import chatsend, task as task_ops, tasklife, vslink
 from .common import CommandError
 
 MAX_ASK = 1000  # characters of what the person types
+MAX_ANSWER = 20000  # characters of an answer kept in the record and sent to the page
 LOST_AFTER = 180.0  # seconds after which a question that the chat shows nowhere is given up
 OPEN = ("sent", "queued")
 PUBLIC = ("id", "task", "text", "at", "state", "turn", "answer", "answer_at", "end", "why")
@@ -60,7 +61,8 @@ def open_task(brain: Any, raw: Any) -> Optional[Dict[str, Any]]:
 
 def ask(brain: Any, data: Dict[str, Any]) -> Dict[str, Any]:
     """Send the person's question to the chat of one task. See the head of this file."""
-    words = str(data.get("text") or "").strip()
+    raw = data.get("text")
+    words = raw.strip() if isinstance(raw, str) else ""  # only text is sent: a list or a number is refused as empty
     if not words:
         return refusal("empty")
     if len(words) > MAX_ASK:
@@ -183,7 +185,7 @@ def read(brain: Any, rec: Dict[str, Any]) -> bool:
             changed = True
         if found["ended"]:
             end = str(turn.get("state") or "complete")
-            entry.update(answer=text_of(turn), answer_at=utc_now(), end=end, state="answered" if end == "complete" else "failed")
+            entry.update(answer=text_of(turn)[:MAX_ANSWER], answer_at=utc_now(), end=end, state="answered" if end == "complete" else "failed")
             if end != "complete":
                 entry["why"] = end
             changed = True

@@ -131,6 +131,11 @@ class AnswerTests(RouteCase):
         self.assertEqual(stored["asks"][0]["answer"], ask["answer"])  # kept in today's record, not only in memory
         self.assertEqual(self.talk()["asks"][0]["answer"], ask["answer"])  # read again: the same
 
+    def test_a_huge_answer_is_kept_cut(self) -> None:
+        self.route({"task": TASK, "text": "everything?"})
+        self.vs.finish("x" * (superroute.MAX_ANSWER + 500))
+        self.assertEqual(len(self.talk()["asks"][0]["answer"]), superroute.MAX_ANSWER)
+
     def test_a_turn_that_did_not_complete_is_a_failed_ask_with_its_end(self) -> None:
         self.route({"task": TASK, "text": "status?"})
         self.vs.finish("half", end="cancelled")
@@ -182,6 +187,8 @@ class RefusalTests(RouteCase):
     def test_empty_and_long_words(self) -> None:
         self.assertEqual(self.why({"task": TASK, "text": "   "}), "empty")
         self.assertEqual(self.why({"task": TASK}), "empty")
+        for odd in (["a"], 5, {"t": "x"}):  # only text is sent: a list or a number is not turned into words
+            self.assertEqual(self.why({"task": TASK, "text": odd}), "empty")
         self.assertEqual(self.why({"task": TASK, "text": "x" * (superroute.MAX_ASK + 1)}), "long")
         self.assertTrue(self.route({"task": TASK, "text": "x" * superroute.MAX_ASK})["ok"])  # the limit itself is fine
 

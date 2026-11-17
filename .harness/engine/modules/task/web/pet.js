@@ -14,6 +14,7 @@ const PET = (function () {
   // The skins, in the order of the shader (bot3d.js `skin`): the gear it wears; the colours are in super.css (`.skin-<name>`). Kept per browser; the flat robots of the super agent (avatars, pop-out) wear it too.
   const SKINS = ["commander", "ninja", "pilot", "mecha", "neon"];
   const SKIN_KEY = "harness.pet.skin";
+  const SKIN_LABEL = {commander: "super.pet.skin.commander", ninja: "super.pet.skin.ninja", pilot: "super.pet.skin.pilot", mecha: "super.pet.skin.mecha", neon: "super.pet.skin.neon"};  // written out: a search for a key finds its place
   let current = (() => { try { const name = localStorage.getItem(SKIN_KEY); return SKINS.includes(name) ? name : SKINS[0]; } catch (error) { return SKINS[0]; } })();
   const dressed = new Set();  // the flat robots of the super agent that were dressed: dressed again when the skin changes (those no longer on screen are dropped)
   const GEAR = {
@@ -241,7 +242,7 @@ const PET = (function () {
       closeMenu();
       menu = h("div", {class: "sa-skins", role: "menu", "aria-label": t("super.pet.skins")}, h("div", {class: "sa-skins-head"}, t("super.pet.skins")),
         ...SKINS.map((name, at) => {
-          const item = h("button", {type: "button", role: "menuitemradio", "aria-checked": String(at === S.skin), class: "sa-skin skin-" + name}, h("span", {class: "sa-swatch", "aria-hidden": "true"}), t("super.pet.skin." + name));
+          const item = h("button", {type: "button", role: "menuitemradio", "aria-checked": String(at === S.skin), class: "sa-skin skin-" + name}, h("span", {class: "sa-swatch", "aria-hidden": "true"}), t(SKIN_LABEL[name]));
           item.addEventListener("click", (event) => {
             event.stopPropagation();
             wear(at);

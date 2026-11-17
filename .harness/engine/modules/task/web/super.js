@@ -50,12 +50,19 @@ const SUPER = (function () {
     const newTask = SERVE.runs("create") ? h("button", {type: "button", class: "sa-new", title: t("super.new.tip")}, t("super.new.go")) : null;
     const send = h("button", {type: "button", class: "sa-send", title: t("super.send"), "aria-label": t("super.send")}, "↑");
     const box = h("div", {class: "sa-box"}, field, newTask, send);
-    sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl), team, lane, filterEl, banner,
+    // The pop-out (companion.js): a small window that stays on top of every other window. Only where the browser can open one (Document Picture-in-Picture: Chrome, Edge).
+    const popUp = typeof COMPANION !== "undefined" ? h("button", {type: "button", class: "sa-pop"}, "⇱") : null;
+    sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, popUp), team, lane, filterEl, banner,
       h("div", {class: "sa-streamwrap"}, stream, pill), quick, h("div", {class: "sa-input"}, box));
 
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], localThink = 0, failed = "";
     let pollTimer = 0, patrolToken = 0, noticeBusy = false, chain = Promise.resolve(), lastMate = "";
+    let watchers = 0;  // the pop-out window is one: while it is open the data keeps coming, shown or not
+    const live = () => shown || watchers > 0;
+    const doneLog = [];  // what was settled while this page is open: {task, text, at}
+    const listeners = new Set();
+    const emit = () => { for (const fn of [...listeners]) { try { fn(); } catch (error) { /* a window that is gone must not stop the view */ } } };
     const known = new Map();  // item id -> {item, node, acts, waited, sig, clicked}
     const queued = new Set();
     const seenTalk = new Set();
@@ -166,15 +173,21 @@ const SUPER = (function () {
     const fullOf = (item) => (asksPerson(item) ? item.detail : "");
 
     // One item of the board: who it comes from, what it is, its buttons. Its buttons are drawn again only when the row of the task changed what they would be.
-    function sigOf(entry) {
-      const row = rowFor(entry.item.task);
-      return JSON.stringify([entry.item.actions.map((item) => item.action), row.state, row.chat ? [row.chat.bound, row.chat.why] : null, row.req_unconfirmed || false, row.todo_left || 0]);
+    function sigFor(item) {
+      const row = rowFor(item.task);
+      return JSON.stringify([item.actions.map((one) => one.action), row.state, row.chat ? [row.chat.bound, row.chat.why] : null, row.req_unconfirmed || false, row.todo_left || 0]);
+    }
+    const sigOf = (entry) => sigFor(entry.item);
+    // The buttons of one item (also the pop-out window's): the board's own, so every action goes through SERVE.act / CHAT as in the board.
+    function buttonsFor(item) {
+      const row = rowFor(item.task);
+      return item.actions.map((one) => (one.action === "answer"
+        ? h("a", {class: "act hot live", href: taskUrl(item.task), target: "_blank", rel: "noopener", "data-label": t("board.action.answer")}, t("board.action.answer"))  // the reply panel is on the task page: a new tab, not this one
+        : actionButton(row, one)));
     }
     function drawActs(entry) {
       const row = rowFor(entry.item.task);
-      const buttons = entry.item.actions.map((item) => (item.action === "answer"
-        ? h("a", {class: "act hot live", href: taskUrl(entry.item.task), target: "_blank", rel: "noopener", "data-label": t("board.action.answer")}, t("board.action.answer"))  // the reply panel is on the task page: a new tab, not this one
-        : actionButton(row, item)));
+      const buttons = buttonsFor(entry.item);
       const joint = entry.item.why === "plan" && Boolean(row.req_unconfirmed);  // one code confirms the requirement and approves the plan (the approve-plan window does it)
       entry.note.hidden = !joint;
       entry.note.textContent = joint ? t("super.plan.joint") : "";
@@ -225,6 +238,8 @@ const SUPER = (function () {
       // The task has another wait now (a row has one): it is not settled, it moved on. The person's own click is still the better thing to say.
       const line = entry.clicked ? "✓ " + t("super.done.you", {action: entry.clicked}) : next ? "→ " + t("super.done.next", {kind: t(WHY[next.why] || "super.why.other")}) : "✓ " + t("super.done.elsewhere");
       entry.acts.replaceChildren(h("span", {class: next && !entry.clicked ? "sa-next" : "sa-ok"}, line + " · " + stamp()));
+      doneLog.push({task: entry.item.task, text: line, at: stamp()});
+      if (doneLog.length > 30) doneLog.shift();
     }
     function reconcile(items) {
       const ids = new Set(items.map((item) => item.id));
@@ -396,7 +411,7 @@ const SUPER = (function () {
       pendingYou.push(mine);
       addYou(typed, new Date().toISOString());
       localThink = Date.now();
-      applyMood(); drawInput(); schedule();
+      applyMood(); drawInput(); schedule(); emit();
       let result;
       try { result = await SERVE.call("/api/super/ask", body || {text: typed}, 10); } catch (error) { result = (error && error.data && typeof error.data === "object" && error.data.why) ? error.data : {ok: false, why: "none"}; }
       if (result && result.ok === false) {
@@ -424,24 +439,26 @@ const SUPER = (function () {
       applyFilter();
       drawStatus(); drawBanner(); drawInput(); applyMood();
       first = false;
+      emit();
     }
     function poll() {
-      if (!shown || SERVE.busy()) return Promise.resolve();
+      if (!live() || SERVE.busy()) return Promise.resolve();
       const spoken = talkGone && Date.now() - talkGone < 60000 ? Promise.resolve(null)
         : SERVE.ready.then(() => SERVE.call("/api/super/talk", {}, 6)).then((answer) => { talkGone = 0; return answer; }, () => { talkGone = Date.now(); return null; });
-      return Promise.all([SERVE.post("/api/super", {}), spoken]).then(([result, answer]) => { if (shown) apply(result, answer); }, (error) => {
-        if (!shown) return;
+      return Promise.all([SERVE.post("/api/super", {}), spoken]).then(([result, answer]) => { if (live()) apply(result, answer); }, (error) => {
+        if (!live()) return;
         failed = error && error.offline ? t("board.serve.stopped") : t("super.unavailable");
         drawStatus();
+        emit();
       });
     }
     function schedule() {
       clearTimeout(pollTimer);
-      if (!shown) return;
-      const delay = document.hidden ? 30000 : thinkingNow() ? 1500 : Math.max(3, Number(DATA.serve && DATA.serve.refresh) || 5) * 1000;
+      if (!live()) return;
+      const delay = document.hidden && !watchers ? 30000 : thinkingNow() ? 1500 : Math.max(3, Number(DATA.serve && DATA.serve.refresh) || 5) * 1000;
       pollTimer = setTimeout(() => poll().then(schedule, schedule), delay);
     }
-    document.addEventListener("visibilitychange", () => { if (shown && !document.hidden) poll().then(schedule, schedule); });
+    document.addEventListener("visibilitychange", () => { if (live() && !document.hidden) poll().then(schedule, schedule); });
     addEventListener("resize", () => {
       if (!shown) return;
       fit();
@@ -465,11 +482,32 @@ const SUPER = (function () {
     function hide() {
       shown = false;
       sv.hidden = true;
-      clearTimeout(pollTimer);
+      if (!watchers) clearTimeout(pollTimer);
       patrolToken++;
       if (pet) pet.run(false);
     }
-    return {node: sv, show, hide, setVscode: (status) => { vsDown = Boolean(status) && !status.ready; if (shown) { drawStatus(); drawBanner(); drawInput(); applyMood(); } }};
+    // What the pop-out window reads (companion.js): the data this view already holds, and a call when it changes. It never asks the server itself.
+    function snapshot() {
+      const status = (data && data.status) || {};
+      return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work").length, watching: status.watching || 0, failed,
+        mood: moodNow(), thinking: thinkingNow(), off: talkOff(), cost: talk && talk.limit ? t("super.cost", {spent: amount(talk.spent || 0), limit: amount(talk.limit)}) : "", costFull: moodNow() === "tired",
+        messages: talk ? (talk.messages || []).filter((message) => message && message.role !== "you") : [], mates, loaded: data !== null};
+    }
+    function watch(on) {
+      watchers = Math.max(0, watchers + (on ? 1 : -1));
+      if (on && watchers === 1 && !shown) poll().then(schedule, schedule);
+      if (!watchers && !shown) clearTimeout(pollTimer);
+    }
+    const pop = {snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: (item) => t(WHY[item.why] || "super.why.other"), jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
+      taskLink, ask: (text) => ask(null, text), watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, openVS: () => SERVE.openVS()};
+    if (popUp) {
+      const reason = COMPANION.unsupported();
+      popUp.disabled = Boolean(reason);
+      popUp.title = reason || t("super.pop.open");
+      popUp.setAttribute("aria-label", popUp.title);
+      popUp.addEventListener("click", () => COMPANION.open(pop));
+    }
+    return {node: sv, show, hide, setVscode: (status) => { vsDown = Boolean(status) && !status.ready; if (shown) { drawStatus(); drawBanner(); drawInput(); applyMood(); } emit(); }};
   }
 
   return {create, waiting};

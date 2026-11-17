@@ -147,5 +147,5 @@ const PET = (function () {
     return {node, solid: Boolean(solid), run, place, walkTo, say: talk, quiet, think, mood, wave, hop, carry, look, at: () => ({x: S.x, y: S.y}), size: () => ({w: node.offsetWidth, h: node.offsetHeight}), onClick: (fn) => S.clickers.push(fn)};
   }
 
-  return {create, face};
+  return {create, face, dress};
 })();

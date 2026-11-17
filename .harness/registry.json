@@ -135,6 +135,7 @@
         ".github/agents/reviewer.agent.md",
         ".github/agents/mapper.agent.md",
         ".github/agents/worker.agent.md",
+        ".github/agents/super.agent.md",
         ".github/skills/generic-mapreduce/",
         ".github/skills/harness-autorun/",
         ".harness/tests/test_autorun.py",

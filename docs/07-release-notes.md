@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.9 (1.8.0 – 1.8.9, 2026-11-17 – 2026-11-19)
+## 1.8.10 (1.8.0 – 1.8.10, 2026-11-17 – 2026-11-19)
 
 ### Added
 
@@ -22,6 +22,7 @@ To see which version you have: `harness --version`.
 - **Your actions never wait behind the board's reading** (1.8.7): what you do on the board (send, answer, allow, stop) goes to VS Code on a lane of its own; a new chat is made with no time limit and its window closes at once, while "being created" shows how far it is.
 - **The Scripts tab** (1.8.9): under Results, the scripts of a task in two parts: *Run on DEV* (`DEV/_server/`) and *Checks* (the read-only checks in `TEST/`). Open one to read it, and copy it whole.
 - **A map of the task folder** (1.8.9): one place for each kind of file, in the rules the agent reads; no folder of its own. `generic-workflow-design` and `generic-workflow-build` follow it, so the skills they make do too.
+- **Trying a change in an environment before the plan** (1.8.10): the agent may prove a change in DEV first, each write approved by you; its script is `trial-<name>` at the task root; `PLAN.md` then lists those writes under `Done before the plan`, with their evidence and how to undo them. The plan step of the ribbon has a small orange mark while such writes exist; its hover names the environments.
 
 ### Fixed
 

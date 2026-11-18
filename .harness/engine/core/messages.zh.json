@@ -1665,6 +1665,7 @@
   "desk.review.earlier": "检查的是之前的版本",
   "desk.review.given": "reviewer 收到的评审包",
   "stage.requirement": "需求",
+  "stage.ahead": "plan 批准前已改动环境：{list}。每次写入都经过你批准；PLAN.md 写明 plan 被拒时如何撤回",
   "stage.plan": "计划",
   "stage.developing": "开发中",
   "stage.writeback": "promote 写入",

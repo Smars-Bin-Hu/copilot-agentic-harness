@@ -222,7 +222,8 @@ const Status = (function () {
         else { kind = "now"; text = t("board.status.stage.now"); }
       }
       const since = kind === "wait" && row.waiting_from ? row.waiting_from : step.since;  // "waits for you" and a time: the wait, the number the card of the task page says
-      return {label, kind, text, s: finite(step.s) ? step.s : null, since: since ? Date.parse(since) : NaN};
+      const ahead = Array.isArray(step.ahead) ? step.ahead.filter((one) => one && one.env && one.n > 0) : [];  // environments changed before the plan was approved (1.8.10)
+      return {label, kind, text, ahead, s: finite(step.s) ? step.s : null, since: since ? Date.parse(since) : NaN};
     });
     const review = s.review && (s.review.n || (s.review.states || []).length) ? {n: s.review.n, states: (s.review.states || []).map((mark) => ({pass: "done", run: "run", fail: "fail"}[mark] || "todo")), waived: Boolean(s.review.waived), stamp: Boolean(s.review.stamp)} : null;
     return {steps, round: s.round || 1, review};
@@ -236,7 +237,7 @@ const Status = (function () {
     const compact = found.steps.length >= COMPACT_FROM;
     const parts = [];
     found.steps.forEach((step, index) => {
-      parts.push(dot(step.kind, compact ? "seg" : ""));
+      parts.push(dot(step.kind, (compact ? "seg" : "") + (step.ahead && step.ahead.length ? " ahead" : "")));
       if (!compact && index < found.steps.length - 1) parts.push(h("i", {class: "st-l" + (step.kind === "done" ? " k-done" : "") + (flow && step.kind === "run" ? " is-flow" : "")}));
     });
     return h("span", {class: "st-ribbon" + (compact ? " compact" : "")}, parts);
@@ -246,7 +247,8 @@ const Status = (function () {
   function stageList(found) {
     const lines = [h("div", {class: "st-head"}, t("board.status.stage.title") + (found.round > 1 ? " · " + t("board.status.stage.round", {round: found.round}) : ""))];
     for (const step of found.steps) {
-      lines.push(h("div", {class: "st-ln" + (["run", "wait", "now", "bad"].includes(step.kind) ? " cur" : "")}, dot(step.kind), h("span", {class: "st-nm"}, step.label), h("span", {class: "st-st k-" + step.kind}, step.text)));
+      lines.push(h("div", {class: "st-ln" + (["run", "wait", "now", "bad"].includes(step.kind) ? " cur" : "")}, dot(step.kind, step.ahead && step.ahead.length ? "ahead" : ""), h("span", {class: "st-nm"}, step.label), h("span", {class: "st-st k-" + step.kind}, step.text)));
+      if (step.ahead && step.ahead.length) lines.push(h("div", {class: "st-ln st-ahead"}, h("span", {class: "st-nm"}, t("stage.ahead", {list: step.ahead.map((one) => one.env + " \u00d7" + one.n).join(", ")}))));
     }
     if (found.review) {
       lines.push(h("div", {class: "st-ln st-rv"}, h("span", {class: "st-nm"}, found.review.n ? t("stage.reviewer", {n: found.review.n}) : t("stage.reviewer.off")), h("span", {class: "st-marks"}, found.review.states.map((kind) => dot(kind)))));
@@ -257,7 +259,7 @@ const Status = (function () {
   function stageMark(row, live, key, focusable) {
     const found = stages(row, live);
     if (!found) return null;
-    const label = t("board.status.stage.title") + ": " + found.steps.map((step) => step.label + " " + step.text).join(", ");
+    const label = t("board.status.stage.title") + ": " + found.steps.map((step) => step.label + " " + step.text + (step.ahead && step.ahead.length ? " (" + t("stage.ahead", {list: step.ahead.map((one) => one.env + " \u00d7" + one.n).join(", ")}) + ")" : "")).join(", ");
     return marked(ribbon(found), key, () => stageList(found), label, true);
   }
 

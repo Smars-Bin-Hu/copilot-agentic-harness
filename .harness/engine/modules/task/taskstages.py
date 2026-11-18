@@ -67,6 +67,28 @@ def write_back(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return steps_of([{"id": name} for name in ("requirement", "plan", "developing", "writeback", "done")], finished, flags)
 
 
+def ahead_of_plan(root: Path, task: str, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Calls that changed an environment before the plan was approved (1.8.10): every noted call that is not a read, made before the last approval of the
+    plan, or while there is none. `[{env, n}]`, in the order met. The person approved each one; the plan step only shows that the environment is ahead of it."""
+    from core import calls
+
+    approved = str((data.get("plan") or {}).get("approved_at") or "") if tasks.plan_approved(root, task, data) else ""
+    counts: Dict[str, int] = {}
+    for item in calls.read(root, task):
+        if str(item.get("verb") or "read") == "read" or (approved and str(item.get("at") or "") >= approved):
+            continue
+        env = str(item.get("env") or "?").upper()
+        counts[env] = counts.get(env, 0) + 1
+    return [{"env": env, "n": n} for env, n in counts.items()]
+
+
+def mark_ahead(root: Path, task: str, data: Dict[str, Any], found: Dict[str, Any]) -> None:
+    ahead = ahead_of_plan(root, task, data)
+    for step in found["steps"] if ahead else []:
+        if step["id"] == "plan":
+            step["ahead"] = ahead
+
+
 def by_hand(root: Path, task: str, data: Dict[str, Any], planned: bool) -> Dict[str, Any]:
     """The ribbon of a task whose result is a script run on a server: a run recorded after the plan was approved ends that step."""
     from . import task as task_ops
@@ -272,6 +294,7 @@ def of(root: Path, task: str, data: Optional[Dict[str, Any]] = None, timing: boo
             found = tests(root, task, data)
         else:
             found = write_back(root, task, data)
+            mark_ahead(root, task, data, found)
         found.update(kind=kind, round=int(data.get("round") or 1), review=reviewer(root, task, data))
         if timing and kind != "test":
             with_timing(found, data)

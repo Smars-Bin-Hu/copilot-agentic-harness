@@ -1665,6 +1665,7 @@
   "desk.review.earlier": "an earlier version of the work",
   "desk.review.given": "What the reviewer was given",
   "stage.requirement": "Requirement",
+  "stage.ahead": "Changed before the plan was approved: {list}. You approved each write; PLAN.md says how to undo them if the plan is turned down",
   "stage.plan": "Plan",
   "stage.developing": "Developing",
   "stage.writeback": "Promote",

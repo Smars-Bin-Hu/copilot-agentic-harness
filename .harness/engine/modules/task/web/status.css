@@ -38,6 +38,8 @@
 .st-d.k-bad::after{content:"";position:absolute;inset:2px;border-radius:50%;background:var(--hot-dot)}
 /* many steps: one short segment each, so the ribbon still fits its place */
 .st-ribbon.compact{gap:1px}
+.st-d.ahead::before{content:"";position:absolute;right:-3px;top:-3px;width:6px;height:6px;border-radius:50%;background:var(--hot-dot);box-shadow:0 0 0 1.5px var(--card)}
+.st-ln.st-ahead{padding-left:20px;color:var(--soft);font-size:11.5px}.st-ln.st-ahead .st-nm{white-space:normal}
 .st-d.seg{flex:1 1 0;min-width:1px;width:auto;height:6px;border-radius:2px;border-width:1px}
 .st-d.seg::after{display:none}
 .st-d.seg.k-run{border-top-color:var(--run);border-color:var(--run);background:var(--run-bg);animation:stblink 2.4s ease-in-out infinite;animation-delay:calc(var(--t,0ms)*-1)}

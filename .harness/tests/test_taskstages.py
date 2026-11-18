@@ -189,6 +189,22 @@ class WriteBack(StageCase):
         self.change(promote={"state": "done", "approved_plan_sha256": "abc"})
         self.assertEqual([state for _, state in shown(self.stages())], ["done"] * 5)
 
+    def test_writes_to_an_environment_before_the_plan_mark_the_plan_step(self) -> None:
+        from core import calls
+
+        self.new("job", "dev")
+        name = f"{BASE}/job"
+        calls.note(self.root, name, "sqlcmd -Q \"SELECT 1\"", "db", "dev", "read", "allow")
+        self.assertNotIn("ahead", self.stages()["steps"][1], "a read changes nothing")
+        calls.note(self.root, name, "sqlcmd -i sync.sql", "db", "dev", "write", "approved", "F30BB2")
+        calls.note(self.root, name, "sqlcmd -i sync.sql", "db", "dev", "write", "approved", "A10001")
+        self.assertEqual(self.stages()["steps"][1]["ahead"], [{"env": "DEV", "n": 2}])
+        (self.folder() / "PLAN.md").write_text("# plan\n", encoding="utf-8")
+        self.change(plan={"approved_sha256": tasks.plan_digest(self.root, name), "approved_at": "2999-01-01T00:00:00Z"})
+        self.assertEqual(self.stages()["steps"][1]["ahead"], [{"env": "DEV", "n": 2}], "still shown once the plan is approved: the record of how it went")
+        self.change(plan={"approved_sha256": tasks.plan_digest(self.root, name), "approved_at": "2000-01-01T00:00:00Z"})
+        self.assertNotIn("ahead", self.stages()["steps"][1], "writes made after the approval are the work itself")
+
     def test_a_task_that_starts_over_falls_back_to_the_plan(self) -> None:
         self.new("job", "kb")
         req = self.folder() / "REQ.md"

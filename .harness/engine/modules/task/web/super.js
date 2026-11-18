@@ -628,8 +628,8 @@ const SUPER = (function () {
     }
     // The reply box of a "stopped" item (the agent ended its turn with a question in text): the answer goes to the task's chat through /api/send, the item folds as answered.
     // On a refusal (409 and the like) the reasons show under the box and the words stay.
-    // The same box for an item that waits on the agent's own question (why "question" or "asking"): the words skip the question (the server turns the send into "say"); never for "confirm".
-    const SAYS = (item) => Boolean(item) && (item.why === "question" || item.why === "asking");
+    // The same box for an item that waits on the agent's own question (why "question"): the words skip the question (the server turns the send into "say"); never for "confirm".
+    const SAYS = (item) => Boolean(item) && item.why === "question";  // 1.8.4: not for "asking": the chat waits for its answer in VS Code, and the server refuses words sent to a chat that is not idle
     function replyBox(entry) {
       const box = h("textarea", {class: "sa-reply-box", rows: "2", placeholder: t(SAYS(entry.item) ? "super.reply.say.ph" : "super.reply.ph"), title: t("super.reply.tip")});
       const send = h("button", {type: "button", class: "act hot sa-reply-go"}, t("super.reply.send"));

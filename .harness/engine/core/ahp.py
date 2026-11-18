@@ -668,6 +668,22 @@ def resumable_turn(state: Dict[str, Any]) -> str:
     return str(turns[-1].get("id") or "") if last.get("kind") == "error" and last.get("resumable") is True else ""
 
 
+def last_error(state: Dict[str, Any]) -> Dict[str, Any]:
+    """`{message, resumable}` of the error part that ended the last turn (1.8.4), when that turn ended in an error and nothing runs; empty otherwise. The message is on one line, at most 300 characters. A state in another shape gives an empty answer."""
+    try:
+        turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
+        if state.get("activeTurn") or not turns or turns[-1].get("state") != "error":
+            return {}
+        parts = turns[-1].get("responseParts") or []
+        last = parts[-1] if parts and isinstance(parts[-1], dict) else {}
+        if last.get("kind") != "error":
+            return {}
+        words = " ".join(str(last.get("message") or "").split())
+        return {"message": words if len(words) <= 300 else words[:299].rstrip() + "\u2026", "resumable": last.get("resumable") is True}
+    except (AttributeError, TypeError):
+        return {}
+
+
 def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) -> None:
     """Apply one action of a subscribed chat to a trimmed state, as the host's own reducer does (read from its code): enough to know the tool that runs and the reply that grows."""
     kind = str(action.get("type") or "")

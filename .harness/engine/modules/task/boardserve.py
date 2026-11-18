@@ -71,7 +71,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import superbrain, superfacts, superpreview, superroute, superview
+from . import superbrain, superdirect, superfacts, superpreview, superroute, superview
 from . import accept, autorun, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
@@ -1816,7 +1816,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/queue", "/api/create") else MAX_EDIT_BODY if urlparse(self.path).path == "/api/fileop" else MAX_SEND_BODY if urlparse(self.path).path == "/api/answer" else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/queue", "/api/create", "/api/super/send") else MAX_EDIT_BODY if urlparse(self.path).path == "/api/fileop" else MAX_SEND_BODY if urlparse(self.path).path == "/api/answer" else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
@@ -2084,6 +2084,16 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     return self.answer(200, board.brain.summary() if data.get("kind") == "summary" else board.brain.ask(data.get("text")))
+                except Exception as error:  # noqa: BLE001 - the page shows the refusal
+                    return self.answer(500, {"error": str(error)})
+            if path == "/api/super/send":  # 1.8.4: a direct message to one task's chat ({task, text, model?, thinking?, context?, new_chat?, busy?: queue | steer, lang?, files?}); not through the super agent. {ok: true, how: sent | queued | steered | said | new-chat, task, chat} or {ok: false, why}: see `superdirect`. The paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = superdirect.send(board, data)
+                    if result.get("ok"):
+                        print(say("serve.did", action="super send " + str(result.get("how")), task=str(result.get("task", ""))), flush=True)
+                    return self.answer(200, result)
                 except Exception as error:  # noqa: BLE001 - the page shows the refusal
                     return self.answer(500, {"error": str(error)})
             if path == "/api/super/route":  # 1.8.2: the person's question to one task's chat ({task, text, lang}); read only for that turn. {ok: true, id, state} or {ok: false, why: unknown | paused | nochat | asleep | empty | long | error | a refusal of the link}. The paired browser only

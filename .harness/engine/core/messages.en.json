@@ -3278,6 +3278,7 @@
   "send.refused.no-retry": "The last turn cannot be tried again now. Look at the page again.",
   "send.refused.queue-gone": "That message is not in the queue any more: Copilot may have sent it. Look at the page again.",
   "event.queue": "a message was queued for after the turn",
+  "event.new-chat": "a new chat was made to go on with the task",
   "event.chat-unqueue": "the person took a queued message back",
   "event.chat-resume": "the person ran a failed turn again",
   "desk.live.files": "Files: {names}",

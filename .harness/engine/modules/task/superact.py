@@ -4,7 +4,7 @@
   check   `check(raw_items, rows, served_actions) -> [proposal]`: each item checked against the rows of the board as they are now. A proposal is `{kind, task, ..., ok, why?}`; what is not ok has a `why` and no button.
           `rows`: the `rows` of `BoardServer.rows()`; `served_actions`: what the board server runs (None: not known, `review set` is then judged by the row alone).
           `kind` `action`: ok when the task is a row of the board and the board offers the action for that row now (its `actions`), or `review set` (open task, `n` 0-9), or `steer` / `stop` (open task that works).
-          `kind` `send`: ok for an open task that is not paused. `kind` `new`: ok for a free, valid folder name. Anything else is `{kind: bad, ok: false, why: bad}`.
+          `kind` `send`: ok for an open task that is not paused, with or without a chat (1.8.4: `/api/super/send` makes a new chat then); the text up to 10000 characters. `kind` `new`: ok for a free, valid folder name. Anything else is `{kind: bad, ok: false, why: bad}`.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from .common import CommandError
 OPEN, CLOSE = "<harness-proposals>", "</harness-proposals>"
 MAX_ITEMS = 8
 MAX_TEXT = 2000
+MAX_SEND = 10000  # characters of a `send` proposal: it goes to `/api/super/send`, which takes this much
 MAX_BLOCK = 40000  # characters of one block: more is one bad item, not parsed
 TASK_KINDS = ("qa", "rca", "design", "dev", "test", "kb", "other")
 BOARD_ACTIONS = {"confirm-req", "approve-plan", "approve-promote", "recover", "review extend", "review waive", "approve-action", "send", "answer", "accept", "review dismiss", "review set",
@@ -111,7 +112,7 @@ def send_of(item: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         return dict(out, why="paused")
     if not text:
         return dict(out, why="empty")
-    if len(text) > MAX_TEXT:
+    if len(text) > MAX_SEND:
         return dict(out, why="long")
     return dict(out, ok=True)
 

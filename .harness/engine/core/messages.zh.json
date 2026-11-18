@@ -1665,7 +1665,7 @@
   "super.head.stuck.tip": "{n} 个卡住：对话在运行，但很久没有工具调用。可以 Steer 或 Stop。",
   "super.head.error": "{n} 个出错",
   "super.head.error.one": "{n} 个出错",
-  "super.head.error.tip": "{n} 个出错停下了。打开任务再试一次。",
+  "super.head.error.tip": "{n} 个出错停下了。在它的卡片上按 Try again。",
   "super.team": "任务",
   "super.pet.label": "Super agent 机器人",
   "super.pet.way": "我去看看",

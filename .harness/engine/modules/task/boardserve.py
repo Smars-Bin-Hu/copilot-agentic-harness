@@ -1268,8 +1268,9 @@ class Board:
         made = self.message(task, found, data)
         model = chatsend.model_of(found)
         files = self.files_of(data)
+        job = self.say_or(task, "send")
         try:
-            done = self.link.dispatch("send", task, made["text"], model, files)
+            done = self.link.dispatch(job, task, made["text"], model, files)
         except vslink.Refused as error:
             raise Fallback(self.refusal(error.why), made["text"]) from None
         except Exception as error:  # noqa: BLE001 - the host said no: the person copies the text
@@ -1279,7 +1280,19 @@ class Board:
             tasklife.set_waiting(self.root, task, None)  # the person answered: the card goes now, not when the hook of the new turn has run
         except Exception:  # noqa: BLE001 - the message went; that hook takes the mark away too
             pass
-        return self.sent(task, found, made["kind"], made["text"], done, {"why": made["why"], "lang": made["lang"], "model": model or {}, "drafts": len(made["draft_ids"]), "files": chatsend.listed(files)})
+        extra = {"why": made["why"], "lang": made["lang"], "model": model or {}, "drafts": len(made["draft_ids"]), "files": chatsend.listed(files)}
+        if job == "say":
+            extra["skipped"] = done.get("skipped") or []
+        return self.sent(task, found, "say" if job == "say" else made["kind"], made["text"], done, extra)
+
+    def say_or(self, task: str, kind: str) -> str:
+        """1.8.4: `say` instead of `kind` (send, queue) when the chat waits for the answer to a question: the person's words skip it. Else `kind`: the link refuses as before. Doubt: `kind`."""
+        try:
+            if self.link.check(task, kind) in ("not-idle", "not-busy") and self.link.check(task, "say") == "":
+                return "say"
+        except Exception:  # noqa: BLE001 - what cannot be judged is not changed
+            pass
+        return kind
 
     def files_of(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         try:
@@ -1296,13 +1309,21 @@ class Board:
         text = chatsend.with_english(self.root, task, str(data.get("lang", "")), text)
         model = chatsend.model_of(found)
         files = self.files_of(data)
+        job = self.say_or(task, kind) if kind == "queue" else kind
         try:
-            done = self.link.dispatch(kind, task, text, model, files)
+            done = self.link.dispatch(job, task, text, model, files)
         except vslink.Refused as error:
             raise Fallback(self.refusal(error.why), text) from None
         except Exception as error:  # noqa: BLE001
             raise Fallback(ahp_scrub(error), text) from None
-        return self.sent(task, found, kind, text, done, {"model": model or {}, "files": chatsend.listed(files)})
+        extra = {"model": model or {}, "files": chatsend.listed(files)}
+        if job == "say":
+            extra["skipped"] = done.get("skipped") or []
+            try:
+                tasklife.set_waiting(self.root, task, None)  # the person answered
+            except Exception:  # noqa: BLE001
+                pass
+        return self.sent(task, found, job, text, done, extra)
 
     def queue(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.steer(data, "queue")

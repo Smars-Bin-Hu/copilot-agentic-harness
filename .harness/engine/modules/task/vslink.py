@@ -138,7 +138,7 @@ class Job:
 
 
 # "": any state: a setting of the chat holds from its next turn; a Withdraw stops a running turn first (1.6.99); Try again and taking back a queued message are checked by the thread
-NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": "", "super": ""}  # relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
+NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "say": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": "", "super": ""}  # relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
 
 
 class VsLink:
@@ -963,6 +963,8 @@ class VsLink:
                         raise Refused("not-idle")
             if job.kind in ("confirm", "answer"):
                 return self._respond(link, job, binding)
+            if job.kind == "say":
+                return self._say(link, job, binding)
             chat, resource = binding["chat"], binding["session"]
             with self.lock:
                 held = self.chats.get(chat)
@@ -1159,6 +1161,53 @@ class VsLink:
             self.dirty = True
             title = str((known or {}).get("title") or binding.get("title") or "")
         job.result = {"chat": binding["chat"], "title": title, "view": view, "line": line}
+
+    def _say(self, link: ahp.Connection, job: Job, binding: Dict[str, Any]) -> None:
+        """1.8.4: the person writes while the agent waits for the answer to its question. The session is read again; the questions of this chat are all skipped, then the words go in as a steering
+        message (a steer alone does not unblock a waiting question: measured in 1.8.3). A confirmation of the chat waiting makes it `confirm-waits`; no question makes it `ask-gone`: nothing is sent."""
+        with self.lock:
+            held = self.sess.get(binding["session"])
+            channel = held["channel"] if held else ""
+        if held is None or not channel:
+            raise Refused("ask-gone")
+        try:
+            link.unsubscribe(channel)
+        except ahp.ConnectionClosed:
+            raise
+        except ahp.AhpError:
+            pass
+        fresh = ahp.trimmed_session(link.subscribe(channel))
+        with self.lock:
+            held["state"] = fresh
+            self._stamp(held)
+        mine = [item for item in fresh.get("inputNeeded") or [] if isinstance(item, dict) and item.get("chat") == binding["chat"]]
+        if any(item.get("kind") == chatask.CONFIRM for item in mine):
+            raise Refused("confirm-waits")
+        asks = [item for item in mine if item.get("kind") == chatask.CHAT_INPUT and isinstance(item.get("request"), dict) and item["request"].get("id")]
+        if not asks:
+            raise Refused("ask-gone")
+        actions = [action for item in asks for action in chatask.skip_actions(item)]
+        message: Dict[str, Any] = {"text": job.text, "origin": {"kind": "user"}}
+        if job.model:
+            message["model"] = job.model
+        if job.attachments:
+            message["attachments"] = job.attachments
+        steer = {"type": "chat/pendingMessageSet", "kind": "steering", "id": str(uuid.uuid4()), "message": message}
+        if job.cancelled:
+            raise Refused("timeout")
+        for action in actions:
+            link.dispatch(binding["chat"], action)  # a failure here goes up before the words: they are not sent
+        link.dispatch(binding["chat"], steer)
+        with self.lock:
+            for item in asks:
+                ahp.reduce_session(held["state"], {"type": "session/inputNeededRemoved", "id": item["id"]})
+            self._stamp(held)
+            held["answered_at"] = time.monotonic()
+            known = self.sessions.get(binding["session"])
+            self.dirty = True
+            title = str((known or {}).get("title") or binding.get("title") or "")
+        titles = [chatask.one_line(question.get("title") or question.get("message") or question.get("id"), 80) for item in asks for question in item["request"].get("questions") or [] if isinstance(question, dict)]
+        job.result = {"chat": binding["chat"], "title": title, "skipped": titles[:10], "text": job.text}
 
     def _entries(self) -> List[Dict[str, Any]]:
         out = []

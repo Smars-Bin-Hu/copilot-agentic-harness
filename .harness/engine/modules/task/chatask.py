@@ -214,6 +214,17 @@ def answer_actions(item: Dict[str, Any], given: Any) -> Tuple[List[Dict[str, Any
     return actions, clip("; ".join(lines), MAX_LINE)
 
 
+def skip_actions(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """1.8.4: the actions that skip a question item whole: `inputAnswerChanged` with `skipped` for every question the agent asked (also the kinds the board cannot show), then `inputCompleted` accept."""
+    request = item["request"]
+    rid = str(request["id"])
+    questions = [question for question in request.get("questions") or [] if isinstance(question, dict) and question.get("id")]
+    answers: Dict[str, Any] = {str(question["id"]): {"state": "skipped"} for question in questions}
+    actions: List[Dict[str, Any]] = [{"type": "chat/inputAnswerChanged", "requestId": rid, "questionId": key, "answer": dict(answer)} for key, answer in answers.items()]
+    actions.append({"type": "chat/inputCompleted", "requestId": rid, "response": "accept", "answers": answers})
+    return actions
+
+
 def find(items: Any, ident: str) -> Optional[Dict[str, Any]]:
     return next((item for item in items or [] if isinstance(item, dict) and item.get("id") == ident), None)
 

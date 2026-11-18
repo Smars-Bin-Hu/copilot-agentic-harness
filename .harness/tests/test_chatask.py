@@ -500,5 +500,99 @@ class AnswerTests(AskCase):
         self.assertEqual(self.dispatched(), [])
 
 
+class SkipTests(unittest.TestCase):
+    def test_skip_actions_skip_every_question_then_complete(self) -> None:
+        odd = [{"id": "a", "title": "A", "kind": "single-select", "options": [{"id": "x", "label": "X"}]}, {"id": "d", "title": "Date", "kind": "date"}]
+        actions = chatask.skip_actions(question_item(questions=odd))
+        skipped = {"state": "skipped"}
+        self.assertEqual(actions, [{"type": "chat/inputAnswerChanged", "requestId": "req-1", "questionId": "a", "answer": skipped}, {"type": "chat/inputAnswerChanged", "requestId": "req-1", "questionId": "d", "answer": skipped},
+                                   {"type": "chat/inputCompleted", "requestId": "req-1", "response": "accept", "answers": {"a": skipped, "d": skipped}}])
+
+
+class SayTests(AskCase):
+    def say(self, text: str = "Take green instead", path: str = "/api/send") -> Any:
+        body = {"kind": "answer", "lang": "en", "note": "", "body": text, "step": "act"} if path == "/api/send" else {"text": text, "lang": "en"}
+        return self.post(path, body)
+
+    def test_in_input_with_a_question_send_skips_every_question_first_and_steers_after(self) -> None:
+        two = [{"id": "q1", "title": "Colour", "kind": "text"}, {"id": "q2", "title": "Size", "kind": "text"}]
+        first, second = question_item("req-1", two), question_item("req-2")
+        self.wait_for(first)
+        self.session_state["inputNeeded"].append(second)
+        status, data, _ = self.say()
+        self.assertEqual(status, 200, data)
+        self.assertTrue(until(lambda: len(self.dispatched()) == 6))
+        told = [(params["channel"], params["action"]["type"]) for params in self.dispatched()]
+        self.assertEqual(told, [(CHAT, "chat/inputAnswerChanged")] * 2 + [(CHAT, "chat/inputCompleted"), (CHAT, "chat/inputAnswerChanged"), (CHAT, "chat/inputCompleted")] + [(CHAT, "chat/pendingMessageSet")])
+        steer = self.dispatched()[-1]["action"]
+        self.assertEqual((steer["kind"], steer["message"]["origin"]), ("steering", {"kind": "user"}))
+        self.assertIn("Take green instead", steer["message"]["text"])
+        completed = [params["action"] for params in self.dispatched() if params["action"]["type"] == "chat/inputCompleted"]
+        self.assertEqual([item["response"] for item in completed], ["accept", "accept"])
+        self.assertTrue(all(answer == {"state": "skipped"} for item in completed for answer in item["answers"].values()))
+        self.assertIsNone(self.vs.ask_of(TASK))
+
+    def test_the_record_and_the_history_say_it_skipped_and_what_was_said(self) -> None:
+        self.wait_for(question_item(questions=[{"id": "c", "title": "Colour", "kind": "text"}]))
+        self.assertEqual(self.say("Take green instead")[0], 200)
+        line = json.loads((self.root / TASK / ".task" / "sent.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+        self.assertEqual((line["kind"], line["skipped"]), ("say", ["Colour"]))
+        self.assertIn("Take green instead", line["text"])
+        events = [event for event in self.data()["events"] if event["what"] == "say"]
+        self.assertEqual(len(events), 1)
+        self.assertIn("Take green instead", events[0]["detail"])
+        self.assertNotEqual(messages.text("event.say"), "event.say")
+
+    def test_queue_in_input_also_says(self) -> None:
+        self.wait_for(question_item())
+        status, data, _ = self.say("later words", "/api/queue")
+        self.assertEqual(status, 200, data)
+        self.assertTrue(until(lambda: self.dispatched() and self.dispatched()[-1]["action"]["type"] == "chat/pendingMessageSet"))
+        self.assertEqual(self.dispatched()[-1]["action"]["kind"], "steering")
+        self.assertEqual(self.dispatched()[0]["action"]["type"], "chat/inputAnswerChanged")
+
+    def test_a_confirmation_waiting_sends_nothing(self) -> None:
+        self.wait_for(confirm_item())
+        status, data, _ = self.say()
+        self.assertEqual((status, data["error"]), (409, said("confirm-waits")))
+        self.assertEqual(self.dispatched(), [])
+        self.assertEqual(self.say("x", "/api/queue")[0], 409)
+        self.assertEqual(self.dispatched(), [])
+
+    def test_a_confirmation_next_to_a_question_sends_nothing(self) -> None:
+        self.wait_for(question_item())
+        self.session_state["inputNeeded"].append(confirm_item())
+        self.assertEqual(self.say()[1]["error"], said("confirm-waits"))
+        self.assertEqual(self.dispatched(), [])
+
+    def test_no_question_left_is_ask_gone(self) -> None:
+        self.wait_for(question_item())
+        self.session_state["inputNeeded"] = []  # answered in VS Code a moment ago
+        status, data, _ = self.say()
+        self.assertEqual((status, data["error"]), (409, said("ask-gone")))
+        self.assertEqual(self.dispatched(), [])
+
+    def test_a_question_of_another_chat_is_not_skipped(self) -> None:
+        other = dict(question_item(), chat="ahp-chat:/not-mine", id="chatInput:other")
+        self.wait_for(question_item())
+        self.session_state["inputNeeded"] = [other]
+        self.assertEqual(self.say()[1]["error"], said("ask-gone"))
+        self.assertEqual(self.dispatched(), [])
+
+    def test_idle_send_still_starts_a_turn_and_busy_queue_still_queues(self) -> None:
+        status, data, _ = self.say()
+        self.assertEqual(status, 200, data)
+        self.assertTrue(until(lambda: self.dispatched()))
+        self.assertEqual(self.dispatched()[-1]["action"]["type"], "chat/turnStarted")
+        self.assertEqual(self.vs.check(TASK, "say"), "not-input")
+        self.items[0]["status"] = ahp.IN_PROGRESS
+        with self.vs.lock:
+            self.vs.sessions[SESSION_URI]["status"] = ahp.IN_PROGRESS
+        before = len(self.dispatched())
+        self.assertEqual(self.say("x", "/api/queue")[0], 200)
+        self.assertTrue(until(lambda: len(self.dispatched()) > before))
+        self.assertEqual(self.dispatched()[-1]["action"]["kind"], "queued")
+
+
 if __name__ == "__main__":
     unittest.main()

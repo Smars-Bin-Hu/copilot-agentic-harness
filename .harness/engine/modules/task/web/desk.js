@@ -608,7 +608,7 @@
     const input = h("input", {type: "text", class: "tk-name-in", value: desk.title || "", maxlength: 80, placeholder: t("waits.title.ph"), "aria-label": t("desk.waits.name.edit"), title: t("desk.waits.name.save")});
     const said = h("span", {class: "bad tk-name-err", role: "alert"});
     let busy = false;
-    const end = () => { naming = false; ui.nameBox.classList.remove("editing"); input.remove(); said.remove(); ui.name.hidden = false; ui.nameEdit.hidden = false; paintHead(); };
+    const end = () => { if (!naming) return; naming = false; ui.nameBox.classList.remove("editing"); input.remove(); said.remove(); ui.name.hidden = false; ui.nameEdit.hidden = false; paintHead(); };
     input.addEventListener("keydown", (event) => {
       if (event.key === "Escape") { event.preventDefault(); end(); return; }
       if (event.key !== "Enter" || busy || event.isComposing) return;

@@ -475,8 +475,9 @@ const SUPER = (function () {
         input.classList.toggle("pulse", can && viewed && !input.value.trim());
         if (!viewed && CHANGED.has(code) && !said.textContent) said.textContent = CHANGED.get(code);
       };
+      const lead = !one.title || String(one.command || "").startsWith(plain(one.title));  // a title that is only the start of the command says nothing more
       const node = h("div", {class: "sa-call", "data-code": code},
-        h("div", {class: "sa-callh"}, h("span", {class: "sa-chip", title: t("desk.outbox.code")}, code), one.system ? h("span", {class: "sa-sys", title: one.verb || ""}, one.system + (one.env && one.env !== "none" ? " · " + one.env : "")) : null, h("span", {class: "sa-ctitle", title: one.title || ""}, one.title || "")),
+        h("div", {class: "sa-callh"}, h("span", {class: "sa-chip", title: t("desk.outbox.code")}, code), one.system ? h("span", {class: "sa-sys", title: one.verb || ""}, one.system + (one.env && one.env !== "none" ? " · " + one.env : "")) : null, lead ? null : h("span", {class: "sa-ctitle", title: one.title || ""}, one.title || "")),
         h("code", {class: "sa-cmd", title: t("super.call.cmd.tip")}, one.command || ""),
         h("div", {class: "sa-callgo"}, view, seen, input, yes), said);
       CTL.add({code, node, arm, born: Date.now()});
@@ -677,7 +678,7 @@ const SUPER = (function () {
         return sections.length ? [t("super.preview.req.sum", {n: result.total || sections.reduce((sum, one) => sum + one.lines.length, 0)}), sections.flatMap((one) => [h("li", {class: "sa-pvh"}, h("b", null, one.title)), ...one.lines.map((line) => h("li", null, String(line)))]), "super.preview.req.open"] : null;
       }
       const files = result.files || [];  // deliver: the whole summary, then the files a promote would change
-      if (!result.summary && !files.length) return null;
+      if (!files.length && String(result.summary || "").length < 140 && !/\n/.test(String(result.summary || ""))) return null;  // the card shows a short summary whole: nothing to unfold
       return [files.length ? t(files.length === 1 && !result.more ? "super.preview.deliver.one" : "super.preview.deliver.sum", {n: files.length + (result.more ? "+" : "")}) : t("super.preview.deliver.text"),
         [...(result.summary ? [h("li", {class: "sa-pvsum"}, String(result.summary))] : []), ...fileRows(files)], "super.preview.deliver.open"];
     }
@@ -737,7 +738,7 @@ const SUPER = (function () {
       const acts = h("div", {class: "sa-acts"});
       const xtra = h("div", {class: "sa-xtra"});
       const more = !asksPerson(item) && !["error", "stuck", "accept"].includes(item.why) && item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
-      const node = h("div", {class: "sa-row item", "data-task": item.task, "data-id": item.id},
+      const node = h("div", {class: "sa-row item" + (item.why === "error" ? " err" : ""), "data-task": item.task, "data-id": item.id},
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
         h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, xtra, saidMore, note, more, acts));
       const entry = {item, node, acts, waited, what, note, why, xtra, xsig: "", sig: "", clicked: ""};

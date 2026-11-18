@@ -317,7 +317,8 @@ a.sa-task:hover{text-decoration:underline}
 .sa-ic{font:12px var(--mono);background:var(--kbd);border-radius:4px;padding:0 4px}
 .sa-link{color:var(--hot);text-decoration:underline}
 /* a held call: the code as a chip, the command in the code font, cut to one line; View, the code box, Approve in one row */
-.sa-acts.sa-calls{flex-direction:column;align-items:stretch;gap:6px}
+.sa-acts.sa-calls{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:6px}  /* nowrap: a wrapping column is as wide as its widest line, and a long command would push the card out */
+.sa-row.item.err .sa-bub.fwd{border-color:var(--bad-line,var(--bad))}
 .sa-acts.sa-calls .sa-open{align-self:flex-start}
 .sa-call{display:flex;flex-direction:column;gap:3px;min-width:0;padding:5px 8px;border:1px solid var(--line2);border-radius:10px;background:var(--card)}
 .sa-callh{display:flex;align-items:center;gap:6px;min-width:0;font-size:12.5px}

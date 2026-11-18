@@ -263,3 +263,5 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .tk-err .tk-err-p{margin:4px 0 8px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap;max-height:9em;overflow:auto;color:var(--ink)}
 .tk-need.tk-cool,.tk-need.strong.tk-cool{border-color:var(--line);border-left:1px solid var(--line);background:transparent}
 .tk-cool .tag.hot{background:transparent;color:var(--soft);border-color:var(--line)}
+.tk-cool .act.hot.live{background:transparent;color:var(--ink);border-color:var(--line2);font-weight:500}  /* 1.8.5: the agent's last turn failed: what it waits for is not the next thing to press */
+.tk-cool .act.hot.live:hover{background:var(--hover);border-color:var(--line2)}

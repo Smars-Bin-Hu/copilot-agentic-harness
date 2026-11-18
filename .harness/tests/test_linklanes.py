@@ -266,6 +266,11 @@ class LaneTests(LaneCase):
         self.assertLess(time.monotonic() - start, 1.5, "the send waited for the background")
         self.assertTrue(done.get("chat"))
 
+    def test_the_jobs_of_one_task_always_go_to_one_lane(self) -> None:
+        """Three lanes: two messages to one chat must still go in the order they were sent."""
+        self.assertEqual({vslink.VsLink.lane_of(TASK) for _ in range(5)}, {vslink.VsLink.lane_of(TASK)})
+        self.assertGreater(len({vslink.VsLink.lane_of(f"t/{n}") for n in range(30)}), 1)  # and the tasks are spread over the lanes
+
     def test_a_job_that_waits_too_long_for_another_job_of_its_task_is_refused_not_queued(self) -> None:
         gate = self.vs._gate(TASK)
         held = threading.Event()

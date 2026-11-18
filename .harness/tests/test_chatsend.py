@@ -244,6 +244,7 @@ class SendCase(ServeCase):
     def setUp(self) -> None:
         super().setUp()
         self.assertTrue(until(lambda: self.vs.status()["bound"] == 1 and self.vs.model_list()), self.vs.status())
+        self.assertTrue(until(lambda: self.chat in self.vs.chats), "the bound chat was not read")  # 1.8.7: tests that change the cached chat need it there first
         self.cookie = self.pair()
 
     def post(self, path: str, body: Dict[str, Any], **kw: Any) -> Any:

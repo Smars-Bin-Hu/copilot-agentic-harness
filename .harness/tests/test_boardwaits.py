@@ -31,6 +31,9 @@ class FakeLink:
     def turn_mark(self, _task: str) -> Tuple[str, str, str]:
         return self.mark
 
+    def made_stage(self, _name: str) -> str:
+        return getattr(self, "making", "")
+
 
 def board() -> Any:
     return SimpleNamespace(started={}, started_lock=threading.Lock(), link=FakeLink())
@@ -116,6 +119,20 @@ class StartingTests(unittest.TestCase):
         settle(fake, found)
         self.assertNotIn("starting", found)
         self.assertEqual(fake.started, {})
+
+    def test_a_new_chat_vs_code_is_still_making_is_never_late(self) -> None:
+        """1.8.7: Go on in a new chat on a slow computer: VS Code may take minutes to make the chat; the row keeps saying starting, not "no start seen"."""
+        fake = board()
+        begin(fake, "newchat")
+        fake.started["t/a"]["mono"] -= boardserve.START_LATE + 1
+        fake.link.making = "asking"
+        found = row(fake.link, name="a")
+        settle(fake, found)
+        self.assertFalse(found["starting"]["late"])
+        fake.link.making = ""
+        found = row(fake.link, name="a")
+        settle(fake, found)
+        self.assertTrue(found["starting"]["late"])
 
     def test_a_closed_or_paused_task_lets_go(self) -> None:
         for extra in ({"status": "closed"}, {"paused_since": "2026-11-18T00:00:00+00:00"}):

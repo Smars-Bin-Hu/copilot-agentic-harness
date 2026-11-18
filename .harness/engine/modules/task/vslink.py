@@ -424,6 +424,12 @@ class VsLink:
                             "error": str(item.get("error") or ""), "initiator": str(item.get("initiator") or "")})
             return out
 
+    def made_stage(self, name: str) -> str:
+        """1.8.7: how far the chat the board is making for the task `name` is (`asking`, `sent`, ...), or "" when none is being made."""
+        with self.lock:
+            found = [item for item in self.created if item.get("name") == name]
+            return str(found[-1].get("stage") or "") if found else ""
+
     def dismiss_making(self, name: str) -> bool:
         """Take away a task being made that VS Code refused, or whose connection went before VS Code answered (1.8.7, the × of its placeholder). One that is being asked cannot be taken away."""
         with self.lock:
@@ -722,43 +728,72 @@ class VsLink:
         self._set(True, "ok")
         lanes = getattr(link, "reading", lambda: False)()
         ended = threading.Event()
-        people = [threading.Thread(target=self._person, args=(link, ended), name=f"board-person-{n}", daemon=True) for n in range(PERSON_LANES)] if lanes else []
-        for person in people:
+        person = threading.Thread(target=self._person, args=(link, ended), name="board-person", daemon=True) if lanes else None
+        if person is not None:
             person.start()
-        if people:
             self._resume_made(link)
         try:
             self._background(link, lanes)
         finally:
             ended.set()
-            for person in people:
+            if person is not None:
                 person.join(5)
 
+    @staticmethod
+    def lane_of(task: str) -> int:
+        """1.8.7: the lane a task's jobs go to: always the same one, so two messages to one chat go in the order they were sent."""
+        return sum(task.encode("utf-8")) % PERSON_LANES
+
     def _person(self, link: ahp.Connection, ended: threading.Event) -> None:
-        """1.8.7, the person's lane: what a page asked for (send, steer, stop, answer, allow...) is done here, never behind the background reads. A chat to make goes to a thread of
-        its own: VS Code may take minutes, with no limit."""
-        while not ended.is_set() and not self.stop_flag.is_set() and not getattr(link, "closed", False):
-            try:
-                job = self.jobs.get(timeout=PERSON_POLL)
-            except queue.Empty:
-                continue
-            if isinstance(job, Job) and job.kind in ("create", "super"):
-                threading.Thread(target=self._do_alone, args=(link, job), name="board-create", daemon=True).start()
-            elif isinstance(job, Job):
-                if job.cancelled:
+        """1.8.7, the person's lane: what a page asked for (send, steer, stop, answer, allow...) is done here, never behind the background reads. The jobs of one task go to
+        one of PERSON_LANES threads, in order; a job that waits on one task does not hold up the others. A chat to make goes to a thread of its own: VS Code may take minutes, with no limit."""
+        queues: List["queue.Queue[Any]"] = [queue.Queue() for _ in range(PERSON_LANES)]
+        lanes = [threading.Thread(target=self._lane, args=(link, ended, waiting), name=f"board-person-{n}", daemon=True) for n, waiting in enumerate(queues)]
+        for lane in lanes:
+            lane.start()
+        try:
+            while not ended.is_set() and not self.stop_flag.is_set() and not getattr(link, "closed", False):
+                try:
+                    job = self.jobs.get(timeout=PERSON_POLL)
+                except queue.Empty:
+                    continue
+                if isinstance(job, Job) and job.kind in ("create", "super"):
+                    threading.Thread(target=self._do_alone, args=(link, job), name="board-create", daemon=True).start()
+                elif isinstance(job, Job):
+                    queues[self.lane_of(job.task)].put(job)
+                else:
+                    self._open_code()
+        finally:
+            ended.set()
+            for lane in lanes:
+                lane.join(5)
+            for waiting in queues:  # what no lane took: refused, as a job is when the connection goes
+                while True:
+                    try:
+                        job = waiting.get_nowait()
+                    except queue.Empty:
+                        break
                     job.error = Refused("not-ready")
                     job.done.set()
-                    continue
-                try:
-                    self._do(Guarded(link, job), job)  # type: ignore[arg-type]
-                except ahp.ConnectionClosed:
-                    return  # the job says so; the link opens a new connection
-                except Exception as error:  # noqa: BLE001 - one job that fails (a refused answer) never stops the lane: the page gets the error, the next job goes on
-                    if job.error is None:
-                        job.error = error
-                    job.done.set()
-            else:
-                self._open_code()
+
+    def _lane(self, link: ahp.Connection, ended: threading.Event, waiting: "queue.Queue[Any]") -> None:
+        while not ended.is_set() and not self.stop_flag.is_set() and not getattr(link, "closed", False):
+            try:
+                job = waiting.get(timeout=PERSON_POLL)
+            except queue.Empty:
+                continue
+            if job.cancelled:
+                job.error = Refused("not-ready")
+                job.done.set()
+                continue
+            try:
+                self._do(Guarded(link, job), job)  # type: ignore[arg-type]
+            except ahp.ConnectionClosed:
+                return  # the job says so; the link opens a new connection
+            except Exception as error:  # noqa: BLE001 - one job that fails (a refused answer) never stops the lane: the page gets the error, the next job goes on
+                if job.error is None:
+                    job.error = error
+                job.done.set()
 
     def _do_alone(self, link: ahp.Connection, job: Job) -> None:
         """A job on a thread of its own (a chat to make): a connection that closes ends it quietly; the job and the board's "being created" say so."""

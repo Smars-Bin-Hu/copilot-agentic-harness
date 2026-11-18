@@ -937,7 +937,7 @@ class Board:
                     if self.started.get(task) is mark:
                         del self.started[task]
                 mark = None
-            elif age <= START_LATE:
+            elif age <= START_LATE or (mark["what"] == "newchat" and self.link.made_stage(str(row.get("name") or "")) in ("asking", "sent")):  # a new chat VS Code is still making: no limit (1.8.7)
                 row["starting"] = {"what": mark["what"], "since": mark["since"], "late": False}
                 row["state"], row["active"] = "working", False
                 for key in WAIT_FIELDS:

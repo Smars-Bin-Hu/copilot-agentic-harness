@@ -477,8 +477,8 @@ const SUPER = (function () {
       };
       const lead = !one.title || String(one.command || "").startsWith(plain(one.title));  // a title that is only the start of the command says nothing more
       const node = h("div", {class: "sa-call", "data-code": code},
-        h("div", {class: "sa-callh"}, h("span", {class: "sa-chip", title: t("desk.outbox.code")}, code), one.system ? h("span", {class: "sa-sys", title: one.verb || ""}, one.system + (one.env && one.env !== "none" ? " · " + one.env : "")) : null, lead ? null : h("span", {class: "sa-ctitle", title: one.title || ""}, one.title || "")),
-        h("code", {class: "sa-cmd", title: t("super.call.cmd.tip")}, one.command || ""),
+        h("div", {class: "sa-callh"}, h("span", {class: "sa-chip", title: t("desk.outbox.code")}, code), one.system ? h("span", {class: "sa-sys", title: one.verb || ""}, one.system + (one.env && one.env !== "none" ? " · " + one.env : "")) : null, lead ? null : h("span", {class: "sa-ctitle", title: one.title || ""}, one.title || ""),
+          h("code", {class: "sa-cmd", title: t("super.call.cmd.tip")}, one.command || "")),
         h("div", {class: "sa-callgo"}, view, seen, input, yes), said);
       CTL.add({code, node, arm, born: Date.now()});
       input.addEventListener("input", () => { TYPED.set(code, input.value); arm(); });
@@ -617,8 +617,11 @@ const SUPER = (function () {
       const joint = entry.item.why === "plan" && Boolean(row.req_unconfirmed);  // one code confirms the requirement and approves the plan (the approve-plan window does it)
       entry.note.hidden = !joint;
       entry.note.textContent = joint ? t("super.plan.joint") : "";
-      entry.acts.classList.toggle("sa-calls", callsOf(entry.item).length > 0);
-      entry.acts.replaceChildren(...buttons, taskLink(entry.item.task, t("super.open") + " ↗", "act sa-open"));
+      const open = taskLink(entry.item.task, t("super.open") + " ↗", "act sa-open");
+      const goes = buttons.filter((node) => node.classList && node.classList.contains("sa-call")).map((node) => node.querySelector(".sa-callgo")).filter(Boolean);
+      entry.acts.classList.toggle("sa-calls", goes.length > 0);
+      if (goes.length) goes[goes.length - 1].append(open);  // a held call: "Open task" sits in the row of its buttons, not on a line of its own
+      entry.acts.replaceChildren(...buttons, ...(goes.length ? [] : [open]));
       entry.sig = sigOf(entry);
     }
     function drawWaited(entry) {

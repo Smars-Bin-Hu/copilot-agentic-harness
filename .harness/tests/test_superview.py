@@ -94,6 +94,32 @@ def chat(state: str, **more: Any) -> Dict[str, Any]:
     return {"bound": True, "state": state, **more}
 
 
+class AgingTests(unittest.TestCase):
+    def order(self, *rows: Dict[str, Any], age_up: Any = 900) -> List[str]:
+        return [item["task"] for item in superview.build(result(*rows), age_up)["items"]]
+
+    def test_no_aging_when_age_up_is_none(self) -> None:
+        rows = (row("dec", "plan", 5000), row("ask", "question", 10))
+        self.assertEqual(self.order(*rows, age_up=None), ["ask", "dec"])
+        self.assertFalse(any("aged" in item for item in superview.build(result(*rows))["items"]))
+
+    def test_an_old_decision_goes_before_a_fresh_question(self) -> None:
+        self.assertEqual(self.order(row("ask", "question", 10), row("dec", "plan", 1000)), ["dec", "ask"])
+
+    def test_a_young_decision_stays_after_it(self) -> None:
+        self.assertEqual(self.order(row("ask", "question", 10), row("dec", "plan", 899)), ["ask", "dec"])
+
+    def test_an_old_rest_item_goes_before_a_fresh_decision(self) -> None:
+        self.assertEqual(self.order(row("dec", "plan", 10), row("rest", "stopped", 1000)), ["rest", "dec"])
+
+    def test_aged_is_set_on_items_that_moved_up_only(self) -> None:
+        items = superview.build(result(row("ask", "question", 5000), row("dec", "plan", 1000), row("new", "plan", 5)), 900)["items"]
+        self.assertEqual({item["task"]: item.get("aged", False) for item in items}, {"ask": False, "dec": True, "new": False})
+
+    def test_longest_wait_first_inside_the_merged_group(self) -> None:
+        self.assertEqual(self.order(row("ask", "question", 100), row("dec", "plan", 1000), row("old", "outbox", 2000)), ["old", "dec", "ask"])
+
+
 class ErrorStuckTests(unittest.TestCase):
     """1.8.4: `row["super"]` (put by `superfacts`) turns a failed or silent chat into an item; `build` only reads it."""
 

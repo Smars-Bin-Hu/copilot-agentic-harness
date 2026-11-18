@@ -798,6 +798,17 @@ def stuck_limit(root: Path) -> int:
         return STUCK_SECONDS
 
 
+AGE_UP_SECONDS = 900  # `board.age_up_seconds` in task.json (1.8.4): an item of the super view that has waited this long moves up one group
+
+
+def age_up_limit(root: Path) -> int:
+    """`board.age_up_seconds`, read as `stuck_limit` reads its key."""
+    try:
+        return config.whole((config.policy_or_empty(root, "task").get("board") or {}).get("age_up_seconds"), AGE_UP_SECONDS)
+    except (OSError, ValueError, TypeError):
+        return AGE_UP_SECONDS
+
+
 def log_age(root: Path, data: Dict[str, Any]) -> Optional[Tuple[int, str]]:
     """`(seconds, time)` since the session log of this task was last written (the same mtime `active_now` reads: the last hook call), and that time as ISO text. None: no log."""
     try:

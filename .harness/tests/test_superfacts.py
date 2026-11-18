@@ -55,6 +55,11 @@ class StuckTests(StuckCase):
         old_log(self, 90)
         self.assertEqual(self.facts(row_of({"bound": True, "state": "busy"}))["kind"], "stuck")
 
+    def test_the_age_up_limit_is_board_age_up_seconds_of_the_task_policy(self) -> None:
+        self.assertEqual(tasklife.age_up_limit(self.root), 900)
+        (self.root / ".harness" / "policies" / "task.override.json").write_text('{"board": {"age_up_seconds": 90}}', encoding="utf-8")
+        self.assertEqual(tasklife.age_up_limit(self.root), 90)
+
     def test_a_chat_that_is_not_busy_is_not_stuck(self) -> None:
         old_log(self, 5000)
         for state in ("idle", "input", "unknown"):

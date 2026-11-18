@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.8.3-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.8.4-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -176,7 +176,7 @@ If you'd rather not read docs, the board and the lessons above are enough.
 | [04 Reference](docs/04-reference.md) | [**For lookup.**](docs/04-reference.md) All commands, policy fields, task file templates and hook events |
 | [05 Design](docs/05-design.md) | [**Why it is built this way.**](docs/05-design.md) The layers, and which work goes to code and which to the model |
 | [06 Cost](docs/06-cost-optimization.md) | [**How it saves time and money**](docs/06-cost-optimization.md), and where it is still expensive |
-| [07 Release notes](docs/07-release-notes.md) | [**What changed in each version.**](docs/07-release-notes.md) Additions, changes and retirements |
+| [07 Release notes](docs/07-release-notes.md) | [**What changed in each minor version.**](docs/07-release-notes.md) Additions, fixes and retirements |
 | [08 Knowledge base](docs/08-knowledge-base.md) | [**Build it from your code and keep it true.**](docs/08-knowledge-base.md) The idea, the steps, how you know the map is right, what you can change |
 | [09 Preparing an intake](docs/09-intake.md) | [**Business documents as files the agent can read.**](docs/09-intake.md) Word and Excel to Markdown and CSV without AI, `INTAKE.md`, trimming, pasting a table, the review of the requirement |
 | [10 Skills](docs/10-skills.md) | [**Which skill is for what.**](docs/10-skills.md) Every skill sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
@@ -235,4 +235,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.8.3 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.8.4 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

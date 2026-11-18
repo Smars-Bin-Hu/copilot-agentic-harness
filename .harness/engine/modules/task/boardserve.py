@@ -443,7 +443,7 @@ class Board:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
         elsewhere = outbox.held_elsewhere(self.root, self.task_is_open)
         names = {str(row.get("name") or "") for row in result["tasks"]}
-        making = [item for item in self.link.making() if item["name"] not in names and not tasks.find(self.root, item["name"])]  # a new chat for a task that exists (Go on in a new chat) is no task being made
+        making = [item for item in self.link.making() if item["stage"] in ("refused", "lost") or (item["name"] not in names and not tasks.find(self.root, item["name"]))]  # a new chat for a task that exists (Go on in a new chat) is no task being made; its refusal or lost connection still shows
         for item in making:  # who VS Code says made the chat, and why it refused (1.8.7: told on the placeholder, the window closed at once)
             initiator = item.pop("initiator", "")
             item["warn"] = say("create.warn.initiator", initiator=initiator) if initiator and initiator != "vscode" else ""

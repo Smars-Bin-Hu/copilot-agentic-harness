@@ -96,6 +96,12 @@ class ReaderTests(unittest.TestCase):
         with self.assertRaises(ahp.ConnectionClosed):
             self.link.next_notice(0.1)
 
+    def test_a_request_the_broken_connection_cannot_write_is_a_lost_connection_not_a_refusal(self) -> None:
+        with mock.patch.object(self.link.transport, "write", side_effect=OSError("broken pipe")):
+            with self.assertRaises(ahp.ConnectionClosed):
+                self.link.call("subscribe", {"channel": "c"}, timeout=None)
+        self.assertEqual(self.link._waiting, {})
+
     def test_notices_still_come_one_by_one(self) -> None:
         self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"n": 1}})
         self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"n": 2}})
@@ -209,6 +215,19 @@ class MakeTests(unittest.TestCase):
         self.assertTrue(self.vs.dismiss_making("late-task"))
         self.assertEqual(self.vs.making(), [])
 
+    def test_a_lost_one_can_be_taken_away_too(self) -> None:
+        self.made("lost")
+        self.assertTrue(self.vs.dismiss_making("late-task"))
+        self.assertEqual(self.vs.making(), [])
+
+    def test_an_unexpected_failure_while_making_ends_as_refused_not_as_making_for_ever(self) -> None:
+        made = self.made()
+        with mock.patch.object(self.vs, "_create", side_effect=RuntimeError("boom")):
+            job = self.job(made)
+            self.vs._do_alone(self.link, job)
+        self.assertEqual((made["stage"], made["error"]), ("refused", "other"))
+        self.assertIsNotNone(job.error)
+
     def test_a_chat_still_being_made_cannot_be_taken_away_and_turns_slow(self) -> None:
         made = self.made()
         self.assertFalse(self.vs.dismiss_making("late-task"))
@@ -246,6 +265,34 @@ class LaneTests(LaneCase):
         done = self.vs.dispatch("send", TASK, "go on")
         self.assertLess(time.monotonic() - start, 1.5, "the send waited for the background")
         self.assertTrue(done.get("chat"))
+
+    def test_a_job_that_waits_too_long_for_another_job_of_its_task_is_refused_not_queued(self) -> None:
+        gate = self.vs._gate(TASK)
+        held = threading.Event()
+        free = threading.Event()
+
+        def hold() -> None:
+            with gate:
+                held.set()
+                free.wait(5)
+
+        threading.Thread(target=hold, daemon=True).start()
+        held.wait(2)
+        with mock.patch.object(vslink, "GATE_WAIT", 0.3):
+            with self.assertRaises(vslink.Refused) as raised:
+                self.vs.dispatch("send", TASK, "go on")
+        free.set()
+        self.assertEqual(raised.exception.why, "not-idle")
+
+    def test_a_refused_new_chat_for_a_task_that_exists_still_shows(self) -> None:
+        """Go on in a new chat makes a chat for a task that exists: no placeholder while it is made (the task's row says starting), but a refusal must show somewhere."""
+        with self.vs.lock:
+            self.vs.created.append({"name": "job1", "kind": "dev", "made_at": "", "session": "s", "chat": "", "clock": time.monotonic(), "stage": "asking"})
+        self.assertEqual(self.request("POST", "/api/board", {})[1]["making"], [])
+        with self.vs.lock:
+            self.vs.created[-1].update(stage="refused", error="copilot")
+        found = self.request("POST", "/api/board", {})[1]["making"]
+        self.assertEqual([(item["name"], item["stage"]) for item in found], [("job1", "refused")])
 
     def test_a_second_send_right_after_the_first_is_refused_whatever_a_slow_list_says(self) -> None:
         """Two lanes (the person, an autorun relay) may send to one chat at once: the second finds the turn the board just started, even when VS Code still lists the chat as idle."""

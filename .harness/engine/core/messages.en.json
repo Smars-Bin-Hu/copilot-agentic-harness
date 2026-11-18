@@ -420,7 +420,7 @@
   "waits.stage.refused": "VS Code refused",
   "waits.stage.refused.none": "VS Code gave no reason.",
   "waits.stage.lost": "Connection lost",
-  "waits.stage.lost.tip": "Connection lost; it goes on when VS Code is back.",
+  "waits.stage.lost.tip": "The connection to VS Code went before it answered. The board goes on when VS Code is back; look in VS Code whether a chat was made. × removes this row.",
   "waits.stage.dismiss": "Remove this row",
   "waits.stage.dismiss.failed": "The row could not be removed: {error}",
   "waits.stage.since": "In this step for {time}",

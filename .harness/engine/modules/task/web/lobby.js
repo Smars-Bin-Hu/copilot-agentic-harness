@@ -41,7 +41,7 @@ function makingMarks(item, short) {
   if (info.timed) node.append(h("span", {class: "mk-time", "data-since": info.stamp}, makingClock(makingSecs(info.stamp))));
   if (item.slow) node.append(h("span", {class: "mk-slow", "aria-hidden": "true"}));
   if (item.warn) node.append(h("span", {class: "mk-note", "aria-hidden": "true"}, "i"));
-  if (info.stage === "refused" && typeof SERVE !== "undefined" && SERVE.post) { node.append(makingDismiss(item)); if (!short && item.error) node.append(h("span", {class: "mk-err"}, item.error)); }
+  if ((info.stage === "refused" || info.stage === "lost") && typeof SERVE !== "undefined" && SERVE.post) { node.append(makingDismiss(item)); if (!short && info.stage === "refused" && item.error) node.append(h("span", {class: "mk-err"}, item.error)); }
   return node;
 }
 setInterval(() => { for (const node of document.querySelectorAll(".mk-time[data-since]")) { const secs = makingSecs(node.dataset.since); if (secs !== null) node.textContent = makingClock(secs); } }, 1000);

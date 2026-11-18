@@ -420,7 +420,7 @@
   "waits.stage.refused": "VS Code 拒绝了",
   "waits.stage.refused.none": "VS Code 没有说原因。",
   "waits.stage.lost": "连接断了",
-  "waits.stage.lost.tip": "连接断了，VS Code 回来后会接着建。",
+  "waits.stage.lost.tip": "VS Code 回应之前连接断了。VS Code 回来后看板会接着做；先去 VS Code 看看有没有建出 chat。× 可以去掉这一行。",
   "waits.stage.dismiss": "去掉这一行",
   "waits.stage.dismiss.failed": "这一行没能去掉：{error}",
   "waits.stage.since": "这一步已用 {time}",

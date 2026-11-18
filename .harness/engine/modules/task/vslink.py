@@ -59,6 +59,8 @@ SLOW_RETRY = 30.0  # seconds before a list the host did not answer in time is as
 RELAY_EVERY = 1.0  # 1.8: seconds between two looks at the bound chats of tasks in autorun (relay and pit stop)
 RELAY_HOLD = 10.0  # 1.8: seconds a relay that was refused (the chat changed, was not idle) waits before it is tried again
 BACKGROUND_TIMEOUT = 120.0  # 1.8.7: seconds a read of the background lane waits (a busy computer); a read that runs out is made again on the next look, and its late answer is only noted
+PERSON_LANES = 3  # 1.8.7: threads of the person's lane: a job that waits on one task does not hold up the others
+GATE_WAIT = 10.0  # 1.8.7: seconds a job waits for another job on the same task before it is refused (the page says the chat is busy)
 PERSON_POLL = 0.5  # 1.8.7: seconds the person's lane waits for a job before it looks whether the connection is still there
 FRESH_TURN = 30.0  # 1.8.7: seconds a turn the board itself started counts as running, whatever a slow list of sessions still says (a second send to that chat is refused)
 STAGE_SLOW = 180.0  # 1.8.7: seconds after which "being created" says VS Code has not answered for a while (it still waits)
@@ -423,9 +425,9 @@ class VsLink:
             return out
 
     def dismiss_making(self, name: str) -> bool:
-        """Take away a task being made that VS Code refused (1.8.7, the × of its placeholder). One that still waits cannot be taken away: VS Code may still make its chat."""
+        """Take away a task being made that VS Code refused, or whose connection went before VS Code answered (1.8.7, the × of its placeholder). One that is being asked cannot be taken away."""
         with self.lock:
-            found = [item for item in self.created if item.get("name") == name and item.get("stage") == "refused"]
+            found = [item for item in self.created if item.get("name") == name and item.get("stage") in ("refused", "lost")]
             self.created = [item for item in self.created if item not in found]
             return bool(found)
 
@@ -720,15 +722,16 @@ class VsLink:
         self._set(True, "ok")
         lanes = getattr(link, "reading", lambda: False)()
         ended = threading.Event()
-        person = threading.Thread(target=self._person, args=(link, ended), name="board-person", daemon=True) if lanes else None
-        if person is not None:
+        people = [threading.Thread(target=self._person, args=(link, ended), name=f"board-person-{n}", daemon=True) for n in range(PERSON_LANES)] if lanes else []
+        for person in people:
             person.start()
+        if people:
             self._resume_made(link)
         try:
             self._background(link, lanes)
         finally:
             ended.set()
-            if person is not None:
+            for person in people:
                 person.join(5)
 
     def _person(self, link: ahp.Connection, ended: threading.Event) -> None:
@@ -764,6 +767,9 @@ class VsLink:
         except ahp.ConnectionClosed:
             pass
         except Exception as error:  # noqa: BLE001 - see `_person`
+            made = (job.plan or {}).get("made")
+            if isinstance(made, dict) and made.get("stage") == "asking":
+                self._stage(made, "refused", "other")  # never left "being made" with nobody making it
             if job.error is None:
                 job.error = error
             job.done.set()
@@ -1231,7 +1237,9 @@ class VsLink:
             if job.cancelled:
                 raise Refused("timeout")
             gate = self._gate(job.task)
-            gate.acquire()  # 1.8.7: the person's lane and the background (relay, follow, Start) may send to one chat at once: one at a time
+            if not gate.acquire(timeout=GATE_WAIT):  # 1.8.7: the person's lane and the background (relay, follow, Start) may send to one chat at once: one at a time
+                gate = None
+                raise Refused("not-idle")
             binding = self._recheck(link, job.task, job.kind)
             if job.kind == "relay":  # a chat that ended in an error takes the next message (measured: status 34, then 33)
                 with self.lock:

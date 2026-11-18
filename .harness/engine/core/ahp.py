@@ -531,7 +531,12 @@ class Connection:
             self.counter += 1
             mine = self.counter
             self._waiting[mine] = entry
-        self.send({"jsonrpc": "2.0", "id": mine, "method": method, "params": params or {}})
+        try:
+            self.send({"jsonrpc": "2.0", "id": mine, "method": method, "params": params or {}})
+        except (OSError, ValueError):  # a broken or closed transport: the connection is going, not the host saying no
+            with self._state:
+                self._waiting.pop(mine, None)
+            raise ConnectionClosed("the connection broke while the request was written") from None
         if not entry["event"].wait(timeout):
             with self._state:
                 if self._waiting.pop(mine, None) is not None:

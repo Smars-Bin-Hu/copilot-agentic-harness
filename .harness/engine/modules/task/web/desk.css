@@ -243,3 +243,23 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .tk-asked .tk-peek{max-width:none}.tk-asked p{margin:2px 0}.tk-asked ul{margin:4px 0 0;padding-left:20px}
 .tk-fact code.tk-path{max-width:100%;text-overflow:clip}  /* a script path is cut from the left by the page (it keeps the file name), never again by the box (1.7.38, F1 M3) */
 .tr-reason summary{cursor:pointer;overflow-wrap:anywhere}.tr-reason-full{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px}
+
+/* 1.8.5: the display name, starting, a late start, an error */
+.tk-namebox{display:flex;align-items:center;gap:4px;min-width:0;flex:0 1 auto;max-width:100%}
+.tk-namebox .tk-name{flex:0 1 auto;min-width:0}
+.tk-pencil{width:22px;height:22px;border-color:transparent;color:var(--soft);opacity:.65}
+.tk-pencil:hover,.tk-pencil:focus-visible{opacity:1}
+.tk-pencil svg{width:13px;height:13px}
+.tk-namebox.editing{flex-wrap:wrap;flex:1 1 280px}
+.tk-name-in{flex:1 1 220px;min-width:0;font:inherit;font-size:16px;font-weight:600;padding:3px 8px;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--ink)}
+.tk-name-err{flex:1 1 100%;font-size:12.5px;overflow-wrap:anywhere}
+.tk-starting{background:var(--card)}
+.tk-starting .tk-need-t{gap:8px}
+.tk-late{border-color:var(--hot-line);border-left:3px solid var(--hot-dot);background:var(--hot-bg)}
+.tk-late .tk-need-h b{color:var(--hot)}
+.tk-err{margin:0;padding:10px 16px;border-bottom:1px solid var(--bad-line);border-left:3px solid var(--bad);background:var(--bad-bg);color:var(--bad)}
+.tk-err[hidden]{display:none}
+.tk-err .tk-err-h{display:block;font-size:14px}
+.tk-err .tk-err-p{margin:4px 0 8px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap;max-height:9em;overflow:auto;color:var(--ink)}
+.tk-need.tk-cool,.tk-need.strong.tk-cool{border-color:var(--line);border-left:1px solid var(--line);background:transparent}
+.tk-cool .tag.hot{background:transparent;color:var(--soft);border-color:var(--line)}

@@ -192,6 +192,7 @@ const REPLY = (function () {
     const items = live ? live.items || [] : [], last = items.length ? items[items.length - 1] : null;
     back.hidden = !info.show || !live || !["busy", "idle", "input", "error"].includes(state) || !items.some((item) => item.k === "me") || (state === "idle" && !(last && last.k === "me"));
     again.hidden = !info.show || !live || !live.retry;
+    if (info.starting) again.hidden = true;  // 1.8.5: not while the board waits for the agent to start
     later.hidden = now.kind !== "steer";
     later.disabled = mine.busy || !box.value.trim() || files.reading();
     paintQueue(live);

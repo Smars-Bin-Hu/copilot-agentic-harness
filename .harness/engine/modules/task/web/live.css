@@ -190,3 +190,12 @@ html.lite .rp{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(-
 @media (prefers-reduced-motion:reduce){.lv *,.lv *::before,.rp,.rp-pill{animation:none!important;transition:none!important}.fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}.caret{opacity:1}}
 html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 .rp-skills{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.rp-skills[hidden]{display:none}.rp-skills .chip{max-width:100%}
+
+/* 1.8.5: an error in the stream, and the footer label of an agent that stopped with one */
+.fi-err .dot{background:var(--bad);border-color:var(--bad)}
+.fi-err .fb{min-width:0;padding:6px 10px;border:1px solid var(--bad-line);border-left:3px solid var(--bad);border-radius:8px;background:var(--bad-bg);color:var(--bad)}
+.fi-err .err-h{display:block;font-size:13px;margin-bottom:2px}
+.fi-err .err-tx{font-size:13.5px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap;max-height:12em;overflow:auto}
+.lv-life.err .lt{color:var(--bad);font-size:15px;font-weight:650}
+.lv-life.err .lv-rb{color:var(--bad)}
+.lv-life.err .lv-rb .ey,.lv-life.err .lv-rb .bulb{fill:var(--bad)}

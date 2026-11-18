@@ -527,7 +527,11 @@
   function shell() {
     if (ui.root) return;
     ui.back = saved ? null : h("a", {class: "tk-icon tk-back", href: "/", title: t("desk.back"), "aria-label": t("desk.back.label")}, icon(["M10 3L5 8l5 5"], 16));
-    ui.name = h("h1", {class: "tk-name"});
+    ui.nameText = h("span", {class: "tk-name-t"});
+    ui.nameEdit = h("button", {type: "button", class: "tk-icon tk-pencil", title: t("desk.waits.name.edit"), "aria-label": t("desk.waits.name.edit"), hidden: ""}, icon(["M10.5 2.5l3 3L5 14H2v-3z"], 13));
+    ui.nameEdit.addEventListener("click", editName);
+    ui.name = h("h1", {class: "tk-name"}, ui.nameText);
+    ui.nameBox = h("span", {class: "tk-namebox"}, ui.name, ui.nameEdit);
     ui.state = slot("span", "tk-state");
     ui.stage = slot("span", "tk-stage");
     Status.card(ui.stage.node, stageCardNow);
@@ -544,7 +548,7 @@
     ui.menu.addEventListener("click", (event) => { if (event.target.closest("a,button")) setTimeout(closeMenu, 0); });  // after the click has done its work
     document.addEventListener("click", (event) => { if (menuOpen && !ui.more.contains(event.target)) closeMenu(); });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menuOpen) { closeMenu(); ui.moreBtn.focus(); } });
-    ui.head = h("header", {class: "tk-head"}, ui.back, ui.name, ui.state.node, ui.stage.node, ui.checks.node, h("span", {class: "tk-sp"}), ui.ctx.node, h("span", {class: "tk-tools"}, ui.vs.node, ui.more));
+    ui.head = h("header", {class: "tk-head"}, ui.back, ui.nameBox, ui.state.node, ui.stage.node, ui.checks.node, h("span", {class: "tk-sp"}), ui.ctx.node, h("span", {class: "tk-tools"}, ui.vs.node, ui.more));
     ui.infoL = slot("div", "tk-info-l");
     ui.rounds = slot("span", "tk-rounds");
     ui.pill = slot("span", "tk-pill");
@@ -559,7 +563,8 @@
     ui.run = typeof AUTORUN !== "undefined" ? AUTORUN.node : h("div", {hidden: ""});  // the run card of autorun (autorun.js): made once, it keeps its own list open and scrolled
     ui.surface = h("section", {class: "tk-surface"}, ui.run, ui.wait, ui.tabs, ui.live, ui.pane);
     ui.foot = h("div", {class: "tk-foot"});
-    ui.root = h("div", {class: "tk"}, ui.head, ui.info, ui.forks.node, SHELL.banner(), ui.surface, ui.foot);
+    ui.err = h("div", {class: "tk-err", role: "alert", hidden: ""});  // 1.8.5: the red bar of an agent that stopped with an error
+    ui.root = h("div", {class: "tk"}, ui.head, ui.info, ui.forks.node, SHELL.banner(), ui.err, ui.surface, ui.foot);
     app.replaceChildren(ui.root);
   }
 
@@ -595,11 +600,41 @@
     return Status.card(h("span", {class: "tk-i tk-model"}, h("span", {class: "tk-model-name"}, modelWords(chat, String(chat.model_name || chat.model).replace(/^claude\s+/i, ""))), gauge), card, label);
   }
 
+  // 1.8.5: the display name. Enter saves, Esc cancels, empty takes it away. A refusal says why next to the box, and the box stays.
+  let naming = false;
+  function editName() {
+    if (naming) return;
+    naming = true;
+    const input = h("input", {type: "text", class: "tk-name-in", value: desk.title || "", maxlength: 80, placeholder: t("waits.title.ph"), "aria-label": t("desk.waits.name.edit"), title: t("desk.waits.name.save")});
+    const said = h("span", {class: "bad tk-name-err", role: "alert"});
+    let busy = false;
+    const end = () => { if (!naming) return; naming = false; ui.nameBox.classList.remove("editing"); input.remove(); said.remove(); ui.name.hidden = false; ui.nameEdit.hidden = false; paintHead(); };
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") { event.preventDefault(); end(); return; }
+      if (event.key !== "Enter" || busy || event.isComposing) return;
+      event.preventDefault();
+      busy = true; input.disabled = true; said.textContent = "";
+      SERVE.post("/api/title", {task: desk.name, title: input.value.trim()}).then(() => { end(); SERVE.done(); },
+        (error) => { busy = false; input.disabled = false; said.textContent = t("desk.waits.name.fail", {why: String((error && error.message) || error)}); input.focus(); });
+    });
+    input.addEventListener("blur", () => { if (!busy && !said.textContent) end(); });
+    ui.nameBox.classList.add("editing");
+    ui.name.hidden = true; ui.nameEdit.hidden = true;
+    ui.nameBox.append(input, said);
+    input.focus(); input.select();
+  }
+
   function paintHead() {
     const live = served();
     const chat = served() && !desk.past && desk.chat ? desk.chat : null;
     view.chat = chat;
-    if (ui.name.textContent !== desk.name) { ui.name.textContent = desk.name; ui.name.title = desk.name; }
+    if (!naming) {  // 1.8.5: the display name, with the task's name on hover; the pencil changes it in place
+      const shown = shownName(desk);
+      if (ui.nameText.textContent !== shown) ui.nameText.textContent = shown;
+      ui.name.title = nameTip(desk) || desk.name;
+      ui.nameEdit.hidden = !(served() && !desk.past && !saved);
+      document.title = t("desk.title", {name: shown});
+    }
     const state = stateTag(desk, live);
     if (!state.title) state.title = state.textContent;
     ui.state.set(state.className + "|" + state.textContent + "|" + state.title, () => state);
@@ -1083,7 +1118,62 @@
         : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, talkButtons(row, item), h("p", {class: "hint"}, hintOf(item)), ["question", "confirm"].includes(item.action) && desk.ask && served() ? h("div", {class: "tk-asked"}, askCard().build()) : null))));  // what the chat asks is on the card, not only behind the bubble (1.7.38, C11 T2-13)
   }
 
+  // --- starting, late, error (1.8.5) -----------------------------------------------------------------------------------------------
+  // The board sent something to the agent and has not seen it start (`desk.starting`): one calm card with the seconds, in place of what the task waits for. After two minutes the card is a yellow note
+  // with Try again and Open VS Code. An agent that stopped with an error (`desk.state === "error"`) gets the red bar at the top of the page body; what the task waits for stays, but not hot.
+  const startingNow = () => Boolean(served() && !desk.past && desk.status === "open" && desk.starting && !desk.starting.late);
+  const lateNow = () => Boolean(served() && !desk.past && desk.status === "open" && desk.starting && desk.starting.late);
+  const errorNow = () => Boolean(served() && !desk.past && !saved && desk.status === "open" && desk.state === "error");
+  const canRetry = () => Boolean((desk.chat && desk.chat.error && desk.chat.error.resumable) || (desk.error && desk.error.resumable) || (typeof LIVE !== "undefined" && LIVE.data() && LIVE.data().retry));
+  function retryButton() {
+    const button = h("button", {type: "button", class: "act chat-act", title: t("desk.reply.retry.tip")}, t("desk.waits.retry"));
+    button.addEventListener("click", () => { SERVE.post("/api/resume", {task: desk.name}).then(() => SERVE.done(), (error) => SERVE.failed(error, t("desk.reply.retry"))); });
+    return button;
+  }
+  function openVsButton() {
+    const button = h("button", {type: "button", class: "act"}, t("desk.live.open"));
+    button.addEventListener("click", () => { button.disabled = true; SERVE.openVS().then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; SERVE.failed(error, desk.chat && desk.chat.title); }); });
+    return button;
+  }
+  function sinceLine(stamp) {
+    const from = Date.parse(stamp);
+    if (isNaN(from)) return null;
+    const [before, after] = t("desk.waits.starting.since", {time: "\n"}).split("\n");
+    Status.clock();
+    return h("span", {class: "sub tk-waited st-run", "data-since": String(from)}, before, h("span", {class: "st-time"}, clock(Math.max(0, Math.floor((Date.now() - from) / 1000)))), after);
+  }
+  function startingCard() {
+    return h("section", {class: "tk-need tk-starting", title: startingTip(desk.starting)},
+      h("div", {class: "tk-need-h"}, h("span", {class: "tk-need-t"}, spinner(), h("b", null, t("desk.waits.starting.title"))), sinceLine(desk.starting.since)));
+  }
+  function lateCard() {
+    return h("section", {class: "tk-need tk-late", title: startingTip(desk.starting)},
+      h("div", {class: "tk-need-h"}, h("b", null, t("desk.waits.late.title")), sinceLine(desk.starting.since)),
+      h("p", {class: "tk-need-p"}, t("desk.waits.late.hint")),
+      h("div", {class: "tk-need-go"}, canRetry() ? retryButton() : null, openVsButton()));
+  }
+  function paintErr() {
+    const on = errorNow();
+    const sig = on ? JSON.stringify([desk.name, desk.error, canRetry(), Boolean(desk.chat && desk.chat.bound)]) : "";
+    if (ui.err.dataset.sig === sig) return;
+    ui.err.dataset.sig = sig;
+    ui.err.hidden = !on;
+    if (!on) { ui.err.replaceChildren(); return; }
+    ui.err.replaceChildren(h("b", {class: "tk-err-h"}, t("waits.error.long")), h("p", {class: "tk-err-p"}, errorWords(desk)),
+      h("div", {class: "tk-need-go"}, canRetry() ? retryButton() : null, goOnButton(desk.name)));
+  }
+  const cool = (node) => { if (node && node.classList) { node.classList.add("tk-cool"); node.title = t("waits.error.tip"); } return node; };
+
   function waitBand() {
+    if (desk.past) return pastNote();
+    if (startingNow()) return [startingCard()];
+    let cards = bandCards();
+    if (lateNow()) cards = [lateCard(), ...(cards || [])];
+    if (errorNow() && cards) cards.forEach(cool);
+    return cards;
+  }
+
+  function bandCards() {
     if (desk.past) return pastNote();
     const told = [approvedCard(), openedCard()].filter(Boolean);  // the approved calls, and the calls whose connection was opened: the one step left is to tell the agent
     const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
@@ -1432,7 +1522,7 @@
   function livePlain() {
     if (desk.past || saved) return null;
     if (desk.status !== "open") return h("div", null, h("p", {class: "hint top"}, t(desk.status === "new" ? (desk.state === "broken" ? "desk.actions.broken" : "desk.actions.new") : "desk.actions.closed")), typeof ROUNDS !== "undefined" ? ROUNDS.node : null);  // the stream is hidden here; the rounds can still be read
-    if (needsCard()) return null;
+    if (needsCard() || startingNow() || errorNow()) return null;  // the card of the start, or the red bar, says it
     const idle = quiet();
     return h("section", {class: "tk-quiet"}, h("h2", null, idle.title), h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, waitNotes());
   }
@@ -1453,9 +1543,10 @@
   // What the Live stream and the reply panel need from this drawing.
   function paintLive() {
     const chat = served() && !desk.past ? desk.chat : null;
+    paintErr();
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), gates: ((desk.trace && desk.trace.entries) || []).filter((entry) => entry.kind === "gate" && !entry.source && entry.command).slice(-60).map((entry) => ({command: entry.command, how: entry.decision === "held" ? "held" : "refused", reason: entry.reason || "", at: entry.at})), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed", answer: (desk.outbox || []).some((item) => item.agent === "wait")});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), gates: ((desk.trace && desk.trace.entries) || []).filter((entry) => entry.kind === "gate" && !entry.source && entry.command).slice(-60).map((entry) => ({command: entry.command, how: entry.decision === "held" ? "held" : "refused", reason: entry.reason || "", at: entry.at})), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed", answer: (desk.outbox || []).some((item) => item.agent === "wait"), starting: startingNow()});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }
@@ -1468,7 +1559,7 @@
     if (typeof REPLY !== "undefined" && served()) {
       const show = hasStream() && bound;
       if (show) draftsBox();  // loads the drafts (the badge counts them) even while the panel is shut
-      REPLY.update({name: desk.name, show, reply: desk.reply_lang, state: chat ? chat.state || "" : "", ask: desk.ask && desk.ask.kind === "question" ? "question" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status, chat && [chat.model, chat.effort]]), drafts: drafts.node, saveDraft: (text) => draftCall({op: "add", text})});
+      REPLY.update({name: desk.name, show, starting: startingNow(), reply: desk.reply_lang, state: chat ? chat.state || "" : "", ask: desk.ask && desk.ask.kind === "question" ? "question" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status, chat && [chat.model, chat.effort]]), drafts: drafts.node, saveDraft: (text) => draftCall({op: "add", text})});
     }
   }
 

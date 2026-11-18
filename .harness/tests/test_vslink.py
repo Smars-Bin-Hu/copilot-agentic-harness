@@ -415,6 +415,43 @@ class NotReadyTests(LinkCase):
         self.link.hurry()
         self.assertTrue(until(lambda: self.link.status()["ready"], 5), self.link.status())  # at once, not after the wait
 
+    def test_an_open_vs_code_window_makes_the_link_look_often_and_says_how_long_it_waited(self) -> None:
+        """1.8.8: VS Code opened by hand while the wait had grown: its host came a minute after the window, and the board said "not open" up to a minute after that."""
+        state = {"fail": True, "calls": 0, "window": False}
+        real = self.open_host
+
+        def opener() -> ahp.Connection:
+            state["calls"] += 1
+            if state["fail"]:
+                raise ahp.NotReady("none")
+            return real()
+
+        with mock.patch.object(vslink, "OPEN_EVERY", 0.2), mock.patch.object(vslink, "WINDOW_EVERY", 0.1):
+            self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, backoff=ahp.Backoff(30.0, 60.0), running=lambda: state["window"])
+            self.addCleanup(self.link.stop)
+            self.link.start()
+            self.assertTrue(until(lambda: self.link.status()["why"] == "none"))
+            time.sleep(0.6)
+            self.assertEqual(state["calls"], 1)  # no window: the grown wait (30 s) holds
+            self.assertNotIn("open_for", self.link.status())
+            state["window"] = True  # opened by hand: not by the board, so no hurry
+            self.assertTrue(until(lambda: state["calls"] >= 3, 3), state)  # the long wait ended, then a look every OPEN_EVERY
+            self.assertIn("open_for", self.link.status())
+            state["fail"] = False  # its host is up
+            self.assertTrue(until(lambda: self.link.status()["ready"], 3), self.link.status())
+            self.assertNotIn("open_for", self.link.status())
+            self.assertEqual(self.link.open_at, 0.0)
+
+    def test_a_window_probe_that_breaks_or_does_not_know_is_no_window(self) -> None:
+        def broken() -> bool:
+            raise OSError("no user32")
+
+        for probe in (broken, lambda: None, None):
+            link = vslink.VsLink(self.root, opener=self.open_host, running=probe)
+            self.assertFalse(link.window_open())
+            self.assertEqual(link.open_at, 0.0)
+            self.assertNotIn("open_for", link.status())
+
     def test_a_host_that_hangs_up_is_ready_again_after_the_wait(self) -> None:
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1))

@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import config, launchenv, messages, readyitems, shortcmd, targets, tasks
+from core import config, launchenv, messages, readyitems, render, shortcmd, targets, tasks
 from core import connections as conn_core
 from core import reach, systems as outside
 
@@ -51,6 +51,10 @@ REASON_MAX = 300
 # What the link says (`vslink.status()["why"]`) -> the state of the VS Code line. A host that is still starting, or a connection that dropped, is told as waiting: it comes back by itself.
 WAITING = ("starting", "lost", "error", "cli-slow")
 STUCK = ("off", "no-cli", "cli-failed", "many")  # nothing the person can do by opening VS Code
+# 1.8.8: the link cannot reach the host, but a VS Code window is open (`open_for`): its host comes about a minute after the window (work computer). Told as getting ready, not as "not open",
+# for HOST_WAIT seconds; then as a VS Code that does not let the board in, with the Restart button.
+GETTING_READY = ("none", "starting", "error", "cli-slow")
+HOST_WAIT = 180.0
 
 
 def short(text: Any) -> str:
@@ -328,6 +332,11 @@ class Ready:
         if status.get("ready"):
             return {"state": "ok", "why": "ok", "n": int(status.get("bound", 0)) + int(status.get("unbound", 0))}
         why = str(status.get("why") or "starting")
+        open_for = status.get("open_for")
+        if isinstance(open_for, (int, float)) and not isinstance(open_for, bool) and why in GETTING_READY:
+            if open_for < HOST_WAIT:
+                return {"state": "wait", "why": "getting-ready", "since": int(open_for), "open": True}
+            return {"state": "fail", "why": "no-host", "since": int(open_for), "open": True}
         if why in WAITING:
             return {"state": "wait", "why": why, "open": True}
         return {"state": "fail", "why": why, "open": why not in STUCK}  # `none`: VS Code is not running for this folder: the person may open it
@@ -633,7 +642,9 @@ class Ready:
                 fix = {} if line.get("integrity") else {"to": "doctor", "label": say("board.enter.doctor.again")}  # 1.7.45: run it now, not when its wait is over; guardrail files have their own button
             elif key == "vscode":
                 if state == "wait":
-                    text, reason = say("ready.r.vscode.wait"), say(f"board.enter.m.vscode.{why}")
+                    text, reason = say("ready.r.vscode.wait"), say(f"board.enter.m.vscode.{why}", since=render.duration(line.get("since")))
+                elif why == "no-host":  # 1.8.8: open for minutes and the board is still not let in: a restart mends it
+                    text, reason, fix = say("ready.r.vscode.no-host"), say("board.enter.m.vscode.no-host", since=render.duration(line.get("since")), button=button["label"]), open_fix
                 elif why in ("env", "unseen"):  # connected, but not started with this copy's settings (Q2): the VS Code button restarts it
                     text, reason, fix = say("ready.r.vscode.env" if why == "env" else "ready.r.vscode.unseen"), say("ready.r.vscode.env.why"), open_fix
                 elif why == "none":

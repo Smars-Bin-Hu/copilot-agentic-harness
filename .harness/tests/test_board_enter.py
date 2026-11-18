@@ -22,7 +22,7 @@ from test_ahp import FakeHost, TOKEN
 from test_boardserve import ServeCase
 from test_vslink import until
 
-from core import ahp, launchenv, messages
+from core import ahp, launchenv, messages, render
 from modules.task import boardserve, ready, taskhtml, vslink
 
 WEB = taskhtml.WEB
@@ -421,6 +421,25 @@ class ReadinessTests(TaskCase):
             self.assertEqual(problems[0]["level"], "red" if state == "fail" else "yellow", why)
             self.assertEqual(bool(problems[0]["fix"]), why == "none", why)  # only a VS Code that is not running has the button that mends it
 
+    def test_a_vs_code_window_that_is_open_is_getting_ready_not_closed(self) -> None:
+        """1.8.8: the window is open, its host is not up yet (about a minute on a work computer): yellow with the time waited, no button that restarts it; after HOST_WAIT red, with the button."""
+        for why in ("none", "starting", "error", "cli-slow"):
+            found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": 42}), clean))
+            vs = line(found, "vscode")
+            self.assertEqual((vs["state"], vs["why"], vs["since"], vs["level"]), ("wait", "getting-ready", 42, "yellow"), why)
+            problem = found["problems"]["required"][0]
+            self.assertEqual((problem["level"], problem["fix"]), ("yellow", {}), why)
+            self.assertIn(render.duration(42), problem["why"], why)
+            found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": int(ready.HOST_WAIT) + 5}), clean))
+            vs = line(found, "vscode")
+            self.assertEqual((vs["state"], vs["why"], vs["level"]), ("fail", "no-host", "red"), why)
+            problem = found["problems"]["required"][0]
+            self.assertEqual((problem["level"], problem["fix"]["to"]), ("red", "vscode"), why)
+            self.assertIn(render.duration(int(ready.HOST_WAIT) + 5), problem["why"], why)
+        for why, state in (("many", "fail"), ("cli-failed", "fail"), ("lost", "wait")):  # a window being open changes nothing for these
+            found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": 42}), clean))
+            self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), (state, why))
+
     def test_copilot_needs_a_model_and_a_host_that_says_it_is_ready(self) -> None:
         up = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
         for copilot, why in (({"models": 0, "problem": ""}, "nomodel"), ({"models": 0, "problem": "provider"}, "provider"), ({"models": 2, "problem": "client"}, "client")):
@@ -768,7 +787,7 @@ class PageTests(unittest.TestCase):
         names = {key for key in en if key.startswith(("board.enter.", "board.ready.", "board.vs.restart.", "ready.", "restart."))}
         self.assertEqual(names, {key for key in zh if key.startswith(("board.enter.", "board.ready.", "board.vs.restart.", "ready.", "restart."))})
         # the keys the screen builds from a check (board.enter.m.<id>.<why>, d.<id>.ok ...) exist for every state the server can give
-        for why in ("none", "starting", "lost", "error", "off", "no-cli", "cli-failed", "cli-slow", "many"):
+        for why in ("none", "starting", "lost", "error", "off", "no-cli", "cli-failed", "cli-slow", "many", "getting-ready", "no-host"):
             self.assertIn(f"board.enter.m.vscode.{why}", en)
         for why in ("provider", "client", "nomodel"):
             self.assertIn(f"board.enter.m.copilot.{why}", en)

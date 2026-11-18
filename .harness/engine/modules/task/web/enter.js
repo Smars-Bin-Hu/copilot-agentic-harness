@@ -353,7 +353,7 @@
   const buttonWords = () => (chk0.last && chk0.last.vscode_button ? chk0.last.vscode_button.label : t("board.enter.open"));
   // A line of the first block -> {state, level, tag, note, soft, tip}: a short word on the line; the long words in the note under it only where the person must do something.
   function reqView(c) {
-    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || "")};
+    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || ""), since: clock(c.since)};
     let state = c.state, level = c.level || "grey", tag = "", note = "", tip = "";
     if (state === "fail" && id === "vscode" && c.why === "none" && recentlyOpened()) { state = "wait"; level = "yellow"; }
     if (state === "check") return {state, level: "grey", tag: "", note: "", soft: false, tip: ""};
@@ -362,7 +362,7 @@
       if (id === "vscode" && c.env_wrong) note = t("board.enter.m.vscode.noenv");
       return {state, level, tag, note, soft: true, tip};
     }
-    if (state === "wait") tag = id === "copilot" ? t("board.enter.d.copilot.vscode") : t("board.enter.tag.wait");
+    if (state === "wait") tag = id === "copilot" ? t("board.enter.d.copilot.vscode") : id === "vscode" && c.why === "getting-ready" ? t("board.enter.d.vscode.getting-ready") : t("board.enter.tag.wait");  // 1.8.8: its window is open, its host not up yet
     else if (id === "paired") tag = t("board.enter.d.paired.unpaired");
     else if (id === "doctor") tag = c.why === "failed" ? t("board.enter.d.doctor.failed") : t(c.n === 1 ? "board.enter.d.doctor.errors.one" : "board.enter.d.doctor.errors", vals);
     else if (id === "vscode") tag = c.why === "none" ? t("board.enter.d.vscode.none") : c.why === "env" ? t("board.enter.d.vscode.noenv") : c.why === "unseen" ? t("board.enter.d.vscode.unseen") : t("board.enter.d.vscode.stuck");
@@ -372,6 +372,7 @@
     else if (id === "paired") note = t("board.enter.m.paired.unpaired");
     else if (id === "doctor") note = word("board.enter.m.doctor." + c.why + (c.why === "errors" && c.n === 1 ? ".one" : ""), vals, plainWords(c.detail || ""));
     else if (id === "vscode") note = c.why === "none" && recentlyOpened() ? t("board.enter.m.vscode.opened") : c.why === "none" ? t("board.enter.m.vscode.none", {button: buttonWords()})
+      : c.why === "no-host" ? t("board.enter.m.vscode.no-host", {since: clock(c.since), button: buttonWords()})  // 1.8.8: open for minutes, the board still not let in: Restart
       : c.why === "env" || c.why === "unseen" ? t("board.enter.m.vscode." + c.why, {button: buttonWords()}) + (c.detail ? (root.lang === "zh" ? "" : " ") + t("board.enter.m.vscode.missing", {detail: plainWords(c.detail)}) : "")  // connected, but not started with this copy's settings (Q2)
       : word("board.enter.m.vscode." + c.why, vals);
     else if (id === "copilot" && c.why !== "vscode") note = word("board.enter.m.copilot." + c.why, vals);

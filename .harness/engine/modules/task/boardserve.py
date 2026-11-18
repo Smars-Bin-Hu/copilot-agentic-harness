@@ -2484,6 +2484,8 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
     sync_on_start(root)
+    if ready is None and getattr(link, "running", False) is None:
+        link.running = board.ready.vs_running.get  # 1.8.8: a VS Code window that is open but not reached yet is looked for every few seconds and told as getting ready (the tests keep their own)
     link.start()  # the thread only; the board does not wait for VS Code
     board.space.start()
     board.start_sweeper()  # a promoted task closes by itself, with no page open (1.7.38)

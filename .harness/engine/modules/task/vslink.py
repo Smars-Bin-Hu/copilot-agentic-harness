@@ -53,6 +53,8 @@ INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is as
 UNDO_WAIT = 12.0  # seconds a Withdraw waits for the turn it stopped to end
 HURRY_FOR = 60.0  # seconds after the board opens VS Code in which the link looks for the host every HURRY_EVERY seconds, not after the grown wait (1.7.19)
 HURRY_EVERY = 1.0
+OPEN_EVERY = 3.0  # 1.8.8: a VS Code window is open but its host is not reached yet (it comes about a minute after the window on a work computer): look this often, not after the grown wait
+WINDOW_EVERY = 5.0  # 1.8.8: a long wait looks this often whether a VS Code window was opened (by hand, not by the board), and then ends
 SUB_FOLLOW = 3  # chats of subagents followed for each bound chat, the newest (1.6.105)
 SLOW_LIMIT = 3  # 1.7.45: calls in a row the host did not answer in time before the connection is given up; one slow answer of a busy computer is not a lost VS Code
 SLOW_RETRY = 30.0  # seconds before a list the host did not answer in time is asked again
@@ -173,8 +175,9 @@ NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "conf
 
 class VsLink:
     def __init__(self, root: Path, enabled: bool = True, opener: Optional[Callable[[], ahp.Connection]] = None, persist: bool = True,
-                 turn: float = 1.0, backoff: Optional[ahp.Backoff] = None) -> None:
+                 turn: float = 1.0, backoff: Optional[ahp.Backoff] = None, running: Optional[Callable[[], Optional[bool]]] = None) -> None:
         self.root = root
+        self.running = running  # 1.8.8: is a VS Code window open on this computer (any folder)? Cheap and never waits (`ready.Running.get`); None: not known
         self.enabled = enabled
         self.persist = persist
         self.turn = turn
@@ -188,6 +191,7 @@ class VsLink:
         self.ready = False
         self.host_pid: Any = None  # the editor process of the connection: its agent host (1.7.38)
         self.hurry_until = 0.0  # monotonic time until which a missing host is looked for often
+        self.open_at = 0.0  # 1.8.8: monotonic time the link first saw a VS Code window open while it could not reach the host; 0 when connected or no window is open
         self.losses = 0  # how many times a working link went away: VS Code was closed, however soon it came back
         self.why = "off" if not enabled else "starting"
         self.sessions: Dict[str, Dict[str, Any]] = {}  # the chats of this folder, by resource
@@ -245,9 +249,13 @@ class VsLink:
             return self.host_pid if self.ready else None
 
     def status(self) -> Dict[str, Any]:
-        """`{ready, bound, unbound, why}`: for `/api/status` and `/api/board`. `bound` and `unbound` count the open tasks."""
+        """`{ready, bound, unbound, why}`: for `/api/status` and `/api/board`. `bound` and `unbound` count the open tasks.
+        `open_for` (1.8.8), only while not connected and a VS Code window is open: seconds since the link first saw that window."""
         with self.lock:
-            return {"ready": self.ready, "bound": len(self.bound) if self.ready else 0, "unbound": len(self.unbound) if self.ready else 0, "why": "ok" if self.ready else self.why}
+            out = {"ready": self.ready, "bound": len(self.bound) if self.ready else 0, "unbound": len(self.unbound) if self.ready else 0, "why": "ok" if self.ready else self.why}
+            if not self.ready and self.open_at:
+                out["open_for"] = max(0, int(time.monotonic() - self.open_at))
+            return out
 
     def host_said(self, error: BaseException) -> None:
         """Remember the two things the host says when Copilot itself is not usable (`Provider copilotcli is not ready`, `Client is not connected`); any other error is not Copilot's sign-in."""
@@ -604,6 +612,8 @@ class VsLink:
         with self.lock:
             self.losses += 1 if self.ready and not ready else 0
             self.ready, self.why = ready, why
+            if ready:
+                self.open_at = 0.0  # a later loss counts its wait from then, not from before this connection
 
     def hurry(self) -> None:
         """The board just opened VS Code: look for its host every second for a while. The wait had grown to a minute while no window was open, and the Enter screen stayed
@@ -612,10 +622,32 @@ class VsLink:
         self.backoff.reset()
         self.wake.set()
 
+    def window_open(self) -> bool:
+        """1.8.8: is a VS Code window open while the host cannot be reached? Keeps `open_at`. A probe that is missing, breaks or does not know yet says no."""
+        try:
+            seen = bool(self.running()) if self.running is not None else False
+        except Exception:  # noqa: BLE001 - a probe that breaks says nothing
+            seen = False
+        with self.lock:
+            if self.ready or not seen:
+                self.open_at = 0.0
+            elif not self.open_at:
+                self.open_at = time.monotonic()
+        return seen
+
     def _wait(self, seconds: float) -> None:
+        """Wait `seconds` (the grown wait), or less: every second for a while after the board opened VS Code (`hurry`), and at most OPEN_EVERY while a VS Code window is open
+        but its host is not reached (1.8.8: the wait had grown to a minute, and a person who had opened VS Code by hand saw "not open" that long after its host was up)."""
         if time.monotonic() < self.hurry_until:
             seconds = min(seconds, HURRY_EVERY)
-        self.wake.wait(seconds)
+        start = time.monotonic()
+        end = start + seconds
+        while not self.stop_flag.is_set():
+            if self.window_open():
+                end = min(end, start + OPEN_EVERY)
+            left = end - time.monotonic()
+            if left <= 0 or self.wake.wait(min(left, WINDOW_EVERY)):
+                break
         self.wake.clear()
 
     def _run(self) -> None:

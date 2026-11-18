@@ -29,7 +29,7 @@ const ROUNDS = (function () {
   const box = h("section", {class: "rd", hidden: "", "aria-label": t("desk.rounds.title")}, h("h3", {class: "rd-title"}, t("desk.rounds.title")), more, rows);
 
   async function fill(body, n) {
-    body.replaceChildren(h("p", {class: "sub"}, "..."));
+    body.replaceChildren(h("p", {class: "sub"}, spinner()));
     try {
       const found = (await SERVE.post("/api/rounds", {op: "one", task: st.task, n})).result;
       const tools = Object.entries(found.tools).map(([name, count]) => (count > 1 ? name + " × " + count : name)).join(", ");
@@ -87,7 +87,7 @@ const ROUNDS = (function () {
   function rewindAsk(item) {
     const task = st.task;
     const said = h("div", {class: "bad"});
-    const view = SERVE.dialog([h("h2", null, t("desk.rewind.title")), h("p", {class: "sub"}, "..."), said]);
+    const view = SERVE.dialog([h("h2", null, t("desk.rewind.title")), h("p", {class: "sub"}, spinner()), said]);
     SERVE.post("/api/rewind", {task, seq: item.rewind.seq, step: "preview"}).then((data) => {
       const found = data.result;
       const words = {back: "desk.rewind.back", removed: "desk.rewind.removed", lost: "desk.rewind.lost"};

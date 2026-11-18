@@ -22,7 +22,7 @@ const DOCK = (function () {
   function start(skill, words, back, task) {  // `task`: the chat goes on with this task, and no new one is made
     const lang = document.documentElement.lang === "zh" ? "zh" : "en";
     const body = {skill, words: words || "", lang, ...(task ? {task} : {})};
-    const preview = h("pre", {class: "send-preview"}, "...");
+    const preview = h("pre", {class: "send-preview"}, spinner());  // 1.8.5: turns until the server has made the message
     // Going on with a task (1.8.5): the person may add their own words, so they go in the same first message and need not be said twice. The server folds the lines into one.
     const more = task ? h("textarea", {class: "su-in dock-more", rows: 3, maxlength: Math.max(0, MAX_WORDS - body.words.length - 1), placeholder: t("dock.more.ph"), "aria-label": t("dock.more.ph")}) : null;
     const wordsNow = () => [words || "", more ? more.value.trim() : ""].filter(Boolean).join(" ");

@@ -87,4 +87,4 @@ Scripts enable evolution: even simple operations benefit from being implemented 
 - Scripts rely on existing credential helpers (no credential storage)
 - Include `-force` flags only for destructive operations
 - Warn users before irreversible actions
-- Document any network operations or external calls
+- No call to an outside system, and no outside program's name in the script, not even in a comment or a help text: the gate refuses the run. The rule: [scripts.md](../../generic-workflow-build/references/scripts.md)

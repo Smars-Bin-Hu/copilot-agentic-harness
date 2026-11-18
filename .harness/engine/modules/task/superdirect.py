@@ -107,7 +107,7 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
         if job == "new-chat":
             done = link.create(dict(skillsend.plan(lang or "en", name), model=model), first_message(root, name, lang or "en", text), files)
             skillsend.record(root, SKILL, "chat", done)
-            link.open_window()
+            # no `open_window()` (unlike "Go on in a new chat"): the person stays in the super view. `create` needs only the ready link, which means VS Code is up.
         else:
             done = link.dispatch(job, task, text, model, files)
     except vslink.Refused as error:

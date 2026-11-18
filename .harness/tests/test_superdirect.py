@@ -128,7 +128,7 @@ class BranchTests(DirectCase):
         made = self.vs.made[0]
         self.assertEqual(made["plan"]["name"], task_ops.name_of(TASK))  # bound to the task at once
         self.assertEqual(made["text"], "/harness-my-task Go on with the task " + task_ops.name_of(TASK) + ".\n\ndo the thing")
-        self.assertEqual((self.vs.sent, self.vs.opened), ([], 1))
+        self.assertEqual((self.vs.sent, self.vs.opened), ([], 0))  # the person stays in the super view: VS Code is not brought forward
 
     def test_a_new_chat_is_wanted_while_the_old_one_is_idle_or_in_error(self) -> None:
         self.assertEqual(self.post({"text": "a", "new_chat": True})["how"], "new-chat")

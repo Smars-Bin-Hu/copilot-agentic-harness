@@ -366,6 +366,7 @@ class CreateTests(CreateCase):
     def test_a_create_makes_the_chat_in_this_folder_without_a_worktree_and_sends_the_first_message_with_the_model(self) -> None:
         status, data, _ = self.make()
         self.assertEqual(status, 200, data)
+        self.assertTrue(until(lambda: self.made))  # 1.8.7: made on a thread of its own
         self.assertEqual(len(self.made), 1)
         call = self.made[0]
         self.assertTrue(call["channel"].startswith("ahp-session:/"))
@@ -384,6 +385,7 @@ class CreateTests(CreateCase):
 
     def test_the_host_gets_autoApprove(self) -> None:
         self.assertEqual(self.make()[0], 200)
+        self.assertTrue(until(lambda: self.made))  # 1.8.7: the page is answered at once; the chat is made on a thread of its own
         self.assertEqual(self.made[0]["config"]["autoApprove"], "autoApprove")
 
     def test_the_client_name_is_not_sent_and_dispose_is_never_called(self) -> None:
@@ -393,15 +395,21 @@ class CreateTests(CreateCase):
         self.assertNotIn("disposeSession", self.methods())
         self.assertNotIn("disposeSession", (REPO / ".harness/engine/modules/task/vslink.py").read_text(encoding="utf-8").replace("`disposeSession`", ""))
 
+    def placeholder(self, name: str) -> Dict[str, Any]:
+        found = [item for item in self.request("POST", "/api/board", {})[1]["making"] if item["name"] == name]
+        return found[0] if found else {}
+
     def test_the_initiator_is_read_back_and_a_different_one_is_warned_about(self) -> None:
+        """1.8.7: the window closes at once (`pending`); who made the chat is told on the board's "being created" placeholder."""
         found = self.make()[1]["result"]
-        self.assertEqual((found["initiator"], found["warn"], found["unchecked"]), ("vscode", "", False))
+        self.assertTrue(found["pending"])
+        self.assertTrue(until(lambda: self.placeholder(GOOD["name"]).get("stage") in ("sent", "opening")))
+        self.assertEqual(self.placeholder(GOOD["name"])["warn"], "")
         CreateCase.initiator = "copilot-sdk"
         self.addCleanup(setattr, CreateCase, "initiator", "vscode")
-        found = self.make(name="other")[1]["result"]
-        self.assertEqual(found["initiator"], "copilot-sdk")
-        self.assertEqual(found["warn"], messages.text("create.warn.initiator", initiator="copilot-sdk"))
-        self.assertIn("copilot-sdk", found["warn"])
+        self.make(name="other")
+        self.assertTrue(until(lambda: self.placeholder("other").get("warn")))
+        self.assertEqual(self.placeholder("other")["warn"], messages.text("create.warn.initiator", initiator="copilot-sdk"))
 
     def test_an_initiator_the_host_has_not_told_is_said_to_be_unchecked(self) -> None:
         self.listed_new = False
@@ -410,7 +418,9 @@ class CreateTests(CreateCase):
         self.addCleanup(setattr, vslink, "INITIATOR_WAIT", old)
         found = self.make()
         self.assertEqual(found[0], 200, found[1])
-        self.assertEqual((found[1]["result"]["initiator"], found[1]["result"]["warn"], found[1]["result"]["unchecked"]), ("", "", True))
+        self.assertTrue(until(lambda: self.placeholder(GOOD["name"]).get("stage") in ("sent", "opening")))
+        time.sleep(1.0)  # past INITIATOR_WAIT: nothing was told
+        self.assertEqual(self.placeholder(GOOD["name"])["warn"], "")
 
     def test_a_fork_names_the_source_and_the_skill(self) -> None:
         status, data, _ = self.make(source="job1", kind="test", lang="zh")
@@ -434,6 +444,8 @@ class CreateTests(CreateCase):
         self.assertEqual(self.make()[0], 200)
         status, data, _ = self.make()
         self.assertEqual((status, data["error"]), (409, refused("exists", name="fresh-load")))
+        self.assertTrue(until(lambda: len(self.made) == 1))  # 1.8.7: the first is made on a thread of its own
+        time.sleep(0.3)
         self.assertEqual(len(self.made), 1)
 
     def test_the_preview_shows_the_message_and_whether_it_can_go(self) -> None:
@@ -480,7 +492,9 @@ class CreateTests(CreateCase):
         self.addCleanup(setattr, vslink, "INITIATOR_WAIT", oldwait)
         self.assertEqual(vslink.RELIST_EVERY, 180.0)
         self.assertEqual(self.make()[0], 200)
+        self.assertTrue(until(lambda: self.made))
         resource = self.made[0]["channel"]
+        self.assertTrue(until(lambda: resource in self.vs.sessions))
         with self.vs.lock:
             self.assertEqual(self.vs.sessions[resource]["defaultChat"], self.new_chat)  # in the cache before the host lists it
         time.sleep(0.6)  # more lists happen; the stub is not dropped by a list without the chat
@@ -688,6 +702,7 @@ class KnowledgeBaseServerTests(CreateCase):
         self.assertTrue(until(lambda: len(self.made) == 2))
         status, data, _ = self.make(name="none-kb")
         self.assertIn("domains: none (do not set", data["result"]["text"])
+        self.assertTrue(until(lambda: len(self.made) == 3))  # 1.8.7: made on a thread of its own
         before = len(self.made)
         status, data, _ = self.make(name="bad-kb", domains=["../etc"])
         self.assertEqual((status, data["error"]), (409, refused("domain", names="../etc", known="finance, Sales")))
@@ -698,6 +713,7 @@ class KnowledgeBaseServerTests(CreateCase):
         body = {"domains": ["Sales"]}
         shown = self.make(step="preview", **body)[1]["result"]
         self.assertEqual(self.make(name="fresh-load", **body)[1]["result"]["text"], shown["text"])  # the same code path: the same words
+        self.assertTrue(until(lambda: self.made))  # 1.8.7: made on a thread of its own
         self.vs.ready, self.vs.why = False, "none"
         found = self.make(step="preview", name="other", model="", thinking="", **body)[1]["result"]  # the dialog has no model to pick while the host is out
         self.assertEqual((found["blocked"], found["problem"]), (refused("not-ready"), ""))
@@ -728,10 +744,11 @@ class NotReadyTests(CreateCase):
 
         self.host.answers["createSession"] = fail
         status, data, _ = self.make()
-        self.assertEqual(status, 409)
-        self.assertIn("the folder is not trusted", data["error"])
-        self.assertTrue(data["error"].startswith(refused("host", why="")[:12]), data["error"])
-        self.assertNotIn(TOKEN, json.dumps(data))
+        self.assertEqual(status, 200, data)  # 1.8.7: handed over at once; the refusal shows on the placeholder
+        self.assertTrue(until(lambda: [item for item in self.request("POST", "/api/board", {})[1]["making"] if item["stage"] == "refused"]))
+        found = [item for item in self.request("POST", "/api/board", {})[1]["making"] if item["stage"] == "refused"][0]
+        self.assertEqual(found["error"], messages.text("host.said", words=f"createSession failed: the folder is not trusted; bad token ***"))
+        self.assertNotIn(TOKEN, json.dumps(self.request("POST", "/api/board", {})[1]))
 
 
 class PairedOnlyTests(CreateCase):

@@ -26,6 +26,7 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from typing import Any, Callable, Deque, Dict, Iterable, List, Optional, Set, Tuple
@@ -35,7 +36,9 @@ from . import procrun
 PROTOCOL = "1.1.0"
 CLI_TIMEOUT = 25  # seconds for `code agent endpoints` and `code <folder>`
 CALL_TIMEOUT = 20
-CREATE_TIMEOUT = 40  # 1.8.6: `createSession` on a busy work computer took more than CALL_TIMEOUT
+CREATE_TIMEOUT = 40  # 1.8.6: `createSession` on a busy work computer took more than CALL_TIMEOUT (1.8.7: the board waits with no limit; a caller without a reader still uses it)
+READ_SLICE = 0.5  # seconds the reader waits for bytes before it looks whether the connection was closed
+LATE_KEPT = 50  # answers that came after their caller stopped waiting, kept for the record
 CLI_ENV = "HARNESS_VSCODE_CLI"  # a person may point at the `code` command by hand
 
 # `status` of a session or chat is a set of bits (checked on real sessions)
@@ -336,7 +339,11 @@ def open_transport(endpoint: Endpoint) -> Any:
 # --- the connection --------------------------------------------------------------------------------------------
 
 class Connection:
-    """JSON-RPC over the frames. `notices` are the notifications that came while a call waited; `next_notice` hands them out, oldest first."""
+    """JSON-RPC over the frames. `notices` are the notifications that came while a call waited; `next_notice` hands them out, oldest first.
+
+    Two ways to use it. Without a reader, whoever waits reads: one caller at a time (the tests, a command line). With `start_reader()` (1.8.7, the board's link), one thread reads
+    the connection and hands each answer to the call that waits for it by its id, and each notification to `next_notice`: several threads may call at once, an answer may come
+    in any order or very late, and a call may wait with no limit (`timeout=None`). A closed connection ends every call that waits."""
 
     def __init__(self, transport: Any, token: str = "") -> None:
         self.transport = transport
@@ -345,6 +352,13 @@ class Connection:
         self.notices: Deque[Dict[str, Any]] = collections.deque()
         self.counter = 0
         self.closed = False
+        self._reader: Optional[threading.Thread] = None
+        self._write = threading.Lock()  # one frame at a time on the wire
+        self._state = threading.Condition()  # with a reader: `notices`, `_waiting`, `counter`
+        self._waiting: Dict[int, Dict[str, Any]] = {}  # id -> {event, message, error, method}
+        self._given_up: Dict[int, Tuple[str, float]] = {}  # id -> (method, when its caller stopped waiting)
+        self.late: Deque[Dict[str, Any]] = collections.deque(maxlen=LATE_KEPT)  # {method, id, late_s}: answers nobody waited for any more
+        self.default_timeout: Optional[float] = CALL_TIMEOUT  # what a call waits when it names no time (the board's link sets more)
         self.pid: Any = None  # the editor process this host runs in, as `code agent endpoints` names it (1.7.38: the board reads its environment before any chat)
         self.instance = ""
 
@@ -369,14 +383,64 @@ class Connection:
             self.absorb(self.decoder.feed(rest))
 
     def send(self, message: Dict[str, Any]) -> None:
-        self.transport.write(encode_frame(json.dumps(message).encode("utf-8")))
+        with self._write:
+            self.transport.write(encode_frame(json.dumps(message).encode("utf-8")))
+
+    def next_id(self) -> int:
+        with self._state:
+            self.counter += 1
+            return self.counter
+
+    def start_reader(self) -> None:
+        """From now on one thread reads the connection (see the class). Once only; after `upgrade` and `hello`."""
+        if self._reader is not None:
+            return
+        self._reader = threading.Thread(target=self._read_loop, name="ahp-reader", daemon=True)
+        self._reader.start()
+
+    def reading(self) -> bool:
+        return self._reader is not None
+
+    def _read_loop(self) -> None:
+        try:
+            while not self.closed:
+                for message in self.pump(READ_SLICE):
+                    self._route(message)
+        except (AhpError, OSError, ValueError):
+            pass
+        finally:
+            with self._state:
+                self.closed = True
+                for entry in self._waiting.values():
+                    entry["error"] = ConnectionClosed("the connection closed while the call waited")
+                    entry["event"].set()
+                self._waiting.clear()
+                self._state.notify_all()
+
+    def _route(self, message: Dict[str, Any]) -> None:
+        if "id" in message and "method" not in message:
+            with self._state:
+                entry = self._waiting.pop(message["id"], None)
+                if entry is None:
+                    gone = self._given_up.pop(message["id"], None)
+                    self.late.append({"method": gone[0] if gone else "", "id": message["id"], "late_s": round(time.monotonic() - gone[1], 1) if gone else None})
+                    return
+            entry["message"] = message
+            entry["event"].set()
+        elif "method" in message and "id" in message:  # the host asks something: we know no method
+            self.send({"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32601, "message": "method not found"}})
+        elif "method" in message:
+            with self._state:
+                self.notices.append(message)
+                self._state.notify_all()
 
     def absorb(self, frames: List[Tuple[int, bytes]]) -> List[Dict[str, Any]]:
         """Frames to messages. A ping is answered, a close ends the connection."""
         out: List[Dict[str, Any]] = []
         for opcode, body in frames:
             if opcode == 9:
-                self.transport.write(encode_frame(body, 10))
+                with self._write:
+                    self.transport.write(encode_frame(body, 10))
             elif opcode == 8:
                 self.closed = True
                 raise ConnectionClosed("the host closed the connection")
@@ -407,6 +471,16 @@ class Connection:
     def next_notice(self, timeout: float = 0.0) -> Optional[Dict[str, Any]]:
         """The next notification, waiting up to `timeout` seconds. A request of the host to us gets `method not found`."""
         end = time.monotonic() + max(0.0, timeout)
+        if self._reader is not None:
+            with self._state:
+                while not self.notices:
+                    if self.closed:
+                        raise ConnectionClosed("closed")
+                    left = end - time.monotonic()
+                    if left <= 0:
+                        return None
+                    self._state.wait(left)
+                return self.notices.popleft()
         while True:
             if self.notices:
                 return self.notices.popleft()
@@ -423,7 +497,13 @@ class Connection:
         elif "method" in message:
             self.notices.append(message)
 
-    def call(self, method: str, params: Optional[Dict[str, Any]] = None, timeout: float = CALL_TIMEOUT) -> Any:
+    def call(self, method: str, params: Optional[Dict[str, Any]] = None, timeout: Optional[float] = -1.0) -> Any:
+        """Ask the host and wait for its answer, at most `timeout` seconds (None: until it answers or the connection closes; left out: `default_timeout`)."""
+        if timeout is not None and timeout < 0:
+            timeout = self.default_timeout
+        if self._reader is not None:
+            return self._call_read(method, params, timeout)
+        timeout = CALL_TIMEOUT if timeout is None else timeout  # without a reader, nobody would read the answer of a wait with no end
         self.counter += 1
         mine = self.counter
         self.send({"jsonrpc": "2.0", "id": mine, "method": method, "params": params or {}})
@@ -443,24 +523,47 @@ class Connection:
                     return message.get("result")
                 self.sort(message)
 
+    def _call_read(self, method: str, params: Optional[Dict[str, Any]], timeout: Optional[float]) -> Any:
+        entry: Dict[str, Any] = {"event": threading.Event(), "message": None, "error": None, "method": method}
+        with self._state:
+            if self.closed:
+                raise ConnectionClosed("closed")
+            self.counter += 1
+            mine = self.counter
+            self._waiting[mine] = entry
+        self.send({"jsonrpc": "2.0", "id": mine, "method": method, "params": params or {}})
+        if not entry["event"].wait(timeout):
+            with self._state:
+                if self._waiting.pop(mine, None) is not None:
+                    self._given_up[mine] = (method, time.monotonic())
+                    while len(self._given_up) > LATE_KEPT:
+                        self._given_up.pop(next(iter(self._given_up)))
+                    raise AhpError(f"{method}: no answer in {timeout:g} s")
+        if entry["error"] is not None:
+            raise entry["error"]
+        message = entry["message"] or {}
+        if "error" in message:
+            error = message["error"] if isinstance(message["error"], dict) else {}
+            raise AhpError(scrub(f"{method} failed: {error.get('message') or message['error']}", self._token))
+        return message.get("result")
+
     def hello(self) -> Dict[str, Any]:
         """`initialize`, without `clientInfo` (the host then records the client as `vscode`)."""
         return self.call("initialize", {"protocolVersions": [PROTOCOL], "clientId": str(uuid.uuid4())}) or {}
 
-    def subscribe(self, channel: str) -> Dict[str, Any]:
+    def subscribe(self, channel: str, timeout: Optional[float] = -1.0) -> Dict[str, Any]:
         """The state of a channel as it is now, and a stream of its actions after it. Returns the snapshot's `state`."""
-        return ((self.call("subscribe", {"channel": channel}) or {}).get("snapshot") or {}).get("state") or {}
+        return ((self.call("subscribe", {"channel": channel}, timeout) or {}).get("snapshot") or {}).get("state") or {}
 
-    def unsubscribe(self, channel: str) -> None:
-        self.call("unsubscribe", {"channel": channel})
+    def unsubscribe(self, channel: str, timeout: Optional[float] = -1.0) -> None:
+        self.call("unsubscribe", {"channel": channel}, timeout)
 
     def dispatch(self, channel: str, action: Dict[str, Any]) -> None:
         """A client action on a chat or session channel: a notification, no answer (the host pushes the state it made of it). Used for a message, a steer and a stop."""
-        self.counter += 1
-        self.send({"jsonrpc": "2.0", "method": "dispatchAction", "params": {"channel": channel, "clientSeq": self.counter, "action": action}})
+        self.send({"jsonrpc": "2.0", "method": "dispatchAction", "params": {"channel": channel, "clientSeq": self.next_id(), "action": action}})
 
-    def sessions(self) -> List[Dict[str, Any]]:
-        return list((self.call("listSessions", {}) or {}).get("items") or [])
+    def sessions(self, timeout: Optional[float] = -1.0) -> List[Dict[str, Any]]:
+        return list((self.call("listSessions", {}, timeout) or {}).get("items") or [])
 
     def close(self) -> None:
         self.closed = True

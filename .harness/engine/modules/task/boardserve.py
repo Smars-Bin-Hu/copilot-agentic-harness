@@ -444,6 +444,11 @@ class Board:
         elsewhere = outbox.held_elsewhere(self.root, self.task_is_open)
         names = {str(row.get("name") or "") for row in result["tasks"]}
         making = [item for item in self.link.making() if item["name"] not in names and not tasks.find(self.root, item["name"])]  # a new chat for a task that exists (Go on in a new chat) is no task being made
+        for item in making:  # who VS Code says made the chat, and why it refused (1.8.7: told on the placeholder, the window closed at once)
+            initiator = item.pop("initiator", "")
+            item["warn"] = say("create.warn.initiator", initiator=initiator) if initiator and initiator != "vscode" else ""
+            if item.get("error"):
+                item["error"] = say("host.copilot") if item["error"] == "copilot" else say("host.other", error="AhpError") if item["error"] in ("other", "slow") else say("host.said", words=item["error"])
         return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": making, "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
 
@@ -1680,6 +1685,8 @@ class Board:
             raise CommandError(say(f"create.refused.{error.why}")) from None
         except Exception as error:  # noqa: BLE001 - the host said no: what kind of error, and the host's own words (not those of another error: they may hold a path)
             raise CommandError(say("create.refused.host", why=host_words(error))) from None
+        if done.get("pending"):  # 1.8.7: handed to VS Code; the board's "being created" shows how it goes, with no time limit
+            return {"created": True, "pending": True, "name": plan["name"], "initiator": "", "warn": "", "unchecked": False, "text": text, "then": plan.get("then") or "", "model": plan["model"] or {}}
         initiator = str(done.get("initiator") or "")
         warn = say("create.warn.initiator", initiator=initiator) if initiator and initiator != "vscode" else ""
         return {"created": True, "name": plan["name"], "initiator": initiator, "warn": warn, "unchecked": not initiator, "text": text, "then": plan.get("then") or "", "model": plan["model"] or {}}
@@ -2276,6 +2283,12 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(500, {"error": str(error)})
+            if path == "/api/making":  # 1.8.7: the × of a "being created" placeholder VS Code refused; one that still waits cannot be taken away
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                if str(data.get("op") or "") != "dismiss":
+                    return self.answer(409, {"error": say("serve.refused.request")})
+                return self.answer(200, {"result": {"dismissed": board.link.dismiss_making(str(data.get("name") or ""))}})
             if path == "/api/board":
                 try:
                     return self.answer(200, board.rows())

@@ -310,7 +310,8 @@ class ServedTests(SendCase):
     def test_making_lists_the_chats_the_board_made_whose_task_is_not_there(self) -> None:
         with self.vs.lock:
             self.vs.created.append({"name": "new-one", "kind": "dev", "made_at": "2026-11-18T10:00:00+00:00", "session": "s", "chat": "c", "clock": time.monotonic()})
-        self.assertEqual(self.request("POST", "/api/board", {})[1]["making"], [{"name": "new-one", "kind": "dev", "since": "2026-11-18T10:00:00+00:00"}])
+        found = self.request("POST", "/api/board", {})[1]["making"]
+        self.assertEqual([(item["name"], item["kind"], item["since"]) for item in found], [("new-one", "dev", "2026-11-18T10:00:00+00:00")])
         self.assertEqual(self.request("POST", "/api/super", {})[1]["making"][0]["name"], "new-one")
         with self.vs.lock:
             self.vs.created.append({"name": "job1", "kind": "dev", "made_at": "2026-11-18T10:01:00+00:00", "session": "s2", "chat": "c2", "clock": time.monotonic()})  # Go on in a new chat

@@ -247,12 +247,11 @@
 
   // 1.8.5: a task being created has no page yet: a row with its name, a turning circle and the words, no link, no buttons. It goes when the task appears.
   function makingLine(item) {
-    const kind = Object.prototype.hasOwnProperty.call(TEXT, "task.kind." + item.kind) ? t("task.kind." + item.kind) : (item.kind || "-");
-    return h("tr", {class: "making", "data-making": item.name, title: t("waits.making.tip", {kind, at: when(item.since, 11, 19)})},
+    const info = makingInfo(item);
+    return h("tr", {class: "making" + (info.tone ? " mk-" + info.tone : ""), "data-making": item.name, title: makingTip(item)},
       canArchive ? h("td", {class: "tick"}) : null,
       h("td", {class: "name"}, h("div", {class: "name-line"}, h("span", {class: "mk-name"}, item.name))),
-      h("td", {class: "state"}, (() => { const node = tag("", "run starting"); node.append(spinner(), t("waits.making")); return node; })()),
-      h("td", {colspan: "7", class: "mk-rest"}));
+      h("td", {class: "state", colspan: "8"}, makingMarks(item, false)));
   }
   function makingRows() {
     const query = view.query.trim().toLowerCase();

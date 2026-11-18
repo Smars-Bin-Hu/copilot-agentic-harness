@@ -7,6 +7,45 @@
 // seconds does not make them start over; only a robot whose state changed changes its pose.
 "use strict";
 
+// 1.8.7: a task being created (`making` item: {name, kind, since, stage, stage_since, slow, error, warn}) shows its step and how long it has been in it. One helper for the list, the lobby, the super view and the pop-out.
+// `short`: no words, only the circle (or mark), the time and the hover: for a place with little room.
+function makingKind(item) { return Object.prototype.hasOwnProperty.call(TEXT, "task.kind." + item.kind) ? t("task.kind." + item.kind) : (item.kind || "-"); }
+function makingSecs(stamp) { const at = Date.parse(stamp || ""); return isNaN(at) ? null : Math.max(0, Math.floor((Date.now() - at) / 1000)); }
+function makingClock(secs) { return Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0"); }
+function makingInfo(item) {
+  const stage = ["asking", "sent", "opening", "refused", "lost"].includes(item.stage) ? item.stage : "asking";
+  const kind = makingKind(item), at = when(item.since, 11, 19), secs = makingSecs(item.stage_since);
+  const tone = stage === "refused" ? "bad" : (stage === "lost" || item.slow) ? "warn" : "";
+  const tips = [stage === "asking" ? t("waits.stage.asking.tip", {kind, at}) : stage === "lost" ? t("waits.stage.lost.tip") : stage === "refused" ? (String(item.error || "").trim() || t("waits.stage.refused.none")) : stage === "sent" ? t("waits.stage.sent.tip", {kind}) : t("waits.stage.opening.tip", {kind})];
+  if (item.slow) tips.push(t("waits.stage.slow", {min: Math.max(3, Math.floor((secs || 0) / 60))}));
+  if (secs !== null && ["asking", "sent", "opening"].includes(stage)) tips.push(t("waits.stage.since", {time: makingClock(secs)}));
+  if (item.warn) tips.push(item.warn);
+  return {stage, tone, tips, text: stage === "asking" ? t("waits.stage.asking") : stage === "sent" ? t("waits.stage.sent") : stage === "opening" ? t("waits.stage.opening") : stage === "refused" ? t("waits.stage.refused") : t("waits.stage.lost"), timed: secs !== null && ["asking", "sent", "opening"].includes(stage), stamp: item.stage_since};
+}
+function makingTip(item) { return makingInfo(item).tips.join("\n"); }
+function makingDismiss(item) {
+  const x = h("button", {type: "button", class: "mk-x", title: t("waits.stage.dismiss"), "aria-label": t("waits.stage.dismiss") + ": " + item.name}, "\u00d7");
+  x.addEventListener("click", (event) => {
+    event.stopPropagation(); x.disabled = true;
+    SERVE.post("/api/making", {op: "dismiss", name: item.name}).then(() => SERVE.done(), (error) => { x.disabled = false; x.title = t("waits.stage.dismiss.failed", {error: error && error.message ? error.message : String(error)}); });
+  });
+  return x;
+}
+// The marks of a being-created item as one inline node: [circle or red dot] [words] [m:ss] [yellow mark] [note mark] [x].
+function makingMarks(item, short) {
+  const info = makingInfo(item);
+  const node = h("span", {class: "mk-st " + info.tone + (short ? " short" : ""), "data-stage": info.stage, title: info.tips.join("\n")});
+  if (info.stage === "refused" || info.stage === "lost") node.append(h("span", {class: "mk-dot", "aria-hidden": "true"}));
+  else node.append(spinner());
+  if (!short) node.append(h("span", {class: "mk-text"}, info.text));
+  if (info.timed) node.append(h("span", {class: "mk-time", "data-since": info.stamp}, makingClock(makingSecs(info.stamp))));
+  if (item.slow) node.append(h("span", {class: "mk-slow", "aria-hidden": "true"}));
+  if (item.warn) node.append(h("span", {class: "mk-note", "aria-hidden": "true"}, "i"));
+  if (info.stage === "refused" && typeof SERVE !== "undefined" && SERVE.post) { node.append(makingDismiss(item)); if (!short && item.error) node.append(h("span", {class: "mk-err"}, item.error)); }
+  return node;
+}
+setInterval(() => { for (const node of document.querySelectorAll(".mk-time[data-since]")) { const secs = makingSecs(node.dataset.since); if (secs !== null) node.textContent = makingClock(secs); } }, 1000);
+
 const Lobby = (function () {
   const NS = "http://www.w3.org/2000/svg";
   const still = Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -321,8 +360,9 @@ const Lobby = (function () {
     function maker(item) {
       const kind = Object.prototype.hasOwnProperty.call(TEXT, "task.kind." + item.kind) ? t("task.kind." + item.kind) : (item.kind || "-");
       const bot = robot("make", item.kind, 0);
-      const slot = h("div", {class: "lb-slot lb-making", title: t("waits.making.tip", {kind, at: when(item.since, 11, 19)}), role: "img", "aria-label": t("board.waits.lobby.making", {name: item.name})}, bot, h("div", {class: "lb-nm"}, item.name));
-      return {slot, bot, zone: ""};
+      const st = h("div", {class: "lb-st"}, makingMarks(item, true));
+      const slot = h("div", {class: "lb-slot lb-making", title: makingTip(item), role: "img", "aria-label": t("board.waits.lobby.making", {name: item.name})}, bot, h("div", {class: "lb-nm"}, item.name), st);
+      return {slot, bot, zone: "", st, sig: JSON.stringify([item.stage, item.slow, item.error, item.warn, item.stage_since])};
     }
 
     let ready = false;  // the first draw shows the robots where they are; it does not bring them in
@@ -338,11 +378,19 @@ const Lobby = (function () {
         const making_names = new Set(making.filter((item) => !names.has(item.name)).map((item) => item.name));
         for (const [name, entry] of makers) if (!making_names.has(name)) { gone.push(entry); makers.delete(name); }
         making.forEach((item) => {
-          if (!making_names.has(item.name) || makers.has(item.name)) return;
+          if (!making_names.has(item.name)) return;
+          const have = makers.get(item.name);
+          if (have) {  // the step may have changed: the same robot, new marks and words
+            const sig = JSON.stringify([item.stage, item.slow, item.error, item.warn, item.stage_since]);
+            if (have.sig !== sig) { have.sig = sig; have.slot.title = makingTip(item); have.st.replaceChildren(makingMarks(item, true)); }
+            const zone = item.stage === "refused" || item.stage === "lost" ? "you" : "work";
+            if (have.zone !== zone) place(have, zone);
+            return;
+          }
           const entry = maker(item);
           makers.set(item.name, entry);
           if (ready) came.push(entry);
-          place(entry, "work");
+          place(entry, item.stage === "refused" || item.stage === "lost" ? "you" : "work");
         });
         agents.forEach((row, index) => {
           const pose = poseOf(row, live);

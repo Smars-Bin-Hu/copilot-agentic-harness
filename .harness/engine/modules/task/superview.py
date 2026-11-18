@@ -4,6 +4,7 @@ Order of `items`: three groups, then the longest wait first inside a group (`wai
 1. blocks running work: the chat asks or waits for a tool confirmation (`confirm`, `question`, `asking`), a held outside call (`outbox`), autorun that stopped (`autorun`);
 2. decisions: `req`, `plan`, `promote`, `review`, `recover`, `accept`;
 3. the rest (hand-offs, `commit`, `stopped`, `cancelled`).
+Aging (1.8.4): `build(result, age_up)` moves an item that has waited `age_up` seconds or more up one group (group 1 joins group 0, group 2 joins group 1), so held calls cannot starve the decisions; the item says `aged: true`. The order inside a group stays the longest wait first. `age_up=None` is no aging (the order above).
 `go-*` marks are left out: the person approved and the board tells the agent; nothing waits for the person. A task that waits for the person is `you` even while its agent works.
 A row has one `waiting_why`, so a task has at most one item. A closed task is left out; a task put aside waits for nothing.
 
@@ -16,7 +17,7 @@ the items of 1.8.3 and no more.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import taskboard
 
@@ -77,16 +78,25 @@ def counts(row: Dict[str, Any]) -> bool:
     return facts.get("kind") in ("error", "stuck") or bool(why and not why.startswith("go-"))
 
 
-def order_key(entry: Tuple[int, Dict[str, Any]]) -> Tuple[Any, ...]:
+def is_aged(item: Dict[str, Any], age_up: Optional[int]) -> bool:
+    """Has the item waited `age_up` seconds or more, and is it above the top group to move up from? None: no aging."""
+    waited = item.get("waited_s")
+    return age_up is not None and isinstance(waited, (int, float)) and waited >= age_up and group_of(item["why"]) > 0
+
+
+def order_key(entry: Tuple[int, Dict[str, Any]], age_up: Optional[int] = None) -> Tuple[Any, ...]:
     index, item = entry
     waited = item["waited_s"]
-    return (group_of(item["why"]), waited is None, -(waited or 0), item["since"], index)
+    return (group_of(item["why"]) - (1 if is_aged(item, age_up) else 0), waited is None, -(waited or 0), item["since"], index)
 
 
-def build(result: Dict[str, Any]) -> Dict[str, Any]:
-    """`result`: what `BoardServer.rows()` returns. Returns `status`, `mates` (one per open task, in board order) and `items`."""
+def build(result: Dict[str, Any], age_up: Optional[int] = None) -> Dict[str, Any]:
+    """`result`: what `BoardServer.rows()` returns; `age_up`: seconds after which an item moves up one group (None: no aging). Returns `status`, `mates` (one per open task, in board order) and `items`."""
     open_rows = [row for row in result.get("rows") or [] if row.get("status") == "open"]
-    found = sorted(((index, item_of(row)) for index, row in enumerate(open_rows) if counts(row)), key=order_key)
+    found = sorted(((index, item_of(row)) for index, row in enumerate(open_rows) if counts(row)), key=lambda entry: order_key(entry, age_up))
+    for _index, item in found:
+        if is_aged(item, age_up):
+            item["aged"] = True
     items = [item for _index, item in found]
     per_task: Dict[str, int] = {}
     kinds: Dict[str, str] = {}

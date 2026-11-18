@@ -19,6 +19,7 @@ The super agent view is a place to finish things: what waits for you is pinned o
 - **A queue above the chat.** Cards that wait for you are pinned above the chat, in their own scroll, the most urgent first. A long chat no longer pushes them away. Settled cards fold into **Done (n)**. With three or more cards the queue takes most of the room, and the chat can fold to one line.
 - **The header counts what matters**: `N wait · oldest · K stuck · M errors`. Point at a mark for its words.
 - **Stuck tasks show.** A task whose chat runs but made no tool call for 10 minutes (`board.stuck_seconds` in `task.json`) is marked stuck on its avatar, in the header and as a card with Steer and Stop. Waiting in `harness wait` or on a subagent is not stuck.
+- **Old waits move up.** An item that has waited 15 minutes (`board.age_up_seconds` in `task.json`) moves up one group, so held calls cannot bury the decisions; the longest wait is still first inside a group.
 - **Errors show.** A task whose last turn ended in an error is red, not "Stopped", with **Try again**.
 - **Approve a held call in the view.** The card shows the code and the command; **View** opens the command and its draft, as on the task page, and Approve works after View with the code typed.
 - **The question shows.** A question the board cannot answer shows its text and options, and says to answer it in VS Code.

@@ -2121,7 +2121,7 @@ def handler_for(board: Board) -> type:
                 try:
                     result = board.rows()
                     superfacts.put(board.root, result.get("rows") or [])  # 1.8.4: held calls, the question, the delivery, an error or a stuck chat: put on the rows, so `build` stays a pure function
-                    view = superview.build(result)
+                    view = superview.build(result, tasklife.age_up_limit(board.root))  # 1.8.4: an old wait moves up one group
                     paths = {superview.name_of(row): str(row["task"]) for row in result.get("rows") or []}
                     for item in view["items"]:
                         if item["why"] in ("stopped", "accept", "cancelled") and item["task"] in paths:

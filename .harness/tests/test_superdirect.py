@@ -1,0 +1,284 @@
+"""A direct message to a task from the super agent view (1.8.4, step 8): `/api/super/send`, one decision (paused, a command to allow, a new chat, a question to skip, a busy chat, an idle one),
+the model, language and files on the message, the 10000 characters, and the record with `by: "super"`."""
+
+from __future__ import annotations
+
+import base64
+import json
+import unittest
+from typing import Any, Dict, List, Optional
+
+import support  # noqa: F401 - puts the engine on the path
+from taskcase import TASK
+from test_boardserve import ServeCase
+
+from modules.task import boardserve, chatnew, chatsend, superdirect, task as task_ops, tasklife, vslink
+
+MODELS = [{"id": "m1", "name": "One", "thinking": {"levels": ["low", "high"], "labels": {}}}, {"id": "m2", "name": "Two"}]
+
+
+class DirectLink(vslink.VsLink):
+    """A ready link with one task and a chat in the state the test sets: idle, busy, input or error; `bound` false: no chat. It records what is dispatched and created."""
+
+    def __init__(self, root: Any) -> None:
+        super().__init__(root, enabled=False)
+        self.ready = True
+        self.why = "ok"
+        self.state = "idle"
+        self.bound_ok = True
+        self.confirm = False
+        self.off = ""
+        self.fail: Optional[BaseException] = None
+        self.sent: List[Dict[str, Any]] = []
+        self.made: List[Dict[str, Any]] = []
+        self.opened = 0
+
+    def check(self, task: str, kind: str) -> str:
+        if self.off:
+            return self.off
+        if not self.bound_ok:
+            return "unbound"
+        need = vslink.NEEDS[kind]
+        return "not-" + need if need and need != self.state else ""
+
+    def ask_of(self, task: str) -> Optional[Dict[str, Any]]:
+        return {"kind": "confirm"} if self.confirm else {"kind": "question"} if self.state == "input" else None
+
+    def model_list(self) -> List[Dict[str, Any]]:
+        return [dict(item) for item in MODELS]
+
+    def dispatch(self, kind: str, task: str, text: str = "", model: Any = None, attachments: Any = None, plan: Any = None) -> Dict[str, Any]:
+        if self.fail is not None:
+            raise self.fail
+        self.sent.append({"kind": kind, "task": task, "text": text, "model": model, "files": attachments})
+        return {"chat": "c1", "title": "job", "turn": "t1", "skipped": ["q"] if kind == "say" else []}
+
+    def create(self, plan: Dict[str, Any], text: str, attachments: Any = None) -> Dict[str, Any]:
+        if self.fail is not None:
+            raise self.fail
+        self.made.append({"plan": plan, "text": text, "files": attachments})
+        return {"session": "s2", "chat": "c2", "title": "new one", "initiator": "vscode"}
+
+    def open_window(self) -> str:
+        self.opened += 1
+        return "queued"
+
+
+class DirectCase(ServeCase):
+    def make_link(self) -> Any:
+        self.vs = DirectLink(self.root)
+        return self.vs
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.cookie = self.pair()
+
+    def post(self, body: Dict[str, Any], cookie: Optional[str] = None) -> Dict[str, Any]:
+        status, found, _ = self.request("POST", "/api/super/send", dict({"task": TASK}, **body), cookie=self.cookie if cookie is None else cookie)
+        self.assertEqual(status, 200, found)
+        return {key: value for key, value in found.items() if key != "language"}
+
+    def sent_lines(self) -> List[Dict[str, Any]]:
+        path = chatsend.sent_file(self.root, TASK)
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
+
+
+class BranchTests(DirectCase):
+    def test_an_idle_chat_gets_it_sent(self) -> None:
+        found = self.post({"text": "  hello there  "})
+        self.assertEqual((found["ok"], found["how"], found["task"]), (True, "sent", task_ops.name_of(TASK)))
+        self.assertEqual([(item["kind"], item["task"], item["text"]) for item in self.vs.sent], [("send", TASK, "hello there")])
+        self.assertEqual(self.vs.made, [])
+
+    def test_a_busy_chat_queues_by_default_and_steers_when_asked(self) -> None:
+        self.vs.state = "busy"
+        self.assertEqual(self.post({"text": "later"})["how"], "queued")
+        self.assertEqual(self.post({"text": "now", "busy": "steer"})["how"], "steered")
+        self.assertEqual([item["kind"] for item in self.vs.sent], ["queue", "steer"])
+
+    def test_a_chat_that_waits_on_its_question_gets_say(self) -> None:
+        self.vs.state = "input"
+        found = self.post({"text": "skip it, do this"})
+        self.assertEqual(found["how"], "said")
+        self.assertEqual([item["kind"] for item in self.vs.sent], ["say"])
+        self.assertEqual(self.sent_lines()[-1]["skipped"], ["q"])
+
+    def test_a_command_to_allow_refuses(self) -> None:
+        self.vs.state, self.vs.confirm = "input", True
+        self.assertEqual(self.post({"text": "x"}), {"ok": False, "why": "confirm-waits"})
+        self.assertEqual(self.post({"text": "x", "new_chat": True}), {"ok": False, "why": "confirm-waits"})
+        self.assertEqual((self.vs.sent, self.vs.made), ([], []))
+
+    def test_paused_refuses_first(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["paused"] = {"since": "2026-11-18T00:00:00+00:00"}
+        self.vs.state, self.vs.confirm = "input", True
+        self.assertEqual(self.post({"text": "x"}), {"ok": False, "why": "paused"})
+        self.assertEqual((self.vs.sent, self.vs.made), ([], []))
+
+    def test_a_chat_in_error_takes_no_message(self) -> None:
+        self.vs.state = "error"
+        self.assertEqual(self.post({"text": "x"}), {"ok": False, "why": "not-idle"})
+
+    def test_a_task_without_a_chat_gets_a_new_one(self) -> None:
+        self.vs.bound_ok = False
+        found = self.post({"text": "do the thing"})
+        self.assertEqual((found["ok"], found["how"]), (True, "new-chat"))
+        self.assertEqual(len(self.vs.made), 1)
+        made = self.vs.made[0]
+        self.assertEqual(made["plan"]["name"], task_ops.name_of(TASK))  # bound to the task at once
+        self.assertEqual(made["text"], "/harness-my-task Go on with the task " + task_ops.name_of(TASK) + ".\n\ndo the thing")
+        self.assertEqual((self.vs.sent, self.vs.opened), ([], 1))
+
+    def test_a_new_chat_is_wanted_while_the_old_one_is_idle_or_in_error(self) -> None:
+        self.assertEqual(self.post({"text": "a", "new_chat": True})["how"], "new-chat")
+        self.vs.state = "error"
+        self.assertEqual(self.post({"text": "b", "new_chat": True})["how"], "new-chat")
+        self.assertEqual(len(self.vs.made), 2)
+
+    def test_a_new_chat_is_refused_while_the_old_one_works_or_waits(self) -> None:
+        for state in ("busy", "input"):
+            self.vs.state = state
+            self.assertEqual(self.post({"text": "a", "new_chat": True}), {"ok": False, "why": "not-idle"})
+        self.assertEqual(self.vs.made, [])
+
+    def test_the_link_being_down_or_unsure_refuses_with_its_reason(self) -> None:
+        for why in ("off", "not-ready", "unsure"):
+            self.vs.off = why
+            self.assertEqual(self.post({"text": "a"}), {"ok": False, "why": why})
+            self.assertEqual(self.post({"text": "a", "new_chat": True}), {"ok": False, "why": why})
+        self.assertEqual((self.vs.sent, self.vs.made), ([], []))
+
+    def test_a_refusal_of_the_link_thread_and_a_host_error(self) -> None:
+        self.vs.fail = vslink.Refused("changed")
+        self.assertEqual(self.post({"text": "a"}), {"ok": False, "why": "changed"})
+        self.vs.fail = RuntimeError("secret words")
+        found = self.post({"text": "a"})
+        self.assertEqual((found["ok"], found["why"], found["error"]), (False, "host", "RuntimeError"))
+        self.assertNotIn("secret", json.dumps(found))
+        self.vs.bound_ok = False
+        self.assertEqual(self.post({"text": "a"})["why"], "host")
+
+    def test_unknown_task_unpaired_and_bad_requests(self) -> None:
+        self.assertEqual(self.post({"task": "ghost", "text": "a"}), {"ok": False, "why": "unknown"})
+        status, _, _ = self.request("POST", "/api/super/send", {"task": TASK, "text": "a"}, cookie="")
+        self.assertEqual(status, 403)
+        self.assertEqual(self.post({"text": "a", "busy": "shout"}), {"ok": False, "why": "request"})
+        self.assertEqual(self.post({"text": "a", "lang": "fr"}), {"ok": False, "why": "request"})
+        self.assertEqual(self.post({"text": ["a"]}), {"ok": False, "why": "text.empty"})
+        self.assertEqual(self.vs.sent, [])
+
+
+class TextTests(DirectCase):
+    def test_empty_and_the_limit_of_10000(self) -> None:
+        self.assertEqual(self.post({"text": "   "}), {"ok": False, "why": "text.empty"})
+        self.assertEqual(superdirect.MAX_TEXT, 10000)
+        self.assertEqual(chatnew.MAX_TEXT, 10000)
+        self.assertEqual(self.post({"text": "x" * 10001}), {"ok": False, "why": "text.long"})
+        self.assertEqual(self.vs.sent, [])
+        self.assertTrue(self.post({"text": "x" * 10000})["ok"])
+
+    def test_the_text_is_kept_whole_with_its_lines_and_signs(self) -> None:
+        words = "Line one\n\n  indented `code` <b>&</b> 中文\n- item\nlast\ttab"
+        self.post({"text": words})
+        self.assertEqual(self.vs.sent[0]["text"], words)
+        self.assertEqual(self.sent_lines()[-1]["text"], words)
+        big = ("Z" * 99 + "\n") * 100
+        self.post({"text": big})
+        self.assertEqual(self.vs.sent[1]["text"], big.strip())
+        self.vs.bound_ok = False
+        self.post({"text": words})
+        self.assertTrue(self.vs.made[0]["text"].endswith("\n\n" + words))
+
+    def test_zh_puts_the_mark_first_en_does_not(self) -> None:
+        self.post({"text": "hello", "lang": "zh"})
+        self.assertEqual(self.vs.sent[0]["text"], chatsend.ZH_MARK + " hello")
+        self.post({"text": "hello", "lang": "en"})
+        self.assertNotIn(chatsend.ZH_MARK, self.vs.sent[1]["text"])
+        self.assertTrue(self.vs.sent[1]["text"].endswith("hello"))  # `[EN]` is added only when the chat replies in Chinese
+
+    def test_a_new_chat_in_zh_says_it_in_chinese_after_the_skill(self) -> None:
+        self.post({"text": "hello", "lang": "zh", "new_chat": True})
+        text = self.vs.made[0]["text"]
+        self.assertTrue(text.startswith("/harness-my-task "), text)
+        self.assertIn("继续任务 " + task_ops.name_of(TASK), text)
+        self.assertIn(chatsend.ZH_MARK, text.split("\n")[0])
+        self.assertTrue(text.endswith("\n\n" + chatsend.ZH_MARK + " hello"), text)
+
+    def test_the_drafts_of_the_task_do_not_go_in(self) -> None:
+        chatsend.add_draft(self.root, TASK, "a saved note")
+        self.post({"text": "plain"})
+        self.assertEqual(self.vs.sent[0]["text"], "plain")
+        self.assertEqual(len(chatsend.drafts(self.root, TASK)), 1)
+
+
+class ModelTests(DirectCase):
+    def test_the_chosen_model_goes_on_the_message(self) -> None:
+        self.post({"text": "a", "model": "m1", "thinking": "high"})
+        self.assertEqual(self.vs.sent[0]["model"]["id"], "m1")
+        self.assertIn("high", json.dumps(self.vs.sent[0]["model"]))
+
+    def test_a_new_chat_carries_the_chosen_model(self) -> None:
+        self.post({"text": "a", "model": "m2", "new_chat": True})
+        self.assertEqual(self.vs.made[0]["plan"]["model"]["id"], "m2")
+
+    def test_no_model_key_means_the_model_of_the_task_and_an_empty_one_the_hosts_own(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["chat"] = {"model": {"id": "m2"}}
+        self.post({"text": "a"})
+        self.post({"text": "b", "model": ""})
+        self.assertEqual((self.vs.sent[0]["model"], self.vs.sent[1]["model"]), ({"id": "m2"}, None))
+
+    def test_a_model_the_host_does_not_list_is_refused(self) -> None:
+        self.assertEqual(self.post({"text": "a", "model": "ghost"}), {"ok": False, "why": "model"})
+        self.assertEqual(self.post({"text": "a", "model": "m1", "thinking": "wild"}), {"ok": False, "why": "thinking"})
+        self.assertEqual(self.post({"text": "a", "model": "m2", "context": "999"})["why"], "context")
+        self.assertEqual(self.vs.sent, [])
+
+
+class FilesAndRecordTests(DirectCase):
+    def files(self, count: int = 1, size: int = 10) -> List[Dict[str, Any]]:
+        return [{"name": f"f{n}.txt", "type": "text/plain", "data": base64.b64encode(b"x" * size).decode()} for n in range(count)]
+
+    def test_files_go_on_the_message_and_on_a_new_chat(self) -> None:
+        self.post({"text": "a", "files": self.files(2)})
+        self.assertEqual([item["label"] for item in self.vs.sent[0]["files"]], ["f0.txt", "f1.txt"])
+        self.vs.bound_ok = False
+        self.post({"text": "b", "files": self.files(1)})
+        self.assertEqual(len(self.vs.made[0]["files"]), 1)
+        self.assertEqual(self.sent_lines()[0]["files"][0]["name"], "f0.txt")
+
+    def test_the_limits_of_send_hold(self) -> None:
+        self.assertEqual(self.post({"text": "a", "files": self.files(chatsend.MAX_FILES + 1)})["why"], "file-count")
+        self.assertEqual(self.post({"text": "a", "files": [{"name": "x", "data": "!!"}]})["why"], "file-bad")
+        self.assertEqual(self.post({"text": "a", "files": self.files(1, chatsend.MAX_FILE + 1)})["why"], "file-big")
+        self.assertEqual(self.vs.sent, [])
+
+    def test_the_body_may_hold_files_like_send(self) -> None:
+        text = self.post({"text": "a", "files": self.files(1, 200000)})
+        self.assertEqual(text["how"], "sent")  # larger than the 4 KB of an ordinary request
+
+    def test_the_record_says_who_and_how(self) -> None:
+        self.post({"text": "one", "model": "m1"})
+        self.vs.state = "busy"
+        self.post({"text": "two"})
+        self.vs.state = "idle"
+        self.vs.bound_ok = False
+        self.post({"text": "three"})
+        lines = self.sent_lines()
+        self.assertEqual([(line["kind"], line["by"], line["text"][-5:]) for line in lines], [("send", "super", "one"[-5:]), ("queue", "super", "two"[-5:]), ("new-chat", "super", "three")])
+        self.assertEqual(lines[0]["model"]["id"], "m1")
+        self.assertEqual(lines[2]["chat"], "c2")
+        found = task_ops.read(self.root, TASK)
+        self.assertEqual([event["what"] for event in found["events"][-3:]], ["send", "queue", "new-chat"])
+
+    def test_a_message_that_went_is_not_an_error_when_the_record_cannot_be_written(self) -> None:
+        path = chatsend.sent_file(self.root, TASK)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.mkdir()  # a folder where the file should be
+        found = self.post({"text": "a"})
+        self.assertEqual((found["ok"], found["how"], found["recorded"]), (True, "sent", False))
+
+
+if __name__ == "__main__":
+    unittest.main()

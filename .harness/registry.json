@@ -150,6 +150,7 @@
         ".harness/tests/test_superbrain.py",
         ".harness/tests/test_superact.py",
         ".harness/tests/test_superroute.py",
+        ".harness/tests/test_superdirect.py",
         ".harness/tests/test_superpreview.py",
         ".harness/tests/test_gate_ask.py",
         ".harness/tests/test_task_askturn.py",

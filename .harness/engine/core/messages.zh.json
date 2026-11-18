@@ -3278,6 +3278,7 @@
   "send.refused.no-retry": "上一轮现在不能重试。请刷新看一下页面。",
   "send.refused.queue-gone": "这条消息已经不在队列里了，Copilot 可能已经发出。请刷新看一下页面。",
   "event.queue": "排了一条消息，这一轮之后发",
+  "event.new-chat": "开了一个新对话，接着做这个任务",
   "event.chat-unqueue": "用户取回了一条排队的消息",
   "event.chat-resume": "用户让出错的一轮重试",
   "desk.live.files": "文件：{names}",

@@ -63,7 +63,11 @@ const SUPER = (function () {
     const field = h("textarea", {class: "sa-field", rows: 1, maxlength: 2000, placeholder: t("super.input.ph"), "aria-label": t("super.input.ph")});
     const newTask = SERVE.runs("create") ? h("button", {type: "button", class: "sa-new", title: t("super.new.tip")}, t("super.new.go")) : null;
     const send = h("button", {type: "button", class: "sa-send", title: t("super.send"), "aria-label": t("super.send")}, "↑");
-    const box = h("div", {class: "sa-box"}, field, newTask, send);
+    // The direct message (superdirect.js): under an avatar (or after "@name") the words go to that task. The counter, the options menu (an icon next to Send) and the files it holds show only then.
+    const counter = h("span", {class: "sa-dcount", hidden: "", title: t("super.direct.count.tip")});
+    const direct = SUPERDIRECT.menu(field, sv);
+    direct.button.hidden = true;
+    const box = h("div", {class: "sa-box"}, field, newTask, counter, direct.button, send);
     const complete = h("div", {class: "sa-comp", role: "listbox", hidden: "", "aria-label": t("super.route.pick")});
     // The pop-out (companion.js): a small window that stays on top of every other window. Only where the browser can open one (Document Picture-in-Picture: Chrome, Edge).
     const popUp = typeof COMPANION !== "undefined" ? h("button", {type: "button", class: "sa-pop"}, "⇱") : null;
@@ -96,7 +100,7 @@ const SUPER = (function () {
     const queue = h("div", {class: "sa-queue", hidden: ""}, queueList, doneBox);
     const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => linked(text)) : null;  // the earlier days (superhist.js)
     sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
-      h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, box));
+      h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, direct.tray, box));
 
     foldBtn.addEventListener("click", () => setFold(!chatFolded, true));
     foldLine.addEventListener("click", () => setFold(false, true));
@@ -285,7 +289,8 @@ const SUPER = (function () {
     }
 
     // ---------- the messages ----------
-    function addSys(text) { add(h("div", {class: "sa-sys"}, text)); }
+    // A line of the chat. With a task it belongs to that task's thread (the filter of another task hides it, the filter of this one and All show it); `title`: the words it is about.
+    function addSys(text, task, bad, title) { add(h("div", {class: "sa-sys" + (bad ? " bad" : ""), "data-task": task || null, title: title || null}, text), true); }
     // A long day: the chat shows its last FOLD messages; the older ones are behind "Show earlier" (the task items are never folded).
     const FOLD = 40, chatRows = [];
     let unfolded = false;
@@ -341,17 +346,23 @@ const SUPER = (function () {
         go.addEventListener("click", () => { state.pressed.set(at, stamp()); CHAT.create({name: one.name, kind: one.task_kind, text: one.text}); });
         return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), h("span", {class: "sa-actkind"}, one.task_kind || "dev"), go), h("div", {class: "sa-acttext"}, one.text));
       }
-      if (one.kind === "send") {
-        const box = h("textarea", {class: "sa-reply-box sa-acttextbox", rows: "3", maxlength: 2000, "aria-label": t("super.act.send.tip")});
+      if (one.kind === "send") {  // the message is editable; the same options menu as the input; the receipt says how it went (sent, queued, said, new chat)
+        const box = h("textarea", {class: "sa-reply-box sa-acttextbox", rows: "3", maxlength: SUPERDIRECT.MAX, "aria-label": t("super.act.send.tip")});
         box.value = state.drafts.has(at) ? state.drafts.get(at) : (one.text || "");
         box.addEventListener("input", () => state.drafts.set(at, box.value));
+        const options = SUPERDIRECT.menu(box, sv);
+        options.bind(one.task);
         const go = h("button", {type: "button", class: "act hot live"}, t("super.act.send.go"));
-        go.addEventListener("click", () => {
+        go.addEventListener("click", async () => {
           const text = box.value.trim();
-          if (!text) return;
-          post(go, () => (mateMenuWorks(one.task) ? SERVE.post("/api/queue", {task: one.task, text, lang: ""}) : SERVE.post("/api/send", {task: one.task, kind: "answer", body: text, note: "", lang: "", step: "act"})));
+          if (!text || options.reading()) return;
+          go.disabled = true; said.replaceChildren();
+          const result = await directSend(one.task, text, options.values(), true);
+          if (result.ok) { options.clear(); state.done.set(at, SUPERDIRECT.howWord(result.how) + " \u00b7 " + stamp()); actDraw(state); emit(); return; }
+          go.disabled = false;
+          said.replaceChildren(SUPERDIRECT.refusal(one.task, result.why, result.error));
         });
-        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), h("div", {class: "sa-reply"}, box, go), said);
+        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), h("div", {class: "sa-reply"}, box, options.button, go), options.tray, said);
       }
       let button;
       if (one.action === "review set") {
@@ -1075,7 +1086,7 @@ const SUPER = (function () {
       const routing = Boolean(filter);  // one task's avatar is on: the input asks that task, whatever the super chat's state
       const off = routing ? "" : talkOff(), blocked = routing ? false : Boolean(off) || thinkingNow(), quickOff = Boolean(talkOff()) || thinkingNow();
       field.disabled = Boolean(off);
-      field.placeholder = off ? t(OFF[off]) : routing ? t("super.route.ph", {task: filter}) : t("super.input.ph");
+      field.placeholder = off ? t(OFF[off]) : routing ? t("super.direct.ph", {task: filter}) : t("super.input.ph");
       field.title = field.placeholder;
       send.disabled = blocked;
       box.classList.toggle("off", Boolean(off));
@@ -1089,6 +1100,21 @@ const SUPER = (function () {
       }
       for (const button of quick.children) button.disabled = quickOff;
       routeComplete();
+      drawDirect();
+    }
+    // The direct message: the counter, the options menu and the length limit follow the target of the words (the avatar, or "@name" in All).
+    function drawDirect() {
+      const typed = field.value.trim(), target = routeTarget(typed), on = Boolean(target) && !talkOff() || Boolean(filter);
+      direct.button.hidden = !on;
+      if (newTask) newTask.hidden = on;  // the room is for the words and the options
+      counter.hidden = !on;
+      direct.tray.classList.toggle("sa-off", !on);
+      if (!on) { field.maxLength = 2000; return; }
+      direct.bind(target ? target.task : filter);
+      const used = target ? target.text.length : 0;
+      field.maxLength = SUPERDIRECT.MAX + (target ? typed.length - target.text.length : 0);
+      counter.textContent = t("super.direct.count", {n: used, max: SUPERDIRECT.MAX});
+      counter.classList.toggle("over", used >= SUPERDIRECT.MAX);
     }
     async function ask(body, text) {
       if (talkOff() || thinkingNow()) return;
@@ -1128,36 +1154,32 @@ const SUPER = (function () {
       }
       return null;
     }
-    // One ask to one task (the view's and the pop-out's): "" when it went, else the reason code.
-    async function routeAsk(task, text) {
-      if (!text) return "empty";
-      try {
-        const result = await SERVE.call("/api/super/route", {task, text, lang: ""}, 10);
-        return !result || result.ok === false ? (result && result.why) || "other" : "";
-      } catch (error) {
-        return error && error.status === 403 ? "unpaired" : error && error.data && typeof error.data === "object" && error.data.why ? error.data.why : "other";
-      }
+    // One direct message to one task (the input's, the card's and the pop-out's): {ok, how, text} with the line to show, or {ok: false, why, text}. Said in the task's thread, so the filter never hides it.
+    async function directSend(task, text, options, quiet) {
+      const result = await SUPERDIRECT.send(task, text, options);
+      if (!quiet) addSys(result.ok ? SUPERDIRECT.receipt(result.how, task) : SUPERDIRECT.refusal(task, result.why, result.error), task, !result.ok, String(text).slice(0, 300));
+      if (result.ok) poll().then(schedule, schedule);
+      return result;
     }
-    async function routeSend(target, typed) {
+    async function submit_direct(target, typed) {
       routeBusy = true;
+      const options = direct.values();
       field.value = "";
       field.style.height = "auto";
       routeComplete();
-      const why = await routeAsk(target.task, target.text);
+      drawDirect();
+      const result = await directSend(target.task, target.text, options);
       routeBusy = false;
-      if (why) {  // refused: say why in the stream, the words go back into the input
-        if (!field.value) field.value = typed;
-        field.dispatchEvent(new Event("input"));
-        addSys(t(routeKey(why)));
-        return;
-      }
-      poll().then(schedule, schedule);
+      if (result.ok) { direct.clear(); drawInput(); return; }
+      if (!field.value) field.value = typed;  // refused: the words come back into the input
+      field.dispatchEvent(new Event("input"));
     }
     function submit() {
       const typed = field.value.trim();
       if (!typed || routeBusy) return;
       const target = routeTarget(typed);
-      if (target) routeSend(target, typed); else ask(null);
+      if (target && direct.reading()) return;  // a file is still being read
+      if (target) submit_direct(target, typed); else ask(null);
     }
     // The ask rows: one per ask, drawn again in place when its state changes (never added twice).
     function routeBuild(item) {
@@ -1224,7 +1246,7 @@ const SUPER = (function () {
       else if (isEnter(event) || event.key === "Tab") { event.preventDefault(); event.stopImmediatePropagation(); routeChoose(routeNames[Math.max(0, routePick)]); }
       else if (event.key === "Escape") { event.preventDefault(); routePick = -1; routeNames = []; complete.hidden = true; }
     });
-    field.addEventListener("input", () => { routePick = -1; routeComplete(); });
+    field.addEventListener("input", () => { routePick = -1; routeComplete(); drawDirect(); });
     send.addEventListener("click", submit);
     field.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); submit(); } });
     field.addEventListener("input", () => { setFold(false, false); field.style.height = "auto"; field.style.height = Math.min(120, field.scrollHeight) + "px"; });
@@ -1321,10 +1343,9 @@ const SUPER = (function () {
     const replyFor = (item) => { const entry = item && (item.why === "stopped" || SAYS(item)) ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };
     const previewFor = (item) => previewBox(item);
     const asksOf = (task) => ((talk && talk.asks) || []).filter((one) => one && one.task === task).map((one) => ({...one, line: one.state === "sent" ? t("super.route.waiting") : one.state === "queued" ? t("super.route.queued") : one.state === "failed" ? t(routeKey(one.why || one.end)) : ""}));
-    async function askTask(task, text) {
-      const why = await routeAsk(task, String(text || "").trim());
-      if (!why) poll().then(schedule, schedule);
-      return {ok: !why, why, text: why ? t(routeKey(why)) : ""};
+    async function askTask(task, text) {  // the pop-out's input: a direct message too, with the options of this browser
+      const result = await directSend(task, String(text || "").trim(), SUPERDIRECT.valuesFor(task), false);
+      return {ok: result.ok, why: result.ok ? "" : result.why, text: result.ok ? "" : SUPERDIRECT.refusal(task, result.why, result.error)};
     }
     const pop = {alertMarks: () => alertMarks((data && data.status) || {}), replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose, jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
       taskLink, ask: (text) => ask(null, text), watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, openVS: () => SERVE.openVS()};

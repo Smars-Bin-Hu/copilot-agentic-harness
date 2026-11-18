@@ -354,3 +354,25 @@ a.sa-task:hover{text-decoration:underline}
 .sa-pvh{list-style:none;margin-left:-16px;margin-top:3px}
 .sa-pvsum{list-style:none;margin-left:-16px;white-space:pre-wrap}
 .sa-row.item.done .sa-xtra,.sa-row.item.done .sa-call{display:none}
+
+/* the direct message (superdirect.js): the counter and the options icon next to Send, the files under the box, and the options menu (a small popover over the page, kept inside the view) */
+.sa-off{display:none!important}
+.sa-dcount{align-self:center;flex:none;font-size:11px;color:var(--soft);white-space:nowrap}
+.sa-dcount.over{color:var(--bad,#c0392b)}
+.sa-dcount[hidden],.sa-dopt[hidden]{display:none}
+.sa-dopt{position:relative;border:0;background:transparent;color:var(--soft);border-radius:9px;width:30px;height:30px;flex:none;font:inherit;font-size:18px;line-height:1;cursor:pointer}
+.sa-dopt:hover,.sa-dopt[aria-expanded="true"]{background:var(--hover);color:var(--ink)}
+.sa-ddot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--hot-dot)}
+.sa-ddot[hidden]{display:none}
+.sa-input .rp-files{margin:0 0 6px}
+.sa-dmenu{position:fixed;z-index:60;box-sizing:border-box;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line2);border-radius:12px;background:var(--card);color:var(--ink);box-shadow:0 8px 28px rgba(0,0,0,.22);font-size:12.5px}
+.sa-dfield{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sa-dlabel{color:var(--soft);flex:none}
+.sa-dfield select{min-width:0;max-width:62%;font:inherit;font-size:12.5px}
+.sa-dcheck{display:flex;align-items:center;gap:6px;cursor:pointer}
+.sa-dfoot{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sa-dfoot .rp-attach{margin:0}
+.sa-dreset{border:0;background:transparent;color:var(--soft);font:inherit;font-size:12px;text-decoration:underline;cursor:pointer}
+.sa-dmsg:empty{display:none}
+.sa-sys.bad{color:var(--bad,#c0392b);white-space:normal}
+.sa-reply .sa-dopt{align-self:flex-end}

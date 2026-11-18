@@ -1,18 +1,17 @@
-# 检查：看板的等待与出错（1.8.5）
+# 检查：看板的等待与出错（1.8.5），VS Code 报错的原因（1.8.6）
 
 在公司电脑上，用真的 VS Code 和 Copilot，把 1.8.5 的改动走一遍。每一步拍照发回。
 
 ## 准备
 
-1. 在 harness 文件夹里换到 1.8.5（发版前用分支 `v1.8.5-board-waits`）：
+1. 在 harness 文件夹里更新到 main（1.8.6）：用看板的文件夹更新，或者在 PowerShell 里：
 
    ```powershell
-   git fetch origin v1.8.5-board-waits
-   git checkout v1.8.5-board-waits
+   git pull
    harness --version
    ```
 
-   应该显示 `1.8.5`。拍照。
+   应该显示 `1.8.6`。拍照。
 
 2. 在看板的终端里按 Ctrl+C 停掉看板，再用 Start Harness 重新启动。页面上不能再有"the files are 1.8.x … start it again"那行红字。
 
@@ -82,3 +81,11 @@ chat 出错的时候（限流、断网都可能），拍下任务页和 Live：
 ## 第 8 步（可选）：一直没开始
 
 关掉 VS Code，在一个任务上 Send 一条消息（会失败或卡住都拍下来）。如果任务进了 Starting…，等 2 分钟：应该变成黄色的"还没看到 agent 开始"，按钮能点了。
+
+## 第 9 步（1.8.6）：VS Code 报错时写清原因
+
+新建任务（或发消息）时如果又出现红字报错，拍下来。现在它不再只写"AhpError"，而是写明是哪一种：
+
+- "VS Code 40 秒内没有回应……它可能稍后还会做完"：电脑太慢。再按之前先看 VS Code 里有没有建出 chat。
+- "VS Code 里的 Copilot 没准备好"：登录问题，按它说的做（登录 GitHub，或者 Developer: Restart Extension Host）。
+- "它说：……"：VS Code 的原话，原样拍下来。

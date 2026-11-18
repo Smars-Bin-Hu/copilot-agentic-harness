@@ -721,14 +721,16 @@ class NotReadyTests(CreateCase):
         self.assertEqual((status, data["error"]), (409, refused("off")))
         self.assertEqual(self.made, [])
 
-    def test_a_host_that_refuses_gives_the_name_of_the_error_only(self) -> None:
+    def test_a_host_that_refuses_gives_its_words_without_the_token(self) -> None:
+        """1.8.6: the host's own words, on one line (before, only "AhpError": nobody could tell why). The token of the link is never in them."""
         def fail(_params: Dict[str, Any]) -> Dict[str, Any]:
-            raise ahp.AhpError(f"createSession failed: bad token {TOKEN}")
+            raise ahp.AhpError(f"the folder is not trusted; bad token {TOKEN}")
 
         self.host.answers["createSession"] = fail
         status, data, _ = self.make()
         self.assertEqual(status, 409)
-        self.assertEqual(data["error"], refused("host", error="AhpError"))
+        self.assertIn("the folder is not trusted", data["error"])
+        self.assertTrue(data["error"].startswith(refused("host", why="")[:12]), data["error"])
         self.assertNotIn(TOKEN, json.dumps(data))
 
 

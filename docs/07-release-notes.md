@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.5 (1.8.0 – 1.8.5, 2026-11-17 – 2026-11-18)
+## 1.8.6 (1.8.0 – 1.8.6, 2026-11-17 – 2026-11-18)
 
 ### Added
 
@@ -27,6 +27,7 @@ To see which version you have: `harness --version`.
 - The gate let the agent run `harness task allow --conn`, `--links` or `--off` (1.8.0).
 - A chat whose last turn failed looked like a task at work or one waiting for you: it is the state *error* now, with the error's words on the task page, a red item in Live, and Try again (1.8.5).
 - After an answer, an approval or Try again, the page kept the old card and its buttons until the agent was seen to work, and Try again gave no sign it was pressed (1.8.5).
+- When VS Code refused or did not answer (New task, a message, Try again), the board said only "AhpError": it now says whether VS Code was too slow, Copilot was not ready, or what VS Code answered; a new chat may take VS Code 40 s to make (1.8.6).
 
 ### Retired
 

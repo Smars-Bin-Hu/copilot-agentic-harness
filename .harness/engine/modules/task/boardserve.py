@@ -131,8 +131,20 @@ class Fallback(CommandError):
         self.text = text
 
 
+def host_words(error: BaseException) -> str:
+    """What the host's error was, in a sentence for the page (1.8.6; before, only the name of the error was shown, and nobody could tell a slow VS Code from a refusal)."""
+    kind, detail = ahp.problem_of(error)
+    if kind == "slow":
+        return say("host.slow", seconds=detail)
+    if kind == "copilot":
+        return say("host.copilot")
+    if kind == "said":
+        return say("host.said", words=detail)
+    return say("host.other", error=type(error).__name__)
+
+
 def ahp_scrub(error: BaseException) -> str:
-    return say("send.refused.host", error=type(error).__name__)
+    return say("send.refused.host", why=host_words(error))
 
 
 class Preview(Exception):
@@ -1326,8 +1338,8 @@ class Board:
             done = self.link.create(dict(skillsend.plan(str(data.get("lang") or "en"), name), model=model), text)
         except vslink.Refused as error:
             raise CommandError(say(f"create.refused.{error.why}")) from None
-        except Exception as error:  # noqa: BLE001 - the name of the error only, never its text
-            raise CommandError(say("create.refused.host", error=type(error).__name__)) from None
+        except Exception as error:  # noqa: BLE001 - what kind of error, and the host's own words (not those of another error: they may hold a path)
+            raise CommandError(say("create.refused.host", why=host_words(error))) from None
         skillsend.record(self.root, str(data.get("skill")), "chat", done)
         if task:
             self.begin(task, "newchat", pre)
@@ -1666,8 +1678,8 @@ class Board:
             done = self.link.create(plan, text, files)
         except vslink.Refused as error:
             raise CommandError(say(f"create.refused.{error.why}")) from None
-        except Exception as error:  # noqa: BLE001 - the host said no: nothing more is known; the name of the error only, never its text
-            raise CommandError(say("create.refused.host", error=type(error).__name__)) from None
+        except Exception as error:  # noqa: BLE001 - the host said no: what kind of error, and the host's own words (not those of another error: they may hold a path)
+            raise CommandError(say("create.refused.host", why=host_words(error))) from None
         initiator = str(done.get("initiator") or "")
         warn = say("create.warn.initiator", initiator=initiator) if initiator and initiator != "vscode" else ""
         return {"created": True, "name": plan["name"], "initiator": initiator, "warn": warn, "unchecked": not initiator, "text": text, "then": plan.get("then") or "", "model": plan["model"] or {}}

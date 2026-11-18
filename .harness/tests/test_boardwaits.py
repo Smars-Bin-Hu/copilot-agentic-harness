@@ -256,6 +256,29 @@ class SuperviewTests(unittest.TestCase):
         self.assertEqual([item["why"] for item in view["items"]], ["plan"])  # the decision stays in the queue
 
 
+class HostWordsTests(unittest.TestCase):
+    """1.8.6: a host error says what kind it was (a slow VS Code, Copilot not ready, the host's own words); before, only "AhpError" was shown."""
+
+    def test_each_kind_of_host_error_has_its_own_words(self) -> None:
+        slow = boardserve.host_words(ahp.AhpError("createSession: no answer in 40 s"))
+        self.assertEqual(slow, messages.text("host.slow", seconds="40"))
+        for said in ("createSession failed: Provider copilotcli is not ready", "dispatchAction failed: Client is not connected"):
+            self.assertEqual(boardserve.host_words(ahp.AhpError(said)), messages.text("host.copilot"))
+        own = boardserve.host_words(ahp.AhpError("createSession failed: the folder is not trusted\n  at line 2"))
+        self.assertEqual(own, messages.text("host.said", words="createSession failed: the folder is not trusted at line 2"))
+        long = ahp.problem_of(ahp.AhpError("x" * 900))[1]
+        self.assertEqual(len(long), ahp.WORDS_MAX)
+
+    def test_an_error_that_is_not_the_hosts_shows_only_its_name(self) -> None:
+        words = boardserve.host_words(OSError("/Users/someone/private/file"))
+        self.assertEqual(words, messages.text("host.other", error="OSError"))
+        self.assertNotIn("/Users", boardserve.ahp_scrub(OSError("/Users/someone/private/file")))
+
+    def test_the_page_waits_longer_than_the_host_may_take_to_make_a_chat(self) -> None:
+        self.assertGreater(ahp.CREATE_TIMEOUT, ahp.CALL_TIMEOUT)
+        self.assertGreaterEqual(vslink.CREATE_WAIT, ahp.CREATE_TIMEOUT + 15)  # room for the calls after createSession
+
+
 class ServedTests(SendCase):
     """Through the server, with a fake VS Code."""
 

@@ -46,7 +46,7 @@ SCAN_MAX = 300  # chats read at most, newest first
 RESCAN_BUSY = 5.0  # seconds between two reads of a chat that is at work and had no Copilot id when read (1.6.111)
 NO_CLI_WAIT = 300.0  # no `code` command: look again only now and then
 JOB_WAIT = 25.0  # seconds a page request waits for the thread to send, steer or stop
-CREATE_WAIT = 45.0  # a create makes the chat, sends, then waits for the host to list it
+CREATE_WAIT = 60.0  # a create makes the chat, sends, then waits for the host to list it (1.8.6: 45 before; `createSession` may take ahp.CREATE_TIMEOUT)
 REREAD_AFTER_ANSWER = 10.0  # seconds after a person answered in which a session that still says "input" is not read again for a missed item
 PROBLEM_FOR = 120.0  # seconds a "Copilot is not usable" answer of the host is still told after it was heard
 INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
@@ -227,7 +227,7 @@ class VsLink:
     def host_said(self, error: BaseException) -> None:
         """Remember the two things the host says when Copilot itself is not usable (`Provider copilotcli is not ready`, `Client is not connected`); any other error is not Copilot's sign-in."""
         text = str(error).lower()
-        found = "provider" if "provider" in text and "not ready" in text else "client" if "not connected" in text else ""
+        found = ("provider" if "provider" in text else "client") if ahp.problem_of(error)[0] == "copilot" else ""
         if found:
             with self.lock:
                 self.problem = (found, time.monotonic())
@@ -929,7 +929,7 @@ class VsLink:
             raise Refused("timeout")
         resource = "ahp-session:/" + str(uuid.uuid4())
         link.call("createSession", {"channel": resource, "provider": ahp.LOCAL_PROVIDER, "workingDirectories": [ahp.folder_uri(self.root)],
-                                    "config": {"isolation": "folder", "mode": "interactive", "autoApprove": plan["approve"]}})  # `model` here would not be honoured: it goes on the message
+                                    "config": {"isolation": "folder", "mode": "interactive", "autoApprove": plan["approve"]}}, timeout=ahp.CREATE_TIMEOUT)  # `model` here would not be honoured: it goes on the message
         state = link.subscribe(resource)
         chat = str(state.get("defaultChat") or "")
         if not chat:

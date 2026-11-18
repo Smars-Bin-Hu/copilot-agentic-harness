@@ -19,6 +19,7 @@ import collections
 import datetime
 import json
 import os
+import re
 import select
 import shutil
 import socket
@@ -34,6 +35,7 @@ from . import procrun
 PROTOCOL = "1.1.0"
 CLI_TIMEOUT = 25  # seconds for `code agent endpoints` and `code <folder>`
 CALL_TIMEOUT = 20
+CREATE_TIMEOUT = 40  # 1.8.6: `createSession` on a busy work computer took more than CALL_TIMEOUT
 CLI_ENV = "HARNESS_VSCODE_CLI"  # a person may point at the `code` command by hand
 
 # `status` of a session or chat is a set of bits (checked on real sessions)
@@ -45,6 +47,26 @@ FUSION_STANDARD = "balance"  # its lowest tier
 
 class AhpError(Exception):
     """The host answered with an error, or the exchange broke."""
+
+
+SLOW = re.compile(r": no answer in (\d+(?:\.\d+)?) s$")
+WORDS_MAX = 200  # characters of the host's own words a page shows
+
+
+def problem_of(error: BaseException) -> Tuple[str, str]:
+    """What went wrong with the host, for a person (1.8.6): (`slow`, seconds) when it did not answer in time; (`copilot`, "") when Copilot itself is not ready in VS Code
+    (signed out, or still starting: `Provider copilotcli is not ready`, `Client is not connected`); (`said`, its words on one line, at most WORDS_MAX characters) for any other
+    error of the exchange; (`other`, "") for an error that is not the host's, whose words may hold a path of this computer."""
+    if not isinstance(error, AhpError):
+        return ("other", "")
+    text = " ".join(str(error).split())
+    found = SLOW.search(text)
+    if found:
+        return ("slow", found.group(1))
+    lower = text.lower()
+    if ("provider" in lower and "not ready" in lower) or "not connected" in lower:
+        return ("copilot", "")
+    return ("said", text if len(text) <= WORDS_MAX else text[:WORDS_MAX - 1].rstrip() + "\u2026")
 
 
 class NotReady(AhpError):

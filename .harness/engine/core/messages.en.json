@@ -1811,6 +1811,7 @@
   "super.why.error": "Error",
   "super.why.stuck": "Stuck · {n} min",
   "super.retry": "Try again",
+  "super.waits.start": "Starting: sent, the agent is not seen to work yet",
   "super.retry.tip": "Starts the chat again where it stopped",
   "super.retry.no": "This chat cannot be resumed from here. Open the task.",
   "super.ask.vs": "Answer it in VS Code",

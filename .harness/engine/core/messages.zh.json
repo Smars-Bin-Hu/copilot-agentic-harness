@@ -1811,6 +1811,7 @@
   "super.why.error": "出错",
   "super.why.stuck": "卡住 · {n} 分钟",
   "super.retry": "重试",
+  "super.waits.start": "正在启动：已发出，还没看到 agent 开始",
   "super.retry.tip": "从停下的地方重新开始这个对话",
   "super.retry.no": "这个对话不能从这里恢复，请打开 task。",
   "super.ask.vs": "去 VS Code 回答",

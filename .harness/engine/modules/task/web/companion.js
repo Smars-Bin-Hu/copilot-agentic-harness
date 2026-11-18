@@ -142,6 +142,17 @@ const COMPANION = (function () {
         mood === "sleep" ? h("span", null, "· " + cap(t("super.line.asleep"))) : mood === "tired" ? h("span", null, "· " + cap(t("super.line.tired"))) : null,
         snap.cost ? h("span", {class: "cp-cost"}, PET.battery(snap.cost)) : null);
     }
+    // 1.8.5: what is starting, not seen to start, or being made: no card yet, so a short line of marks (a spinner or a yellow mark, the name; the details in the hover).
+    function waits(snap) {
+      const marks = [];
+      for (const mate of snap.mates || []) {
+        if (mate.state !== "start" && !(mate.starting && mate.starting.late)) continue;
+        const late = Boolean(mate.starting && mate.starting.late);
+        marks.push(h("span", {class: "cp-wt" + (late ? " late" : ""), title: shownName(mate) + "\n" + (nameTip(mate) ? nameTip(mate) + "\n" : "") + startingTip(mate.starting)}, late ? h("span", {class: "cp-late", "aria-hidden": "true"}) : spinner("cp-spin"), shownName(mate)));
+      }
+      for (const one of snap.making || []) marks.push(h("span", {class: "cp-wt", title: t("waits.making.tip", {kind: one.kind || "", at: when(one.since, 11, 19)})}, spinner("cp-spin"), one.name));
+      return marks.length ? h("div", {class: "cp-waits"}, ...marks) : null;
+    }
     function buttons(item) {
       const nodes = pop.buttonsFor(item);
       nodes.forEach((node, at) => {
@@ -181,7 +192,7 @@ const COMPANION = (function () {
       acts.addEventListener("click", () => { wake(); setTimeout(() => { try { window.focus(); } catch (error) { /* the page may keep its place */ } }, 0); });  // an approval opens its window in the page
       const reply = cached(state.replies, item, pop.replyFor), preview = cached(state.previews, item, pop.previewFor), qa = asked(item);
       const node = h("div", {class: "cp-card" + (state.fresh === item.id ? " fresh" : "")},
-        h("div", {class: "cp-head"}, avatar(item), pop.taskLink(item.task, undefined, "cp-task"), h("span", {class: "cp-why"}, "· " + pop.why(item)), h("span", {class: "cp-nav"}, prev, (at + 1) + "/" + w, next)),
+        h("div", {class: "cp-head"}, avatar(item), pop.taskLink(item.task, undefined, "cp-task", item), h("span", {class: "cp-why"}, "· " + pop.why(item)), h("span", {class: "cp-nav"}, prev, (at + 1) + "/" + w, next)),
         what, ...pop.extraFor(item), note ? h("div", {class: "cp-note"}, h("span", {class: "cp-judg", title: t("super.judgment.tip")}, "◇"), " " + note) : null, more, qa, reply, preview, acts, h("div", {class: "cp-keys"}, t("super.pop.keys")));
       state.fresh = "";
       return node;
@@ -189,7 +200,7 @@ const COMPANION = (function () {
     function row(item, at) {
       const mate = (state.snap.mates || []).find((one) => one.task === item.task);
       const node = h("button", {type: "button", class: "cp-row"}, h("span", {class: "cp-av"}, PET.face("you", mate ? mate.kind : "", 0)),
-        h("span", {class: "cp-et"}, h("b", {title: item.task}, item.task), h("span", null, pop.why(item) + " · " + cap(item.title))), h("span", {class: "cp-go"}, "›"));
+        h("span", {class: "cp-et"}, h("b", {title: item.task + (nameTip(item) ? "\n" + nameTip(item) : "")}, shownName(item)), h("span", null, pop.why(item) + " · " + cap(item.title))), h("span", {class: "cp-go"}, "›"));
       node.title = t("super.pop.row.tip");
       node.addEventListener("click", () => { state.cur = item.id; state.curTask = item.task; state.view = "card"; setView("card"); });
       node.addEventListener("contextmenu", (event) => { event.preventDefault(); menuOpen(item.task, node); });  // a right click, or the menu key on the focused row
@@ -197,7 +208,7 @@ const COMPANION = (function () {
     }
     function draw(force) {
       const snap = state.snap, w = snap.items.length, at = current(), item = snap.items[at];
-      const sig = JSON.stringify([state.view, w, snap.items.map((one) => one.id + "|" + pop.mainOf(one)), item ? pop.sigFor(item) : "", item ? item.id : "", item && state.view === "card" ? pop.asksOf(item.task).slice(-1).map((one) => [one.id, one.state, one.answer, one.line]) : "", snap.done.length, snap.working, snap.stuck, snap.error, snap.mood, snap.cost, snap.failed, snap.off, snap.loaded, state.dialog]);
+      const sig = JSON.stringify([state.view, w, snap.items.map((one) => one.id + "|" + pop.mainOf(one)), item ? pop.sigFor(item) : "", item ? item.id : "", item && state.view === "card" ? pop.asksOf(item.task).slice(-1).map((one) => [one.id, one.state, one.answer, one.line]) : "", snap.done.length, snap.working, JSON.stringify([(snap.mates || []).map((mate) => [mate.task, mate.state, mate.label, mate.starting && mate.starting.late]), snap.making]), snap.stuck, snap.error, snap.mood, snap.cost, snap.failed, snap.off, snap.loaded, state.dialog]);
       drawPet();
       listBtn.classList.toggle("on", state.view === "list");
       root.className = root.className.replace(/\bv-\w+\b/g, "").trim() + " v-" + state.view;
@@ -210,12 +221,12 @@ const COMPANION = (function () {
         pill.addEventListener("click", () => setView(w ? "card" : "list"));
         content = [pill];
       } else if (state.view === "list") {
-        content = [stat(snap), h("div", {class: "cp-list"}, ...(w ? snap.items.map(row) : [h("div", {class: "cp-meta cp-none"}, t("super.empty.title"))]),
+        content = [stat(snap), waits(snap), h("div", {class: "cp-list"}, ...(w ? snap.items.map(row) : [h("div", {class: "cp-meta cp-none"}, t("super.empty.title"))]),
           snap.done.length ? h("div", {class: "cp-today"}, h("span", {class: "cp-meta"}, t("super.pop.today")), ...snap.done.slice().reverse().map((one) => h("span", {class: "cp-ok"}, one.task + " · " + one.text))) : null)];
       } else if (!w) {
-        content = [stat(snap), h("div", {class: "cp-clear"}, t("super.pop.clear"), h("br"), h("span", {class: "cp-meta"}, t("super.pop.clear.sub"))),
+        content = [stat(snap), waits(snap), h("div", {class: "cp-clear"}, t("super.pop.clear"), h("br"), h("span", {class: "cp-meta"}, t("super.pop.clear.sub"))),
           snap.done.length ? h("div", {class: "cp-today"}, h("span", {class: "cp-meta"}, t("super.pop.today")), ...snap.done.slice(-3).reverse().map((one) => h("span", {class: "cp-ok"}, one.task + " · " + one.text))) : null];
-      } else content = [stat(snap), card(item, at, w)];
+      } else content = [stat(snap), waits(snap), card(item, at, w)];
       const typing = doc.activeElement;
       body.replaceChildren(...content.filter(Boolean));
       if (typing && typing !== doc.body && typing.isConnected && body.contains(typing)) typing.focus();  // a redraw does not take the focus from a reply box

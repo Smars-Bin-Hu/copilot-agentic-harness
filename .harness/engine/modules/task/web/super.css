@@ -34,6 +34,15 @@
 .sa-mate.work .sa-ring{border-color:transparent}
 .sa-mate.work .sa-ring::before{content:"";position:absolute;inset:-2px;border-radius:50%;border:2px dashed var(--good-dot);animation:saspin 9s linear infinite}
 .sa-mate.idle .sa-ring{opacity:.6}
+/* 1.8.5: starting (a turning ring, the agent is not seen to work yet), not seen to start (a yellow mark), and a task being made (a spinner, no button) */
+.sa-ring .sa-spin{width:26px;height:26px;margin:0;border-width:3px;color:var(--good-dot);opacity:1}
+.sa-mate.start .sa-ring,.sa-mk .sa-ring{border-color:var(--line2)}
+.sa-mk{flex:none;width:58px;text-align:center;position:relative;cursor:help}
+.sa-mk .sa-ring{border-style:dashed;opacity:.85}
+.sa-mk .sa-spin{color:var(--soft)}
+.sa-late{position:absolute;right:3px;top:-2px;width:13px;height:13px;border-radius:50%;background:var(--warn-dot,#e0a100);border:2px solid var(--bg);box-sizing:border-box}
+.sa-optl{color:var(--soft);font-size:12px}
+.sa-opt.on .sa-optl,.sa-opt:hover .sa-optl{color:inherit;opacity:.8}
 .sa-mate.stuck .sa-ring{border-color:var(--hot-dot);border-style:dashed}
 .sa-mate.error .sa-ring{border-color:var(--bad,#b3261e);box-shadow:0 0 0 3px var(--hot-bg)}
 .sa-mate.on .sa-ring{outline:2px solid var(--ink);outline-offset:2px}

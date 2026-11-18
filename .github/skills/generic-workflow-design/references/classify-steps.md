@@ -13,6 +13,8 @@ Ask the questions in order. The first yes decides.
 
 A step can be split: a config file is D for its shape and S for the source, the fields and the schedule.
 
+A step that runs a call on an outside system (a query on DEV, a call to a server) is split too: writing the query can be D, the call is its own step that the agent runs and the gate judges. The script never makes the call ([scripts.md](../../generic-workflow-build/references/scripts.md)).
+
 ## Aligning the examples
 
 1. Take the file list of each example from `harness target refs <example name>`. Ignore hits that are only a mention (a comment, a README line) unless the user says they matter.

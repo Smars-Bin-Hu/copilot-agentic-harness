@@ -388,8 +388,10 @@ const SUPER = (function () {
     }
     // The reply box of a "stopped" item (the agent ended its turn with a question in text): the answer goes to the task's chat through /api/send, the item folds as answered.
     // On a refusal (409 and the like) the reasons show under the box and the words stay.
+    // The same box for an item that waits on the agent's own question (why "question" or "asking"): the words skip the question (the server turns the send into "say"); never for "confirm".
+    const SAYS = (item) => Boolean(item) && (item.why === "question" || item.why === "asking");
     function replyBox(entry) {
-      const box = h("textarea", {class: "sa-reply-box", rows: "2", placeholder: t("super.reply.ph"), title: t("super.reply.tip")});
+      const box = h("textarea", {class: "sa-reply-box", rows: "2", placeholder: t(SAYS(entry.item) ? "super.reply.say.ph" : "super.reply.ph"), title: t("super.reply.tip")});
       const send = h("button", {type: "button", class: "act hot sa-reply-go"}, t("super.reply.send"));
       const said = h("div", {class: "bad sa-reply-bad"});
       let busy = false;
@@ -467,7 +469,7 @@ const SUPER = (function () {
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
         h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, saidMore, note, more, acts));
       const entry = {item, node, acts, waited, what, note, sig: "", clicked: ""};
-      if (item.why === "stopped") node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
+      if (item.why === "stopped" || SAYS(item)) node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
       const preview = previewBox(item);
       if (preview) node.querySelector(".sa-bub").insertBefore(preview, acts);
       acts.addEventListener("click", (event) => { const button = event.target.closest("button, a.act"); if (button && button.dataset.label) entry.clicked = plain(button.dataset.label); });
@@ -968,7 +970,7 @@ const SUPER = (function () {
       if (!watchers && !shown) clearTimeout(pollTimer);
     }
     // The pop-out's calls (companion.js): the same pieces as the view, never a copy of them.
-    const replyFor = (item) => { const entry = item && item.why === "stopped" ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };
+    const replyFor = (item) => { const entry = item && (item.why === "stopped" || SAYS(item)) ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };
     const previewFor = (item) => previewBox(item);
     const asksOf = (task) => ((talk && talk.asks) || []).filter((one) => one && one.task === task).map((one) => ({...one, line: one.state === "sent" ? t("super.route.waiting") : one.state === "queued" ? t("super.route.queued") : one.state === "failed" ? t(routeKey(one.why || one.end)) : ""}));
     async function askTask(task, text) {

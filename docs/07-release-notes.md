@@ -10,6 +10,27 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.8.4 (2026-11-18)
+
+The super agent view is a place to finish things: what waits for you is pinned on top, most urgent first, and more of it can be decided there.
+
+### Added
+
+- **A queue above the chat.** Cards that wait for you are pinned above the chat, in their own scroll, the most urgent first. A long chat no longer pushes them away. Settled cards fold into **Done (n)**. With three or more cards the queue takes most of the room, and the chat can fold to one line.
+- **The header counts what matters**: `N wait · oldest · K stuck · M errors`. Point at a mark for its words.
+- **Stuck tasks show.** A task whose chat runs but made no tool call for 10 minutes (`board.stuck_seconds` in `task.json`) is marked stuck on its avatar, in the header and as a card with Steer and Stop. Waiting in `harness wait` or on a subagent is not stuck.
+- **Errors show.** A task whose last turn ended in an error is red, not "Stopped", with **Try again**.
+- **Approve a held call in the view.** The card shows the code and the command; **View** opens the command and its draft, as on the task page, and Approve works after View with the code typed.
+- **The question shows.** A question the board cannot answer shows its text and options, and says to answer it in VS Code.
+- **Previews of a requirement and a delivery.** A requirement to confirm unfolds what to do, what not to do and when it is done; a delivery its summary and changed files.
+
+### Changed
+
+- **Accept and close counts down 10 seconds, with Undo.** The task closes only when the count ends; leaving the page before then closes nothing.
+- **The line left after you act says what you did** (Allowed, Denied, Answered: …, Approved, Confirmed, Accepted), not the button's name.
+- **The super agent's text shows bold names and links properly.** Only web and board links become links.
+- **A stopped task's card no longer has a second link to its page**; its reply box and Open task stay.
+
 ## 1.8.3 (2026-11-18)
 
 The super agent view: what waits for you across all tasks in one place, a chat that knows them, asking a task a question, proposals you press, and saying something while an agent waits on its question.

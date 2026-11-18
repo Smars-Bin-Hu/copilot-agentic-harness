@@ -247,13 +247,21 @@ Run `harness task board` in your own terminal. It serves the board of every task
 
 The third button of the board's header. It is never the default and the board does not keep the choice.
 
-- **Messages**: what waits for you across all open tasks, each with the board's own buttons. The agent never presses them: you do.
+- **Queue**: what waits for you across all open tasks, as cards pinned above the chat, the most urgent first, each with the board's own buttons. The agent never presses them: you do. A card you settled folds into **Done (n)** at the foot of the queue. With three or more cards the queue gets most of the room; the chat can fold to one line.
+- **Header**: `N wait · oldest · K stuck · M errors`; point at a mark for its words. A part that is zero is left out.
+- **Cards that finish in place** (1.8.4):
+  - A held call shows its code and command. **View** opens the command and its draft; Approve works only after View, with the code typed, as on the task page.
+  - An error is red, with **Try again**.
+  - A task whose chat runs but made no tool call for `board.stuck_seconds` (10 minutes by default) is **Stuck**, with Steer and Stop.
+  - A question the board cannot answer shows its text and its options, and says to answer it in VS Code.
+  - A delivery shows its summary. **Accept and close** counts down 10 seconds with **Undo**; the task closes only then.
+  - The line left after you act says what you did: Allowed, Denied, Answered: …, Approved, Confirmed, Accepted.
 - **Avatars**: a round avatar for each task shows its state; a click filters the messages to that task.
 - **The pet**: a small robot in a headset rests in the top right corner of the view and flies out only when it has something to do, with one dot circling it for each task (red: stops work, amber: waits for you, green: works). Click it: it shows the next thing that waits; click again to open that task. Double-click: it sums up today. Drag it onto an avatar: only that task's messages. Right-click it to change its skin: Commander, Ninja, Pilot, Mecha or Neon (each with its own colours and gear; the super agent's avatars wear it too; this browser remembers it). A battery in the header shows the Credits the super agent has left today; point at it for the numbers. Its eyes follow the pointer. It stands still when the page is hidden or the system reduces motion.
 - **Chat**: ask a question, or press **Sum up today**. The board opens one Copilot chat a day with the `super` agent, which only reads. The limit is `super.daily_credits` in `task.json`; the view works without the chat.
 - **History**: a long day shows its latest 40 messages, with **Show earlier** for the rest. When a new day starts, the day before goes into the history (`.harness/runtime/super-history/`). The clock button in the header lists the earlier days: open one to read it, **Archive** it (hidden under **Archived**, where **Restore** brings it back) or **Delete** it (a second click confirms). Nothing is deleted by itself. Today cannot be deleted: its record holds the day's spend.
 - **Answer and ask**: a task that stopped with a question has a reply box under its message. With one task's avatar filter on, or with `@name` at the start, the input asks that task; its answer comes back as a message from the task. That turn is read only: the gate refuses writes, and the task keeps what it waited for.
-- **Previews**: a plan approval shows the plan's steps, a promote approval the changed files with their added and removed lines (click to unfold).
+- **Previews**: a plan approval shows the plan's steps, a promote approval the changed files with their added and removed lines, a requirement to confirm what to do, what not to do and when it is done, and a delivery its summary and changed files (click to unfold).
 - **Steer and Stop**: right click a task's avatar while it works.
 - **Say something while it asks**: when an agent waits on its own question, the reply box (also on the task page and in the pop-out) sends your own words: the board skips the question and the agent goes on from what you said. A command confirmation still needs its buttons.
 - **Proposals**: ask the super agent for anything (archive, pause, autorun, checks, work for a task, a new task). It never acts: its answer ends with a card of the board's own buttons, checked against the board as it is now, and nothing happens until you press.

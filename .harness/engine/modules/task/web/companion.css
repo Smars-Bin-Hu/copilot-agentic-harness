@@ -124,3 +124,9 @@ a.cp-task:hover{text-decoration:underline}
 .cp-menuline{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--line2);background:var(--bg);color:var(--ink);border-radius:7px}
 .cp-menubad{font-size:12px;padding:0 8px;overflow-wrap:anywhere}
 .cp-menubad:empty{display:none}
+/* 1.8.4: a question or a delivery is words, not a command; the held call fits the narrow card */
+.cp-text.ask.prose{font-family:inherit;font-size:14px;-webkit-line-clamp:4;line-clamp:4}
+.cp-text[hidden]{display:none}
+.cp-card .sa-xtra{margin:0 0 6px}
+.cp-acts .sa-call{flex:1 1 100%;background:transparent}
+.cp-acts .sa-code{flex:1 1 7em}

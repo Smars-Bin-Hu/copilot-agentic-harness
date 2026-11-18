@@ -144,7 +144,10 @@ const COMPANION = (function () {
     }
     function buttons(item) {
       const nodes = pop.buttonsFor(item);
-      nodes.forEach((node, at) => { if (item.actions[at]) node.dataset.action = item.actions[at].action; node.classList.add("cp-act"); });
+      nodes.forEach((node, at) => {
+        if (item.actions[at] && node.matches("button, a")) node.dataset.action = item.actions[at].action;
+        for (const one of node.matches("button, a") ? [node] : node.querySelectorAll("button")) one.classList.add("cp-act");  // a held call, Accept and a stuck chat bring more than one control in a box: the keys find the buttons in it
+      });
       return nodes;
     }
     function avatar(item) {
@@ -167,10 +170,11 @@ const COMPANION = (function () {
     }
     function card(item, at, w) {
       const main = pop.mainOf(item), asks = pop.asksPerson(item);
-      const what = h("div", {class: "cp-text" + (asks ? " ask" : ""), title: pop.fullOf(item)}, main);
-      if (asks) { what.tabIndex = 0; what.addEventListener("click", () => what.classList.toggle("open")); }
+      const what = h("div", {class: "cp-text" + (asks || pop.prose(item) ? " ask" : "") + (pop.prose(item) ? " prose" : ""), title: pop.fullOf(item)}, main);
+      if (asks || pop.prose(item)) { what.tabIndex = 0; what.addEventListener("click", () => what.classList.toggle("open")); }
+      if (pop.hasCalls(item)) what.hidden = true;  // the held calls below show the command with its code (1.8.4)
       const note = pop.jointNote(item);
-      const more = !asks && item.detail && item.detail !== item.title ? h("details", {class: "cp-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
+      const more = !asks && !pop.prose(item) && item.detail && item.detail !== item.title ? h("details", {class: "cp-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
       const prev = h("button", {type: "button", class: "cp-cb", title: t("super.pop.prev"), "aria-label": t("super.pop.prev")}, "‹"), next = h("button", {type: "button", class: "cp-cb", title: t("super.pop.next"), "aria-label": t("super.pop.next")}, "›");
       prev.addEventListener("click", () => move(-1)); next.addEventListener("click", () => move(1));
       const acts = h("div", {class: "cp-acts"}, buttons(item));
@@ -178,7 +182,7 @@ const COMPANION = (function () {
       const reply = cached(state.replies, item, pop.replyFor), preview = cached(state.previews, item, pop.previewFor), qa = asked(item);
       const node = h("div", {class: "cp-card" + (state.fresh === item.id ? " fresh" : "")},
         h("div", {class: "cp-head"}, avatar(item), pop.taskLink(item.task, undefined, "cp-task"), h("span", {class: "cp-why"}, "· " + pop.why(item)), h("span", {class: "cp-nav"}, prev, (at + 1) + "/" + w, next)),
-        what, note ? h("div", {class: "cp-note"}, h("span", {class: "cp-judg", title: t("super.judgment.tip")}, "◇"), " " + note) : null, more, qa, reply, preview, acts, h("div", {class: "cp-keys"}, t("super.pop.keys")));
+        what, ...pop.extraFor(item), note ? h("div", {class: "cp-note"}, h("span", {class: "cp-judg", title: t("super.judgment.tip")}, "◇"), " " + note) : null, more, qa, reply, preview, acts, h("div", {class: "cp-keys"}, t("super.pop.keys")));
       state.fresh = "";
       return node;
     }

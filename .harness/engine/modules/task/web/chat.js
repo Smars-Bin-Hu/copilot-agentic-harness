@@ -414,6 +414,7 @@ const CHAT = (function () {
 
   // "Allow . deny" (B75): the chat waits for a person to let a tool run. The dialog shows the one call (the command, redacted and cut, and its id) and sends the decision for that call only.
   // The server reads the host again and refuses when the call is gone or is not what this dialog showed.
+  let decided = null;  // what the person just decided in the two windows below (1.8.4): the super view's receipt says "Allowed", "Denied" or the answer, not the name of the button
   function confirm(row) {
     const found = row.ask;
     if (!found || found.kind !== "confirm") return;
@@ -429,13 +430,24 @@ const CHAT = (function () {
       h("div", {class: "row send-actions"}, allow, deny, no), said]);
     const decide = (decision) => {
       allow.disabled = deny.disabled = true;
-      ask("/api/confirm", {task: row.name, id: found.id, tool_call_id: found.tool_call_id, digest: found.digest, decision}).then(() => { view.close(); SERVE.done(); },
+      ask("/api/confirm", {task: row.name, id: found.id, tool_call_id: found.tool_call_id, digest: found.digest, decision}).then(() => { decided = {task: row.name, kind: decision, at: Date.now()}; view.close(); SERVE.done(); },
         (error) => { allow.disabled = deny.disabled = false; said.replaceChildren(...SERVE.reasons(shown(error))); });
     };
     allow.addEventListener("click", () => decide("allow"));
     deny.addEventListener("click", () => decide("deny"));
     no.addEventListener("click", view.close);
     no.focus();  // Enter does not allow anything by accident
+  }
+
+  // The answers as words for a receipt: the option the person chose (its label), or what was typed, "; " between the questions.
+  function answerText(found, answers) {
+    const label = (item, id) => ((item.options || []).find((option) => option.id === id) || {}).label || (id === true ? t("board.ask.yes") : id === false ? t("board.ask.no") : String(id));
+    return (found.questions || []).map((item) => {
+      const one = answers[item.id];
+      if (one === undefined) return "";
+      const part = one !== null && typeof one === "object" && !Array.isArray(one) ? [one.value === undefined ? "" : label(item, one.value), one.free].filter(Boolean).join(", ") : Array.isArray(one) ? one.map((id) => label(item, id)).join(", ") : item.kind === "single-select" || item.kind === "boolean" ? label(item, one) : String(one);
+      return part.length > 60 ? part.slice(0, 59) + "\u2026" : part;
+    }).filter(Boolean).join("; ");
   }
 
   // "Answer..." (B75): the agent asked a question. One control for each question (options, a box, yes or no, a number); the answers go for the one request this dialog showed.
@@ -492,11 +504,11 @@ const CHAT = (function () {
       const answers = {};
       for (const [key, value] of Object.entries(values)) if (value !== undefined) answers[key] = value;
       for (const [key, text] of Object.entries(typed)) if (text.trim()) answers[key] = {value: values[key], free: text};
-      ask("/api/answer", {task: row.name, id: found.id, request_id: found.request_id, digest: found.digest, answers}).then(() => { view.close(); SERVE.done(); },
+      ask("/api/answer", {task: row.name, id: found.id, request_id: found.request_id, digest: found.digest, answers}).then(() => { decided = {task: row.name, kind: "answer", text: answerText(found, answers), at: Date.now()}; view.close(); SERVE.done(); },
         (error) => { send.textContent = t("board.ask.send"); ready(); said.replaceChildren(...SERVE.reasons(shown(error))); });
     });
     no.addEventListener("click", view.close);
   }
 
-  return {panel, stop, withdraw, create, seen, confirm, question, fileTray, modelPick};
+  return {panel, stop, withdraw, create, seen, confirm, question, fileTray, modelPick, decided: () => decided};
 })();

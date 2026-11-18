@@ -47,5 +47,5 @@
 .mk-st .mk-err{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bad)}
 .mk-x{flex:none;border:0;background:transparent;color:inherit;font:inherit;font-size:15px;line-height:1;padding:0 4px;cursor:pointer;border-radius:4px}
 .mk-x:hover{background:var(--bad-bg)}.mk-x:disabled{opacity:.5;cursor:default}
-tr.making td.state{max-width:0;width:100%;overflow:hidden}
+tr.making td.state{max-width:0;overflow:hidden}
 tr.making.mk-bad td.name{box-shadow:inset 2px 0 0 var(--bad)}

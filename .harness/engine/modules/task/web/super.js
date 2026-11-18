@@ -66,7 +66,7 @@ const SUPER = (function () {
     const queue = h("div", {class: "sa-queue", hidden: ""}, queueList, doneBox);
     const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => linked(text)) : null;  // the earlier days (superhist.js)
     sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
-      queue, streamWrap, quick, h("div", {class: "sa-input"}, complete, box));
+      h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, box));
 
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], localThink = 0, failed = "";

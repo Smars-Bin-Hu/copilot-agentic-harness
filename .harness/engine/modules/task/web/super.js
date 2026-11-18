@@ -738,7 +738,7 @@ const SUPER = (function () {
       const list = [waiting ? mark("sa-w", "", t("super.head.wait", {n: waiting}), t("super.line.waiting", {n: waiting})) : mark("sa-st-none", "", t("super.line.none"), t("super.line.none"))];
       if (Number.isFinite(oldest) && oldest > 0 && status.oldest_s !== null) list.push(mark("sa-st-old", "\u25f7", clock(oldest), t("super.head.oldest.tip", {time: clock(oldest)})));
       list.push(...alertMarks(status));
-      return list.flatMap((node, at) => (at ? [" \u00b7 ", node] : [node]));
+      return list.flatMap((node, at) => (at ? [h("span", {class: "sa-sep", "aria-hidden": "true"}, "\u00b7"), node] : [node]));
     }
     function drawStatus() {
       const status = (data && data.status) || {};
@@ -749,7 +749,7 @@ const SUPER = (function () {
       else {
         lineEl.append(...headMarks(status));
         const n = status.watching || 0;
-        lineEl.append(h("span", {class: "sa-tail"}, " \u00b7 " + t(n === 1 ? "super.line.watching.one" : "super.line.watching", {n}) + (status.as_of ? " \u00b7 " + t("super.line.updated", {time: when(status.as_of, 11, 16)}) : "")));
+        lineEl.append(h("span", {class: "sa-tail"}, h("span", {class: "sa-sep", "aria-hidden": "true"}, "\u00b7"), t(n === 1 ? "super.line.watching.one" : "super.line.watching", {n}) + (status.as_of ? " \u00b7 " + t("super.line.updated", {time: when(status.as_of, 11, 16)}) : "")));
       }
       lineEl.title = lineEl.textContent;
       const cost = costNow();

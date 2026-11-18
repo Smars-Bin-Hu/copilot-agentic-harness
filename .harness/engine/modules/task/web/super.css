@@ -10,6 +10,7 @@
 .sa-line>*{flex:none;white-space:pre}
 .sa-line .sa-tail{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .sa-st{cursor:help}
+.sa-sep{margin:0 6px;color:var(--soft)}
 .sa-st i{font-style:normal;margin-right:3px}
 .sa-st-old{color:var(--ink)}
 .sa-st-stuck{color:var(--hot);font-weight:600}

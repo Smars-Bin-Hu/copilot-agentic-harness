@@ -1233,6 +1233,7 @@ const SUPER = (function () {
     // ---------- asking the server ----------
     function apply(result, spoken) {
       failed = "";
+      if (shown) fit();  // the board's banner above the view may have gone (hidden by the person): the view takes the room it left
       data = result;
       talk = spoken && typeof spoken === "object" && spoken.state ? spoken : null;
       drawTeam(result.mates || []);

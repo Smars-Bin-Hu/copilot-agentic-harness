@@ -179,7 +179,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       });
       // One avatar for each task the board is still making: a spinner and its name; not a filter, no menu.
       const makes = making.map((one) => h("span", {class: "sa-mk", "data-making": one.name, title: makingTip(one)},
-        h("span", {class: "sa-ring"}, makingInfo(one).stage === "refused" || makingInfo(one).stage === "lost" ? h("span", {class: "mk-dot", "aria-hidden": "true"}) : spinner("sa-spin")), h("span", {class: "sa-nm"}, one.name), h("span", {class: "sa-st"}, makingMarks(one, true))));
+        h("span", {class: "sa-ring"}, makingInfo(one).stage === "refused" || makingInfo(one).stage === "lost" ? h("span", {class: "mk-dot", "aria-hidden": "true"}) : spinner("sa-spin")), h("span", {class: "sa-nm"}, one.name), h("span", {class: "sa-mkst"}, makingMarks(one, true))));
       team.replaceChildren(all, ...nodes, ...makes);
     }
     team.addEventListener("click", (event) => {

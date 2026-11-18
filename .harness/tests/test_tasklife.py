@@ -818,6 +818,7 @@ class MessageTests(unittest.TestCase):
             "desk.stmt.zone.",  # 1.7.38 (F3): the zone of a statement is the end of the key (read, write, ask, refuse; and `.tip`)
             "gate.external.unpinned.why.", "gate.external.hidden.", "gate.external.invalid", "gate.policy.unreadable.note",  # 1.7.38 (F2): the end of the key is the state of the call (`rules.py`, `external.py`, `failclosed.py`), or the key is written between single quotes inside an f-string (`fallback.py`)
             "desk.autorun.field.", "desk.autorun.warn.", "desk.autorun.result.",  # 1.8.0: autorun.js builds the key from a field name, a warning code or a step result
+            "waits.what.",  # 1.8.5: common.js startingTip builds the key from what the board sent (`starting.what`)
             "report.perf.owner.","report.perf.confidence.", "report.perf.metric.", "report.perf.origin.", "report.perf.why.", "report.perf.chain.", "report.perf.priority.", "report.perf.outcome.", "report.perf.fact.",  # 1.7.41: the review page builds the key from an owner, an origin, a fact and so on (perfpage.js)
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')

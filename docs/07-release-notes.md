@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.7 (1.8.0 – 1.8.7, 2026-11-17 – 2026-11-18)
+## 1.8.8 (1.8.0 – 1.8.8, 2026-11-17 – 2026-11-18)
 
 ### Added
 
@@ -30,6 +30,7 @@ To see which version you have: `harness --version`.
 - After an answer, an approval or Try again, the page kept the old card and its buttons until the agent was seen to work, and Try again gave no sign it was pressed (1.8.5).
 - When VS Code refused or did not answer (New task, a message, Try again), the board said only "AhpError": it now says whether VS Code was too slow, Copilot was not ready, or what VS Code answered; a new chat may take VS Code 40 s to make (1.8.6).
 - On a slow computer with many tasks, a message was often refused as "not taken in time", and a New task VS Code answered late left an empty chat (1.8.7).
+- With VS Code open but not ready for the board yet (on a work computer it takes about a minute after the window opens), the Enter screen said VS Code was not open, with a button to restart it, and saw it ready up to a minute late. Now it says VS Code is open and getting ready, with the time waited; it checks every 3 s while a VS Code window is open, and after 3 minutes it turns red with **Restart VS Code** (1.8.8).
 
 ### Retired
 

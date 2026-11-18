@@ -66,7 +66,7 @@ const DOCK = (function () {
       memory.top = list.scrollTop;
       view.close();
       const again = () => allSkills(only, back, memory);
-      if (item.opens === "task") CHAT.create({kind: item.kind, text: "Use the skill " + item.name + "." + (words ? " " + words : ""), note: t("dock.task.note"), back: again});
+      if (item.opens === "task") CHAT.create({kind: item.kind, skill: item.name, text: words || "", note: t("dock.task.note"), back: again});
       else DOCK.start(item.name, words || item.words, again);
     };
     const row = (item) => {
@@ -312,7 +312,7 @@ const DOCK = (function () {
     const chatGlyph = () => { const node = drawn(["M4 5h16v11h-8l-4 3.5V16H4z"]); node.classList.add("kb-chat"); return node; };
     const chatButton = (label, run, hot) => { const go = h("button", {type: "button", class: "act" + (hot ? " hot" : "")}, chatGlyph(), label); go.addEventListener("click", leave(run)); return go; };
     const backHere = () => kbWindow(current);
-    const taskChat = (skill, domain, word) => CHAT.create({kind: "kb", name: word + "-" + domain.toLowerCase().replace(/[^a-z0-9_-]+/g, "-"), domains: [domain], text: "Use the skill " + skill + ". Domain: " + domain + ".", note: t("dock.task.note"), back: backHere});
+    const taskChat = (skill, domain, word) => CHAT.create({kind: "kb", name: word + "-" + domain.toLowerCase().replace(/[^a-z0-9_-]+/g, "-"), domains: [domain], skill, text: "Domain: " + domain + ".", note: t("dock.task.note"), back: backHere});
     const goOn = (item) => start("generic-kb-learn-batch", item.task, backHere, item.task);
     const learn = (item) => taskChat("generic-kb-learn-plan", item.domain, "learn");
     const refresh = (item) => taskChat("generic-kb-refresh", item.domain, "refresh");

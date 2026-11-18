@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
 import support  # noqa: F401  (puts the engine on sys.path)
+from support import ENGINE
 from core import config, schema, state
 from core.events import Decision, HookEvent, merge
 
@@ -174,29 +177,58 @@ class StateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             state.safe_session_id("")
 
-    # --- I-9: stale lock ----------------------------------------------------------------------
+    # --- I-9: a lock is freed when its holder ends, and never taken from a live holder (1.8.1) --------------
 
-    def test_a_stale_lock_is_cleared_instead_of_blocking_forever(self) -> None:
+    def _hold_in_child(self, path: Path, ready: Path) -> "subprocess.Popen[bytes]":
+        code = ("import sys, time; from pathlib import Path; sys.path.insert(0, sys.argv[1]); from core import state\n"
+                "with state.state_lock(Path(sys.argv[2])):\n    Path(sys.argv[3]).write_text('held')\n    time.sleep(60)\n")
+        child = subprocess.Popen([sys.executable, "-c", code, str(ENGINE), str(path), str(ready)])
+        self.addCleanup(child.wait)
+        self.addCleanup(child.kill)
+        deadline = time.monotonic() + 20
+        while not ready.exists():
+            self.assertLess(time.monotonic(), deadline, "the child never took the lock")
+            time.sleep(0.02)
+        return child
+
+    def test_a_lock_held_by_a_killed_process_is_free_at_once(self) -> None:
         path = state.state_path(self.root, "vscode", "s")
-        lock = path.with_suffix(".json.lock")
-        lock.mkdir(parents=True)
-        old = time.time() - 60
-        os.utime(lock, (old, old))
+        child = self._hold_in_child(path, self.root / "ready")
+        child.kill()
+        child.wait()
         started = time.monotonic()
         state.update_state(self.root, "vscode", "s", lambda data: data.update(level=2))
-        self.assertLess(time.monotonic() - started, state.LOCK_STALE_SECONDS)
-        self.assertFalse(lock.exists())
+        self.assertLess(time.monotonic() - started, 2.0)
 
-    def test_a_fresh_lock_is_respected_until_it_times_out(self) -> None:
+    def test_a_live_holder_is_waited_for_until_the_timeout_however_long_it_holds(self) -> None:
         path = state.state_path(self.root, "vscode", "s")
-        lock = path.with_suffix(".json.lock")
-        lock.mkdir(parents=True)
+        self._hold_in_child(path, self.root / "ready")
         original = state.LOCK_TIMEOUT_SECONDS
-        state.LOCK_TIMEOUT_SECONDS = 0.2
+        state.LOCK_TIMEOUT_SECONDS = 0.3
         self.addCleanup(setattr, state, "LOCK_TIMEOUT_SECONDS", original)
         with self.assertRaises(TimeoutError):
             state.update_state(self.root, "vscode", "s", lambda data: None)
-        self.assertTrue(lock.exists())  # not ours, not removed
+
+    def test_a_lock_in_the_same_process_is_exclusive_and_leaves_no_file_next_to_the_data(self) -> None:
+        path = state.state_path(self.root, "vscode", "s")
+        original = state.LOCK_TIMEOUT_SECONDS
+        state.LOCK_TIMEOUT_SECONDS = 0.2
+        self.addCleanup(setattr, state, "LOCK_TIMEOUT_SECONDS", original)
+        with state.state_lock(path):
+            with self.assertRaises(TimeoutError):
+                with state.state_lock(path):
+                    pass
+        with state.state_lock(path):  # freed on leaving
+            pass
+        self.assertEqual([item.name for item in path.parent.iterdir() if "lock" in item.name], [])
+        self.assertNotEqual(state.lock_file(path), state.lock_file(path.with_name("t.json")))
+
+    def test_the_lock_waits_longer_than_a_slow_hook_and_less_than_the_hook_timeout(self) -> None:
+        hooks = json.loads((ENGINE.parent.parent / ".github" / "hooks" / "harness.json").read_text(encoding="utf-8"))
+        timeouts = [entry.get("timeoutSec") or entry.get("timeout") for entries in hooks["hooks"].values() for entry in entries]
+        self.assertTrue(timeouts)
+        self.assertGreaterEqual(state.LOCK_TIMEOUT_SECONDS, 15)
+        self.assertLessEqual(state.LOCK_TIMEOUT_SECONDS, min(timeouts) - 5)
 
     # --- subagent tracking --------------------------------------------------------------------
 

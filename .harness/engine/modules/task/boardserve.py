@@ -1538,7 +1538,7 @@ class Board:
             raise CommandError(say("create.refused.host", error=type(error).__name__)) from None
         initiator = str(done.get("initiator") or "")
         warn = say("create.warn.initiator", initiator=initiator) if initiator and initiator != "vscode" else ""
-        return {"created": True, "name": plan["name"], "initiator": initiator, "warn": warn, "unchecked": not initiator, "text": text, "model": plan["model"] or {}}
+        return {"created": True, "name": plan["name"], "initiator": initiator, "warn": warn, "unchecked": not initiator, "text": text, "then": plan.get("then") or "", "model": plan["model"] or {}}
 
     def draft(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The Drafts box of the task page (B77): `op` list, add, edit, delete or use (switch a draft in or out of the next send). The answer holds the drafts: they are the person's notes, so only the paired browser reads them."""

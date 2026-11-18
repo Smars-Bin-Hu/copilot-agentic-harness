@@ -10,49 +10,9 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
-## 1.8.4 (2026-11-17)
+## 1.8.3 (2026-11-18)
 
-While an agent waits on its own question, you can just say something.
-
-### Added
-
-- **Say something instead of picking an answer.** When an agent asks you a question and waits, the task page's reply panel, the super view and the pop-out let you write your own words and Send. The board skips its question and puts your words into the running turn; the agent goes on from them. The Answer… window stays for picking its options.
-
-### Changed
-
-- **Only a command confirmation still blocks the reply.** When the agent waits for you to allow a command, Send stays off and says to use its buttons.
-
-## 1.8.3 (2026-11-17)
-
-Ask the super agent for anything: it does nothing itself and sends back a card of the board's own buttons. The pop-out gets the 1.8.2 features.
-
-### Added
-
-- **Proposal cards.** Ask the super agent to archive tasks, pause one, start autorun, set independent checks, send a task some work, or start a new task. Its answer ends with a card: board actions use the board's own buttons (a code or a dialog is asked as on the board), a message for a task is an editable box with **Send**, a new task opens the New task window filled in. Nothing happens until you press. Each item is checked against the board as it is now; one the board would not offer shows its reason and no button. Several of the same simple action (archive, pause, resume, close, checks) get **Do all**.
-- **The pop-out does what the view does.** A task that stopped with a question shows its words and a reply box; plan and promote approvals fold a preview; **Ask** asks the task of the card (or `@name`); right click a task in the list for **Steer** and **Stop**.
-
-### Changed
-
-- **The super agent knows the closed tasks** the board still shows, so it can propose to archive them. It still only reads, and it never says it did something.
-
-## 1.8.2 (2026-11-17)
-
-The super agent view becomes the place to work: answer a task, ask it a question, see the plan or the changes before you approve, steer or stop it.
-
-### Added
-
-- **Answer a task in the view.** When a task stops with a question in text, its message has a reply box. Your words go to the task's chat, and the message folds as answered.
-- **Ask a task a question.** With one task's avatar filter on, the input asks that task. With "All", start with `@name` (a list of task names opens after `@`). The question shows as a message from the task, "asked, waiting", and then its answer (about 12 lines, then **Show more**). A task that works gets the question after its turn.
-- **Previews before you approve.** A plan approval shows the plan's steps; a promote approval shows the files it changes with their added and removed lines. Click the summary line to unfold it; the full plan and diff stay on the task page.
-- **Steer and Stop from an avatar.** Right click a task's avatar: **Steer…** sends one line into its running turn, **Stop** stops it. Both only while the task works.
-
-### Changed
-
-- **A question to a task is read only.** A message that starts with `/harness-ask` (the board sends it) makes that one turn read only: the gate refuses every write and every write command, and the task keeps what it waited for. The next normal message lifts it.
-
-## 1.8.1 (2026-11-17)
-
-A super agent view on the board: what waits for you across all tasks, a chat that knows them, and a window that stays on top.
+The super agent view: what waits for you across all tasks in one place, a chat that knows them, asking a task a question, proposals you press, and saying something while an agent waits on its question.
 
 ### Added
 
@@ -61,11 +21,39 @@ A super agent view on the board: what waits for you across all tasks, a chat tha
 - **A daily limit.** `super.daily_credits` in `task.json` (50 by default; `0` switches the chat off). At the limit the board sends no new message; the view still works. A battery in the view's header shows what is left today; point at it for the Credits spent and left.
 - **The chat's history.** Each day is kept when the next one starts. The clock button in the header lists the earlier days to read, archive or delete; a long day folds its older messages behind **Show earlier**.
 - **A pop-out.** The button in the header of the view opens a small window that stays on top of other windows (Chrome and Edge only). It has the same buttons. A window that needs a code (approvals, a new task) is shown in the board page, and the pop-out says so.
+- **Answer a task in the view.** When a task stops with a question in text, its message has a reply box. Your words go to the task's chat, and the message folds as answered.
+- **Ask a task a question.** With one task's avatar filter on, the input asks that task. With "All", start with `@name` (a list of task names opens after `@`). The question shows as a message from the task, "asked, waiting", and then its answer (about 12 lines, then **Show more**). A task that works gets the question after its turn.
+- **Previews before you approve.** A plan approval shows the plan's steps; a promote approval shows the files it changes with their added and removed lines. Click the summary line to unfold it; the full plan and diff stay on the task page.
+- **Steer and Stop from an avatar.** Right click a task's avatar: **Steer…** sends one line into its running turn, **Stop** stops it. Both only while the task works.
+- **Proposal cards.** Ask the super agent to archive tasks, pause one, start autorun, set independent checks, send a task some work, or start a new task. Its answer ends with a card: board actions use the board's own buttons (a code or a dialog is asked as on the board), a message for a task is an editable box with **Send**, a new task opens the New task window filled in. Nothing happens until you press. Each item is checked against the board as it is now; one the board would not offer shows its reason and no button. Several of the same simple action (archive, pause, resume, close, checks) get **Do all**.
+- **The pop-out does what the view does.** A task that stopped with a question shows its words and a reply box; plan and promote approvals fold a preview; **Ask** asks the task of the card (or `@name`); right click a task in the list for **Steer** and **Stop**.
+- **Say something instead of picking an answer.** When an agent asks you a question and waits, the task page's reply panel, the super view and the pop-out let you write your own words and Send. The board skips its question and puts your words into the running turn; the agent goes on from them. The Answer… window stays for picking its options.
 
 ### Changed
 
 - **The gate keeps the super agent chat to reading.** A session whose first prompt starts with `/harness-super` may only read and run a few read-only harness commands.
 - **The super agent is not a subagent.** It never presses a button and never changes task state.
+- **A question to a task is read only.** A message that starts with `/harness-ask` (the board sends it) makes that one turn read only: the gate refuses every write and every write command, and the task keeps what it waited for. The next normal message lifts it.
+- **The super agent knows the closed tasks** the board still shows, so it can propose to archive them. It still only reads, and it never says it did something.
+- **Only a command confirmation still blocks the reply.** When the agent waits for you to allow a command, Send stays off and says to use its buttons.
+
+## 1.8.2 (2026-11-17)
+
+A skill only you can start now works from its button on the board.
+
+### Changed
+
+- **Agent Performance Review starts from its button.** The skill is one only you can start (`disable-model-invocation: true`), so the agent cannot load it; the button told the agent "Use the skill ..." and it stopped and asked you to type `/harness-agent-performance-review`. Now, for any skill like that which opens a task, the first message only opens the task; when that turn is over, the board sends `/<skill> <your words>` to the same chat, once, with the model you chose. The new-task window shows both messages. A skill the agent may load is named in the first message, as before; a skill that opens a chat already started with `/<skill>`.
+
+## 1.8.1 (2026-11-17)
+
+On a slow work computer, calls of one session no longer wait out and get refused, and two of them can no longer write the same task file at once.
+
+### Changed
+
+- **The session and task locks are locks of the system now.** A lock is freed when the process that held it ends, and a process that is still working keeps it however long it takes. Before, a lock older than 5 seconds was taken as left behind and removed: on a computer that scans every file it reads, a `harness task fetch` holding it longer let a second one in, and one fetch record was lost (the promote dry-run was refused, and the work in `DEV/` was done again). The lock files are in the system's temp folder, not next to the data.
+- **A call waits up to 20 seconds for a lock**, not 7. Calls made side by side wait for each other; on a slow computer the fourth or fifth one was refused as "the harness was busy". 20 seconds stays under the hook's own 30-second limit.
+- The agent fetches several files in one `harness task fetch`, not in a loop and not in calls side by side, and changes the files `task new` made (`REQ.md`, `LOG.md`, `TODO.md`) with an edit, not a create.
 
 ## 1.8.0 (2026-11-17)
 

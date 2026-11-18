@@ -26,11 +26,14 @@ from .events import Decision, HookEvent
 from .paths import state_dir, utc_now
 
 SCHEMA_VERSION = 3
-LOCK_TIMEOUT_SECONDS = 7.0
-# A critical section takes milliseconds. A lock older than this belongs to a killed process (I-9).
-LOCK_STALE_SECONDS = 5.0
-# Windows refuses a file or folder for a moment while another process still has it open or deletes it (WinError 5): the board reading a state
-# file, an antivirus scan, a lock folder that was just removed. Seen on a work PC (2026-11-17): a hook that met it could not decide, and its call was refused.
+# How long a call waits for a lock before it gives up (the hook then refuses the call: it could not decide). A hook holds the session lock while
+# every module decides, which takes seconds on a slow computer (a work PC scans each file read): 7 s refused calls queued behind three others
+# (2026-11-17). It stays well under the hook timeout (30 s in .github/hooks/harness.json), which also pays the start of the process.
+LOCK_TIMEOUT_SECONDS = 20.0
+# The lock files: one per locked path, named by a hash of it, so no lock file lies next to the data (a task folder, the outbox).
+LOCK_DIR_NAME = "copilot-harness-locks"
+# Windows refuses a file for a moment while another process still has it open (WinError 5): the board reading a state file, an antivirus scan.
+# Seen on a work PC (2026-11-17): a hook that met it could not decide, and its call was refused. `atomic_write` tries `os.replace` again for this long.
 REPLACE_RETRY_SECONDS = 1.0
 # Safety nets so a missing SubagentStop does not leave entries behind for a later child session to claim.
 SUBAGENT_ACTIVE_TTL_SECONDS = 1800.0
@@ -156,39 +159,71 @@ def _replace(source: str, target: str) -> None:
             time.sleep(0.02)
 
 
-def _clear_if_stale(lock: Path) -> None:
+def lock_file(path: Path) -> Path:
+    """Where the lock of `path` lives: in the temp folder, by a hash of the full path (case folded on Windows), so every process finds the same file."""
     try:
-        age = time.time() - lock.stat().st_mtime
+        full = str(path.resolve())
     except OSError:
-        return
-    if age > LOCK_STALE_SECONDS:
+        full = os.path.abspath(str(path))
+    digest = hashlib.sha256(os.path.normcase(full).encode("utf-8")).hexdigest()[:32]
+    return Path(tempfile.gettempdir()) / LOCK_DIR_NAME / (digest + ".lock")
+
+
+def _try_lock(handle: Any) -> bool:
+    """Take the lock of an open file without waiting. The system frees it when the process ends, so a killed holder never blocks anyone,
+    and a slow holder that is still alive is never taken over (before 1.8.1 a lock older than 5 s was removed, so two hooks could write at once)."""
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
         try:
-            os.rmdir(str(lock))
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         except OSError:
-            pass
+            return False
+        return True
+    import fcntl
+
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, PermissionError):
+        return False
+    return True
+
+
+def _unlock(handle: Any) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 @contextmanager
 def state_lock(path: Path) -> Iterator[None]:
-    lock = path.with_suffix(path.suffix + ".lock")
+    """One writer at a time for `path`, across processes. The lock file is kept: removing it while another process waits on it would let a third take a new one."""
+    path.parent.mkdir(parents=True, exist_ok=True)  # the old lock made it, and callers write there next
+    lock = lock_file(path)
     lock.parent.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
-    while True:
-        try:
-            lock.mkdir()
-            break
-        except (FileExistsError, PermissionError):  # Windows: a lock folder that another process is removing is refused, not "exists" (REPLACE_RETRY_SECONDS)
-            _clear_if_stale(lock)
-            if time.monotonic() >= deadline:
-                raise TimeoutError(f"Timed out waiting for state lock: {lock}")
-            time.sleep(0.01)
+    handle = open(str(lock), "a+b")
     try:
-        yield
-    finally:
+        deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
+        while not _try_lock(handle):
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for state lock: {path}")
+            time.sleep(0.01)
         try:
-            lock.rmdir()
-        except OSError:
-            pass
+            yield
+        finally:
+            try:
+                _unlock(handle)
+            except OSError:
+                pass
+    finally:
+        handle.close()
 
 
 @contextmanager

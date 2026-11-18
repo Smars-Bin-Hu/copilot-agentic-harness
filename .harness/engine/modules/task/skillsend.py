@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict
 
-from core import paths
+from core import paths, skillcheck
 from core.paths import utc_now
 
 from . import chatnew
@@ -25,6 +25,15 @@ BREAKS = re.compile(r"[\t\r\n]+")  # what a paste brings: a space to a person
 
 def known(root: Path, name: str) -> bool:
     return bool(NAME.fullmatch(name)) and (root / ".github" / "skills" / name / "SKILL.md").is_file()
+
+
+def user_only(root: Path, name: str) -> bool:
+    """The skill says `disable-model-invocation: true`: only a person starts it, with `/<name>`; an agent cannot load it (1.8.2). A skill that cannot be read counts as one."""
+    try:
+        fields, _body = skillcheck.frontmatter((root / ".github" / "skills" / name / "SKILL.md").read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return True
+    return str(fields.get("disable-model-invocation", "")).strip().lower() == "true"
 
 
 def message(root: Path, data: Dict[str, Any]) -> str:

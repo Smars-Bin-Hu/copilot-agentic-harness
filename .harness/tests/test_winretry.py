@@ -1,4 +1,4 @@
-"""A work PC (2026-11-17): Windows refused the lock folder and the replace of a session state for a moment (WinError 5), and a hook that met it could not decide;
+"""A work PC (2026-11-17): Windows refused the replace of a session state for a moment (WinError 5), and a hook that met it could not decide;
 the hook logged each prompt about 6 s before Copilot wrote its message, so the report took the second prompt for a queued one and showed two prompts as one."""
 
 from __future__ import annotations
@@ -44,36 +44,6 @@ class StateRetryTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 state.atomic_write(self.path, {"a": 1})
         self.assertEqual(list(self.folder.iterdir()), [])
-
-    def test_a_lock_folder_refused_for_a_moment_is_waited_for(self) -> None:
-        real, calls = Path.mkdir, []
-
-        def flaky(self_: Path, *args: Any, **kwargs: Any) -> None:
-            if self_.name.endswith(".lock"):
-                calls.append(1)
-                if len(calls) < 3:
-                    raise PermissionError(5, "Access is denied")
-            real(self_, *args, **kwargs)
-
-        with mock.patch.object(Path, "mkdir", flaky):
-            with state.state_lock(self.path):
-                self.assertTrue(self.path.with_suffix(".json.lock").is_dir())
-        self.assertEqual(len(calls), 3)  # two refusals, then the lock
-        self.assertFalse(self.path.with_suffix(".json.lock").exists())
-
-    def test_a_lock_folder_refused_for_good_times_out(self) -> None:
-        real = Path.mkdir
-
-        def refused(self_: Path, *args: Any, **kwargs: Any) -> None:
-            if self_.name.endswith(".lock"):
-                raise PermissionError(5, "Access is denied")
-            real(self_, *args, **kwargs)
-
-        with mock.patch.object(state, "LOCK_TIMEOUT_SECONDS", 0.1), mock.patch.object(Path, "mkdir", refused):
-            with self.assertRaises(TimeoutError):
-                with state.state_lock(self.path):
-                    pass
-
 
 def record(*messages: float, queued: tuple = ()) -> Dict[str, Any]:
     prompts = []

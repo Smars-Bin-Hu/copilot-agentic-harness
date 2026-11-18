@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.8.4 (2026-11-17)
+
+While an agent waits on its own question, you can just say something.
+
+### Added
+
+- **Say something instead of picking an answer.** When an agent asks you a question and waits, the task page's reply panel, the super view and the pop-out let you write your own words and Send. The board skips its question and puts your words into the running turn; the agent goes on from them. The Answer… window stays for picking its options.
+
+### Changed
+
+- **Only a command confirmation still blocks the reply.** When the agent waits for you to allow a command, Send stays off and says to use its buttons.
+
 ## 1.8.3 (2026-11-17)
 
 Ask the super agent for anything: it does nothing itself and sends back a card of the board's own buttons. The pop-out gets the 1.8.2 features.

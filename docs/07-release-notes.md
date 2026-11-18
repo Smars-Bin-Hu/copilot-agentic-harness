@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.6 (1.8.0 – 1.8.6, 2026-11-17 – 2026-11-18)
+## 1.8.7 (1.8.0 – 1.8.7, 2026-11-17 – 2026-11-18)
 
 ### Added
 
@@ -19,6 +19,7 @@ To see which version you have: `harness --version`.
 - **Your own words in Go on in a new chat** (1.8.4): the window has a box; what you write goes in the same first message.
 - **Starting, being created, a turning button** (1.8.5): right after the board sends something to the agent, the task shows *Starting…* until its chat is seen to work (2 minutes at most, then it says no start was seen); a task the board is making shows as being created on the list, the lobby and the super view; a button whose request has not come back turns.
 - **A display name for a task** (1.8.5): the pencil next to its name on the task page; the agent and the commands keep the task's name.
+- **Your actions never wait behind the board's reading** (1.8.7): what you do on the board (send, answer, allow, stop) goes to VS Code on a lane of its own; a new chat is made with no time limit and its window closes at once, while "being created" shows how far it is.
 
 ### Fixed
 
@@ -28,6 +29,7 @@ To see which version you have: `harness --version`.
 - A chat whose last turn failed looked like a task at work or one waiting for you: it is the state *error* now, with the error's words on the task page, a red item in Live, and Try again (1.8.5).
 - After an answer, an approval or Try again, the page kept the old card and its buttons until the agent was seen to work, and Try again gave no sign it was pressed (1.8.5).
 - When VS Code refused or did not answer (New task, a message, Try again), the board said only "AhpError": it now says whether VS Code was too slow, Copilot was not ready, or what VS Code answered; a new chat may take VS Code 40 s to make (1.8.6).
+- On a slow computer with many tasks, a message was often refused as "not taken in time", and a New task VS Code answered late left an empty chat (1.8.7).
 
 ### Retired
 

@@ -130,3 +130,8 @@ a.cp-task:hover{text-decoration:underline}
 .cp-card .sa-xtra{margin:0 0 6px}
 .cp-acts .sa-call{flex:1 1 100%}
 .cp-acts .sa-code{flex:1 1 7em}
+/* 1.8.5: starting, not seen to start, being made: one short line of marks under the counts */
+.cp-waits{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:12px;color:var(--soft);margin:-2px 0 7px;min-width:0}
+.cp-wt{display:inline-flex;align-items:center;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
+.cp-wt .cp-spin{width:.8em;height:.8em;color:var(--good-dot)}
+.cp-late{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--hot-dot);margin-right:5px;flex:none}

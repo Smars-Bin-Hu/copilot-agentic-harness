@@ -27,7 +27,7 @@ const SUPER = (function () {
   const receiptFor = (action) => (RECEIPT[action] ? t(RECEIPT[action]) : plain(t("board.action." + String(action).replace(" ", "-"))));
   const idleMin = (item) => Math.max(1, Math.floor((Number(item.idle_s) || 0) / 60));
   const whyText = (item) => (item.why === "stuck" ? t("super.why.stuck", {n: idleMin(item)}) : t(WHY[item.why] || "super.why.other"));  // "Stuck · N min" says how long
-  const MATE = {you: "super.mate.you", work: "super.mate.work", idle: "super.mate.idle", stuck: "super.mate.stuck", error: "super.mate.error"};
+  const MATE = {you: "super.mate.you", work: "super.mate.work", idle: "super.mate.idle", stuck: "super.mate.stuck", error: "super.mate.error", start: "super.waits.start"};
   const BLOCKS = new Set(["confirm", "question", "asking", "outbox", "autorun"]);  // superview.py: these stop running work; their dot on the pet is red
   const OFF = {asleep: "super.off.asleep", limit: "super.off.limit", busy: "super.off.busy", off: "super.off.off", none: "super.off.none"};
   const query = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
@@ -45,7 +45,8 @@ const SUPER = (function () {
   }
 
   // A link to the task page, in a new tab: the person's place in the messages stays.
-  const taskLink = (task, text, cls) => h("a", {class: cls || "sa-task", href: taskUrl(task), target: "_blank", rel: "noopener", title: cls ? t("super.open.tip") : task}, text === undefined ? task : text);
+  // `row` (1.8.5) is the item or mate: its display name is the text, the task name is in the hover.
+const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href: taskUrl(task), target: "_blank", rel: "noopener", title: (cls ? t("super.open.tip") : task) + (row && nameTip(row) ? "\n" + nameTip(row) : "")}, text === undefined ? (row ? shownName(row) : task) : text);
 
   function create(options) {
     const rowsOf = options.rows;
@@ -102,7 +103,7 @@ const SUPER = (function () {
     foldLine.addEventListener("click", () => setFold(false, true));
     drawFold();
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
-    let teamSig = "", bannerSig = "", mates = [], localThink = 0, failed = "";
+    let teamSig = "", bannerSig = "", mates = [], making = [], localThink = 0, failed = "";
     let pollTimer = 0, patrolToken = 0, noticeBusy = false, chain = Promise.resolve(), lastMate = "";
     let pointing = null, holdUntil = 0;  // the item the pet showed on a click (a second click soon after opens its task); the pet stays put until holdUntil
     let watchers = 0;  // the pop-out window is one: while it is open the data keeps coming, shown or not
@@ -161,20 +162,25 @@ const SUPER = (function () {
     }
 
     // ---------- the avatars ----------
-    function drawTeam(list) {
-      mates = list;
-      const sig = JSON.stringify(list) + "|" + filter;
+    function drawTeam(list, creating) {
+      mates = list; making = creating || [];
+      const sig = JSON.stringify([list, making]) + "|" + filter;
       if (sig === teamSig) return;
       teamSig = sig;
       if (filter && !list.some((mate) => mate.task === filter)) filter = "";
       const all = h("button", {type: "button", class: "sa-mate all" + (filter ? "" : " on"), "data-task": "", title: t("super.team.all.tip")}, h("span", {class: "sa-ring"}, t("super.team.all")), h("span", {class: "sa-nm"}, t("super.team.all")));
       const nodes = list.map((mate, at) => {
         const state = MATE[mate.state] ? mate.state : "idle";
-        const ring = h("span", {class: "sa-ring"}, PET.face(state === "you" || state === "error" ? "you" : state === "work" || state === "stuck" ? "work" : "idle", mate.kind, ((at * .37) % 3).toFixed(2)));
-        return h("button", {type: "button", class: "sa-mate " + state + (filter === mate.task ? " on" : ""), "data-task": mate.task, "data-state": state, title: t("super.mate.tip", {task: mate.task, state: t(MATE[state])})},
-          ring, mate.count ? h("span", {class: "sa-cnt"}, mate.count) : null, h("span", {class: "sa-nm"}, mate.task));
+        const ring = h("span", {class: "sa-ring"}, state === "start" ? spinner("sa-spin") : PET.face(state === "you" || state === "error" ? "you" : state === "work" || state === "stuck" ? "work" : "idle", mate.kind, ((at * .37) % 3).toFixed(2)));
+        const late = Boolean(mate.starting && mate.starting.late);  // 1.8.5: the board sent something and has not seen the agent start
+        const tip = t("super.mate.tip", {task: mate.task, state: t(MATE[state])}) + (nameTip(mate) ? "\n" + nameTip(mate) : "") + (mate.starting ? "\n" + startingTip(mate.starting) : "");
+        return h("button", {type: "button", class: "sa-mate " + state + (late ? " late" : "") + (filter === mate.task ? " on" : ""), "data-task": mate.task, "data-state": state, title: tip},
+          ring, mate.count ? h("span", {class: "sa-cnt"}, mate.count) : null, late ? h("span", {class: "sa-late", "aria-hidden": "true"}) : null, h("span", {class: "sa-nm"}, shownName(mate)));
       });
-      team.replaceChildren(all, ...nodes);
+      // One avatar for each task the board is still making: a spinner and its name; not a filter, no menu.
+      const makes = making.map((one) => h("span", {class: "sa-mk", "data-making": one.name, title: t("waits.making.tip", {kind: one.kind || "", at: when(one.since, 11, 19)})},
+        h("span", {class: "sa-ring"}, spinner("sa-spin")), h("span", {class: "sa-nm"}, one.name)));
+      team.replaceChildren(all, ...nodes, ...makes);
     }
     team.addEventListener("click", (event) => {
       const mate = event.target.closest(".sa-mate");
@@ -250,9 +256,9 @@ const SUPER = (function () {
     function setFilter(task) {
       filter = task;
       teamSig = "";
-      drawTeam(mates);
+      drawTeam(mates, making);
       filterEl.hidden = !task;
-      filterEl.replaceChildren(...(task ? [t("super.filter.only") + " ", taskLink(task), " ", h("button", {type: "button", class: "sa-x", title: t("super.filter.clear"), "aria-label": t("super.filter.clear")}, "×")] : []));
+      filterEl.replaceChildren(...(task ? [t("super.filter.only") + " ", taskLink(task, undefined, undefined, mates.find((mate) => mate.task === task)), " ", h("button", {type: "button", class: "sa-x", title: t("super.filter.clear"), "aria-label": t("super.filter.clear")}, "×")] : []));
       const clear = filterEl.querySelector(".sa-x");
       if (clear) clear.addEventListener("click", () => setFilter(""));
       applyFilter();
@@ -769,7 +775,7 @@ const SUPER = (function () {
       const more = !asksPerson(item) && !["error", "stuck", "accept"].includes(item.why) && item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
       const node = h("div", {class: "sa-row item" + (item.why === "error" ? " err" : ""), "data-task": item.task, "data-id": item.id},
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
-        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, xtra, saidMore, note, more, acts));
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task, undefined, undefined, item), why, waited), what, xtra, saidMore, note, more, acts));
       const entry = {item, node, acts, waited, what, note, why, xtra, xsig: "", sig: "", clicked: ""};
       if (item.why === "stopped" || SAYS(item)) node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
       const preview = previewBox(item);
@@ -813,7 +819,7 @@ const SUPER = (function () {
       const said_ = decidedIn(entry) || entry.clicked;
       const line = said_ ? "\u2713 " + said_ : next ? "\u2192 " + t("super.done.next", {kind: whyText(next)}) : "\u2713 " + t("super.done.elsewhere");
       entry.node.remove();  // the card leaves the queue; its receipt goes to the "Done" row
-      doneList.prepend(h("div", {class: "sa-rc", "data-task": entry.item.task}, taskLink(entry.item.task), h("span", {class: next && !said_ ? "sa-next" : "sa-ok"}, line + " \u00b7 " + stamp())));
+      doneList.prepend(h("div", {class: "sa-rc", "data-task": entry.item.task}, taskLink(entry.item.task, undefined, undefined, entry.item), h("span", {class: next && !said_ ? "sa-next" : "sa-ok"}, line + " \u00b7 " + stamp())));
       while (doneList.children.length > RECEIPTS) doneList.lastElementChild.remove();
       doneBox.classList.remove("sa-flash"); void doneBox.offsetWidth; doneBox.classList.add("sa-flash");
       applyFilter();
@@ -1006,7 +1012,7 @@ const SUPER = (function () {
     function drawOrbit() {
       if (!pet) return;
       const blocked = new Set(((data && data.items) || []).filter((item) => BLOCKS.has(item.why)).map((item) => item.task));
-      pet.orbit(mates.map((mate) => (blocked.has(mate.task) || mate.state === "stuck" || mate.state === "error" ? "block" : MATE[mate.state] ? mate.state : "idle")));
+      pet.orbit(mates.map((mate) => (blocked.has(mate.task) || mate.state === "stuck" || mate.state === "error" ? "block" : mate.state === "start" ? "work" : MATE[mate.state] ? mate.state : "idle")));
     }
     function applyMood() {
       if (!pet) return;
@@ -1167,7 +1173,7 @@ const SUPER = (function () {
       more.addEventListener("click", () => { entry.open = true; routeDraw(entry, entry.ask); });
       entry.node = h("div", {class: "sa-row askrow", "data-task": item.task, "data-ask": item.id},
         h("span", {class: "sa-mini hot"}, PET.face("you", kind, 0)),
-        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), item.at ? h("span", {class: "sa-when"}, when(item.at, 11, 16)) : null),
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task, undefined, undefined, mates.find((mate) => mate.task === item.task)), item.at ? h("span", {class: "sa-when"}, when(item.at, 11, 16)) : null),
           h("div", {class: "sa-text sa-q"}, item.text), line, answer, more));
       return entry;
     }
@@ -1202,13 +1208,14 @@ const SUPER = (function () {
       for (const item of asks || []) { const entry = item && ROUTE_ASKS.get(item.id); if (entry) routeDraw(entry, item); }
     }
     // "@" completion: the open task names, filtered as the person types; ArrowUp/ArrowDown move, Enter or Tab pick, Esc closes, a click picks.
+    const label = (task) => String((mates.find((mate) => mate.task === task) || {}).label || "");
     function routeComplete() {
       const word = /^@([^\s]*)$/.exec(field.value);
-      routeNames = !filter && word ? mates.map((mate) => mate.task).filter((name) => name.toLowerCase().includes(word[1].toLowerCase())).slice(0, 8) : [];
+      routeNames = !filter && word ? mates.filter((mate) => (mate.task + " " + (mate.label || "")).toLowerCase().includes(word[1].toLowerCase())).map((mate) => mate.task).slice(0, 8) : [];
       if (routePick >= routeNames.length) routePick = routeNames.length - 1;
       if (routePick < 0 && routeNames.length) routePick = 0;
       complete.hidden = !routeNames.length;
-      complete.replaceChildren(...routeNames.map((name, at) => h("div", {class: "sa-opt" + (at === routePick ? " on" : ""), role: "option", "aria-selected": String(at === routePick), "data-task": name}, name)));
+      complete.replaceChildren(...routeNames.map((name, at) => h("div", {class: "sa-opt" + (at === routePick ? " on" : ""), role: "option", "aria-selected": String(at === routePick), "data-task": name}, ...(label(name) ? [name, h("span", {class: "sa-optl"}, " \u00b7 " + label(name))] : [name]))));
     }
     function routeChoose(name) {
       field.value = "@" + name + " ";
@@ -1231,12 +1238,24 @@ const SUPER = (function () {
     if (newTask) newTask.addEventListener("click", () => { const text = field.value.trim(); CHAT.create(text ? {text} : undefined); field.value = ""; });  // the text moved into the new-task dialog
 
     // ---------- asking the server ----------
+    // 1.8.5: Try again was pressed and the chat has not been seen to run yet: the server still says error (the state it had before), but the person just acted. The error card goes and the avatar shows starting.
+    function retried(result) {
+      const quiet = new Set((result.mates || []).filter((mate) => mate.starting && !mate.starting.late && (mate.state === "error" || mate.state === "stuck")).map((mate) => mate.task));
+      if (!quiet.size) return result;
+      const gone = (result.items || []).filter((item) => quiet.has(item.task) && (item.why === "error" || item.why === "stuck"));
+      const status = {...(result.status || {})};
+      status.error = Math.max(0, count(status.error) - gone.filter((item) => item.why === "error").length);
+      status.stuck = Math.max(0, count(status.stuck) - gone.filter((item) => item.why === "stuck").length);
+      status.working = count(status.working) + quiet.size;
+      return {...result, status, mates: result.mates.map((mate) => (quiet.has(mate.task) ? {...mate, state: "start", count: 0} : mate)), items: (result.items || []).filter((item) => !gone.includes(item))};
+    }
     function apply(result, spoken) {
+      result = retried(result);
       failed = "";
       if (shown) fit();  // the board's banner above the view may have gone (hidden by the person): the view takes the room it left
       data = result;
       talk = spoken && typeof spoken === "object" && spoken.state ? spoken : null;
-      drawTeam(result.mates || []);
+      drawTeam(result.mates || [], result.making);
       if (talk && talk.state !== "thinking" && localThink && Date.now() - localThink > 4000) localThink = 0;  // the server is done (a message, or nothing to say)
       routeMerge(talk ? talk.messages : [], talk ? talk.asks : []);
       reconcile(result.items || []);
@@ -1308,7 +1327,7 @@ const SUPER = (function () {
     // What the pop-out window reads (companion.js): the data this view already holds, and a call when it changes. It never asks the server itself.
     function snapshot() {
       const status = (data && data.status) || {};
-      return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work").length, watching: status.watching || 0, stuck: count(status.stuck), error: count(status.error), failed,
+      return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work" || mate.state === "start").length, making: making.slice(), watching: status.watching || 0, stuck: count(status.stuck), error: count(status.error), failed,
         mood: moodNow(), thinking: thinkingNow(), off: talkOff(), cost: costNow(),
         messages: talk ? (talk.messages || []).filter((message) => message && message.role !== "you") : [], mates, loaded: data !== null};
     }

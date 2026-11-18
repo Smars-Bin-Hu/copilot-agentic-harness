@@ -1,7 +1,7 @@
 """Asking a task from the super agent view (1.8.2, step 3): the person's question goes to one task's chat with the `/harness-ask` marker; the gate makes that turn read only.
 
   ask    `ask(brain, data)`: `{task, text, lang}` -> `{ok: true, id, state}` or `{ok: false, why}`. Sent when the task's chat is idle, queued when it works, never steered (a steer would
-         break into the turn that runs). The question is recorded in today's super record, under `asks`. `why`: `empty`, `long`, `unknown`, `paused`, `nochat`, `asleep`, `error`, or the reason
+         break into the turn that runs). The question is recorded in today's super record, under `asks`. `why`: `empty`, `long`, `unknown`, `paused`, `nochat`, `asleep`, `asking`, `error`, or the reason
          of `vslink.Refused` as it is.
   read   `read(brain, rec)`: take the answers into `rec["asks"]` from what the link already holds of each task's chat (the cache; no call to the host). True when something changed.
   An ask is `{id, task, text, at, state, turn, answer, answer_at, end}` (+ `why` on `failed`). `state`: sent, queued, answered, failed. `path` (the task folder; older records hold it in `task`), `sent` and `sent_ts` are kept in the record only. The page gets `task` as the short name.
@@ -123,6 +123,8 @@ def reason(why: str) -> str:
         return "asleep"
     if why in ("unbound", "unsure"):
         return "nochat"
+    if why == "not-busy":  # the chat takes neither a send nor a queue: it waits for the person in its own ask tool
+        return "asking"
     return why
 
 

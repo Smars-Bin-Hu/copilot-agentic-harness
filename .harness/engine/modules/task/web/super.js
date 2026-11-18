@@ -764,7 +764,7 @@ const SUPER = (function () {
     }
     // ---------- asking one task (1.8.2): the filter, or "@name" in the first words ----------
     const ROUTE_ASKS = new Map();  // ask id -> the row of an ask: {ask, sig, open, node, line, answer, more}
-    const ROUTE_WHY = {unknown: "super.route.why.unknown", paused: "super.route.why.paused", nochat: "super.route.why.nochat", asleep: "super.route.why.asleep", empty: "super.route.why.empty",
+    const ROUTE_WHY = {unknown: "super.route.why.unknown", paused: "super.route.why.paused", nochat: "super.route.why.nochat", asleep: "super.route.why.asleep", asking: "super.route.why.asking", empty: "super.route.why.empty",
       long: "super.route.why.long", error: "super.route.why.error", lost: "super.route.why.lost", cancelled: "super.route.why.cancelled", unpaired: "super.route.why.unpaired"};  // written out: a search for a key finds its place
     const routeKey = (why) => ROUTE_WHY[why] || "super.route.why.other";
     const routeEstimate = (text) => String(text).split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 60)), 0);  // the lines an answer takes, about

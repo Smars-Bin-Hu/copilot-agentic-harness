@@ -6,6 +6,7 @@ import json
 import time
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from unittest import mock
 
@@ -269,7 +270,9 @@ class RefusalTests(RouteCase):
 
     def test_a_chat_that_waits_for_the_person_takes_no_question(self) -> None:
         with mock.patch.object(self.vs, "check", side_effect=lambda task, kind: "not-idle" if kind == "send" else "not-busy"):
-            self.assertEqual(self.why({"task": TASK, "text": "hi"}), "not-busy")  # not idle, and not working either: it is never steered
+            self.assertEqual(self.why({"task": TASK, "text": "hi"}), "asking")  # not idle, and not working either: it is never steered; the person is asked first
+        for lang in ("en", "zh"):
+            self.assertIn("super.route.why.asking", json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{lang}.json").read_text(encoding="utf-8")))
 
     def test_an_error_of_the_host_is_a_plain_error_and_its_words_stay_out(self) -> None:
         self.vs.fail = RuntimeError("secret path /Users/x")

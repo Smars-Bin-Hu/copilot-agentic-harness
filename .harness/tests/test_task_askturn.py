@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
+from unittest import mock
 from typing import Any, Dict
 
 from test_accept import SUMMARY, AcceptCase
-from taskcase import TASK
+from taskcase import SESSION, TASK
 
-from modules.task import task as task_ops
+from modules.task import task as task_ops, tasklife
 
 from modules.task import rewind
 
@@ -62,6 +66,72 @@ class WaitKeptTests(AskTurnCase):
         self.assertFalse(data.get("waiting"))
         self.stop()
         self.assertEqual(self.data()["waiting"]["why"], "stopped")
+
+
+class CancelAndEndTests(AskTurnCase):
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.dict(os.environ, {"COPILOT_HOME": self.env["COPILOT_HOME"]})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def record(self, rows: Any) -> None:
+        folder = Path(self.env["COPILOT_HOME"]) / "session-state" / SESSION
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "events.jsonl").write_text("\n".join(json.dumps(item) for item in rows) + "\n", encoding="utf-8")
+
+    def cancelled_turn(self) -> None:
+        self.new(kind="rca")
+        self.prompt("work")  # takes any mark away
+        self.record([{"type": "user.message", "data": {}, "timestamp": "2026-10-19T10:00:00.000Z"},
+                     {"type": "assistant.turn_start", "data": {}, "timestamp": "2026-10-19T10:00:01.000Z"},
+                     {"type": "abort", "data": {"reason": "user_initiated"}, "timestamp": "2026-10-19T10:00:03.000Z"}])
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "cancelled")
+
+    def test_a_cancelled_task_keeps_its_cancelled_wait_through_a_question(self) -> None:
+        self.cancelled_turn()
+        self.prompt(ASK)
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "cancelled")
+        self.stop()
+        found = tasklife.waiting(self.root, TASK, self.data())
+        self.assertEqual(found["why"], "cancelled")
+        self.assertTrue(found["since"].startswith("2026-10-19T10:00:03"))
+        self.assertFalse(tasklife.at_work(self.root, self.data()))
+
+    def test_the_cancel_mark_stays_when_the_record_has_the_question_prompt(self) -> None:
+        self.cancelled_turn()
+        self.prompt(ASK)  # the mark is written here, from the record that still shows the cancel
+        self.record([{"type": "user.message", "data": {}, "timestamp": "2026-10-19T10:05:00.000Z"}])  # Copilot's record now has the question
+        self.stop()
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "cancelled")
+
+    def test_a_normal_prompt_after_a_cancelled_question_clears_it(self) -> None:
+        self.cancelled_turn()
+        self.prompt(ASK)
+        self.stop()
+        self.prompt("go on")
+        self.assertFalse(self.data().get("waiting"))
+        self.stop()
+        self.assertEqual(self.data()["waiting"]["why"], "stopped")
+
+    def test_the_end_of_a_question_turn_writes_the_stop_mark_when_there_was_none(self) -> None:
+        self.new(kind="rca")
+        self.prompt("work")
+        self.assertFalse(self.data().get("waiting"))
+        self.prompt(ASK)
+        self.assertFalse(self.data().get("waiting"))
+        self.stop()
+        self.assertEqual(self.data()["waiting"]["why"], "stopped")
+        self.assertFalse(tasklife.at_work(self.root, self.data()), "a task is not at work after the Stop of a question")
+
+    def test_an_accepted_wait_and_a_stopped_wait_are_not_at_work(self) -> None:
+        self.new(kind="rca")
+        self.deliver("--summary", SUMMARY)
+        self.stop()
+        self.prompt(ASK)
+        self.stop()
+        self.assertEqual(self.waiting()["why"], "accept")
+        self.assertFalse(tasklife.at_work(self.root, self.data()))
 
 
 class PausedTests(AskTurnCase):

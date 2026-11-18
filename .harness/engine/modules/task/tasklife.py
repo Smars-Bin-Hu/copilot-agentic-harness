@@ -323,6 +323,8 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     if isinstance(mark, dict) and mark.get("since"):
         if mark.get("why") in GO_MARKS:
             return {"why": str(mark["why"]), "since": str(mark["since"])}  # approved on a page or in a terminal; the agent is not told yet
+        if mark.get("why") == "cancelled":
+            return {"why": "cancelled", "since": str(mark["since"])}  # kept through a question turn (`handler.keep_cancel`): Copilot's record has a newer prompt then
         if mark.get("why") == "accept":
             return {"why": "accept", "since": str(mark["since"])}  # the agent delivered and stopped: the person accepts the work, or says not yet (1.7.38)
         run = data.get("autorun") if isinstance(data.get("autorun"), dict) else {}

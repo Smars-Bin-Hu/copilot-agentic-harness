@@ -56,6 +56,8 @@ a.cp-task:hover{text-decoration:underline}
 .cp-b:disabled{opacity:.45;cursor:default}
 .cp-askrow{display:flex;gap:6px;margin-top:6px}
 .cp-askrow[hidden]{display:none}
+.cp-askwhy{margin-top:4px;font-size:12px;color:var(--bad,#b42318);line-height:1.35}
+.cp-askwhy[hidden]{display:none}
 .cp-field{flex:1;min-width:0;border:1px solid var(--line2);background:var(--bg);color:var(--ink);border-radius:8px;padding:5px 9px;font:inherit;font-size:13px}
 .cp-list{display:flex;flex-direction:column;gap:6px}
 .cp-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);color:inherit;border-radius:10px;padding:6px 8px;text-align:left;width:100%;font:inherit;cursor:pointer}

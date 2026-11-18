@@ -60,7 +60,8 @@ const COMPANION = (function () {
     const field = h("input", {class: "cp-field", maxlength: 2000, placeholder: t("super.input.ph"), "aria-label": t("super.input.ph")});
     const go = h("button", {type: "button", class: "cp-b main"}, t("super.pop.ask.go"));
     const askRow = h("div", {class: "cp-askrow", hidden: ""}, field, go);
-    const foot = h("div", {class: "cp-foot"}, h("div", {class: "cp-btns"}, ask, make, h("span", {class: "cp-sp"}), board), askRow);
+    const askWhy = h("div", {class: "cp-askwhy", role: "status", hidden: ""});  // why a question was refused: stays until the person types again
+    const foot = h("div", {class: "cp-foot"}, h("div", {class: "cp-btns"}, ask, make, h("span", {class: "cp-sp"}), board), askRow, askWhy);
     const bub = h("div", {class: "cp-bub", role: "status"});
     const win0 = h("div", {class: "cp-win"}, chrome, dialogLine, body, foot);
     const root = h("div", {class: "cp"}, perch, think, bat, win0, bub);
@@ -278,6 +279,7 @@ const COMPANION = (function () {
       const target = cardTask();
       field.placeholder = off ? t(OFF[off] || OFF.none) : target ? t("super.route.ph", {task: target}) : t("super.input.ph");
       askRow.hidden = !state.askRow || Boolean(off);
+      if (askRow.hidden) askWhy.hidden = true;
       if (make) make.disabled = false;
     }
 
@@ -326,10 +328,11 @@ const COMPANION = (function () {
       if (task) {  // one task is asked: its answer shows in its card
         field.value = "";
         go.disabled = true;
+        askWhy.hidden = true;
         pop.askTask(task, named ? named.text : text).then((result) => {
           go.disabled = false;
           if (!alive) return;
-          if (!result.ok) { if (!field.value) field.value = text; toast(result.text); }
+          if (!result.ok) { if (!field.value) field.value = text; askWhy.textContent = result.text; askWhy.hidden = false; }
           draw(true);
         });
         return;
@@ -340,6 +343,7 @@ const COMPANION = (function () {
       drawFoot();
     }
     go.addEventListener("click", send);
+    field.addEventListener("input", () => { askWhy.hidden = true; });
     field.addEventListener("keydown", (event) => { if (isEnter(event)) { event.preventDefault(); send(); } });
     const toPage = () => { try { window.focus(); } catch (error) { /* a browser may keep the focus where it is */ } };
     if (make) make.addEventListener("click", () => { CHAT.create(); toPage(); });  // the new-task window is the board's: it opens in the page

@@ -204,6 +204,32 @@ def in_ask_turn(ctx: Context) -> bool:
         return False
 
 
+def keep_cancel(ctx: Context, data: Dict[str, Any]) -> None:
+    """A question turn after a cancelled turn: Copilot's record has a new prompt then, so the cancel would be read as gone. Keep it as a mark of its own (`cancelled`, since the cancel); a normal prompt clears it like any mark. Never in the way of the hook."""
+    try:
+        from . import tasklife
+
+        if data.get("waiting") or data.get("paused"):
+            return
+        since = tasklife.cancelled_at(data)
+        if since:
+            tasklife.set_waiting(ctx.root, data["task"], {"since": since, "why": "cancelled"})
+    except Exception:  # noqa: BLE001 - the mark is for the board
+        pass
+
+
+def end_ask_turn(ctx: Context, data: Dict[str, Any]) -> None:
+    """The Stop of a question turn: what the task waited for stays. A task that waited for nothing (it had worked, and the turn that ended was lost to the list) gets the mark of any Stop: the agent is not at work."""
+    try:
+        from . import tasklife
+
+        if data.get("paused") or tasklife.waiting(ctx.root, data["task"], data)["why"]:
+            return
+        mark_waiting(ctx, data, True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.from_subagent or event.continuation:
         # A subagent call message, or the reason of a Stop block fed back by the engine. Not the user.
@@ -213,6 +239,8 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if not ctx.admin and ask_marked(event.prompt):
         # 1.8.2: a question from the person through the board (`/harness-ask`). The turn is read-only and leaves the task as it was: no wait or delivery cleared, no resume, no restore point, no new count.
         data = open_task(ctx)
+        if data is not None:
+            keep_cancel(ctx, data)
         return Decision(context=prompt_text(ctx), facts={"kind": "task", "task": data["task"]} if data is not None else {})
     asked = user_review(event)
     state = ctx.module_state(NAME)
@@ -575,6 +603,7 @@ def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if data is None:
         return None
     if in_ask_turn(ctx):
+        end_ask_turn(ctx, data)
         return None  # the end of a question turn: the task waits for what it waited for, and nothing is asked of the agent
     pushed = autorun_stop(ctx, data, event.stop_hook_active)
     if pushed is not None:

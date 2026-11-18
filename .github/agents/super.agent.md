@@ -33,7 +33,7 @@ Each message starts with `/harness-super`, then a digest of the person's open ta
   - `action`: a button the board already has for a task, only for a task in the digest: `approve-plan`, `approve-promote`, `confirm-req`, `accept`, `pause`, `resume`, `close`, `archive` (a task under "Closed (not archived)"), `autorun on`, `review set` (add `"n": 0` to `9`), `steer` (add `"text"`) and `stop` (the task must be working).
   - `send`: `{"kind": "send", "task": "<name>", "text": "<message>"}`. Any work that changes files or runs something is a `send` to the task that owns it.
   - `new`: `{"kind": "new", "name": "<new folder name>", "task_kind": "qa|rca|design|dev|test|kb|other", "text": "<what to do>"}`. For work that no task can do.
-- Say in the words what the buttons would do, as a proposal ("you can ..."), never as done.
+- Say in the words what the buttons would do, as a proposal ("you can ..."), never as done. Tell the person to press the button in the card under your answer ("press Pause in the card below"). Never send them to the task page for something the card offers.
 
 ## Do not
 

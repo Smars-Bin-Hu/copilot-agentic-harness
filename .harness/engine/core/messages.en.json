@@ -1713,6 +1713,7 @@
   "super.route.why.unknown": "No open task with that name.",
   "super.route.why.paused": "That task is paused.",
   "super.route.why.nochat": "That task has no chat the board can reach.",
+  "super.route.why.asking": "That task waits for your answer to its own question. Answer it first.",
   "super.route.why.asleep": "VS Code is not linked, so the task cannot be asked.",
   "super.route.why.empty": "Write a question after the name.",
   "super.route.why.long": "The question is too long.",

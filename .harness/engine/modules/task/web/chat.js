@@ -268,7 +268,7 @@ const CHAT = (function () {
     const linkKinds = h("div", {class: "chips new-link-types"});
     const smallNote = h("p", {class: "sub new-small", hidden: "", role: "note"}, t("board.new.small"));  // tickets named, a short text, Kind Dev: a small errand is lighter as Q&A (1.7.26). Kind is not changed for the person.
     const small = () => { const on = kind.value === "dev" && links.value.trim().length > 0 && text.value.trim().length < 140; if (smallNote.hidden === on) smallNote.hidden = !on; };
-    const text = h("textarea", {rows: 5, class: "send-body", placeholder: t("board.new.text.ph"), maxlength: 5000});
+    const text = h("textarea", {rows: 5, class: "send-body", placeholder: t("board.new.text.ph"), maxlength: 10000});
     const said = h("div", {class: "bad"});
     const files = fileTray(text, said, () => sync());
     const model = h("select", {class: "send-body"});

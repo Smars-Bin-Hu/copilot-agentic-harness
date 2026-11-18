@@ -23,7 +23,7 @@ The super agent view is a place to finish things: what waits for you is pinned o
 - **Errors show.** A task whose last turn ended in an error is red, not "Stopped", with **Try again**.
 - **Approve a held call in the view.** The card shows the code and the command; **View** opens the command and its draft, as on the task page, and Approve works after View with the code typed.
 - **The question shows.** A question the board cannot answer shows its text and options, and says to answer it in VS Code.
-- **Message a task directly (server).** `/api/super/send` sends the person's words to one task's chat, not through the super agent: new chat, skip a question, queue, steer or send, with the chosen model, thinking, context, language and files, up to 10000 characters (also the limit of a new task's text).
+- **Message a task directly.** With one task's avatar filter on, or `@name` in All, what you write goes straight to that task's chat, not through the super agent, up to 10000 characters (also the limit of a new task's text). One Send: sent when idle, queued when it works (or steered in), said in place of its own question; a task with no chat gets a new chat that goes on with it. A paused task or a command waiting to be allowed is refused with the reason. The options sit in a menu behind the icon next to Send: model, thinking, context, when it works, reply language, files, and New chat (for that one message). The super agent's `send` card uses the same menu and the same send.
 - **Previews of a requirement and a delivery.** A requirement to confirm unfolds what to do, what not to do and when it is done; a delivery its summary and changed files.
 
 ### Changed

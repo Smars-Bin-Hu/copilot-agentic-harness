@@ -1,6 +1,6 @@
 // The direct message of the super agent view (1.8.4): the words typed under an avatar (or after "@name") go to that task's own chat with `/api/super/send`. This file holds the three parts both the input and the
 // proposal card use, so the two never differ: the send call with the words for its refusals, the small options menu (an icon next to Send), and the receipt words.
-// The menu: model, thinking, context, when the task works (queue or steer), the reply language, files and "New chat". Every choice is remembered in this browser (`localStorage`), except the files.
+// The menu: model, thinking, context, when the task works (queue or steer), the reply language, files and "New chat". Every choice is remembered in this browser (`localStorage`), except the files and New chat: New chat is for one message only (kept on, every later message would make one more chat).
 // A choice that is not the default puts a dot on the icon; its hover lists the choices in short form ("Fusion · high · new chat"). The default model is the task's own: nothing is sent for it.
 // Needs common.js, serve.js, chat.js (CHAT.fileTray). Loaded before super.js.
 "use strict";
@@ -25,7 +25,9 @@ const SUPERDIRECT = (function () {
     if (String(text).length > MAX) return {ok: false, why: "text.long"};
     try {
       const result = await SERVE.call("/api/super/send", {task, text, ...(options || {})}, 40);
-      return !result || result.ok === false ? {ok: false, why: (result && result.why) || "error", error: result && result.error} : {ok: true, how: result.how || "sent", task: result.task || task};
+      if (!result || result.ok === false) return {ok: false, why: (result && result.why) || "error", error: result && result.error};
+      if (options && options.new_chat && state.newChat) { state.newChat = false; menus.forEach((menu) => menu.redraw && menu.redraw()); }  // New chat is for this message only: off again once it went
+      return {ok: true, how: result.how || "sent", task: result.task || task};
     } catch (error) {
       return {ok: false, why: error && error.status === 403 ? "unpaired" : error && error.data && typeof error.data === "object" && error.data.why ? error.data.why : "error", error: error && error.data && error.data.error};
     }
@@ -37,8 +39,8 @@ const SUPERDIRECT = (function () {
   // ---------- the options (shared by every menu on the page) ----------
   const DEFAULT = {model: "", thinking: "", context: "", busy: "queue", lang: "", newChat: false};
   let state = {...DEFAULT};
-  try { const saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved && typeof saved === "object") state = {...DEFAULT, ...saved}; } catch (error) { /* no storage: kept for this page only */ }
-  const keep = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (error) { /* ignore */ } };
+  try { const saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved && typeof saved === "object") state = {...DEFAULT, ...saved, newChat: false}; } catch (error) { /* no storage: kept for this page only */ }
+  const keep = () => { try { localStorage.setItem(KEY, JSON.stringify({...state, newChat: false})); } catch (error) { /* ignore */ } };
   const menus = new Set();
   let models = null;  // the models the host offers; null until asked (and asked again if it failed)
   const own = new Map();  // task -> the task's own {id, thinking, context}

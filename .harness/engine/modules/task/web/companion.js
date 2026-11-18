@@ -138,7 +138,7 @@ const COMPANION = (function () {
     const dot = (cls) => h("span", {class: "cp-dot " + cls});
     function stat(snap) {
       const w = snap.items.length, mood = snap.mood;
-      return h("div", {class: "cp-stat"}, h("span", null, dot("run"), t("super.pop.run", {n: snap.working})), h("span", null, dot("wait"), t("super.pop.wait", {n: w})),
+      return h("div", {class: "cp-stat"}, h("span", null, dot("run"), t("super.pop.run", {n: snap.working})), h("span", null, dot("wait"), t("super.pop.wait", {n: w})), ...pop.alertMarks(),
         mood === "sleep" ? h("span", null, "· " + cap(t("super.line.asleep"))) : mood === "tired" ? h("span", null, "· " + cap(t("super.line.tired"))) : null,
         snap.cost ? h("span", {class: "cp-cost"}, PET.battery(snap.cost)) : null);
     }
@@ -193,7 +193,7 @@ const COMPANION = (function () {
     }
     function draw(force) {
       const snap = state.snap, w = snap.items.length, at = current(), item = snap.items[at];
-      const sig = JSON.stringify([state.view, w, snap.items.map((one) => one.id + "|" + pop.mainOf(one)), item ? pop.sigFor(item) : "", item ? item.id : "", item && state.view === "card" ? pop.asksOf(item.task).slice(-1).map((one) => [one.id, one.state, one.answer, one.line]) : "", snap.done.length, snap.working, snap.mood, snap.cost, snap.failed, snap.off, snap.loaded, state.dialog]);
+      const sig = JSON.stringify([state.view, w, snap.items.map((one) => one.id + "|" + pop.mainOf(one)), item ? pop.sigFor(item) : "", item ? item.id : "", item && state.view === "card" ? pop.asksOf(item.task).slice(-1).map((one) => [one.id, one.state, one.answer, one.line]) : "", snap.done.length, snap.working, snap.stuck, snap.error, snap.mood, snap.cost, snap.failed, snap.off, snap.loaded, state.dialog]);
       drawPet();
       listBtn.classList.toggle("on", state.view === "list");
       root.className = root.className.replace(/\bv-\w+\b/g, "").trim() + " v-" + state.view;

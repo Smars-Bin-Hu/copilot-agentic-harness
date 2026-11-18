@@ -3,6 +3,10 @@
 // a click shows only that task's messages; a robot (pet.js) rests in the top right corner and flies out to an avatar to fetch a letter when a new message arrives. A message that is answered folds
 // into one "✓" line. Under the stream: two quick asks and an input to ask the agent or start a new task.
 //
+// Layout (1.8.4): two parts. The queue of items is pinned above the chat (its own scroll, at most half the height, the most urgent item on top); the chat (the agent's talk, your words, the asks) is below it
+// and a long chat never pushes the queue away. An item that is settled leaves the queue: its receipt goes to a collapsed "Done (n)" row at the foot of the queue. The header line shows
+// `N wait · oldest X · K stuck · M errors` (a part that is zero or missing is left out; the words are in the hover).
+//
 // The buttons of a message are the buttons of the board (`actionButton`, common.js): the same code, the same endpoints, the same code field for an approval; this file makes no action of its own.
 // The agent's brain is another part (`/api/super/ask`, `/api/super/talk`): when they do not answer, the view still works and the input says the agent is not there.
 // Not the default: board.js shows it when the person picks "Super agent" in the bar (the choice is not kept; the board opens as before).
@@ -13,7 +17,7 @@ const SUPER = (function () {
   // The names of the messages are written out, so a search for a key finds its place.
   const WHY = {confirm: "super.why.confirm", question: "super.why.question", asking: "super.why.asking", outbox: "super.why.outbox", autorun: "super.why.autorun", req: "super.why.req", plan: "super.why.plan",
     promote: "super.why.promote", review: "super.why.review", recover: "super.why.recover", accept: "super.why.accept", commit: "super.why.commit", stopped: "super.why.stopped", cancelled: "super.why.cancelled"};
-  const MATE = {you: "super.mate.you", work: "super.mate.work", idle: "super.mate.idle"};
+  const MATE = {you: "super.mate.you", work: "super.mate.work", idle: "super.mate.idle", stuck: "super.mate.stuck", error: "super.mate.error"};
   const BLOCKS = new Set(["confirm", "question", "asking", "outbox", "autorun"]);  // superview.py: these stop running work; their dot on the pet is red
   const OFF = {asleep: "super.off.asleep", limit: "super.off.limit", busy: "super.off.busy", off: "super.off.off", none: "super.off.none"};
   const query = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
@@ -54,9 +58,15 @@ const SUPER = (function () {
     // The pop-out (companion.js): a small window that stays on top of every other window. Only where the browser can open one (Document Picture-in-Picture: Chrome, Edge).
     const popUp = typeof COMPANION !== "undefined" ? h("button", {type: "button", class: "sa-pop"}, "⇱") : null;
     const streamWrap = h("div", {class: "sa-streamwrap"}, stream, pill);
+    // The queue (1.8.4): the open items, pinned above the chat; the receipts of the settled ones fold into "Done (n)" at its foot.
+    const queueList = h("div", {class: "sa-qlist", role: "list", "aria-label": t("super.queue")});
+    const doneList = h("div", {class: "sa-qdlist"});
+    const doneHead = h("summary", {title: t("super.done.tip")});
+    const doneBox = h("details", {class: "sa-qdone", hidden: ""}, doneHead, doneList);
+    const queue = h("div", {class: "sa-queue", hidden: ""}, queueList, doneBox);
     const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => linked(text)) : null;  // the earlier days (superhist.js)
     sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
-      streamWrap, quick, h("div", {class: "sa-input"}, complete, box));
+      h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, box));
 
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], localThink = 0, failed = "";
@@ -107,7 +117,7 @@ const SUPER = (function () {
       const all = h("button", {type: "button", class: "sa-mate all" + (filter ? "" : " on"), "data-task": "", title: t("super.team.all.tip")}, h("span", {class: "sa-ring"}, t("super.team.all")), h("span", {class: "sa-nm"}, t("super.team.all")));
       const nodes = list.map((mate, at) => {
         const state = MATE[mate.state] ? mate.state : "idle";
-        const ring = h("span", {class: "sa-ring"}, PET.face(state === "you" ? "you" : state === "work" ? "work" : "idle", mate.kind, ((at * .37) % 3).toFixed(2)));
+        const ring = h("span", {class: "sa-ring"}, PET.face(state === "you" || state === "error" ? "you" : state === "work" || state === "stuck" ? "work" : "idle", mate.kind, ((at * .37) % 3).toFixed(2)));
         return h("button", {type: "button", class: "sa-mate " + state + (filter === mate.task ? " on" : ""), "data-task": mate.task, "data-state": state, title: t("super.mate.tip", {task: mate.task, state: t(MATE[state])})},
           ring, mate.count ? h("span", {class: "sa-cnt"}, mate.count) : null, h("span", {class: "sa-nm"}, mate.task));
       });
@@ -119,7 +129,7 @@ const SUPER = (function () {
     });
     // ---------- the menu of an avatar (1.8.2): right click or the menu key. Steer and Stop, only while the task works ----------
     let mateMenuNode = null, mateMenuFrom = null;
-    const mateMenuWorks = (task) => Boolean((mates.find((mate) => mate.task === task) || {}).state === "work" || rowFor(task).state === "working");
+    const mateMenuWorks = (task) => Boolean(["work", "stuck"].includes((mates.find((mate) => mate.task === task) || {}).state) || rowFor(task).state === "working");
     const mateSteer = (task, text) => SERVE.post("/api/steer", {task, text, lang: ""});  // the menu's and the pop-out's
     const mateStop = (task) => SERVE.post("/api/stop", {task});
     function mateMenuClose(back) {
@@ -196,13 +206,26 @@ const SUPER = (function () {
       drawInput();
     }
     function applyFilter() {
-      let visible = 0;
+      let chat = 0, open = 0;
       for (const node of stream.children) {
         if (node === empty || node === earlier) continue;
         node.hidden = Boolean(filter) && node.dataset.task !== filter;
-        if (!node.hidden) visible++;
+        if (!node.hidden) chat++;
       }
-      empty.hidden = visible > 0;
+      for (const node of queueList.children) {
+        node.hidden = Boolean(filter) && node.dataset.task !== filter;
+        if (!node.hidden) open++;
+      }
+      let settled = 0;
+      for (const node of doneList.children) {
+        node.hidden = Boolean(filter) && node.dataset.task !== filter;
+        if (!node.hidden) settled++;
+      }
+      doneBox.hidden = !settled;
+      doneHead.replaceChildren(h("span", {class: "sa-qcheck", "aria-hidden": "true"}, "\u2713"), " " + t("super.done.head", {n: settled}));
+      queue.hidden = !open && !settled;
+      sv.classList.toggle("sa-nochat", !chat);  // no chat yet: the queue takes the room
+      empty.hidden = chat + open > 0;
       empty.replaceChildren(...[h("b", null, filter ? t("super.empty.filter") : mates.length ? t("super.empty.title") : t("super.empty.notasks")), filter || !mates.length ? null : h("div", null, t("super.empty.text"))].filter(Boolean));
     }
 
@@ -477,21 +500,33 @@ const SUPER = (function () {
       drawWaited(entry);
       return entry;
     }
-    function addItem(item, down) {
+    // A new item goes where the server's order puts it (the most urgent on top), not at the end.
+    function queueInsert(node, id) {
+      const order = ((data && data.items) || []).map((item) => item.id), mine = order.indexOf(id);
+      let before = null;
+      if (mine >= 0) for (const one of queueList.children) { if (order.indexOf(one.dataset.id) > mine) { before = one; break; } }
+      queueList.insertBefore(node, before);
+    }
+    function addItem(item) {
       if (known.has(item.id)) return;
       const entry = build(item);
       known.set(item.id, entry);
       queued.delete(item.id);
-      add(entry.node, down);
+      queueInsert(entry.node, item.id);
+      applyFilter();
     }
+    const RECEIPTS = 30;
     function fold(entry, next) {
       entry.done = true;
-      entry.node.classList.add("done");
       entry.waited.textContent = "";
       entry.note.hidden = true;
       // The task has another wait now (a row has one): it is not settled, it moved on. The person's own click is still the better thing to say.
-      const line = entry.clicked ? "✓ " + t("super.done.you", {action: entry.clicked}) : next ? "→ " + t("super.done.next", {kind: t(WHY[next.why] || "super.why.other")}) : "✓ " + t("super.done.elsewhere");
-      entry.acts.replaceChildren(h("span", {class: next && !entry.clicked ? "sa-next" : "sa-ok"}, line + " · " + stamp()));
+      const line = entry.clicked ? "\u2713 " + t("super.done.you", {action: entry.clicked}) : next ? "\u2192 " + t("super.done.next", {kind: t(WHY[next.why] || "super.why.other")}) : "\u2713 " + t("super.done.elsewhere");
+      entry.node.remove();  // the card leaves the queue; its receipt goes to the "Done" row
+      doneList.prepend(h("div", {class: "sa-rc", "data-task": entry.item.task}, taskLink(entry.item.task), h("span", {class: next && !entry.clicked ? "sa-next" : "sa-ok"}, line + " \u00b7 " + stamp())));
+      while (doneList.children.length > RECEIPTS) doneList.lastElementChild.remove();
+      doneBox.classList.remove("sa-flash"); void doneBox.offsetWidth; doneBox.classList.add("sa-flash");
+      applyFilter();
       doneLog.push({task: entry.item.task, text: line, at: stamp()});
       if (doneLog.length > 30) doneLog.shift();
     }
@@ -509,9 +544,9 @@ const SUPER = (function () {
       const fresh = items.filter((item) => !known.has(item.id) && !queued.has(item.id));
       const animate = !first && fresh.length <= 3 && petFree();
       for (const item of fresh) {
-        if (animate) { queued.add(item.id); chain = chain.then(() => notice(item)).catch(() => addItem(item, true)); } else addItem(item, false);
+        if (animate) { queued.add(item.id); chain = chain.then(() => notice(item)).catch(() => addItem(item)); } else addItem(item);
       }
-      if (first) { stream.scrollTop = 0; pill.hidden = true; }  // the most urgent message is the first one
+      if (first) { queueList.scrollTop = 0; stream.scrollTop = stream.scrollHeight; pill.hidden = true; }  // the most urgent item is the first one of the queue, in view; the chat shows its newest
     }
 
     // ---------- the pet ----------
@@ -543,7 +578,7 @@ const SUPER = (function () {
     // A new item: the pet walks to the avatar of the task, takes the letter, brings it down to the stream, and the message comes.
     async function notice(item) {
       const mate = mateOf(item.task);
-      if (!petFree() || !mate) { addItem(item, true); return; }
+      if (!petFree() || !mate) { addItem(item); return; }
       noticeBusy = true;
       try {
         mate.scrollIntoView({inline: "nearest", block: "nearest"});
@@ -552,7 +587,7 @@ const SUPER = (function () {
         pet.say(t("super.pet.way"), 1000);
         const stand = standAt(mate);
         await pet.walkTo(stand.x, stand.y, stand.face);
-        if (!petFree()) { addItem(item, true); return; }
+        if (!petFree()) { addItem(item); return; }
         mate.classList.add("ping");
         const a = centre(mate), p = pet.at(), size = pet.size();
         letter(a, {x: p.x + size.w - 6, y: p.y + size.h * .45}, false);
@@ -564,10 +599,10 @@ const SUPER = (function () {
         const target = home();
         await pet.walkTo(target.x, target.y, 0);
         pet.carry(false);
-        const end = hostBox(), list = stream.getBoundingClientRect(), now = pet.at();
+        const end = hostBox(), list = (queue.hidden ? stream : queueList).getBoundingClientRect(), now = pet.at();
         letter({x: now.x + size.w - 6, y: now.y + size.h * .45}, {x: list.left - end.left + 50, y: list.top - end.top + 30}, true);
         await wait(650);
-        addItem(item, true);
+        addItem(item);
         pet.hop();
       } finally { noticeBusy = false; pet.look(0, 0); }
     }
@@ -608,7 +643,7 @@ const SUPER = (function () {
         return;
       }
       const entry = nextEntry();
-      for (const node of stream.querySelectorAll(".sa-spot")) node.classList.remove("sa-spot");
+      for (const node of sv.querySelectorAll(".sa-spot")) node.classList.remove("sa-spot");
       if (!entry) {
         pointing = null;
         const mood = moodNow();
@@ -618,6 +653,7 @@ const SUPER = (function () {
         return;
       }
       if (entry.node.hidden) setFilter("");
+      queueList.scrollTop = Math.min(queueList.scrollTop, entry.node.offsetTop);  // the queue's own scroll shows it (scrollIntoView below does the rest)
       pointing = {id: entry.item.id, until: Date.now() + 8000};
       holdUntil = pointing.until;
       entry.node.classList.add("sa-spot");
@@ -675,7 +711,7 @@ const SUPER = (function () {
     function drawOrbit() {
       if (!pet) return;
       const blocked = new Set(((data && data.items) || []).filter((item) => BLOCKS.has(item.why)).map((item) => item.task));
-      pet.orbit(mates.map((mate) => (blocked.has(mate.task) ? "block" : MATE[mate.state] ? mate.state : "idle")));
+      pet.orbit(mates.map((mate) => (blocked.has(mate.task) || mate.state === "stuck" || mate.state === "error" ? "block" : MATE[mate.state] ? mate.state : "idle")));
     }
     function applyMood() {
       if (!pet) return;
@@ -688,6 +724,22 @@ const SUPER = (function () {
     }
 
     // ---------- the header, the banner, the input ----------
+    // `N wait · oldest X · K stuck · M errors`: icons and short marks, the words in the hover. A part that is zero or missing (the server of 1.8.3 has no oldest, stuck or error) is left out.
+    const count = (value) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.floor(Number(value)) : 0);
+    const mark = (cls, icon, text, tip) => h("span", {class: "sa-st " + cls, title: tip}, icon ? h("i", {"aria-hidden": "true"}, icon) : null, text);
+    function alertMarks(status) {  // the stuck and error marks (also the pop-out's header)
+      const stuck = count(status.stuck), error = count(status.error), list = [];
+      if (stuck) list.push(mark("sa-st-stuck", "\u26a0", t("super.head.stuck", {n: stuck}), t("super.head.stuck.tip", {n: stuck})));
+      if (error) list.push(mark("sa-st-error", "\u2715", t(error === 1 ? "super.head.error.one" : "super.head.error", {n: error}), t("super.head.error.tip", {n: error})));
+      return list;
+    }
+    function headMarks(status) {
+      const waiting = count(status.waiting), oldest = Number(status.oldest_s);
+      const list = [waiting ? mark("sa-w", "", t("super.head.wait", {n: waiting}), t("super.line.waiting", {n: waiting})) : mark("sa-st-none", "", t("super.line.none"), t("super.line.none"))];
+      if (Number.isFinite(oldest) && oldest > 0 && status.oldest_s !== null) list.push(mark("sa-st-old", "\u25f7", clock(oldest), t("super.head.oldest.tip", {time: clock(oldest)})));
+      list.push(...alertMarks(status));
+      return list.flatMap((node, at) => (at ? [h("span", {class: "sa-sep", "aria-hidden": "true"}, "\u00b7"), node] : [node]));
+    }
     function drawStatus() {
       const status = (data && data.status) || {};
       const mood = moodNow();
@@ -695,9 +747,9 @@ const SUPER = (function () {
       if (failed) { lineEl.append(failed); } else if (mood === "sleep") lineEl.append(t("super.line.asleep"));
       else if (mood === "tired") lineEl.append(t("super.line.tired"));
       else {
+        lineEl.append(...headMarks(status));
         const n = status.watching || 0;
-        lineEl.append(t(n === 1 ? "super.line.watching.one" : "super.line.watching", {n}), " · ", h("span", {class: status.waiting ? "sa-w" : ""}, status.waiting ? t("super.line.waiting", {n: status.waiting}) : t("super.line.none")));
-        if (status.as_of) lineEl.append(" · " + t("super.line.updated", {time: when(status.as_of, 11, 16)}));
+        lineEl.append(h("span", {class: "sa-tail"}, h("span", {class: "sa-sep", "aria-hidden": "true"}, "\u00b7"), t(n === 1 ? "super.line.watching.one" : "super.line.watching", {n}) + (status.as_of ? " \u00b7 " + t("super.line.updated", {time: when(status.as_of, 11, 16)}) : "")));
       }
       lineEl.title = lineEl.textContent;
       const cost = costNow();
@@ -960,7 +1012,7 @@ const SUPER = (function () {
     // What the pop-out window reads (companion.js): the data this view already holds, and a call when it changes. It never asks the server itself.
     function snapshot() {
       const status = (data && data.status) || {};
-      return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work").length, watching: status.watching || 0, failed,
+      return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work").length, watching: status.watching || 0, stuck: count(status.stuck), error: count(status.error), failed,
         mood: moodNow(), thinking: thinkingNow(), off: talkOff(), cost: costNow(),
         messages: talk ? (talk.messages || []).filter((message) => message && message.role !== "you") : [], mates, loaded: data !== null};
     }
@@ -978,7 +1030,7 @@ const SUPER = (function () {
       if (!why) poll().then(schedule, schedule);
       return {ok: !why, why, text: why ? t(routeKey(why)) : ""};
     }
-    const pop = {replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: (item) => t(WHY[item.why] || "super.why.other"), jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
+    const pop = {alertMarks: () => alertMarks((data && data.status) || {}), replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: (item) => t(WHY[item.why] || "super.why.other"), jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
       taskLink, ask: (text) => ask(null, text), watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, openVS: () => SERVE.openVS()};
     if (popUp) {
       const reason = COMPANION.unsupported();

@@ -2825,7 +2825,7 @@
   "dock.home": "回到 Enter 屏",
   "dock.back": "返回",
   "dock.sent": "已交给 VS Code",
-  "dock.sent.where": "VS Code 在后台建 chat。建好后它会出现在 Sessions 最上面。这个窗口不会等它。",
+  "dock.sent.where": "VS Code 正在建 chat；电脑很忙时会慢一些，看板会一直等它。建好后它会出现在 Sessions 最上面。",
   "board.empty.lesson": "上一节 20 分钟的课",
   "skill.refused.name": "这份副本里没有这个 skill。",
   "skill.refused.words": "内容只能一行，最多 {limit} 个字符。",

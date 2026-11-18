@@ -2825,7 +2825,7 @@
   "dock.home": "Back to the Enter screen",
   "dock.back": "Back",
   "dock.sent": "Handed to VS Code",
-  "dock.sent.where": "VS Code makes the chat in the background. It shows at the top of Sessions when it is made. This window does not wait.",
+  "dock.sent.where": "VS Code makes the chat; on a busy computer that can take a while, and the board waits for it. It shows at the top of Sessions when it is made.",
   "board.empty.lesson": "Take the 20-minute lesson",
   "skill.refused.name": "This skill is not in this copy.",
   "skill.refused.words": "The words are one line, {limit} characters at most.",

@@ -39,9 +39,9 @@ const SERVE = (function () {
     const button = event.target && event.target.closest ? event.target.closest("button") : null;
     if (button && !button.disabled) { pressed = button; pressedAt = Date.now(); }
   }, true);
-  const POLLS = ["/api/board", "/api/super", "/api/live", "/api/desk", "/api/status", "/api/ready"];  // what the pages ask every few seconds, and after an action to draw it
+  const POLLS = ["board", "super", "live", "desk", "status", "ready"];  // what the pages ask every few seconds (`/api/<name>`), and after an action to draw it
   function waitOn(promise, path) {
-    const button = !POLLS.includes(path) && pressed && Date.now() - pressedAt <= PRESS_WINDOW && pressed.isConnected ? pressed : null;
+    const button = !POLLS.includes(String(path || "").split("/").pop()) && pressed && Date.now() - pressedAt <= PRESS_WINDOW && pressed.isConnected ? pressed : null;
     if (!button) return promise;
     pending.set(button, (pending.get(button) || 0) + 1);
     const timer = setTimeout(() => { if (button.isConnected && pending.get(button)) { button.classList.add("is-waiting"); button.setAttribute("aria-busy", "true"); } }, WAIT_SHOW);

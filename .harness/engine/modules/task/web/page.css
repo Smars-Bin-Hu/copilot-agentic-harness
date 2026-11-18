@@ -32,7 +32,7 @@ td.grow{width:42%}
 /* A long reason (why autorun stopped) takes several lines; it must not push the table out of the card. */
 .tag.long{white-space:normal;overflow-wrap:anywhere;border-radius:10px;padding:2px 8px}
 .model-line{max-width:0;min-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px}.tag.model{display:inline;padding:1px 8px;font-family:var(--mono)}.tr-model{display:none}@media (max-width:640px){.model-line.in{display:none}.tr-model{display:table-row}.tr-model td{padding-top:0;border-top:0}.tr-model td{overflow:hidden;max-width:0}}  /* the model and the effort of a prompt in the report (F3 M): a line under the stage, as wide as the cell and no wider (a long model name ends in an ellipsis); in a narrow window the cell is too small for it, so it has a row of its own under the prompt. Every run is on hover */
-td.state .tag.long{display:inline-block;max-width:min(17em,100%);height:22px;padding:0 9px 0 8px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}  /* a long wait text is one line in a list row; the whole text is on hover (1.7.26) */
+td.state .tag.long{display:inline-block;max-width:min(17em,calc(100vw - 96px));height:22px;padding:0 9px 0 8px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}  /* a long wait text is one line in a list row; the whole text is on hover (1.7.26) */
 .tag.lost{background:rgba(217,180,90,.18);color:#a8761a;border:1px dashed rgba(217,180,90,.7)}
 /* A long task name wraps (at a hyphen first) instead of pushing the buttons out of the card. */
 td.name{white-space:nowrap}td.name .sub{white-space:normal;max-width:18em}
@@ -299,3 +299,9 @@ ol.trace li.tr-prompt{opacity:.7}ol.trace li.tr-decision .what b{color:var(--ink
 .ctx{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.ctx.unknown{color:var(--soft)}.ctx b{font-weight:650;font-variant-numeric:tabular-nums}
 .ctx-bar{display:inline-block;width:70px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}.ctx-bar i{display:block;height:100%;background:var(--model)}.ctx.hot b{color:var(--bad,#c0392b)}.ctx.hot .ctx-bar i{background:var(--bad,#c0392b)}
 .new-grill{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:13px}
+
+/* 1.8.5: the list's wait states. An error row has a red edge; a late "starting" has a small yellow mark; a task being created is a plain row with a circle. */
+tr.is-error td:first-child,tr.is-error td.tick{box-shadow:inset 2px 0 0 var(--bad)}
+.tag.warn.late{margin-left:6px;padding:0 7px;font-weight:700}
+tr.making td{color:var(--soft);cursor:default}
+tr.making .mk-name{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}

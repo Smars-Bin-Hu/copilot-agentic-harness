@@ -109,7 +109,7 @@ const SHELL = (function () {
       const row = byName.get(name);
       const href = row ? hrefOf(row) : served ? "/task/" + encodeURIComponent(name) : "";
       if (!href) return null;
-      return {g: group, key: "task:" + name, label: name, icon: "task", node: row ? stateTag(row, served) : null, kw: name + " " + (row ? row.kind + " " + row.state : ""),
+      return {g: group, key: "task:" + name, label: row ? shownName(row) : name, icon: "task", node: row ? stateTag(row, served) : null, kw: name + " " + (row ? (row.title || "") + " " + row.kind + " " + row.state : ""),  // the display name shows; the task name still finds it (1.8.5)
         run: () => { visit(name); if (name !== own.here) location.assign(href); }};
     };
     const recent = recents().filter((name) => !known || known.has(name)).slice(0, 3);

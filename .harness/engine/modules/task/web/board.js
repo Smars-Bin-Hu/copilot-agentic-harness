@@ -10,13 +10,14 @@
 
 (function () {
   let rows = DATA.rows;
+  let making = DATA.making || [];  // 1.8.5: tasks whose chat the board made and whose agent has not made the task yet: [{name, kind, since}]
   let hidden = DATA.hidden || 0;
   let archiveTo = DATA.serve ? DATA.serve.archive_to || "" : "";
   let vscode = DATA.serve ? DATA.serve.vscode || null : null;  // {ready, bound, unbound, why}: the link to VS Code (the server's thread keeps it)
   let asOf = DATA.as_of;
   const canArchive = typeof SERVE !== "undefined" && SERVE.runs("archive");
   const selected = new Set();  // closed tasks the person ticked, to archive together
-  let shown = JSON.stringify([rows, hidden, vscode]);
+  let shown = JSON.stringify([rows, hidden, vscode, making]);
   let hovering = false;  // the pointer is over the list: a refresh updates the cells but keeps the row order, so no row jumps under a click
   let held = null;  // the order of the rows (their names) at the last drawing
   const app = document.getElementById("app");
@@ -53,7 +54,7 @@
   function listed() {
     const query = view.query.trim().toLowerCase();
     let found = rows.filter((row) => matches[view.filter](row) && (!view.kind || row.kind === view.kind)
-      && (!query || (row.name + " " + kindText(row)).toLowerCase().includes(query)));
+      && (!query || (row.name + " " + (row.title || "") + " " + kindText(row)).toLowerCase().includes(query)));  // the display name too (1.8.5)
     const column = COLUMNS[view.key];
     if (column) {
       found = found.map((row, index) => ({row, index, value: column.value(row)}));
@@ -229,6 +230,12 @@
     return h("span", {class: "tag warn", title: row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n"), "aria-label": t("board.warn.label")}, "\u26a0");
   }
 
+  // 1.8.5: sent a while ago and the agent has not been seen to start: a small yellow mark after the state, the words on hover (the state itself is the real one).
+  function lateTag(row) {
+    if (!row.starting || !row.starting.late || stateOf(row, live) === "error") return null;
+    return h("span", {class: "tag warn late", title: startingTip(row.starting), "aria-label": t("waits.late")}, " !");
+  }
+
   const cell = (key, text) => h("td", {class: "num col-" + key}, text);
   // What a narrow list takes out of its columns is written under the name instead, so nothing is cut without a trace (board.css shows each part where its column is hidden).
   function meta(row) {
@@ -238,17 +245,32 @@
     return h("div", {class: "row-meta"}, parts.map(([key, value]) => h("span", {class: "m-" + key}, t("board.col." + (key === "aiu" ? "credits" : key)) + " ", h("b", null, String(value)))));
   }
 
+  // 1.8.5: a task being created has no page yet: a row with its name, a turning circle and the words, no link, no buttons. It goes when the task appears.
+  function makingLine(item) {
+    const kind = Object.prototype.hasOwnProperty.call(TEXT, "task.kind." + item.kind) ? t("task.kind." + item.kind) : (item.kind || "-");
+    return h("tr", {class: "making", "data-making": item.name, title: t("waits.making.tip", {kind, at: when(item.since, 11, 19)})},
+      canArchive ? h("td", {class: "tick"}) : null,
+      h("td", {class: "name"}, h("div", {class: "name-line"}, h("span", {class: "mk-name"}, item.name))),
+      h("td", {class: "state"}, (() => { const node = tag("", "run starting"); node.append(spinner(), t("waits.making")); return node; })()),
+      h("td", {colspan: "7", class: "mk-rest"}));
+  }
+  function makingRows() {
+    const query = view.query.trim().toLowerCase();
+    if (view.filter !== "all" || view.kind) return [];
+    return making.filter((item) => !query || item.name.toLowerCase().includes(query));
+  }
+
   function line(row, longest) {
     const brief = figures(row);
-    return h("tr", {class: [row.status === "closed" ? "closed" : "", touched.has(row.name) ? "touched" : ""].join(" ").trim() || null, "data-name": row.name},
+    return h("tr", {class: [row.status === "closed" ? "closed" : "", touched.has(row.name) ? "touched" : "", stateOf(row, live) === "error" ? "is-error" : ""].join(" ").trim() || null, "data-name": row.name},
       canArchive ? tickCell(row) : null,
       h("td", {class: "name"},
         h("div", {class: "name-line"}, kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
-          DATA.serve ? h("a", {href: "/task/" + encodeURIComponent(row.name), title: row.name}, row.name)
-            : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/"), title: row.name}, row.name) : h("span", {title: row.name}, row.name),
+          DATA.serve ? h("a", {href: "/task/" + encodeURIComponent(row.name), title: nameTip(row) || row.name}, shownName(row))
+            : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/"), title: nameTip(row) || row.name}, shownName(row)) : h("span", {title: nameTip(row) || row.name}, shownName(row)),
           DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null, Status.links(row.links)),  // a small link icon when the task is linked to tickets (1.7.38)
         statusLine(row), meta(row)),
-      h("td", {class: "state"}, state(row), warnTag(row) ? [" ", warnTag(row)] : null),
+      h("td", {class: "state"}, state(row), lateTag(row), warnTag(row) ? [" ", warnTag(row)] : null),
       h("td", {class: "checks col-reviews"}, row.status === "new" ? "-" : checkDots(row)),
       cell("waited", row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
       actionCell(row),
@@ -365,17 +387,18 @@
     paintStamp();
     more.textContent = hidden ? t("board.closed.more", {count: hidden}) : "";
     more.hidden = mode !== "list" || !hidden;
-    if (!rows.length) { tableBox.replaceChildren(firstTask()); return; }
+    if (!rows.length && !making.length) { tableBox.replaceChildren(firstTask()); return; }
     const shownRows = listed();
+    const makers = makingRows();
     const before = rowTops();
     touched = new Set(rows.filter((row) => row.status === "open" && seen.has(row.name) && seen.get(row.name) !== row.updated_at).map((row) => row.name));
     seen = new Map(rows.map((row) => [row.name, row.updated_at]));
     const briefs = rows.filter((row) => row.brief).map(figures);
     const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
-    if (!shownRows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
+    if (!shownRows.length && !makers.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
     tableBox.replaceChildren(
       table([canArchive ? headerTick(shownRows) : null, header("task"), header("waiting"), header("reviews"), header("waited", true), h("th", {class: "col-acts"}, t("board.col.actions")), header("time"), h("th", {class: "num col-bar"}),  header("aiu", true), header("prompts", true)],
-        shownRows.map((row) => line(row, longest))),
+        [...makers.map(makingLine), ...shownRows.map((row) => line(row, longest))]),
       legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]]));
     slide(before);
     hintOverflow();
@@ -538,7 +561,7 @@
   // The pill that says whether VS Code is linked is SHELL.vsPill (shell.js): the same state as the banner and the dimmed buttons.
   const cli = DATA.cli || "harness";
 
-  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); drawShift(); lobby.update(rows, live); drawBadge(); }
+  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); drawShift(); lobby.update(rows, live, making); drawBadge(); }
 
   search.addEventListener("input", () => { view.query = search.value; keep.set("query", search.value); drawTable(); });
   kinds.addEventListener("change", () => { view.kind = kinds.value; keep.set("kind", view.kind); drawTable(); });
@@ -618,8 +641,8 @@
     SHELL.vs(data.vscode);
     if (superView) superView.setVscode(data.vscode);
     if (DATA.serve) { DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); }
-    const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
-    if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else { paintStamp(); paintSpace(data.space); }
+    const text = JSON.stringify([data.rows, data.hidden, data.vscode || null, data.making || []]);
+    if (text !== shown) { rows = data.rows; making = data.making || []; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else { paintStamp(); paintSpace(data.space); }
   }
   if (typeof SERVE !== "undefined") {
     SERVE.start(app);

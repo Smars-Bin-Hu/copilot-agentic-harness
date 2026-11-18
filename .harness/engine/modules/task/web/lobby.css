@@ -153,3 +153,32 @@ a.lb-name:hover{text-decoration:underline;text-underline-offset:3px}
 .lb-elsewhere{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0}.lb-elsewhere[hidden]{display:none}
 .el-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}.el-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}.el-row .act{margin:0 0 0 auto}
 .el-row .el-cmd{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;background:none;padding:0;color:var(--soft)}.el-row>div{flex:1 1 100%;min-width:0}
+
+/* 1.8.5: starting, error, late, and a robot being assembled (a task being created). */
+.lb-spin{opacity:0}
+.lb-spin circle{fill:none;stroke:var(--c);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:20 40;transform-box:fill-box;transform-origin:center}
+.lb-starting .lb-spin{opacity:1}
+.lb-starting .lb-spin circle{animation:lbturn .9s linear infinite}
+@keyframes lbturn{to{transform:rotate(360deg)}}
+.lb-pose-err{--c:var(--bad)}
+.lb-pose-err .lb-bubble{opacity:1;animation:lbpop .5s cubic-bezier(.2,.9,.3,1.4) both}
+.lb-pose-err .lb-bubble circle,.lb-pose-err .lb-bubble path{fill:var(--bad)}
+.lb-pose-err .lb-bubble text{fill:#fff}
+.lb-pose-err .lb-body,.lb-pose-err .lb-head{stroke:var(--bad)}
+.lb-pose-err .lb-headg{transform:translateY(2px) rotate(-3deg);transform-box:fill-box;transform-origin:50% 100%}
+.lb-pose-err .lb-arm.lb-r{transform:rotate(-10deg)}
+.lb-late{position:absolute;right:0;top:-4px;min-width:16px;height:16px;box-sizing:border-box;padding:0 4px;border-radius:8px;font-size:11px;font-weight:800;line-height:14px;text-align:center;color:var(--hot);background:var(--hot-bg);border:1px solid var(--hot-line);cursor:help}
+.lb-scene[data-size="s"] .lb-late{right:-2px;top:-6px}
+.lb-making{cursor:default}
+.lb-making .lb-nm{font-style:italic}
+.lb-pose-make{--c:var(--soft)}
+.lb-pose-make .lb-floaty{animation:none}
+.lb-pose-make .lb-eye{animation:none}
+.lb-pose-make .lb-core,.lb-pose-make .lb-feet,.lb-pose-make .lb-arm,.lb-pose-make .lb-body,.lb-pose-make .lb-headg{animation:lbmk 4s ease-out infinite both}
+.lb-pose-make .lb-feet{animation-delay:0s}.lb-pose-make .lb-body{animation-delay:.35s}.lb-pose-make .lb-arm{animation-delay:.7s}
+.lb-pose-make .lb-core{animation-delay:.9s}.lb-pose-make .lb-headg{animation-delay:1.2s}
+@keyframes lbmk{0%,3%{opacity:0;transform:translateY(-30px)}16%{opacity:1;transform:translateY(3px)}21%,80%{opacity:1;transform:none}92%,100%{opacity:0;transform:none}}
+@media (prefers-reduced-motion:reduce){
+ .lb-scene .lb-starting .lb-spin circle{animation:lbturn 2.4s linear infinite!important}
+ .lb-scene .lb-pose-make .lb-feet,.lb-scene .lb-pose-make .lb-body,.lb-scene .lb-pose-make .lb-arm,.lb-scene .lb-pose-make .lb-core,.lb-scene .lb-pose-make .lb-headg{animation:lbmk 6s ease-out infinite both!important}
+}

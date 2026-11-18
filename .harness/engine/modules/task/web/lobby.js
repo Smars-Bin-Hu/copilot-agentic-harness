@@ -19,13 +19,14 @@ const Lobby = (function () {
 
   // pose -> zone. `tests`: waiting for the results of a test the person is to run.
   // `lost`: no session holds the task (a plug hangs loose).
-  const ZONE_OF = {work: "work", you: "you", tests: "you", lost: "left", idle: "rest", pause: "rest"};
+  const ZONE_OF = {work: "work", you: "you", tests: "you", err: "you", make: "work", lost: "left", idle: "rest", pause: "rest"};  // err: the last turn ended in an error (1.8.5); make: being created
   const ZONES = [["you", "board.lobby.zone.you"], ["work", "board.lobby.zone.work"], ["left", "board.lobby.zone.left"], ["rest", "board.lobby.zone.rest"]];  // what waits for the person is on top
 
   // The state is the server's (`row.state`); the pose only draws it.
   function poseOf(row, live) {
     const state = stateOf(row, live);
     if (state === "paused") return "pause";
+    if (state === "error") return "err";
     if (state === "waiting") return row.waiting_why === "tests" ? "tests" : "you";
     if (state === "unheld") return "lost";
     return state === "working" ? "work" : "idle";
@@ -64,6 +65,7 @@ const Lobby = (function () {
     body.append(head, svg("g", {class: "lb-bubble"}, svg("circle", {cx: 80, cy: 14, r: 11, fill: "#f0a02e"}), svg("path", {d: "M72 21 L68 28 L77 24 Z", fill: "#f0a02e"}), mark),
       svg("text", {class: "lb-zz", x: 70, y: 22}, "z"), svg("text", {class: "lb-zz lb-b", x: 78, y: 12}, "Z"));
     body.append(svg("g", {class: "lb-cable"}, svg("path", {d: "M70 84 C84 86 88 98 80 110"}), svg("circle", {class: "lb-spark", cx: 80, cy: 112, r: 2.6})));
+    body.append(svg("g", {class: "lb-spin"}, svg("circle", {cx: 80, cy: 14, r: 9})));  // 1.8.5: shown while the agent is starting (lobby.css)
     root.append(body);
     root._mark = mark;
     return root;
@@ -77,9 +79,26 @@ const Lobby = (function () {
     node.title = row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n");
   }
 
+  // 1.8.5: a task sent something a while ago and the agent has not been seen to start: a small yellow mark on the robot, the words on hover.
+  function lateMark(slot, row) {
+    let node = slot.querySelector(".lb-late");
+    if (!row.starting || !row.starting.late || row.state === "error") { if (node) node.remove(); return; }
+    if (!node) { node = h("span", {class: "lb-late", role: "img"}, "!"); slot.append(node); }
+    node.title = startingTip(row.starting);
+    node.setAttribute("aria-label", t("board.waits.lobby.late", {name: shownName(row)}));
+  }
+  // What the pointer says over a robot and what a screen reader says: the error, or what the board sent. Nothing for a calm task (its name is already there).
+  function robotWords(slot, row, state) {
+    const words = state === "error" ? errorWords(row) : state === "starting" ? startingTip(row.starting) : "";
+    if (words) slot.setAttribute("title", words); else slot.removeAttribute("title");
+    slot.setAttribute("aria-label", state === "error" ? t("board.waits.lobby.error", {name: shownName(row)}) : state === "starting" ? t("board.waits.lobby.starting", {name: shownName(row)}) : shownName(row));
+  }
+  const startingNow = (row) => Boolean(row.starting && !row.starting.late && row.state !== "error");
+
   // options: href(row) the page of a task; figures(row) its Time, Credits and prompts (the brief); actions(row) the strip of buttons of the list row, or null; live: the page is kept fresh.
   function create(options) {
     const slots = new Map();  // task name -> {slot, bot, row, pose, zone, label}
+    const makers = new Map();  // 1.8.5: tasks being created (no page yet) -> {slot, zone}
     const rowsOf = {};
     const zoneBox = {};
     const count = h("div", {class: "lb-sub"});
@@ -145,11 +164,11 @@ const Lobby = (function () {
       const row = entry.row, href = options.href(row);
       const served = typeof SERVE !== "undefined" && DATA.serve;
       card.setAttribute("aria-label", t("board.status.card.label", {name: row.name}));
-      put("head", JSON.stringify([row.name, row.kind, row.status, href, served && row.status === "open" ? row.chat || null : null, row.links || null]), () => [
+      put("head", JSON.stringify([row.name, row.title || "", row.kind, row.status, href, served && row.status === "open" ? row.chat || null : null, row.links || null]), () => [
         kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
-        href ? h("a", {class: "lb-name", href, title: row.name}, row.name) : h("span", {class: "lb-name", title: row.name}, row.name),
+        href ? h("a", {class: "lb-name", href, title: nameTip(row) || row.name}, shownName(row)) : h("span", {class: "lb-name", title: nameTip(row) || row.name}, shownName(row)),
         served && row.status === "open" ? SERVE.vsButton(row.chat) : null, Status.links(row.links)]);  // a small link icon when the task is linked to tickets (1.7.38)
-      put("state", JSON.stringify([stateOf(row, liveNow), row.waiting, row.waiting_why, row.unheld_s, row.warn || []]), () => {
+      put("state", JSON.stringify([stateOf(row, liveNow), row.waiting, row.waiting_why, row.unheld_s, row.warn || [], row.starting || null, row.error || null]), () => {
         const tag = stateTag(row, liveNow);
         const warn = row.warn && row.warn.length ? h("span", {class: "tag warn", title: row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n"), "aria-label": t("board.warn.label")}, "⚠") : null;
         return [/\b(run|hot)\b/.test(tag.className) ? Status.phase(tag) : tag, warn];
@@ -193,7 +212,7 @@ const Lobby = (function () {
     card.addEventListener("focusin", () => clearTimeout(hideTimer));
     card.addEventListener("focusout", later);
 
-    const slotsInOrder = () => Array.from(scene.querySelectorAll(".lb-slot"));
+    const slotsInOrder = () => Array.from(scene.querySelectorAll(".lb-slot:not(.lb-making)"));
     const focusable = () => Array.from(card.querySelectorAll("a[href],button:not([disabled]),[tabindex='0']")).filter((node) => node.offsetParent !== null);
     // The keyboard: Esc closes the card and goes back to the robot; Tab on a robot with its card open goes into the card, and Tab at the end of the card goes on to the next robot.
     card.addEventListener("keydown", (event) => {
@@ -254,11 +273,12 @@ const Lobby = (function () {
     // The robots slide to where they now are, whatever changed the layout (a robot that came, went or changed zone).
     function flip(change) {
       const was = new Map();
-      if (!still) for (const [name, entry] of slots) was.set(name, entry.slot.getBoundingClientRect());
+      const all = () => [...slots.values(), ...makers.values()];
+      if (!still) for (const entry of all()) was.set(entry, entry.slot.getBoundingClientRect());
       change();
       if (still) return;
-      for (const [name, entry] of slots) {
-        const before = was.get(name);
+      for (const entry of all()) {
+        const before = was.get(entry);
         if (!before || !entry.slot.animate) continue;
         const now = entry.slot.getBoundingClientRect(), dx = before.left - now.left, dy = before.top - now.top;
         if (Math.abs(dx) > 2 || Math.abs(dy) > 2) entry.slot.animate([{transform: "translate(" + dx + "px," + dy + "px)"}, {transform: "none"}], {duration: 700, easing: "cubic-bezier(.2,.8,.2,1)"});
@@ -267,7 +287,7 @@ const Lobby = (function () {
 
     function zones() {
       for (const [id] of ZONES) {
-        const here = [...slots.values()].filter((entry) => entry.zone === id).length;
+        const here = [...slots.values(), ...makers.values()].filter((entry) => entry.zone === id).length;
         zoneBox[id].box.hidden = !rowsOf[id].childElementCount;  // a robot on its way out still holds its zone open
         zoneBox[id].name.textContent = t(zoneBox[id].label) + " \u00b7 " + here;
       }
@@ -297,35 +317,59 @@ const Lobby = (function () {
       slot.animate([{opacity: 1, transform: "none"}, {opacity: 0, transform: "translateY(-30px) scale(.6)"}], {duration: 500, easing: "ease-in", fill: "forwards"}).onfinish = () => flip(() => { slot.remove(); zones(); });
     }
 
+    // 1.8.5: a robot being assembled, for a task the board made a chat for and whose agent has not made the task yet. Not a link; its name is under it.
+    function maker(item) {
+      const kind = Object.prototype.hasOwnProperty.call(TEXT, "task.kind." + item.kind) ? t("task.kind." + item.kind) : (item.kind || "-");
+      const bot = robot("make", item.kind, 0);
+      const slot = h("div", {class: "lb-slot lb-making", title: t("waits.making.tip", {kind, at: when(item.since, 11, 19)}), role: "img", "aria-label": t("board.waits.lobby.making", {name: item.name})}, bot, h("div", {class: "lb-nm"}, item.name));
+      return {slot, bot, zone: ""};
+    }
+
     let ready = false;  // the first draw shows the robots where they are; it does not bring them in
 
-    function update(rows, live) {
+    function update(rows, live, making) {
       liveNow = Boolean(live);
+      making = making || [];
       const changed = [], came = [], gone = [];
       const agents = rows.filter((row) => row.status === "open");
       const names = new Set(agents.map((row) => row.name));
       flip(() => {
         for (const [name, entry] of slots) if (!names.has(name)) { gone.push(entry); slots.delete(name); }
+        const making_names = new Set(making.filter((item) => !names.has(item.name)).map((item) => item.name));
+        for (const [name, entry] of makers) if (!making_names.has(name)) { gone.push(entry); makers.delete(name); }
+        making.forEach((item) => {
+          if (!making_names.has(item.name) || makers.has(item.name)) return;
+          const entry = maker(item);
+          makers.set(item.name, entry);
+          if (ready) came.push(entry);
+          place(entry, "work");
+        });
         agents.forEach((row, index) => {
           const pose = poseOf(row, live);
           let entry = slots.get(row.name);
           if (!entry) {
             const bot = robot(pose, row.kind, ((index * 0.37) % 3).toFixed(2));
-            const label = h("div", {class: "lb-nm", title: row.name}, row.name);
+            const label = h("div", {class: "lb-nm"}, shownName(row));
             const slot = h("div", {class: "lb-slot", tabindex: "0", role: "link", "aria-label": row.name}, bot, label);
-            entry = {slot, bot, row, pose, zone: "", label};
+            entry = {slot, bot, row, pose, zone: "", label, cls: ""};
             wire(entry);
             slots.set(row.name, entry);
             if (ready) came.push(entry);
           }
           entry.row = row;
           warnMark(entry.slot, row);
+          lateMark(entry.slot, row);
+          entry.label.textContent = shownName(row);
+          entry.label.title = nameTip(row) || row.name;
+          robotWords(entry.slot, row, pose === "err" ? "error" : startingNow(row) ? "starting" : "");
+          const starting = startingNow(row);
           if (entry.pose !== pose) {
             changed.push(entry);
-            entry.bot.setAttribute("class", "lb-bot lb-pose-" + pose);
             entry.bot._mark.textContent = pose === "tests" ? "?" : "!";
             entry.pose = pose;
           }
+          const cls = "lb-bot lb-pose-" + pose + (starting ? " lb-starting" : "");
+          if (entry.cls !== cls) { entry.bot.setAttribute("class", cls); entry.cls = cls; }
           place(entry, ZONE_OF[pose]);
         });
         zones();
@@ -341,7 +385,7 @@ const Lobby = (function () {
       }
       ready = true;
       count.textContent = agents.length ? t("board.lobby.count", {count: agents.length}) : t("board.lobby.none");
-      if (!agents.length) {
+      if (!agents.length && !makers.size) {
         // No task at all: the first-task block (options.first, board.js: the big New task button, or how to run the served board). Tasks that are all closed: the quiet sentence and the same button;
         // a page on disk cannot start a task, so it says where to.
         const none = !rows.length && typeof options.first === "function";
@@ -354,7 +398,7 @@ const Lobby = (function () {
           empty.setAttribute("data-kind", key);
         }
       }
-      empty.hidden = agents.length > 0;
+      empty.hidden = agents.length > 0 || makers.size > 0;
     }
 
     if (!still) {  // the eyes follow the mouse; one frame at a time

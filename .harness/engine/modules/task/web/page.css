@@ -299,3 +299,9 @@ ol.trace li.tr-prompt{opacity:.7}ol.trace li.tr-decision .what b{color:var(--ink
 .ctx{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.ctx.unknown{color:var(--soft)}.ctx b{font-weight:650;font-variant-numeric:tabular-nums}
 .ctx-bar{display:inline-block;width:70px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}.ctx-bar i{display:block;height:100%;background:var(--model)}.ctx.hot b{color:var(--bad,#c0392b)}.ctx.hot .ctx-bar i{background:var(--bad,#c0392b)}
 .new-grill{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:13px}
+
+/* 1.8.5: the list's wait states. An error row has a red edge; a late "starting" has a small yellow mark; a task being created is a plain row with a circle. */
+tr.is-error td:first-child,tr.is-error td.tick{box-shadow:inset 2px 0 0 var(--bad)}
+.tag.warn.late{margin-left:6px;padding:0 7px;font-weight:700}
+tr.making td{color:var(--soft);cursor:default}
+tr.making .mk-name{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}

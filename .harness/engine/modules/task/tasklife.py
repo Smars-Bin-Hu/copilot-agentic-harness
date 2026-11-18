@@ -848,7 +848,7 @@ def require_idle(root: Path, data: Dict[str, Any], command: str, force: bool = F
         raise CommandError(messages.text("task.busy", command=command, minutes=ACTIVE_SECONDS // 60))
 
 
-STATES = ("broken", "waiting", "working", "quiet", "unheld", "paused", "closed", "new")  # the order of the list; `state_of` picks one
+STATES = ("broken", "error", "waiting", "working", "quiet", "unheld", "paused", "closed", "new")  # the order of the list; `state_of` picks one. `error` (1.8.5): only the served board gives it, from the chat (`boardserve.settle`)
 
 
 def session_state(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -914,7 +914,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
         is_held = is_open and held(root, data)
         working = is_open and not aside and at_work(root, data, found["why"])
         rows.append({
-            "task": task, "name": data.get("name") or task_ops.name_of(task), "status": data.get("status", ""),
+            "task": task, "name": data.get("name") or task_ops.name_of(task), "title": str(data.get("title") or ""), "status": data.get("status", ""),
             "kind": data.get("kind", ""), "reviews": data.get("reviews", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
             "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"], "waiting_from": wait_clock(data, found["since"]) if found["why"] else "",
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),

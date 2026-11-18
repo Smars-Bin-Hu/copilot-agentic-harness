@@ -561,7 +561,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
     report = common.task_report_file(root, name, common.REPORT_HTML)
     review, events = reviews(root, task, data), history(data)
     return {
-        "name": name, "task": task, "as_of": utc_now(),
+        "name": name, "task": task, "title": row.get("title") or "", "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "state": row.get("state", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
         "promote_direct": bool((data.get("promote") or {}).get("direct")), "domains": list(data.get("domains") or []), "autorun": bool(row.get("autorun")), "autorun_run": bool(autorun.state_of(data).get("started_at")), "paused_since": row.get("paused_since") or "",
         "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waiting_tip": row.get("waiting_tip") or "", "waited_s": row.get("waited_s"), "waiting_from": row.get("waiting_from") or "",

@@ -48,7 +48,7 @@ def item_of(row: Dict[str, Any]) -> Dict[str, Any]:
         since = str(facts.get("idle_at") or since) if kind == "stuck" or not since else since  # an error keeps the time the row waits since; with none, the time of the last hook call
         wanted = CHAT_ACTIONS if kind == "stuck" else None
         waited = facts.get("idle_s") if kind == "stuck" or row.get("waited_s") is None else row.get("waited_s")
-        item = {"id": f"{name_of(row)}|{why}|{since}", "task": name_of(row), "why": why, "since": since, "waited_s": waited, "title": facts.get("title") or "", "detail": facts.get("detail") or "",
+        item = {"id": f"{name_of(row)}|{why}|{since}", "task": name_of(row), "label": str(row.get("title") or ""), "why": why, "since": since, "waited_s": waited, "title": facts.get("title") or "", "detail": facts.get("detail") or "",
                 "actions": [dict(action) for action in row.get("actions") or [] if action.get("action") in (wanted or ANSWERS)]}
         if kind == "error":
             item["resumable"] = bool(facts.get("resumable"))
@@ -56,7 +56,7 @@ def item_of(row: Dict[str, Any]) -> Dict[str, Any]:
             item["idle_s"] = facts.get("idle_s")
         return item
     item = {
-        "id": f"{name_of(row)}|{why}|{since}", "task": name_of(row), "why": why, "since": since, "waited_s": row.get("waited_s"),
+        "id": f"{name_of(row)}|{why}|{since}", "task": name_of(row), "label": str(row.get("title") or ""), "why": why, "since": since, "waited_s": row.get("waited_s"),
         "title": row.get("waiting") or "", "detail": row.get("waiting_tip") or "",
         "actions": [dict(action) for action in row.get("actions") or [] if action.get("action") in ANSWERS],
     }
@@ -107,10 +107,14 @@ def build(result: Dict[str, Any], age_up: Optional[int] = None) -> Dict[str, Any
     mates: List[Dict[str, Any]] = []
     for row in open_rows:
         count = per_task.get(name_of(row), 0)
-        state = kinds.get(name_of(row)) or ("you" if count else "work" if row.get("state") == "working" else "idle")
-        mates.append({"task": name_of(row), "kind": row.get("kind") or "", "state": state, "count": count})
+        starting = row.get("starting") if isinstance(row.get("starting"), dict) else None
+        state = kinds.get(name_of(row)) or ("you" if count else "start" if starting and not starting.get("late") else "work" if row.get("state") == "working" else "idle")  # start (1.8.5): the board sent something, the agent is not seen to work yet
+        mate = {"task": name_of(row), "label": str(row.get("title") or ""), "kind": row.get("kind") or "", "state": state, "count": count}
+        if starting:
+            mate["starting"] = dict(starting)
+        mates.append(mate)
     tally = [mate["state"] for mate in mates]
     waited = [item["waited_s"] for item in items if isinstance(item["waited_s"], (int, float))]
-    status = {"watching": len(mates), "working": tally.count("work"), "waiting": tally.count("you"), "idle": tally.count("idle"), "as_of": result.get("as_of") or "",
+    status = {"watching": len(mates), "working": tally.count("work") + tally.count("start"), "waiting": tally.count("you"), "idle": tally.count("idle"), "as_of": result.get("as_of") or "",
               "oldest_s": max(waited) if waited else None, "stuck": sum(1 for item in items if item["why"] == "stuck"), "error": sum(1 for item in items if item["why"] == "error")}
     return {"status": status, "mates": mates, "items": items}

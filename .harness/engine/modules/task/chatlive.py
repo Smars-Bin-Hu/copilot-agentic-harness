@@ -22,6 +22,7 @@ from . import mdtree
 LATEST = 8  # items sent
 TEXT_CAP = 4000  # characters of agent text (a reply of 20,000 is cut here; the rest is in VS Code)
 THINK_CAP = 1200
+ERROR_CAP = 300  # 1.8.5: the words of an error part, as `ahp.last_error` keeps them
 SAY_CAP = 200
 TARGET_CAP = 500
 MARKS_MAX = 240  # part times kept for one turn
@@ -187,6 +188,9 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
                     item["cut"] = True
             elif kind == "toolCall" and isinstance(part.get("toolCall"), dict):
                 item = tool_item(part["toolCall"], ident, running, root)
+            elif kind == "error":  # 1.8.5: the turn ended in an error; the page draws it red, with its words
+                text, _was_cut = cut(part.get("message"), ERROR_CAP)
+                item = {"id": ident, "k": "err", "text": text, "resumable": part.get("resumable") is True}
             else:
                 continue
             mark = marks.get(ident)

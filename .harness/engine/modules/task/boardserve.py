@@ -191,6 +191,11 @@ RESTART_AFTER = 0.3  # seconds for the answer to reach the page
 RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: in its environment, never on disk
 
 
+START_LATE = 120.0  # 1.8.5: seconds after the board sent something before "starting" says the agent was not seen to start
+START_FORGET = 600.0  # and seconds after that before the board lets go of the mark
+TITLE_MAX = 80  # characters of a task's display name (1.8.5)
+WAIT_FIELDS = ("waiting", "waiting_why", "waiting_tip", "waiting_since", "waiting_from")
+ANSWERED_BY_A_TURN = ("go-req", "go-plan", "go-promote", "go-recover", "go-review", "asking", "stopped", "cancelled")  # marks a running turn has answered; the hooks take them away later (slowly on a busy computer)
 CHAT_STILL = ("idle", "error", "input")  # VS Code says the chat runs no turn: it waits for the person (`input`: a question or a command to allow, 1.7.20), or its last turn failed
 
 
@@ -292,6 +297,8 @@ class Board:
         self.batch_salt = secrets.token_hex(16)  # a secret of this process: the code of a batch of held calls is made with it (core.outbox.batch_code); a restarted board gives other codes
         self.code = os.environ.pop(RESTART_CODE, "") or secrets.token_urlsafe(12)  # after Restart board the page brings this code back; a new process holds no session
         self.next_code = ""
+        self.started: Dict[str, Dict[str, Any]] = {}  # 1.8.5: task -> what the board sent and how the chat stood then, until the agent is seen to start (`settle`). Memory only
+        self.started_lock = threading.Lock()
         self.server: Any = None
         self.woken: Optional[threading.Thread] = None  # the last wake of an agent after a decision, sent in the background (1.7.43)
         self.opener: Callable[[str], Any] = webbrowser.open
@@ -403,9 +410,12 @@ class Board:
         self.close_promoted()
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served, rewrite=False)
         self.link.overlay(result["tasks"])
+        moved = False
         for row in result["tasks"]:
-            trust_chat(row)
+            moved = self.settle(row) or moved
             health.with_context(self.root, row, row.get("chat"))
+        if moved:
+            tasklife.sort_rows(result["tasks"])
         asked = [taskboard.with_ask(row, self.link.ask_of(row["task"]), tuple(self.served), self.root) for row in result["tasks"] if row.get("status") == "open"]
         if any(asked):  # the chat waits for a person to allow a command or answer a question: that wait comes first in the order
             tasklife.sort_rows(result["tasks"])
@@ -413,7 +423,7 @@ class Board:
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
         elsewhere = outbox.held_elsewhere(self.root, self.task_is_open)
-        return {"held_elsewhere": elsewhere, "rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
+        return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": self.link.making(), "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
 
     def task_is_open(self, task: str) -> bool:
@@ -502,7 +512,7 @@ class Board:
         if chat.get("bound"):
             chat.update(self.link.context_card(found["task"]))
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
-        trust_chat(found)
+        self.settle(found)
         health.with_context(self.root, found, chat)
         if found["status"] == "open":
             taskboard.with_ask(found, self.link.ask_of(found["task"]), tuple(self.served), self.root)
@@ -865,6 +875,82 @@ class Board:
         except Exception:  # noqa: BLE001
             return None
 
+    # --- 1.8.5: what the page shows between "sent" and "the agent works", and when the chat failed ---------------------------
+
+    def before(self, task: str) -> Dict[str, Any]:
+        """How the chat of `task` stands now, taken before the board sends it something: `begin` keeps it, `settle` compares."""
+        try:
+            chat = self.link.chat_of(task)
+            return {"state": str(chat.get("state") or "unknown") if chat.get("bound") else "unknown", "mark": self.link.turn_mark(task)}
+        except Exception:  # noqa: BLE001 - a helper: without it the page only shows less
+            return {"state": "unknown", "mark": ("", "", "")}
+
+    def begin(self, task: str, what: str, pre: Dict[str, Any]) -> None:
+        """The board sent something that makes the agent of `task` work (an answer, a message, an approval's go-on, Try again, a new chat). Until the agent is seen to start, the rows say "starting"."""
+        with self.started_lock:
+            self.started[task] = {"what": what, "since": utc_now(), "mono": time.monotonic(), "before": pre.get("state") or "unknown", "mark": tuple(pre.get("mark") or ("", "", ""))}
+
+    def settle(self, row: Dict[str, Any]) -> bool:
+        """A row or a task page as the chat shows it (1.8.5), after `trust_chat`. Starting: the board sent something and the agent has not been seen to start; the row says `working`
+        with `starting`, and nothing waits for the person yet. Late: two minutes and no start; the row is as it is, with `starting.late`. Error: the chat's last turn failed; the row is
+        `error` with the chat's `error`, whatever the hook log says, and keeps what it waited for. True when the state of the row changed (the list is sorted again)."""
+        old = row.get("state")
+        trust_chat(row)
+        task = str(row.get("task") or "")
+        chat = row.get("chat") or {}
+        state = str(chat.get("state") or "unknown") if chat.get("bound") else "unknown"
+        live = row.get("status") == "open" and not row.get("paused_since")
+        with self.started_lock:
+            mark = self.started.get(task)
+        if mark:
+            age = time.monotonic() - mark["mono"]
+            now = self.link.turn_mark(task)
+            ran = now != mark["mark"] and not now[2]  # a new turn that already ended (a fast one); a new turn that runs while the list of sessions still says the old state stays "starting"
+            lagging = bool(now[2]) and state in ("idle", "error", "input")  # the chat holds a running turn; the list of sessions has not said so yet
+            if not live or age > START_LATE + START_FORGET or (state != "unknown" and not lagging and (state != mark["before"] or ran)):
+                with self.started_lock:
+                    if self.started.get(task) is mark:
+                        del self.started[task]
+                mark = None
+            elif age <= START_LATE:
+                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": False}
+                row["state"], row["active"] = "working", False
+                for key in WAIT_FIELDS:
+                    if key in row:
+                        row[key] = ""
+                return row["state"] != old
+            else:
+                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": True}
+        if live and state == "busy" and row.get("waiting_why") in ANSWERED_BY_A_TURN:  # the chat runs a turn: the agent works, whatever mark the hooks have not taken away yet
+            row["state"] = "working"
+            for key in WAIT_FIELDS:
+                if key in row:
+                    row[key] = ""
+        if live and state == "error":
+            row["state"], row["active"] = "error", False
+            row["error"] = chat.get("error") if isinstance(chat.get("error"), dict) else {}
+        return row.get("state") != old
+
+    def title(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The display name of a task (1.8.5): one line, at most TITLE_MAX characters, no control characters; empty takes it away. The folder, the agent and the commands keep the task's name."""
+        if not str(data.get("task") or "").strip():
+            raise CommandError(say("title.refused.task"))
+        task = task_ops.resolve(self.root, str(data.get("task", "")))
+        if tasks.read(self.root, task) is None:
+            raise CommandError(say("title.refused.task"))
+        title = str(data.get("title") if data.get("title") is not None else "").strip()
+        if len(title) > TITLE_MAX:
+            raise CommandError(say("title.refused.long", limit=TITLE_MAX))
+        if any(ord(char) < 32 or 127 <= ord(char) < 160 or char in "\u2028\u2029" for char in title):
+            raise CommandError(say("title.refused.control"))
+        with task_ops.locked(self.root, task) as again:
+            if title:
+                again["title"] = title
+            else:
+                again.pop("title", None)
+            task_ops.note(again, "title", title or "-")
+        return {"title": title}
+
     def wake_go(self, task: str) -> str:
         """The person confirmed the requirement, approved the plan or approved the promote (1.7.38, C13 RB-2): the task now waits with a `go-*` mark, "tell the agent to go on". The board sends that message itself,
         the one the button would send (`kind` go: the fixed text, the notes of the person, the model of the task). `message` when it went; "" when it could not (no chat, VS Code closed, the chat is busy, nothing to send):
@@ -933,7 +1019,9 @@ class Board:
             found = tasks.read(self.root, task) or {}
             made = chatsend.prepare(self.root, task, "answer", "", "", text, "", with_drafts=False)
             model = chatsend.model_of(found)
+            pre = self.before(task)
             done = self.link.dispatch("send", task, made["text"], model, [])
+            self.begin(task, "wake", pre)
         except Exception:  # noqa: BLE001 - see above
             return False
         try:
@@ -1201,10 +1289,11 @@ class Board:
             raise CommandError(say("serve.refused.request"))
         if why:
             raise CommandError(say(f"create.refused.{why}"))
-        name = ""
+        name, task, pre = "", "", {}
         if data.get("task"):  # the chat goes on with this task: bound to it at once, not when its agent has answered
             task, found = self.target(data)
             name = str(found.get("name") or task_ops.name_of(task))
+            pre = self.before(task)
         try:
             done = self.link.create(dict(skillsend.plan(str(data.get("lang") or "en"), name), model=model), text)
         except vslink.Refused as error:
@@ -1212,6 +1301,8 @@ class Board:
         except Exception as error:  # noqa: BLE001 - the name of the error only, never its text
             raise CommandError(say("create.refused.host", error=type(error).__name__)) from None
         skillsend.record(self.root, str(data.get("skill")), "chat", done)
+        if task:
+            self.begin(task, "newchat", pre)
         self.link.open_window()
         return {"sent": True}
 
@@ -1269,6 +1360,7 @@ class Board:
         model = chatsend.model_of(found)
         files = self.files_of(data)
         job = self.say_or(task, "send")
+        pre = self.before(task)
         try:
             done = self.link.dispatch(job, task, made["text"], model, files)
         except vslink.Refused as error:
@@ -1283,6 +1375,7 @@ class Board:
         extra = {"why": made["why"], "lang": made["lang"], "model": model or {}, "drafts": len(made["draft_ids"]), "files": chatsend.listed(files)}
         if job == "say":
             extra["skipped"] = done.get("skipped") or []
+        self.begin(task, "say" if job == "say" else made["kind"], pre)
         return self.sent(task, found, "say" if job == "say" else made["kind"], made["text"], done, extra)
 
     def say_or(self, task: str, kind: str) -> str:
@@ -1310,6 +1403,7 @@ class Board:
         model = chatsend.model_of(found)
         files = self.files_of(data)
         job = self.say_or(task, kind) if kind == "queue" else kind
+        pre = self.before(task)
         try:
             done = self.link.dispatch(job, task, text, model, files)
         except vslink.Refused as error:
@@ -1323,6 +1417,7 @@ class Board:
                 tasklife.set_waiting(self.root, task, None)  # the person answered
             except Exception:  # noqa: BLE001
                 pass
+            self.begin(task, "say", pre)
         return self.sent(task, found, job, text, done, extra)
 
     def queue(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1345,12 +1440,14 @@ class Board:
     def resume(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Try again: the last turn of the chat ended in an error the host can run again (a limit or a broken connection), and it runs again with the same message."""
         task, _found = self.target(data)
+        pre = self.before(task)
         try:
             self.link.dispatch("resume", task)
         except vslink.Refused as error:
             raise CommandError(self.refusal(error.why)) from None
         except Exception as error:  # noqa: BLE001
             raise CommandError(ahp_scrub(error)) from None
+        self.begin(task, "retry", pre)
         with task_ops.locked(self.root, task) as again:
             task_ops.note(again, "chat-resume", "-")
         return {"resumed": True}
@@ -1444,12 +1541,14 @@ class Board:
     def compact(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The compact button: `/compact` as a message, to an idle chat only, as a send is. The only control mark the board sends; nothing but this call sends it."""
         task, found = self.target(data)
+        pre = self.before(task)
         try:
             done = self.link.dispatch("send", task, chatsend.COMPACT_TEXT)  # no model: the chat keeps the one it has
         except vslink.Refused as error:
             raise CommandError(self.compact_refusal(error.why)) from None
         except Exception as error:  # noqa: BLE001
             raise CommandError(ahp_scrub(error)) from None
+        self.begin(task, "compact", pre)
         return self.sent(task, found, "compact", chatsend.COMPACT_TEXT, done)
 
     # --- allow, deny, answer (B75) ----------------------------------------------------------------------------------
@@ -1487,7 +1586,10 @@ class Board:
         if decision not in ("allow", "deny"):
             raise CommandError(say("ask.refused.decision"))
         plan = dict(self.ask_plan(data, "tool_call_id"), approved=decision == "allow")
+        pre = self.before(task)
         done = self.respond("confirm", task, plan)
+        if decision == "allow":
+            self.begin(task, "allow", pre)
         view = done["view"]
         command = chatask.one_line(view["command"], chatask.MAX_LINE)
         self.asked(task, "confirm", f"{decision}: {view['tool'] or '-'} {command}".strip(), {"decision": decision, "tool": view["tool"], "tool_call_id": view["tool_call_id"], "command": view["command"], "chat": done["chat"]})
@@ -1500,7 +1602,9 @@ class Board:
         if not isinstance(answers, dict):
             raise CommandError(say("ask.refused.answer.unknown", question=""))
         plan = dict(self.ask_plan(data, "request_id"), answers=answers)
+        pre = self.before(task)
         done = self.respond("answer", task, plan)
+        self.begin(task, "question", pre)
         view = done["view"]
         self.asked(task, "question", done["line"] if (view["message"] or "-") in done["line"] else (view["message"] or "-")[:60] + ": " + done["line"], {"request_id": view["request_id"], "question": view["message"], "answer": done["line"], "chat": done["chat"]})
         return {"answered": True, "chat": done["title"]}
@@ -1896,7 +2000,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"ok": True, **result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                     return self.answer(409, {"ok": False, "error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/rewind", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/rewind", "/api/verdict", "/api/export", "/api/confirm", "/api/answer", "/api/title"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
@@ -2128,6 +2232,7 @@ def handler_for(board: Board) -> type:
                             said = superroute.said_of(board.link, paths[item["task"]])  # the agent's last words, from what the link holds
                             if said:
                                 item["said"] = said
+                    view["making"] = result.get("making") or []  # 1.8.5: chats the board made whose task is not there yet
                     return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(500, {"error": str(error)})

@@ -118,6 +118,15 @@ def choose(found: List[ahp.Endpoint], root: Path, connect: Callable[[ahp.Endpoin
     raise ahp.NotReady("many")
 
 
+def chat_state(summary: Dict[str, Any], cached: Dict[str, Any]) -> str:
+    """The state of a bound chat: the session's status bits, except that a chat whose last turn ended in an error and runs none is `error` (1.8.5).
+    The list of sessions can still say idle or busy then (seen on a work computer: the task stayed "working" after an error), while the chat itself has the error."""
+    state = ahp.status_name(summary.get("status"))
+    if state in ("idle", "busy", "unknown") and cached.get("state") and ahp.last_error(cached["state"]):
+        return "error"
+    return state
+
+
 class Refused(Exception):
     """A send, steer or stop that was not done, and why (`why` is a key of `send.refused.*`): off, not-ready, unbound, unsure, changed, not-idle, not-busy, no-turn, timeout."""
 
@@ -240,7 +249,7 @@ class VsLink:
                 return {"bound": False, "why": self.unbound.get(task, "") if self.ready else self.why}
             summary = self.sessions.get(binding["session"]) or {}
             cached = self.chats.get(binding["chat"]) or {}
-            out: Dict[str, Any] = {"bound": True, "how": binding.get("how", ""), "title": str(summary.get("title") or binding.get("title") or ""), "state": ahp.status_name(summary.get("status"))}
+            out: Dict[str, Any] = {"bound": True, "how": binding.get("how", ""), "title": str(summary.get("title") or binding.get("title") or ""), "state": chat_state(summary, cached)}
             if cached.get("state"):
                 if out["state"] == "error":
                     out["error"] = ahp.last_error(cached["state"])  # 1.8.4: what the last turn failed with, and whether Try again can run it (the super view)
@@ -271,8 +280,8 @@ class VsLink:
                 why = self.unbound.get(task, "") if self.ready else self.why
                 rev = "x:" + why
                 return {"rev": rev, "same": True} if rev == last else {"rev": rev, "bound": False, "why": why}
-            state = ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status"))
             cached = self.chats.get(binding["chat"])
+            state = chat_state(self.sessions.get(binding["session"]) or {}, cached or {})
             subs = self._subs_of(binding)
             steps = ",".join(f"{sub['call']}.{(self.chats.get(sub['chat']) or {}).get('rev', -1)}.{sub.get('status')}" for sub in subs)  # a subagent's step changes the answer too
             rev = f"{binding['chat']}:{cached.get('rev', 0) if cached else -1}:{state}:{steps}"
@@ -373,6 +382,22 @@ class VsLink:
         """The names of the tasks the board made a chat for and whose task is not there yet."""
         with self.lock:
             return [item["name"] for item in self.created]
+
+    def making(self) -> List[Dict[str, str]]:
+        """1.8.5: the tasks the board made a chat for that are not there yet, for the board's placeholders: `{name, kind, since}`, oldest first."""
+        with self.lock:
+            return [{"name": str(item.get("name") or ""), "kind": str(item.get("kind") or ""), "since": str(item.get("made_at") or "")} for item in self.created]
+
+    def turn_mark(self, task: str) -> Tuple[str, str, str]:
+        """1.8.5: where the chat of `task` stands, to tell that a new turn began after the board sent something: (chat, id of the last turn, id of the running turn). Empty parts: not known."""
+        with self.lock:
+            binding = self.bound.get(task) if self.ready else None
+            if not binding:
+                return ("", "", "")
+            state = (self.chats.get(binding["chat"]) or {}).get("state") or {}
+            turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
+            active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else {}
+            return (str(binding["chat"]), str(turns[-1].get("id") or "") if turns else "", str(active.get("id") or ""))
 
     def create_blocked(self) -> str:
         """Why a chat cannot be made now (`off`, `not-ready`), from the cache. Empty: it can."""

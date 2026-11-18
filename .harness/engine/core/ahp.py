@@ -425,8 +425,8 @@ class Connection:
                     gone = self._given_up.pop(message["id"], None)
                     self.late.append({"method": gone[0] if gone else "", "id": message["id"], "late_s": round(time.monotonic() - gone[1], 1) if gone else None})
                     return
-            entry["message"] = message
-            entry["event"].set()
+                entry["message"] = message  # under the lock: a caller whose wait runs out at this moment finds the answer, not an empty one
+                entry["event"].set()
         elif "method" in message and "id" in message:  # the host asks something: we know no method
             self.send({"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32601, "message": "method not found"}})
         elif "method" in message:

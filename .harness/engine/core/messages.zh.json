@@ -2344,6 +2344,7 @@
   "create.refused.timeout": "VS Code 没有及时完成（电脑很忙时会这么慢）。它可能稍后还是会建好 chat 并发出消息：再按之前，先去 VS Code 看一眼。",
   "create.refused.host": "VS Code 没有建好 chat：{why} 再按之前，先去 VS Code 看看是不是已经建了一个 chat。",
   "host.other": "通信出错（{error}）。",
+  "host.never": "VS Code 建好 chat 之前连接断了，VS Code 里也没有这个 chat。请重新建这个任务。",
   "host.said": "它说：“{words}”。",
   "host.copilot": "VS Code 里的 Copilot 没准备好（没登录，或者还在启动）。请在 VS Code 里登录 GitHub，或者运行 Developer: Restart Extension Host，然后再试。",
   "host.slow": "{seconds} 秒内没有回应（电脑很忙时会这么慢），它可能稍后还会做完。",

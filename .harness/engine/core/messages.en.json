@@ -2344,6 +2344,7 @@
   "create.refused.timeout": "VS Code did not finish in time (a busy computer can take that long). It may still make the chat and send the message: look in VS Code before you press again.",
   "create.refused.host": "VS Code did not make the chat: {why} Look in VS Code whether a chat was made before you press again.",
   "host.other": "the exchange failed ({error}).",
+  "host.never": "the connection went before VS Code made the chat, and VS Code does not have it. Make the task again.",
   "host.said": "it said \"{words}\".",
   "host.copilot": "Copilot is not ready in VS Code (signed out, or still starting). Sign in to GitHub in VS Code, or run Developer: Restart Extension Host, then try again.",
   "host.slow": "it gave no answer in {seconds} s (a busy computer can take that long), and it may still do it.",

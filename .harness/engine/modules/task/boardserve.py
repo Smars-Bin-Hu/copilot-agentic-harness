@@ -448,7 +448,7 @@ class Board:
             initiator = item.pop("initiator", "")
             item["warn"] = say("create.warn.initiator", initiator=initiator) if initiator and initiator != "vscode" else ""
             if item.get("error"):
-                item["error"] = say("host.copilot") if item["error"] == "copilot" else say("host.other", error="AhpError") if item["error"] in ("other", "slow") else say("host.said", words=item["error"])
+                item["error"] = say("host.copilot") if item["error"] == "copilot" else say("host.never") if item["error"] == "never" else say("host.other", error="AhpError") if item["error"] in ("other", "slow") else say("host.said", words=item["error"])
         return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": making, "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
 

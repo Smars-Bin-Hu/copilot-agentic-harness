@@ -60,6 +60,7 @@ RELAY_EVERY = 1.0  # 1.8: seconds between two looks at the bound chats of tasks 
 RELAY_HOLD = 10.0  # 1.8: seconds a relay that was refused (the chat changed, was not idle) waits before it is tried again
 BACKGROUND_TIMEOUT = 120.0  # 1.8.7: seconds a read of the background lane waits (a busy computer); a read that runs out is made again on the next look, and its late answer is only noted
 PERSON_POLL = 0.5  # 1.8.7: seconds the person's lane waits for a job before it looks whether the connection is still there
+FRESH_TURN = 30.0  # 1.8.7: seconds a turn the board itself started counts as running, whatever a slow list of sessions still says (a second send to that chat is refused)
 STAGE_SLOW = 180.0  # 1.8.7: seconds after which "being created" says VS Code has not answered for a while (it still waits)
 KEEP_SHOWN = 120.0  # 1.7.45: seconds the rows keep the chat they showed after the connection went away, while it comes back and the chats are found again, so a task does not flash idle
 
@@ -200,6 +201,8 @@ class VsLink:
         self.limits: Dict[str, Dict[str, int]] = {}  # model id -> what decides its context window, every model the host lists (for the context meter)
         self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
         self.list_asked = 0.0  # 1.8.7: when the list in place was asked for
+        self.gates: Dict[str, threading.RLock] = {}  # 1.8.7: one per task: what is sent to a task's chat goes one at a time, whichever lane sends it
+        self.just_sent: Dict[str, Tuple[str, float, str]] = {}  # 1.8.7: chat -> (the turn the board started, when, its session); gone when VS Code says anything new of it
         self.super_making = False  # 1.8.7: the super agent chat is being made (no limit): a second is not made beside it
         self.created: List[Dict[str, Any]] = []  # chats this board made whose task does not exist yet (`chatnew.pending`); memory only
         self.expect: Dict[str, Dict[str, Any]] = {}  # session resource of a chat this board made that the host has not listed yet -> {stub, until}; memory only
@@ -469,9 +472,7 @@ class VsLink:
         self.wake.set()
         if made["name"]:
             return {"session": resource, "pending": True}
-        if not job.done.wait(CREATE_WAIT):
-            job.cancelled = True  # a thread that has not begun must not make a chat the person was told failed
-            raise Refused("timeout")
+        job.done.wait()  # 1.8.7: a chat with no task (a one-click skill) is waited for with no limit too: "failed" while it still goes on would make a second one
         if job.error is not None:
             self.host_said(job.error)
             raise job.error
@@ -501,9 +502,7 @@ class VsLink:
         job = Job("super", "", text, plan.get("model"), plan)
         self.jobs.put(job)
         self.wake.set()
-        if not job.done.wait(CREATE_WAIT):
-            job.cancelled = True  # a thread that has not begun must not send what the person was told failed
-            raise Refused("timeout")
+        job.done.wait()  # 1.8.7: making the chat is never given up (an empty chat would be left); the view shows the agent at work meanwhile
         if job.error is not None:
             self.host_said(job.error)
             raise job.error
@@ -662,6 +661,9 @@ class VsLink:
                 return
             if isinstance(job, Job):
                 if link is None or job.cancelled:
+                    made = (job.plan or {}).get("made") if job.kind == "create" else None
+                    if isinstance(made, dict) and link is None:
+                        self._stage(made, "lost")  # 1.8.7: the connection went before the chat was asked for: made when it comes back
                     job.error = Refused("not-ready")
                     job.done.set()
                 else:
@@ -770,9 +772,12 @@ class VsLink:
         """1.8.7: a chat that was being made when the connection went is picked up again: VS Code may have made it meanwhile, so the board looks and sends the first message if it has none."""
         with self.lock:
             lost = [made for made in self.created if made.get("stage") == "lost"]
+            for made in lost:
+                made.update(stage="asking", stage_at=utc_now(), stage_clock=time.monotonic())  # taken: a second look does not start it twice
         for made in lost:
-            job = Job("create", "", made["text"], made["model"], {"name": made["name"], "kind": made["kind"], "source": made["source"], "lang": made["lang"], "permission": made["permission"],
-                                                                 "model": made["model"], "approve": made.get("approve") or "autoApprove", "session": made["session"], "made": made, "again": True})
+            plan = {"name": made["name"], "kind": made["kind"], "source": made["source"], "lang": made["lang"], "permission": made["permission"], "model": made["model"],
+                    "approve": made.get("approve") or "autoApprove", "session": made["session"], "made": made, "again": bool(made.get("asked"))}  # never asked: made now, as new
+            job = Job("create", "", made["text"], made["model"], plan)
             threading.Thread(target=self._do_alone, args=(link, job), name="board-create", daemon=True).start()
 
     def _background(self, link: ahp.Connection, lanes: bool) -> None:
@@ -968,6 +973,9 @@ class VsLink:
                     self.sessions[item["resource"]] = item
                     self.dirty = True
             elif method == "root/sessionSummaryChanged":
+                for chat, started in list(self.just_sent.items()):
+                    if started[2] == str(params.get("session") or ""):
+                        del self.just_sent[chat]  # VS Code has said how the chat stands since the board sent its turn: its word counts
                 seen = self.everywhere.get(str(params.get("session") or ""))
                 if seen is not None and isinstance(params.get("changes"), dict):
                     seen.update({key: value for key, value in params["changes"].items() if key in ("title", "status")})
@@ -983,6 +991,8 @@ class VsLink:
                 channel = str(params.get("channel") or "")
                 cached = self.chats.get(channel)
                 action = params.get("action")
+                if isinstance(action, dict) and action.get("type") in ("chat/turnComplete", "chat/turnCancelled", "chat/error"):
+                    self.just_sent.pop(channel, None)
                 if cached is not None and isinstance(action, dict):
                     ahp.reduce_chat(cached["state"], action)
                     chatlive.stamp(cached, action, int(time.time() * 1000))
@@ -1062,7 +1072,14 @@ class VsLink:
         wait = None if getattr(link, "reading", lambda: False)() else ahp.CREATE_TIMEOUT  # without a reader nobody would read a late answer
         try:
             if plan.get("again"):
-                state = link.subscribe(resource, timeout=wait)  # is it there? An unknown channel is the host's error: it never made it
+                try:
+                    state = link.subscribe(resource, timeout=wait)  # is it there? An unknown channel is the host's error: it never made it
+                except ahp.ConnectionClosed:
+                    raise
+                except ahp.AhpError:
+                    if made is not None:
+                        self._stage(made, "refused", "never")
+                    raise Refused("never") from None  # not the host's words: VS Code does not have the chat
                 chat = str(state.get("defaultChat") or "")
                 if chat:
                     known = ahp.trimmed(link.subscribe(chat, timeout=wait))
@@ -1078,6 +1095,9 @@ class VsLink:
             else:
                 if job.cancelled:
                     raise Refused("timeout")
+                if made is not None:
+                    with self.lock:
+                        made["asked"] = True  # from now on VS Code may make it, even if the connection goes
                 link.call("createSession", {"channel": resource, "provider": ahp.LOCAL_PROVIDER, "workingDirectories": [ahp.folder_uri(self.root)],
                                             "config": {"isolation": "folder", "mode": "interactive", "autoApprove": plan["approve"]}}, timeout=wait)  # `model` here would not be honoured: it goes on the message
                 state = link.subscribe(resource, timeout=wait)
@@ -1113,7 +1133,12 @@ class VsLink:
             self.expect[resource] = {"stub": stub, "until": time.monotonic() + EXPECT_FOR}  # the host lists it only once the first turn runs: until then the cache holds the stub
             self.chats[chat] = held
             self.sess[resource] = {"channel": resource, "state": ahp.trimmed_session(state), "seen": {}}
-        link.dispatch(chat, action)
+        try:
+            link.dispatch(chat, action)
+        except (ahp.ConnectionClosed, OSError, ValueError):
+            if made is not None:
+                self._stage(made, "lost")  # the chat is there and empty: its first message goes when the connection comes back
+            raise ahp.ConnectionClosed("the connection closed before the first message went")
         with self.lock:
             ahp.reduce_chat(held["state"], {**action, "message": {key: value for key, value in message.items() if key != "attachments"}})  # the bytes are not kept here
             self.sessions.setdefault(resource, dict(stub))  # tracked at once; `_list` asks again every EXPECT_EVERY seconds until the host lists it
@@ -1192,7 +1217,12 @@ class VsLink:
             self.dirty = True
         job.result = {"session": resource, "chat": chat, "turn": str(action["turnId"])}
 
+    def _gate(self, task: str) -> threading.RLock:
+        with self.lock:
+            return self.gates.setdefault(task, threading.RLock())
+
     def _do(self, link: ahp.Connection, job: Job) -> None:
+        gate: Optional[threading.RLock] = None
         try:
             if job.kind == "create":
                 return self._create(link, job)
@@ -1200,6 +1230,8 @@ class VsLink:
                 return self._super(link, job)
             if job.cancelled:
                 raise Refused("timeout")
+            gate = self._gate(job.task)
+            gate.acquire()  # 1.8.7: the person's lane and the background (relay, follow, Start) may send to one chat at once: one at a time
             binding = self._recheck(link, job.task, job.kind)
             if job.kind == "relay":  # a chat that ended in an error takes the next message (measured: status 34, then 33)
                 with self.lock:
@@ -1242,6 +1274,11 @@ class VsLink:
                 if job.attachments:
                     message["attachments"] = job.attachments  # the host keeps a copy of each and lists its own address in the chat
                 if job.kind in ("send", "relay"):
+                    with self.lock:
+                        started = self.just_sent.get(chat)
+                        running = held["state"].get("activeTurn") if isinstance(held["state"].get("activeTurn"), dict) else {}
+                    if started and time.monotonic() - started[1] < FRESH_TURN and running.get("id") == started[0]:
+                        raise Refused("not-idle")  # the board started a turn here a moment ago; a slow list still says idle
                     action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
                 else:  # steer goes into the turn that runs; queue (1.6.99) waits for its end, and Copilot sends it then as the next turn
                     action = {"type": "chat/pendingMessageSet", "kind": "queued" if job.kind == "queue" else "steering", "id": str(uuid.uuid4()), "message": message}
@@ -1249,6 +1286,7 @@ class VsLink:
             with self.lock:
                 known = self.sessions.get(resource)
                 if job.kind in ("send", "relay"):
+                    self.just_sent[chat] = (str(action["turnId"]), time.monotonic(), resource)
                     if known is not None:
                         known["status"] = ahp.IN_PROGRESS | (int(known.get("status") or 0) & (ahp.IS_READ | ahp.ARCHIVED))  # not idle at once: a second send finds it busy
                     ahp.reduce_chat(held["state"], {**action, "message": {key: value for key, value in message.items() if key != "attachments"}})  # the bytes are not kept here
@@ -1266,6 +1304,8 @@ class VsLink:
         except (Refused, ahp.AhpError, OSError) as error:
             job.error = error
         finally:
+            if gate is not None:
+                gate.release()
             job.done.set()
 
     def _settle(self, link: ahp.Connection, held: Dict[str, Any]) -> None:
@@ -1275,6 +1315,9 @@ class VsLink:
             with self.lock:
                 if not held["state"].get("activeTurn"):
                     return
+            if getattr(link, "reading", lambda: False)():
+                time.sleep(0.3)  # 1.8.7: the background lane reads the notices and keeps `held` up to date
+                continue
             note = link.next_notice(0.3)
             while note is not None:
                 self._notice(note)

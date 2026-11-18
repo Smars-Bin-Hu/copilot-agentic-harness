@@ -173,9 +173,28 @@ class MakeTests(unittest.TestCase):
         made = self.made("lost")
         job = self.job(made, again=True)
         self.vs._do(self.link, job)
-        self.assertEqual(made["stage"], "refused")
-        self.assertIn("unknown channel", made["error"])
+        self.assertEqual((made["stage"], made["error"]), ("refused", "never"))  # the page says the connection went before VS Code made it
         self.assertEqual(self.first_messages(), [])
+
+    def test_a_chat_never_asked_for_before_the_connection_went_is_made_when_it_is_back(self) -> None:
+        made = self.made()
+        self.vs.jobs.put(self.job(made))
+        self.vs._jobs(None)  # the connection is gone: the job could not even be taken
+        self.assertEqual(made["stage"], "lost")
+        self.vs._resume_made(self.link)
+        self.assertTrue(until(lambda: self.first_messages(), 3))
+        self.assertEqual([item["method"] for item in self.host.arrived].count("createSession"), 1)
+        self.assertEqual(made["stage"], "sent")
+
+    def test_a_first_message_the_connection_lost_on_the_way_goes_when_it_is_back(self) -> None:
+        made = self.made()
+        with mock.patch.object(self.link, "dispatch", side_effect=OSError("closed")):
+            with self.assertRaises(ahp.ConnectionClosed):
+                self.vs._do(self.link, self.job(made))
+        self.assertEqual((made["stage"], made["chat"], made.get("asked")), ("lost", "ahp-chat:/new", True))
+        self.vs._resume_made(self.link)
+        self.assertTrue(until(lambda: self.first_messages(), 3))
+        self.assertEqual([item["method"] for item in self.host.arrived].count("createSession"), 1)  # not made twice
 
     def test_a_refusal_shows_on_the_placeholder_and_can_be_taken_away(self) -> None:
         def refuse(_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -227,6 +246,16 @@ class LaneTests(LaneCase):
         done = self.vs.dispatch("send", TASK, "go on")
         self.assertLess(time.monotonic() - start, 1.5, "the send waited for the background")
         self.assertTrue(done.get("chat"))
+
+    def test_a_second_send_right_after_the_first_is_refused_whatever_a_slow_list_says(self) -> None:
+        """Two lanes (the person, an autorun relay) may send to one chat at once: the second finds the turn the board just started, even when VS Code still lists the chat as idle."""
+        self.vs.dispatch("send", TASK, "first")
+        with self.vs.lock:
+            for item in self.vs.sessions.values():
+                item["status"] = ahp.IDLE  # a list of sessions that is not up to date yet
+        with self.assertRaises(vslink.Refused) as raised:
+            self.vs.dispatch("send", TASK, "second")
+        self.assertEqual(raised.exception.why, "not-idle")
 
 
 class MakingEndpointTests(LaneCase):

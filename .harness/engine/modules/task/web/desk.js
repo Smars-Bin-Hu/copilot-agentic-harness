@@ -1468,7 +1468,7 @@
     if (typeof REPLY !== "undefined" && served()) {
       const show = hasStream() && bound;
       if (show) draftsBox();  // loads the drafts (the badge counts them) even while the panel is shut
-      REPLY.update({name: desk.name, show, reply: desk.reply_lang, state: chat ? chat.state || "" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status, chat && [chat.model, chat.effort]]), drafts: drafts.node, saveDraft: (text) => draftCall({op: "add", text})});
+      REPLY.update({name: desk.name, show, reply: desk.reply_lang, state: chat ? chat.state || "" : "", ask: desk.ask && desk.ask.kind === "question" ? "question" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status, chat && [chat.model, chat.effort]]), drafts: drafts.node, saveDraft: (text) => draftCall({op: "add", text})});
     }
   }
 

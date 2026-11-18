@@ -3246,6 +3246,7 @@
   "desk.reply.steer.hint": "It reaches the agent at its next step, in the same turn.",
   "desk.reply.off": "The link to VS Code is down. Nothing can be sent now.",
   "desk.reply.input": "The chat waits for a yes or an answer. Answer that first.",
+  "desk.reply.say": "It waits for your answer. Your words skip its question and go to the agent.",
   "desk.reply.state": "The chat is: {state}. Send is possible when it is idle.",
   "desk.live.down": "VS Code is not linked now",
   "dock.kb.col.cards": "Cards",

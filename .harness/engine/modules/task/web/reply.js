@@ -12,7 +12,7 @@
 
 const REPLY = (function () {
   const NS = "http://www.w3.org/2000/svg";
-  const info = {name: "", show: false, state: "", why: "", count: 0, settings: null, drafts: null, settingsSig: null};
+  const info = {name: "", show: false, state: "", ask: "", why: "", count: 0, settings: null, drafts: null, settingsSig: null};
   const mine = {open: false, lang: "", busy: false, fallback: "", previewing: false, timer: 0};
   const MAC = /Mac|iPhone|iPad/.test(navigator.platform || "");
 
@@ -173,7 +173,7 @@ const REPLY = (function () {
     if (document.documentElement.classList.contains("vs-down")) return {kind: "off", hint: t("desk.reply.off")};
     if (state === "busy") return {kind: "steer", hint: t("desk.reply.steer.hint")};
     if (state === "idle") return {kind: "send", hint: ""};
-    if (state === "input") return {kind: "off", hint: t("desk.reply.input")};
+    if (state === "input") return info.ask === "question" ? {kind: "send", hint: t("desk.reply.say")} : {kind: "off", hint: t("desk.reply.input")};  // 1.8.4: a question the agent asked: the words skip it (the server decides); a command to allow, or not known: off
     return {kind: "off", hint: t("desk.reply.state", {state: t("desk.chat." + (state || "unknown"))})};
   }
 

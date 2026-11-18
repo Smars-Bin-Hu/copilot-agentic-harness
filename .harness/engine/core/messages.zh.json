@@ -3246,6 +3246,7 @@
   "desk.reply.steer.hint": "agent 在下一步、同一轮里读到。",
   "desk.reply.off": "与 VS Code 的连接断了，现在发不出去。",
   "desk.reply.input": "chat 在等你允许或回答，请先处理那一项。",
+  "desk.reply.say": "它在等你的回答。你写的话会跳过它的问题，直接交给它。",
   "desk.reply.state": "chat 状态：{state}。空闲时才能发送。",
   "desk.live.down": "现在没有连上 VS Code",
   "dock.kb.col.cards": "卡片",

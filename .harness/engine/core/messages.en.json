@@ -1721,7 +1721,6 @@
   "super.reply.ph": "Reply to this question",
   "super.reply.send": "Send",
   "super.reply.tip": "Enter sends, Shift+Enter adds a line",
-  "super.reply.done": "replied",
   "super.reply.say.ph": "Or just say something: it skips the question",
   "super.route.ph": "Ask {task}",
   "super.route.waiting": "asked, waiting…",

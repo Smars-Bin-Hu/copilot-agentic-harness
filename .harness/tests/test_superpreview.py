@@ -89,6 +89,130 @@ class ChangesTests(PreviewCase):
         self.assertEqual(self.look({"task": TASK, "kind": "changes"}), {"ok": False, "why": "missing"})
 
 
+REQ = """# REQ: job1
+
+> The requirement.
+
+- **User confirmed**: <not yet / confirmed yyyy-mm-dd>
+
+## What to do
+
+Add the column `region` to `a.sql`.
+Keep the old names.
+
+## What not to do
+
+- Do not touch repo_a.
+- <not written yet>
+
+## Done when
+
+<What counts as done>
+
+### Shown by the task files
+
+- [T1] **a.sql** has the column
+- [T2] <checked by the reviewer in the task files>
+
+### Shown by a run the user does before the promote
+
+- [R1] <ENV>: <what the user runs>
+
+```
+- inside a fence
+```
+
+## Source
+
+conversation
+"""
+
+
+class ReqTests(PreviewCase):
+    def write(self, text: str) -> None:
+        (self.root / TASK / "REQ.md").write_text(text, encoding="utf-8")
+
+    def test_the_three_sections_as_plain_lines_with_the_template_left_out(self) -> None:
+        self.write(REQ)
+        found = self.look({"task": TASK, "kind": "req"})
+        self.assertEqual(found["sections"], [
+            {"title": "What to do", "lines": ["Add the column region to a.sql.", "Keep the old names."]},
+            {"title": "What not to do", "lines": ["Do not touch repo_a."]},
+            {"title": "Done when", "lines": ["[T1] a.sql has the column"]},
+        ])
+        self.assertEqual((found["ok"], found["total"]), (True, 4))
+
+    def test_the_chinese_template_headings_are_taken_as_they_are_written(self) -> None:
+        self.write("# REQ：job1\n\n## 要做什么\n\n给 a.sql 加一列。\n\n## 不做什么\n\n无\n\n## 做完的标准\n\n- [T1] 列在\n\n## 来源\n\n对话\n")
+        found = self.look({"task": TASK, "kind": "req"})
+        self.assertEqual([one["title"] for one in found["sections"]], ["要做什么", "不做什么", "做完的标准"])
+        self.assertEqual(found["sections"][1]["lines"], ["无"])
+
+    def test_a_section_with_no_written_line_is_left_out(self) -> None:
+        self.write("# REQ\n\n## What to do\n\nDo it.\n\n## What not to do\n\n<What is ruled out>\n\n## Done when\n\n<What counts as done>\n")
+        self.assertEqual([one["title"] for one in self.look({"task": TASK, "kind": "req"})["sections"]], ["What to do"])
+
+    def test_a_requirement_that_is_still_the_template_is_missing(self) -> None:
+        for language in ("en", "zh"):
+            template = (self.root / ".harness" / "contracts" / "templates" / "task" / language / "REQ.md")
+            self.write(template.read_text(encoding="utf-8").replace("{name}", "job1"))
+            self.assertEqual(self.look({"task": TASK, "kind": "req"}), {"ok": False, "why": "missing"}, language)
+        (self.root / TASK / "REQ.md").unlink()
+        self.assertEqual(self.look({"task": TASK, "kind": "req"}), {"ok": False, "why": "missing"})
+
+    def test_at_most_twelve_lines_a_section_and_total_counts_all(self) -> None:
+        self.write("## What to do\n\n" + "\n".join(f"- point {n}" for n in range(20)) + "\n")
+        found = self.look({"task": TASK, "kind": "req"})
+        self.assertEqual((len(found["sections"][0]["lines"]), found["total"]), (12, 20))
+
+    def test_a_huge_file_is_read_in_part(self) -> None:
+        self.write("## What to do\n\n" + ("line of words\n" * 100000))
+        found = self.look({"task": TASK, "kind": "req"})
+        self.assertEqual((found["ok"], len(found["sections"][0]["lines"])), (True, 12))
+
+
+class DeliverTests(PreviewCase):
+    def deliver(self, summary: str) -> None:
+        from modules.task import task as task_ops
+
+        with task_ops.locked(self.root, TASK) as data:
+            data["deliver"] = {"at": "2026-11-17T09:00:00+00:00", "summary": summary, "skipped": []}
+
+    def test_the_summary_is_cut_and_a_look_task_has_no_files(self) -> None:
+        self.deliver("s" * 700)
+        found = self.look({"task": TASK, "kind": "deliver"})
+        self.assertEqual((found["ok"], len(found["summary"]), found["files"], found["more"]), (True, 600, [], False))
+
+    def test_a_dev_task_with_a_promote_plan_lists_its_changed_files(self) -> None:
+        self.ready()
+        self.fetch("repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
+        self.deliver("Added a column.")
+        found = self.look({"task": TASK, "kind": "deliver"})
+        self.assertEqual((found["summary"], found["more"], found["files"]), ("Added a column.", False, [{"path": "repo_b/src/a.sql", "added": 1, "removed": 1, "action": "modify"}]))
+
+    def test_nothing_delivered_is_missing(self) -> None:
+        self.assertEqual(self.look({"task": TASK, "kind": "deliver"}), {"ok": False, "why": "missing"})
+
+    def test_a_failing_file_list_still_gives_the_summary(self) -> None:
+        self.deliver("done")
+        with mock.patch.object(superpreview, "changes", side_effect=RuntimeError("boom")):
+            self.ready()
+            self.fetch("repo_b/src/a.sql")
+            self.assertEqual(self.look({"task": TASK, "kind": "deliver"})["files"], [])
+
+
+class CallTests(PreviewCase):
+    def test_a_held_call_as_the_task_page_shows_it_and_a_wrong_code_is_missing(self) -> None:
+        from modules.task import taskdesk
+
+        item = {"code": "AB12CD", "command": "echo hi", "seen": {}, "layout": None}
+        with mock.patch.object(taskdesk, "outbox_view", return_value=[item]):
+            self.assertEqual(self.look({"task": TASK, "kind": "call", "code": "ab12cd"}), {"ok": True, "call": item})
+            self.assertEqual(self.look({"task": TASK, "kind": "call", "code": "ZZZZZZ"}), {"ok": False, "why": "missing"})
+            self.assertEqual(self.look({"task": TASK, "kind": "call"}), {"ok": False, "why": "missing"})
+
+
 class RefusalTests(PreviewCase):
     def test_unknown_task_and_bad_kind(self) -> None:
         self.assertEqual(self.look({"task": "nope", "kind": "plan"}), {"ok": False, "why": "unknown"})

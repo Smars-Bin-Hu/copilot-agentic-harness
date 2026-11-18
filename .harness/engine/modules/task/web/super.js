@@ -68,6 +68,7 @@ const SUPER = (function () {
     const direct = SUPERDIRECT.menu(field, sv);
     direct.button.hidden = true;
     const box = h("div", {class: "sa-box"}, field, newTask, counter, direct.button, send);
+    const to = h("div", {class: "sa-to", hidden: "", title: t("super.direct.to.tip")});  // "To: <task>": where the words go while a task is targeted
     const complete = h("div", {class: "sa-comp", role: "listbox", hidden: "", "aria-label": t("super.route.pick")});
     // The pop-out (companion.js): a small window that stays on top of every other window. Only where the browser can open one (Document Picture-in-Picture: Chrome, Edge).
     const popUp = typeof COMPANION !== "undefined" ? h("button", {type: "button", class: "sa-pop"}, "⇱") : null;
@@ -100,7 +101,7 @@ const SUPER = (function () {
     const queue = h("div", {class: "sa-queue", hidden: ""}, queueList, doneBox);
     const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => linked(text)) : null;  // the earlier days (superhist.js)
     sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
-      h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, direct.tray, box));
+      h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, direct.tray, to, box));
 
     foldBtn.addEventListener("click", () => setFold(!chatFolded, true));
     foldLine.addEventListener("click", () => setFold(false, true));
@@ -290,7 +291,7 @@ const SUPER = (function () {
 
     // ---------- the messages ----------
     // A line of the chat. With a task it belongs to that task's thread (the filter of another task hides it, the filter of this one and All show it); `title`: the words it is about.
-    function addSys(text, task, bad, title) { add(h("div", {class: "sa-sys" + (bad ? " bad" : ""), "data-task": task || null, title: title || null}, text), true); }
+    function addSys(text, task, bad, title) { const node = h("div", {class: "sa-sys" + (bad ? " bad" : ""), "data-task": task || null, title: title || null}, text); add(node, true); return node; }
     // A long day: the chat shows its last FOLD messages; the older ones are behind "Show earlier" (the task items are never folded).
     const FOLD = 40, chatRows = [];
     let unfolded = false;
@@ -301,10 +302,26 @@ const SUPER = (function () {
       earlier.textContent = hide ? t("super.earlier", {n: hide}) : "";
     }
     earlier.addEventListener("click", () => { unfolded = true; foldChat(); });
-    function addYou(text, at) {
-      const row = h("div", {class: "sa-row me"}, h("div", {class: "sa-bub", title: at ? when(at, 11, 16) : null}, text));
+    // The person's words. With a `task` they are a message to that task (a direct one): the row belongs to its thread, and long words fold after FOLD_LINES lines behind "Show more".
+    const FOLD_LINES = 8;
+    function addYou(text, at, task) {
+      const body = h("div", {class: "sa-ytext"}, text), bub = h("div", {class: "sa-bub", title: at ? when(at, 11, 16) : null}, body);
+      if (task && routeEstimate(text) > FOLD_LINES) {
+        const more = h("button", {type: "button", class: "sa-askmore sa-ymore"}, t("super.more"));
+        body.classList.add("sa-clip");
+        more.addEventListener("click", () => { body.classList.remove("sa-clip"); more.remove(); });
+        bub.append(more);
+      }
+      const row = h("div", {class: "sa-row me", "data-task": task || null}, bub);
       chatRows.push(row);
       add(row, true);
+      foldChat();
+      return row;
+    }
+    function dropYou(row) {
+      const at = chatRows.indexOf(row);
+      if (at >= 0) chatRows.splice(at, 1);
+      row.remove();
       foldChat();
     }
     function addAgent(message) {
@@ -360,7 +377,7 @@ const SUPER = (function () {
           const result = await directSend(one.task, text, options.values(), true);
           if (result.ok) { options.clear(); state.done.set(at, SUPERDIRECT.howWord(result.how) + " \u00b7 " + stamp()); actDraw(state); emit(); return; }
           go.disabled = false;
-          said.replaceChildren(SUPERDIRECT.refusal(one.task, result.why, result.error));
+          said.replaceChildren(...refusalNodes(one.task, result.why, result.error, (words) => said.replaceChildren(words)));
         });
         return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), h("div", {class: "sa-reply"}, box, options.button, go), options.tray, said);
       }
@@ -1108,9 +1125,12 @@ const SUPER = (function () {
       direct.button.hidden = !on;
       if (newTask) newTask.hidden = on;  // the room is for the words and the options
       counter.hidden = !on;
+      to.hidden = !on;
       direct.tray.classList.toggle("sa-off", !on);
       if (!on) { field.maxLength = 2000; return; }
-      direct.bind(target ? target.task : filter);
+      const name = target ? target.task : filter;
+      to.textContent = t("super.direct.to", {task: name});
+      direct.bind(name);
       const used = target ? target.text.length : 0;
       field.maxLength = SUPERDIRECT.MAX + (target ? typed.length - target.text.length : 0);
       counter.textContent = t("super.direct.count", {n: used, max: SUPERDIRECT.MAX});
@@ -1154,10 +1174,44 @@ const SUPER = (function () {
       }
       return null;
     }
+    // The refusal of a direct message as the nodes of one line: the words and, when the task is paused, a Resume button for that one task (the board's own `resume`, as its card or row has). `after` says what to do once it ran.
+    function refusalNodes(task, why, error, after) {
+      const out = [SUPERDIRECT.refusal(task, why, error)];
+      if (why === "paused") {
+        const button = actionButton(rowFor(task), {action: "resume"}, "sa-resume");
+        button.addEventListener("click", () => {
+          let tries = 0;
+          const look = setInterval(() => {  // the board draws the new state after its own call: the line tells when the task is back
+            if (++tries > 14 || !button.isConnected) { clearInterval(look); return; }
+            const row = (rowsOf() || []).find((one) => one.name === task || one.task === task);
+            if (row && !row.paused_since) { clearInterval(look); if (after) after(t("super.direct.resumed", {task})); }
+          }, 500);
+        });
+        out.push(button);
+      }
+      return out;
+    }
     // One direct message to one task (the input's, the card's and the pop-out's): {ok, how, text} with the line to show, or {ok: false, why, text}. Said in the task's thread, so the filter never hides it.
+    // Not quiet: the person's words show as their own bubble (after the send, or at once when it may make a new chat: that takes long), then one line under it with the result. A refusal shows no bubble.
     async function directSend(task, text, options, quiet) {
+      const slow = !quiet && (Boolean(options && options.new_chat) || chatGone(rowFor(task)));
+      let bubble = null, line = null;
+      if (slow) {
+        bubble = addYou(text, new Date().toISOString(), task);
+        line = addSys(t("super.direct.making", {task}), task, false, String(text).slice(0, 300));
+        line.classList.add("sa-dl", "sa-pend");
+      }
       const result = await SUPERDIRECT.send(task, text, options);
-      if (!quiet) addSys(result.ok ? SUPERDIRECT.receipt(result.how, task) : SUPERDIRECT.refusal(task, result.why, result.error), task, !result.ok, String(text).slice(0, 300));
+      if (!quiet) {
+        const ok = result.ok;
+        const nodes = ok ? [SUPERDIRECT.receipt(result.how, task) + (result.how === "said" ? " " + t("super.direct.skipped") : "")] : refusalNodes(task, result.why, result.error, (words) => { if (line && line.isConnected) { line.classList.remove("bad"); line.replaceChildren(words); } });
+        if (ok && !bubble) bubble = addYou(text, new Date().toISOString(), task);
+        if (!ok && bubble) { dropYou(bubble); bubble = null; }
+        if (line) { line.className = "sa-sys sa-dl" + (ok ? "" : " bad"); line.replaceChildren(...nodes); line.title = String(text).slice(0, 300); }
+        else line = addSys(nodes, task, !ok, String(text).slice(0, 300));
+        line.classList.add("sa-dl");
+        if (bubble || !ok) toBottom();
+      }
       if (result.ok) poll().then(schedule, schedule);
       return result;
     }
@@ -1179,7 +1233,10 @@ const SUPER = (function () {
       if (!typed || routeBusy) return;
       const target = routeTarget(typed);
       if (target && direct.reading()) return;  // a file is still being read
-      if (target) submit_direct(target, typed); else ask(null);
+      if (target) { submit_direct(target, typed); return; }
+      const named = filter ? null : /^@([^\s,:;]+)/.exec(typed);  // "@name" that is no open task: never a question to the super agent (it costs Credits); the words stay in the box
+      if (named) { addSys(t("super.route.noname", {name: named[1]}), "", true, typed.slice(0, 300)).classList.add("sa-dl"); return; }
+      ask(null);
     }
     // The ask rows: one per ask, drawn again in place when its state changes (never added twice).
     function routeBuild(item) {
@@ -1236,6 +1293,7 @@ const SUPER = (function () {
       field.value = "@" + name + " ";
       routePick = -1;
       routeComplete();
+      drawDirect();
       field.focus();
     }
     complete.addEventListener("mousedown", (event) => event.preventDefault());

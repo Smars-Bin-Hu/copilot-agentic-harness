@@ -221,7 +221,14 @@ pre.diff .add{background:var(--good-bg)}pre.diff .del{background:var(--bad-bg)}p
 @keyframes rbring{0%{box-shadow:0 0 0 0 var(--good-line)}70%,100%{box-shadow:0 0 0 9px transparent}}
 
 /* ---------- reduced motion ---------- */
+/* 1.8.5: a turning circle (starting, being created, a button whose request has not come back). It turns under reduced motion too, slower: a still circle reads as "stuck" */
+.spin{display:inline-block;width:.9em;height:.9em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-.12em;margin-right:.4em;animation:spin .8s linear infinite;opacity:.8;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+button.is-waiting{pointer-events:none;cursor:progress}
+button.is-waiting::before{content:"";display:inline-block;width:.85em;height:.85em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-.12em;margin-right:.4em;animation:spin .8s linear infinite}
+.tag.starting{display:inline-flex;align-items:center}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){.spin,button.is-waiting::before{animation:spin 2.4s linear infinite!important}}
 .hover-card{position:fixed;z-index:400;max-width:min(380px,calc(100vw - 24px));padding:7px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--pop);color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.18);font:12.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0;text-transform:none;pointer-events:none;overflow-wrap:anywhere}
 .hover-card>div+div{margin-top:3px}.hover-card b{font-weight:600}.hover-card .mk{font-weight:600;margin:0 1px}.hover-card .mk.ok{color:var(--good-dot)}.hover-card .mk.bad{color:var(--hot-dot)}
 .act.primary:not(:disabled){background:var(--btn);border-color:var(--btn);color:var(--btn-ink);font-weight:600}.act.primary:not(:disabled):hover{background:var(--btn-hover);border-color:var(--btn-hover)}  /* the one main button of a window (1.7.28) */

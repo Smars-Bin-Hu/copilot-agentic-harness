@@ -118,8 +118,21 @@ function waitTip(row) {
   if (own) return own;
   return row.waiting_why === "asking" && Object.prototype.hasOwnProperty.call(TEXT, "desk.wait.asking") ? t("desk.wait.asking") : "";
 }
+// 1.8.5: a small turning circle (CSS, still under reduced motion), for "starting", "being created" and a button whose request has not come back.
+function spinner(extra) { return h("span", {class: "spin" + (extra ? " " + extra : ""), "aria-hidden": "true"}); }
+// 1.8.5: a task's display name (`title`, set on its page) or its name; the hover of a display name says the task's name, which the agent and the commands use.
+function shownName(row) { return String((row && (row.title || row.label)) || (row && (row.name || row.task)) || ""); }
+function nameTip(row) { return row && (row.title || row.label) ? t("waits.title.tip", {name: row.name || row.task}) : ""; }
+// 1.8.5: `row.starting` {what, since, late} (boardserve.settle): the board sent something and the agent has not been seen to start; the hover says what and when.
+function startingTip(starting) {
+  const what = Object.prototype.hasOwnProperty.call(TEXT, "waits.what." + starting.what) ? t("waits.what." + starting.what) : t("waits.what.other");
+  return t(starting.late ? "waits.late.tip" : "waits.starting.tip", {what, at: when(starting.since, 11, 19)});
+}
+const errorWords = (row) => String((row && row.error && row.error.message) || "") || t("waits.error.none");
 function stateTag(row, live) {
   const state = stateOf(row, live);
+  if (row.starting && !row.starting.late && live !== false) { const node = tag("", "run starting"); node.append(spinner(), t("waits.starting")); node.title = startingTip(row.starting); return node; }
+  if (state === "error") { const node = tag(t("waits.error"), "bad"); node.title = errorWords(row); return node; }
   if (state === "waiting") { const node = tag(waitText(row), "hot long"); const tip = waitTip(row); if (tip) node.title = tip; return node; }
   if (state === "working") return tag(t("board.state.working"), "good run");
   if (state === "quiet") return tag(t("board.state.quiet"), "idle");

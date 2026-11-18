@@ -6,6 +6,14 @@
 .sa-name{font-weight:650;font-size:15px}
 .sa-line{font-size:12.5px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sa-w{color:var(--hot);font-weight:600}
+.sa-line{display:flex;align-items:baseline;gap:0}
+.sa-line>*{flex:none;white-space:pre}
+.sa-line .sa-tail{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sa-st{cursor:help}
+.sa-st i{font-style:normal;margin-right:3px}
+.sa-st-old{color:var(--ink)}
+.sa-st-stuck{color:var(--hot);font-weight:600}
+.sa-st-error{color:var(--bad,#b3261e);font-weight:600}
 .sa-cost{margin-top:12px;display:inline-flex}
 .sa-cost[hidden]{display:none}
 /* the battery of today's Credits (PET.battery): green, amber under a half, red under a fifth and when the limit is reached; the numbers on hover */
@@ -25,6 +33,8 @@
 .sa-mate.work .sa-ring{border-color:transparent}
 .sa-mate.work .sa-ring::before{content:"";position:absolute;inset:-2px;border-radius:50%;border:2px dashed var(--good-dot);animation:saspin 9s linear infinite}
 .sa-mate.idle .sa-ring{opacity:.6}
+.sa-mate.stuck .sa-ring{border-color:var(--hot-dot);border-style:dashed}
+.sa-mate.error .sa-ring{border-color:var(--bad,#b3261e);box-shadow:0 0 0 3px var(--hot-bg)}
 .sa-mate.on .sa-ring{outline:2px solid var(--ink);outline-offset:2px}
 .sa-mate:hover .sa-ring svg{transform:translateY(-3px)}
 .sa-mate:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:10px}
@@ -38,6 +48,24 @@
 .sa-x{border:1px solid var(--line2);background:transparent;color:var(--soft);border-radius:6px;width:22px;height:22px;line-height:1;cursor:pointer;font:inherit}
 .sa-banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 14px 0;padding:7px 12px;border:1px solid var(--line2);border-radius:10px;background:var(--raise);font-size:12.5px;color:var(--soft);flex:none}
 .sa-banner .act{margin:0 0 0 auto}
+.sa-queue{flex:0 1 auto;max-height:50%;min-height:0;display:flex;flex-direction:column;margin:8px 0 0;border-bottom:1px solid var(--line);background:var(--raise)}  /* the queue (1.8.4): pinned above the chat, its own scroll */
+.sa-queue[hidden],.sa-qdone[hidden]{display:none}
+.sa.sa-nochat .sa-queue{flex:1 1 auto;max-height:none}
+.sa-qlist{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 14px 0;overscroll-behavior:contain}
+.sa-qlist:empty{padding:0}
+.sa-qdone{flex:none;border-top:1px solid var(--line);font-size:12px;color:var(--soft)}
+.sa-qlist:empty+.sa-qdone{border-top:0}
+.sa-qdone summary{cursor:pointer;padding:5px 14px;width:max-content;list-style:none}
+.sa-qdone summary::-webkit-details-marker{display:none}
+.sa-qdone summary:hover{color:var(--ink)}
+.sa-qdone.sa-flash summary{animation:saflash 1.2s}
+.sa-qcheck{color:var(--good-dot);font-weight:700}
+.sa-qdlist{max-height:120px;overflow:auto;padding:0 14px 6px;overscroll-behavior:contain}
+.sa-rc{display:flex;gap:8px;align-items:baseline;min-width:0;padding:1px 0}
+.sa-rc[hidden]{display:none}
+.sa-rc .sa-task{max-width:45%;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-rc .sa-ok,.sa-rc .sa-next{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@keyframes saflash{0%{background:var(--hot-bg)}100%{background:transparent}}
 .sa-streamwrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
 .sa-stream{flex:1;overflow:auto;padding:12px 14px 6px;overscroll-behavior:contain}
 .sa-newpill{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);border:1px solid var(--hot-line);background:var(--pop);color:var(--hot);border-radius:999px;padding:2px 12px;font:inherit;font-size:12px;box-shadow:var(--shadow);cursor:pointer;z-index:2}
@@ -187,7 +215,9 @@ a.sa-task:hover{text-decoration:underline}
  .sa{--sa-perch:96px}
  .sa-head{padding:2px calc(var(--sa-perch) + 10px) 0 10px}
  .sa-team{padding-left:10px;padding-right:calc(var(--sa-perch) + 6px)}
- .sa-stream,.sa-filter,.sa-quick,.sa-input{padding-left:10px;padding-right:10px}
+ .sa-stream,.sa-filter,.sa-quick,.sa-input,.sa-qlist{padding-left:10px;padding-right:10px}
+ .sa-qdone summary{padding-left:10px}
+ .sa-qdlist{padding-left:10px;padding-right:10px}
  .sa-banner{margin-left:10px;margin-right:10px}
  .sa-mini{display:none}
  .sa-bub{max-width:100%}

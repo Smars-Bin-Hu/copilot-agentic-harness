@@ -365,7 +365,7 @@ a.sa-task:hover{text-decoration:underline}
 .sa-ddot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--hot-dot)}
 .sa-ddot[hidden]{display:none}
 .sa-input .rp-files{margin:0 0 6px}
-.sa-dmenu{position:fixed;z-index:60;box-sizing:border-box;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line2);border-radius:12px;background:var(--card);color:var(--ink);box-shadow:0 8px 28px rgba(0,0,0,.22);font-size:12.5px}
+.sa-dmenu{position:fixed;z-index:165;box-sizing:border-box;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line2);border-radius:12px;background:var(--card);color:var(--ink);box-shadow:0 8px 28px rgba(0,0,0,.22);font-size:12.5px}
 .sa-dfield{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .sa-dlabel{color:var(--soft);flex:none}
 .sa-dfield select{min-width:0;max-width:62%;font:inherit;font-size:12.5px}
@@ -374,5 +374,13 @@ a.sa-task:hover{text-decoration:underline}
 .sa-dfoot .rp-attach{margin:0}
 .sa-dreset{border:0;background:transparent;color:var(--soft);font:inherit;font-size:12px;text-decoration:underline;cursor:pointer}
 .sa-dmsg:empty{display:none}
-.sa-sys.bad{color:var(--bad,#c0392b);white-space:normal}
+.sa-sys.bad{color:var(--bad,#c0392b);white-space:normal;padding:0 32px}  /* room for the fold button at the right edge */
+.sa-sys.sa-dl{white-space:normal;padding:0 32px;overflow-wrap:anywhere}
+.sa-sys.sa-pend{font-style:italic}
+.sa-sys .sa-resume{margin:0 0 0 8px;vertical-align:baseline}
+.sa-ytext.sa-clip{max-height:calc(8 * 1.45em);overflow:hidden}
+.sa-ymore{display:block}
+.sa-row.me .sa-ymore{color:inherit;border-color:currentColor;opacity:.85}
+.sa-to{padding:0 4px 4px;font-size:11.5px;color:var(--hot);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sa-to[hidden]{display:none}
 .sa-reply .sa-dopt{align-self:flex-end}

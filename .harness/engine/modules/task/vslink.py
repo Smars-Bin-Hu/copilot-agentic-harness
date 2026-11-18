@@ -942,7 +942,7 @@ class VsLink:
             message["attachments"] = job.attachments
         action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
         made = {"name": plan["name"], "kind": plan["kind"], "source": plan["source"], "lang": plan["lang"], "permission": plan["permission"], "model": job.model, "text": job.text, "files": chatsend.listed(job.attachments or []),
-                "session": resource, "chat": chat, "title": "", "clock": time.monotonic(), "keep_model": plan.get("keep_model", True), "then": plan.get("then") or ""}
+                "session": resource, "chat": chat, "title": "", "made_at": utc_now(), "clock": time.monotonic(), "keep_model": plan.get("keep_model", True), "then": plan.get("then") or ""}  # made_at (1.8.5): the board's "being created" says since when
         stub = {"resource": resource, "provider": ahp.LOCAL_PROVIDER, "title": "", "status": ahp.IN_PROGRESS, "defaultChat": chat, "chats": [{"resource": chat}],
                 "workingDirectories": [ahp.folder_uri(self.root)], "modifiedAt": ahp.utc_stamp()}
         with self.lock:

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any, Dict, Tuple
 
 import support  # noqa: F401 - HARNESS_VSCODE_CLI=off
+from test_chatnew import GOOD, CreateCase
 from test_chatsend import SendCase
 from test_vslink import until
 
@@ -255,6 +256,15 @@ class ServedTests(SendCase):
         self.assertEqual(self.post("/api/title", {"title": ""})[0], 200)
         self.assertNotIn("title", tasks.read(self.root, TASK))
         self.assertEqual(self.board_row()["title"], "")
+
+
+class MakingTests(CreateCase):
+    def test_a_task_the_board_makes_is_being_created_since_its_chat_was_made(self) -> None:
+        status, data, _ = self.make()
+        self.assertEqual(status, 200, data)
+        found = [item for item in self.request("POST", "/api/board", {})[1]["making"] if item["name"] == GOOD["name"]]
+        self.assertEqual([item["kind"] for item in found], [GOOD["kind"]])
+        self.assertRegex(found[0]["since"], r"^\d{4}-\d\d-\d\dT")
 
 
 if __name__ == "__main__":

@@ -1238,19 +1238,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     if (newTask) newTask.addEventListener("click", () => { const text = field.value.trim(); CHAT.create(text ? {text} : undefined); field.value = ""; });  // the text moved into the new-task dialog
 
     // ---------- asking the server ----------
-    // 1.8.5: Try again was pressed and the chat has not been seen to run yet: the server still says error (the state it had before), but the person just acted. The error card goes and the avatar shows starting.
-    function retried(result) {
-      const quiet = new Set((result.mates || []).filter((mate) => mate.starting && !mate.starting.late && (mate.state === "error" || mate.state === "stuck")).map((mate) => mate.task));
-      if (!quiet.size) return result;
-      const gone = (result.items || []).filter((item) => quiet.has(item.task) && (item.why === "error" || item.why === "stuck"));
-      const status = {...(result.status || {})};
-      status.error = Math.max(0, count(status.error) - gone.filter((item) => item.why === "error").length);
-      status.stuck = Math.max(0, count(status.stuck) - gone.filter((item) => item.why === "stuck").length);
-      status.working = count(status.working) + quiet.size;
-      return {...result, status, mates: result.mates.map((mate) => (quiet.has(mate.task) ? {...mate, state: "start", count: 0} : mate)), items: (result.items || []).filter((item) => !gone.includes(item))};
-    }
     function apply(result, spoken) {
-      result = retried(result);
       failed = "";
       if (shown) fit();  // the board's banner above the view may have gone (hidden by the person): the view takes the room it left
       data = result;

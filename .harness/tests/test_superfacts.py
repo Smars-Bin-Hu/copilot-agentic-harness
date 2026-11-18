@@ -99,6 +99,12 @@ class ErrorTests(StuckCase):
         self.assertIn("idle_s", found)
         self.assertFalse(self.facts(row_of({"bound": True, "state": "error", "error": {"message": "bad", "resumable": False}}, "stopped"))["resumable"])
 
+    def test_a_row_the_board_just_retried_is_no_error_until_it_is_late(self) -> None:
+        """1.8.5: Try again was pressed; the chat still holds the error until it runs, but the row is starting (boardserve.settle): no error card."""
+        failed = {"bound": True, "state": "error", "error": {"message": "rate limited", "resumable": True}}
+        self.assertEqual(self.facts(row_of(failed, "stopped", starting={"what": "retry", "since": "x", "late": False})), {})
+        self.assertEqual(self.facts(row_of(failed, "stopped", starting={"what": "retry", "since": "x", "late": True}))["kind"], "error")
+
     def test_an_error_with_no_text_says_so_and_a_row_waiting_for_nothing_counts(self) -> None:
         found = self.facts(row_of({"bound": True, "state": "error"}))
         self.assertEqual((found["kind"], found["detail"], found["resumable"]), ("error", messages.text("super.error.detail"), False))

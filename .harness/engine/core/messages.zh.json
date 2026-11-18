@@ -2335,7 +2335,7 @@
   "board.new.first.hint": "这是将要发送的消息，由看板生成，固定用英文（agent 读英文），你写的内容原样放在最后。这里不能输入：请改上面的字段。",
   "board.new.go": "创建并发送",
   "board.new.working": "创建中…",
-  "board.new.done": "chat 已创建，第一条消息已发送。agent 创建任务后，任务会出现在这里。",
+  "board.new.done": "chat 已建好，第一条消息已发出。agent 打开任务之前，看板上会显示它\"创建中\"。",
   "board.new.done.unchecked": "VS Code 尚未确认这个 chat 的创建者。如果 Agents 窗口里看不到它，请检查那里的筛选。",
   "board.new.close": "关闭",
   "board.new.here": "任务已经出现在 board 上了。",

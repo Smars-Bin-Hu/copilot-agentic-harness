@@ -69,7 +69,8 @@ def chat_facts(root: Path, row: Dict[str, Any], data: Dict[str, Any], limit: int
     """The `error` and `stuck` facts of a row (see the head of this file); `{}` when neither holds."""
     chat = row.get("chat") or {}
     state, why = chat.get("state"), str(row.get("waiting_why") or "")
-    if row.get("paused_since") or not chat.get("bound") or state not in ("busy", "error"):
+    starting = row.get("starting") if isinstance(row.get("starting"), dict) else None
+    if row.get("paused_since") or not chat.get("bound") or state not in ("busy", "error") or (starting and not starting.get("late")):  # 1.8.5: the board just sent something (Try again): not an error or stuck yet
         return {}
     age = tasklife.log_age(root, data)
     if state == "error" and why in ("", "stopped"):

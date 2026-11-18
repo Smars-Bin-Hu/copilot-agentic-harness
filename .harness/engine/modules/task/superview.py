@@ -108,7 +108,7 @@ def build(result: Dict[str, Any], age_up: Optional[int] = None) -> Dict[str, Any
     for row in open_rows:
         count = per_task.get(name_of(row), 0)
         starting = row.get("starting") if isinstance(row.get("starting"), dict) else None
-        state = kinds.get(name_of(row)) or ("you" if count else "start" if starting and not starting.get("late") else "work" if row.get("state") == "working" else "idle")  # start (1.8.5): the board sent something, the agent is not seen to work yet
+        state = kinds.get(name_of(row)) or ("error" if row.get("state") == "error" else "you" if count else "start" if starting and not starting.get("late") else "work" if row.get("state") == "working" else "idle")  # error (1.8.5): the chat failed while the task waited for something: red, not "you"  # start (1.8.5): the board sent something, the agent is not seen to work yet
         mate = {"task": name_of(row), "label": str(row.get("title") or ""), "kind": row.get("kind") or "", "state": state, "count": count}
         if starting:
             mate["starting"] = dict(starting)

@@ -31,7 +31,7 @@ const SERVE = (function () {
 
   // 1.8.5: the button a request came from turns while the request has not come back (`is-waiting`, after WAIT_SHOW ms) and cannot be pressed again. A request belongs to the button
   // pressed at most PRESS_WINDOW ms before it started, or to the button whose last request came back that recently (a dialog's Send makes two calls, one after the other).
-  // A poll of the page belongs to no button. A button drawn again while it waits is a new node: the old one goes with the page, the new one does not turn.
+  // A poll of the page (POLLS) belongs to no button. A button drawn again while it waits is a new node: the old one goes with the page, the new one does not turn.
   const WAIT_SHOW = 300, PRESS_WINDOW = 400;
   let pressed = null, pressedAt = 0;
   const pending = new Map();
@@ -39,8 +39,9 @@ const SERVE = (function () {
     const button = event.target && event.target.closest ? event.target.closest("button") : null;
     if (button && !button.disabled) { pressed = button; pressedAt = Date.now(); }
   }, true);
-  function waitOn(promise) {
-    const button = pressed && Date.now() - pressedAt <= PRESS_WINDOW && pressed.isConnected ? pressed : null;
+  const POLLS = ["/api/board", "/api/super", "/api/live", "/api/desk", "/api/status", "/api/ready"];  // what the pages ask every few seconds, and after an action to draw it
+  function waitOn(promise, path) {
+    const button = !POLLS.includes(path) && pressed && Date.now() - pressedAt <= PRESS_WINDOW && pressed.isConnected ? pressed : null;
     if (!button) return promise;
     pending.set(button, (pending.get(button) || 0) + 1);
     const timer = setTimeout(() => { if (button.isConnected && pending.get(button)) { button.classList.add("is-waiting"); button.setAttribute("aria-busy", "true"); } }, WAIT_SHOW);
@@ -57,7 +58,7 @@ const SERVE = (function () {
   }
 
   // Every call of the page waits for the pairing of this load: asked before it, a paired browser would be refused and told it is not paired.
-  const post = (path, body, now) => waitOn(ready.then(() => send(path, body, now)));
+  const post = (path, body, now) => waitOn(ready.then(() => send(path, body, now)), path);
 
   function send(path, body, now) {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body)})
@@ -82,7 +83,7 @@ const SERVE = (function () {
 
   // A POST with a deadline and nothing else: no bar for an unpaired browser, no reload. The Enter screen asks with it: a stalled server is an error line there, never a hang.
   function call(path, body, seconds) {
-    return waitOn(callNow(path, body, seconds));
+    return waitOn(callNow(path, body, seconds), path);
   }
   function callNow(path, body, seconds) {
     const control = window.AbortController ? new AbortController() : null;

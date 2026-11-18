@@ -663,7 +663,7 @@ class WalkThroughTests(unittest.TestCase):
 
     def test_a_paired_browser_is_never_told_it_is_not_paired(self) -> None:
         serve = (WEB / "serve.js").read_text(encoding="utf-8")
-        self.assertIn("const post = (path, body, now) => waitOn(ready.then(() => send(path, body, now)));", serve)  # a call of the page waits for the pairing (and its button turns meanwhile, 1.8.5)
+        self.assertIn("const post = (path, body, now) => waitOn(ready.then(() => send(path, body, now)), path);", serve)  # a call of the page waits for the pairing (and its button turns meanwhile, 1.8.5)
         self.assertIn('const already = send("/api/status", {})', serve)  # the pairing itself cannot wait for itself
         self.assertIn('if (paired) document.querySelector(".unpaired-note")?.remove();', serve)
 

@@ -149,6 +149,50 @@ class StartingTests(unittest.TestCase):
         self.assertEqual((found["state"], found["error"]["message"]), ("error", "rate limit"))
 
 
+class WakeTests(unittest.TestCase):
+    """Review 1: an approval's go-on is sent in the background; the row must say starting from the answer to the approval, not from when VS Code took the message."""
+
+    def fake(self, outcome: str, gate: threading.Event) -> Any:
+        fake = board()
+
+        def wake_go(_task: str) -> str:
+            gate.wait(5)
+            return outcome
+
+        fake.wake_go = wake_go
+        fake.before = lambda task: boardserve.Board.before(fake, task)
+        fake.begin = lambda task, what, pre: boardserve.Board.begin(fake, task, what, pre)
+        return fake
+
+    def test_the_row_is_starting_while_the_go_on_is_still_on_its_way(self) -> None:
+        gate = threading.Event()
+        fake = self.fake("message", gate)
+        boardserve.Board.wake_soon(fake, "t/a")
+        found = row(fake.link)
+        settle(fake, found)
+        self.assertEqual((found["state"], found["starting"]["what"]), ("working", "go"))
+        gate.set()
+        fake.woken.join(5)
+        self.assertIn("t/a", fake.started)  # it went: starting until the chat works
+
+    def test_a_go_on_that_does_not_go_takes_the_mark_away(self) -> None:
+        gate = threading.Event()
+        gate.set()
+        fake = self.fake("", gate)
+        boardserve.Board.wake_soon(fake, "t/a")
+        fake.woken.join(5)
+        self.assertEqual(fake.started, {})
+        found = row(fake.link)
+        settle(fake, found)
+        self.assertNotIn("starting", found)
+        self.assertEqual(found["waiting_why"], "go-plan")  # the card that asks to tell the agent comes back
+
+    def test_an_ask_the_host_still_lists_is_not_read_while_starting(self) -> None:
+        self.assertTrue(boardserve.starting_now({"starting": {"late": False}}))
+        self.assertFalse(boardserve.starting_now({"starting": {"late": True}}))
+        self.assertFalse(boardserve.starting_now({}))
+
+
 class ErrorTests(unittest.TestCase):
     def test_a_failed_chat_makes_the_row_an_error_and_keeps_what_it_waits_for(self) -> None:
         fake = board()
@@ -205,6 +249,12 @@ class SuperviewTests(unittest.TestCase):
         rows[0]["starting"]["late"] = True
         self.assertEqual(superview.build({"rows": rows})["mates"][0]["state"], "work")
 
+    def test_a_failed_chat_that_still_waits_for_the_person_is_a_red_mate(self) -> None:
+        rows = [{"task": "t/a", "name": "a", "status": "open", "state": "error", "waiting_why": "plan", "waiting": "Approve the plan", "actions": []}]
+        view = superview.build({"rows": rows})
+        self.assertEqual(view["mates"][0]["state"], "error")
+        self.assertEqual([item["why"] for item in view["items"]], ["plan"])  # the decision stays in the queue
+
 
 class ServedTests(SendCase):
     """Through the server, with a fake VS Code."""
@@ -239,6 +289,9 @@ class ServedTests(SendCase):
             self.vs.created.append({"name": "new-one", "kind": "dev", "made_at": "2026-11-18T10:00:00+00:00", "session": "s", "chat": "c", "clock": time.monotonic()})
         self.assertEqual(self.request("POST", "/api/board", {})[1]["making"], [{"name": "new-one", "kind": "dev", "since": "2026-11-18T10:00:00+00:00"}])
         self.assertEqual(self.request("POST", "/api/super", {})[1]["making"][0]["name"], "new-one")
+        with self.vs.lock:
+            self.vs.created.append({"name": "job1", "kind": "dev", "made_at": "2026-11-18T10:01:00+00:00", "session": "s2", "chat": "c2", "clock": time.monotonic()})  # Go on in a new chat
+        self.assertEqual([item["name"] for item in self.request("POST", "/api/board", {})[1]["making"]], ["new-one"])
 
     def test_a_display_name_is_set_shown_and_taken_away(self) -> None:
         status, data, _ = self.post("/api/title", {"title": "  Fix the late orders  "})
@@ -248,9 +301,12 @@ class ServedTests(SendCase):
         self.assertIn("title", [event["what"] for event in tasks.read(self.root, TASK)["events"]])
         status, data, _ = self.post("/api/title", {"title": "x" * (boardserve.TITLE_MAX + 1)})
         self.assertEqual((status, data["error"]), (409, messages.text("title.refused.long", limit=boardserve.TITLE_MAX)))
-        for bad in ("two\nlines", "tab\there", "bell\x07"):
+        for bad in ("two\nlines", "tab\there", "bell\x07", "zero\u200bwidth", "bidi\u202eflip"):
             status, data, _ = self.post("/api/title", {"title": bad})
             self.assertEqual((status, data["error"]), (409, messages.text("title.refused.control")), bad)
+        self.assertEqual(self.post("/api/title", {"title": ["a"]})[0], 409)
+        self.assertEqual(self.post("/api/title", {"title": False})[0], 409)
+        self.assertEqual(tasks.read(self.root, TASK)["title"], "Fix the late orders")  # nothing bad was kept
         self.assertEqual(self.post("/api/title", {"title": "x"}, cookie="")[0], 403)
         self.assertEqual(self.request("POST", "/api/title", {"title": "x"}, cookie=self.cookie)[0], 409)  # no task named
         self.assertEqual(self.post("/api/title", {"title": ""})[0], 200)

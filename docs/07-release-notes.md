@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.4 (1.8.0 – 1.8.4, 2026-11-17 – 2026-11-18)
+## 1.8.5 (1.8.0 – 1.8.5, 2026-11-17 – 2026-11-18)
 
 ### Added
 
@@ -17,12 +17,16 @@ To see which version you have: `harness --version`.
 - **The super view as a place to finish things** (1.8.4): a queue pinned above the chat, most urgent first, with **Done (n)**; header counts of waits, the oldest, stuck tasks and errors; stuck tasks (`board.stuck_seconds`) and errors with **Try again**; an old wait moves up (`board.age_up_seconds`); approve a held call after **View**; previews of a requirement and a delivery.
 - **Say something while an agent waits on its question** (1.8.3): the reply panel, the super view and the pop-out send your own words into the running turn instead of an answer.
 - **Your own words in Go on in a new chat** (1.8.4): the window has a box; what you write goes in the same first message.
+- **Starting, being created, a turning button** (1.8.5): right after the board sends something to the agent, the task shows *Starting…* until its chat is seen to work (2 minutes at most, then it says no start was seen); a task the board is making shows as being created on the list, the lobby and the super view; a button whose request has not come back turns.
+- **A display name for a task** (1.8.5): the pencil next to its name on the task page; the agent and the commands keep the task's name.
 
 ### Fixed
 
 - On a slow work computer, calls of one session waited out and were refused, and two of them could write the same task file (1.8.1): the locks are locks of the system now, and a call waits up to 20 seconds.
 - The Agent Performance Review button made the agent stop and ask you to type the skill (1.8.2): the board now sends `/<skill>` itself once the task is open.
 - The gate let the agent run `harness task allow --conn`, `--links` or `--off` (1.8.0).
+- A chat whose last turn failed looked like a task at work or one waiting for you: it is the state *error* now, with the error's words on the task page, a red item in Live, and Try again (1.8.5).
+- After an answer, an approval or Try again, the page kept the old card and its buttons until the agent was seen to work, and Try again gave no sign it was pressed (1.8.5).
 
 ### Retired
 

@@ -49,6 +49,7 @@ import sys
 import threading
 import re
 import time
+import unicodedata
 import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -197,6 +198,12 @@ TITLE_MAX = 80  # characters of a task's display name (1.8.5)
 WAIT_FIELDS = ("waiting", "waiting_why", "waiting_tip", "waiting_since", "waiting_from")
 ANSWERED_BY_A_TURN = ("go-req", "go-plan", "go-promote", "go-recover", "go-review", "asking", "stopped", "cancelled")  # marks a running turn has answered; the hooks take them away later (slowly on a busy computer)
 CHAT_STILL = ("idle", "error", "input")  # VS Code says the chat runs no turn: it waits for the person (`input`: a question or a command to allow, 1.7.20), or its last turn failed
+
+
+def starting_now(row: Dict[str, Any]) -> bool:
+    """Has the board just sent something to this task's agent, and not yet seen it start (and it is not late)? (1.8.5, `Board.settle`)"""
+    starting = row.get("starting")
+    return isinstance(starting, dict) and not starting.get("late")
 
 
 def trust_chat(row: Dict[str, Any]) -> bool:
@@ -416,14 +423,16 @@ class Board:
             health.with_context(self.root, row, row.get("chat"))
         if moved:
             tasklife.sort_rows(result["tasks"])
-        asked = [taskboard.with_ask(row, self.link.ask_of(row["task"]), tuple(self.served), self.root) for row in result["tasks"] if row.get("status") == "open"]
+        asked = [taskboard.with_ask(row, self.link.ask_of(row["task"]), tuple(self.served), self.root) for row in result["tasks"] if row.get("status") == "open" and not starting_now(row)]  # 1.8.5: an ask the host still lists right after the person answered it is not a wait
         if any(asked):  # the chat waits for a person to allow a command or answer a question: that wait comes first in the order
             tasklife.sort_rows(result["tasks"])
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
         elsewhere = outbox.held_elsewhere(self.root, self.task_is_open)
-        return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": self.link.making(), "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
+        names = {str(row.get("name") or "") for row in result["tasks"]}
+        making = [item for item in self.link.making() if item["name"] not in names and not tasks.find(self.root, item["name"])]  # a new chat for a task that exists (Go on in a new chat) is no task being made
+        return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": making, "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
 
     def task_is_open(self, task: str) -> bool:
@@ -514,7 +523,7 @@ class Board:
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
         self.settle(found)
         health.with_context(self.root, found, chat)
-        if found["status"] == "open":
+        if found["status"] == "open" and not starting_now(found):
             taskboard.with_ask(found, self.link.ask_of(found["task"]), tuple(self.served), self.root)
         if chat.get("state") == "busy" and found["status"] == "open" and "steer" in self.served:
             found["actions"] = [item for item in found["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
@@ -857,9 +866,8 @@ class Board:
                 pass
             result["agent"] = "none"
         elif step == "act" and action in WAKING:  # 1.7.38, C13 RB-2: a decision that moves the task on wakes the agent by itself, as an approved call does: no second click on "tell the agent"
-            self.woken = threading.Thread(target=self.wake_go, args=(result.get("task") or task,), name="board-wake", daemon=True)  # 1.7.43: in the background; the decision is
-            self.woken.start()  # answered at once, not after VS Code took the message (up to JOB_WAIT on a work computer). A message that does not go leaves the "go on" card, as before
-            result["agent"] = "sending"
+            self.wake_soon(str(result.get("task") or task))  # 1.7.43: in the background; the decision is answered at once, not after VS Code took the message (up to JOB_WAIT on a
+            result["agent"] = "sending"  # work computer). A message that does not go leaves the "go on" card, as before
         if stood and stood.get("task"):
             place = self.place_of(stood)
             self.after_decision(str(stood["task"]), [(str(stood["code"]), place)], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
@@ -938,10 +946,13 @@ class Board:
         task = task_ops.resolve(self.root, str(data.get("task", "")))
         if tasks.read(self.root, task) is None:
             raise CommandError(say("title.refused.task"))
-        title = str(data.get("title") if data.get("title") is not None else "").strip()
+        raw = data.get("title")
+        if raw is not None and not isinstance(raw, str):
+            raise CommandError(say("title.refused.control"))
+        title = (raw or "").strip()
         if len(title) > TITLE_MAX:
             raise CommandError(say("title.refused.long", limit=TITLE_MAX))
-        if any(ord(char) < 32 or 127 <= ord(char) < 160 or char in "\u2028\u2029" for char in title):
+        if any(ord(char) < 32 or 127 <= ord(char) < 160 or unicodedata.category(char) in ("Cf", "Zl", "Zp", "Cs", "Co") for char in title):  # format characters (zero width, bidi overrides) too
             raise CommandError(say("title.refused.control"))
         with task_ops.locked(self.root, task) as again:
             if title:
@@ -950,6 +961,23 @@ class Board:
                 again.pop("title", None)
             task_ops.note(again, "title", title or "-")
         return {"title": title}
+
+    def wake_soon(self, task: str) -> None:
+        """Send the go-on of `wake_go` in the background, and say "starting" from now (1.8.5): on a work computer VS Code can take its time to take the message, and the page must not show the
+        go-on card meanwhile. When the message does not go, the mark goes and the card comes back."""
+        pre = self.before(task)
+        self.begin(task, "go", pre)
+        with self.started_lock:
+            mark = self.started.get(task)
+
+        def run() -> None:
+            if self.wake_go(task) != "message":
+                with self.started_lock:
+                    if self.started.get(task) is mark:
+                        del self.started[task]
+
+        self.woken = threading.Thread(target=run, name="board-wake", daemon=True)
+        self.woken.start()
 
     def wake_go(self, task: str) -> str:
         """The person confirmed the requirement, approved the plan or approved the promote (1.7.38, C13 RB-2): the task now waits with a `go-*` mark, "tell the agent to go on". The board sends that message itself,

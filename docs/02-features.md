@@ -367,9 +367,12 @@ A task has one **state** at a time, the first that holds:
 | *closed* | The task is closed |
 | *not started* | A folder with no task file yet |
 | *paused* | You put it aside |
+| *error* | The last turn of its chat ended in an error (served board only). The page shows the error's words, **Try again** when Copilot can run it again, and **Go on in a new chat**. What the task waits for stays, but not bold: the agent did not finish |
 | *working* | The agent is in the middle of a turn: a session holds the task, made a hook call in the last 5 minutes (or waits for a subagent, such as the reviewer, that is running) and has not stopped since. This holds even when a plan it just wrote already waits for you |
 | *waiting for you* | With the reason. It stays *waiting* with or without a session; the page then adds that you open a new session and ask for the task by name |
 | *quiet* | A session holds it, but 5 minutes with no call and no stop: a long step, or a window that was closed |
+
+**Starting.** Right after the board sends something that makes the agent work (an answer, a message, an approval's go-on, allowing a command, **Try again**, **Go on in a new chat**), the task shows *Starting…* with a turning circle until its chat is seen to work: on a busy computer this can take a while. Its buttons are locked meanwhile, as while it works. After 2 minutes with no start it says so, and the buttons are free again. **Being created**: a task the board made a chat for shows on the list, the lobby and the super view as being created until its agent has made it. A button whose request has not come back turns. **Display name**: the pencil next to a task's name on its page gives it a name of your own (80 characters at most) that the board shows everywhere; the agent, the commands and the folder keep the task's name, which the hover shows.
 | *no session* | Open, nothing waits for you, and no session holds it any more: the one that had it moved on to another task, or its state file is gone. The list shows how long nobody has touched it |
 
 Nothing closes or pauses a task for you.

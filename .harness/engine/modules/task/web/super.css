@@ -363,3 +363,7 @@ a.sa-task:hover{text-decoration:underline}
 .sa-pvh{list-style:none;margin-left:-16px;margin-top:3px}
 .sa-pvsum{list-style:none;margin-left:-16px;white-space:pre-wrap}
 .sa-row.item.done .sa-xtra,.sa-row.item.done .sa-call{display:none}
+/* 1.8.7: the avatar of a task being created: the ring turns (or is red), the mark and the time are under the name */
+.sa-mkst{display:flex;justify-content:center;overflow:hidden}.sa-mkst .mk-st{font-size:10px;gap:3px}.sa-mkst .spin,.sa-mkst .mk-dot:not(.mk-slow){display:none}
+.sa-mk .sa-ring .mk-dot{display:block;width:12px;height:12px;border-radius:50%;background:var(--bad);margin:auto}
+.sa-mk:has(.mk-st.bad) .sa-ring{border-color:var(--bad-line)}

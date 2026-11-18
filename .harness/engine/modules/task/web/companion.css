@@ -135,3 +135,5 @@ a.cp-task:hover{text-decoration:underline}
 .cp-wt{display:inline-flex;align-items:center;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
 .cp-wt .cp-spin{width:.8em;height:.8em;color:var(--good-dot)}
 .cp-late{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--hot-dot);margin-right:5px;flex:none}
+/* 1.8.7: a task being created, in the line of marks: its name, then the step and the time */
+.cp-mk{gap:6px}.cp-mk .cp-mk-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:3em}.cp-mk .mk-st{flex:1 1 0}

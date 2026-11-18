@@ -182,3 +182,6 @@ a.lb-name:hover{text-decoration:underline;text-underline-offset:3px}
  .lb-scene .lb-starting .lb-spin circle{animation:lbturn 2.4s linear infinite!important}
  .lb-scene .lb-pose-make .lb-feet,.lb-scene .lb-pose-make .lb-body,.lb-scene .lb-pose-make .lb-arm,.lb-scene .lb-pose-make .lb-core,.lb-scene .lb-pose-make .lb-headg{animation:lbmk 6s ease-out infinite both!important}
 }
+/* 1.8.7: the step under the name of a robot being assembled: only the mark and the time, the words are in the hover */
+.lb-st{display:flex;justify-content:center;max-width:100%;overflow:hidden;margin-top:1px}
+.lb-st .mk-st{font-size:10.5px;gap:4px}.lb-st .spin{width:.8em;height:.8em}

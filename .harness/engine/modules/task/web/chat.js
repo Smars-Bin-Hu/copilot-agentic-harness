@@ -360,6 +360,7 @@ const CHAT = (function () {
       state.busy = true; go.textContent = t("board.new.working"); sync(); said.replaceChildren();
       ask("/api/create", {...body("act"), attachments: files.list()}).then((found) => {
         clearTimeout(state.timer);
+        if (found.pending) { close(); SERVE.done(); return; }  // 1.8.7: VS Code makes the chat in the background; the answer is only "handed over", so nothing here says it is made. The "Being created" row says where it is.
         const done = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
         done.addEventListener("click", () => { close(); SERVE.done(); });
         const line = h("p", null, t("board.new.done"));

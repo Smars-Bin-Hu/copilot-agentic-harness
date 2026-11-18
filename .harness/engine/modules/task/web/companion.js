@@ -150,7 +150,7 @@ const COMPANION = (function () {
         const late = Boolean(mate.starting && mate.starting.late);
         marks.push(h("span", {class: "cp-wt" + (late ? " late" : ""), title: shownName(mate) + "\n" + (nameTip(mate) ? nameTip(mate) + "\n" : "") + startingTip(mate.starting)}, late ? h("span", {class: "cp-late", "aria-hidden": "true"}) : spinner("cp-spin"), shownName(mate)));
       }
-      for (const one of snap.making || []) marks.push(h("span", {class: "cp-wt", title: t("waits.making.tip", {kind: one.kind || "", at: when(one.since, 11, 19)})}, spinner("cp-spin"), one.name));
+      for (const one of snap.making || []) marks.push(h("span", {class: "cp-wt cp-mk", title: makingTip(one)}, h("b", {class: "cp-mk-name"}, one.name), makingMarks(one, false)));
       return marks.length ? h("div", {class: "cp-waits"}, ...marks) : null;
     }
     function buttons(item) {

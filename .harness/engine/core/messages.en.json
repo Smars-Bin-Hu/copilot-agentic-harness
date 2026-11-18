@@ -3332,6 +3332,7 @@
   "dock.pack.done": "Made {file} with {files} file(s). Send it to your colleagues.",
   "dock.title.task": "Go on with this task?",
   "dock.hint.task": "The board makes a new chat in VS Code that picks up the task {task}. No new task is made.",
+  "dock.more.ph": "Anything else for the agent? It goes in the same message.",
   "report.why": "Ask why",
   "report.why.hint": "Opens a chat: the agent explains where the time and the usage of this task went.",
   "fetch.manual.one": "Give one `_manual/<path>` and the file it starts from: `{command} task fetch _manual/<path> --from <file>`, for example `--from <task>/REF/load.sql`. A file of a target repository is fetched as `<repository>/<path>`, without --from.",

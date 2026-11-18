@@ -3,6 +3,7 @@
 const DOCK = (function () {
   const BOOK = "https://smarshu.com/book/";
   const ENTERED = "harness.entered";  // enter.js: the Enter screen was seen in this tab
+  const MAX_WORDS = 2000;  // skillsend.MAX_WORDS: the server refuses longer words
   const ask = (step, body) => SERVE.post("/api/skill", {step, ...body}).then((data) => data.result);
 
   function done() {
@@ -22,6 +23,9 @@ const DOCK = (function () {
     const lang = document.documentElement.lang === "zh" ? "zh" : "en";
     const body = {skill, words: words || "", lang, ...(task ? {task} : {})};
     const preview = h("pre", {class: "send-preview"}, "...");
+    // Going on with a task (1.8.5): the person may add their own words, so they go in the same first message and need not be said twice. The server folds the lines into one.
+    const more = task ? h("textarea", {class: "su-in dock-more", rows: 3, maxlength: Math.max(0, MAX_WORDS - body.words.length - 1), placeholder: t("dock.more.ph"), "aria-label": t("dock.more.ph")}) : null;
+    const wordsNow = () => [words || "", more ? more.value.trim() : ""].filter(Boolean).join(" ");
     const said = h("div", {class: "bad"});
     const runs = h("p", {class: "sub", hidden: ""});
     const go = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("dock.send"));
@@ -29,22 +33,26 @@ const DOCK = (function () {
     const copy = h("button", {type: "button", class: "act", "data-label": t("dock.copy"), hidden: ""}, t("dock.copy"));  // with VS Code away, the words can still go into a chat by hand
     const again = h("button", {type: "button", class: "act", hidden: ""}, t("dock.again"));
     const pick = typeof CHAT !== "undefined" ? CHAT.modelPick(task || "") : null;  // 1.6.101: the person picks the model; a task's chat has no Copilot Fusion by default
-    const view = SERVE.dialog([h("h2", null, t(task ? "dock.title.task" : "dock.title")), h("p", {class: "sub"}, task ? t("dock.hint.task", {task}) : t("dock.hint")), preview, pick ? pick.node : runs, said, h("div", {class: "row"}, go, again, copy, no)]);
+    const view = SERVE.dialog([h("h2", null, t(task ? "dock.title.task" : "dock.title")), h("p", {class: "sub"}, task ? t("dock.hint.task", {task}) : t("dock.hint")), preview, more, pick ? pick.node : runs, said, h("div", {class: "row"}, go, again, copy, no)]);
     no.addEventListener("click", () => { view.close(); if (back) back(); });  // Cancel goes back to where the person came from
     copy.addEventListener("click", () => copyCommand(copy, preview.textContent));
-    const check = () => ask("preview", body).then((found) => {
+    let ticket = 0;  // only the newest preview is drawn
+    const check = () => { const mine = ++ticket; body.words = wordsNow(); return ask("preview", body).then((found) => {
+      if (mine !== ticket) return;
       preview.textContent = found.text;
       runs.hidden = !found.model;
       runs.textContent = found.model ? t("dock.model", {model: found.model}) : "";
       said.replaceChildren(...(found.blocked ? SERVE.reasons(found.blocked) : []));
       go.disabled = Boolean(found.blocked);
       copy.hidden = again.hidden = !found.blocked;
-    }, (error) => { preview.textContent = ""; said.replaceChildren(...SERVE.reasons(error.message || error)); });
+    }, (error) => { if (mine !== ticket) return; preview.textContent = ""; said.replaceChildren(...SERVE.reasons(error.message || error)); }); };
     again.addEventListener("click", check);
     check();
+    let typing = 0;
+    if (more) more.addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(check, 300); });
     go.addEventListener("click", () => {
       go.disabled = true;
-      (pick ? pick.apply() : Promise.resolve({})).then((chosen) => ask("act", {...body, ...chosen})).then(() => { view.close(); done(); }, (error) => { go.disabled = false; said.replaceChildren(...SERVE.reasons(error.message || error)); });
+      (pick ? pick.apply() : Promise.resolve({})).then((chosen) => ask("act", {...body, words: wordsNow(), ...chosen})).then(() => { view.close(); done(); }, (error) => { go.disabled = false; said.replaceChildren(...SERVE.reasons(error.message || error)); });
     });
   }
 

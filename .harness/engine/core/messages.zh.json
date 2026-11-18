@@ -3332,6 +3332,7 @@
   "dock.pack.done": "已生成 {file}，共 {files} 个文件。发给同事即可。",
   "dock.title.task": "要继续这个任务吗？",
   "dock.hint.task": "看板会在 VS Code 里新建一个 chat，接着做任务 {task}，不会新开任务。",
+  "dock.more.ph": "还有要告诉 agent 的话？会放进同一条消息里。",
   "report.why": "问问为什么",
   "report.why.hint": "打开一个 chat：agent 解释这个任务的时间和用量花在哪里。",
   "fetch.manual.one": "给一个 `_manual/<路径>`，和它的底稿文件：`{command} task fetch _manual/<路径> --from <文件>`，例如 `--from <task>/REF/load.sql`。目标仓库里的文件用 `<仓库名>/<路径>` 取，不加 --from。",

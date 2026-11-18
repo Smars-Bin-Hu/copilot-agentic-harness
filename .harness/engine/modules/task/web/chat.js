@@ -150,7 +150,7 @@ const CHAT = (function () {
   // The panel: the message in full, the reply language, an optional note, then send / save as draft / copy. `action` is "send" (a template after an approval) or "answer" (the person's own words).
   function panel(row, action) {
     const state = {lang: "", note: "", text: "", blocked: "", busy: false, timer: null};  // lang: empty until the person picks one; the chips show what the chat replies in
-    const preview = h("pre", {class: "send-preview"}, "...");
+    const preview = h("pre", {class: "send-preview"}, spinner());  // 1.8.5: turns until the server has made the message
     const blocked = h("div", {class: "bad"});
     const said = h("div", {class: "bad"});
     const note = h("textarea", {rows: 2, class: "send-body", placeholder: t("desk.send.note.ph"), maxlength: 2000});
@@ -276,7 +276,7 @@ const CHAT = (function () {
     const room = h("select", {class: "send-body", title: t("desk.set.context.tip")});
     const roomField = field(t("board.new.context"), room, "new-context");
     const sizes = sizePick(room, roomField);
-    const preview = h("pre", {class: "send-preview"}, "...");
+    const preview = h("pre", {class: "send-preview"}, spinner());  // 1.8.5: turns until the server has made the message
     const grill = h("input", {type: "checkbox"});  // Ask me first: the opening of the task, not a thing of its own
     grill.addEventListener("change", () => refresh());
     const problem = h("div", {class: "sub"});  // what is not right yet: shown quietly while the person types

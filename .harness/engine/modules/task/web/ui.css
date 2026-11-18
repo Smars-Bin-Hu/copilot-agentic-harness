@@ -225,6 +225,7 @@ pre.diff .add{background:var(--good-bg)}pre.diff .del{background:var(--bad-bg)}p
 .spin{display:inline-block;width:.9em;height:.9em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-.12em;margin-right:.4em;animation:spin .8s linear infinite;opacity:.8;flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 button.is-waiting{pointer-events:none;cursor:progress}
+.act.is-waiting:disabled{opacity:1}  /* a button that disabled itself when pressed still shows that it waits */
 button.is-waiting::before{content:"";display:inline-block;width:.85em;height:.85em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-.12em;margin-right:.4em;animation:spin .8s linear infinite}
 .tag.starting{display:inline-flex;align-items:center}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

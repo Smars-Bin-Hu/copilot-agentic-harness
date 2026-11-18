@@ -53,6 +53,16 @@
 .sa-queue{flex:0 1 auto;max-height:50%;min-height:0;display:flex;flex-direction:column;margin:8px 0 0;border-bottom:2px solid var(--line2);background:var(--raise);box-shadow:0 5px 8px -6px var(--shade);position:relative;z-index:1}  /* the queue (1.8.4): pinned above the chat, its own scroll */
 .sa-queue[hidden],.sa-qdone[hidden]{display:none}
 .sa.sa-nochat .sa-queue{flex:1 1 auto;max-height:none}
+.sa.sa-many .sa-queue{max-height:max(50%,min(70%,calc(100% - 160px)))}  /* 3 or more waiting: up to 70% of the room, the chat keeps about 160px */
+.sa.sa-many .sa-streamwrap{min-height:min(160px,50%)}
+.sa.sa-fold-on .sa-queue{flex:1 1 auto;max-height:none}
+.sa.sa-fold-on .sa-streamwrap{flex:none;height:30px;min-height:0}
+.sa.sa-fold-on .sa-stream,.sa.sa-fold-on .sa-newpill{display:none}
+.sa-fold{position:absolute;right:8px;top:4px;z-index:3;width:22px;height:22px;line-height:1;border:1px solid var(--line2);background:var(--raise);color:var(--soft);border-radius:6px;cursor:pointer;font:inherit;font-size:13px;padding:0}
+.sa-fold:hover{color:var(--ink)}
+.sa-foldline{display:none;padding:6px 14px;font-size:12px;color:var(--soft);cursor:pointer}
+.sa.sa-fold-on .sa-foldline{display:block}
+.sa.sa-nochat .sa-fold{display:none}
 .sa-qlist{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 14px 0;overscroll-behavior:contain}
 .sa-qlist:empty{padding:0}
 .sa-qdone{flex:none;border-top:1px solid var(--line);font-size:12px;color:var(--soft)}

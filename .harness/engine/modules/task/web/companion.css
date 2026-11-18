@@ -128,5 +128,5 @@ a.cp-task:hover{text-decoration:underline}
 .cp-text.ask.prose{font-family:inherit;font-size:14px;-webkit-line-clamp:4;line-clamp:4}
 .cp-text[hidden]{display:none}
 .cp-card .sa-xtra{margin:0 0 6px}
-.cp-acts .sa-call{flex:1 1 100%;background:transparent}
+.cp-acts .sa-call{flex:1 1 100%}
 .cp-acts .sa-code{flex:1 1 7em}

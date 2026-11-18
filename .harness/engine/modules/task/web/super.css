@@ -40,7 +40,7 @@
 .sa-mk{flex:none;width:58px;text-align:center;position:relative;cursor:help}
 .sa-mk .sa-ring{border-style:dashed;opacity:.85}
 .sa-mk .sa-spin{color:var(--soft)}
-.sa-late{position:absolute;right:3px;top:-2px;width:13px;height:13px;border-radius:50%;background:var(--warn-dot,#e0a100);border:2px solid var(--bg);box-sizing:border-box}
+.sa-late{position:absolute;right:3px;top:-2px;width:13px;height:13px;border-radius:50%;background:var(--hot-dot);border:2px solid var(--bg);box-sizing:border-box}
 .sa-optl{color:var(--soft);font-size:12px}
 .sa-opt.on .sa-optl,.sa-opt:hover .sa-optl{color:inherit;opacity:.8}
 .sa-mate.stuck .sa-ring{border-color:var(--hot-dot);border-style:dashed}

@@ -3299,7 +3299,7 @@
   "desk.waits.starting.since": "{time}前",
   "desk.waits.late.title": "还没看到 agent 开始",
   "desk.waits.late.hint": "VS Code 可能很忙或已关闭。可以 Try again，或者打开 VS Code 看看。",
-  "desk.waits.retry": "Try again",
+  "desk.waits.retry": "再试一次",
   "desk.waits.name.edit": "改显示名",
   "desk.waits.name.save": "Enter 保存，Esc 取消。留空：用任务名。",
   "desk.waits.name.fail": "名字没有保存：{why}",

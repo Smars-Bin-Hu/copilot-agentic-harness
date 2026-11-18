@@ -20,7 +20,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import config, copilot_events, domainskills, messages, outbox, tasks
 from core.logs import session_log_path
@@ -457,7 +457,7 @@ def seconds_since(stamp: str) -> Optional[float]:
         return None
 
 
-def set_waiting(root: Path, task: str, mark: Optional[Dict[str, str]]) -> None:
+def set_waiting(root: Path, task: str, mark: Optional[Dict[str, Any]]) -> None:
     """The Stop hook's mark: the agent stopped, the person is next. A new prompt takes it away. `updated_at` is left alone."""
     path = tasks.state_file(root, task)
     with state_lock(path):
@@ -785,6 +785,43 @@ def active_now(root: Path, data: Dict[str, Any]) -> bool:
         return time.time() - path.stat().st_mtime <= limit
     except (OSError, ValueError, TypeError):
         return False
+
+
+STUCK_SECONDS = 600  # `board.stuck_seconds` in task.json (1.8.4): a chat that runs a turn while the session log has not been written for this long is "stuck"
+
+
+def stuck_limit(root: Path) -> int:
+    """`board.stuck_seconds`, read as `board.active_seconds` is (a whole number, else the default)."""
+    try:
+        return config.whole((config.policy_or_empty(root, "task").get("board") or {}).get("stuck_seconds"), STUCK_SECONDS)
+    except (OSError, ValueError, TypeError):
+        return STUCK_SECONDS
+
+
+AGE_UP_SECONDS = 900  # `board.age_up_seconds` in task.json (1.8.4): an item of the super view that has waited this long moves up one group
+
+
+def age_up_limit(root: Path) -> int:
+    """`board.age_up_seconds`, read as `stuck_limit` reads its key."""
+    try:
+        return config.whole((config.policy_or_empty(root, "task").get("board") or {}).get("age_up_seconds"), AGE_UP_SECONDS)
+    except (OSError, ValueError, TypeError):
+        return AGE_UP_SECONDS
+
+
+def log_age(root: Path, data: Dict[str, Any]) -> Optional[Tuple[int, str]]:
+    """`(seconds, time)` since the session log of this task was last written (the same mtime `active_now` reads: the last hook call), and that time as ISO text. None: no log."""
+    try:
+        path = session_log_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or ""))
+        stamp = path.stat().st_mtime
+        return max(0, int(time.time() - stamp)), datetime.fromtimestamp(stamp, timezone.utc).isoformat()
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def waits_quietly(root: Path, data: Dict[str, Any]) -> bool:
+    """The agent makes no hook call for a good reason (1.8.4): it sits in `harness wait` on a held call, or a subagent runs. Such a silence is not "stuck"."""
+    return outbox.agent_waiting(root, str(data.get("task") or "")) or subagent_running(root, data)
 
 
 CONTROLS = ("pause", "resume", "close", "autorun on")  # what changes the course of a task; the person may do them only when the agent is not in the middle of a turn

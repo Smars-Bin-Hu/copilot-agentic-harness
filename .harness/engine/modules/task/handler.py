@@ -502,9 +502,57 @@ def mark_waiting(ctx: Context, data: Dict[str, Any], stopped: bool) -> None:
 ASK_TOOLS = ("ask_user", "askuserquestion")  # the tool that asks the person a question (1.7.20): `ask_user` in a Copilot SDK session (recorded in events.jsonl), `AskUserQuestion` in older recordings
 
 
+ASK_MESSAGE_CHARS = 600  # the question kept in the `asking` mark (1.8.4): the super view shows it, so the person need not open VS Code to read what is asked
+ASK_OPTIONS_MAX = 8
+ASK_OPTION_CHARS = 80
+ASK_FIELDS_SCANNED = 12  # the properties of the form that are looked at: a form with more is cut, not read to the end
+
+
+def one_line(text: Any, size: int) -> str:
+    """`text` on one line, cut to `size` characters with a mark."""
+    line = " ".join(str(text).split())
+    return line if len(line) <= size else line[: size - 1].rstrip() + "\u2026"
+
+
+def ask_options(schema: Any) -> List[str]:
+    """The titles of the choices in the form of an `ask_user` call (`requestedSchema`), at most `ASK_OPTIONS_MAX`: the `enum` of a property (plain strings), or its `oneOf` (the `title` of each entry, else its `const`).
+    One bounded pass over the first `ASK_FIELDS_SCANNED` properties; anything that is not the expected shape is one entry skipped, never an error."""
+    found: List[str] = []
+    props = schema.get("properties") if isinstance(schema, dict) else None
+    if not isinstance(props, dict):
+        return found
+    for _name, prop in list(props.items())[:ASK_FIELDS_SCANNED]:
+        if not isinstance(prop, dict):
+            continue
+        listed = prop.get("enum") if isinstance(prop.get("enum"), list) else []
+        titled = prop.get("oneOf") if isinstance(prop.get("oneOf"), list) else []
+        for entry in (listed + titled)[:ASK_OPTIONS_MAX * 2]:
+            text = entry if isinstance(entry, str) else (entry.get("title") or entry.get("const")) if isinstance(entry, dict) else None
+            if isinstance(text, (str, int, float)) and not isinstance(text, bool) and str(text).strip():
+                found.append(one_line(text, ASK_OPTION_CHARS))
+            if len(found) >= ASK_OPTIONS_MAX:
+                return found
+    return found
+
+
+def ask_mark(event: HookEvent, since: str) -> Dict[str, Any]:
+    """The `asking` mark with what the agent asks (1.8.4): `question` (the message, one line, at most `ASK_MESSAGE_CHARS`) and `options` (the titles of the choices). A call whose input cannot be read gives the bare mark of before."""
+    mark: Dict[str, Any] = {"since": since, "why": "asking"}
+    try:
+        given = tool_input_of(event)
+        message = given.get("message") if isinstance(given.get("message"), str) else given.get("question")
+        if isinstance(message, str) and message.strip():
+            mark["question"] = one_line(message, ASK_MESSAGE_CHARS)
+            mark["options"] = ask_options(given.get("requestedSchema"))
+    except Exception:  # noqa: BLE001 - the words are help; the mark itself must stay
+        pass
+    return mark
+
+
 def note_asking(event: HookEvent, ctx: Context) -> None:
     """While the agent waits in the ask-the-person tool it makes no hook call and has not stopped: the board would say "working" for minutes and refuse a held call's Approve (1.7.20).
-    The call before the tool leaves the mark `asking` (the person is next); the call after it, or any other tool call, takes it away. Never in the way of the hook."""
+    The call before the tool leaves the mark `asking` (the person is next); the call after it, or any other tool call, takes it away. Never in the way of the hook.
+    1.8.4: the mark keeps the question and the titles of its choices (`ask_mark`), for the super view. A mark of an older version has neither."""
     try:
         if is_subagent_session(ctx) or ctx.admin or event.event not in ("PreToolUse", "PostToolUse"):
             return
@@ -519,7 +567,7 @@ def note_asking(event: HookEvent, ctx: Context) -> None:
 
         if asking and event.event == "PreToolUse":
             if mark.get("why") != "asking":
-                tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "asking"})
+                tasklife.set_waiting(ctx.root, data["task"], ask_mark(event, utc_now()))
         elif mark.get("why") == "asking":
             delivered = data.get("deliver") if isinstance(data.get("deliver"), dict) else None  # 1.7.38 (C13 FR 24): a delivered task is still to accept after a question and its answer, until the person accepts or the agent delivers again
             tasklife.set_waiting(ctx.root, data["task"], {"since": str(delivered.get("at") or utc_now()), "why": "accept"} if delivered else None)  # answered (or the agent went on): it is at work again

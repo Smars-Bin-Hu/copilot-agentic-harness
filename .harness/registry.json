@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.8.3",
-  "released": "2026-11-17",
+  "version": "1.8.4",
+  "released": "2026-11-18",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -145,6 +145,7 @@
         ".harness/tests/test_autorun_relay.py",
         ".harness/tests/test_autorun_board.py",
         ".harness/tests/test_gate_super.py",
+        ".harness/tests/test_superfacts.py",
         ".harness/tests/test_superview.py",
         ".harness/tests/test_superbrain.py",
         ".harness/tests/test_superact.py",

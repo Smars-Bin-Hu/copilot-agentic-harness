@@ -242,6 +242,8 @@ class VsLink:
             cached = self.chats.get(binding["chat"]) or {}
             out: Dict[str, Any] = {"bound": True, "how": binding.get("how", ""), "title": str(summary.get("title") or binding.get("title") or ""), "state": ahp.status_name(summary.get("status"))}
             if cached.get("state"):
+                if out["state"] == "error":
+                    out["error"] = ahp.last_error(cached["state"])  # 1.8.4: what the last turn failed with, and whether Try again can run it (the super view)
                 found = tasksub.facts(cached["state"], self.root)
                 out["model"] = found["model"]
                 out["model_name"] = next((str(item.get("name") or "") for item in self.models if item.get("id") == found["model"]), "")  # as the pickers call it; not listed: the page falls back on the id

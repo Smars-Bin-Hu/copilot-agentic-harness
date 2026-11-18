@@ -71,7 +71,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import superbrain, superpreview, superroute, superview
+from . import superbrain, superfacts, superpreview, superroute, superview
 from . import accept, autorun, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
@@ -2093,7 +2093,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.brain.route(data))
                 except Exception as error:  # noqa: BLE001 - the page shows the refusal
                     return self.answer(500, {"error": str(error)})
-            if path == "/api/super/preview":  # 1.8.2: a short look at a task's plan or changes ({task, kind: plan | changes}). {ok: true, lines | files, more} or {ok: false, why: unknown | kind | missing | error}. A read, but of task files: the paired browser only
+            if path == "/api/super/preview":  # 1.8.2: a short look at a task's plan or changes ({task, kind: plan | changes}); 1.8.4: `req`, `deliver`, `call` ({task, kind: call, code}: the held call as the task page shows it). {ok: true, lines | files | sections | summary | call, more} or {ok: false, why: unknown | kind | missing | error}. A read, but of task files: the paired browser only
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 return self.answer(200, superpreview.preview(board.root, data))
@@ -2120,7 +2120,8 @@ def handler_for(board: Board) -> type:
             if path == "/api/super":  # the super agent view (1.8.1): what waits for the person across the open tasks, from the same rows as /api/board; a read, with the same checks
                 try:
                     result = board.rows()
-                    view = superview.build(result)
+                    superfacts.put(board.root, result.get("rows") or [])  # 1.8.4: held calls, the question, the delivery, an error or a stuck chat: put on the rows, so `build` stays a pure function
+                    view = superview.build(result, tasklife.age_up_limit(board.root))  # 1.8.4: an old wait moves up one group
                     paths = {superview.name_of(row): str(row["task"]) for row in result.get("rows") or []}
                     for item in view["items"]:
                         if item["why"] in ("stopped", "accept", "cancelled") and item["task"] in paths:

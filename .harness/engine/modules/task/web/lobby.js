@@ -16,11 +16,11 @@ function makingInfo(item) {
   const stage = ["asking", "sent", "opening", "refused", "lost"].includes(item.stage) ? item.stage : "asking";
   const kind = makingKind(item), at = when(item.since, 11, 19), secs = makingSecs(item.stage_since);
   const tone = stage === "refused" ? "bad" : (stage === "lost" || item.slow) ? "warn" : "";
-  const tips = [stage === "asking" ? t("waits.stage.asking.tip", {kind, at}) : stage === "lost" ? t("waits.stage.lost.tip") : stage === "refused" ? (String(item.error || "").trim() || t("waits.stage.refused.none")) : t("waits.stage." + stage + ".tip", {kind})];
+  const tips = [stage === "asking" ? t("waits.stage.asking.tip", {kind, at}) : stage === "lost" ? t("waits.stage.lost.tip") : stage === "refused" ? (String(item.error || "").trim() || t("waits.stage.refused.none")) : stage === "sent" ? t("waits.stage.sent.tip", {kind}) : t("waits.stage.opening.tip", {kind})];
   if (item.slow) tips.push(t("waits.stage.slow", {min: Math.max(3, Math.floor((secs || 0) / 60))}));
   if (secs !== null && ["asking", "sent", "opening"].includes(stage)) tips.push(t("waits.stage.since", {time: makingClock(secs)}));
   if (item.warn) tips.push(item.warn);
-  return {stage, tone, tips, text: t("waits.stage." + stage), timed: secs !== null && ["asking", "sent", "opening"].includes(stage), stamp: item.stage_since};
+  return {stage, tone, tips, text: stage === "asking" ? t("waits.stage.asking") : stage === "sent" ? t("waits.stage.sent") : stage === "opening" ? t("waits.stage.opening") : stage === "refused" ? t("waits.stage.refused") : t("waits.stage.lost"), timed: secs !== null && ["asking", "sent", "opening"].includes(stage), stamp: item.stage_since};
 }
 function makingTip(item) { return makingInfo(item).tips.join("\n"); }
 function makingDismiss(item) {

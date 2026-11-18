@@ -48,7 +48,7 @@
 .sa-x{border:1px solid var(--line2);background:transparent;color:var(--soft);border-radius:6px;width:22px;height:22px;line-height:1;cursor:pointer;font:inherit}
 .sa-banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 14px 0;padding:7px 12px;border:1px solid var(--line2);border-radius:10px;background:var(--raise);font-size:12.5px;color:var(--soft);flex:none}
 .sa-banner .act{margin:0 0 0 auto}
-.sa-queue{flex:0 1 auto;max-height:50%;min-height:0;display:flex;flex-direction:column;margin:8px 0 0;border-bottom:1px solid var(--line);background:var(--raise)}  /* the queue (1.8.4): pinned above the chat, its own scroll */
+.sa-queue{flex:0 1 auto;max-height:50%;min-height:0;display:flex;flex-direction:column;margin:8px 0 0;border-bottom:2px solid var(--line2);background:var(--raise);box-shadow:0 5px 8px -6px var(--shade);position:relative;z-index:1}  /* the queue (1.8.4): pinned above the chat, its own scroll */
 .sa-queue[hidden],.sa-qdone[hidden]{display:none}
 .sa.sa-nochat .sa-queue{flex:1 1 auto;max-height:none}
 .sa-qlist{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 14px 0;overscroll-behavior:contain}

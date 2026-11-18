@@ -398,7 +398,7 @@
     if (!shownRows.length && !makers.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
     tableBox.replaceChildren(
       table([canArchive ? headerTick(shownRows) : null, header("task"), header("waiting"), header("reviews"), header("waited", true), h("th", {class: "col-acts"}, t("board.col.actions")), header("time"), h("th", {class: "num col-bar"}),  header("aiu", true), header("prompts", true)],
-        makers.map(makingLine), shownRows.map((row) => line(row, longest))),
+        [...makers.map(makingLine), ...shownRows.map((row) => line(row, longest))]),
       legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]]));
     slide(before);
     hintOverflow();

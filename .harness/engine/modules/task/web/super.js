@@ -67,7 +67,27 @@ const SUPER = (function () {
     const complete = h("div", {class: "sa-comp", role: "listbox", hidden: "", "aria-label": t("super.route.pick")});
     // The pop-out (companion.js): a small window that stays on top of every other window. Only where the browser can open one (Document Picture-in-Picture: Chrome, Edge).
     const popUp = typeof COMPANION !== "undefined" ? h("button", {type: "button", class: "sa-pop"}, "⇱") : null;
-    const streamWrap = h("div", {class: "sa-streamwrap"}, stream, pill);
+    // The fold (1.8.4): one small control that folds the chat to one line so the queue takes the whole room. Remembered in localStorage; typing or a new agent message unfolds it (not remembered).
+    const FOLD_KEY = "super.chatfold";
+    const foldBtn = h("button", {type: "button", class: "sa-fold"});
+    const foldLine = h("span", {class: "sa-foldline"}, t("super.chat.folded"));
+    let chatFolded = false;
+    try { chatFolded = localStorage.getItem(FOLD_KEY) === "1"; } catch (error) { /* no storage: the fold is not remembered */ }
+    function drawFold() {
+      sv.classList.toggle("sa-fold-on", chatFolded);
+      foldBtn.textContent = chatFolded ? "\u2303" : "\u2304";
+      foldBtn.title = t(chatFolded ? "super.chat.unfold" : "super.chat.fold");
+      foldBtn.setAttribute("aria-label", foldBtn.title);
+      foldBtn.setAttribute("aria-expanded", chatFolded ? "false" : "true");
+      if (!chatFolded) { toBottom(); }
+    }
+    function setFold(on, remember) {
+      if (chatFolded === on) return;
+      chatFolded = on;
+      if (remember) { try { localStorage.setItem(FOLD_KEY, on ? "1" : "0"); } catch (error) { /* ignore */ } }
+      drawFold();
+    }
+    const streamWrap = h("div", {class: "sa-streamwrap"}, stream, pill, foldLine, foldBtn);
     // The queue (1.8.4): the open items, pinned above the chat; the receipts of the settled ones fold into "Done (n)" at its foot.
     const queueList = h("div", {class: "sa-qlist", role: "list", "aria-label": t("super.queue")});
     const doneList = h("div", {class: "sa-qdlist"});
@@ -78,6 +98,9 @@ const SUPER = (function () {
     sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
       h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, box));
 
+    foldBtn.addEventListener("click", () => setFold(!chatFolded, true));
+    foldLine.addEventListener("click", () => setFold(false, true));
+    drawFold();
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], localThink = 0, failed = "";
     let pollTimer = 0, patrolToken = 0, noticeBusy = false, chain = Promise.resolve(), lastMate = "";
@@ -235,6 +258,7 @@ const SUPER = (function () {
       applyFilter();
       drawInput();
     }
+    const MANY = 3;
     function applyFilter() {
       let chat = 0, open = 0;
       for (const node of stream.children) {
@@ -254,6 +278,7 @@ const SUPER = (function () {
       doneBox.hidden = !settled;
       doneHead.replaceChildren(h("span", {class: "sa-qcheck", "aria-hidden": "true"}, "\u2713"), " " + t("super.done.head", {n: settled}));
       queue.hidden = !open && !settled;
+      sv.classList.toggle("sa-many", queueList.children.length >= MANY);  // 3 or more waiting: the queue may take more room (changes only when the count crosses the line)
       sv.classList.toggle("sa-nochat", !chat);  // no chat yet: the queue takes the room
       empty.hidden = chat + open > 0;
       empty.replaceChildren(...[h("b", null, filter ? t("super.empty.filter") : mates.length ? t("super.empty.title") : t("super.empty.notasks")), filter || !mates.length ? null : h("div", null, t("super.empty.text"))].filter(Boolean));
@@ -400,6 +425,7 @@ const SUPER = (function () {
         } else {
           typingBubble(false);
           if (localThink && Date.parse(message.at || "") >= localThink - 5000) localThink = 0;
+          if (!first) setFold(false, false);  // a new agent message unfolds the chat
           addAgent(message);
         }
       }
@@ -795,6 +821,7 @@ const SUPER = (function () {
       if (doneLog.length > 30) doneLog.shift();
     }
     function reconcile(items) {
+      const top0 = queueList.firstElementChild ? queueList.firstElementChild.dataset.id : "";
       const ids = new Set(items.map((item) => item.id));
       for (const [id, entry] of known) if (!entry.done && !ids.has(id)) fold(entry, items.find((item) => item.task === entry.item.task));
       for (const item of items) {
@@ -812,6 +839,8 @@ const SUPER = (function () {
       for (const item of fresh) {
         if (animate) { queued.add(item.id); chain = chain.then(() => notice(item)).catch(() => addItem(item)); } else addItem(item);
       }
+      const top1 = queueList.firstElementChild ? queueList.firstElementChild.dataset.id : "";
+      if (!first && top1 !== top0) queueList.scrollTop = 0;  // a more urgent item came: it is the one in view
       if (first) { queueList.scrollTop = 0; stream.scrollTop = stream.scrollHeight; pill.hidden = true; }  // the most urgent item is the first one of the queue, in view; the chat shows its newest
     }
 
@@ -1198,7 +1227,7 @@ const SUPER = (function () {
     field.addEventListener("input", () => { routePick = -1; routeComplete(); });
     send.addEventListener("click", submit);
     field.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); submit(); } });
-    field.addEventListener("input", () => { field.style.height = "auto"; field.style.height = Math.min(120, field.scrollHeight) + "px"; });
+    field.addEventListener("input", () => { setFold(false, false); field.style.height = "auto"; field.style.height = Math.min(120, field.scrollHeight) + "px"; });
     if (newTask) newTask.addEventListener("click", () => { const text = field.value.trim(); CHAT.create(text ? {text} : undefined); field.value = ""; });  // the text moved into the new-task dialog
 
     // ---------- asking the server ----------

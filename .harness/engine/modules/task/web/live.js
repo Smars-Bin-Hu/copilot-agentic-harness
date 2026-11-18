@@ -292,14 +292,14 @@ const LIVE = (function () {
 
   function paintLife(data) {
     const bound = Boolean(data && data.bound);
-    const state = bound ? data.state : "";
+    const state = bound ? (st.starting ? "starting" : data.state) : "";
     life.hidden = !bound;
     root.classList.toggle("is-busy", state === "busy" && !st.answer);  // the robot of the footer works only when the agent does
     const asked = state === "busy" && st.answer;  // busy in the chat, but the agent waits for the person's answer on a held call: not "Working"
     const waits = asked || state === "input" || (state === "idle" && st.needs.length > 0);  // the chat is idle, the task is not: a card above says what it waits for
-    setClass(life, "lv-life " + (state === "error" ? "err" : state === "busy" && !asked ? "run" : waits ? "paused" : "calm"));
+    setClass(life, "lv-life " + (state === "starting" ? "paused" : state === "error" ? "err" : state === "busy" && !asked ? "run" : waits ? "paused" : "calm"));
     const when = state === "busy" && !asked && data.started ? Date.parse(data.started) : NaN;
-    setText(lifeLabel, asked ? t("desk.live.approval") : state === "busy" ? t("desk.live.working") : waits ? t("desk.live.input") : state === "error" ? t("waits.error") : t("desk.live.idle"));
+    setText(lifeLabel, asked ? t("desk.live.approval") : state === "starting" ? t("waits.starting") : state === "busy" ? t("desk.live.working") : waits ? t("desk.live.input") : state === "error" ? t("waits.error") : t("desk.live.idle"));
     lifeSep.hidden = lifeRun.hidden = isNaN(when);
     if (!isNaN(when)) running(lifeRun, when); else stopped(lifeRun);
   }
@@ -382,7 +382,8 @@ const LIVE = (function () {
       }
       st.off = info.off || "";
       const answer = Boolean(info.answer);  // the agent sits in `harness wait --approval`: the chat is busy, but the agent waits for the person (1.7.38, C12 TB-15)
-      if (answer !== st.answer) { st.answer = answer; if (st.data) paintLife(st.data); }
+      const starting = Boolean(info.starting);  // 1.8.5: the board sent something and the agent has not started: the footer does not say what the chat said before
+      if (answer !== st.answer || starting !== st.starting) { st.answer = answer; st.starting = starting; if (st.data) paintLife(st.data); }
       const nothing = st.chat && !st.chat.bound ? st.chat.why || "" : "";
       link.title = nothing === "no-cli" || nothing === "off" ? t("board.vs.why." + nothing) : t("board.vs.open");
       link.disabled = nothing === "no-cli" || nothing === "off";

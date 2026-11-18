@@ -949,7 +949,6 @@
         prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3) + (why === "go-req" ? REQ_NEXT(desk.kind) : "")) : form ? "" : why === "tests" ? t("desk.tests.prompt") : why === "run" ? t("desk.run.prompt", {env: handed.env || ""}) : ""};
     }
     if (desk.state === "unheld") return {title: t("desk.actions.unheld"), hint: t("desk.actions.unheld.hint"), prompt: t("desk.unheld.prompt", {name: desk.name})};
-    if (desk.state === "error") return {title: t("waits.error.long"), hint: errorWords(desk)};
     if (stateOf(desk, served()) === "quiet") return {title: t("desk.actions.quiet"), hint: t("desk.actions.quiet.hint")};
     if (desk.waiting) return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: ""};  // a reason with no card of its own: never "nothing waits" (B62)
     return {title: t("desk.actions.none"), hint: t("desk.actions.none.hint")};
@@ -1523,7 +1522,7 @@
   function livePlain() {
     if (desk.past || saved) return null;
     if (desk.status !== "open") return h("div", null, h("p", {class: "hint top"}, t(desk.status === "new" ? (desk.state === "broken" ? "desk.actions.broken" : "desk.actions.new") : "desk.actions.closed")), typeof ROUNDS !== "undefined" ? ROUNDS.node : null);  // the stream is hidden here; the rounds can still be read
-    if (needsCard()) return null;
+    if (needsCard() || startingNow() || errorNow()) return null;  // the card of the start, or the red bar, says it
     const idle = quiet();
     return h("section", {class: "tk-quiet"}, h("h2", null, idle.title), h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, waitNotes());
   }
@@ -1547,7 +1546,7 @@
     paintErr();
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), gates: ((desk.trace && desk.trace.entries) || []).filter((entry) => entry.kind === "gate" && !entry.source && entry.command).slice(-60).map((entry) => ({command: entry.command, how: entry.decision === "held" ? "held" : "refused", reason: entry.reason || "", at: entry.at})), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed", answer: (desk.outbox || []).some((item) => item.agent === "wait")});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), gates: ((desk.trace && desk.trace.entries) || []).filter((entry) => entry.kind === "gate" && !entry.source && entry.command).slice(-60).map((entry) => ({command: entry.command, how: entry.decision === "held" ? "held" : "refused", reason: entry.reason || "", at: entry.at})), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed", answer: (desk.outbox || []).some((item) => item.agent === "wait"), starting: startingNow()});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }

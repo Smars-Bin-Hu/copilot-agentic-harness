@@ -301,3 +301,46 @@ a.sa-task:hover{text-decoration:underline}
 .sa-actrow.no{flex-direction:row;flex-wrap:wrap;gap:6px;opacity:.75}
 .sa-actwhy{font-size:13px;overflow-wrap:anywhere}
 .sa-actbad{flex:1 1 100%}
+
+/* the cards (1.8.4): error and stuck pills, a question's options, the held call, Accept's countdown, the folded requirement and delivery, the agent's words (F12) */
+.sa-why.err{border-color:var(--bad-line,var(--bad));background:var(--bad-bg,transparent);color:var(--bad,#b3261e);font-weight:600}
+.sa-why.stuck{font-weight:600}
+.sa-what.ask.prose{font-family:inherit;font-size:inherit;-webkit-line-clamp:3;line-clamp:3}
+.sa-what.ask.prose.open{display:block;max-height:260px;overflow:auto}
+.sa-what[hidden],.sa-xtra[hidden]{display:none}
+.sa-xtra{margin-top:3px;font-size:12.5px;color:var(--soft);display:flex;flex-direction:column;gap:2px}
+.sa-opts{display:flex;flex-wrap:wrap;gap:3px 5px;align-items:baseline;min-width:0}
+.sa-optc{border:1px solid var(--line2);border-radius:999px;padding:0 8px;color:var(--ink);font-size:12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-vs i,.sa-todo i{font-style:normal;margin-right:4px}
+.sa-vs{color:var(--soft)}
+.sa-todo{color:var(--hot)}
+.sa-ic{font:12px var(--mono);background:var(--kbd);border-radius:4px;padding:0 4px}
+.sa-link{color:var(--hot);text-decoration:underline}
+/* a held call: the code as a chip, the command in the code font, cut to one line; View, the code box, Approve in one row */
+.sa-acts.sa-calls{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:6px}  /* nowrap: a wrapping column is as wide as its widest line, and a long command would push the card out */
+.sa-row.item.err .sa-bub.fwd{border-color:var(--bad-line,var(--bad))}
+.sa-callgo .sa-open{margin-left:auto}
+.sa-call{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sa-callh{display:flex;align-items:center;gap:6px;min-width:0;font-size:12.5px}
+.sa-chip{font:600 12px var(--mono);background:var(--hot-bg);color:var(--hot);border:1px solid var(--hot-line);border-radius:6px;padding:0 6px;flex:none;user-select:all}
+.sa-sys{font-size:11.5px;color:var(--soft);flex:none;white-space:nowrap}
+.sa-ctitle{flex:0 1 auto;max-width:40%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--soft)}
+.sa-cmd{display:block;flex:1 1 0;font:12px var(--mono);background:var(--kbd);border-radius:6px;padding:1px 7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.sa-callgo{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sa-callgo .act{margin:0}
+.sa-code{width:9.5em;min-width:0;font:12.5px var(--mono);padding:3px 7px;box-sizing:border-box}
+.sa-seen{color:var(--good-dot);font-weight:700;font-size:13px;margin-left:-2px}
+.sa-seen[hidden]{display:none}
+.sa-view.pulse,.sa-code.pulse{animation:sapulse 1.4s ease-in-out infinite}
+@keyframes sapulse{50%{box-shadow:0 0 0 3px var(--hot-bg)}}
+.sa-actbad{flex:1 1 100%;min-width:0}
+.sa-actbad:empty{display:none}
+.sa-steerline{flex:1 1 100%;min-width:0;box-sizing:border-box}
+.sa-steerline[hidden]{display:none}
+/* Accept: the countdown and Undo take the button's place */
+.sa-accept{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.sa-accept .act{margin:0}
+.sa-count{font-size:12.5px;color:var(--hot);font-weight:600;font-variant-numeric:tabular-nums}
+.sa-pvh{list-style:none;margin-left:-16px;margin-top:3px}
+.sa-pvsum{list-style:none;margin-left:-16px;white-space:pre-wrap}
+.sa-row.item.done .sa-xtra,.sa-row.item.done .sa-call{display:none}

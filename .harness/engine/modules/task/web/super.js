@@ -7,6 +7,10 @@
 // and a long chat never pushes the queue away. An item that is settled leaves the queue: its receipt goes to a collapsed "Done (n)" row at the foot of the queue. The header line shows
 // `N wait · oldest X · K stuck · M errors` (a part that is zero or missing is left out; the words are in the hover).
 //
+// The cards (1.8.4): a held call shows its command and its code, View opens the whole command (and counts as seen, as on the task page) before Approve works, and the typed code stays; an error has "Try again";
+// a stuck chat has Steer and Stop; a question shows its text and options and says it is answered in VS Code; a delivery shows its summary, and "Accept and close" counts 10 s down in the page (the accept is sent only when it ends;
+// Undo, or closing the page, sends nothing). Requirements and deliveries have a folded preview. A receipt says what was done (Allowed, Denied, Answered: ..., Approved).
+//
 // The buttons of a message are the buttons of the board (`actionButton`, common.js): the same code, the same endpoints, the same code field for an approval; this file makes no action of its own.
 // The agent's brain is another part (`/api/super/ask`, `/api/super/talk`): when they do not answer, the view still works and the input says the agent is not there.
 // Not the default: board.js shows it when the person picks "Super agent" in the bar (the choice is not kept; the board opens as before).
@@ -16,7 +20,13 @@
 const SUPER = (function () {
   // The names of the messages are written out, so a search for a key finds its place.
   const WHY = {confirm: "super.why.confirm", question: "super.why.question", asking: "super.why.asking", outbox: "super.why.outbox", autorun: "super.why.autorun", req: "super.why.req", plan: "super.why.plan",
-    promote: "super.why.promote", review: "super.why.review", recover: "super.why.recover", accept: "super.why.accept", commit: "super.why.commit", stopped: "super.why.stopped", cancelled: "super.why.cancelled"};
+    promote: "super.why.promote", review: "super.why.review", recover: "super.why.recover", accept: "super.why.accept", commit: "super.why.commit", stopped: "super.why.stopped", cancelled: "super.why.cancelled", error: "super.why.error"};
+  // What the person did, as a receipt says it (the action of the button that was pressed); an action not here is said with the name of its button.
+  const RECEIPT = {"approve-action": "super.done.approved", "approve-plan": "super.done.approved", "approve-promote": "super.done.approved", "confirm-req": "super.done.confirmed", accept: "super.done.accepted", send: "super.done.sent",
+    recover: "super.done.recovered", "review extend": "super.done.extended", "review waive": "super.done.waived", "review dismiss": "super.done.dismissed", "autorun on": "super.done.autorun", steer: "super.done.steered", stop: "super.done.stopped"};
+  const receiptFor = (action) => (RECEIPT[action] ? t(RECEIPT[action]) : plain(t("board.action." + String(action).replace(" ", "-"))));
+  const idleMin = (item) => Math.max(1, Math.floor((Number(item.idle_s) || 0) / 60));
+  const whyText = (item) => (item.why === "stuck" ? t("super.why.stuck", {n: idleMin(item)}) : t(WHY[item.why] || "super.why.other"));  // "Stuck · N min" says how long
   const MATE = {you: "super.mate.you", work: "super.mate.work", idle: "super.mate.idle", stuck: "super.mate.stuck", error: "super.mate.error"};
   const BLOCKS = new Set(["confirm", "question", "asking", "outbox", "autorun"]);  // superview.py: these stop running work; their dot on the pet is red
   const OFF = {asleep: "super.off.asleep", limit: "super.off.limit", busy: "super.off.busy", off: "super.off.off", none: "super.off.none"};
@@ -105,6 +115,26 @@ const SUPER = (function () {
       if (!names.length) return [String(text)];
       const found = new RegExp("(" + names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")", "g");
       return String(text).split(found).map((part, at) => (at % 2 ? taskLink(part, part) : part));
+    }
+
+    // The agent's words (F12): `**bold**` (also around `code`, with or without inner spaces), `code`, and [text](url) as a link when the url is http(s) or a board path; any other url is shown as text. A code fence left empty at the end
+    // (what is left when the proposals block was cut out of it) goes. One pass with one pattern: no nesting but bold around the rest, so a long text costs a long text.
+    const RICH = /\*\*([\s\S]+?)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\(([^)\s]+)\)/g;
+    const safeUrl = (url) => /^https?:\/\//i.test(url) || /^\/task\//.test(url);
+    function rich(text, plainOnly) {
+      const out = [];
+      const source = String(text || "").replace(/(^|\n)[ \t]*(```|~~~)[\w-]*\s*\2[ \t]*(?=\s*$)/, "$1").replace(/\s+$/, "");
+      let at = 0;
+      for (const found of source.matchAll(RICH)) {
+        if (found.index > at) out.push(...linked(source.slice(at, found.index)));
+        if (found[1] !== undefined) out.push(h("b", null, ...(plainOnly ? [found[1].trim()] : rich(found[1].trim(), true))));
+        else if (found[2] !== undefined) out.push(h("code", {class: "sa-ic"}, found[2]));
+        else if (safeUrl(found[4])) out.push(h("a", {href: found[4], target: "_blank", rel: "noopener", class: "sa-link"}, found[3]));
+        else out.push(found[3] + " (" + found[4] + ")");
+        at = found.index + found[0].length;
+      }
+      if (at < source.length) out.push(...linked(source.slice(at)));
+      return out;
     }
 
     // ---------- the avatars ----------
@@ -250,7 +280,7 @@ const SUPER = (function () {
     function addAgent(message) {
       const judgment = h("span", {class: "sa-judg", title: t("super.judgment.tip"), "aria-label": t("super.judgment.tip")}, "◇");
       const row = h("div", {class: "sa-row"}, h("span", {class: "sa-mini boss"}, PET.face("calm", "", 0, true)),
-        h("div", {class: "sa-bub agent"}, h("div", {class: "sa-fw"}, h("b", null, t("super.name")), judgment, message.at ? h("span", {class: "sa-when"}, when(message.at, 11, 16)) : null), h("div", {class: "sa-text"}, linked(message.text)), actCard(message)));
+        h("div", {class: "sa-bub agent"}, h("div", {class: "sa-fw"}, h("b", null, t("super.name")), judgment, message.at ? h("span", {class: "sa-when"}, when(message.at, 11, 16)) : null), h("div", {class: "sa-text"}, rich(message.text)), actCard(message)));
       chatRows.push(row);
       add(row);
       foldChat();
@@ -377,23 +407,209 @@ const SUPER = (function () {
 
     // A chat that asks the person, or a held outside call: the real question or command is in `detail`, the `title` is a generic line. Show the detail as the message when there is one.
     const asksPerson = (item) => ["confirm", "question", "asking", "outbox"].includes(item.why) && Boolean(item.detail);
-    const said = (item) => (item.said && !asksPerson(item) ? String(item.said) : "");  // the agent's last words of a stopped, accepted or cancelled task
-    const mainOf = (item) => (asksPerson(item) ? item.detail : said(item) || item.title);
-    const fullOf = (item) => (asksPerson(item) ? item.detail : "");
+    const said = (item) => (item.said && !asksPerson(item) && !summaryOf(item) ? String(item.said) : "");  // the agent's last words of a stopped, accepted or cancelled task
+    // 1.8.4: an asking item shows the question itself (`question.message`, from the mark; an older mark has none), an error its message, a delivery its summary.
+    const questionOf = (item) => (item.why === "asking" && item.question && item.question.message ? item.question : null);
+    const summaryOf = (item) => (item.why === "accept" && item.deliver && item.deliver.summary ? String(item.deliver.summary) : "");
+    const callsOf = (item) => (item.why === "outbox" && Array.isArray(item.calls) ? item.calls.filter((one) => one && one.code) : []);  // a held call with its command: the card draws it (callRow), not the one line of the board
+    const prose = (item) => Boolean(questionOf(item) || summaryOf(item) || item.why === "error");  // words, not a command: the card's text is not in the code font
+    const mainOf = (item) => (questionOf(item) ? questionOf(item).message : summaryOf(item) || (item.why === "error" ? item.detail || item.title : asksPerson(item) ? item.detail : said(item) || item.title));
+    const fullOf = (item) => (questionOf(item) ? questionOf(item).message : asksPerson(item) ? item.detail : "");
+    const clampable = (item) => asksPerson(item) || prose(item);
     const saidLong = (item) => String(said(item)).split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 60)), 0) > 8;
 
     // One item of the board: who it comes from, what it is, its buttons. Its buttons are drawn again only when the row of the task changed what they would be.
     function sigFor(item) {
       const row = rowFor(item.task);
-      return JSON.stringify([item.actions.map((one) => one.action), row.state, row.chat ? [row.chat.bound, row.chat.why] : null, row.req_unconfirmed || false, row.todo_left || 0]);
+      return JSON.stringify([item.why, item.actions.map((one) => one.action), row.state, row.chat ? [row.chat.bound, row.chat.why] : null, row.req_unconfirmed || false, row.todo_left || 0, callsOf(item).map((one) => one.code), item.resumable]);
     }
     const sigOf = (entry) => sigFor(entry.item);
-    // The buttons of one item (also the pop-out window's): the board's own, so every action goes through SERVE.act / CHAT as in the board.
-    function buttonsFor(item) {
+    // ---------- the held call (1.8.4): its command and code on the card, View, the typed code, Approve ----------
+    // The same three guards as the task page: Approve works only after View (the call is drawn from the server's copy and its `seen` is what Approve sends), the person types the code, and a command that
+    // changed since View is refused by the server (`changed`): "viewed" is taken back and View is asked for again. What was viewed and typed is kept by the call's code, so a card drawn again (here or in the pop-out) keeps it.
+    const VIEWED = new Map(), TYPED = new Map(), CHANGED = new Map();  // call code -> the files pinned at View / the code typed / why the last Approve was refused
+    const CTL = new Set();  // the controls of the cards on show: {code, node, arm}
+    function armAll(code) {
+      for (const ctl of [...CTL]) {
+        if (!ctl.node.isConnected && Date.now() - ctl.born > 3000) { CTL.delete(ctl); continue; }
+        if (ctl.code === code) ctl.arm();
+      }
+    }
+    // The window View opens: the call as the server shows it (what the task page's View shows, without its layout): the words of its type, the system, the text it writes, the files it reads, the command as written.
+    function callWindow(call, onCode) {
+      const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
+      copy.addEventListener("click", () => { navigator.clipboard.writeText(call.command || "").then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
+      const close = h("button", {type: "button", class: "act"}, t("desk.window.close"));
+      const chip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, call.code);  // a click copies the code, puts it in the card's box and closes this window
+      const scripts = (call.layout && (call.layout.scripts || (call.layout.script ? [call.layout.script] : []))) || [];
+      const says = (call.says || []).filter(Boolean);
+      const body = call.body && call.body.text ? call.body : null;
+      const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), says.length ? h("p", null, says.join(" · ")) : null,
+        h("p", {class: "sub"}, h("b", null, call.system || "-"), call.env && call.env !== "none" ? " (" + call.env + ")" : "", call.target ? " · " + call.target : ""),
+        h("p", {class: "sub"}, t("desk.outbox.asked", {at: when(call.created_at, 0, 16)}), " ", chip),
+        h("div", {class: "win-body"},
+          body ? [h("p", {class: "sub"}, h("b", null, body.label || t("desk.outbox.body")), body.path ? " · " + body.path : ""), h("pre", {class: "cmd-script", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null] : null,
+          scripts.filter((script) => script && script.text).map((script) => [h("p", null, h("b", null, script.path)), h("pre", {class: "cmd-script", tabindex: "0"}, script.text), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null]),
+          h("p", {class: "sub"}, t("desk.outbox.as_written")), h("pre", {class: "cmd-script", tabindex: "0"}, call.command || "")),
+        call.draft ? h("p", {class: "sub"}, t("super.call.draft", {file: call.draft})) : null, h("div", {class: "row win-foot"}, copy, close)]);
+      view.box.classList.add("wide");
+      close.addEventListener("click", view.close);
+      chip.addEventListener("click", () => { navigator.clipboard.writeText(call.code).then(() => {}, () => {}); view.close(); if (onCode) onCode(call.code); });
+    }
+    function callRow(item, one) {
+      const can = SERVE.runs("approve-action");
+      const code = one.code;
+      const input = h("input", {class: "code sa-code", autocomplete: "off", spellcheck: "false", placeholder: t("desk.outbox.code"), "aria-label": t("board.serve.code")});
+      input.value = TYPED.get(code) || "";
+      const view = h("button", {type: "button", class: "act sa-view"}, t("desk.outbox.view"));
+      const seen = h("span", {class: "sa-seen", title: t("super.call.viewed"), hidden: ""}, "✓");
+      const yes = h("button", {type: "button", class: "act hot sa-approve", disabled: "disabled", "data-act": "approve-action", "data-label": t("desk.outbox.approve")}, t("desk.outbox.approve"));
+      const said = h("div", {class: "bad sa-actbad"});
+      const ready = () => can && VIEWED.has(code) && input.value.trim().length > 0;
+      const arm = () => {
+        const viewed = VIEWED.has(code);
+        yes.disabled = !ready();
+        yes.title = ready() || !can ? "" : viewed ? t("desk.outbox.type_code") : t("desk.outbox.view_first");
+        seen.hidden = !viewed;
+        view.classList.toggle("pulse", can && !viewed);  // the order is View, then the code: View pulses until it was opened, then the box until a code is typed
+        input.classList.toggle("pulse", can && viewed && !input.value.trim());
+        if (!viewed && CHANGED.has(code) && !said.textContent) said.textContent = CHANGED.get(code);
+      };
+      const lead = !one.title || String(one.command || "").startsWith(plain(one.title));  // a title that is only the start of the command says nothing more
+      const node = h("div", {class: "sa-call", "data-code": code},
+        h("div", {class: "sa-callh"}, h("span", {class: "sa-chip", title: t("desk.outbox.code")}, code), one.system ? h("span", {class: "sa-sys", title: one.verb || ""}, one.system + (one.env && one.env !== "none" ? " · " + one.env : "")) : null, lead ? null : h("span", {class: "sa-ctitle", title: one.title || ""}, one.title || ""),
+          h("code", {class: "sa-cmd", title: t("super.call.cmd.tip")}, one.command || "")),
+        h("div", {class: "sa-callgo"}, view, seen, input, yes), said);
+      CTL.add({code, node, arm, born: Date.now()});
+      input.addEventListener("input", () => { TYPED.set(code, input.value); arm(); });
+      view.addEventListener("click", () => {
+        view.disabled = true;
+        said.replaceChildren();
+        SERVE.post("/api/super/preview", {task: item.task, kind: "call", code}).then((result) => {
+          view.disabled = false;
+          if (!result || result.ok !== true || !result.call) { said.textContent = t("super.call.gone"); return; }
+          VIEWED.set(code, result.call.seen || {});
+          CHANGED.delete(code);
+          armAll(code);
+          callWindow(result.call, (typed) => { TYPED.set(code, typed); input.value = typed; armAll(code); yes.focus(); });
+        }, (error) => { view.disabled = false; said.replaceChildren(...actBad(error)); });
+      });
+      const send = () => {
+        if (!ready()) return;
+        yes.disabled = true; yes.textContent = t("board.serve.working"); said.replaceChildren();
+        SERVE.post("/api/act", {action: "approve-action", task: item.task, step: "act", code: input.value.trim(), seen: {code, files: VIEWED.get(code) || {}}}).then(() => {
+          const entry = known.get(item.id);
+          if (entry) entry.clicked = receiptFor("approve-action");
+          TYPED.delete(code); VIEWED.delete(code);
+          SERVE.done(); poll(); emit();
+        }, (error) => {
+          if (error && error.data && error.data.changed) { VIEWED.delete(code); CHANGED.set(code, error.message); }  // a file changed since View: View is asked for again
+          said.replaceChildren(...actBad(error));
+          yes.textContent = t("desk.outbox.approve");
+          armAll(code);
+        });
+      };
+      yes.addEventListener("click", send);
+      input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });
+      arm();
+      return node;
+    }
+
+    // ---------- an error and a stuck chat (1.8.4) ----------
+    function errorButtons(item) {
+      const retry = h("button", {type: "button", class: "act hot live", "data-act": "retry", title: t(item.resumable === false ? "super.retry.no" : "super.retry.tip")}, t("super.retry"));
+      const said = h("div", {class: "bad sa-actbad"});
+      retry.addEventListener("click", () => {
+        retry.disabled = true; said.replaceChildren();
+        SERVE.post("/api/resume", {task: item.task}).then(() => { const entry = known.get(item.id); if (entry) entry.clicked = t("super.done.retried"); retry.disabled = false; SERVE.done(); poll(); emit(); },
+          (error) => { retry.disabled = false; said.replaceChildren(...actBad(error)); });  // a refusal says why, here
+      });
+      return [retry, said];
+    }
+    function stuckButtons(item) {
+      const said = h("div", {class: "bad sa-actbad"});
+      const line = h("input", {type: "text", class: "sa-mateline sa-steerline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task: item.task}), "aria-label": t("super.mate.steer.ph", {task: item.task}), hidden: ""});
+      const steer = h("button", {type: "button", class: "act hot live", "data-act": "steer"}, t("super.mate.steer"));
+      const stop = h("button", {type: "button", class: "act live", "data-act": "stop"}, t("super.mate.stop"));
+      let busy = false;
+      const send = (call, receipt, said_) => {  // the mate menu's own calls (mateSteer, mateStop)
+        if (busy) return;
+        busy = true; said.replaceChildren();
+        call.then(() => { busy = false; const entry = known.get(item.id); if (entry) entry.clicked = t(receipt); addSys(said_); poll(); emit(); }, (error) => { busy = false; said.replaceChildren(...actBad(error)); });
+      };
+      steer.addEventListener("click", () => { line.hidden = !line.hidden; if (!line.hidden) line.focus(); });
+      line.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey && line.value.trim()) { event.preventDefault(); send(mateSteer(item.task, line.value.trim()), "super.done.steered", t("super.mate.steered", {task: item.task})); } });
+      stop.addEventListener("click", () => send(mateStop(item.task), "super.done.stopped", t("super.mate.stopped", {task: item.task})));
+      return [steer, stop, line, said];
+    }
+
+    // ---------- Accept and close (1.8.4): 10 s in the page, then the accept is sent ----------
+    // The person presses Accept; nothing goes to the server until the countdown ends, so Undo (or a page that is closed) leaves the task open. A task whose held calls still wait asks its second yes at once (the board's window,
+    // which closes at once: that yes is the deliberate one). The state is kept by the item, so the view and the pop-out show the same countdown.
+    const ACCEPT_SECONDS = 10;
+    const COUNT = new Map();  // item id -> {end, timer} while counting down; "sending" once it went
+    const COUNT_BAD = new Map();  // item id -> why the accept was refused
+    function acceptEnd(item) {
+      const state = COUNT.get(item.id);
+      if (!state) return;
+      state.sending = true;
+      SERVE.post("/api/act", {action: "accept", task: item.task, step: "act"}).then(() => {
+        COUNT.delete(item.id);
+        const entry = known.get(item.id);
+        if (entry) entry.clicked = receiptFor("accept");
+        SERVE.done(); poll(); emit();
+      }, (error) => { COUNT.delete(item.id); COUNT_BAD.set(item.id, (error && error.message) || String(error)); emit(); });
+    }
+    function acceptNode(item) {
       const row = rowFor(item.task);
-      return item.actions.map((one) => (one.action === "answer"
-        ? h("a", {class: "act hot live", href: taskUrl(item.task), target: "_blank", rel: "noopener", "data-label": t("board.action.answer")}, t("board.action.answer"))  // the reply panel is on the task page: a new tab, not this one
-        : actionButton(row, one)));
+      const wrap = h("span", {class: "sa-accept"});
+      const button = h("button", {type: "button", class: "act hot live", "data-act": "accept", "data-label": t("board.action.accept")}, t("board.action.accept"));
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        COUNT_BAD.delete(item.id);
+        SERVE.post("/api/act", {action: "accept", task: item.task, step: "preview"}).then((data) => {
+          button.disabled = false;
+          if ((((data && data.result) || {}).held || []).length) { SERVE.act(button, row, {action: "accept"}); return; }  // calls still wait: the board's window asks first
+          COUNT.set(item.id, {end: Date.now() + ACCEPT_SECONDS * 1000, timer: setTimeout(() => acceptEnd(item), ACCEPT_SECONDS * 1000)});
+          draw(); emit();
+        }, (error) => { button.disabled = false; COUNT_BAD.set(item.id, (error && error.message) || String(error)); draw(); });
+      });
+      const undo = h("button", {type: "button", class: "act", title: t("super.accept.tip")}, t("super.accept.undo"));
+      undo.addEventListener("click", () => {
+        const state = COUNT.get(item.id);
+        if (!state || state.sending) return;
+        clearTimeout(state.timer);
+        COUNT.delete(item.id);
+        draw(); emit();
+      });
+      function draw() {
+        const state = COUNT.get(item.id), bad = COUNT_BAD.get(item.id);
+        if (state) {
+          const left = Math.max(0, Math.ceil((state.end - Date.now()) / 1000));
+          undo.disabled = Boolean(state.sending);
+          wrap.replaceChildren(h("span", {class: "sa-count", role: "timer", title: t("super.accept.tip")}, t("super.accept.count", {n: left})), " · ", undo);
+        } else wrap.replaceChildren(button, ...(bad ? [h("div", {class: "bad sa-actbad"}, ...SERVE.reasons(bad))] : []));
+      }
+      draw();
+      let ticks = 0;
+      const tick = setInterval(() => { if (!wrap.isConnected && ++ticks > 8) { clearInterval(tick); return; } if (wrap.isConnected) ticks = 0; draw(); }, 250);
+      return wrap;
+    }
+    // The buttons of one item (also the pop-out window's): the board's own, so every action goes through SERVE.act / CHAT as in the board; the held call, an error, a stuck chat and Accept have their own (above).
+    function buttonsFor(item) {
+      if (item.why === "error") return errorButtons(item);
+      if (item.why === "stuck") return stuckButtons(item);
+      const row = rowFor(item.task), calls = callsOf(item), nodes = [];
+      for (const one of item.actions) {
+        if (one.action === "answer") continue;  // 1.8.4: the reply box of a stopped item is on the card; a link to the task page beside "Open task" said the same
+        if (one.action === "approve-action" && calls.length) { nodes.push(...calls.map((call) => callRow(item, call))); continue; }
+        if (one.action === "accept") { nodes.push(acceptNode(item)); continue; }
+        const button = actionButton(row, one);
+        button.dataset.act = one.action;
+        button.addEventListener("click", () => { const entry = known.get(item.id); if (entry) entry.clicked = receiptFor(one.action); });  // what the receipt says if this settles it (a window the person closes settles nothing: the next poll says so)
+        nodes.push(button);
+      }
+      return nodes;
     }
     function drawActs(entry) {
       const row = rowFor(entry.item.task);
@@ -401,7 +617,11 @@ const SUPER = (function () {
       const joint = entry.item.why === "plan" && Boolean(row.req_unconfirmed);  // one code confirms the requirement and approves the plan (the approve-plan window does it)
       entry.note.hidden = !joint;
       entry.note.textContent = joint ? t("super.plan.joint") : "";
-      entry.acts.replaceChildren(...buttons, taskLink(entry.item.task, t("super.open") + " ↗", "act sa-open"));
+      const open = taskLink(entry.item.task, t("super.open") + " ↗", "act sa-open");
+      const goes = buttons.filter((node) => node.classList && node.classList.contains("sa-call")).map((node) => node.querySelector(".sa-callgo")).filter(Boolean);
+      entry.acts.classList.toggle("sa-calls", goes.length > 0);
+      if (goes.length) goes[goes.length - 1].append(open);  // a held call: "Open task" sits in the row of its buttons, not on a line of its own
+      entry.acts.replaceChildren(...buttons, ...(goes.length ? [] : [open]));
       entry.sig = sigOf(entry);
     }
     function drawWaited(entry) {
@@ -411,8 +631,8 @@ const SUPER = (function () {
     }
     // The reply box of a "stopped" item (the agent ended its turn with a question in text): the answer goes to the task's chat through /api/send, the item folds as answered.
     // On a refusal (409 and the like) the reasons show under the box and the words stay.
-    // The same box for an item that waits on the agent's own question (why "question" or "asking"): the words skip the question (the server turns the send into "say"); never for "confirm".
-    const SAYS = (item) => Boolean(item) && (item.why === "question" || item.why === "asking");
+    // The same box for an item that waits on the agent's own question (why "question"): the words skip the question (the server turns the send into "say"); never for "confirm".
+    const SAYS = (item) => Boolean(item) && item.why === "question";  // 1.8.4: not for "asking": the chat waits for its answer in VS Code, and the server refuses words sent to a chat that is not idle
     function replyBox(entry) {
       const box = h("textarea", {class: "sa-reply-box", rows: "2", placeholder: t(SAYS(entry.item) ? "super.reply.say.ph" : "super.reply.ph"), title: t("super.reply.tip")});
       const send = h("button", {type: "button", class: "act hot sa-reply-go"}, t("super.reply.send"));
@@ -426,7 +646,7 @@ const SUPER = (function () {
         said.replaceChildren();
         SERVE.post("/api/send", {task: entry.item.task, kind: "answer", lang: "", note: "", body: text, step: "act"}).then(() => {
           busy = false;
-          entry.clicked = t("super.reply.done");
+          entry.clicked = t("super.done.sent");
           reply.classList.add("sent");  // the same box in the pop-out goes too
           fold(entry, null);
           emit();
@@ -441,24 +661,36 @@ const SUPER = (function () {
       const reply = h("div", {class: "sa-reply"}, box, send, said);
       return reply;
     }
-    // The preview under a "plan" or "promote" message (1.8.2): asked once per item id, shown folded as one line; a refusal or nothing to show draws nothing.
+    // The preview under a "plan", "promote", "req" or "accept" message (1.8.2, 1.8.4): asked once per item id, shown folded as one line; a refusal or nothing to show draws nothing.
     const PREVIEW_ASKED = new Map();  // item id -> the answer (a promise): the view and the pop-out both draw from it
-    const previewKind = (item) => (item.why === "plan" ? "plan" : item.why === "promote" ? "changes" : "");
-    function previewRows(kind, result) {
-      const list = kind === "plan" ? result.lines : result.files;
-      const rows = (list || []).map((one) => (kind === "plan"
-        ? h("li", null, String(one))
-        : h("li", null, h("span", {class: "sa-pvpath"}, one.path), " ", h("span", {class: "sa-pvadd"}, "+" + one.added), " ", h("span", {class: "sa-pvdel"}, "\u2212" + one.removed), one.action === "delete" ? h("em", {class: "sa-pvgone"}, " " + t("super.preview.deleted")) : null)));
-      if (result.more) rows.push(h("li", {class: "sa-pvmore"}, t("super.preview.more")));
-      return rows;
+    const previewKind = (item) => (item.why === "plan" ? "plan" : item.why === "promote" ? "changes" : item.why === "req" ? "req" : item.why === "accept" ? "deliver" : "");
+    const fileRows = (files) => (files || []).map((one) => h("li", null, h("span", {class: "sa-pvpath"}, one.path), " ", h("span", {class: "sa-pvadd"}, "+" + one.added), " ", h("span", {class: "sa-pvdel"}, "−" + one.removed), one.action === "delete" ? h("em", {class: "sa-pvgone"}, " " + t("super.preview.deleted")) : null));
+    // `[the one line, the rows, the link text]` of a preview, or null when there is nothing to show.
+    function previewParts(kind, result) {
+      if (!result || result.ok !== true) return null;
+      if (kind === "plan") {
+        const lines = result.lines || [];
+        return lines.length ? [t("super.preview.plan.sum", {n: result.total || lines.length + (result.more ? "+" : "")}), lines.map((one) => h("li", null, String(one))), "super.preview.plan.open"] : null;
+      }
+      if (kind === "changes") {
+        const files = result.files || [];
+        return files.length ? [t(files.length === 1 && !result.more ? "super.preview.changes.one" : "super.preview.changes.sum", {n: files.length + (result.more ? "+" : "")}), fileRows(files), "super.preview.changes.open"] : null;
+      }
+      if (kind === "req") {
+        const sections = (result.sections || []).filter((one) => one && (one.lines || []).length);
+        return sections.length ? [t("super.preview.req.sum", {n: result.total || sections.reduce((sum, one) => sum + one.lines.length, 0)}), sections.flatMap((one) => [h("li", {class: "sa-pvh"}, h("b", null, one.title)), ...one.lines.map((line) => h("li", null, String(line)))]), "super.preview.req.open"] : null;
+      }
+      const files = result.files || [];  // deliver: the whole summary, then the files a promote would change
+      if (!files.length && String(result.summary || "").length < 140 && !/\n/.test(String(result.summary || ""))) return null;  // the card shows a short summary whole: nothing to unfold
+      return [files.length ? t(files.length === 1 && !result.more ? "super.preview.deliver.one" : "super.preview.deliver.sum", {n: files.length + (result.more ? "+" : "")}) : t("super.preview.deliver.text"),
+        [...(result.summary ? [h("li", {class: "sa-pvsum"}, String(result.summary))] : []), ...fileRows(files)], "super.preview.deliver.open"];
     }
     function previewFill(box, item, kind, result) {
-      const list = (kind === "plan" ? result.lines : result.files) || [];
-      if (!result || result.ok !== true || !list.length) return;
-      const count = kind === "plan" && result.total ? result.total : list.length + (result.more ? "+" : "");
-      const sum = kind === "plan" ? t("super.preview.plan.sum", {n: count}) : t(list.length === 1 && !result.more ? "super.preview.changes.one" : "super.preview.changes.sum", {n: count});
-      box.replaceChildren(h("summary", null, sum), h("ul", {class: "sa-pvlist"}, ...previewRows(kind, result)),
-        taskLink(item.task, t(kind === "plan" ? "super.preview.plan.open" : "super.preview.changes.open") + " \u2197", "sa-pvopen"));
+      const parts = previewParts(kind, result);
+      if (!parts) return;
+      const rows = parts[1];
+      if (result.more) rows.push(h("li", {class: "sa-pvmore"}, t("super.preview.more")));
+      box.replaceChildren(h("summary", null, parts[0]), h("ul", {class: "sa-pvlist"}, ...rows), taskLink(item.task, t(parts[2]) + " ↗", "sa-pvopen"));
       box.hidden = false;
     }
     function previewBox(item) {
@@ -469,16 +701,36 @@ const SUPER = (function () {
       PREVIEW_ASKED.get(item.id).then((result) => previewFill(box, item, kind, result));
       return box;
     }
+    // What a card says beyond its text (also the pop-out's): the options of a question and where it is answered, the steps a delivery left open.
+    function extraNodes(item) {
+      const out = [];
+      if (item.why === "asking") {
+        const options = (questionOf(item) || {}).options || [];
+        if (options.length) out.push(h("div", {class: "sa-opts"}, h("span", {class: "sa-optk"}, t("super.ask.opts") + ":"), ...options.map((option) => h("span", {class: "sa-optc"}, String(option)))));
+        out.push(h("div", {class: "sa-vs"}, h("i", {"aria-hidden": "true"}, "⇢"), t("super.ask.vs")));
+      }
+      if (item.why === "accept" && item.deliver && item.deliver.todo_open) out.push(h("div", {class: "sa-todo"}, h("i", {"aria-hidden": "true"}, "⚠"), t("super.accept.todo", {why: String(item.deliver.todo_open)})));
+      return out;
+    }
+    function drawExtra(entry) {
+      const sig = JSON.stringify([entry.item.why, entry.item.question, entry.item.deliver && entry.item.deliver.todo_open]);
+      if (sig === entry.xsig) return;
+      entry.xsig = sig;
+      entry.xtra.replaceChildren(...extraNodes(entry.item));
+      entry.xtra.hidden = !entry.xtra.children.length;
+    }
     function build(item) {
-      const why = h("span", {class: "sa-why"}, t(WHY[item.why] || "super.why.other"));
+      const why = h("span", {class: "sa-why " + (item.why === "error" ? "err" : item.why === "stuck" ? "stuck" : "")}, whyText(item));
       const waited = h("span", {class: "sa-when"});
       const what = h("div", {class: "sa-what"}, mainOf(item));
-      what.title = fullOf(item);
+      what.title = fullOf(item) || (item.why === "accept" && item.deliver && item.deliver.at ? t("super.accept.at", {at: when(item.deliver.at, 0, 16)}) : "");
+      if (callsOf(item).length) what.hidden = true;  // the held calls under it show the command, with its code
+      if (prose(item)) what.classList.add("prose");
       if (said(item)) what.replaceChildren(...linked(said(item)));
       let saidMore = null;
       if (said(item)) what.classList.add("said");
       if (said(item) && saidLong(item)) { saidMore = h("button", {type: "button", class: "sa-askmore"}, t("super.more")); saidMore.addEventListener("click", () => { what.classList.add("open"); saidMore.hidden = true; }); }
-      if (asksPerson(item) || saidLong(item)) {  // the question or command itself is the message: a few lines, the rest on a click
+      if (clampable(item) || saidLong(item)) {  // the question or command itself is the message: a few lines, the rest on a click
         what.classList.add("ask");
         what.tabIndex = 0;
         const flip = () => { what.classList.toggle("open"); if (saidMore) saidMore.hidden = what.classList.contains("open"); };
@@ -487,15 +739,16 @@ const SUPER = (function () {
       }
       const note = h("div", {class: "sa-note", hidden: ""});
       const acts = h("div", {class: "sa-acts"});
-      const more = !asksPerson(item) && item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
-      const node = h("div", {class: "sa-row item", "data-task": item.task, "data-id": item.id},
+      const xtra = h("div", {class: "sa-xtra"});
+      const more = !asksPerson(item) && !["error", "stuck", "accept"].includes(item.why) && item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
+      const node = h("div", {class: "sa-row item" + (item.why === "error" ? " err" : ""), "data-task": item.task, "data-id": item.id},
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
-        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, saidMore, note, more, acts));
-      const entry = {item, node, acts, waited, what, note, sig: "", clicked: ""};
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task), why, waited), what, xtra, saidMore, note, more, acts));
+      const entry = {item, node, acts, waited, what, note, why, xtra, xsig: "", sig: "", clicked: ""};
       if (item.why === "stopped" || SAYS(item)) node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
       const preview = previewBox(item);
       if (preview) node.querySelector(".sa-bub").insertBefore(preview, acts);
-      acts.addEventListener("click", (event) => { const button = event.target.closest("button, a.act"); if (button && button.dataset.label) entry.clicked = plain(button.dataset.label); });
+      drawExtra(entry);
       drawActs(entry);
       drawWaited(entry);
       return entry;
@@ -516,14 +769,25 @@ const SUPER = (function () {
       applyFilter();
     }
     const RECEIPTS = 30;
+    // The window of an allow or an answer (chat.js) says what was decided: "Allowed", "Denied", "Answered: DEV only". Only for the item of that kind, and only a minute after.
+    function decidedIn(entry) {
+      const found = typeof CHAT !== "undefined" && CHAT.decided ? CHAT.decided() : null;
+      if (!found || found.task !== entry.item.task || Date.now() - found.at > 60000) return "";
+      if (entry.item.why === "confirm" && (found.kind === "allow" || found.kind === "deny")) return t(found.kind === "allow" ? "super.done.allowed" : "super.done.denied");
+      if (["question", "asking"].includes(entry.item.why) && found.kind === "answer") return found.text ? t("super.done.answered", {text: found.text}) : t("super.done.answered.none");
+      return "";
+    }
     function fold(entry, next) {
+      const counting = COUNT.get(entry.item.id);
+      if (counting) { clearTimeout(counting.timer); COUNT.delete(entry.item.id); }  // a card that left takes its countdown with it
       entry.done = true;
       entry.waited.textContent = "";
       entry.note.hidden = true;
       // The task has another wait now (a row has one): it is not settled, it moved on. The person's own click is still the better thing to say.
-      const line = entry.clicked ? "\u2713 " + t("super.done.you", {action: entry.clicked}) : next ? "\u2192 " + t("super.done.next", {kind: t(WHY[next.why] || "super.why.other")}) : "\u2713 " + t("super.done.elsewhere");
+      const said_ = decidedIn(entry) || entry.clicked;
+      const line = said_ ? "\u2713 " + said_ : next ? "\u2192 " + t("super.done.next", {kind: whyText(next)}) : "\u2713 " + t("super.done.elsewhere");
       entry.node.remove();  // the card leaves the queue; its receipt goes to the "Done" row
-      doneList.prepend(h("div", {class: "sa-rc", "data-task": entry.item.task}, taskLink(entry.item.task), h("span", {class: next && !entry.clicked ? "sa-next" : "sa-ok"}, line + " \u00b7 " + stamp())));
+      doneList.prepend(h("div", {class: "sa-rc", "data-task": entry.item.task}, taskLink(entry.item.task), h("span", {class: next && !said_ ? "sa-next" : "sa-ok"}, line + " \u00b7 " + stamp())));
       while (doneList.children.length > RECEIPTS) doneList.lastElementChild.remove();
       doneBox.classList.remove("sa-flash"); void doneBox.offsetWidth; doneBox.classList.add("sa-flash");
       applyFilter();
@@ -537,6 +801,8 @@ const SUPER = (function () {
         const entry = known.get(item.id);
         if (!entry || entry.done) continue;
         entry.item = item;
+        entry.why.textContent = whyText(item);
+        drawExtra(entry);
         if (entry.what.textContent !== mainOf(item)) { if (said(item)) entry.what.replaceChildren(...linked(said(item))); else entry.what.textContent = mainOf(item); entry.what.title = fullOf(item); }
         drawWaited(entry);
         if (entry.sig !== sigOf(entry)) drawActs(entry);
@@ -659,7 +925,7 @@ const SUPER = (function () {
       entry.node.classList.add("sa-spot");
       setTimeout(() => entry.node.classList.remove("sa-spot"), 8000);
       entry.node.scrollIntoView({block: "nearest", behavior: still() ? "auto" : "smooth"});
-      pet.say(t("super.pet.next", {task: entry.item.task, why: t(WHY[entry.item.why] || "super.why.other")}), 3200);
+      pet.say(t("super.pet.next", {task: entry.item.task, why: whyText(entry.item)}), 3200);
       // it flies beside the task's avatar, looks at it, and goes back to its corner when it has said its line
       const mate = mateOf(entry.item.task), token = pointing;
       if (mate && !still()) {
@@ -887,7 +1153,7 @@ const SUPER = (function () {
       entry.line.textContent = item.state === "sent" ? t("super.route.waiting") : item.state === "queued" ? t("super.route.queued") : failedAsk ? t(routeKey(item.why || item.end)) : "";
       entry.line.hidden = !entry.line.textContent;
       entry.answer.hidden = !partial;
-      entry.answer.replaceChildren(...(partial ? linked(partial) : []));
+      entry.answer.replaceChildren(...(partial ? rich(partial) : []));
       const long = routeEstimate(partial) > 12;
       entry.answer.classList.toggle("sa-ansclip", long && !entry.open);
       entry.more.hidden = !(long && !entry.open);
@@ -1030,7 +1296,7 @@ const SUPER = (function () {
       if (!why) poll().then(schedule, schedule);
       return {ok: !why, why, text: why ? t(routeKey(why)) : ""};
     }
-    const pop = {alertMarks: () => alertMarks((data && data.status) || {}), replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: (item) => t(WHY[item.why] || "super.why.other"), jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
+    const pop = {alertMarks: () => alertMarks((data && data.status) || {}), replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose, jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
       taskLink, ask: (text) => ask(null, text), watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, openVS: () => SERVE.openVS()};
     if (popUp) {
       const reason = COMPANION.unsupported();

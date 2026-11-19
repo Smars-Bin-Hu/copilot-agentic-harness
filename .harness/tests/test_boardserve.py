@@ -7,6 +7,7 @@ import io
 import json
 import os
 import socket
+import tempfile
 import threading
 import time
 import types
@@ -20,7 +21,7 @@ from taskcase import SESSION, TASK, TaskCase
 
 from core import messages, tasks
 from core.paths import board_serve_file
-from modules.task import boardserve, task as task_ops
+from modules.task import boardpairs, boardserve, task as task_ops
 from modules.task.common import CommandError
 
 
@@ -539,10 +540,11 @@ class WaitForBrowserTests(unittest.TestCase):
 
     def test_a_pairing_sets_the_event(self) -> None:
         board = boardserve.Board.__new__(boardserve.Board)
-        board.lock, board.code, board.sessions, board.first_pair = threading.Lock(), "abc", set(), threading.Event()
-        self.assertIsNone(board.pair("wrong"))
-        self.assertFalse(board.first_pair.is_set())
-        self.assertTrue(board.pair("abc"))
+        board.lock, board.live_codes, board.spent, board.pairs, board.first_pair = threading.Lock(), {"abc": time.time() + 60}, {}, boardpairs.Pairs(Path(tempfile.mkdtemp())), threading.Event()
+        with mock.patch("integrity.home_dir", return_value=None):
+            self.assertEqual(board.pair("wrong"), (None, "wrong"))
+            self.assertFalse(board.first_pair.is_set())
+            self.assertTrue(board.pair("abc")[0])
         self.assertTrue(board.first_pair.is_set())
 
 

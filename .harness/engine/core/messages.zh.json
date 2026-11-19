@@ -1171,6 +1171,7 @@
   "board.serve.working": "处理中…",
   "board.serve.stopped": "看板服务没有响应。双击 Start Harness 重新启动。",
   "board.stopped": "看板已停止，本页不再更新。双击 Start Harness，然后刷新本页。",
+  "serve.restart.novoucher": "看板没能重新启动：没有地方放启动凭证（~/.copilot-harness）。双击 Start Harness 启动它。",
   "serve.started.bg": "看板在 {address} 运行（只有这台电脑能访问）。可直接点的按钮：{actions}。在页面上点停止按钮，或用 `harness task board --stop` 停止。",
   "serve.bg.starting": "看板正在启动",
   "serve.bg.opening": "正在等浏览器打开页面",

@@ -1171,6 +1171,7 @@
   "board.serve.working": "Working…",
   "board.serve.stopped": "The board server does not answer. Double-click Start Harness to start it again.",
   "board.stopped": "The board has stopped, so this page no longer updates. Double-click Start Harness, then reload this page.",
+  "serve.restart.novoucher": "The board could not start again: there is no folder for the start's voucher (~/.copilot-harness). Double-click Start Harness to start it.",
   "serve.started.bg": "The board runs at {address} (this computer only). Buttons that act: {actions}. Stop it with the button on its pages, or with `harness task board --stop`.",
   "serve.bg.starting": "starting the board",
   "serve.bg.opening": "waiting for the browser to open the page",

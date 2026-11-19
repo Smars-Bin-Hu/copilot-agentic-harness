@@ -1,8 +1,9 @@
 """The pairings of the board's browsers, kept across a restart (1.8.11).
 
 A paired browser holds a cookie with a random token. The board keeps only the fingerprint (sha256) of each token and when it ends, in a file of the folder of the guardrail lists
-(`integrity.home_dir()`), one file for each copy: `board-pairs-<sha256(root)[:16]>.json`, `{"<sha256(token)>": <expires epoch>}`. The agent holds no token, so a file it could write
-would still give it no cookie; a process of the same user can reach the folder: this raises the bar, it is not a sandbox. A missing or broken file means no pairings: unpaired is the safe side.
+(`integrity.home_dir()`), one file for each copy: `board-pairs-<sha256(root)[:16]>.json`, `{"<sha256(token)>": <expires epoch>}`. The fingerprint is a plain sha256: whoever can
+write this file can add a token of their own. What keeps the agent out is the folder: the gate guards it as it guards the guardrail lists; a process of the same user that
+builds the path at run time can still reach it, so this raises the bar, it is not a sandbox. A missing or broken file means no pairings: unpaired is the safe side.
 No home folder: memory only, as before. Stdlib only.
 """
 

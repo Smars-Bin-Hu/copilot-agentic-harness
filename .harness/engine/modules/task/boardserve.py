@@ -46,7 +46,6 @@ import json
 import os
 import hashlib
 import secrets
-import socket
 import subprocess
 import sys
 import threading
@@ -252,11 +251,21 @@ def relaunch(code: str) -> None:
     """The same command again, so new code and new texts are read. No exec replaces a process on Windows: it runs it and leaves with its answer, as `pinpython` does."""
     words = [sys.executable, *sys.argv]
     env = {**os.environ, RESTART_CODE: code}
-    if os.environ.get(BACKGROUND_ENV) == "1":  # no keyboard behind a background board: it makes the voucher of the person's start again, as `task board --background` did
+    background = os.environ.get(BACKGROUND_ENV) == "1"
+    if background:  # no keyboard behind a background board: it makes the voucher of the person's start again, as `task board --background` did
         from core import boardperson
 
-        env[boardperson.ENV] = boardperson.issue()
+        voucher = boardperson.issue()
+        if not voucher:  # no home for the voucher: the new process would be refused and the board would be gone with no word (review 1)
+            print(say("serve.restart.novoucher"), flush=True)
+            return
+        env[boardperson.ENV] = voucher
     if os.name == "nt":
+        if background:  # detached as the first start was (no window), its output to the same log (review 1): a plain call from a process with no console opens one
+            from . import boardbg
+
+            subprocess.Popen(words, env=env, stdin=subprocess.DEVNULL, stdout=sys.stdout, stderr=subprocess.STDOUT, close_fds=True, creationflags=boardbg.HIDE)
+            sys.exit(0)
         sys.exit(subprocess.call(words, env=env))
     os.execve(sys.executable, words, env)
 
@@ -2553,12 +2562,9 @@ def sync_on_start(root: Path) -> None:
 
 
 class Server(http.server.ThreadingHTTPServer):
-    allow_reuse_address = not WINDOWS  # 1.8.11: on Windows that option lets a second process take the same port, so two boards could run; the port is exclusive there
-
-    def server_bind(self) -> None:
-        if WINDOWS and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
-            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
+    # 1.8.11: on Windows SO_REUSEADDR lets a second process take a port that one listens on, so two boards could run and answer in turns. Without it a second bind
+    # fails, as on other systems. Not SO_EXCLUSIVEADDRUSE: that one keeps the port for minutes after a stop (connections in TIME_WAIT), and a start right after a stop would fail (review 1)
+    allow_reuse_address = not WINDOWS
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """A browser that closed its connection is not an error to print (1.7.45); anything else is printed as before."""

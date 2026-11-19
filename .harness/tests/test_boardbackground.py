@@ -299,13 +299,10 @@ class PortTests(unittest.TestCase):
         with self.assertRaises(OSError):
             boardserve.Server(("127.0.0.1", port), http_handler())
 
-    def test_windows_takes_the_port_exclusively(self) -> None:
-        with mock.patch.object(boardserve, "WINDOWS", True), mock.patch.object(socket, "SO_EXCLUSIVEADDRUSE", -5, create=True), mock.patch("http.server.HTTPServer.server_bind"):
-            server = boardserve.Server.__new__(boardserve.Server)
-            server.socket = mock.Mock()
-            server.server_bind()
-        server.socket.setsockopt.assert_called_once_with(socket.SOL_SOCKET, -5, 1)
+    def test_windows_does_not_share_the_port_and_does_not_hold_it_after_a_stop(self) -> None:
+        # no SO_REUSEADDR on Windows (two boards could share it there), and no SO_EXCLUSIVEADDRUSE (it would keep the port for minutes after a stop; review 1)
         self.assertEqual(boardserve.Server.allow_reuse_address, os.name != "nt")
+        self.assertNotIn("server_bind", vars(boardserve.Server))
         self.assertEqual(boardserve.STATUS_WAIT, 10.0)
 
 
@@ -329,3 +326,27 @@ class LaunchersTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RelaunchTests(unittest.TestCase):
+    def test_a_background_restart_on_windows_stays_detached_and_logs_to_the_same_place(self) -> None:
+        # review 1 of 1.8.11: a plain call from a process with no console opened a window, and its output left the log
+        from modules.task import boardbg
+
+        env = {boardserve.BACKGROUND_ENV: "1"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(boardserve.os, "name", "nt"), \
+                mock.patch("core.boardperson.issue", return_value="voucher"), \
+                mock.patch.object(boardserve.subprocess, "Popen") as popen, mock.patch.object(boardserve.subprocess, "call") as call:
+            with self.assertRaises(SystemExit):
+                boardserve.relaunch("code")
+        call.assert_not_called()
+        self.assertEqual(popen.call_args.kwargs["creationflags"], boardbg.HIDE)
+        self.assertIs(popen.call_args.kwargs["stdout"], sys.stdout)
+        self.assertEqual(popen.call_args.kwargs["env"][boardserve.RESTART_CODE], "code")
+
+    def test_a_background_restart_with_no_voucher_says_so_and_starts_nothing(self) -> None:
+        with mock.patch.dict(os.environ, {boardserve.BACKGROUND_ENV: "1"}), mock.patch("core.boardperson.issue", return_value=""), \
+                mock.patch.object(boardserve.os, "execve") as execve, mock.patch.object(boardserve.subprocess, "Popen") as popen:
+            boardserve.relaunch("code")
+        execve.assert_not_called()
+        popen.assert_not_called()

@@ -74,7 +74,7 @@
     if (tab === "plan") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && Boolean(doc(FILES.plan)));
     if (tab === "changes") return WRITES_BACK.includes(desk.kind);  // a diff is the product of a development task only (1.7.9): a script of an RCA is evidence, not a change
     if (tab === "todo" || tab === "log" || tab === "req") return Boolean(doc(FILES[tab]));
-    if (tab === "scripts") return Boolean(desk.scripts);  // the files to run by hand and the check scripts (1.8.9)
+    if (tab === "scripts") return Boolean(desk.scripts);  // the scripts run on a server and the check scripts (1.8.9)
     if (tab === "test") return Boolean(desk.test);
     if (tab === "evidence") return Boolean(desk.evidence && desk.evidence.length);  // the saved runs of the task (1.7.3), a tab of Results (1.7.9)
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
@@ -2490,7 +2490,7 @@
       const fetched = c.files.filter((item) => item.action !== "create").length + same.length;
       parts.push(h("h3", null, t("desk.changes.files")));
       if (same.length) parts.push(h("p", {class: "sub"}, t("desk.changes.summary", {fetched, changed: fetched - same.length, same: same.length})));
-      if (c.files.some((item) => item.by_hand)) parts.push(h("p", {class: "sub"}, t("desk.changes.byhand")));  // DEV/_manual/ is run by hand: promote leaves it
+      if (c.files.some((item) => item.by_hand)) parts.push(h("p", {class: "sub"}, t("desk.changes.byhand")));  // DEV/_manual/ runs on a server: promote leaves it
       parts.push(DiffView.create({files: c.files, lines: c.diff.lines, cut: c.diff.cut, same}, () => diff(c.diff), "dev"));  // old and new code side by side (diffview.js); the plain diff text is its third view
     } else {
       parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.changes.none")), h("p", null, t("desk.changes.none.hint"))));

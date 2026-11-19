@@ -1,6 +1,6 @@
 ---
 name: sqlserver-jobs
-description: 'How this team deploys a script to DEV and IST, and starts, watches and checks a SQL Server job: the procedures to call, the log table to read, how long to wait, what counts as done; QAT and PROD go to the person. Use when a task needs a script deployed, a job run (a load, a sync, a nightly batch) or its result checked. Keywords: deploy the script, run the script, sqlcmd -i, run the job, start the load, job status, job log, wait for the job.'
+description: 'How this team deploys a script to DEV, and starts, watches and checks a SQL Server job: the procedures to call, the log table to read, how long to wait, what counts as done; QAT and PROD go to the person. Use when a task needs a script deployed, a job run (a load, a sync, a nightly batch) or its result checked. Keywords: deploy the script, run the script, sqlcmd -i, run the job, start the load, job status, job log, wait for the job.'
 type: unit
 specificTo: generic
 ---
@@ -13,13 +13,13 @@ A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the
 
 ## When to Use This Skill
 
-- A task needs a script deployed to DEV or IST (a procedure, a table change).
+- A task needs a script deployed to DEV (a procedure, a table change, a configuration sync).
 - A task needs a job run in an environment and its result checked (a test step, a sync after a write-back, a sample load).
 - The user says "run the job", "start the load", "did the job finish", "check the job log".
 
 ## Step-by-Step Workflows
 
-**Deploy a script to DEV or IST yourself**, in one command, before any job step. The script is a file in the task folder (`DEV/_manual/<path>`): `sqlcmd -S <server>,<port> -i <file>` (the connection's own options; the path from the repository root, no `-Q`). The gate holds it as a write and the card shows the file: the user approves it, or opens that connection for the task (the button on the card). Do as the hold says. **QAT and PROD are the user's**: do not run a script there; hand it over with `harness task handoff run --env QAT --what "<file>"` and stop. A script that fails halfway is read from the error, not run again at once.
+**Deploy a script to DEV yourself**, in one command, before any job step. DEV is your workbench. The script is a file in the task folder (`DEV/_manual/<path>`, after the plan is approved; a dry run and a commit run are two files there, `<name>.sql` and `<name>_commit.sql`): `sqlcmd -S <server>,<port> -i <file>` (the connection's own options; the path from the repository root, no `-Q`). The gate holds it as a write and the card shows the file: the user approves it, or opens that connection for the task (the button on the card). Do as the hold says. **Save what it printed whole** in `RUNS/DEV/` (`run-<time>.txt`) and record it: `harness task run record --env DEV --run-by agent ...` (the skill `generic-evidence-run`). **IST and up are not yours to change**: the change itself goes to the repository (`DEV/<repository>/`), and the team's pipeline takes it there; a script that must still run there by hand is the user's: `harness task handoff run --env <ENV> --what "<file>"`, and stop. A script that fails halfway is read from the error, not run again at once.
 
 **A job:**
 

@@ -704,7 +704,7 @@ def fetch_to_read(root: Path, raw_task: str, specs: List[str]) -> Dict[str, Any]
 
 
 def fetch_by_hand(root: Path, raw_task: str, specs: List[str], source: str, overwrite: bool) -> Dict[str, Any]:
-    """`task fetch _manual/<path> --from <file>` (1.6.110): a file the person runs by hand, as it is now (they put it in REF/, or it is on a share), becomes the base
+    """`task fetch _manual/<path> --from <file>` (1.6.110): a script run on a server, as it is now (they put it in REF/, or it is on a share), becomes the base
     of `DEV/_manual/<path>`, so the Changes tab shows what the task changes in it. No repository is read and nothing of it is promoted."""
     if len(specs) != 1 or not tasks.is_manual(specs[0].strip()) or not source.strip():
         raise CommandError(say("fetch.manual.one"))
@@ -865,10 +865,10 @@ def make_plan(root: Path, task: str, data: Dict[str, Any], sync: bool = False) -
     """`sync` (a dry run): the base branches are first brought up to their remotes (basesync)."""
     found = dev_files(root, task)
     if not data.get("target_mode"):
-        manual = [key for key, _path in found if tasks.is_manual(key)]  # run by hand needs no target repository
+        manual = [key for key, _path in found if tasks.is_manual(key)]  # a script run on a server needs no target repository
         raise CommandError(say("promote.no_target") + (say("promote.nothing.manual", count=len(manual), task=task) if manual else ""))
     loose = [key for key, _path in found if "/" not in key]  # directly in DEV/: under no repository, so it is not written back
-    by_hand = [key for key, _path in found if tasks.is_manual(key)]  # DEV/_manual/: the person runs it by hand
+    by_hand = [key for key, _path in found if tasks.is_manual(key)]  # DEV/_manual/: run on a server, not written back
     items: List[Dict[str, Any]] = [{"key": key, "source": path, "sha256": common.sha256_file(path), "delete": False} for key, path in found if "/" in key and not tasks.is_manual(key)]
     base = tasks.base_dir(root, task)
     untouched = [item["key"] for item in items if (base / item["key"]).is_file() and common.sha256_file(base / item["key"]) == item["sha256"]]  # 1.7.42: as fetched, only read: nothing to write, and its repository is not checked

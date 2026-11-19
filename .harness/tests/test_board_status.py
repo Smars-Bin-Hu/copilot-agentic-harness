@@ -94,7 +94,7 @@ class PageTests(unittest.TestCase):
         self.assertIn("event.key !== \"Escape\"", lobby)
         self.assertIn(".lb-card{position:fixed", css)
         # the poll fills the card in place: nothing in update() builds it again
-        update = lobby[lobby.index("function update(rows, live)"):]
+        update = lobby[lobby.index("function update(rows, live"):]  # 1.8.5 added `making`
         self.assertIn("fill(same)", update)
         self.assertNotIn("card.replaceChildren", lobby)
 

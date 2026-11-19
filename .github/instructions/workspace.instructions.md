@@ -5,7 +5,26 @@ applyTo: '.workspace/**'
 
 # Rules for .workspace
 
-The folder layout, and what the gate can and cannot guard, are in [.workspace/README.md](../../.workspace/README.md).
+The layout of `.workspace/`, and what the gate can and cannot guard, are in [.workspace/README.md](../../.workspace/README.md).
+
+## The task folder
+
+Every file has one of these places. Make no other top-level folder; a skill that writes files uses these places too.
+
+```text
+<task>/
+  TASK.md REQ.md PLAN.md TODO.md LOG.md QUESTIONS.md   the task's documents
+  RCA.md, DESIGN.md, notes, read-only queries           work that stays in the task; no approval
+  REQ/ REF/ INBOX/                what the user gave; read only
+  DEV/<repository>/<path>         the change to write back (promote); after the plan is approved
+  DEV/_manual/<path>              a script run on a server, never written back; after the plan is approved
+  TEST/                           read-only checks that show the result (a query to run again in a higher environment)
+  RUNS/<ENV>/                     what every run printed, whole (`task run record`): the evidence
+  READ/  OUT/<system>/            code fetched only to read; what was sent to an outside system
+  .task/ REVIEW/ SNAPSHOT/ OUTBOX/ CHANGES.diff PROMOTE-PLAN.diff   the CLI and the hooks only
+```
+
+## Rules
 
 - A task folder is `sandbox/tasks/<task>/`. `harness task new` makes it. Do not make one yourself.
 - A session with a task writes only inside that task folder:
@@ -17,10 +36,10 @@ The folder layout, and what the gate can and cannot guard, are in [.workspace/RE
   - `TODO.md`: one step per line, `- [ ] <text>`, `- [x]` done, `- [?]` parked (it waits for an answer). A step may end with `(model: <id>)`: the model the worker uses for it. `<id>` has no space and no bracket.
   - `QUESTIONS.md` holds what a person must answer. Start it with `# Open questions`, then one line per question: `- [ ] Q1 (step 4) <question> | took: <what you did, or none>`. `Qn` counts from 1 and is never reused; `(step N)` is the TODO step. `took: none` means the step is `[?]`; any other `took` means the step is done and the person confirms it at the end. When it is answered, `[ ]` becomes `[x]` and ` | answer: <answer>` is added. A line `[held: <tool>] <call> | took: held` is a call the gate held; a hook writes it, not you, and it does not park a step.
   - Who writes what while autorun is on: the default agent writes only `TODO.md`, `TASK.md`, `LOG.md` and `QUESTIONS.md`; the worker writes none of the four. Both obey the other limits here. The flow is in the skill [harness-autorun](../skills/harness-autorun/SKILL.md).
-  - Work that stays in the task (RCA, design, notes, a read-only query or script run only to look at something) goes at the root of the task folder and needs no approval.
+  - Work that stays in the task (RCA, design, notes, a read-only query or script run only to look at something) goes at the root of the task folder and needs no approval. A read-only check that shows the result, to run again later or in a higher environment, goes in `TEST/`; it needs no approval either.
   - Code that leaves the task goes in `DEV/`. The plan is in `PLAN.md`; `DEV/` can be written only after the user approves it on the task page.
     - To write back to a target repository: `DEV/<repository>/<path>`.
-    - Run by hand (on a server, in a database; written back later or by others): `DEV/_manual/<path>`. The agent runs it itself where a tool pack's skill says so (`sqlserver-jobs`: a script to DEV and IST, held for the user); anywhere else, the user runs it. Promote leaves it; hand the run over with `task handoff run`. To change a file that is in no target repository, ask the user to put its current version in `REF/`, then run `task fetch _manual/<path> --from <task>/REF/<file>`, so the Changes tab shows what you changed.
+    - A script run on a server (in a database; DEV is the agent's workbench): `DEV/_manual/<path>`. It is never written back: the change itself goes to the repository, and higher environments get it from there (promote, then the team's pipeline) or from the user. The agent runs it on DEV itself where a tool pack's skill says so (`sqlserver-jobs`), as the gate decides; what it printed goes whole into `RUNS/DEV/` with `harness task run record --run-by agent`. Where only the user may run it: `task handoff run`. A dry run and a commit run are two files here (`<name>.sql`, `<name>_commit.sql`), not a folder of their own. To change a file that is in no target repository, ask the user to put its current version in `REF/`, then run `task fetch _manual/<path> --from <task>/REF/<file>`, so the Changes tab shows what you changed.
   - "DEV" in what the user says may be an environment, not the task's `DEV/` folder. When you cannot tell, ask.
 - Files in a target repository cannot be changed directly. Fetch them into `DEV/` with `task fetch`, change them, then run `task promote`: `--dry-run` first, then the user approves in the terminal.
 - Fetch several files in one call: `harness task fetch <repo>/<a> <repo>/<b>`, or a folder. Not in a loop or a variable (the gate refuses a harness command it cannot read), and not as calls side by side (they wait for the same task lock).

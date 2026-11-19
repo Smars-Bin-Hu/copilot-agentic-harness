@@ -13,7 +13,7 @@ Ask the questions in order. The first yes decides.
 
 A step can be split: a config file is D for its shape and S for the source, the fields and the schedule.
 
-A step that runs a call on an outside system (a query on DEV, a call to a server) is split too: writing the query can be D, the call is its own step that the agent runs and the gate judges. The script never makes the call ([scripts.md](../../generic-workflow-build/references/scripts.md)).
+A step that runs a call on an outside system (a query on DEV, a call to a server) is split too: writing the query can be D, the call is its own step that the agent runs and the gate judges. A query that writes goes in `DEV/_manual/`, a read-only check in `TEST/`, and what the call printed in `RUNS/<ENV>/`. The script never makes the call ([scripts.md](../../generic-workflow-build/references/scripts.md)).
 
 ## Aligning the examples
 

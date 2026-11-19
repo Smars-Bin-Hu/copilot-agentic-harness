@@ -68,7 +68,7 @@ def write_back(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def by_hand(root: Path, task: str, data: Dict[str, Any], planned: bool) -> Dict[str, Any]:
-    """The ribbon of a task whose result the person runs by hand: a run recorded after the plan was approved ends that step."""
+    """The ribbon of a task whose result is a script run on a server: a run recorded after the plan was approved ends that step."""
     from . import task as task_ops
 
     events = [event for event in data.get("events") or [] if isinstance(event, dict)]

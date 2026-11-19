@@ -38,13 +38,14 @@ function makingMarks(item, short) {
   if (info.stage === "refused" || info.stage === "lost") node.append(h("span", {class: "mk-dot", "aria-hidden": "true"}));
   else node.append(spinner());
   if (!short) node.append(h("span", {class: "mk-text"}, info.text));
+  if (info.timed) Status.clock();
   if (info.timed) node.append(h("span", {class: "mk-time", "data-since": info.stamp}, makingClock(makingSecs(info.stamp))));
   if (item.slow) node.append(h("span", {class: "mk-slow", "aria-hidden": "true"}));
   if (item.warn) node.append(h("span", {class: "mk-note", "aria-hidden": "true"}, "i"));
   if ((info.stage === "refused" || info.stage === "lost") && typeof SERVE !== "undefined" && SERVE.post) { node.append(makingDismiss(item)); if (!short && info.stage === "refused" && item.error) node.append(h("span", {class: "mk-err"}, item.error)); }
   return node;
 }
-setInterval(() => { for (const node of document.querySelectorAll(".mk-time[data-since]")) { const secs = makingSecs(node.dataset.since); if (secs !== null) node.textContent = makingClock(secs); } }, 1000);
+Status.every(() => { const nodes = document.querySelectorAll(".mk-time[data-since]"); for (const node of nodes) { const secs = makingSecs(node.dataset.since); if (secs !== null) node.textContent = makingClock(secs); } return nodes.length > 0; });  // the one timer of status.js (1.8.9)
 
 const Lobby = (function () {
   const NS = "http://www.w3.org/2000/svg";

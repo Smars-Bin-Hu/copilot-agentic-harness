@@ -92,17 +92,23 @@ const Status = (function () {
     return text;
   }
 
+  // Other clocks of the page ride on this one timer (1.8.9): `every(paint)`; `paint` returns true while it still has something to move.
+  const others = [];
+  function every(paint) { others.push(paint); ensureTimer(); }
+
   function tick() {
     if (document.hidden) return;
     const runs = document.querySelectorAll(".st-run[data-since]");
     for (const node of runs) paintRun(node);
+    let more = false;
+    for (const paint of others) more = paint() || more;
     if (pop.anchor) {
       if (!pop.anchor.isConnected) {  // the page drew its rows again (the poll): find the same mark in the new rows, or let go
         const again = pop.key ? Array.from(document.querySelectorAll("[data-tip]")).find((node) => node.getAttribute("data-tip") === pop.key) : null;
         if (again) { pop.anchor = again; fillPop(); } else hideTip();
       } else if (pop.anchor.classList.contains("st-run") || pop.anchor.querySelector(".st-run")) fillPop();  // the time in the tip moves too
     }
-    if (!runs.length && !pop.anchor) { clearInterval(timer); timer = 0; }
+    if (!runs.length && !pop.anchor && !more) { clearInterval(timer); timer = 0; }
   }
   function ensureTimer() { if (!timer) timer = setInterval(tick, 1000); }
   document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
@@ -419,5 +425,5 @@ const Status = (function () {
     return box;
   }
 
-  return {row: build, links: linkMark, stages, ribbon, stageList, stageCard, checks, card, refresh, dot, place, phase, shortModel, tick, clock: ensureTimer};
+  return {row: build, links: linkMark, stages, ribbon, stageList, stageCard, checks, card, refresh, dot, place, phase, shortModel, tick, clock: ensureTimer, every};
 })();

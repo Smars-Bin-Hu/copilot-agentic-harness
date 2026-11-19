@@ -28,7 +28,7 @@ REQ_FILE = "REQ.md"  # the requirement as the agent understands it; REQ/ holds t
 PLAN_NAME = "PLAN.md"
 DEV_NAME = "DEV"
 READ_NAME = "READ"  # READ/<repo>/<path>: code of a target repository fetched only to be read (`task fetch --read`, 1.7.42), as the base branch has it; never promoted
-MANUAL_NAME = "_manual"  # DEV/_manual/<path>: made under the plan like the rest of DEV/, run by hand by the person, never promoted (1.6.110)
+MANUAL_NAME = "_manual"  # DEV/_manual/<path>: made under the plan like the rest of DEV/, a script run on a server (DEV: by the agent, as the gate allows), never promoted (1.6.110)
 STATE_DIR = ".task"
 STATE_NAME = "task.json"
 BASE_NAME = "base"
@@ -165,12 +165,12 @@ def plan_approved(root: Path, task: str, data: Optional[Dict[str, Any]] = None) 
 
 
 def is_manual(key: str) -> bool:
-    """Is this file of DEV/ (`<repo>/<path>` or `_manual/<path>`) one the person runs by hand? No repository can have that name: one starts with a letter or digit."""
+    """Is this file of DEV/ (`<repo>/<path>` or `_manual/<path>`) a script run on a server? No repository can have that name: one starts with a letter or digit."""
     return key.replace("\\", "/").split("/", 1)[0] == MANUAL_NAME
 
 
 def by_hand_only(root: Path, task: str) -> bool:
-    """Does DEV/ hold work to run by hand and nothing for a repository? Only its top is listed: the board asks this for every task."""
+    """Does DEV/ hold scripts to run on a server and nothing for a repository? Only its top is listed: the board asks this for every task."""
     try:
         names = [entry.name for entry in os.scandir(str(dev_dir(root, task))) if entry.is_dir() and not entry.name.startswith(".") and entry.name != "_deleted"]
     except OSError:

@@ -34,7 +34,7 @@ If the line says "not yet", or you cannot tell, stop: tell the user the design i
 
 1. **Read the design and the examples again.** Do not go beyond the design. A step the design does not have is added to the design first, and the user is told.
 2. **Make the skill folders in the task folder**, at `SKILLS/<name>/`, following `generic-build-new-skill` (its templates and its rules about the form). Names are `domain-<domain>-<name>`. Unit skills are `type: unit`; the orchestration skill is `type: workflow`. A description says what, when, and the words a user would say.
-3. **Write the scripts for the D steps** in each skill's `scripts/`, by the rules in [scripts.md](./references/scripts.md): one job each, parameters named, a dry run by default, `--write` to write, writes only under the task's `DEV/<repository>/`, no judgment inside.
+3. **Write the scripts for the D steps** in each skill's `scripts/`, by the rules in [scripts.md](./references/scripts.md): one job each, parameters named, a dry run by default, `--write` to write, writes only where the task folder map puts that kind of file, no judgment inside.
 4. **Test every script against a real example.** Run it with the parameters of example A; its output must equal the real files of A (apart from nothing). Keep the tests next to the scripts. Run them; a failing test means a missing rule or a variant: go back to the design and ask the user.
 5. **Write the S steps as text** in the unit skills: the check list, the knowledge base pages to read (paths), and the common mistakes in `## Gotchas`. Write only what the model would miss.
 6. **Write the orchestration skill** by [orchestration.md](./references/orchestration.md): defaults and conditions, not a fixed script. It keeps the approvals of the harness.
@@ -45,7 +45,7 @@ If the line says "not yet", or you cannot tell, stop: tell the user the design i
 ## Gotchas
 
 - **A script never makes a judgment.** If you find yourself adding an `if` about the business, that step is S: move it to the text.
-- **A script writes only under `DEV/<repository>/` of the task**, and only with `--write`. Without it, it prints what it would do. The plan approval and promote stay as they are.
+- **A script writes only where the [task folder map](../../instructions/workspace.instructions.md#the-task-folder) puts its kind of file**, and only with `--write`: `DEV/<repository>/` for a change to write back, `DEV/_manual/` for a script that runs on a server (DEV too), `TEST/` for a read-only check. What a run printed goes in `RUNS/<ENV>/` through `harness task run record`. Without `--write`, it prints what it would do. Never a top-level folder of its own (`DEV-RUN/`, `work/`), and never a script that writes to a server outside `DEV/`: that skips the plan approval. The plan approval and promote stay as they are.
 - **Test with real examples, not invented ones.** A test that compares with a file you made up proves nothing.
 - **Do not copy values, names or secrets from the examples into the skills or tests** beyond what a test needs to compare; keep example data in the task folder, not in the shipped skill, when it is real.
 - **Do not make the orchestration skill rigid.** If it reads like a script, the next case that differs will break it. Give conditions and let the model decide inside them.

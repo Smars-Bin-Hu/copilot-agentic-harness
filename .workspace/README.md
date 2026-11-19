@@ -17,18 +17,22 @@ What a task folder holds:
 | `TASK.md` | The handover file: kind, status, doing now, next step, what is decided. A new session reads it first | The agent |
 | `REQ.md` | The requirement. The agent writes it from the conversation and you confirm it; when the requirement changes, the agent changes this file first | The agent |
 | `REQ/`, `REF/` | Your own requirement documents and reference material | People. Agents only read |
+| `INBOX/<ENV>/` | Results you give on the task page (what you ran, what came back, pictures) | The board. Agents only read |
 | `TODO.md`, `LOG.md` | The list of steps; the decisions made, and why | The agent |
-| `PLAN.md` | The plan, when a target repository is to change or code is to be run by hand. `DEV/` can be written only after you approve it in the terminal | The agent |
+| `PLAN.md` | The plan, when a target repository is to change or a script is to run on a server. `DEV/` can be written only after you approve it in the terminal | The agent |
 | `RCA.md`, `DESIGN.md` and the like | Work that stays in the task: notes, an RCA, a design, a read-only query. At the root of the folder; no approval needed | The agent |
 | `DEV/<repository>/<path>` | Work to write back to a target repository, at the same path as in the repository | The agent (after the plan is approved) |
-| `DEV/_manual/<path>` | Code you run by hand (on a server, in a database), written back later or by others; promote leaves it | The agent (after the plan is approved) |
+| `DEV/_manual/<path>` | A script run on a server (in a database; on DEV by the agent, as the gate allows; where only you may run it, by you). Never written back: the change itself goes to the repository; promote leaves it | The agent (after the plan is approved) |
 | `READ/<repository>/<path>` | Code of a target repository fetched only to be read (`task fetch --read`), as its base branch has it: what a knowledge base card is written from. Never written back | The CLI |
-| `TEST/` | Test cases and results | The agent |
+| `TEST/` | Read-only checks that show the result (queries to run again later or in a higher environment); in a test task also the test results | The agent; the results by the CLI |
+| `RUNS/<ENV>/` | What every run printed, whole, and its record (`results.md`, numbered `E<n>`): the evidence | The agent and `task run record` |
 | `OUT/<system>/<item>/` | What the agent wrote to send to an outside system, one new file per send (an `ado` comment text: `OUT/ado/<id>/<time>-comment.md`): the record of what was sent. Never promoted | The agent |
 | `REVIEW/round-NNN/` | Only with independent checks on: the review package and the reviewer's verdict | The CLI and the hook |
-| `SNAPSHOT/<gate>-<time>/` | The work as saved when the plan is approved, before every check and before a write-back | The CLI |
+| `SNAPSHOT/<gate>-<time>/` | At plan approval, before every check and before a write-back: the list of the result files with their sha256 (`manifest.json`), and a copy of `REQ.md` and `PLAN.md`. The code itself is not copied | The CLI |
 | `OUTBOX/<code>-<system>.md` | A call to an outside system waiting for the user's approval (`approve-action`): the action, the exact command, its state | The hook |
 | `.task/`, `CHANGES.diff`, `PROMOTE-PLAN.diff` | State; the diffs for people to read | The CLI |
+
+No other top-level folder: everything has one of the places above, files a skill writes too.
 
 A task has one of three tiers, and the files come with the tier: light has only `TASK.md`; medium adds `REQ.md`, `REQ/`, `REF/`, `LOG.md`; full adds `TODO.md`, `DEV/`, `TEST/`.
 

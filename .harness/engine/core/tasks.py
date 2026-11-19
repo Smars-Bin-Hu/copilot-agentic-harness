@@ -28,7 +28,8 @@ REQ_FILE = "REQ.md"  # the requirement as the agent understands it; REQ/ holds t
 PLAN_NAME = "PLAN.md"
 DEV_NAME = "DEV"
 READ_NAME = "READ"  # READ/<repo>/<path>: code of a target repository fetched only to be read (`task fetch --read`, 1.7.42), as the base branch has it; never promoted
-MANUAL_NAME = "_manual"  # DEV/_manual/<path>: made under the plan like the rest of DEV/, a script run on a server (DEV: by the agent, as the gate allows), never promoted (1.6.110)
+SERVER_NAME = "_server"  # DEV/_server/<path>: made under the plan like the rest of DEV/, a script run on a server (DEV: by the agent, as the gate allows), never promoted (1.6.110 as _manual; 1.8.9)
+OLD_SERVER_NAMES = ("_manual",)  # the name before 1.8.9: an old task's DEV/_manual/ is still such a script
 STATE_DIR = ".task"
 STATE_NAME = "task.json"
 BASE_NAME = "base"
@@ -165,8 +166,8 @@ def plan_approved(root: Path, task: str, data: Optional[Dict[str, Any]] = None) 
 
 
 def is_manual(key: str) -> bool:
-    """Is this file of DEV/ (`<repo>/<path>` or `_manual/<path>`) a script run on a server? No repository can have that name: one starts with a letter or digit."""
-    return key.replace("\\", "/").split("/", 1)[0] == MANUAL_NAME
+    """Is this file of DEV/ (`<repo>/<path>` or `_server/<path>`; `_manual/<path>` before 1.8.9) a script run on a server? No repository can have that name: one starts with a letter or digit."""
+    return key.replace("\\", "/").split("/", 1)[0] in (SERVER_NAME, *OLD_SERVER_NAMES)
 
 
 def by_hand_only(root: Path, task: str) -> bool:
@@ -175,7 +176,7 @@ def by_hand_only(root: Path, task: str) -> bool:
         names = [entry.name for entry in os.scandir(str(dev_dir(root, task))) if entry.is_dir() and not entry.name.startswith(".") and entry.name != "_deleted"]
     except OSError:
         return False
-    return names == [MANUAL_NAME]
+    return bool(names) and all(name in (SERVER_NAME, *OLD_SERVER_NAMES) for name in names)
 
 
 def in_dev(root: Path, folder: Path) -> bool:

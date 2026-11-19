@@ -25,7 +25,7 @@ const DiffView = (function () {
 
   // Inside a hunk the counts of its `@@` line say how many lines follow, as in `diffKinds` of desk.js. A created file has no `@@` line
   // (`--- /dev/null`, then only `+` lines) and a deleted one has none either (`+++ /dev/null`, then only `-` lines).
-  // DEV/_manual/: a script run on a server; promote leaves it (1.6.110).
+  // DEV/_server/: a script run on a server; promote leaves it (1.6.110).
   function handTag(item) {
     return item.by_hand ? h("span", {class: "dv-hand", title: t("desk.changes.byhand.tip")}, t("desk.changes.byhand.tag")) : null;
   }

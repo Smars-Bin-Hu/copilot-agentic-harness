@@ -2060,7 +2060,7 @@
         fileLoad(known);
         return [button, h("div", {class: "script-view"}, fileView(known))];
       });
-      return h("section", {class: "scripts-sec"}, h("h3", {class: "scripts-h", title: t("desk.scripts." + key + ".tip")}, t("desk.scripts." + key), " ", h("span", {class: "sub"}, String(items.length))), rows);
+      return h("section", {class: "scripts-sec"}, h("h3", {class: "scripts-h", title: key === "dev" ? t("desk.scripts.dev.tip") : t("desk.scripts.test.tip")}, key === "dev" ? t("desk.scripts.dev") : t("desk.scripts.test"), " ", h("span", {class: "sub"}, String(items.length))), rows);
     };
     return [section("dev", desk.scripts.dev), section("test", desk.scripts.test)];
   }
@@ -2490,7 +2490,7 @@
       const fetched = c.files.filter((item) => item.action !== "create").length + same.length;
       parts.push(h("h3", null, t("desk.changes.files")));
       if (same.length) parts.push(h("p", {class: "sub"}, t("desk.changes.summary", {fetched, changed: fetched - same.length, same: same.length})));
-      if (c.files.some((item) => item.by_hand)) parts.push(h("p", {class: "sub"}, t("desk.changes.byhand")));  // DEV/_manual/ runs on a server: promote leaves it
+      if (c.files.some((item) => item.by_hand)) parts.push(h("p", {class: "sub"}, t("desk.changes.byhand")));  // DEV/_server/ runs on a server: promote leaves it
       parts.push(DiffView.create({files: c.files, lines: c.diff.lines, cut: c.diff.cut, same}, () => diff(c.diff), "dev"));  // old and new code side by side (diffview.js); the plain diff text is its third view
     } else {
       parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.changes.none")), h("p", null, t("desk.changes.none.hint"))));

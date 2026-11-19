@@ -167,7 +167,7 @@ def _script_in(folder: Optional[Path], token: Dict[str, Any], root: Optional[Pat
 
 def script_of(folder: Path, value: str, root: Optional[Path] = None, cwd: str = "", command: str = "") -> Optional[Dict[str, Any]]:
     """A file the command names, when it is inside the task folder: its text, capped, and its line count. A path outside the task, or no file, is None. A relative path is found as the command finds it
-    (`core.pinfiles.find`): from the agent's terminal, from the repository root, then in the task folder; the card showed no script for `-i .workspace/sandbox/tasks/<task>/DEV/_manual/x.sql` before (1.7.38)."""
+    (`core.pinfiles.find`): from the agent's terminal, from the repository root, then in the task folder; the card showed no script for `-i .workspace/sandbox/tasks/<task>/DEV/_server/x.sql` before (1.7.38)."""
     if not value or value.startswith("-") or not value.lower().endswith(SCRIPT_SUFFIXES):
         return None
     try:

@@ -67,7 +67,7 @@ Also:
 - Do not ask the user, do not wait, do not promote. Do not change the confirmation line of `REQ.md`.
 - A call the gate refuses is not a stop. Mark the step `[?]` and go on. The exception: a worker call refused because autorun is off. Stop at once, do not park the remaining steps, and tell the user.
 - **When no open step is left**: ask all open questions at once, with one `ask_user` (the hook lets it through only now). Write each answer into `QUESTIONS.md`, turn the `[?]` back to `[ ]`, and go on with them.
-- **When every step is ticked and no question is open** (held lines included: ask them first, even when every step is ticked): run the independent check (`harness task review start`, call `reviewer`). Send its findings to the worker. Then `harness task promote --dry-run`, give the user the link to `PROMOTE-PLAN.diff`, and stop. When `DEV/` holds only `DEV/_manual/`, there is no promote: run the scripts on DEV where a tool pack's skill says so and record what they printed (`RUNS/DEV/`); where only the user may run them, `harness task handoff run`; then stop.
+- **When every step is ticked and no question is open** (held lines included: ask them first, even when every step is ticked): run the independent check (`harness task review start`, call `reviewer`). Send its findings to the worker. Then `harness task promote --dry-run`, give the user the link to `PROMOTE-PLAN.diff`, and stop. When `DEV/` holds only `DEV/_server/`, there is no promote: run the scripts on DEV where a tool pack's skill says so and record what they printed (`RUNS/DEV/`); where only the user may run them, `harness task handoff run`; then stop.
 
 ### C. Park, do not stop
 

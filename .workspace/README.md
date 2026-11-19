@@ -22,7 +22,7 @@ What a task folder holds:
 | `PLAN.md` | The plan, when a target repository is to change or a script is to run on a server. `DEV/` can be written only after you approve it in the terminal | The agent |
 | `RCA.md`, `DESIGN.md` and the like | Work that stays in the task: notes, an RCA, a design, a read-only query. At the root of the folder; no approval needed | The agent |
 | `DEV/<repository>/<path>` | Work to write back to a target repository, at the same path as in the repository | The agent (after the plan is approved) |
-| `DEV/_manual/<path>` | A script run on a server (in a database; on DEV by the agent, as the gate allows; where only you may run it, by you). Never written back: the change itself goes to the repository; promote leaves it | The agent (after the plan is approved) |
+| `DEV/_server/<path>` | A script run on a server (in a database; on DEV by the agent, as the gate allows; where only you may run it, by you). Never written back: the change itself goes to the repository; promote leaves it | The agent (after the plan is approved) |
 | `READ/<repository>/<path>` | Code of a target repository fetched only to be read (`task fetch --read`), as its base branch has it: what a knowledge base card is written from. Never written back | The CLI |
 | `TEST/` | Read-only checks that show the result (queries to run again later or in a higher environment); in a test task also the test results | The agent; the results by the CLI |
 | `RUNS/<ENV>/` | What every run printed, whole, and its record (`results.md`, numbered `E<n>`): the evidence | The agent and `task run record` |

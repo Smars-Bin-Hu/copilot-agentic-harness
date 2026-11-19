@@ -7,7 +7,7 @@ the plan is asked for again, a new round after a write-back) falls back to the r
   rca, design, other    doing, done (done = the task is closed)
   dev, kb               requirement, plan, developing, write-back, done
                         developing: from the approved plan to the approved write-back; done: the write-back is made
-                        DEV/ holds only DEV/_manual/ (1.6.110): requirement, plan, developing, apply, done
+                        DEV/ holds only DEV/_server/ (1.6.110): requirement, plan, developing, apply, done
                         developing ends when the run is handed over; apply, when its result is recorded; done, when the task is closed
                         apply is named by where it was applied (`Apply to DEV`, 1.7.9): the person may run it, or the agent through the gate; nothing is promoted
   test                  guide, one step per environment of TEST-GUIDE.md (DEV, IST, UAT when it names none), done

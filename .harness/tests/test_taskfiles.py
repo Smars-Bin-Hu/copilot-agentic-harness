@@ -27,8 +27,8 @@ class FilesCase(ServeCase):
         (self.task / "RUNS" / "DEV" / "dump.bin").write_bytes(b"\x00\x01\x02")
         (self.task / "DEV" / "repo" / "sql").mkdir(parents=True, exist_ok=True)
         (self.task / "DEV" / "repo" / "sql" / "a.sql").write_text("select 2;\n", encoding="utf-8")
-        (self.task / "DEV-RUN").mkdir()
-        (self.task / "DEV-RUN" / "run.sh").write_text("echo hi\n", encoding="utf-8")
+        (self.task / "made-on-the-way").mkdir()
+        (self.task / "made-on-the-way" / "run.sh").write_text("echo hi\n", encoding="utf-8")
 
 
 class FilesTests(FilesCase):
@@ -41,7 +41,7 @@ class FilesTests(FilesCase):
         listed = taskfiles.listing(self.root, TASK)
         self.assertEqual([(item["path"], item["kind"]) for item in listed], [
             ("REQ/brd.md", "markdown"), ("REQ/chart.png", "image"), ("REF/old.sql", "text"), ("DEV/repo/sql/a.sql", "text"), ("RUNS/DEV/dump.bin", "other"), ("RUNS/DEV/result.md", "markdown"),
-            ("DEV-RUN/run.sh", "text"), ("TEST", "folder"),  # what the agent made on the way, and an empty folder
+            ("made-on-the-way/run.sh", "text"), ("TEST", "folder"),  # what the agent made on the way, and an empty folder
             ("LOG.md", "markdown"), ("PLAN.md", "markdown"), ("REQ.md", "markdown"), ("TASK.md", "markdown"), ("TODO.md", "markdown"),  # the files at the top; never .task/ or a hidden name
             ("READ/repo/b.sql", "text")])
         self.assertEqual(taskdesk.desk(self.root, "job1")["files"], listed)
@@ -63,7 +63,7 @@ class FilesTests(FilesCase):
         for path in sorted((self.task / "REQ").glob("*")) + sorted((self.task / "REF").glob("*")) + sorted((self.task / "RUNS" / "DEV").glob("*")) + sorted((self.task / "DEV").rglob("a.sql")):
             path.unlink()
         listed = [(item["path"], item["kind"]) for item in taskfiles.listing(self.root, TASK)]
-        self.assertEqual(listed[:5], [("REQ", "folder"), ("REF", "folder"), ("DEV/repo/sql", "folder"), ("RUNS/DEV", "folder"), ("DEV-RUN/run.sh", "text")])
+        self.assertEqual(listed[:5], [("REQ", "folder"), ("REF", "folder"), ("DEV/repo/sql", "folder"), ("RUNS/DEV", "folder"), ("made-on-the-way/run.sh", "text")])
 
     def test_a_file_is_shown_by_what_it_holds(self) -> None:
         shown = taskfiles.view(self.root, TASK, "REQ/brd.md")
@@ -82,7 +82,7 @@ class FilesTests(FilesCase):
         (self.task / "REF" / "link.txt").symlink_to(self.root / "outside.txt")
         (self.task / "REF" / "linked").symlink_to(self.root)
         self.assertEqual(taskfiles.view(self.root, TASK, "secret.md")["kind"], "markdown")  # 1.6.100: the whole task folder
-        self.assertEqual(taskfiles.view(self.root, TASK, "DEV-RUN/run.sh")["text"], "echo hi\n")
+        self.assertEqual(taskfiles.view(self.root, TASK, "made-on-the-way/run.sh")["text"], "echo hi\n")
         for path in (".task/task.json", "../job1/REF/old.sql", "REF/../secret.md", "/etc/passwd", "REF/link.txt", "REF/linked/outside.txt", "REF/.hidden", "C:/x", "REF/missing.txt", "REF", ""):
             self.assertIsNone(taskfiles.view(self.root, TASK, path), path)
         self.assertNotIn("REF/link.txt", [item["path"] for item in taskfiles.listing(self.root, TASK)])
@@ -116,7 +116,7 @@ class FilesTests(FilesCase):
         self.assertIn("attachment", {key.lower(): value for key, value in headers.items()}["content-disposition"])
         for path in ("secret.md", "REQ/../task.json", ".task/task.json"):
             self.assertIsNone(taskdesk.download_file(self.root, "job1", path), path)
-        self.assertIsNotNone(taskdesk.download_file(self.root, "job1", "DEV-RUN/run.sh"))  # 1.6.100: what the tab lists can be saved
+        self.assertIsNotNone(taskdesk.download_file(self.root, "job1", "made-on-the-way/run.sh"))  # 1.6.100: what the tab lists can be saved
         self.assertIsNone(taskdesk.download_file(self.root, "nope", "REQ/brd.md"))
 
 

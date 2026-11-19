@@ -1,7 +1,7 @@
 """A short look at a task's plan or changes for the super agent view (1.8.2, step 6): `/api/super/preview` `{task, kind}`.
 
   plan     `{ok: true, lines, more, total}`: the numbered steps of PLAN.md (the headings and top-level bullets when it has none) as plain text, each cut short, at most `MAX_LINES`; `total` counts them all.
-  changes  `{ok: true, files: [{path, added, removed, action}], more}`: the files a promote would change; unchanged files and DEV/_manual/ files are left out.
+  changes  `{ok: true, files: [{path, added, removed, action}], more}`: the files a promote would change; unchanged files and DEV/_server/ files are left out.
   req      (1.8.4) `{ok: true, sections: [{title, lines}], total}`: REQ.md as three sections, what to do, what not to do and done when, titled as the file titles them (either language of the template); lines are plain text, at most `MAX_LINES` for a section,
            and the lines still the template's `<...>` are left out (a section with none is left out, and a REQ that is still the template is `missing`); `total` counts all the lines of the sections shown.
   deliver  (1.8.4) `{ok: true, summary, files, more}`: the summary the agent delivered (at most `SUMMARY_CHARS`), and `files` as `changes` gives them for a task that has files to promote (development and knowledge-base tasks), else `[]`. `missing` when nothing was delivered.

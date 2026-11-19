@@ -51,7 +51,7 @@ class ByHandTests(TaskCase):
         self.fetch(KEY, "--from", self.given(), ok=False)
         output = self.edit(f"{TASK}/DEV/{KEY}")
         self.assertEqual(self.decision(output), "deny")
-        self.assertIn("DEV/_manual/", self.reason(output))
+        self.assertIn("DEV/_server/", self.reason(output))  # 1.8.9: the messages name the new folder; this task still has the old one
 
     def test_wrong_uses_are_refused_with_what_to_type(self) -> None:
         self.ready()
@@ -66,7 +66,7 @@ class ByHandTests(TaskCase):
         self.by_hand()
         self.dev(KEY, "select a, b from t;\n")
         refused = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
-        self.assertIn("DEV/_manual/", refused)
+        self.assertIn("DEV/_server/", refused)
         self.assertIn("handoff run", refused)
         self.assertFalse(autorun.wants_promote(self.root, TASK, self.data()))
         self.fetch("repo_b/src/a.sql")
@@ -105,7 +105,7 @@ class ByHandTests(TaskCase):
     def test_no_repository_can_take_the_name(self) -> None:
         self.assertTrue(tasks.is_manual(KEY))
         self.assertFalse(tasks.is_manual("repo_b/_manual/a.sql"))
-        self.assertIsNone(targets.REPO_NAME.match(tasks.MANUAL_NAME))
+        for name in (tasks.SERVER_NAME, *tasks.OLD_SERVER_NAMES): self.assertIsNone(targets.REPO_NAME.match(name))
 
     def test_a_session_still_writes_notes_at_the_root_without_a_plan(self) -> None:
         self.new()

@@ -409,7 +409,7 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
         items, text = [], ""
     lines = text.splitlines()[1:] if items else []  # the first line is the header of the file
     folder = tasks.task_dir(root, task)
-    shown = [dict(item, by_hand=True) if tasks.is_manual(item["path"]) else dict(item) for item in items if item["action"] != "unchanged"]  # DEV/_manual/: a script run on a server, never promoted
+    shown = [dict(item, by_hand=True) if tasks.is_manual(item["path"]) else dict(item) for item in items if item["action"] != "unchanged"]  # DEV/_server/: a script run on a server, never promoted
     budget = MAX_CODE_CHARS
     for item in shown:  # the new code of a changed file: the compare rebuilds the lines between the hunks from it
         if item["action"] != "modify":
@@ -437,7 +437,7 @@ TEST_RECORD_DIRS = ("evidence", "runs")
 
 
 def scripts(files: List[Dict[str, Any]], changes_view: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """The Scripts tab: the files of `DEV/_manual/` (scripts run on a server; `mark` new or changed from the Changes data) and the check scripts of `TEST/`, never the records of a test run.
+    """The Scripts tab: the files of `DEV/_server/` (scripts run on a server; `mark` new or changed from the Changes data) and the check scripts of `TEST/`, never the records of a test run.
     `files` is the Files tab list (same order, no hidden name, no link). None when there is nothing."""
     marks = {item["path"]: {"create": "new", "modify": "changed"}.get(item.get("action"), "") for item in changes_view.get("files") or []}
     dev, test = [], []

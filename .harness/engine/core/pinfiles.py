@@ -1,6 +1,6 @@
 """The files a held call reads, pinned when the person approves it (1.7.38, C12 TB-05).
 
-An approval is for one command line. A line like `sqlcmd -i DEV/_manual/load.sql` names a file, and the same line runs whatever that file holds when it runs. So the approval also keeps what the
+An approval is for one command line. A line like `sqlcmd -i DEV/_server/load.sql` names a file, and the same line runs whatever that file holds when it runs. So the approval also keeps what the
 files in the task folder that the line names held at the time the person approved (the person read them on the card). When the line is run, every file is read again; a file that is not what was
 approved, or a file that has appeared since, is a change: the approval is not used, and the call is held anew.
 

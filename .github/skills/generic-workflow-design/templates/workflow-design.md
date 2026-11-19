@@ -35,7 +35,7 @@ Where the files go (the task folder map in `.github/instructions/workspace.instr
 | File a step makes | Place |
 | --- | --- |
 | <a change to write back> | `DEV/<repository>/<path>` |
-| <a script that runs on a server, DEV too> | `DEV/_manual/<path>` |
+| <a script that runs on a server, DEV too> | `DEV/_server/<path>` |
 | <a read-only check> | `TEST/<path>` |
 | <what a run printed> | `RUNS/<ENV>/` (`harness task run record`) |
 

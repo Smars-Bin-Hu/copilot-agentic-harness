@@ -265,3 +265,10 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .tk-cool .tag.hot{background:transparent;color:var(--soft);border-color:var(--line)}
 .tk-cool .act.hot.live{background:transparent;color:var(--ink);border-color:var(--line2);font-weight:500}  /* 1.8.5: the agent's last turn failed: what it waits for is not the next thing to press */
 .tk-cool .act.hot.live:hover{background:var(--hover);border-color:var(--line2)}
+
+/* Scripts tab: a row is the path (wraps), the size and a mark; the open file sits under its row */
+.scripts-sec{margin:0 0 18px}
+.scripts-h{margin:0 0 6px;font-size:14px;cursor:help}
+.script-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;width:100%;box-sizing:border-box}
+.script-path{min-width:0;overflow-wrap:anywhere;word-break:break-all}
+.script-view{margin:4px 0 10px 12px;min-width:0;overflow-x:auto}

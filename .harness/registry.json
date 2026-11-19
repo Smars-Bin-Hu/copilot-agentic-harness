@@ -207,6 +207,7 @@
         ".harness/tests/test_skillsend.py",
         ".harness/tests/test_chatrounds.py",
         ".harness/tests/test_taskfiles.py",
+        ".harness/tests/test_deskscripts.py",
         ".harness/tests/test_taskinbox.py",
         ".harness/tests/test_taskfork.py",
         ".harness/tests/test_basesync.py",

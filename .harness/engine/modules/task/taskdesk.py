@@ -432,6 +432,26 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+TEST_RECORDS = re.compile(r"(results-.*\.md|summary\.md|defects\.md|steps-.*\.md|given\.txt|ran\.txt)$", re.IGNORECASE)  # written by `task test record` and friends
+TEST_RECORD_DIRS = ("evidence", "runs")
+
+
+def scripts(files: List[Dict[str, Any]], changes_view: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The Scripts tab: the files of `DEV/_manual/` (run on DEV by hand; `mark` new or changed from the Changes data) and the check scripts of `TEST/`, never the records of a test run.
+    `files` is the Files tab list (same order, no hidden name, no link). None when there is nothing."""
+    marks = {item["path"]: {"create": "new", "modify": "changed"}.get(item.get("action"), "") for item in changes_view.get("files") or []}
+    dev, test = [], []
+    for item in files:
+        parts = item["path"].split("/")
+        if item.get("kind") == "folder":
+            continue
+        if parts[0] == "DEV" and len(parts) > 2 and tasks.is_manual("/".join(parts[1:])):
+            dev.append({"path": item["path"], "size": item["size"], "mark": marks.get("/".join(parts[1:]), "")})
+        elif parts[0] == "TEST" and len(parts) > 1 and parts[1].lower() not in TEST_RECORD_DIRS and not (len(parts) == 2 and TEST_RECORDS.match(parts[1])):
+            test.append({"path": item["path"], "size": item["size"]})
+    return {"dev": dev, "test": test} if dev or test else None
+
+
 def round_diff(root: Path, entry: Dict[str, Any]) -> Dict[str, Any]:
     """The changes of an earlier round from the diff kept when it was archived (`CHANGES_r<n>.diff`): file by file, and the diff.
     `kept` is false for a round archived before diffs were kept: then only the file names are known (`files`, `deletes` of the round)."""
@@ -560,6 +580,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
     done, total = sum(1 for step in steps if step["done"]), len(steps)
     report = common.task_report_file(root, name, common.REPORT_HTML)
     review, events = reviews(root, task, data), history(data)
+    listed, changes_view = taskfiles.listing(root, task), changed(root, task, data)
     return {
         "name": name, "task": task, "title": row.get("title") or "", "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "state": row.get("state", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
@@ -571,7 +592,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

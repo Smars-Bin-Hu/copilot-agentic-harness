@@ -16,7 +16,7 @@
   const GROUPS = [
     {id: "live", tabs: ["live"]},
     {id: "overview", tabs: ["overview", "req", "intake", "plan", "todo"]},
-    {id: "deliver", tabs: ["changes", "test", "rca", "design", "evidence", "review"]},  // what came out: the product of the kind first (a diff, a test, a conclusion), then the proof and the check (1.7.9)
+    {id: "deliver", tabs: ["changes", "scripts", "test", "rca", "design", "evidence", "review"]},  // what came out: the product of the kind first (a diff, a test, a conclusion), then the proof and the check (1.7.9)
     {id: "records", tabs: ["log", "history", "trace"]},
     {id: "files", tabs: ["docs", "files"]},
   ];
@@ -74,6 +74,7 @@
     if (tab === "plan") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && Boolean(doc(FILES.plan)));
     if (tab === "changes") return WRITES_BACK.includes(desk.kind);  // a diff is the product of a development task only (1.7.9): a script of an RCA is evidence, not a change
     if (tab === "todo" || tab === "log" || tab === "req") return Boolean(doc(FILES[tab]));
+    if (tab === "scripts") return Boolean(desk.scripts);  // the files to run by hand and the check scripts (1.8.9)
     if (tab === "test") return Boolean(desk.test);
     if (tab === "evidence") return Boolean(desk.evidence && desk.evidence.length);  // the saved runs of the task (1.7.3), a tab of Results (1.7.9)
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
@@ -1591,6 +1592,7 @@
     if (tab === "plan") return {name, bang: mine && desk.waiting_why === "plan"};
     if (tab === "todo") return {name, count: desk.todo.total ? desk.todo.done + "/" + desk.todo.total : ""};
     if (tab === "changes") return {name, count: desk.changes.files.length ? String(desk.changes.files.length) : "", bang: Boolean(desk.commit && !desk.commit.written) || (mine && desk.waiting_why === "promote")};
+    if (tab === "scripts") return {name, count: String(desk.scripts.dev.length + desk.scripts.test.length)};
     if (tab === "test") return {name, count: desk.test.passed + "/" + desk.test.total};
     if (tab === "evidence") return {name, count: String(desk.evidence.length)};
     if (tab === "review") return {name, count: desk.review.n ? desk.review.passes + "/" + desk.review.n : String(desk.review.rounds.length)};
@@ -2041,6 +2043,27 @@
     button.addEventListener("click", (event) => { event.stopPropagation(); call(); });
     return button;
   };
+
+  // The Scripts tab: the files to run on DEV and the read-only checks. A file opens in place in the viewer of the Files tab (fileView), with its Copy button.
+  let scriptOpen = "";
+  function scriptsTab() {
+    const mark = {new: "create", changed: "modify"};
+    const section = (key, items) => {
+      if (!items.length) return null;
+      const rows = items.map((item) => {
+        const on = item.path === scriptOpen;
+        const tag = mark[item.mark] ? h("span", {class: "tag fmark " + mark[item.mark]}, markText()[mark[item.mark]]) : null;
+        const button = h("button", {type: "button", class: "file script-row" + (on ? " on" : ""), "aria-expanded": on ? "true" : "false", title: item.path}, h("span", {class: "script-path"}, item.path), h("span", {class: "sub"}, size(item.size)), tag);
+        button.addEventListener("click", () => { scriptOpen = on ? "" : item.path; draw(true); });
+        if (!on) return button;
+        const known = desk.files.find((file) => file.path === item.path) || {path: item.path, size: item.size, kind: "text"};
+        fileLoad(known);
+        return [button, h("div", {class: "script-view"}, fileView(known))];
+      });
+      return h("section", {class: "scripts-sec"}, h("h3", {class: "scripts-h", title: t("desk.scripts." + key + ".tip")}, t("desk.scripts." + key), " ", h("span", {class: "sub"}, String(items.length))), rows);
+    };
+    return [section("dev", desk.scripts.dev), section("test", desk.scripts.test)];
+  }
 
   function filesTab() {
     const items = desk.files;
@@ -2687,6 +2710,7 @@
     if (current === "review") return review();
     if (current === "test" && desk.test) return testing();
     if (current === "evidence") return evidenceTab();
+    if (current === "scripts") return scriptsTab();
     if (current === "files") return filesTab();
     if (current === "intake") return intakeTab();
     if (current === "trace") return trace();

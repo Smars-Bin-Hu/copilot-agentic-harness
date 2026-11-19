@@ -27,7 +27,7 @@ LOG_LINES = 20  # lines of the log shown when the start fails
 WAIT_LIMIT = 180.0  # seconds the launcher waits in all
 POLL_EVERY = 0.5  # seconds between two looks at the board; the wheel turns faster
 STOP_WAIT = 30.0  # seconds `--stop` waits for the board to go
-HIDE = 0x08000000 | 0x00000008 | 0x00000200  # CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP (Windows)
+HIDE = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP (Windows): a hidden console that the board's own children (git, code) share, so none flashes a window. Not DETACHED_PROCESS: with it the board has no console, and every console program it starts opens one (review 2)
 
 
 def say(key: str, /, **values: Any) -> str:

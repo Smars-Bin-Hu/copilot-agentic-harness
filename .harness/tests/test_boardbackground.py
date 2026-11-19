@@ -225,7 +225,7 @@ class NoBoardTests(Home, TaskCase):
         self.assertEqual(options["stderr"], subprocess.STDOUT)
         if os.name != "nt":
             self.assertTrue(options["start_new_session"])
-        self.assertEqual(boardbg.HIDE, 0x08000000 | 0x00000008 | 0x00000200)  # CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        self.assertEqual(boardbg.HIDE, 0x08000000 | 0x00000200)  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP; never DETACHED_PROCESS (its children would open windows)
 
     def test_the_voucher_is_kept_by_its_hash_only_and_a_start_without_a_home_is_refused(self) -> None:
         with mock.patch.object(boardperson, "issue", return_value=""):

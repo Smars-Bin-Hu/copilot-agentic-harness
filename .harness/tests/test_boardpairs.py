@@ -149,14 +149,16 @@ class ServedTests(test_boardserve.ServeCase):
     def test_every_endpoint_but_the_reads_refuses_an_unpaired_browser(self) -> None:
         # review 1 of 1.8.11: every POST path of the server, not a sample; a new path that acts must be refused too, or named here as a read
         reads = {"/api/pair", "/api/reopen", "/api/status", "/api/ready", "/api/live", "/api/board", "/api/desk", "/api/file", "/api/super", "/api/super/history", "/api/super/talk", "/api/wall"}
-        paths = sorted(set(re.findall(r'if path == "(/api/[a-z/_-]+)"', Path(boardserve.__file__).read_text(encoding="utf-8"))))
-        self.assertIn("/api/send", paths)
-        for path in paths:
-            if path in reads:
-                continue
-            status, _data, _ = self.request("POST", path, {"task": test_boardserve.TASK, "text": "hi"})
-            self.assertNotEqual(status, 200, path)
-            self.assertTrue(self.server_alive(), path) if hasattr(self, "server_alive") else None
+        source = Path(boardserve.__file__).read_text(encoding="utf-8")
+        handler = source[source.index("def do_POST"):]
+        paths = set()
+        for line in handler.splitlines():  # `path == "/api/x"` and `path in ("/api/a", "/api/b")` (review 2: the second form was missed)
+            if re.search(r"\bpath (==|in) ", line):
+                paths.update(re.findall(r'"(/api/[a-z/_-]+)"', line))
+        self.assertTrue({"/api/send", "/api/steer", "/api/confirm", "/api/answer", "/api/autorun/on"} <= paths)
+        for path in sorted(paths - reads):
+            status, data, _ = self.request("POST", path, {"task": test_boardserve.TASK, "text": "hi"})
+            self.assertEqual(status, 403, (path, data))
 
     def test_reopen_needs_no_pairing_and_the_button_is_in_the_page_files(self) -> None:
         self.assertEqual(self.request("POST", "/api/reopen", {})[0], 200)

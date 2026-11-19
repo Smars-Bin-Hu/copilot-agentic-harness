@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 import os
 import time
@@ -17,6 +18,8 @@ from test_tasklife import BASE, S1, S2, LifeCase
 from core import approval, tasks
 from modules.task import task as task_ops
 from modules.task import taskreview, tasksnap
+
+MANIFEST_NAME = tasksnap.MANIFEST
 from modules.task.common import CommandError
 from support import GIT
 
@@ -178,8 +181,9 @@ class CheckTests(ReviewCase):
         self.assertIn(f"| {JOB}/RCA.md |", package)
         self.assertNotIn("TASK.md |", package)
         self.assertNotIn("LOG.md |", package)
-        copy = self.root / result["snapshot"] / "files" / "RCA.md"
-        self.assertEqual(copy.read_text(encoding="utf-8"), "v1\n")
+        listed = json.loads((self.root / result["snapshot"] / MANIFEST_NAME).read_text(encoding="utf-8"))["files"]  # the snapshot lists the work by sha256, it does not copy it (1.8.9)
+        self.assertEqual({item["path"]: item["sha256"] for item in listed}["RCA.md"], hashlib.sha256(b"v1\n").hexdigest())
+        self.assertFalse((self.root / result["snapshot"] / "files" / "RCA.md").exists())
         self.assertEqual(self.status()["pending_round"], 1)
 
     def test_the_package_says_an_unconfirmed_requirement_is_not_a_problem(self) -> None:
@@ -418,8 +422,10 @@ class SnapshotTests(ReviewCase):
         self.check(PASS)
         listed = self.cli_json("task", "snapshot", "list")["snapshots"]
         self.assertEqual([item["gate"] for item in listed], ["review-001", "review-002"])
-        self.assertEqual((self.root / listed[0]["snapshot"] / "files" / "RCA.md").read_text(encoding="utf-8"), "v1\n")
-        self.assertEqual((self.root / listed[1]["snapshot"] / "files" / "RCA.md").read_text(encoding="utf-8"), "v2\n")
+        # A snapshot keeps the hash list, not copies of the work (1.8.9): each version is told by its sha256.
+        hashes = [{item["path"]: item["sha256"] for item in json.loads((self.root / entry["snapshot"] / "manifest.json").read_text(encoding="utf-8"))["files"]}["RCA.md"] for entry in listed]
+        self.assertEqual(hashes, [hashlib.sha256(b"v1\n").hexdigest(), hashlib.sha256(b"v2\n").hexdigest()])
+        self.assertFalse((self.root / listed[0]["snapshot"] / "files" / "RCA.md").exists())
 
     def test_a_file_over_the_limit_is_listed_but_not_copied(self) -> None:
         path = self.root / ".harness" / "policies" / "task.json"
@@ -433,7 +439,24 @@ class SnapshotTests(ReviewCase):
         self.assertFalse(big["copied"])
         self.assertTrue(big["sha256"])
         self.assertFalse((self.root / taken["snapshot"] / "files" / "big.sql").exists())
-        self.assertTrue((self.root / taken["snapshot"] / "files" / "RCA.md").exists())
+        self.assertFalse((self.root / taken["snapshot"] / "files" / "RCA.md").exists())  # only REQ.md and PLAN.md are copied (1.8.9)
+
+    def test_a_snapshot_copies_req_and_plan_only_and_keeps_the_digest(self) -> None:
+        self.job(result=False)
+        for name, text in (("DEV/repo/a.py", "print(1)"), ("RUNS/DEV/results.md", "ok"), ("TEST/x.sql", "select 1;"), ("REQ.md", "# req"), ("PLAN.md", "# plan")):
+            self.result(text, name)
+        taken = tasksnap.take(self.root, JOB, "plan")
+        target = self.root / taken["snapshot"]
+        held = sorted(path.relative_to(target / "files").as_posix() for path in (target / "files").rglob("*") if path.is_file())
+        self.assertEqual(held, ["PLAN.md", "REQ.md"])
+        by_path = {item["path"]: item for item in taken["files"]}
+        self.assertEqual(sorted(by_path), ["DEV/repo/a.py", "PLAN.md", "REQ.md", "RUNS/DEV/results.md", "TEST/x.sql"])
+        self.assertTrue(all(len(item["sha256"]) == 64 for item in by_path.values()))
+        self.assertEqual({path for path, item in by_path.items() if item["copied"]}, {"PLAN.md", "REQ.md"})
+        old_way = hashlib.sha256("\n".join(f"{path}\t{by_path[path]['sha256']}" for path in sorted(by_path)).encode("utf-8")).hexdigest()
+        self.assertEqual(taken["digest"], old_way)
+        self.assertEqual(taken["digest"], tasksnap.results_digest(self.root, JOB))
+        self.assertEqual(json.loads((target / "manifest.json").read_text(encoding="utf-8"))["digest"], old_way)
 
     def test_old_snapshots_go_and_the_newest_always_stays(self) -> None:
         self.job()

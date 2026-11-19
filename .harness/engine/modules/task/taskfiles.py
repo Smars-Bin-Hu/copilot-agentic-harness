@@ -72,6 +72,11 @@ def converted_from(base: Path, out: List[Dict[str, Any]]) -> None:
         item["made"] = [path for path in made if path in have and path != item["path"]]
 
 
+def kept_out(name: str) -> bool:
+    """A top-level folder the tab does not list: `SNAPSHOT/` is a list of hashes the harness keeps (old ones hold big copies)."""
+    return name.upper() == "SNAPSHOT"
+
+
 def hidden(name: str) -> bool:
     return name.startswith(".") or name in common.SKIP_NAMES
 
@@ -83,7 +88,7 @@ def listing(root: Path, task: str, folders: Optional[Tuple[str, ...]] = None) ->
     base = folder_of(root, task)
     out: List[Dict[str, Any]] = []
     try:
-        top = sorted((entry for entry in base.iterdir() if not entry.is_symlink() and not hidden(entry.name)), key=lambda entry: entry.name.lower())
+        top = sorted((entry for entry in base.iterdir() if not entry.is_symlink() and not hidden(entry.name) and not kept_out(entry.name)), key=lambda entry: entry.name.lower())
     except OSError:
         return out
     named = {entry.name.upper(): entry for entry in top if entry.is_dir()}
@@ -121,7 +126,7 @@ def locate(root: Path, task: str, relative: str) -> Optional[Path]:
     if not relative or "\x00" in relative or relative.startswith(("/", "\\")) or ":" in relative.split("/")[0]:
         return None
     parts = relative.replace("\\", "/").split("/")
-    if any(part in ("", ".", "..") or hidden(part) for part in parts):
+    if any(part in ("", ".", "..") or hidden(part) for part in parts) or kept_out(parts[0]):
         return None
     base = folder_of(root, task)
     walk = base

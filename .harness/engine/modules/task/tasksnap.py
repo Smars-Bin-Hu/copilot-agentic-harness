@@ -1,8 +1,9 @@
 """Snapshots of a task at its gates (M11-10): what the results were when the plan was approved, before each check,
 before a promote dry-run.
 
-A snapshot is a copy of the task's result files under `SNAPSHOT/<gate>-<time>/`, with a manifest of their sha256.
-What changes between two gates is not kept. The one made before a check is also what the reviewer was given.
+A snapshot is a list: `SNAPSHOT/<gate>-<time>/manifest.json` holds every result file with its sha256 and size, and one digest of them all.
+It does not hold the work: the reviewer reads the live files, and "changed after the check" compares digests. Only `REQ.md` and `PLAN.md`
+are copied (`files/`), so a later round can show the requirement as it was at plan approval.
 Only the CLI writes here (gate.json: cli_owned_paths). Old snapshots are removed when a new one is made.
 """
 
@@ -24,6 +25,7 @@ from .policy import POLICY_NAME
 SNAPSHOT_DIR = "SNAPSHOT"
 REVIEW_DIR = "REVIEW"
 MANIFEST = "manifest.json"
+COPIED = (tasks.REQ_FILE, tasks.PLAN_NAME)  # the only files a snapshot copies; every result file is listed with its sha256
 DEFAULTS = {"keep_days": 14, "max_file_mb": 5}
 # Not results: the CLI's own files, the person's material, the files that only say where the work stands.
 # QUESTIONS.md (autorun) is answered after the last check: answering must not undo the passes (1.8).
@@ -95,7 +97,7 @@ def stamp() -> str:
 
 
 def take(root: Path, task: str, gate: str) -> Dict[str, Any]:
-    """Copy the result files to `SNAPSHOT/<gate>-<time>/`. A file over the size limit is listed, not copied."""
+    """List the result files (sha256, bytes) in `SNAPSHOT/<gate>-<time>/manifest.json`; copy `REQ.md` and `PLAN.md` only, when under the size limit."""
     limits = settings(root)
     files = listing(root, task)
     folder = tasks.task_dir(root, task)
@@ -108,7 +110,7 @@ def take(root: Path, task: str, gate: str) -> Dict[str, Any]:
     target.mkdir(parents=True)
     limit = int(limits["max_file_mb"] * 1024 * 1024)
     for item in files:
-        item["copied"] = item["bytes"] <= limit
+        item["copied"] = item["path"] in COPIED and item["bytes"] <= limit
         if item["copied"]:
             copy = target / "files" / item["path"]
             copy.parent.mkdir(parents=True, exist_ok=True)

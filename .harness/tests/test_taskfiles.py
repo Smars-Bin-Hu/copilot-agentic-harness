@@ -47,6 +47,18 @@ class FilesTests(FilesCase):
         self.assertEqual(taskdesk.desk(self.root, "job1")["files"], listed)
         self.assertEqual(taskfiles.listing(self.root, TASK, ("DEV",)), [{"path": "DEV/repo/sql/a.sql", "size": 10, "kind": "text"}])  # an earlier round lists only its own folder
 
+    def test_snapshot_is_not_listed_and_not_opened(self) -> None:
+        (self.task / "SNAPSHOT" / "plan-1" / "files" / "DEV").mkdir(parents=True)
+        (self.task / "SNAPSHOT" / "plan-1" / "files" / "DEV" / "old.py").write_text("print(1)\n", encoding="utf-8")
+        (self.task / "SNAPSHOT" / "plan-1" / "manifest.json").write_text("{}", encoding="utf-8")
+        (self.task / "REVIEW" / "round-001").mkdir(parents=True)
+        (self.task / "REVIEW" / "round-001" / "verdict.md").write_text("PASS\n", encoding="utf-8")
+        listed = [item["path"] for item in taskfiles.listing(self.root, TASK)]
+        self.assertFalse([path for path in listed if path.upper().startswith("SNAPSHOT")])
+        self.assertIn("REVIEW/round-001/verdict.md", listed)  # REVIEW/ stays listed
+        self.assertIsNone(taskfiles.locate(self.root, TASK, "SNAPSHOT/plan-1/manifest.json"))
+        self.assertIsNone(taskfiles.locate(self.root, TASK, "snapshot/plan-1/files/DEV/old.py"))
+
     def test_a_task_with_empty_folders_lists_the_folders(self) -> None:
         for path in sorted((self.task / "REQ").glob("*")) + sorted((self.task / "REF").glob("*")) + sorted((self.task / "RUNS" / "DEV").glob("*")) + sorted((self.task / "DEV").rglob("a.sql")):
             path.unlink()

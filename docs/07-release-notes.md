@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.8 (1.8.0 – 1.8.8, 2026-11-17 – 2026-11-18)
+## 1.8.9 (1.8.0 – 1.8.9, 2026-11-17 – 2026-11-19)
 
 ### Added
 
@@ -20,6 +20,8 @@ To see which version you have: `harness --version`.
 - **Starting, being created, a turning button** (1.8.5): right after the board sends something to the agent, the task shows *Starting…* until its chat is seen to work (2 minutes at most, then it says no start was seen); a task the board is making shows as being created on the list, the lobby and the super view; a button whose request has not come back turns.
 - **A display name for a task** (1.8.5): the pencil next to its name on the task page; the agent and the commands keep the task's name.
 - **Your actions never wait behind the board's reading** (1.8.7): what you do on the board (send, answer, allow, stop) goes to VS Code on a lane of its own; a new chat is made with no time limit and its window closes at once, while "being created" shows how far it is.
+- **The Scripts tab** (1.8.9): under Results, the scripts of a task in two parts: *Run on DEV* (`DEV/_server/`) and *Checks* (the read-only checks in `TEST/`). Open one to read it, and copy it whole.
+- **A map of the task folder** (1.8.9): one place for each kind of file, in the rules the agent reads; no folder of its own. `generic-workflow-design` and `generic-workflow-build` follow it, so the skills they make do too.
 
 ### Fixed
 
@@ -32,10 +34,13 @@ To see which version you have: `harness --version`.
 - On a slow computer with many tasks, a message was often refused as "not taken in time", and a New task VS Code answered late left an empty chat (1.8.7).
 - With VS Code open but not ready for the board yet (on a work computer it takes about a minute after the window opens), the Enter screen said VS Code was not open, with a button to restart it, and saw it ready up to a minute late. Now it says VS Code is open and getting ready, with the time waited; it checks every 3 s while a VS Code window is open, and after 3 minutes it turns red with **Restart VS Code** (1.8.8).
 
+- A task folder grew to hundreds of files (1.8.9): every plan approval, check and promote dry run copied the whole work into `SNAPSHOT/`. A snapshot now keeps the list of files with their sha256, and only `REQ.md` and `PLAN.md`; the Files tab no longer lists `SNAPSHOT/`. Old copies stay until `harness task snapshot prune`.
 ### Retired
 
 - **The old autorun** (1.8.0): the default agent doing every step itself is gone; the scheduling chat must use a Claude model; the default run time is 480 minutes. `autorun.max_denies` and the `denied` stop reason are gone: a refusal parks the step. Remove `max_denies` from an override file.
 - **Accept and close at once** (1.8.4): it counts down 10 seconds, with Undo; leaving the page before then closes nothing.
+- **`DEV/_manual/`** (1.8.9): it is `DEV/_server/` now, a script run on a server and never promoted. An old task's `DEV/_manual/` still counts as one. A skill that writes `DEV/_manual/`, or a folder of its own at the task root, should write `DEV/_server/`, `TEST/` or `RUNS/<ENV>/` instead.
+- **Deploys to IST by the agent** (1.8.9): `sqlserver-jobs` deploys a script to DEV only; higher environments get the change from the repository. A job or a check runs on IST only when you say so for the task.
 
 ## 1.7.46 (1.7.0 – 1.7.46, 2026-11-04 – 2026-11-16)
 

@@ -21,6 +21,7 @@ Every file has one of these places. Make no other top-level folder; a skill that
   TEST/                           read-only checks that show the result (a query to run again in a higher environment)
   RUNS/<ENV>/                     what every run printed, whole (`task run record`): the evidence
   READ/  OUT/<system>/            code fetched only to read; what was sent to an outside system
+  SKILLS/<name>/                  skills being built (`generic-workflow-build`), never installed from here
   .task/ REVIEW/ SNAPSHOT/ OUTBOX/ CHANGES.diff PROMOTE-PLAN.diff   the CLI and the hooks only
 ```
 

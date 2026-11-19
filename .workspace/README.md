@@ -27,6 +27,7 @@ What a task folder holds:
 | `TEST/` | Read-only checks that show the result (queries to run again later or in a higher environment); in a test task also the test results | The agent; the results by the CLI |
 | `RUNS/<ENV>/` | What every run printed, whole, and its record (`results.md`, numbered `E<n>`): the evidence | The agent and `task run record` |
 | `OUT/<system>/<item>/` | What the agent wrote to send to an outside system, one new file per send (an `ado` comment text: `OUT/ado/<id>/<time>-comment.md`): the record of what was sent. Never promoted | The agent |
+| `SKILLS/<name>/` | Skills being built by `generic-workflow-build`; you or an admin session install them | The agent |
 | `REVIEW/round-NNN/` | Only with independent checks on: the review package and the reviewer's verdict | The CLI and the hook |
 | `SNAPSHOT/<gate>-<time>/` | At plan approval, before every check and before a write-back: the list of the result files with their sha256 (`manifest.json`), and a copy of `REQ.md` and `PLAN.md`. The code itself is not copied | The CLI |
 | `OUTBOX/<code>-<system>.md` | A call to an outside system waiting for the user's approval (`approve-action`): the action, the exact command, its state | The hook |

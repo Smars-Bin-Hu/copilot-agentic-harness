@@ -18,7 +18,7 @@ const SERVE = (function () {
   // One place for a refusal of an unpaired browser: a bar at the top of the page, on the board and on a task page. A click closes it.
   function unpairedNote() {
     if (document.querySelector(".unpaired-note")) return;
-    const bar = h("div", {class: "unpaired-note", role: "alert", title: t("board.serve.cancel")}, t("board.serve.notpaired"));
+    const bar = h("div", {class: "unpaired-note", role: "alert", title: t("board.serve.cancel")}, refusal || t("board.serve.notpaired"), " ", pairControl());
     bar.addEventListener("click", () => bar.remove());
     document.body.append(bar);
   }
@@ -446,6 +446,20 @@ const SERVE = (function () {
 
   // Once per page: trade the pairing code of the address for a cookie, and ask whether this browser is paired.
   let paired = null;
+  let refusal = "";  // why the code of the address was refused (used, old, wrong), until this browser is paired
+  let pairSaid = "";  // what the last press of the pair button found
+  // One click to pair (1.8.11): the board opens itself in the default browser of this computer, with a new code. A small button; the long words are in its tip.
+  function pairControl() {
+    const said = h("span", {class: "sub pair-said"}, pairSaid);
+    const button = h("button", {type: "button", class: "act pair-btn", title: t("board.serve.pair.tip")}, t("board.serve.pair.button"));
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();  // the bar closes on a click; this is not a click to close it
+      button.disabled = true;
+      send("/api/reopen", {}).then((data) => data.opened ? t("board.serve.pair.opened") : t("board.serve.pair.notopened"), (error) => t("board.serve.pair.notopened") + " " + (error && error.message || ""))
+        .then((text) => { pairSaid = text; said.textContent = text; button.disabled = false; });
+    });
+    return h("span", {class: "pair-control"}, button, " ", said);
+  }
   let stale = null;  // the board was started on an older release than the files now hold: it still runs the old code
   const banners = [];
   const mark = h("span", {class: "vs-pill", hidden: ""}, h("i"), h("span"));  // the same state in two words, next to the VS Code pill; the tip has the sentence
@@ -453,7 +467,8 @@ const SERVE = (function () {
   function showPaired() {
     if (paired) document.querySelector(".unpaired-note")?.remove();  // paired in the meantime: the bar is no longer true
     for (const node of banners) {
-      node.replaceChildren(paired === null || (paired && node.dataset.quiet) ? "" : t(paired ? "board.serve.paired" : "board.serve.unpaired"),
+      node.replaceChildren(paired === null || (paired && node.dataset.quiet) ? "" : refusal && !paired ? refusal : t(paired ? "board.serve.paired" : "board.serve.unpaired"),
+        paired === false ? h("span", null, " ", pairControl()) : "",
         stale ? h("span", {class: "bad"}, " " + t("board.serve.stale", stale)) : "");
       node.classList.toggle("good", paired === true && !stale);
       node.hidden = !node.textContent;
@@ -471,7 +486,7 @@ const SERVE = (function () {
     // A browser that has the cookie of an earlier pairing does not need the code again: a second tab, a tab the browser restored
     // or loaded twice would otherwise find the code used up and say so.
     const already = send("/api/status", {}).then((data) => data.paired, () => false);
-    return already.then((yes) => (code && !yes ? send("/api/pair", {code}).catch(failed) : null))
+    return already.then((yes) => (code && !yes ? send("/api/pair", {code}).catch((error) => { if (error && error.data && error.data.reason) { refusal = error.message; } else failed(error); }) : null))
       .then(() => send("/api/status", {})).then((data) => { paired = note(data).paired; showPaired(); }, () => { paired = false; showPaired(); });
   }
   const ready = trade();
@@ -499,5 +514,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner(true));
   }
 
-  return {call, read, file, stay, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, restartVS, restartWhy, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
+  return {call, read, file, stay, pairMark, pairControl, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, restartVS, restartWhy, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
 })();

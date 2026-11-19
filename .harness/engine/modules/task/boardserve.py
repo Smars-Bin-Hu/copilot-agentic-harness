@@ -73,7 +73,7 @@ from . import rewind
 from . import tasksize
 from . import wallpaper
 from . import superbrain, superfacts, superpreview, superroute, superview
-from . import accept, autorun, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import accept, autorun, boardpairs, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
 from .common import CommandError
@@ -90,6 +90,9 @@ MAX_EDIT_BODY = 3 * 1024 * 1024  # `/api/fileop`: one text file the person edits
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 REOPEN_EVERY = 3.0  # seconds
+CODE_SECONDS = 600  # a pairing code lives 10 minutes and works once (1.8.11)
+PAIR_REFUSED = {"used": "serve.pair.used", "old": "serve.pair.old", "wrong": "serve.pair.wrong"}  # why a code was refused -> the text
+CODES_LIVE = 5  # not more live codes than this; the oldest goes
 GONE = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)  # the browser closed the connection while the board was still answering (WinError 10053 on Windows)
 OPEN_WAIT = 60.0  # seconds the terminal turns its wheel for the browser to open the board (1.7.45); after it, it says how to open the page by hand
 WHEEL = "|/-\\"
@@ -295,7 +298,7 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
 EMBEDDED = re.compile(r"\bElectron/\d")  # the user agent of VS Code's own browser (an Electron app); Chrome, Edge and Firefox never send it
 
 class Board:
-    """What one server holds: the settings, the pairing code and the sessions of paired browsers. Memory only."""
+    """What one server holds: the settings, the pairing codes (memory only) and the paired browsers (fingerprints kept for 30 days, `boardpairs`)."""
 
     def __init__(self, root: Path, everything: bool, port: int, actions: List[str], link: Optional[vslink.VsLink] = None, refresh: int = REFRESH) -> None:
         self.root = root
@@ -314,7 +317,6 @@ class Board:
         self.actions = actions
         self.restarted = bool(os.environ.get(RESTART_CODE))
         self.batch_salt = secrets.token_hex(16)  # a secret of this process: the code of a batch of held calls is made with it (core.outbox.batch_code); a restarted board gives other codes
-        self.code = os.environ.pop(RESTART_CODE, "") or secrets.token_urlsafe(12)  # after Restart board the page brings this code back; a new process holds no session
         self.next_code = ""
         self.started: Dict[str, Dict[str, Any]] = {}  # 1.8.5: task -> what the board sent and how the chat stood then, until the agent is seen to start (`settle`). Memory only
         self.started_lock = threading.Lock()
@@ -322,9 +324,12 @@ class Board:
         self.woken: Optional[threading.Thread] = None  # the last wake of an agent after a decision, sent in the background (1.7.43)
         self.opener: Callable[[str], Any] = webbrowser.open
         self.reopened = -REOPEN_EVERY
-        self.sessions: set = set()
         self.first_pair = threading.Event()  # a browser paired: the wheel in the terminal stops (1.7.45)
         self.lock = threading.Lock()
+        self.live_codes: Dict[str, float] = {}  # the live pairing codes -> when each ends (1.8.11: 10 minutes, once, up to CODES_LIVE; oldest first). Memory only
+        self.spent: Dict[str, str] = {}  # a code that is gone -> `used` or `old`, to tell the person why (bounded)
+        self.pairs = boardpairs.Pairs(root)  # the pairings of the browsers: their fingerprints survive a restart (1.8.11)
+        self.new_code(os.environ.pop(RESTART_CODE, ""))  # after Restart board the page brings this code back
         self.wall_window = threading.Lock()  # one folder window at a time
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
@@ -399,30 +404,57 @@ class Board:
         except Exception:  # noqa: BLE001 - the second start opens the plain address then
             return False
 
-    def new_code(self) -> str:
+    def new_code(self, code: str = "") -> str:
+        """A pairing code, good for CODE_SECONDS and one use. The older live ones stay (a second `harness task board`, a Restart, a button pressed twice must not spoil the link in the other tab); at most CODES_LIVE, the oldest goes."""
         with self.lock:
-            self.code = secrets.token_urlsafe(12)
-            return self.code
+            code = code or secrets.token_urlsafe(12)
+            self.sweep()
+            self.live_codes[code] = time.time() + CODE_SECONDS
+            while len(self.live_codes) > CODES_LIVE:
+                self.forget(next(iter(self.live_codes)), "old")
+            return code
+
+    @property
+    def code(self) -> str:
+        """The newest live code, or "" (a code was used up and none made since)."""
+        with self.lock:
+            self.sweep()
+            return next(reversed(self.live_codes), "")
+
+    def sweep(self) -> None:
+        """Move the codes that ended to `spent`. Call with the lock held."""
+        now = time.time()
+        for code in [code for code, until in self.live_codes.items() if until <= now]:
+            self.forget(code, "old")
+
+    def forget(self, code: str, why: str) -> None:
+        self.live_codes.pop(code, None)
+        self.spent[code] = why
+        while len(self.spent) > 64:
+            self.spent.pop(next(iter(self.spent)))
 
     @property
     def cookie(self) -> str:
         """The name of this board's cookie. Cookies do not tell ports apart: with one name, a second board in the same browser would take this one's pairing away."""
         return f"{COOKIE}_{self.port}"
 
-    def pair(self, code: str) -> Optional[str]:
-        """A session token for the right code; the code is used up."""
+    def pair(self, code: str) -> Tuple[Optional[str], str]:
+        """`(token, "")` for a live code, which is used up; else `(None, reason)`: `used`, `old` or `wrong`. The token's fingerprint is kept for 30 days (`boardpairs`)."""
+        raw = code.encode("utf-8", "replace")
         with self.lock:
-            if not self.code or not secrets.compare_digest(code.encode(), self.code.encode()):
-                return None
-            self.code = ""
+            self.sweep()
+            hit = next((live for live in self.live_codes if secrets.compare_digest(raw, live.encode())), "")
+            if not hit:
+                seen = next((why for gone, why in self.spent.items() if secrets.compare_digest(raw, gone.encode())), "")
+                return None, seen or "wrong"
+            self.forget(hit, "used")
             token = secrets.token_urlsafe(24)
-            self.sessions.add(token)
+        self.pairs.add(token)
         self.first_pair.set()
-        return token
+        return token, ""
 
     def paired(self, token: str) -> bool:
-        with self.lock:
-            return bool(token) and token in self.sessions
+        return self.pairs.has(token)
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
@@ -1979,10 +2011,10 @@ def handler_for(board: Board) -> type:
             if path == "/api/pair":
                 if self.embedded():  # checked first: the code is not used up
                     return self.answer(403, {"error": say("serve.pair.embedded")})
-                token = board.pair(str(data.get("code", "")))
+                token, reason = board.pair(str(data.get("code", "")))
                 if token is None:
-                    return self.answer(403, {"error": say("serve.pair.wrong")})
-                cookie = f"{board.cookie}={token}; HttpOnly; SameSite=Strict; Path=/"
+                    return self.answer(403, {"error": say(PAIR_REFUSED.get(reason, "serve.pair.wrong")), "reason": reason if reason in PAIR_REFUSED else "wrong"})
+                cookie = f"{board.cookie}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={boardpairs.SECONDS}"
                 return self.answer(200, {"paired": True}, {"Set-Cookie": cookie})
             if path == "/api/reopen":  # a second `harness task board`: this server opens the browser with a new code. The answer never holds the code, so no pairing is needed
                 return self.answer(200, {"opened": board.open_page()})

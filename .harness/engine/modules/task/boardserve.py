@@ -43,7 +43,9 @@ import http.server
 import io
 import json
 import os
+import hashlib
 import secrets
+import socket
 import subprocess
 import sys
 import threading
@@ -93,8 +95,13 @@ REOPEN_EVERY = 3.0  # seconds
 CODE_SECONDS = 600  # a pairing code lives 10 minutes and works once (1.8.11)
 PAIR_REFUSED = {"used": "serve.pair.used", "old": "serve.pair.old", "wrong": "serve.pair.wrong"}  # why a code was refused -> the text
 CODES_LIVE = 5  # not more live codes than this; the oldest goes
+PROBE = "X-Harness-Probe"  # sent by the launcher and the checks of a second start: a look at /api/status that is no page, so it does not set `page_seen`
 GONE = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)  # the browser closed the connection while the board was still answering (WinError 10053 on Windows)
 OPEN_WAIT = 60.0  # seconds the terminal turns its wheel for the browser to open the board (1.7.45); after it, it says how to open the page by hand
+BACKGROUND_ENV = "HARNESS_BOARD_BACKGROUND"  # 1.8.11: set in the child of `task board --background`: it reads no stdin and prints no pairing code or link
+WINDOWS = os.name == "nt"
+STATUS_WAIT = 10.0  # seconds `running_board` waits for the answer of /api/status (a slow computer; 3 until 1.8.10)
+STOP_EVERY = 0.5  # seconds between two looks of the main loop at the stop file
 WHEEL = "|/-\\"
 WHEEL_EVERY = 0.15
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
@@ -244,6 +251,10 @@ def relaunch(code: str) -> None:
     """The same command again, so new code and new texts are read. No exec replaces a process on Windows: it runs it and leaves with its answer, as `pinpython` does."""
     words = [sys.executable, *sys.argv]
     env = {**os.environ, RESTART_CODE: code}
+    if os.environ.get(BACKGROUND_ENV) == "1":  # no keyboard behind a background board: it makes the voucher of the person's start again, as `task board --background` did
+        from core import boardperson
+
+        env[boardperson.ENV] = boardperson.issue()
     if os.name == "nt":
         sys.exit(subprocess.call(words, env=env))
     os.execve(sys.executable, words, env)
@@ -321,6 +332,10 @@ class Board:
         self.started: Dict[str, Dict[str, Any]] = {}  # 1.8.5: task -> what the board sent and how the chat stood then, until the agent is seen to start (`settle`). Memory only
         self.started_lock = threading.Lock()
         self.server: Any = None
+        self.stop_asked = threading.Event()  # 1.8.11: set by POST /api/shutdown; the main loop of `serve` then ends as after Ctrl+C
+        self.page_served = False  # the page (/) was sent since the launch or the last reopen ...
+        self.page_seen = self.restarted  # ... and a page asked /api/status after that (`page_seen`), and a paired page did (`page_paired`): the launcher of `--background` waits for them (a restart: the page is there already)
+        self.page_paired = self.restarted
         self.woken: Optional[threading.Thread] = None  # the last wake of an agent after a decision, sent in the background (1.7.43)
         self.opener: Callable[[str], Any] = webbrowser.open
         self.reopened = -REOPEN_EVERY
@@ -399,10 +414,21 @@ class Board:
             if time.monotonic() - self.reopened < REOPEN_EVERY:
                 return False
             self.reopened = time.monotonic()
+            self.page_served = self.page_seen = self.page_paired = False  # a new page is asked for: the flag turns true when it has come
         try:
             return bool(self.opener(f"http://127.0.0.1:{self.port}/#pair={self.new_code()}"))
         except Exception:  # noqa: BLE001 - the second start opens the plain address then
             return False
+
+    def look_at_page(self, served: bool = False, paired: bool = False, probe: bool = False) -> Dict[str, bool]:
+        """The page was served (`served`), or /api/status was asked (`paired`: by a paired browser): the flags of the launcher. `probe`: the launcher itself asks, which counts for nothing. Flags only, never a code."""
+        with self.lock:
+            if served:
+                self.page_served = True
+            elif self.page_served and not probe:
+                self.page_seen = True
+                self.page_paired = self.page_paired or paired
+            return {"page_seen": self.page_seen, "page_paired": self.page_paired}
 
     def new_code(self, code: str = "") -> str:
         """A pairing code, good for CODE_SECONDS and one use. The older live ones stay (a second `harness task board`, a Restart, a button pressed twice must not spoil the link in the other tab); at most CODES_LIVE, the oldest goes."""
@@ -1953,6 +1979,8 @@ def handler_for(board: Board) -> type:
             if path == "/setup":
                 return self.send(200, taskhtml.setup_page(board.serve_info({}, 0)).encode("utf-8"), "text/html; charset=utf-8")
             if path in ("/", "/board.html") or path.startswith("/task/"):
+                if path in ("/", "/board.html"):
+                    board.look_at_page(True)
                 try:
                     page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"))
                     return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
@@ -2019,7 +2047,13 @@ def handler_for(board: Board) -> type:
             if path == "/api/reopen":  # a second `harness task board`: this server opens the browser with a new code. The answer never holds the code, so no pairing is needed
                 return self.answer(200, {"opened": board.open_page()})
             if path == "/api/status":
-                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status(), "root": str(board.root)})
+                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status(), "root": str(board.root), **board.look_at_page(paired=board.paired(self.token()), probe=bool(self.headers.get(PROBE)))})
+            if path == "/api/shutdown":  # the stop button of every page (1.8.11): the paired browser only. The answer goes first, then the main loop ends
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                self.answer(200, {"stopping": True})
+                board.stop_asked.set()
+                return None
             if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the cache of the link and of the one doctor run; it waits for nothing
                 try:
                     return self.answer(200, board.ready.answer(board.paired(self.token())))
@@ -2449,7 +2483,7 @@ def running_board(root: Path) -> int:
     if not port:
         return 0
     try:
-        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=3) as answer:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=STATUS_WAIT) as answer:
             found = json.load(answer) if answer.status == 200 else None
     except (OSError, ValueError):
         return 0
@@ -2460,6 +2494,36 @@ def running_board(root: Path) -> int:
         return port if not theirs or Path(theirs).resolve() == root.resolve() else 0
     except OSError:
         return 0
+
+
+def page_flags(port: int) -> Dict[str, bool]:
+    """`page_seen` (a page of the running board asked /api/status since the launch or the last reopen) and `page_paired` (a paired one did). The launcher of `--background` waits for them (1.8.11). Both False on any failure."""
+    try:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=STATUS_WAIT) as answer:
+            found = json.load(answer) if answer.status == 200 else {}
+    except (OSError, ValueError):
+        return {"page_seen": False, "page_paired": False}
+    return {"page_seen": isinstance(found, dict) and found.get("page_seen") is True, "page_paired": isinstance(found, dict) and found.get("page_paired") is True}
+
+
+def stop_file(root: Path) -> Optional[Path]:
+    """The file `task board --stop` writes and the main loop looks for (1.8.11): in the folder of the guardrail lists, which the agent cannot write to. None when there is no such folder."""
+    import integrity
+
+    home = integrity.home_dir()
+    return home / ("stop-" + hashlib.sha256(str(Path(root).resolve()).encode("utf-8")).hexdigest()[:16]) if home else None
+
+
+def stop_wanted(root: Path) -> bool:
+    """Is the stop file there? It is taken away, so it asks once."""
+    path = stop_file(root)
+    try:
+        if path is not None and path.is_file():
+            path.unlink()
+            return True
+    except OSError:
+        pass
+    return False
 
 
 def already_running(root: Path, port: int, out: Any, opener: Callable[[str], Any]) -> Dict[str, Any]:
@@ -2488,6 +2552,13 @@ def sync_on_start(root: Path) -> None:
 
 
 class Server(http.server.ThreadingHTTPServer):
+    allow_reuse_address = not WINDOWS  # 1.8.11: on Windows that option lets a second process take the same port, so two boards could run; the port is exclusive there
+
+    def server_bind(self) -> None:
+        if WINDOWS and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
     def handle_error(self, request: Any, client_address: Any) -> None:
         """A browser that closed its connection is not an error to print (1.7.45); anything else is printed as before."""
         if isinstance(sys.exc_info()[1], GONE):
@@ -2524,6 +2595,8 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     path = board_serve_file(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"port": board.port, "pid": os.getpid(), "started": utc_now()}), encoding="utf-8")
+    background = os.environ.get(BACKGROUND_ENV) == "1"
+    stop_wanted(root)  # a stop file left by an earlier `--stop` must not stop this board at once
     address = f"http://127.0.0.1:{board.port}/"
     serving = threading.Thread(target=server.serve_forever, name="board-serve", daemon=True)
     serving.start()  # 1.7.43: the page is answered as soon as the browser asks; before, the browser opened and waited until the terminal had said its lines
@@ -2536,15 +2609,18 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         word = say(key)
         return action if word == key else word
 
-    print(say("serve.started", address=address, actions=", ".join(button(action) for action in board.actions)), file=out, flush=True)  # the terminal speaks first, then the browser opens (1.7.43)
+    print(say("serve.started.bg" if background else "serve.started", address=address, actions=", ".join(button(action) for action in board.actions)), file=out, flush=True)  # the terminal speaks first, then the browser opens (1.7.43)
     opened = False
     try:
         opened = board.restarted or bool(opener(f"{address}#pair={board.code}"))  # after a restart the page is there, and asks for itself
     except Exception:  # noqa: BLE001 - the person can pair by hand
         opened = False
     if ready is not None:
-        print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
+        if not background:
+            print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         ready(server)
+    elif background:  # 1.8.11: no keyboard and no terminal: no wheel, no Enter, no code or link in the log. The launcher watches /api/status
+        pass
     elif opened and not board.restarted and terminal(out):  # 1.7.45: a wheel turns until the browser has opened the page and paired, then the Enter key is read
         threading.Thread(target=wait_for_browser, args=(board, address, out), daemon=True).start()
     else:
@@ -2552,7 +2628,8 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:
         while serving.is_alive():
-            serving.join(0.5)  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too
+            if board.stop_asked.wait(STOP_EVERY) or stop_wanted(root):  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too; the stop button and `--stop` end it here
+                break
     except KeyboardInterrupt:
         pass
     finally:

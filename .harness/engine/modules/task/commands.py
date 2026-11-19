@@ -23,7 +23,7 @@ from typing import Any, Dict
 from core import approval, messages, render, starticon, targets, tasks
 from core.paths import repo_root
 
-from . import accept, autorun, boardserve, common, intake, kbsetup, perfreview, perfroll, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
+from . import accept, autorun, boardbg, boardserve, common, intake, kbsetup, perfreview, perfroll, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
 
 
 def read_text_argument(path: str) -> str:
@@ -91,6 +91,10 @@ def list_text(result: Dict[str, Any]) -> str:
 
 def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
     person = approval.is_person()
+    if args.background:
+        return boardbg.background(repo_root(), args.port)
+    if args.stop:
+        return boardbg.stop(repo_root())
     if args.serve or (person and not args.once and args.refresh is None and not args.no_serve):  # a person gets the server by default
         starticon.later(repo_root())
         return boardserve.serve(repo_root(), True, args.port)
@@ -208,6 +212,8 @@ def register_task(subparsers: Any) -> None:
     how = board.add_mutually_exclusive_group()
     how.add_argument("--once", action="store_true", help="write the pages once and return: what an agent runs (the gate refuses `task board` without it from an agent). A script or a pipe gets this anyway")
     how.add_argument("--serve", action="store_true", help="serve the board on 127.0.0.1 with the task pages and buttons that act, until Ctrl+C. What a person at a terminal gets anyway; the browser it opens is paired with a code no one sees")
+    how.add_argument("--background", action="store_true", help="what Start Harness runs (a person at a terminal): the board runs on its own in the background, its output in .harness/runtime/board.log, with a wheel here until the browser has opened the page; the terminal may be closed. A board that already runs is only opened again, nothing in it changes. Stop it with the button on its pages or with --stop")
+    how.add_argument("--stop", action="store_true", help="a person at a terminal: ask the board of this copy to stop, and wait up to 30 s for it. Open tasks keep their state")
     how.add_argument("--no-serve", action="store_true", help="a person at a terminal: keep the page on disk fresh instead of serving it (no buttons that act, no task pages)")
     board.add_argument("--port", type=int, default=None, help="with --serve: the port (default: board.port in task.json)")
     board.set_defaults(handler=cmd_board)

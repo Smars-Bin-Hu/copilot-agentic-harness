@@ -8,9 +8,10 @@ Who may do what:
 - It listens on 127.0.0.1 only, and answers only to the Host and Origin of that address (no other web site, no DNS
   rebinding). Every POST needs the header `X-Harness-Board`, which a page of another site cannot send without asking.
 - Pause and resume need nothing more: they guard nothing.
-- The approvals need the paired browser. At start a random code is made and kept in memory only; the server opens the
-  browser at `/#pair=<code>` and the page trades the code for a session cookie (HttpOnly, SameSite=Strict). The code
-  works once. The terminal prints a new one only when the person presses Enter. When the server stops, it is gone.
+- The approvals need the paired browser. A code is made in memory only (at start, by Pair this browser through
+  `/api/reopen`, or Enter in a terminal board); the server opens the browser at `/#pair=<code>` and the page trades the
+  code for a cookie (HttpOnly, SameSite=Strict, 30 days). A code works once, within 10 minutes. The cookie's token is
+  kept as a fingerprint only, in the guardrail home (`boardpairs`), so a paired browser stays paired across restarts.
 - An approval runs the same function as the terminal command, in two steps: `preview` shows what the terminal would
   show and the code to type; `act` runs it with the code the person typed. A plan that changed between the two has
   another code, and the approval is refused, as in the terminal.

@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.10 (1.8.0 – 1.8.10, 2026-11-17 – 2026-11-19)
+## 1.8.11 (1.8.0 – 1.8.11, 2026-11-17 – 2026-11-19)
 
 ### Added
 
@@ -24,6 +24,8 @@ To see which version you have: `harness --version`.
 - **A map of the task folder** (1.8.9): one place for each kind of file, in the rules the agent reads; no folder of its own. `generic-workflow-design` and `generic-workflow-build` follow it, so the skills they make do too.
 - **Trying a change in an environment before the plan** (1.8.10): the agent may prove a change in DEV first, each write approved by you; its script is `trial-<name>` at the task root; `PLAN.md` then lists those writes under `Done before the plan`, with their evidence and how to undo them. The plan step of the ribbon has a small orange mark while such writes exist; its hover names the environments.
 
+- **The board in the background** (1.8.11): Start Harness starts the board with no terminal window to keep open; its window shows a wheel through three stages (starting the board, waiting for the browser, pairing) and closes when a paired page is open. A second double-click only opens the board. The power button at the top right of every page stops it; `harness task board --stop` too.
+- **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
 ### Fixed
 
 - On a slow work computer, calls of one session waited out and were refused, and two of them could write the same task file (1.8.1): the locks are locks of the system now, and a call waits up to 20 seconds.
@@ -36,6 +38,7 @@ To see which version you have: `harness --version`.
 - With VS Code open but not ready for the board yet (on a work computer it takes about a minute after the window opens), the Enter screen said VS Code was not open, with a button to restart it, and saw it ready up to a minute late. Now it says VS Code is open and getting ready, with the time waited; it checks every 3 s while a VS Code window is open, and after 3 minutes it turns red with **Restart VS Code** (1.8.8).
 
 - A task folder grew to hundreds of files (1.8.9): every plan approval, check and promote dry run copied the whole work into `SNAPSHOT/`. A snapshot now keeps the list of files with their sha256, and only `REQ.md` and `PLAN.md`; the Files tab no longer lists `SNAPSHOT/`. Old copies stay until `harness task snapshot prune`.
+- A pairing link stopped working as soon as a newer one was made, and the page only said the code was wrong (1.8.11): a link now works once within 10 minutes, whatever came after it, and a refusal says why. On Windows two boards could take the same port and answer in turns; the port is the board's alone now.
 ### Retired
 
 - **The old autorun** (1.8.0): the default agent doing every step itself is gone; the scheduling chat must use a Claude model; the default run time is 480 minutes. `autorun.max_denies` and the `denied` stop reason are gone: a refusal parks the step. Remove `max_denies` from an override file.

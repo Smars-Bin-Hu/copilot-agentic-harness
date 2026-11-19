@@ -459,7 +459,7 @@
   "gate.policy.unreadable.shell": "这条命令要写 `{path}`，它不在打开的任务文件夹里（或者 gate 看不出它写到哪里）",
   "gate.policy.unreadable.failed": "gate 判断不了这次调用是不是写到了任务文件夹之外",
   "gate.policy.unreadable.note": "gate 读不了自己的策略（{file}：{problem}），文件修好之前，用内置的出厂规则。",
-  "gate.task.plan_req": "`{relative}` 在任务的 `DEV/` 下。用户批准计划之后，任务的需求变了，所以 `DEV/` 又锁上了。先核对 {task}/PLAN.md 还合不合需求（不合就改），然后停下，请用户重新读需求和计划，在任务页上确认需求、批准计划（“{@board.action.confirm-req}”“{@board.action.approve-plan}”）。用户说批准了再继续。这期间只写笔记、RCA、设计和只读查询，放在 {task}/ 根目录：代码要等，手动运行的代码也一样。",
+  "gate.task.plan_req": "`{relative}` 在任务的 `DEV/` 下。用户批准计划之后，任务的需求变了，所以 `DEV/` 又锁上了。先核对 {task}/PLAN.md 还合不合需求（不合就改），然后停下，请用户重新读需求和计划，在任务页上确认需求、批准计划（“{@board.action.confirm-req}”“{@board.action.approve-plan}”）。用户说批准了再继续。这期间只写笔记、RCA、设计和只读查询，放在 {task}/ 根目录：代码要等，在服务器上跑的脚本也一样。",
   "desk.req.changed": "需求在你确认之后，或者在你批准计划之后改过了。重新读一遍：确认需求，再批准计划。",
   "gate.task.plan_first": "`{relative}` 在任务的 `DEV/` 下。`DEV/` 要等计划经用户批准后才能写（现在没批准，或批准之后改过）。写好 [PLAN.md]({task}/PLAN.md) 就停下，请用户在任务页上读它，再点“{@board.action.approve-plan}”，用户说批准了再继续。在服务器上跑的脚本（数据库里，DEV 也算）也要等计划：它放在 `DEV/_server/<路径>`，不要放进根下自己建的文件夹。只有笔记、RCA、设计、只读查询和只读检查（`TEST/`）可以不等批准，写在 `{task}/` 里。",
   "gate.task.outside": "任务 {task} 进行中，只能在任务目录 `{task}/` 里写，你要写的是 `{relative}`。笔记、RCA、设计和只读查询写在任务目录根下，只读检查放 `TEST/`；代码在计划批准后写在 `{task}/DEV/` 下：要 promote 的放 `DEV/<仓库名>/<路径>`，在服务器上跑的脚本放 `DEV/_server/<路径>`。",

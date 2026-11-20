@@ -18,7 +18,7 @@ ICON = Path(__file__).resolve().parent / "web" / "icon.png"
 WIDTH, HEIGHT = 420, 150
 READY_MS = 1200  # how long "ready" stays before the window closes
 TICK_MS = 40  # the bar moves this often
-BG, INK, SOFT, ACCENT, TRACK, BAD, WARN = "#101113", "#f5f6f7", "#a0a4ad", "#5ac8fa", "#24262a", "#ff6b6b", "#f5c451"
+BG, INK, SOFT, ACCENT, TRACK, BAD, WARN, EDGE = "#101113", "#f5f6f7", "#a0a4ad", "#5ac8fa", "#24262a", "#ff6b6b", "#f5c451", "#2a2c31"
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -67,7 +67,10 @@ class Splash:
     def build(self) -> None:
         tk, w = self.tk, self.window
         w.overrideredirect(True)
-        w.configure(bg=BG, highlightthickness=1, highlightbackground="#2a2c31")
+        w.configure(bg=EDGE)  # a 1 px edge: the window's own colour, shown around the inner frame
+        inner = tk.Frame(w, bg=BG)
+        inner.pack(fill="both", expand=True, padx=1, pady=1)
+        self.inner = inner
         try:
             w.attributes("-topmost", True)
         except Exception:  # noqa: BLE001
@@ -75,10 +78,10 @@ class Splash:
         left = (w.winfo_screenwidth() - WIDTH) // 2
         top = (w.winfo_screenheight() - HEIGHT) // 3
         w.geometry(f"{WIDTH}x{HEIGHT}+{left}+{top}")
-        cross = tk.Label(w, text="\u00d7", bg=BG, fg=SOFT, font=("Segoe UI", 12), cursor="hand2")
+        cross = tk.Label(inner, text="\u00d7", bg=BG, fg=SOFT, font=("Segoe UI", 12), cursor="hand2")
         cross.place(relx=1.0, x=-10, y=4, anchor="ne")
         cross.bind("<Button-1>", lambda _event: self.close())
-        head = tk.Frame(w, bg=BG)
+        head = tk.Frame(inner, bg=BG)
         head.pack(fill="x", padx=22, pady=(20, 0))
         try:
             self.icon = tk.PhotoImage(file=str(ICON))
@@ -92,16 +95,17 @@ class Splash:
         tk.Label(words, text="Harness", bg=BG, fg=INK, font=("Segoe UI", 15, "bold"), anchor="w").pack(fill="x")
         self.stage = tk.Label(words, text=say("serve.bg.starting"), bg=BG, fg=SOFT, font=("Segoe UI", 10), anchor="w")
         self.stage.pack(fill="x")
-        self.bar = tk.Canvas(w, height=4, bg=TRACK, highlightthickness=0, bd=0)
+        self.bar = tk.Canvas(inner, height=4, bg=TRACK, highlightthickness=0, bd=0)
         self.bar.pack(fill="x", padx=22, pady=(18, 0))
         self.segment = self.bar.create_rectangle(0, 0, 0, 4, fill=ACCENT, width=0)
-        low = tk.Frame(w, bg=BG)
+        low = tk.Frame(inner, bg=BG)
         low.pack(fill="x", padx=22, pady=(8, 0))
         self.note = tk.Label(low, text="", bg=BG, fg=SOFT, font=("Segoe UI", 9), anchor="w", justify="left", wraplength=WIDTH - 110)
         self.note.pack(side="left", fill="x", expand=True)
         self.clock = tk.Label(low, text="0 s", bg=BG, fg=SOFT, font=("Segoe UI", 9))
         self.clock.pack(side="right")
-        self.button = tk.Button(low, text=say("serve.splash.close"), command=self.close, relief="flat", bg=TRACK, fg=INK, activebackground="#2f3237", activeforeground=INK, bd=0, padx=10)
+        self.button = tk.Label(inner, text=say("serve.splash.close"), bg=TRACK, fg=INK, font=("Segoe UI", 10), padx=14, pady=4, cursor="hand2")  # a label: a Tk button on macOS ignores the colours
+        self.button.bind("<Button-1>", lambda _event: self.close())
         w.bind("<Escape>", lambda _event: self.close())
         w.after(60, w.focus_force)  # a window without a frame gets no focus by itself, and Esc needs it
         w.after(TICK_MS, self.step)
@@ -138,9 +142,11 @@ class Splash:
         self.bar.itemconfigure(self.segment, fill=colour)
         self.bar.coords(self.segment, 0, 0, self.bar.winfo_width(), 4)
         self.stage.configure(text=say("serve.splash.failed" if kind == "failed" else "serve.splash.warn"), fg=colour)
-        self.note.configure(text=text)
-        self.window.geometry(f"{WIDTH}x{HEIGHT + 40 + 14 * min(text.count(chr(10)) + len(text) // 60, 6)}")
-        self.button.pack(side="right", padx=(8, 0))
+        self.note.configure(text=text, wraplength=WIDTH - 50)
+        self.clock.pack_forget()
+        self.button.pack(side="bottom", anchor="e", padx=22, pady=(0, 16))
+        self.window.update_idletasks()
+        self.window.geometry(f"{WIDTH}x{max(HEIGHT, self.inner.winfo_reqheight() + 2)}")
         if self.hid_console and kind == "failed":  # the launcher's pause, and the log lines, are there
             console(True)
 

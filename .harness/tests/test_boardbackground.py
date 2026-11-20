@@ -282,7 +282,8 @@ class SplashTests(Home, TaskCase):
         self.assertEqual(found["exit_code"], 1)
         self.assertEqual(len(window.ends), 1)
         self.assertEqual(window.ends[0][1], "failed")
-        self.assertIn(messages.text("serve.bg.why.died", code=3), window.ends[0][0])
+        self.assertEqual(window.ends[0][0], "last words\n" + messages.text("serve.splash.log", log=str(Path(".harness") / "runtime" / "board.log")), "the window: the last line of the log (the reason), then where the log is")
+        self.assertIn(messages.text("serve.bg.why.died", code=3), text)
         self.assertIn("last words", text, "the console, shown again for the pause, has the log lines")
 
     def test_the_window_shows_the_stages_with_their_words_and_the_terminal_no_wheel(self) -> None:

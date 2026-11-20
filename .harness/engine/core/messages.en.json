@@ -1189,6 +1189,7 @@
   "serve.splash.ready": "The board is open in your browser.",
   "serve.splash.failed": "The board did not start",
   "serve.splash.warn": "The board runs, but the browser did not show it",
+  "serve.splash.log": "Log: {log}",
   "serve.splash.close": "Close",
   "serve.stop.none": "No board runs for this copy.",
   "serve.stop.asked": "Asking the board to stop...",

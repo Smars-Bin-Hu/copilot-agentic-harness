@@ -103,7 +103,7 @@ class Wheel:
                 self.tty = False
             self.shown = len(line)
 
-    def end(self, text: str, lines: str = "", kind: str = "ready") -> None:
+    def end(self, text: str, lines: str = "", kind: str = "ready", log: str = "") -> None:
         if self.shown:
             try:
                 self.out.write("\r" + " " * self.shown + "\r")
@@ -130,8 +130,11 @@ class Both:
     def tick(self, stage: str, seconds: int) -> None:
         self.window.tick(stage_text(stage), seconds)
 
-    def end(self, text: str, lines: str = "", kind: str = "ready") -> None:
+    def end(self, text: str, lines: str = "", kind: str = "ready", log: str = "") -> None:
         self.wheel.end(text, lines, kind)
+        if kind == "failed":  # the window has room for the reason: the last line of the log says it best (a taken port, an error), then where the log is
+            last = next((line.strip() for line in reversed(lines.splitlines()) if line.strip()), "")
+            text = "\n".join(part for part in (last or text, say("serve.splash.log", log=log) if log else "") if part)
         self.window.end(text, kind)
 
 
@@ -222,7 +225,12 @@ def wait(root: Path, port: Optional[int], ui: Any, *, start: Optional[Callable[.
 
 
 def failed(root: Path, ui: Any, why: str) -> Dict[str, Any]:
-    ui.end(say("serve.bg.failed", why=why, log=log_path(root)), last_lines(log_path(root)), "failed")
+    path = log_path(root)
+    try:
+        short = str(path.relative_to(root))
+    except ValueError:
+        short = str(path)
+    ui.end(say("serve.bg.failed", why=why, log=path), last_lines(path), "failed", log=short)
     return {"_text": "", "exit_code": 1}
 
 

@@ -1189,6 +1189,7 @@
   "serve.splash.ready": "看板已经在浏览器里打开了。",
   "serve.splash.failed": "看板没有启动",
   "serve.splash.warn": "看板在跑，但浏览器没有打开它",
+  "serve.splash.log": "日志：{log}",
   "serve.splash.close": "关闭",
   "serve.stop.none": "这份副本没有在运行的看板。",
   "serve.stop.asked": "正在请看板停止……",

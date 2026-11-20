@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import config, launchenv, messages, readyitems, render, shortcmd, targets, tasks
+from core import config, launchenv, messages, pace, readyitems, render, shortcmd, targets, tasks
 from core import connections as conn_core
 from core import reach, systems as outside
 
@@ -95,11 +95,11 @@ def setup_done(root: Path) -> bool:
 
 
 def doctor_seconds(root: Path) -> float:
-    """The deadline of the child `doctor`: `board.doctor_seconds` of the policy `task`, kept between DOCTOR_LIMITS; DOCTOR_TIMEOUT when it is not set or not a number."""
+    """The deadline of the child `doctor`: `board.doctor_seconds` of the policy `task` (DOCTOR_TIMEOUT when it is not set or not a number), times the pace factor,
+    kept between DOCTOR_LIMITS. 1.8.15: the value is scaled too, as `git_timeout_seconds` is: the shipped policy sets 300, written for a quick computer."""
     value = (config.policy_or_empty(root, "task").get("board") or {}).get("doctor_seconds")
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return DOCTOR_TIMEOUT
-    return min(max(float(value), DOCTOR_LIMITS[0]), DOCTOR_LIMITS[1])
+    base = DOCTOR_TIMEOUT if isinstance(value, bool) or not isinstance(value, (int, float)) else float(value)
+    return min(max(pace.scaled(base), DOCTOR_LIMITS[0]), DOCTOR_LIMITS[1])
 
 
 def crash_words(stderr: str, root: Path) -> str:
@@ -307,7 +307,7 @@ class Ready:
         if not found.get("errors") and not found.get("failed"):
             return REFRESH_CLEAN
         if found.get("timeout"):
-            return RETRY_TIMEOUT
+            return pace.scaled(RETRY_TIMEOUT)
         return RETRY_FAILED[min(max(self.misses, 1), len(RETRY_FAILED)) - 1]
 
     def note_step(self, done: int, total: int, step: str) -> None:
@@ -345,7 +345,7 @@ class Ready:
         why = str(status.get("why") or "starting")
         open_for = status.get("open_for")
         if isinstance(open_for, (int, float)) and not isinstance(open_for, bool) and why in GETTING_READY:
-            if open_for < HOST_WAIT:
+            if open_for < pace.scaled(HOST_WAIT):
                 return {"state": "wait", "why": "getting-ready", "since": int(open_for), "open": True}
             return {"state": "fail", "why": "no-host", "since": int(open_for), "open": True}
         if why in WAITING:
@@ -682,7 +682,7 @@ class Ready:
                 self.worker = threading.Thread(target=self.keep_fresh, name="ready-answer", daemon=True)
                 self.worker.start()
         if kept is None:
-            self.first.wait(FIRST_WAIT)
+            self.first.wait(pace.scaled(FIRST_WAIT))
             with self.lock:
                 kept = self.kept
         if kept is None:

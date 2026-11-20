@@ -46,7 +46,7 @@ from html import escape
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import messages
+from core import messages, pace
 from core.paths import cli_command
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -101,7 +101,7 @@ WALL_CSS = "wall.css"  # ... and, with wall.js, the glass panels over a wallpape
 
 def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], refresh: int = 0, styles: Optional[List[str]] = None) -> str:
     """One file: the skeleton with the style, the scripts and the data in it. `styles`: what goes between the tokens and ui.css."""
-    data = dict(data, text=page_text())
+    data = dict(data, text=page_text(), pace=pace.factor())  # 1.8.15: the time limits of the page grow with this computer's slowness (`core.pace`)
     parts = {
         "<!--REFRESH-->": f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else "",
         "<!--ICON-->": icon(),

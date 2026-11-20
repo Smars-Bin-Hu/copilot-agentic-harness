@@ -120,7 +120,7 @@ def build(result: Dict[str, Any], age_up: Optional[int] = None) -> Dict[str, Any
     return {"status": status, "mates": mates, "items": items}
 
 
-CLOSED_LISTED = 12  # the recently closed tasks the super view lists (1.8.15): the board's own rows hold them (`closed_shown`)
+CLOSED_LISTED = 12  # the recently closed tasks the super view lists (1.8.16): the board's own rows hold them (`closed_shown`)
 
 
 def closed_of(rows: Any, limit: int = CLOSED_LISTED) -> List[Dict[str, Any]]:

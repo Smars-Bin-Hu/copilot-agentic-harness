@@ -167,7 +167,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
 
     // ---------- the avatars ----------
-    // The recently closed tasks (1.8.15): not on the strip as avatars but behind one control at its end. A task is "closed" here only while it has no avatar: once it is open again its avatar takes over.
+    // The recently closed tasks (1.8.16): not on the strip as avatars but behind one control at its end. A task is "closed" here only while it has no avatar: once it is open again its avatar takes over.
     const closedOnly = () => closedList.filter((one) => one && one.task && !mates.some((mate) => mate.task === one.task));
     const isClosed = (task) => Boolean(task) && closedOnly().some((one) => one.task === task);
     const closedTitle = (one) => String((one && one.title) || "");
@@ -811,7 +811,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const kind = previewKind(item);
       if (!kind) return null;
       const box = h("details", {class: "sa-pv", hidden: ""});
-      if (!PREVIEW_ASKED.has(item.id)) PREVIEW_ASKED.set(item.id, SERVE.call("/api/super/preview", {task: item.task, kind}, 8).then((result) => result || {}, () => ({})));
+      if (!PREVIEW_ASKED.has(item.id)) PREVIEW_ASKED.set(item.id, SERVE.call("/api/super/preview", {task: item.task, kind}, 30).then((result) => result || {}, () => ({})));
       PREVIEW_ASKED.get(item.id).then((result) => previewFill(box, item, kind, result));
       return box;
     }
@@ -1211,7 +1211,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       localThink = Date.now();
       applyMood(); drawInput(); schedule(); emit();
       let result;
-      try { result = await SERVE.call("/api/super/ask", body || {text: typed}, 10); } catch (error) { result = (error && error.data && typeof error.data === "object" && error.data.why) ? error.data : {ok: false, why: "none"}; }
+      try { result = await SERVE.call("/api/super/ask", body || {text: typed}, 30); } catch (error) { result = (error && error.data && typeof error.data === "object" && error.data.why) ? error.data : {ok: false, why: "none"}; }
       if (result && result.ok === false) {
         localThink = 0;
         const at = pendingYou.indexOf(mine); if (at >= 0) pendingYou.splice(at, 1);
@@ -1403,7 +1403,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     function poll() {
       if (!live() || SERVE.busy()) return Promise.resolve();
       const spoken = talkGone && Date.now() - talkGone < 60000 ? Promise.resolve(null)
-        : SERVE.ready.then(() => SERVE.call("/api/super/talk", {}, 6)).then((answer) => { talkGone = 0; return answer; }, () => { talkGone = Date.now(); return null; });
+        : SERVE.ready.then(() => SERVE.call("/api/super/talk", {}, 30)).then((answer) => { talkGone = 0; return answer; }, () => { talkGone = Date.now(); return null; });
       return Promise.all([SERVE.post("/api/super", {}), spoken]).then(([result, answer]) => { if (live()) apply(result, answer); }, (error) => {
         if (!live()) return;
         failed = error && error.offline ? t("board.serve.stopped") : t("super.unavailable");

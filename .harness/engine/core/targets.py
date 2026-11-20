@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import config, gitread, messages, repo_paths, schema
+from . import config, gitread, messages, pace, repo_paths, schema
 from .paths import policies_dir
 from . import procrun
 
@@ -252,6 +252,7 @@ def git(repo: Repo, *arguments: str, timeout: int = DEFAULT_GIT_TIMEOUT, allow_f
 
 def run_step(path: Path, arguments: List[str], timeout: int = DEFAULT_GIT_TIMEOUT) -> Tuple[int, str]:
     """`git -C <path> <arguments>` as one step of something a person asked for: (exit code, what git said). Never raises."""
+    timeout = int(pace.scaled(timeout))  # 1.8.15
     try:
         done = procrun.run(gitread.command(path, arguments), capture_output=True, timeout=timeout, env=gitread.env(), check=False)
     except (FileNotFoundError, PermissionError):

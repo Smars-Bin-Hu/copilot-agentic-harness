@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import ahp, clip, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
+from core import ahp, clip, pace, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -69,6 +69,9 @@ def check_python(report: Report) -> None:
         report.ok(f"Python {text}")
     else:
         report.error(say("doctor.python.old", version=text))
+    found = pace.info()  # 1.8.15: the factor every time limit of the board is multiplied by
+    key = {"measured": "doctor.pace.measured", "set": "doctor.pace.set"}.get(found["source"], "doctor.pace.default")
+    report.ok(say(key, factor=f"{found['factor']:g}", seconds=f"{found['seconds'] or 0:.2f}"))
 
 
 def check_interpreter(report: Report) -> None:
@@ -83,7 +86,7 @@ def check_interpreter(report: Report) -> None:
         report.error(say("doctor.interpreter.missing", name=name, consequence=consequence))
         return
     try:
-        result = procrun.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=INTERPRETER_SECONDS)
+        result = procrun.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=pace.scaled(INTERPRETER_SECONDS))
         problem = "" if result.returncode == 0 and result.stdout.strip() == "1" else say("doctor.interpreter.exit", code=result.returncode)
     except Exception as error:
         problem = f"{type(error).__name__}"

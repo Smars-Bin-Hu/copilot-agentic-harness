@@ -46,6 +46,8 @@ import json
 import os
 import hashlib
 import secrets
+import socket
+import http.client
 import subprocess
 import sys
 import threading
@@ -59,7 +61,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
-from core import launchenv
+from core import launchenv, pace
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
@@ -499,7 +501,7 @@ class Board:
         self.link.overlay(result["tasks"])
         moved = False
         for row in result["tasks"]:
-            if row.get("pending_checks") is not None:  # 1.8.15: the person asked for checks with a message that reopens the task; it is open now
+            if row.get("pending_checks") is not None:  # 1.8.16: the person asked for checks with a message that reopens the task; it is open now
                 self.apply_checks(row)
             moved = self.settle(row) or moved
             health.with_context(self.root, row, row.get("chat"))
@@ -2377,7 +2379,7 @@ def handler_for(board: Board) -> type:
                             said = superroute.said_of(board.link, paths[item["task"]])  # the agent's last words, from what the link holds
                             if said:
                                 item["said"] = said
-                    view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.15: the recently closed tasks the board still shows, to open again with `/api/super/send`
+                    view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.16: the recently closed tasks the board still shows, to open again with `/api/super/send`
                     view["making"] = result.get("making") or []  # 1.8.5: chats the board made whose task is not there yet
                     return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
@@ -2503,10 +2505,61 @@ def handler_for(board: Board) -> type:
 def open_again(port: int) -> bool:
     """A second start: the running board opens the browser with a new code. The code stays in that process: this call only hears that it was done."""
     try:
-        with urlopen(Request(f"http://127.0.0.1:{port}/api/reopen", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=3) as answer:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/reopen", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=pace.scaled(STATUS_WAIT)) as answer:
             return answer.status == 200 and json.load(answer).get("opened") is True
     except (OSError, ValueError):
         return False
+
+
+def listening(error: BaseException) -> bool:
+    """Did something take the connection and then not answer in time? Only that is a busy board. A refused port, a cut connection (a board that is stopping) and an answer
+    that is not HTTP (another program on the port) are not (1.8.15 review)."""
+    reason = getattr(error, "reason", error)  # URLError wraps the OSError
+    return isinstance(reason, (socket.timeout, TimeoutError))
+
+
+def serve_pid(root: Path) -> int:
+    """The process id `board-serve.json` names, or 0."""
+    try:
+        value = json.loads(board_serve_file(root).read_text(encoding="utf-8")).get("pid")
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
+def pid_alive(pid: int) -> bool:
+    """Does the process run? No process is started (Windows: OpenProcess and its exit code; elsewhere a signal 0). A process that cannot be asked counts as running."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED: it runs, as another user
+            try:
+                code = wintypes.DWORD()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return True
+                return code.value == 259  # STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:  # noqa: BLE001 - cannot be asked: counts as running
+            return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True  # it runs, as another user
+    return True
 
 
 def running_board(root: Path) -> int:
@@ -2516,10 +2569,12 @@ def running_board(root: Path) -> int:
     if not port:
         return 0
     try:
-        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=STATUS_WAIT) as answer:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=pace.scaled(STATUS_WAIT)) as answer:
             found = json.load(answer) if answer.status == 200 else None
-    except (OSError, ValueError):
-        return 0
+    except (OSError, ValueError) as error:
+        # 1.8.15: a port that took the connection and did not answer in time, while the process `board-serve.json` names still runs, is the board of this copy, busy
+        # (a slow computer): it is opened again, not started twice. Anything else is no board.
+        return port if listening(error) and pid_alive(serve_pid(root)) else 0  # the process the file names must still run: a file left by a crash is not a busy board
     if not isinstance(found, dict):
         return 0
     theirs = str(found.get("root") or "")
@@ -2532,7 +2587,7 @@ def running_board(root: Path) -> int:
 def page_flags(port: int) -> Dict[str, bool]:
     """`page_seen` (a page of the running board asked /api/status since the launch or the last reopen) and `page_paired` (a paired one did). The launcher of `--background` waits for them (1.8.11). Both False on any failure."""
     try:
-        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=STATUS_WAIT) as answer:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=pace.scaled(STATUS_WAIT)) as answer:
             found = json.load(answer) if answer.status == 200 else {}
     except (OSError, ValueError):
         return {"page_seen": False, "page_paired": False}
@@ -2632,6 +2687,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     serving.start()  # 1.7.43: the page is answered as soon as the browser asks; before, the browser opened and waited until the terminal had said its lines
     if ready is None:
         board.ready.vs_running.get()  # is any VS Code running: the button of the Enter screen says Open or Restart from the first answer
+        threading.Thread(target=pace.measure_and_save, args=(root,), name="pace", daemon=True).start()  # 1.8.15: how slow this computer is, for every time limit after it
         board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104); 1.7.43: before the browser is asked to open, not after
 
     def button(action: str) -> str:  # the first line names the buttons as the board shows them (1.7.22), not as the command words
@@ -2685,9 +2741,10 @@ def terminal(out: Any) -> bool:
         return False
 
 
-def wait_for_browser(board: Board, address: str, out: Any, limit: float = OPEN_WAIT, every: float = WHEEL_EVERY) -> bool:
+def wait_for_browser(board: Board, address: str, out: Any, limit: Optional[float] = None, every: float = WHEEL_EVERY) -> bool:
     """A wheel in the terminal while the browser opens the board (on a slow computer, many seconds): it stops when the page paired, or after `limit` seconds with how to open
     the page by hand. Then Enter is read for a new code, as before. Whether the page paired."""
+    limit = pace.scaled(OPEN_WAIT) if limit is None else limit  # 1.8.15
     began = time.monotonic()
     shown = 0
     turn = 0

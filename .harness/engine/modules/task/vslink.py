@@ -54,6 +54,7 @@ UNDO_WAIT = 12.0  # seconds a Withdraw waits for the turn it stopped to end
 HURRY_FOR = 60.0  # seconds after the board opens VS Code in which the link looks for the host every HURRY_EVERY seconds, not after the grown wait (1.7.19)
 HURRY_EVERY = 1.0
 OPEN_EVERY = 3.0  # 1.8.8: a VS Code window is open but its host is not reached yet (it comes about a minute after the window on a work computer): look this often, not after the grown wait
+WATCH_EVERY = 2.0  # 1.8.13: how often the watcher thread looks for a VS Code window while the host is not reached (the probe answers from a cache of RUNNING_KEEP s)
 WINDOW_EVERY = 5.0  # 1.8.8: a long wait looks this often whether a VS Code window was opened (by hand, not by the board), and then ends
 SUB_FOLLOW = 3  # chats of subagents followed for each bound chat, the newest (1.6.105)
 SLOW_LIMIT = 3  # 1.7.45: calls in a row the host did not answer in time before the connection is given up; one slow answer of a busy computer is not a lost VS Code
@@ -188,6 +189,8 @@ class VsLink:
         self.wake = threading.Event()
         self.jobs: "queue.Queue[Any]" = queue.Queue()  # "open", or a Job
         self.thread: Optional[threading.Thread] = None
+        self.watcher: Optional[threading.Thread] = None  # 1.8.13: looks for a VS Code window on its own, so a slow `code agent endpoints` does not hide it
+        self.window_seen = False  # 1.8.13: the watcher's last answer
         self.ready = False
         self.host_pid: Any = None  # the editor process of the connection: its agent host (1.7.38)
         self.hurry_until = 0.0  # monotonic time until which a missing host is looked for often
@@ -232,6 +235,17 @@ class VsLink:
         if self.enabled and self.thread is None:
             self.thread = threading.Thread(target=self._run, name="vscode-link", daemon=True)
             self.thread.start()
+            if self.running is not None:
+                self.watcher = threading.Thread(target=self._watch, name="vscode-window", daemon=True)
+                self.watcher.start()
+
+    def _watch(self) -> None:
+        """1.8.13: is a VS Code window open, looked at every WATCH_EVERY seconds on a thread of its own. Before, the link looked only between two tries to reach the host,
+        and a `code agent endpoints` that hangs on a work computer (25 s and more) kept the Enter screen on "open VS Code" while VS Code had been open for minutes."""
+        while not self.stop_flag.is_set():
+            if not self.ready:
+                self.window_open()
+            self.stop_flag.wait(WATCH_EVERY)
 
     def stop(self) -> None:
         self.stop_flag.set()
@@ -629,6 +643,7 @@ class VsLink:
         except Exception:  # noqa: BLE001 - a probe that breaks says nothing
             seen = False
         with self.lock:
+            self.window_seen = seen and not self.ready
             if self.ready or not seen:
                 self.open_at = 0.0
             elif not self.open_at:
@@ -643,7 +658,7 @@ class VsLink:
         start = time.monotonic()
         end = start + seconds
         while not self.stop_flag.is_set():
-            if self.window_open():
+            if self.window_seen if self.watcher is not None else self.window_open():  # the watcher keeps it fresh; a link without one looks here
                 end = min(end, start + OPEN_EVERY)
             left = end - time.monotonic()
             if left <= 0 or self.wake.wait(min(left, WINDOW_EVERY)):

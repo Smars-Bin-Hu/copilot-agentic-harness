@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import unittest
 from unittest import mock
@@ -441,6 +442,28 @@ class NotReadyTests(LinkCase):
             self.assertTrue(until(lambda: self.link.status()["ready"], 3), self.link.status())
             self.assertNotIn("open_for", self.link.status())
             self.assertEqual(self.link.open_at, 0.0)
+
+    def test_a_window_is_seen_while_code_agent_endpoints_hangs(self) -> None:
+        """1.8.13: on a work computer `code agent endpoints` hung for minutes; the window was looked for only between two tries, so the Enter screen said "open VS Code" all that time."""
+        release = threading.Event()
+        state = {"window": False}
+
+        def opener() -> ahp.Connection:
+            release.wait(10)  # the hanging command
+            raise ahp.NotReady("none")
+
+        with mock.patch.object(vslink, "WATCH_EVERY", 0.05):
+            self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, running=lambda: state["window"])
+            self.addCleanup(release.set)
+            self.addCleanup(self.link.stop)
+            self.link.start()
+            time.sleep(0.2)
+            self.assertNotIn("open_for", self.link.status())
+            state["window"] = True  # VS Code opened while the first try still hangs
+            self.assertTrue(until(lambda: "open_for" in self.link.status(), 2), self.link.status())
+            self.assertEqual(self.link.status()["why"], "starting", "told as getting ready, not as no VS Code")
+            state["window"] = False
+            self.assertTrue(until(lambda: "open_for" not in self.link.status(), 2))
 
     def test_a_window_probe_that_breaks_or_does_not_know_is_no_window(self) -> None:
         def broken() -> bool:

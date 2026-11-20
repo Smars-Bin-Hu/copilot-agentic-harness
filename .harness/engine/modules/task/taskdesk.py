@@ -394,12 +394,23 @@ def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def req_approval(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """1.8.16: the Requirement tab's line, as the Plan tab has one: `approved` (ever confirmed), when, the code the person typed (the start of the sha256 of REQ.md as they
-    read it, from the newest `confirm-req` event; "" when the event is gone), and `changed`: what it asks for is not what was confirmed."""
+    read it, from the newest `confirm-req` event; "" when the event is gone), and `changed`: what it asks for is not what was confirmed.
+    1.8.21: `again` (a new round asked for the requirement again: round above 1, nothing confirmed now, and the round before kept what it had), with `round`, `was_round`,
+    `was_at` and `was_code` (from the `confirm-req` event of that round; "" when it is gone): the page says what the person confirmed before."""
     kept = data.get("req") if isinstance(data.get("req"), dict) else {}
-    if not kept.get("confirmed_sha256"):
-        return {"approved": False, "at": "", "code": "", "changed": False}
-    said = next((str(event.get("detail") or "") for event in reversed(data.get("events") or []) if isinstance(event, dict) and event.get("what") == "confirm-req"), "")
-    return {"approved": True, "at": str(kept.get("confirmed_at") or ""), "code": approval.code_of(said) if said else "", "changed": task_ops.req_state(root, task) == "changed"}
+    out: Dict[str, Any] = {"approved": False, "at": "", "code": "", "changed": False, "again": False, "round": int(data.get("round") or 1), "was_round": 0, "was_at": "", "was_code": ""}
+    events = [event for event in data.get("events") or [] if isinstance(event, dict) and event.get("what") == "confirm-req"]
+    if kept.get("confirmed_sha256"):
+        said = str(events[-1].get("detail") or "") if events else ""
+        out.update(approved=True, at=str(kept.get("confirmed_at") or ""), code=approval.code_of(said) if said else "", changed=task_ops.req_state(root, task) == "changed")
+        return out
+    past = [item for item in data.get("rounds") or [] if isinstance(item, dict)]
+    before = past[-1].get("req") if past and isinstance(past[-1].get("req"), dict) else {}
+    if out["round"] > 1 and before.get("confirmed_sha256"):
+        number = int(past[-1].get("round") or out["round"] - 1)
+        said = next((str(event.get("detail") or "") for event in reversed(events) if event.get("round") == number), "")
+        out.update(again=True, was_round=number, was_at=str(before.get("confirmed_at") or ""), was_code=approval.code_of(said) if said else "")
+    return out
 
 
 def promote_stamp(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:

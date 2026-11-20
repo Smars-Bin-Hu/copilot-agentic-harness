@@ -1,0 +1,32 @@
+/* Reopen a closed task (1.8.21, reopen.js): the card, the pill at the head of the task page, the icon of a list row and its hover. Colours come from the tokens, so light and dark both hold. */
+.ro-card{max-width:min(520px,calc(100% - 32px))}
+.ro-title{margin:0 0 2px;overflow-wrap:anywhere;word-break:break-word}
+.ro-who{margin:0 0 10px;color:var(--soft)}
+.ro-mode{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;max-width:100%;margin:2px 0 10px;padding:3px 9px;border:1px solid;border-radius:8px;font-size:12.5px;font-weight:600}
+.ro-mode svg{flex:none;width:13px;height:13px}
+.ro-mode.new{background:var(--hot-bg);color:var(--hot);border-color:var(--hot-line)}
+.ro-mode.same{background:var(--good-bg);color:var(--good);border-color:var(--good-line)}
+.ro-mode.no{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
+.ro-what{margin:0 0 12px;padding:0;list-style:none;font-size:13px;color:var(--soft)}
+.ro-what li{position:relative;padding:5px 0 5px 22px;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.ro-what li:first-child{border-top:0}
+.ro-what li::before{content:attr(data-i);position:absolute;left:0;top:5px;width:16px;text-align:center}
+.ro-what code{padding:0 4px;border-radius:4px;background:var(--hover);color:var(--ink);font:12px ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.ro-what b{color:var(--ink)}
+.ro-lbl{display:block;margin:0 0 4px;font-size:12.5px;color:var(--soft)}
+.ro-msg{display:block;width:100%;min-height:58px;margin-top:4px;padding:8px 10px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);color:var(--ink);font-family:inherit;font-size:13px;line-height:1.45;resize:vertical;box-sizing:border-box}
+.ro-btns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:12px}
+.ro-btn{margin:0;padding:7px 13px;border-radius:10px;border-color:var(--line2);font-size:13px;font-weight:550}
+.ro-btn.primary{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.ro-btn.primary:hover:not(:disabled){background:var(--btn-hover);border-color:var(--btn-hover)}
+.ro-foot{margin:10px 0 0;font-size:12px;line-height:1.45;color:var(--soft)}
+.ro-pill svg{flex:none}
+.act.ro-ic{display:inline-flex;align-items:center;justify-content:center;padding:2px 7px}
+.act.ro-ic svg{width:14px;height:14px}
+.ro-tip{position:fixed;z-index:5001;width:min(280px,calc(100vw - 16px));padding:9px 11px;border-radius:9px;background:var(--btn);color:var(--btn-ink);font:12px/1.5 var(--sans);box-shadow:0 10px 30px rgba(0,0,0,.25);pointer-events:none;overflow-wrap:anywhere}
+.ro-tip .m{display:inline-block;margin-bottom:3px;padding:0 6px;border-radius:5px;font-weight:600}
+.ro-tip .m.new{background:#f0c77a;color:#3a2600}
+.ro-tip .m.same{background:#9be0bd;color:#063b20}
+.ro-tip .m.no{background:#f3b1ac;color:#4a0f0b}
+.ro-tip .k{opacity:.7}
+@media (max-width:480px){.ro-btns .ro-btn{flex:1 1 auto}}

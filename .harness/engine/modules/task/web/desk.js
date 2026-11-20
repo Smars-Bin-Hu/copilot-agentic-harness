@@ -553,9 +553,10 @@
     ui.infoL = slot("div", "tk-info-l");
     ui.rounds = slot("span", "tk-rounds");
     ui.pill = slot("span", "tk-pill");
+    ui.reopen = slot("span", "tk-rv");
     ui.review = slot("span", "tk-rv");
     ui.envs = slot("span", "tk-rv tk-env");
-    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.review.node, ui.envs.node, ui.pill.node);
+    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.reopen.node, ui.review.node, ui.envs.node, ui.pill.node);
     ui.forks = slot("div", "tk-forks sub");
     ui.wait = h("div", {class: "tk-wait"});
     ui.tabs = h("div", {class: "tk-tabs"});
@@ -667,6 +668,8 @@
       return nodes;
     });
     ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
+    const canReopen = served() && full.status === "closed" && !desk.past && Boolean(desk.reopen) && SERVE.runs("reopen") && typeof REOPEN !== "undefined";  // 1.8.21: a closed task, not an earlier round's view
+    ui.reopen.set(canReopen ? JSON.stringify(desk.reopen) : "", () => (canReopen ? REOPEN.pill(desk.name, desk.reopen) : null));
     ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());
     ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());
     ui.pill.set(live ? JSON.stringify([desk.vscode, chat && chat.bound]) : "", () => (live ? [SHELL.vsPill(desk.vscode, chat), SERVE.pairMark(true)] : null));
@@ -2721,6 +2724,10 @@
   function reqApproval() {
     const a = desk.req_approval;
     if (!a) return null;
+    if (a.again && !desk.past) {  // 1.8.21: a new round asks for it again: what was confirmed before is told, and it does not count
+      const body = t(a.was_code ? "desk.req.again.body" : "desk.req.again.body.nocode", {was: a.was_round, at: when(a.was_at, 0, 16), code: a.was_code});
+      return h("p", {class: "plan-approval"}, h("span", {class: "tag hot long"}, h("b", null, t("desk.req.again.head", {round: a.round})), " " + body));
+    }
     if (!a.approved) return h("p", {class: "plan-approval"}, tag(t("desk.req.approval.none"), "hot long"));
     const key = a.changed ? (a.code ? "desk.req.approval.changed" : "desk.req.approval.changed.nocode") : (a.code ? "desk.req.approval.yes" : "desk.req.approval.yes.nocode");
     return h("p", {class: "plan-approval"}, tag(t(key, {at: when(a.at, 0, 16), code: a.code}), (a.changed ? "hot" : "good") + " long"));

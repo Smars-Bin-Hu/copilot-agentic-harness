@@ -12,7 +12,7 @@
 const READY = (function () {
   // The picker is held until the board sees VS Code gone: it refuses to open one while a VS Code of this folder is open.
   function waitGone() {
-    const until = Date.now() + 15000;
+    const until = Date.now() + 15000 * Math.max(1, Number(DATA.pace) || 1);
     return new Promise((resolve) => {
       const look = () => SERVE.call("/api/ready", {}, 8).then((data) => {
         const vs = (data.checks || []).find((line) => line.id === "vscode");

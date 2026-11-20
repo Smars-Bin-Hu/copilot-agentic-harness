@@ -9,9 +9,9 @@ from pathlib import Path
 
 import support  # noqa: F401  (puts the engine on sys.path)
 from core import approval, messages
-from modules.task import taskdesk, taskhtml
+from modules.task import taskdesk, taskhtml, taskreopen
 from support import confirm_requirement, run_git
-from taskcase import TASK, TaskCase
+from taskcase import NAME, TASK, TaskCase
 
 WEB = Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web"
 CORE = Path(__file__).resolve().parents[1] / "engine" / "core"
@@ -32,16 +32,16 @@ class RequirementAfterANewRound(TaskCase):
         self.run_cli("task", "close")
         run_git(self.repo_b, "commit", "-qam", "the person commits")
         run_git(self.repo_b, "switch", "-q", "main")
-        self.open(session="again-1")
+        taskreopen.reopen(self.root, TASK)  # the person's click on the board: a new round, no chat
         data = self.data()
         self.assertEqual(data["round"], 2)
-        found = taskdesk.desk(self.root, TASK, ())["req_approval"]
+        found = taskdesk.desk(self.root, NAME, ())["req_approval"]
         self.assertEqual((found["approved"], found["again"], found["round"], found["was_round"]), (False, True, 2, 1))
         self.assertEqual(found["was_at"], data["rounds"][-1]["req"]["confirmed_at"])
         self.assertEqual(found["was_code"], approval.code_of(typed))  # the code of the confirm-req event of that round
         self.assertEqual((found["at"], found["code"], found["changed"]), ("", "", False))  # the old keys: nothing is confirmed now
         confirm_requirement(self.root, TASK, "Add the new column too.")  # confirmed again: the stamp goes
-        found = taskdesk.desk(self.root, TASK, ())["req_approval"]
+        found = taskdesk.desk(self.root, NAME, ())["req_approval"]
         self.assertEqual((found["approved"], found["again"]), (True, False))
 
     def test_it_asks_again_only_when_the_round_before_kept_a_confirmation(self) -> None:
@@ -93,7 +93,7 @@ class ReopenPageText(unittest.TestCase):
 
     def test_the_stamp_over_the_requirement_is_the_1_8_16_stamp(self) -> None:
         desk = source("desk.js")
-        self.assertIn('h("span", {class: "tag hot long"}, h("b", null, t("desk.req.again.head", {round: a.round}))', desk)
+        self.assertIn('h("span", {class: "tag hot long"}, h("span", null, h("b", null, t("desk.req.again.head", {round: a.round}))', desk)
         self.assertIn("if (a.again && !desk.past)", desk)
 
     def test_every_word_of_the_card_is_in_both_languages_with_the_same_places(self) -> None:

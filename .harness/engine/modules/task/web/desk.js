@@ -2726,7 +2726,7 @@
     if (!a) return null;
     if (a.again && !desk.past) {  // 1.8.21: a new round asks for it again: what was confirmed before is told, and it does not count
       const body = t(a.was_code ? "desk.req.again.body" : "desk.req.again.body.nocode", {was: a.was_round, at: when(a.was_at, 0, 16), code: a.was_code});
-      return h("p", {class: "plan-approval"}, h("span", {class: "tag hot long"}, h("b", null, t("desk.req.again.head", {round: a.round})), " " + body));
+      return h("p", {class: "plan-approval"}, h("span", {class: "tag hot long"}, h("span", null, h("b", null, t("desk.req.again.head", {round: a.round})), " " + body)));
     }
     if (!a.approved) return h("p", {class: "plan-approval"}, tag(t("desk.req.approval.none"), "hot long"));
     const key = a.changed ? (a.code ? "desk.req.approval.changed" : "desk.req.approval.changed.nocode") : (a.code ? "desk.req.approval.yes" : "desk.req.approval.yes.nocode");

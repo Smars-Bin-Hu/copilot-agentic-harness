@@ -55,15 +55,16 @@ const REOPEN = (function () {
   // The card. `plan`: what `taskreopen.plan_of` gave. Both ways close it and let the page draw again (`SERVE.done`); a refusal is shown in the card, which stays.
   function card(name, plan) {
     const kind = kindOf(plan.mode), refused = plan.mode === "refused";
+    const number = plan.mode === "new" ? plan.next_round : plan.round;  // the round the task will be in
     const said = h("div", {class: "bad", role: "alert"});
-    const message = refused ? null : h("textarea", {class: "ro-msg", rows: 3, maxlength: 10000, placeholder: t(plan.mode === "new" ? "desk.reopen.msg.new" : "desk.reopen.msg.same", {round: plan.round}), "aria-label": t("desk.reopen.msg")});
+    const message = refused ? null : h("textarea", {class: "ro-msg", rows: 3, maxlength: 10000, placeholder: t(plan.mode === "new" ? "desk.reopen.msg.new" : "desk.reopen.msg.same", {round: number}), "aria-label": t("desk.reopen.msg")});
     const no = h("button", {type: "button", class: "act ro-btn"}, t("board.serve.cancel"));
     const only = h("button", {type: "button", class: "act ro-btn", disabled: refused ? "disabled" : null}, t("desk.reopen.only"));
     const recover = refused && plan.why !== "checks" && SERVE.runs("recover");
     const hand = h("button", {type: "button", class: "act ro-btn primary", disabled: refused && !recover ? "disabled" : null}, t(recover ? "desk.reopen.recover" : "desk.reopen.hand"));
     const view = SERVE.dialog([
       h("h2", {class: "ro-title"}, t("desk.reopen.title", {name})), h("p", {class: "sub ro-who"}, whoLine(plan)),
-      h("span", {class: "ro-mode " + kind}, icon(modeIcon[kind], 13), h("span", null, t(MODE[plan.mode], {round: plan.round}))),
+      h("span", {class: "ro-mode " + kind}, icon(modeIcon[kind], 13), h("span", null, t(MODE[plan.mode], {round: number}))),
       whatList(plan),
       refused ? null : h("label", {class: "ro-lbl"}, t("desk.reopen.msg"), message),
       said, h("div", {class: "ro-btns"}, no, only, hand), refused ? null : h("p", {class: "ro-foot"}, t("desk.reopen.foot"))]);

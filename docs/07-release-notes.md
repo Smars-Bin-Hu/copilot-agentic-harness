@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.15 (1.8.0 – 1.8.15, 2026-11-17 – 2026-11-20)
+## 1.8.16 (1.8.0 – 1.8.16, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -27,6 +27,8 @@ To see which version you have: `harness --version`.
 - **The board in the background** (1.8.11): Start Harness starts the board with no terminal window to keep open; a small start window shows three stages (starting the board, waiting for the browser, pairing) and closes by itself when a paired page is open (a wheel in the terminal when Python has no tkinter). The console (Windows) or Terminal window (macOS, 1.8.12) is hidden meanwhile and closed at the end. A second double-click only opens the board. The power button at the top right of every page stops it; `harness task board --stop` too.
 - **Message a task directly from the super view** (1.8.14): with a task's avatar filter on, or `@name` in All, your words go straight to that task's chat (up to 10000 characters), not through the super agent: sent, queued (or steered in), or said in place of its own question; a task with no chat gets a new chat that goes on with it. One Send; the options (model, thinking, context, when it works, reply language, files, New chat for one message) sit in a menu behind the icon next to Send. Your words show as your bubble with how it went; a paused task is refused with **Resume**. The super agent's `send` card goes the same way.
 - **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
+- **Green stamps on the Requirement, Changes and Scripts tabs** (1.8.16): the Requirement tab says when you confirmed it and with which code, amber when it changed since, as the Plan tab does; Changes says when the work was written back, to which branch, with the promote's code; a script of `DEV/_server/` that the gate let through shows **ran on DEV ×N**, each run in the hover (it says the call ran, not how it ended).
+
 ### Fixed
 
 - On a slow work computer fixed time limits made slowness look like a failure (1.8.15): red lines, buttons turned off, "the board did not come back", a second board started, a promote stopped halfway. The board now measures how slow the computer is when it starts and multiplies every time limit that is not a guardrail by a factor from 1 to 5 (`board.slow_factor` in `task.json` sets it by hand); the pages use the same factor. A board that listens but answers late is a busy board, not a missing one: a second start opens it. Only one `code agent endpoints` runs at a time. The guardrails keep their limits.

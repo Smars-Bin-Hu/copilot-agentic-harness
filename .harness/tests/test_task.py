@@ -481,6 +481,74 @@ class PromoteTests(TaskCase):
 
 
 class RoundAndReportTests(TaskCase):
+    def refuse_dev_moves(self, times: int) -> Dict[str, int]:
+        """os.replace refuses to move DEV/ the first `times` tries, as Windows does while something has a file in it open (WinError 5)."""
+        import os
+        from core import state
+
+        real, count = os.replace, {"tries": 0}
+
+        def replace(source: Any, target: Any) -> None:
+            if Path(str(source)).name == "DEV":
+                count["tries"] += 1
+                if count["tries"] <= times:
+                    raise PermissionError(5, "Access is denied", str(source))
+            real(source, target)
+
+        for patcher in (mock.patch.object(state.os, "replace", replace), mock.patch.object(state, "MOVE_RETRY_SECONDS", 0.2)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return count
+
+    def test_a_promoted_closed_task_is_checked_after_the_close_without_a_new_round(self) -> None:
+        self.promoted()
+        self.run_cli("task", "close")
+        before = self.data()
+        self.prompt("[review]=1 给已关闭的任务做独立检查")
+        bound = self.run_cli("task", "review", "after", NAME, "--session-id", SESSION)
+        self.assertEqual(bound["n"], 1)
+        started = self.run_cli("task", "review", "start", "--task", NAME)
+        self.assertTrue(started["after"])
+        call = {"name": "reviewer", "agent_type": "reviewer", "prompt": "检查评审包", "description": "check"}
+        self.assertEqual(self.decision(self.hook(pre_tool(SESSION, "Agent", call))), "")
+        self.hook(post_tool(SESSION, "Agent", call, "VERDICT: PASS\n- repo_b/src/a.sql:1 ok | 依据：REQ.md:1"))
+        after = self.data()
+        self.assertEqual((after["status"], after["round"], after["promote"]["state"], after["branch"]), ("closed", before["round"], "done", before["branch"]))
+        self.assertTrue((self.task / "DEV" / "repo_b" / "src" / "a.sql").is_file())
+        self.assertFalse((self.task / "DEV_r1").exists())
+        self.assertEqual(after["review"]["rounds"][-1]["verdict"], "PASS")
+        self.assertTrue((self.task / "REVIEW" / "round-001" / "verdict.md").is_file())
+
+    def test_a_refused_move_of_dev_is_tried_again(self) -> None:
+        from modules.task import tasklife
+
+        self.promoted()
+        self.run_cli("task", "close")
+        count = self.refuse_dev_moves(3)
+        result = tasklife.open_task(self.root, NAME, SESSION)
+        self.assertEqual((result["round"], count["tries"]), (2, 4))
+        self.assertTrue((self.task / "DEV_r1" / "repo_b" / "src" / "a.sql").is_file())
+
+    def test_a_move_of_dev_still_refused_changes_nothing_and_says_why_in_plain_words(self) -> None:
+        from modules.task import tasklife
+
+        self.promoted()
+        self.run_cli("task", "close")
+        before = self.data()
+        self.refuse_dev_moves(10_000)
+        with self.assertRaises(CommandError) as caught:
+            tasklife.open_task(self.root, NAME, SESSION)
+        text = str(caught.exception)
+        self.assertNotIn("WinError", text)
+        self.assertIn("DEV", text)
+        self.assertIn("task open", text)
+        after = self.data()
+        self.assertEqual((after["status"], after["round"], after["promote"], after["rounds"]), (before["status"], before["round"], before["promote"], before["rounds"]))
+        self.assertTrue((self.task / "DEV" / "repo_b" / "src" / "a.sql").is_file())
+        self.assertTrue((self.task / "PLAN.md").is_file())  # put back
+        self.assertFalse((self.task / "PLAN_r1.md").exists())
+        self.assertTrue(tasks.base_dir(self.root, TASK).exists())  # the base stays: the round is whole for the next try
+
     def test_after_a_promote_starting_again_opens_a_new_round_with_a_new_plan(self) -> None:
         self.promoted()
         self.run_cli("task", "close")

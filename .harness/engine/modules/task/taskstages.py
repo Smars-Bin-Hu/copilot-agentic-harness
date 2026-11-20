@@ -218,7 +218,7 @@ def reviewer(root: Path, task: str, data: Dict[str, Any], number: Optional[int] 
         data = dict(data, round=number, status="closed")  # settled: the checks as they stood, not compared with the files of today
         if not wanted and not taskreview.done_now(data):
             return None
-    elif not review["n"] and not review["rounds"]:
+    elif not review["n"] and not any(not item.get("after") for item in review["rounds"]):  # checks after the close are not the task's own (1.8.16)
         return None
     info = taskreview.summary(root, task, data, settled=True)
     n = info["n"] if number is None else wanted

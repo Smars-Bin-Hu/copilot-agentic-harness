@@ -30,7 +30,7 @@ from urllib.parse import quote
 
 from core import approval, messages, standards, targets, tasks
 from core.paths import board_serve_port, cli_command, utc_now
-from core.state import admin_on, atomic_write, session, state_lock, state_path
+from core.state import admin_on, atomic_write, move_aside, session, state_lock, state_path
 
 from . import common, promote_target
 from .common import CommandError
@@ -207,6 +207,7 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
             data["updated_at"] = utc_now()
             atomic_write(path, data)
         state["active_task"] = task
+        state.pop("after_review", None)  # a task picked up ends the checks after the close this session was doing (1.8.16)
     approved = tasks.plan_approved(root, task, data)
     result: Dict[str, Any] = {
         "task": task, "round": data["round"], "resumed": resumed and not new_round, "new_round": new_round,
@@ -231,19 +232,36 @@ def keep_diff(root: Path, task: str, data: Dict[str, Any], number: int) -> str:
         return ""
 
 
+def _move(root: Path, task: str, source: Path, target: Path) -> None:
+    """Move a part of the old round aside. Still refused after the retries: a plain error (which folder, why, try again) and task.json is not written."""
+    try:
+        move_aside(source, target)
+    except PermissionError as error:
+        raise CommandError(say("task.round.move_refused", what=rel(root, source), to=rel(root, target), task=name_of(task))) from error
+
+
 def archive_round(root: Path, task: str, data: Dict[str, Any]) -> None:
     """A promoted task that is started again begins a new round: the old result moves aside, the plan needs a new approval."""
     number = data["round"]
     dev = tasks.dev_dir(root, task)
     kept = dev.parent / f"{tasks.DEV_NAME}_r{number}"
     diff_file = keep_diff(root, task, data, number)  # before the base goes: the round's diff cannot be made again after that
-    if dev.is_dir() and any(dev.iterdir()) and not kept.exists():
-        dev.rename(kept)
-    shutil.rmtree(str(tasks.base_dir(root, task)), ignore_errors=True)
     plan = tasks.plan_file(root, task)
     old_plan = plan.with_name(f"{plan.stem}_r{number}{plan.suffix}")
-    if plan.is_file() and not old_plan.exists():
-        plan.rename(old_plan)  # the new round starts without a plan, so the old one cannot be approved again by mistake
+    moved_plan = plan.is_file() and not old_plan.exists()
+    if moved_plan:
+        _move(root, task, plan, old_plan)  # the new round starts without a plan, so the old one cannot be approved again by mistake
+    if dev.is_dir() and any(dev.iterdir()) and not kept.exists():
+        try:
+            _move(root, task, dev, kept)
+        except CommandError:
+            if moved_plan:
+                try:
+                    move_aside(old_plan, plan)  # put the plan back: the task stays as it was, and the person can try again
+                except OSError:
+                    pass
+            raise
+    shutil.rmtree(str(tasks.base_dir(root, task)), ignore_errors=True)  # only after the moves: a refused move leaves the round whole
     data["rounds"].append({
         "round": number, "started_at": data.get("round_started_at", ""), "plan": data.get("plan", {}), "promote": data["promote"],
         "branch": data["branch"], "dev": rel(root, kept), "diff_file": diff_file, "plan_file": rel(root, old_plan) if old_plan.exists() else "", "files": sorted(data["target_files"]) + sorted(data.get("manual_files") or {}), "deletes": list(data["deletes"]),

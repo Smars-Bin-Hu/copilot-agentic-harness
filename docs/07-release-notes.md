@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.13 (1.8.0 – 1.8.13, 2026-11-17 – 2026-11-20)
+## 1.8.16 (1.8.0 – 1.8.16, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -26,6 +26,8 @@ To see which version you have: `harness --version`.
 
 - **The board in the background** (1.8.11): Start Harness starts the board with no terminal window to keep open; a small start window shows three stages (starting the board, waiting for the browser, pairing) and closes by itself when a paired page is open (a wheel in the terminal when Python has no tkinter). The console (Windows) or Terminal window (macOS, 1.8.12) is hidden meanwhile and closed at the end. A second double-click only opens the board. The power button at the top right of every page stops it; `harness task board --stop` too.
 - **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
+- **Checks of a closed task** (1.8.16): a task closed without independent checks can be checked afterwards. Write `[review]=n` with its name in a chat, or set **Checks after the close** on its page; the agent runs `harness task review after <task>` and the reviewer. The task stays closed, `DEV/` is not moved, nothing is promoted. The page and the report show these checks in a block of their own; a FAIL is only recorded (fix it in a new task with `task fork`).
+
 ### Fixed
 
 - On a slow work computer, calls of one session waited out and were refused, and two of them could write the same task file (1.8.1): the locks are locks of the system now, and a call waits up to 20 seconds.
@@ -42,6 +44,7 @@ To see which version you have: `harness --version`.
 - On a slow work computer the Enter screen turned Enter off with every line green, saying the board did not answer (1.8.13): the board works the answer out on a thread of its own and sends the last one at once; one late answer is not counted, and while the last answer was ready (two minutes at most) Enter stays on and an amber line says the board is slow. An answer that took over 3 seconds is written to `.harness/runtime/board.log` with the time of each part.
 - `harness doctor` often ran out of its 300 seconds on a work computer (1.8.13): the target repositories are checked from their files, with no git command; uncommitted files are checked by promote when it writes. **Check again** shows the progress bar of the run it started.
 - VS Code had been open for minutes and the Enter screen still said to open it (1.8.13): the board looks for a VS Code window on a thread of its own, every 2 seconds, not only between two tries to reach VS Code.
+- Opening a closed task again failed on Windows with `WinError 5` when something had a file under `DEV/` open (1.8.16): the move of `DEV/` aside is tried again for 5 seconds; if it is still refused, the message says which folder and what to close, and the task is left as it was.
 
 ### Retired
 

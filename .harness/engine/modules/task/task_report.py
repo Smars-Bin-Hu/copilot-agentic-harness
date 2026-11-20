@@ -8,7 +8,7 @@ Next to it goes report.html: where the task's time and usage went (taskinsight.p
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from core import kbreads, messages, tasks
 from core.paths import cli_command
@@ -78,21 +78,27 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
     fetched = sorted(data.get("target_files", {}))
     if fetched:
         lines += ["", say("mdreport.fetched", count=len(fetched), files=messages.joined(fetched[:30]) + (say("mdreport.fetched.more") if len(fetched) > 30 else ""))]
-    checks = [item for item in review.get("rounds") or [] if item.get("task_round") == data["round"]]
+    now = [item for item in review.get("rounds") or [] if item.get("task_round") == data["round"]]
+    checks = [item for item in now if not item.get("after")]
+    later = [item for item in now if item.get("after")]  # checks after the close (1.8.16): never the task's own, so a table of their own
+    no_verdict, refunded, dismissed = say("mdreport.checks.no_verdict"), say("mdreport.checks.refunded"), say("mdreport.checks.dismissed")  # a check that does not count says so in its row
+
+    def table(items: List[Dict[str, Any]]) -> List[str]:
+        return [say("mdreport.checks.header"), "| --- | --- | --- | --- | --- |"] + [
+            f"| round-{item['number']:03d} | {str(item.get('started_at', ''))[:19]} | {item.get('verdict') or no_verdict}{refunded if item.get('refunded') else dismissed if item.get('dismissed') else ''} | {str(item.get('digest', ''))[:12]} | {task}/REVIEW/round-{item['number']:03d}/verdict.md |"
+            for item in items
+        ]
+
     lines += ["", say("mdreport.checks.title"), ""]
     if checks:
-        no_verdict = say("mdreport.checks.no_verdict")
-        lines += [say("mdreport.checks.header"), "| --- | --- | --- | --- | --- |"]
-        refunded, dismissed = say("mdreport.checks.refunded"), say("mdreport.checks.dismissed")  # a check that does not count says so in its row
-        lines += [
-            f"| round-{item['number']:03d} | {str(item.get('started_at', ''))[:19]} | {item.get('verdict') or no_verdict}{refunded if item.get('refunded') else dismissed if item.get('dismissed') else ''} | {str(item.get('digest', ''))[:12]} | {task}/REVIEW/round-{item['number']:03d}/verdict.md |"
-            for item in checks
-        ]
+        lines += table(checks)
         waived = review.get("waived") or {}
         if waived.get("task_round") == data["round"]:
             lines.append(say("mdreport.checks.waived", at=waived.get("at", ""), digest=str(waived.get("digest", ""))[:12]))
     else:
         lines.append(say("mdreport.checks.none"))
+    if later:
+        lines += ["", say("mdreport.checks.after", n=int((review.get("after") or {}).get("n") or 0)), ""] + table(later)
     try:
         read = kbreads.of_task(root, task)
     except Exception:  # noqa: BLE001 - a list in a report

@@ -118,6 +118,7 @@ A test where the user skipped an environment (for example UAT): the summary says
   - Once the work changes, earlier passes no longer count. So finish the changes first, then check.
   - When the checks are used up, stop and tell the user. Only the user can run `task review extend` and `task review waive`, in the terminal.
   - Without enough passes, `task promote --dry-run` is refused.
+- **Checks of a closed task** (the user names a closed task and wrote `[review]=n`, or set the checks on its page): do not `task open` it, which starts a new round and moves `DEV/` aside. Run `harness task review after <task> --session-id <id>` in the same turn, then `task review start --task <task>` and the reviewer, as above. The task stays closed and nothing in it changes. A FAIL is only shown to the user; a fix is a new task (`task fork`).
 - **A tier only goes up.** When unsure, pick the lower one and run `task upgrade` later.
 - **A wrong kind is no disaster.** It is written in `TASK.md`, and the user sees it at a glance. When you notice it, tell the user; do not change the state file yourself. Only a Q&A task can change its kind (`task upgrade --kind`); any other is forked.
 

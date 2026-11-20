@@ -62,7 +62,7 @@
   const head = h("div", {class: "en-chk-h h-check"}, h("i"), headText, getReady);
   const list = h("ul", {class: "en-chk-l"});
   const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
-  const KEEP_READY = 120;  // 1.8.13: seconds a ready answer still counts while the board answers late
+  const KEEP_READY = 120 * Math.max(1, Number(DATA.pace) || 1);  // 1.8.13: seconds a ready answer still counts while the board answers late
   const legal = h("p", {class: "en-legal"}, t("board.enter.legal", {copyright: t("board.copyright"), version: DATA.serve.version || ""}));
   const body = h("div", {class: "en-chk-body"}, head, list, errLine);  // the lines scroll here; the legal line below it stays in view (1.7.24)
   const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);

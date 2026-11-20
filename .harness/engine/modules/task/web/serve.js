@@ -85,10 +85,13 @@ const SERVE = (function () {
   function call(path, body, seconds) {
     return waitOn(callNow(path, body, seconds), path);
   }
-  function callNow(path, body, seconds) {
+  // The seconds are for a computer as fast as the limits were written for; DATA.pace (1 to 10) says how much slower this one is. `seconds` grow with it here, in one place, for every caller.
+  const PACE = Math.max(1, Number(typeof DATA !== "undefined" && DATA ? DATA.pace : 1) || 1);
+  function callNow(path, body, base) {
+    const seconds = (base || 8) * PACE;
     const control = window.AbortController ? new AbortController() : null;
-    const timer = setTimeout(() => control && control.abort(), (seconds || 8) * 1000);
-    const failed = (error) => { clearTimeout(timer); throw new Error(error && error.name === "AbortError" ? "no answer in " + (seconds || 8) + " s" : (error && error.message) || "no answer"); };
+    const timer = setTimeout(() => control && control.abort(), seconds * 1000);
+    const failed = (error) => { clearTimeout(timer); throw new Error(error && error.name === "AbortError" ? "no answer in " + seconds + " s" : (error && error.message) || "no answer"); };
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body || {}), signal: control ? control.signal : undefined})
       .then((response) => response.json().catch(() => ({})).then((data) => {
         clearTimeout(timer);

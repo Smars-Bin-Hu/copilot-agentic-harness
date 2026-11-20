@@ -951,5 +951,15 @@ class ReopenTests(unittest.TestCase):
         self.assertFalse(checks.still_reopen())
 
 
+
+class PaceInCallTests(unittest.TestCase):
+    def test_serve_call_scales_its_seconds_by_the_pace_in_one_place(self) -> None:
+        serve = (WEB / "serve.js").read_text(encoding="utf-8")
+        body = serve[serve.index("function callNow("):]
+        body = body[: body.index("function file(")]
+        self.assertIn("DATA.pace", serve)
+        self.assertIn("(base || 8) * PACE", body)
+        self.assertIn("seconds * 1000", body)
+
 if __name__ == "__main__":
     unittest.main()

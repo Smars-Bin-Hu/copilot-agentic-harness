@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.11 (1.8.0 – 1.8.11, 2026-11-17 – 2026-11-19)
+## 1.8.11 (1.8.0 – 1.8.11, 2026-11-17 – 2026-11-20)
 
 ### Added
 

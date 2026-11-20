@@ -175,6 +175,11 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
                 state_now = data["promote"]["state"]
                 if state_now == "partial":
                     raise CommandError(say("task.promote.partial.first", task=task))
+                if data.get("status") == "closed" and state_now == "done":
+                    from . import taskreopen  # it needs this module
+
+                    if taskreopen.checks_running(data):  # a new round would move DEV/ away under the check after the close (review 1 of 1.8.21)
+                        raise CommandError(say("reopen.refused.checks", task=name_of(task)))
                 if state_now == "done":
                     new_round = True
                     archive_round(root, task, data)

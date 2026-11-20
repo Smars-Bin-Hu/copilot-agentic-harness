@@ -1277,7 +1277,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     // The person opens a closed task again with no chat (the board's `reopen` action, paired page only): the same call for the mark and the card. {ok, text, new_round} or {ok: false, error}.
     async function reopenCall(task) {
       try {
-        const answer = await SERVE.post("/api/act", {action: "reopen", task, step: "act"});
+        const info = reopenOf(task);  // what the mark and the card said: a task in another state now is refused, and the person looks again
+        const answer = await SERVE.post("/api/act", {action: "reopen", task, step: "act", ...(info ? {seen: {mode: info.mode, round: info.round}} : {})});
         const found = (answer && (answer.result || answer)) || {};
         poll().then(schedule, schedule);
         return {ok: true, new_round: Boolean(found.new_round), text: found.new_round ? t("super.reopen.done.new", {task, n: found.round}) : t("super.reopen.done.same", {task})};
@@ -1361,7 +1362,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         line = addSys(t(isClosed(task) ? "super.direct.reopening" : "super.direct.making", {task}), task, false, String(text).slice(0, 300));
         line.classList.add("sa-dl", "sa-pend");
       }
-      const result = await SUPERDIRECT.send(task, text, options, empty || isClosed(task));
+      const info = isClosed(task) ? reopenOf(task) : null;  // what the mark said (1.8.21 review 1): another state now is refused before a chat is made
+      const result = await SUPERDIRECT.send(task, text, info ? {...(options || {}), seen: {mode: info.mode, round: info.round}} : options, empty || isClosed(task));
       if (!quiet) {
         const ok = result.ok;
         const nodes = ok ? [SUPERDIRECT.receipt(result.how, task, result) + (result.how === "said" ? " " + t("super.direct.skipped") : "")] : refusalNodes(task, result.why, result.error, (words) => { if (line && line.isConnected) { line.classList.remove("bad"); line.replaceChildren(words); } });

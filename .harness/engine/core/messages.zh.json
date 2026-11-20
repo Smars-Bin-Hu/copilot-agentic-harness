@@ -4852,5 +4852,7 @@
   "send.refused.reopen.partial": "这个任务现在还不能重开：上次 promote 只完成了一部分仓库。先用 Recover 把仓库处理好。",
   "send.refused.reopen.checks": "这个任务现在不能重开：事后检查正在进行。等它出结果。",
   "board.action.reopen": "重新打开",
-  "req.unconfirm.line": "还没确认（第 {round} 轮：{value}）"
+  "req.unconfirm.line": "还没确认（第 {round} 轮：{value}）",
+  "reopen.changed": "{task} 已经和卡片上说的不一样了（可能有 agent 动过它）。再看一眼，然后再按。",
+  "send.refused.reopen.changed": "这个任务已经和卡片上说的不一样了（可能有 agent 动过它）。再看一眼，然后再按。"
 }

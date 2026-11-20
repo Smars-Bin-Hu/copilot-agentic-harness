@@ -82,6 +82,8 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
         mode = taskreopen.mode_of(found)
         if mode["mode"] == "refused":
             return refusal("reopen." + mode["why"])
+        if taskreopen.seen_differs(data.get("seen"), mode):  # the card said another mode: the person looks again before a chat is made
+            return refusal("reopen.changed")
     busy = str(data.get("busy") or "queue")
     lang = str(data.get("lang") or "")
     if busy not in BUSY or lang not in ("", *chatsend.LANGS):

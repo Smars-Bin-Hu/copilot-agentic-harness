@@ -10,7 +10,7 @@ const SUPERDIRECT = (function () {
   // The reason words of a refusal: written out here and nowhere else, so the list the server gives can be set against it in one place. A word that is not here is shown as it is (super.direct.why.other).
   const SHARED = {unknown: "super.route.why.unknown", paused: "super.route.why.paused", "text.empty": "send.refused.text.empty", "text.long": "send.refused.text.long", request: "serve.refused.request"};
   // The words the server's own refusals have (send.refused.<why>), so the page and the task page say them the same way.
-  const SERVER = new Set(["file-count", "file-big", "file-bad", "model", "thinking", "context", "confirm-waits", "not-idle", "off", "not-ready", "unsure", "changed", "timeout", "not-busy", "not-input", "ask-gone", "no-turn", "host", "checks"]);
+  const SERVER = new Set(["file-count", "file-big", "file-bad", "model", "thinking", "context", "confirm-waits", "not-idle", "off", "not-ready", "unsure", "changed", "timeout", "not-busy", "not-input", "ask-gone", "no-turn", "host", "checks", "reopen.partial", "reopen.checks", "reopen.changed"]);
   // The page's own: the call itself failed (no answer, an unpaired browser).
   const OWN = {error: "super.direct.why.error", unpaired: "super.direct.why.unpaired"};
   const HOW = {sent: ["super.direct.sent", "super.direct.how.sent"], queued: ["super.direct.queued", "super.direct.how.queued"], steered: ["super.direct.steered", "super.direct.how.steered"], said: ["super.direct.said", "super.direct.how.said"], "new-chat": ["super.direct.newchat", "super.direct.how.newchat"], reopened: ["super.direct.reopened", "super.direct.how.reopened"], after: ["super.direct.after", "super.direct.how.after"]};

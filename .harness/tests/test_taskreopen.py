@@ -100,6 +100,20 @@ class ReopenTests(TaskCase):
         with self.assertRaises(CommandError):
             taskreopen.reopen(self.root, TASK)
 
+    def test_a_card_that_said_another_mode_is_refused(self) -> None:  # review 1: the page's plan may be old
+        self.closed_promoted()
+        with self.assertRaises(CommandError):
+            taskreopen.reopen(self.root, TASK, {"mode": "same", "round": 1})
+        self.assertEqual(self.data()["status"], "closed")
+        self.assertEqual(taskreopen.reopen(self.root, TASK, {"mode": "new", "round": 1})["round"], 2)
+
+    def test_task_open_waits_for_a_running_check_after_the_close(self) -> None:  # review 1: the agent's own way in, as the board's
+        self.closed_promoted()
+        with task_ops.locked(self.root, TASK) as data:
+            taskreview.state_of(data)["rounds"] = [{"number": 1, "after": True, "task_round": data["round"], "started_at": "2026-11-20T00:00:00Z"}]
+        self.open(ok=False)
+        self.assertEqual((self.data()["status"], self.data()["round"]), ("closed", 1))
+
     def test_an_open_task_is_not_reopened(self) -> None:
         self.new()
         self.assertEqual(taskreopen.plan_of(self.root, TASK)["mode"], "open")

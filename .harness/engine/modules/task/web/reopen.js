@@ -75,7 +75,7 @@ const REOPEN = (function () {
     const fail = (error, button) => { busy(false, button); said.replaceChildren(...SERVE.reasons(error && error.message ? error.message : String(error))); };
     only.addEventListener("click", () => {
       said.replaceChildren(); busy(true, only);
-      SERVE.post("/api/act", {action: "reopen", task: name, step: "act"}).then(() => { view.close(); SERVE.done(); }, (error) => fail(error, only));
+      SERVE.post("/api/act", {action: "reopen", task: name, step: "act", seen: {mode: plan.mode, round: plan.round}}).then(() => { view.close(); SERVE.done(); }, (error) => fail(error, only));
     });
     hand.addEventListener("click", () => {
       said.replaceChildren();
@@ -86,7 +86,7 @@ const REOPEN = (function () {
         return;
       }
       busy(true, hand);
-      SERVE.post("/api/super/send", {task: name, text: message.value.trim()}).then((answer) => {
+      SERVE.post("/api/super/send", {task: name, text: message.value.trim(), seen: {mode: plan.mode, round: plan.round}}).then((answer) => {
         if (answer && answer.ok === false) { fail({message: whyText(answer.why, answer.error)}, hand); return; }
         view.close(); SERVE.done();
       }, (error) => fail(error, hand));

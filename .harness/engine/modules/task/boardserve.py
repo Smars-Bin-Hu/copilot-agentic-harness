@@ -925,7 +925,7 @@ class Board:
         if action == "reopen":  # 1.8.21: the person opens a closed task again with no chat (no credits); `preview` says first what it will be (same round, a new round, or why not)
             if step == "preview":
                 return taskreopen.plan_of(self.root, task)
-            result = taskreopen.reopen(self.root, task)
+            result = taskreopen.reopen(self.root, task, seen)
             noted(self.root, result["task"], action)
             return result
         if action == "autorun on":  # 1.8, step 9: autorun starts from its own form (`/api/autorun/on`: the models, the spend limit, the Start order), not from the code window of an approval

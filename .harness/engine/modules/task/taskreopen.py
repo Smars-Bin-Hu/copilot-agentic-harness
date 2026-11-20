@@ -90,8 +90,16 @@ def plan_of(root: Path, raw_task: str) -> Dict[str, Any]:
     return found
 
 
-def reopen(root: Path, raw_task: str) -> Dict[str, Any]:
-    """The task is open again, with no session. A new round when it was promoted. Called by the board only (the person's click): an agent reopens with `task open`."""
+def seen_differs(seen: Any, found: Dict[str, Any]) -> bool:
+    """The person pressed on a card that said `seen` ({mode, round}); the task is in another state now (an agent opened, promoted and closed it meanwhile). None given: no check."""
+    if not isinstance(seen, dict) or "mode" not in seen:
+        return False
+    return str(seen.get("mode")) != found["mode"] or ("round" in seen and str(seen.get("round")) != str(found["round"]))
+
+
+def reopen(root: Path, raw_task: str, seen: Any = None) -> Dict[str, Any]:
+    """The task is open again, with no session. A new round when it was promoted. Called by the board only (the person's click): an agent reopens with `task open`.
+    `seen`: what the card showed ({mode, round}); another state now is refused, so the person looks again (review 1 of 1.8.21)."""
     task = task_ops.resolve(root, raw_task)
     path = tasks.state_file(root, task)
     with state_lock(path):
@@ -101,6 +109,8 @@ def reopen(root: Path, raw_task: str) -> Dict[str, Any]:
         found = mode_of(data)
         if found["mode"] == "open":
             raise CommandError(say("reopen.open", task=task_ops.name_of(task)))
+        if seen_differs(seen, found):
+            raise CommandError(say("reopen.changed", task=task_ops.name_of(task)))
         if found["mode"] == "refused":
             raise CommandError(say("reopen.refused.partial" if found["why"] == "partial" else "reopen.refused.checks", task=task_ops.name_of(task)))
         new_round = found["mode"] == "new"

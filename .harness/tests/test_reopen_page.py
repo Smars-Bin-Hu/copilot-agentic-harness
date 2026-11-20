@@ -68,8 +68,8 @@ class ReopenPageText(unittest.TestCase):
 
     def test_the_card_has_two_ways_on_and_a_third_for_a_task_that_cannot_reopen(self) -> None:
         card = source("reopen.js")
-        self.assertIn('SERVE.post("/api/act", {action: "reopen", task: name, step: "act"})', card)  # Reopen only
-        self.assertIn('SERVE.post("/api/super/send", {task: name, text: message.value.trim()})', card)  # hand to the agent: the text may be empty
+        self.assertIn('SERVE.post("/api/act", {action: "reopen", task: name, step: "act", seen: {mode: plan.mode, round: plan.round}})', card)  # Reopen only, with what the card said
+        self.assertIn('SERVE.post("/api/super/send", {task: name, text: message.value.trim(), seen: {mode: plan.mode, round: plan.round}})', card)  # hand to the agent: the text may be empty
         self.assertIn('{action: "reopen", task: name, step: "preview"}', card)  # the list asks what it will be
         self.assertIn('SERVE.act(button, {name}, {action: "recover"})', card)  # a partial promote: Recover first
         self.assertIn("answer.ok === false", card)  # the refusal is shown in the card, which stays

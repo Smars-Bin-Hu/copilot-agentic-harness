@@ -323,6 +323,12 @@ class ReopenTests(DirectCase):
         self.assertEqual(self.post({"text": "go on"}), {"ok": False, "why": "reopen.partial"})
         self.assertEqual(self.vs.made, [])
 
+    def test_a_card_that_said_another_mode_makes_no_chat(self) -> None:  # review 1 of 1.8.21
+        self.close()
+        self.assertEqual(self.post({"text": "go on", "seen": {"mode": "new", "round": 1}}), {"ok": False, "why": "reopen.changed"})
+        self.assertEqual(self.vs.made, [])
+        self.assertEqual(self.post({"text": "go on", "seen": {"mode": "same", "round": 1}})["how"], "reopened")
+
     def test_zh_reopen_words_come_in_chinese(self) -> None:
         self.close()
         self.post({"text": "x", "lang": "zh"})
@@ -441,7 +447,7 @@ class PageWords(unittest.TestCase):
     def test_reopen_only_is_a_click_on_the_board_action_and_nothing_else_makes_it(self) -> None:
         page = self.source("super.js")
         self.assertEqual(len(re.findall(r'action: "reopen"', page)), 1)  # one place posts it: reopenCall
-        self.assertIn('SERVE.post("/api/act", {action: "reopen", task, step: "act"})', page)
+        self.assertIn('SERVE.post("/api/act", {action: "reopen", task, step: "act", ...(info ? {seen: {mode: info.mode, round: info.round}} : {})})', page)
         self.assertEqual(len(re.findall(r"reopenCall\(", page)), 3)  # its definition, the mark's click and the card's click
         self.assertNotIn("/api/act", self.source("superdirect.js"))
 

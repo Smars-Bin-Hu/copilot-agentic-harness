@@ -4852,5 +4852,7 @@
   "send.refused.reopen.partial": "This task cannot be opened again yet: its last promote wrote only part of the repositories. Put them right with Recover first.",
   "send.refused.reopen.checks": "This task cannot be opened again now: a check after the close is running. Wait for its verdict.",
   "board.action.reopen": "Reopen",
-  "req.unconfirm.line": "not yet (round {round}: {value})"
+  "req.unconfirm.line": "not yet (round {round}: {value})",
+  "reopen.changed": "{task} is not as the card said any more (an agent may have worked on it). Look again, then press.",
+  "send.refused.reopen.changed": "This task is not as the card said any more (an agent may have worked on it). Look again, then press."
 }

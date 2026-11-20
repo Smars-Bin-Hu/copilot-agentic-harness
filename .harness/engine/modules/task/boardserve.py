@@ -76,7 +76,7 @@ from . import taskrun
 from . import rewind
 from . import tasksize
 from . import wallpaper
-from . import superbrain, superdirect, superfacts, superpreview, superroute, superview
+from . import superbrain, superdirect, superfacts, superpreview, superroute, superview, taskreopen
 from . import accept, autorun, boardpairs, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from . import perfreview, reachcheck, vsrestart
@@ -132,7 +132,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept", "reopen"]}
 
 
 class Fallback(CommandError):
@@ -921,6 +921,12 @@ class Board:
         if action in FREE:
             result = tasklife.pause(self.root, task, interactive=True, force=still) if action == "pause" else tasklife.resume(self.root, task, interactive=True)
             noted(self.root, result.get("task") or task, action)
+            return result
+        if action == "reopen":  # 1.8.21: the person opens a closed task again with no chat (no credits); `preview` says first what it will be (same round, a new round, or why not)
+            if step == "preview":
+                return taskreopen.plan_of(self.root, task)
+            result = taskreopen.reopen(self.root, task)
+            noted(self.root, result["task"], action)
             return result
         if action == "autorun on":  # 1.8, step 9: autorun starts from its own form (`/api/autorun/on`: the models, the spend limit, the Start order), not from the code window of an approval
             raise CommandError(say("serve.autorun.form"))

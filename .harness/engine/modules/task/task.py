@@ -262,11 +262,47 @@ def archive_round(root: Path, task: str, data: Dict[str, Any]) -> None:
                     pass
             raise
     shutil.rmtree(str(tasks.base_dir(root, task)), ignore_errors=True)  # only after the moves: a refused move leaves the round whole
+    req_before = unconfirm_req(root, task, data, number)
     data["rounds"].append({
         "round": number, "started_at": data.get("round_started_at", ""), "plan": data.get("plan", {}), "promote": data["promote"],
         "branch": data["branch"], "dev": rel(root, kept), "diff_file": diff_file, "plan_file": rel(root, old_plan) if old_plan.exists() else "", "files": sorted(data["target_files"]) + sorted(data.get("manual_files") or {}), "deletes": list(data["deletes"]),
+        **({"req": req_before} if req_before else {}),
     })
     data.update(round=number + 1, round_started_at=utc_now(), targets={}, target_files={}, manual_files={}, deletes=[], plan={}, promote={"state": "none"}, branch="")
+
+
+def unconfirm_req(root: Path, task: str, data: Dict[str, Any], number: int) -> Dict[str, Any]:
+    """A new round asks the person to confirm REQ.md again (1.8.21): the harness, which filled the confirmation line, sets it back to "not yet", keeping what it said in brackets,
+    and forgets what was confirmed (`data["req"]`). Returns what round `number` had (`confirmed_at`, `confirmed_sha256`, `line`), for its record; {} when nothing was confirmed.
+    A REQ.md that cannot be read or written is left as it is: the round is archived all the same (the confirmation then still shows, as before 1.8.21)."""
+    before = dict(data.get("req") or {})
+    path = tasks.task_dir(root, task) / tasks.REQ_FILE
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return before
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        found = _CONFIRM_LINE.match(line)
+        if not found:
+            continue
+        value = found.group(2).strip()
+        from . import taskreview  # it needs this module
+
+        if not taskreview.confirm_line_filled(line):
+            break
+        word = "zh" if "确认" in found.group(1) else "en"  # the language of the line, not of the setting (as `fill_confirmation`)
+        again = messages.table(word)["req.unconfirm.line"].format(round=number, value=value)
+        lines[index] = f"{found.group(1)}{again}{found.group(3)}"
+        try:
+            path.write_text("".join(lines), encoding="utf-8")
+        except OSError:
+            return before
+        before["line"] = value
+        data.pop("req", None)
+        note(data, "unconfirm-req", say("task.note.unconfirm_req", round=number))
+        return before
+    return before if data.pop("req", None) is not None else {}
 
 
 def page_url(root: Path, task: str) -> str:

@@ -20,7 +20,7 @@ from typing import Any, Dict
 
 from core import messages, tasks
 
-from . import chatnew, chatsend, skillsend, task as task_ops, taskreview, tasklife, vslink
+from . import chatnew, chatsend, skillsend, task as task_ops, taskreopen, taskreview, tasklife, vslink
 from .common import CommandError
 
 MAX_TEXT = 10000  # characters of what the person types
@@ -43,7 +43,7 @@ def first_message(root: Any, name: str, lang: str, text: str, reopen: bool = Fal
     key = "board.after.words" if after else "board.reopen.words" if reopen else "board.go.words"
     words = messages.table(lang).get(key) or messages.table("en")[key]
     head = f"/{SKILL} " + words.format(task=name) + (" " + chatsend.ZH_MARK if lang == "zh" else "")
-    return head + "\n\n" + text
+    return head + "\n\n" + text if text else head  # 1.8.21: a closed task may be reopened (or checked) with no words of the person
 
 
 def confirm_waits(link: Any, task: str) -> bool:
@@ -69,7 +69,7 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
         return refusal("paused")
     raw = data.get("text")
     typed = raw.strip() if isinstance(raw, str) else ""
-    if not typed:
+    if not typed and not reopen:  # 1.8.21: "Reopen and hand to the agent" may go with no message: the fixed words say what to do
         return refusal("text.empty")
     if len(typed) > MAX_TEXT:
         return refusal("text.long")
@@ -78,6 +78,10 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
         return refusal("checks")
     after = reopen and isinstance(checks, int) and checks > 0  # checks of a closed task: after the close, never a reopen (a reopen starts a new round and moves DEV/ aside)
     reopen = reopen and not after
+    if reopen:  # 1.8.21: what the reopen would be; one that cannot happen is refused here, not by the agent's `task open` in a new chat
+        mode = taskreopen.mode_of(found)
+        if mode["mode"] == "refused":
+            return refusal("reopen." + mode["why"])
     busy = str(data.get("busy") or "queue")
     lang = str(data.get("lang") or "")
     if busy not in BUSY or lang not in ("", *chatsend.LANGS):
@@ -94,7 +98,7 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
     except CommandError as error:
         return refusal(model_why(error))
     try:
-        made = chatsend.prepare(root, task, "answer", "", lang, typed, "", with_drafts=False)  # `[ZH]` or `[EN]` as the reply panel does; no saved draft goes in
+        made = chatsend.prepare(root, task, "answer", "", lang, typed, "", with_drafts=False) if typed else {"text": "", "lang": lang}  # `[ZH]` or `[EN]` as the reply panel does; no saved draft goes in
     except ValueError as error:
         return refusal("text." + str(error))
     text = made["text"]

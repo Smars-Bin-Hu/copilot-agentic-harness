@@ -304,6 +304,23 @@ class ReopenTests(DirectCase):
         self.assertEqual((line["by"], line["kind"], line["reopen"]), ("super", "new-chat", True))
         self.assertEqual(self.state()["status"], "closed")  # the agent opens it, not the board
 
+    def test_a_reopen_may_go_with_no_message(self) -> None:  # 1.8.21: "Reopen and hand to the agent" with the message box left empty
+        self.close()
+        found = self.post({"text": ""})
+        self.assertEqual((found["ok"], found["how"]), (True, "reopened"))
+        name = task_ops.name_of(TASK)
+        self.assertEqual(self.vs.made[0]["text"], f"/harness-my-task The task {name} is closed. Open it again with `harness task open {name}`, then go on with it.")
+
+    def test_an_open_task_still_needs_words(self) -> None:
+        self.assertEqual(self.post({"text": ""}), {"ok": False, "why": "text.empty"})
+
+    def test_a_reopen_that_cannot_happen_is_refused_before_a_chat_is_made(self) -> None:  # 1.8.21: a promote that wrote part of it
+        self.close()
+        with task_ops.locked(self.root, TASK) as data:
+            data["promote"] = {"state": "partial"}
+        self.assertEqual(self.post({"text": "go on"}), {"ok": False, "why": "reopen.partial"})
+        self.assertEqual(self.vs.made, [])
+
     def test_zh_reopen_words_come_in_chinese(self) -> None:
         self.close()
         self.post({"text": "x", "lang": "zh"})

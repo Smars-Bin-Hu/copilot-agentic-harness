@@ -4772,5 +4772,17 @@
   "desk.autorun.trace.focus": "已标出：第 {n} 步的调用（{time}）",
   "desk.autorun.trace.clear": "清除标记",
   "desk.autorun.trace.missing": "Trace 里还没有这次调用。",
-  "desk.autorun.budget.none.mark": "不推荐"
+  "desk.autorun.budget.none.mark": "不推荐",
+  "task.note.reopen": "在看板上重新打开，第 {round} 轮",
+  "task.note.unconfirm_req": "第 {round} 轮已归档：需求等你重新确认",
+  "event.reopen": "重新打开",
+  "event.unconfirm-req": "需求等你重新确认",
+  "reopen.unknown": "没有任务 {task}。",
+  "reopen.open": "{task} 本来就是打开的，不用重开。",
+  "reopen.refused.partial": "{task} 现在还不能重开：上次 promote 只写回了一部分仓库。先用 Recover 把仓库处理好。",
+  "reopen.refused.checks": "{task} 现在不能重开：事后检查正在进行。等它出结果。",
+  "send.refused.reopen.partial": "这个任务现在还不能重开：上次 promote 只写回了一部分仓库。先用 Recover 把仓库处理好。",
+  "send.refused.reopen.checks": "这个任务现在不能重开：事后检查正在进行。等它出结果。",
+  "board.action.reopen": "重新打开",
+  "req.unconfirm.line": "还没确认（第 {round} 轮：{value}）"
 }

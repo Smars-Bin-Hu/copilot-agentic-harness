@@ -127,4 +127,5 @@ def closed_of(rows: Any, limit: int = CLOSED_LISTED) -> List[Dict[str, Any]]:
     """The closed tasks of the board's rows, newest first (by `closed_at`, else `updated_at`), at most `limit`: `{task, kind, closed_at, title}`. A pure function; what is not a row is left out."""
     found = [row for row in rows if isinstance(row, dict) and row.get("status") == "closed" and row.get("task")] if isinstance(rows, list) else []
     found.sort(key=lambda row: str(row.get("closed_at") or row.get("updated_at") or ""), reverse=True)
-    return [{"task": name_of(row), "kind": str(row.get("kind") or ""), "closed_at": str(row.get("closed_at") or row.get("updated_at") or ""), "title": str(row.get("title") or "")} for row in found[:limit]]
+    return [{"task": name_of(row), "kind": str(row.get("kind") or ""), "closed_at": str(row.get("closed_at") or row.get("updated_at") or ""), "title": str(row.get("title") or ""),
+             "reopen": row.get("reopen") if isinstance(row.get("reopen"), dict) else None} for row in found[:limit]]  # 1.8.21: the mode mark of the Closed list

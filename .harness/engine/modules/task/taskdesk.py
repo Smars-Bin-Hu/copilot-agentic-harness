@@ -15,7 +15,7 @@ from core import systems as outside
 from core import approval, calls, config, messages, outbox, pinfiles, tasks
 from core.paths import cli_command, utc_now
 
-from . import accept, autorun, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
+from . import accept, autorun, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, taskreopen, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
 from . import steps as step_parts
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
@@ -632,6 +632,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waiting_tip": row.get("waiting_tip") or "", "waited_s": row.get("waited_s"), "waiting_from": row.get("waiting_from") or "",
         "handoff": {key: str((data.get("handoff") or {}).get(key) or "") for key in ("what", "env", "detail")} if isinstance(data.get("handoff"), dict) else None,
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
+        "reopen": taskreopen.plan_of(root, task) if row.get("status") == "closed" else None,  # 1.8.21: what Reopen would do (same round, a new round, or why not)
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],

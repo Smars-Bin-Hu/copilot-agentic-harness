@@ -161,6 +161,20 @@ class ServeTests(ServeCase):
         self.assertEqual(self.request("GET", "/../../.harness/policies/gate.json")[0], 404)
         self.assertEqual(json.loads(board_serve_file(self.root).read_text(encoding="utf-8"))["port"], self.port)
 
+    def test_reopen_is_the_paired_persons_and_says_what_it_will_be_first(self) -> None:  # 1.8.21: Reopen only, no chat
+        task_ops.close(self.root, TASK)
+        self.assertEqual(self.request("POST", "/api/act", {"action": "reopen", "task": TASK, "step": "act"})[0], 403)  # a page that is not paired: no agent's request gets here
+        self.assertEqual(self.data()["status"], "closed")
+        cookie = self.pair()
+        status, plan, _ = self.request("POST", "/api/act", {"action": "reopen", "task": TASK, "step": "preview"}, cookie=cookie)
+        self.assertEqual(status, 200, plan)
+        self.assertEqual(json.dumps(plan).count('"mode": "same"'), 1, plan)
+        self.assertEqual(self.data()["status"], "closed")  # a look changes nothing
+        status, done, _ = self.request("POST", "/api/act", {"action": "reopen", "task": TASK, "step": "act"}, cookie=cookie)
+        self.assertEqual(status, 200, done)
+        self.assertEqual(self.data()["status"], "open")
+        self.assertEqual(self.request("POST", "/api/act", {"action": "reopen", "task": TASK, "step": "act"}, cookie=cookie)[0], 409)  # open now: nothing to reopen
+
     def test_a_post_needs_the_header_and_this_origin(self) -> None:
         self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK}, header=False)[0], 403)
         self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK}, origin="https://evil.example")[0], 403)

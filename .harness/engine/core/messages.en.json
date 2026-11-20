@@ -4772,5 +4772,17 @@
   "desk.autorun.trace.focus": "Marked: the calls of step {n} ({time})",
   "desk.autorun.trace.clear": "Clear the mark",
   "desk.autorun.trace.missing": "That call is not in the Trace yet.",
-  "desk.autorun.budget.none.mark": "Not recommended"
+  "desk.autorun.budget.none.mark": "Not recommended",
+  "task.note.reopen": "opened again on the board, round {round}",
+  "task.note.unconfirm_req": "round {round} is kept: the requirement waits for a new confirmation",
+  "event.reopen": "opened again",
+  "event.unconfirm-req": "the requirement waits for a new confirmation",
+  "reopen.unknown": "There is no task {task}.",
+  "reopen.open": "{task} is open already: nothing to reopen.",
+  "reopen.refused.partial": "{task} cannot be opened again yet: its last promote wrote only part of the repositories. Put them right with Recover first.",
+  "reopen.refused.checks": "{task} cannot be opened again now: a check after the close is running. Wait for its verdict.",
+  "send.refused.reopen.partial": "This task cannot be opened again yet: its last promote wrote only part of the repositories. Put them right with Recover first.",
+  "send.refused.reopen.checks": "This task cannot be opened again now: a check after the close is running. Wait for its verdict.",
+  "board.action.reopen": "Reopen",
+  "req.unconfirm.line": "not yet (round {round}: {value})"
 }

@@ -21,7 +21,7 @@ from core import config, messages, tasks
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
 
-from . import common, gatereview, health, task as task_ops, taskarchive, taskhtml, taskinsight, tasklife, tasksub, taskstages
+from . import common, gatereview, health, task as task_ops, taskarchive, taskhtml, taskreopen, taskinsight, tasklife, tasksub, taskstages
 
 BOARD_NAME = "board.html"
 MIN_INTERVAL = 1.0
@@ -268,6 +268,7 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         data = tasks.read(root, row["task"]) or {}
         if row["status"] == "closed":
             row["closed_at"] = taskarchive.closed_at(data)  # when the person closed it (the super view's Closed list)
+            row["reopen"] = taskreopen.mode_of(data)  # 1.8.21: what Reopen would do, from task.json alone: {mode: same | new | refused, round, next_round, why}
         elif data.get("pending_checks") is not None:
             row["pending_checks"] = data["pending_checks"]  # kept for a reopened task (1.8.17); `Board.rows` sets it now the task is open
         row["open_conns"] = opened_marks(data) if row["status"] == "open" else []  # what the person opened for the task (1.7.38: connections, and the linked items): a mark under the name

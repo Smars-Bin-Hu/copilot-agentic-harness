@@ -33,7 +33,7 @@ class ClosedListTests(unittest.TestCase):
         found = superview.closed_of(rows)
         self.assertEqual(len(found), 12)
         self.assertEqual([item["task"] for item in found][:3], ["c14", "c13", "c12"])
-        self.assertEqual(found[0], {"task": "c14", "kind": "dev", "closed_at": "2026-11-15T00:00:00+00:00", "title": "T14"})
+        self.assertEqual(found[0], {"task": "c14", "kind": "dev", "closed_at": "2026-11-15T00:00:00+00:00", "title": "T14", "reopen": None})
         self.assertEqual(superview.closed_of(rows, 2)[1]["task"], "c13")
 
     def test_without_closed_at_the_update_time_stands_in_and_bad_input_is_empty(self) -> None:
@@ -230,7 +230,7 @@ class RouteTests(ServeCase):
         self.assertEqual(len(found["closed"]), 1)
         item = found["closed"][0]
         self.assertEqual((item["task"], item["title"]), (TASK.rsplit("/", 1)[-1], "A title"))
-        self.assertEqual(set(item), {"task", "kind", "closed_at", "title"})
+        self.assertEqual(set(item), {"task", "kind", "closed_at", "title", "reopen"})
         self.assertTrue(item["closed_at"])
 
 

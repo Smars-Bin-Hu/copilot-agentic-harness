@@ -823,7 +823,7 @@ class DeskTests(ServeCase):
 
     def test_the_requirement_tab_knows_when_it_was_confirmed_with_which_code_and_whether_it_changed(self) -> None:
         """1.8.16: the same green line as the Plan tab."""
-        self.assertEqual(taskdesk.desk(self.root, "job1", ())["req_approval"], {"approved": False, "at": "", "code": "", "changed": False})
+        self.assertEqual(taskdesk.desk(self.root, "job1", ())["req_approval"], {"approved": False, "at": "", "code": "", "changed": False, "again": False, "round": 1, "was_round": 0, "was_at": "", "was_code": ""})
         confirm_requirement(self.root, TASK)
         typed = next(event["detail"] for event in reversed(self.data()["events"]) if event["what"] == "confirm-req")  # the start of the sha256 the person typed
         found = taskdesk.desk(self.root, "job1", ())["req_approval"]

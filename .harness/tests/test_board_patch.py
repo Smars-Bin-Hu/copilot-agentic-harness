@@ -567,7 +567,7 @@ class WalkThroughTests(unittest.TestCase):
         self.assertEqual((shell["say"], shell["target"]), ("Sleep", "sleep 5"))
 
     def test_a_row_has_one_button_of_its_own_and_the_rest_are_in_the_menu(self) -> None:
-        strip = between((WEB / "board.js").read_text(encoding="utf-8"), "function actionStrip(row)", "function actionCell(row)")
+        strip = between((WEB / "board.js").read_text(encoding="utf-8"), "function actionStrip(row, withReopen)", "function actionCell(row)")
         self.assertIn("const first = items.find((item) => isHot(row, item) && !TALK.includes(item.action));", strip)  # steer and stop are drawn once, with the words to the agent (1.6.104)
         self.assertIn('item.action === "archive" || item === first', strip)
 

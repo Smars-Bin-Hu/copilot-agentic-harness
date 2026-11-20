@@ -167,14 +167,16 @@
   }
 
   // The buttons of a row as one strip (also the lobby card's): what the task waits for, what is said to the agent, and the menu behind the three dots. Null: no action.
-  function actionStrip(row) {
+  function actionStrip(row, withReopen) {
     const items = row.actions || [];
-    if (!items.length) return null;
+    const again = withReopen && row.status === "closed" && row.reopen && typeof SERVE !== "undefined" && typeof REOPEN !== "undefined" && DATA.serve && SERVE.runs("reopen") ? REOPEN.rowButton(row) : null;  // 1.8.21: a closed row of the list: the icon next to Archive (the lobby card has none)
+    if (!items.length && !again) return null;
     const first = items.find((item) => isHot(row, item) && !TALK.includes(item.action));  // the others go behind the three dots; steer and stop have their own place below (1.6.104: one was drawn twice)
     const direct = items.filter((item) => item.action === "archive" || item === first);
     const talk = items.filter((item) => TALK.includes(item.action));
     const rest = items.filter((item) => !direct.includes(item) && !talk.includes(item));
     const nodes = direct.map((item) => actionButton(row, item));
+    if (again) nodes.push(again);
     if (items.some((item) => ["send", "answer"].includes(item.action)) && chatNew(row)) nodes.push(goOnButton(row.name));
     nodes.push(h("span", {class: "act-talk"}, talk.map((item) => actionButton(row, item))));
     if (rest.length) {
@@ -194,7 +196,7 @@
     return strip.querySelector("button, a") ? strip : null;  // nothing to press (only the room kept for steer and stop): the cell says "-" like any row with no action (1.7.28)
   }
   function actionCell(row) {
-    const strip = actionStrip(row);
+    const strip = actionStrip(row, true);
     return strip ? h("td", {class: "acts"}, strip) : h("td", {class: "acts"}, "-");
   }
 

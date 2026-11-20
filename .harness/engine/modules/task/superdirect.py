@@ -3,6 +3,8 @@
   send   `send(board, data)`: `{task, text, model?, thinking?, context?, new_chat?, busy?, lang?, files?, checks?}` -> `{ok: true, how, task, chat, checks? | checks_pending?}` or `{ok: false, why}`.
          1.8.17: a CLOSED task is reopened: a new chat whose first message (`board.reopen.words`) has the agent open the task again, then the person's words; `how: "reopened"`. `checks` (0 up to `review.max_n`, else `why: "checks"`, key `send.refused.checks`) is set
          after the message went, through `taskreview.set_by_person` (the code of the board's `review set`); on a closed task it waits as `pending_checks` (`taskreview.set_pending`) until the board sees it open (`Board.apply_checks`): `checks_pending: n`, else `checks: n`.
+         1.8.20: a closed task with `checks` above 0 is NOT reopened: n is set as checks after the close (`set_by_person` on a closed task), then a new chat whose first message (`board.after.words`)
+         has the agent run `task review after`; the task stays closed and `DEV/` stays; `how: "after"`, `checks: n`.
          `how`: `sent` (idle chat), `queued` (busy chat, `busy` queue: the default), `steered` (busy chat, `busy` steer: into the running turn), `said` (the chat waits for the answer to its own
          question: the words skip it), `new-chat` (a new chat that goes on with the task). `why` is a key part of `send.refused.*` (`text.empty`, `text.long`, `not-idle`, `confirm-waits`, `off`,
          `not-ready`, `unsure`, `changed`, `timeout`, `model`, `thinking`, `context`, `file-bad`, `file-big`, `file-count`, `host` (+ `error`: the name of the error)), or `unknown`, `paused` (keys
@@ -35,10 +37,10 @@ def model_why(error: CommandError) -> str:
     return next((why for why in ("thinking", "context", "model") if str(error) == messages.text(f"create.refused.{why}")), "model")
 
 
-def first_message(root: Any, name: str, lang: str, text: str, reopen: bool = False) -> str:
+def first_message(root: Any, name: str, lang: str, text: str, reopen: bool = False, after: bool = False) -> str:
     """The first message of a new chat: the skill, the fixed "go on with the task" words (in the language chosen; `[ZH]` after them so the slash stays first), then the person's text as typed.
     `reopen` (a closed task): the words tell the agent to open the task again first (`board.reopen.words`)."""
-    key = "board.reopen.words" if reopen else "board.go.words"
+    key = "board.after.words" if after else "board.reopen.words" if reopen else "board.go.words"
     words = messages.table(lang).get(key) or messages.table("en")[key]
     head = f"/{SKILL} " + words.format(task=name) + (" " + chatsend.ZH_MARK if lang == "zh" else "")
     return head + "\n\n" + text
@@ -74,6 +76,8 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
     checks = data.get("checks")
     if checks is not None and not taskreview.checks_ok(root, checks):
         return refusal("checks")
+    after = reopen and isinstance(checks, int) and checks > 0  # checks of a closed task: after the close, never a reopen (a reopen starts a new round and moves DEV/ aside)
+    reopen = reopen and not after
     busy = str(data.get("busy") or "queue")
     lang = str(data.get("lang") or "")
     if busy not in BUSY or lang not in ("", *chatsend.LANGS):
@@ -101,7 +105,7 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
     bound = why != "unbound"
     if bound and confirm_waits(link, task):
         return refusal("confirm-waits")
-    new = bool(data.get("new_chat")) or not bound or reopen  # a closed task has its old chat, if any, behind it: the reopen goes in a new chat
+    new = bool(data.get("new_chat")) or not bound or reopen or after  # a closed task has its old chat, if any, behind it: the reopen goes in a new chat
     if new:
         if bound and (link.check(task, "steer") == "" or link.check(task, "say") == ""):  # the old chat works, or waits for an answer
             return refusal("not-idle")
@@ -116,7 +120,9 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
         return refusal(why)  # an error or an unknown state of the chat: it takes no message now
     try:
         if job == "new-chat":
-            done = link.create(dict(skillsend.plan(lang or "en", name), model=model), first_message(root, name, lang or "en", text, reopen), files)
+            if after:  # set before the chat starts: `task review after` reads it
+                taskreview.set_by_person(root, task, checks, interactive=True)
+            done = link.create(dict(skillsend.plan(lang or "en", name), model=model), first_message(root, name, lang or "en", text, reopen, after), files)
             skillsend.record(root, SKILL, "chat", done)
             # no `open_window()` (unlike "Go on in a new chat"): the person stays in the super view. `create` needs only the ready link, which means VS Code is up.
         else:
@@ -132,15 +138,19 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
     extra: Dict[str, Any] = {"by": "super", "lang": made["lang"], "model": model or {}, "files": chatsend.listed(files)}
     if reopen:
         extra["reopen"] = True
+    if after:
+        extra["after"] = True
     if job == "say":
         extra["skipped"] = done.get("skipped") or []
         try:
             tasklife.set_waiting(root, task, None)  # the person answered the question
         except Exception:  # noqa: BLE001
             pass
-    kept = board.sent(task, found, job, first_message(root, name, lang or "en", text, reopen) if job == "new-chat" else text, done, extra)
-    answer: Dict[str, Any] = {"ok": True, "how": "reopened" if reopen else {"send": "sent", "queue": "queued", "steer": "steered", "say": "said", "new-chat": "new-chat"}[job], "task": name, "chat": kept["chat"], "recorded": kept["recorded"]}
-    if checks is not None:
+    kept = board.sent(task, found, job, first_message(root, name, lang or "en", text, reopen, after) if job == "new-chat" else text, done, extra)
+    answer: Dict[str, Any] = {"ok": True, "how": "after" if after else "reopened" if reopen else {"send": "sent", "queue": "queued", "steer": "steered", "say": "said", "new-chat": "new-chat"}[job], "task": name, "chat": kept["chat"], "recorded": kept["recorded"]}
+    if after:
+        answer["checks"] = checks
+    elif checks is not None:
         answer.update(set_checks(root, task, checks, reopen))
     return answer
 

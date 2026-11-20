@@ -334,38 +334,43 @@ class ReopenTests(DirectCase):
         self.assertNotIn("checks", self.post({"text": "z"}))  # absent: no change
         self.assertEqual(self.state()["review"]["n"], 0)
 
-    def test_checks_on_a_closed_task_wait_until_it_is_open_then_are_set_once(self) -> None:
+    def test_checks_on_a_closed_task_are_checks_after_the_close_and_it_is_not_reopened(self) -> None:
         self.close()
-        found = self.post({"text": "x", "checks": 3})
-        self.assertEqual((found["how"], found["checks_pending"]), ("reopened", 3))
-        self.assertNotIn("checks", found)
-        self.assertEqual(self.state()["pending_checks"], 3)
-        self.assertNotEqual((self.state().get("review") or {}).get("n"), 3)
-        self.request("POST", "/api/board", {}, cookie=self.cookie)  # still closed: it stays
-        self.assertEqual(self.state()["pending_checks"], 3)
-        with task_ops.locked(self.root, TASK) as data:
-            data["status"] = "open"  # the agent opened it
-        status, board, _ = self.request("POST", "/api/board", {}, cookie=self.cookie)
-        self.assertEqual(status, 200)
-        self.assertEqual(self.state()["review"]["n"], 3)
-        self.assertNotIn("pending_checks", self.state())
-        row = next(item for item in board["rows"] if item["task"] == TASK)
-        self.assertNotIn("pending_checks", row)
-        events = [event["what"] for event in self.state()["events"]]
-        self.assertEqual(events.count("review-set"), 1)
+        found = self.post({"text": "check it", "checks": 2})
+        self.assertEqual((found["ok"], found["how"], found["checks"]), (True, "after", 2))
+        self.assertNotIn("checks_pending", found)
+        state = self.state()
+        self.assertEqual(state["status"], "closed")
+        self.assertEqual(state["review"]["after"]["n"], 2)
+        self.assertNotEqual(state["review"].get("n"), 2)  # not the checks during the work
+        self.assertNotIn("pending_checks", state)
+        name = task_ops.name_of(TASK)
+        text = self.vs.made[0]["text"]
+        self.assertIn(f"`harness task review after {name} --session-id <session id>`", text)
+        self.assertNotIn("task open", text)
+        self.assertTrue(text.endswith("\n\ncheck it"))
+        line = self.sent_lines()[-1]
+        self.assertEqual((line["kind"], line.get("after"), line.get("reopen")), ("new-chat", True, None))
+        self.request("POST", "/api/board", {}, cookie=self.cookie)  # the board sets nothing more
+        self.assertEqual(self.state()["review"]["after"]["n"], 2)
+        self.assertNotEqual(self.state()["review"].get("n"), 2)
 
-    def test_a_task_the_agent_opened_before_the_number_was_kept_gets_it_at_once(self) -> None:
+    def test_zero_checks_on_a_closed_task_still_reopen_it(self) -> None:
         self.close()
-        def opens(link: Any, plan: Any, text: Any, attachments: Any = None) -> Dict[str, Any]:
-            with task_ops.locked(self.root, TASK) as data:
-                data["status"] = "open"
-            return DirectLink.create(link, plan, text, attachments)
+        found = self.post({"text": "x", "checks": 0})
+        self.assertEqual((found["how"], found["checks_pending"]), ("reopened", 0))
+        self.assertIn("task open", self.vs.made[0]["text"])
 
-        self.vs.create = lambda plan, text, attachments=None: opens(self.vs, plan, text, attachments)  # type: ignore[method-assign]
-        found = self.post({"text": "x", "checks": 1})
-        self.assertEqual((found["how"], found["checks"]), ("reopened", 1))
-        self.assertEqual(self.state()["review"]["n"], 1)
-        self.assertNotIn("pending_checks", self.state())
+    def test_a_refused_send_sets_no_checks_after_the_close(self) -> None:
+        self.close()
+        self.vs.state = "busy"
+        self.assertEqual(self.post({"text": "x", "checks": 2}), {"ok": False, "why": "not-idle"})
+        self.assertEqual(((self.state().get("review") or {}).get("after") or {}).get("n", 0), 0)
+
+    def test_zh_after_words_come_in_chinese(self) -> None:
+        self.close()
+        self.post({"text": "x", "checks": 1, "lang": "zh"})
+        self.assertIn("事后检查", self.vs.made[0]["text"])
 
     def test_a_bad_checks_value_refuses_before_anything_goes(self) -> None:
         for value in (-1, 6, 10, "2", 2.5, True, [2], {"n": 2}):

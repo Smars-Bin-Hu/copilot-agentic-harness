@@ -13,7 +13,7 @@ const SUPERDIRECT = (function () {
   const SERVER = new Set(["file-count", "file-big", "file-bad", "model", "thinking", "context", "confirm-waits", "not-idle", "off", "not-ready", "unsure", "changed", "timeout", "not-busy", "not-input", "ask-gone", "no-turn", "host", "checks"]);
   // The page's own: the call itself failed (no answer, an unpaired browser).
   const OWN = {error: "super.direct.why.error", unpaired: "super.direct.why.unpaired"};
-  const HOW = {sent: ["super.direct.sent", "super.direct.how.sent"], queued: ["super.direct.queued", "super.direct.how.queued"], steered: ["super.direct.steered", "super.direct.how.steered"], said: ["super.direct.said", "super.direct.how.said"], "new-chat": ["super.direct.newchat", "super.direct.how.newchat"], reopened: ["super.direct.reopened", "super.direct.how.reopened"]};
+  const HOW = {sent: ["super.direct.sent", "super.direct.how.sent"], queued: ["super.direct.queued", "super.direct.how.queued"], steered: ["super.direct.steered", "super.direct.how.steered"], said: ["super.direct.said", "super.direct.how.said"], "new-chat": ["super.direct.newchat", "super.direct.how.newchat"], reopened: ["super.direct.reopened", "super.direct.how.reopened"], after: ["super.direct.after", "super.direct.how.after"]};
   // One place for the words of a refusal; a word that is in none of the lists is shown as it is (super.direct.why.other). `error`: the text the server gives with `host`.
   const whyText = (why, error) => (SHARED[why] ? t(SHARED[why]) : SERVER.has(why) ? t("send.refused." + why, {error: String(error || "")}) : OWN[why] ? t(OWN[why]) : t("super.direct.why.other", {why: String(why || "?")}));
   const howOf = (how) => HOW[how] || HOW.sent;

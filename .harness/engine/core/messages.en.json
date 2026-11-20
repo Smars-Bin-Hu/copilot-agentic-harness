@@ -3036,6 +3036,7 @@
   "board.enter.m.paired.unpaired": "This browser is not paired. Press \"Pair this browser\" to open the board, already paired, in your default browser.",
   "board.enter.open": "Open VS Code",
   "board.enter.opening": "Opening...",
+  "board.enter.slow": "The board is answering slowly; its last answer, {s} s ago, was ready. You can enter.",
   "board.enter.noanswer": "The board did not answer ({error}). Trying again every 3 s.",
   "board.enter.legal": "{copyright} · v{version}",
   "board.enter.say.1": "Beep.",

@@ -3036,6 +3036,7 @@
   "board.enter.m.paired.unpaired": "这个浏览器没有配对。点“配对这个浏览器”，在默认浏览器里打开已配对的看板。",
   "board.enter.open": "打开 VS Code",
   "board.enter.opening": "正在打开...",
+  "board.enter.slow": "看板回答得慢；它 {s} 秒前的回答是就绪的，可以进入。",
   "board.enter.noanswer": "看板没有回答（{error}）。每 3 秒再试。",
   "board.enter.legal": "{copyright} · v{version}",
   "board.enter.say.1": "滴。",

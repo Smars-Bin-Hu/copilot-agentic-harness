@@ -264,16 +264,17 @@ class ReadinessTests(TaskCase):
         settled(check)
         first = check.latest(True)
         self.assertEqual(len(first["checks"]), len(ready.Ready.REQUIRED))
-        gate = threading.Event()
+        gate, inside = threading.Event(), threading.Event()
         real = check.answer
 
         def slow(paired: bool) -> Dict[str, Any]:
+            inside.set()
             gate.wait(5)
             return real(paired)
 
         out = io.StringIO()
-        with mock.patch.object(check, "answer", side_effect=slow), mock.patch.object(ready, "SLOW_ANSWER", 0.05), mock.patch("sys.stdout", out):
-            time.sleep(1.2)  # the thread is now inside a slow answer
+        with mock.patch.object(check, "answer", side_effect=slow), mock.patch.object(ready, "SLOW_ANSWER", 0.05), mock.patch.object(ready, "KEEP_EVERY", 0.05), mock.patch("sys.stdout", out):
+            self.assertTrue(inside.wait(5))  # the thread is now inside a slow answer
             began = time.monotonic()
             again = check.latest(True)
             self.assertLess(time.monotonic() - began, 0.5, "the page is not kept waiting")
@@ -281,6 +282,7 @@ class ReadinessTests(TaskCase):
             unpaired = check.latest(False)
             self.assertFalse(unpaired["ready"])
             self.assertEqual(next(line for line in unpaired["checks"] if line["id"] == "paired")["state"], "fail")
+            time.sleep(0.2)  # longer than SLOW_ANSWER here
             gate.set()
             self.assertTrue(until(lambda: bool(out.getvalue().strip()), 5), "a slow answer is written to the log with its parts")
 

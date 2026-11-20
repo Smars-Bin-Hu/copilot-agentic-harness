@@ -62,6 +62,7 @@
   const head = h("div", {class: "en-chk-h h-check"}, h("i"), headText, getReady);
   const list = h("ul", {class: "en-chk-l"});
   const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
+  const KEEP_READY = 120;  // 1.8.13: seconds a ready answer still counts while the board answers late
   const legal = h("p", {class: "en-legal"}, t("board.enter.legal", {copyright: t("board.copyright"), version: DATA.serve.version || ""}));
   const body = h("div", {class: "en-chk-body"}, head, list, errLine);  // the lines scroll here; the legal line below it stays in view (1.7.24)
   const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
@@ -536,9 +537,15 @@
       } else if (!p.hidden) { p.hidden = true; p.dataset.k = ""; }
     });
     const down = Boolean(chk0.error) && (chk0.misses || 0) >= 2;  // 1.8.13: one late answer is not a board that is down: Enter stayed off with every line green
-    if (down && all) all = false;
-    errLine.hidden = !down; setText(errLine, down ? t("board.enter.noanswer", {error: chk0.error}) : "");
-    const ready = all && !pending && !down && slot(ORDER.length - 1);
+    // 1.8.13: a slow computer is not a broken one. While the last answer that came was ready (KEEP_READY s ago at most), Enter stays on and the line says the board is slow,
+    // in amber, with how long ago it last answered; only after that, or when the last answer was not ready, is it red and Enter off. The checks themselves stay as they are.
+    const lastOk = chk0.readyAt ? Math.round((Date.now() - chk0.readyAt) / 1000) : -1;
+    const slowOnly = down && lastOk >= 0 && lastOk <= KEEP_READY;
+    if (down && !slowOnly && all) all = false;
+    errLine.hidden = !down; setText(errLine, slowOnly ? t("board.enter.slow", {s: lastOk}) : down ? t("board.enter.noanswer", {error: chk0.error}) : "");
+    errLine.classList.toggle("soft", slowOnly);
+    const ready = all && !pending && (!down || slowOnly) && slot(ORDER.length - 1);
+    if (ready && !down) chk0.readyAt = Date.now();
     chk0.ready = ready;
     root.classList.toggle("en-notready", !ready && !pending);  // the reflection of the wordmark goes when the list has something to say (1.7.29)
     const looks = optionalCount(), noKb = Boolean(optional) && !optional.kb;

@@ -33,9 +33,11 @@ netstat -ano | findstr :8765
 双击 Start Harness（`.cmd` 或者那个带机器人图标的快捷方式）。
 
 应该看到：
-- 窗口里有转圈和秒数，依次是：`starting the board` → `waiting for the browser to open the page` → `pairing`。记下每一段大概多少秒，拍一张。
+- 黑色控制台一闪（最多两三秒）就被藏起来，屏幕中间弹出一个深色小窗口：机器人图标、`Harness`、当前阶段、一条来回移动的蓝色进度条、右下角秒数。阶段依次是 `starting the board` → `waiting for the browser to open the page` → `pairing`。记下每一段大概多少秒，拍一张小窗口。
+- 如果没有小窗口，而是控制台里转圈：说明这台电脑的 Python 用不了 tkinter，拍下控制台，再运行 `py -c "import tkinter; print(tkinter.TkVersion)"` 拍结果。
+- 如果小窗口出来了，但黑色控制台一直还在（没被藏起来）：拍照，并说一下默认终端是不是 Windows Terminal。
 - 浏览器打开看板，已经配好对（进入页上 `Browser paired` 是绿的）。
-- 页面打开以后，启动窗口自己关掉。
+- 页面打开以后，小窗口显示"看板已经在浏览器里打开了"，一秒多后自己关掉。
 - 没有一直开着的黑色终端窗口。
 - 看板开着的几分钟里，留意有没有黑色窗口一下一下闪出来（看板在后台调用 git、VS Code 命令时）。有的话，拍下来，记下当时在做什么。
 
@@ -71,6 +73,10 @@ netstat -ano | findstr :8765
 ## 第 5 步：日志
 
 打开 harness 文件夹里的 `.harness\runtime\board.log`。里面应该有看板的输出，没有 `pair=`。拍一张开头。
+
+## 第 6 步：中途关掉小窗口
+
+先点右上角电源按钮停掉看板。再双击 Start Harness，小窗口出来后马上按 `Esc`。小窗口应该消失，看板照样启动，浏览器照样打开它。拍照。
 
 ## 发回
 

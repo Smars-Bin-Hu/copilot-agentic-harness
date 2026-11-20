@@ -2499,11 +2499,54 @@ def open_again(port: int) -> bool:
 
 
 def listening(error: BaseException) -> bool:
-    """Did something take the connection (and then not answer, or answer badly)? A refused or unreachable port is False."""
+    """Did something take the connection and then not answer in time? Only that is a busy board. A refused port, a cut connection (a board that is stopping) and an answer
+    that is not HTTP (another program on the port) are not (1.8.15 review)."""
     reason = getattr(error, "reason", error)  # URLError wraps the OSError
-    if isinstance(reason, (socket.timeout, TimeoutError)):
-        return True
-    return isinstance(reason, (ConnectionResetError, http.client.HTTPException))  # taken, then cut off; a refused port, an answer that is no JSON or an HTTP error is not a busy board
+    return isinstance(reason, (socket.timeout, TimeoutError))
+
+
+def serve_pid(root: Path) -> int:
+    """The process id `board-serve.json` names, or 0."""
+    try:
+        value = json.loads(board_serve_file(root).read_text(encoding="utf-8")).get("pid")
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
+def pid_alive(pid: int) -> bool:
+    """Does the process run? No process is started (Windows: OpenProcess and its exit code; elsewhere a signal 0). A process that cannot be asked counts as running."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED: it runs, as another user
+            try:
+                code = wintypes.DWORD()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return True
+                return code.value == 259  # STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:  # noqa: BLE001 - cannot be asked: counts as running
+            return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True  # it runs, as another user
+    return True
 
 
 def running_board(root: Path) -> int:
@@ -2516,9 +2559,9 @@ def running_board(root: Path) -> int:
         with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=pace.scaled(STATUS_WAIT)) as answer:
             found = json.load(answer) if answer.status == 200 else None
     except (OSError, ValueError) as error:
-        # 1.8.15: only a port nothing listens on is "no board". A port that took the connection and did not answer in time (a busy board on a slow computer) is the board of
-        # this copy, busy: it is opened again, not started twice. A busy board that someone else took the port from after a crash cannot be told apart: the file is trusted.
-        return port if listening(error) else 0
+        # 1.8.15: a port that took the connection and did not answer in time, while the process `board-serve.json` names still runs, is the board of this copy, busy
+        # (a slow computer): it is opened again, not started twice. Anything else is no board.
+        return port if listening(error) and pid_alive(serve_pid(root)) else 0  # the process the file names must still run: a file left by a crash is not a busy board
     if not isinstance(found, dict):
         return 0
     theirs = str(found.get("root") or "")

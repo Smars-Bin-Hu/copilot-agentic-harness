@@ -6,6 +6,9 @@ import io
 import json
 import os
 import socket
+import threading
+import sys
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -101,10 +104,10 @@ class BusyBoardTests(TaskCase):
         quick.start()
         self.addCleanup(quick.stop)
 
-    def keep_port(self, port: int) -> None:
+    def keep_port(self, port: int, pid: int = 0) -> None:
         path = board_serve_file(self.root)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"port": port}), encoding="utf-8")
+        path.write_text(json.dumps({"port": port, "pid": pid or os.getpid()}), encoding="utf-8")  # a process that runs: this one
 
     def silent_listener(self) -> socket.socket:
         server = socket.socket()
@@ -118,6 +121,32 @@ class BusyBoardTests(TaskCase):
         self.keep_port(port)
         with with_factor(1.0):
             self.assertEqual(boardserve.running_board(self.root), port)
+
+    def test_a_file_left_by_a_crash_with_the_port_taken_by_something_else_is_no_board(self) -> None:
+        """Review 1: the board crashed, its file stayed, another program took the port and never answers: the person must still be able to start a board."""
+        port = self.silent_listener().getsockname()[1]
+        gone = subprocess.Popen([sys.executable, "-c", "pass"])
+        gone.wait()
+        self.keep_port(port, pid=gone.pid)
+        self.assertFalse(boardserve.pid_alive(gone.pid))
+        self.assertEqual(boardserve.running_board(self.root), 0)
+
+    def test_a_port_that_cuts_the_connection_is_no_board(self) -> None:
+        """Review 2: a board that is stopping takes the connection and cuts it; another program may answer in no HTTP at all. Neither is a busy board."""
+        server = self.silent_listener()
+        port = server.getsockname()[1]
+        self.keep_port(port)
+
+        def cut() -> None:
+            try:
+                conn, _ = server.accept()
+                conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                conn.close()  # a reset
+            except OSError:
+                pass
+
+        threading.Thread(target=cut, daemon=True).start()
+        self.assertEqual(boardserve.running_board(self.root), 0)
 
     def test_a_refused_port_is_no_board(self) -> None:
         server = socket.socket()

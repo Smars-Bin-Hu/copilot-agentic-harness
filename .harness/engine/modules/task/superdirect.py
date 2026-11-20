@@ -1,7 +1,7 @@
 """A direct message from the super agent view to one task's chat (1.8.4, step 8): `POST /api/super/send`. It does not go through the super agent and spends none of its Credits.
 
   send   `send(board, data)`: `{task, text, model?, thinking?, context?, new_chat?, busy?, lang?, files?, checks?}` -> `{ok: true, how, task, chat, checks? | checks_pending?}` or `{ok: false, why}`.
-         1.8.16: a CLOSED task is reopened: a new chat whose first message (`board.reopen.words`) has the agent open the task again, then the person's words; `how: "reopened"`. `checks` (0 up to `review.max_n`, else `why: "checks"`, key `send.refused.checks`) is set
+         1.8.17: a CLOSED task is reopened: a new chat whose first message (`board.reopen.words`) has the agent open the task again, then the person's words; `how: "reopened"`. `checks` (0 up to `review.max_n`, else `why: "checks"`, key `send.refused.checks`) is set
          after the message went, through `taskreview.set_by_person` (the code of the board's `review set`); on a closed task it waits as `pending_checks` (`taskreview.set_pending`) until the board sees it open (`Board.apply_checks`): `checks_pending: n`, else `checks: n`.
          `how`: `sent` (idle chat), `queued` (busy chat, `busy` queue: the default), `steered` (busy chat, `busy` steer: into the running turn), `said` (the chat waits for the answer to its own
          question: the words skip it), `new-chat` (a new chat that goes on with the task). `why` is a key part of `send.refused.*` (`text.empty`, `text.long`, `not-idle`, `confirm-waits`, `off`,

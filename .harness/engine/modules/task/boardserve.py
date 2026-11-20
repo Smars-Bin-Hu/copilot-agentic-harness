@@ -501,7 +501,7 @@ class Board:
         self.link.overlay(result["tasks"])
         moved = False
         for row in result["tasks"]:
-            if row.get("pending_checks") is not None:  # 1.8.16: the person asked for checks with a message that reopens the task; it is open now
+            if row.get("pending_checks") is not None:  # 1.8.17: the person asked for checks with a message that reopens the task; it is open now
                 self.apply_checks(row)
             moved = self.settle(row) or moved
             health.with_context(self.root, row, row.get("chat"))
@@ -2379,7 +2379,7 @@ def handler_for(board: Board) -> type:
                             said = superroute.said_of(board.link, paths[item["task"]])  # the agent's last words, from what the link holds
                             if said:
                                 item["said"] = said
-                    view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.16: the recently closed tasks the board still shows, to open again with `/api/super/send`
+                    view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.17: the recently closed tasks the board still shows, to open again with `/api/super/send`
                     view["making"] = result.get("making") or []  # 1.8.5: chats the board made whose task is not there yet
                     return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows

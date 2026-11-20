@@ -499,7 +499,7 @@ def checks_ok(root: Path, number: Any) -> bool:
 
 
 def set_pending(root: Path, raw_task: str, number: int) -> bool:
-    """A person's n for a task that is closed (1.8.16, reopen from the super view): kept in `pending_checks` of the task state, applied by `apply_pending` once the task is open.
+    """A person's n for a task that is closed (1.8.17, reopen from the super view): kept in `pending_checks` of the task state, applied by `apply_pending` once the task is open.
     True when the task is open already (the caller applies it now). It changes nothing the person cannot change back; the checks are never set from a request the paired browser did not make."""
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:

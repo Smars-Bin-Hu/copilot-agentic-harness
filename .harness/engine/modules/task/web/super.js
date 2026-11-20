@@ -167,7 +167,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
 
     // ---------- the avatars ----------
-    // The recently closed tasks (1.8.16): not on the strip as avatars but behind one control at its end. A task is "closed" here only while it has no avatar: once it is open again its avatar takes over.
+    // The recently closed tasks (1.8.17): not on the strip as avatars but behind one control at its end. A task is "closed" here only while it has no avatar: once it is open again its avatar takes over.
     const closedOnly = () => closedList.filter((one) => one && one.task && !mates.some((mate) => mate.task === one.task));
     const isClosed = (task) => Boolean(task) && closedOnly().some((one) => one.task === task);
     const closedTitle = (one) => String((one && one.title) || "");

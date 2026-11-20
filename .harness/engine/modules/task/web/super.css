@@ -398,7 +398,7 @@ a.sa-task:hover{text-decoration:underline}
 .sa-to[hidden]{display:none}
 .sa-reply .sa-dopt{align-self:flex-end}
 
-/* the closed tasks (1.8.16): one control at the end of the avatar strip, its small list, the "closed" mark in the "@" list, and the "Reopen" mark above the input */
+/* the closed tasks (1.8.17): one control at the end of the avatar strip, its small list, the "closed" mark in the "@" list, and the "Reopen" mark above the input */
 .sa-closed{flex:none;width:58px;text-align:center;position:relative;background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer}
 .sa-closed .sa-ring{display:flex;align-items:center;justify-content:center;border-style:dashed;opacity:.75}
 .sa-closed:hover .sa-ring,.sa-closed[aria-expanded="true"] .sa-ring{opacity:1}

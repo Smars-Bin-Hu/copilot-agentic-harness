@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.14 (1.8.0 – 1.8.14, 2026-11-17 – 2026-11-20)
+## 1.8.15 (1.8.0 – 1.8.15, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -26,6 +26,7 @@ To see which version you have: `harness --version`.
 
 - **The board in the background** (1.8.11): Start Harness starts the board with no terminal window to keep open; a small start window shows three stages (starting the board, waiting for the browser, pairing) and closes by itself when a paired page is open (a wheel in the terminal when Python has no tkinter). The console (Windows) or Terminal window (macOS, 1.8.12) is hidden meanwhile and closed at the end. A second double-click only opens the board. The power button at the top right of every page stops it; `harness task board --stop` too.
 - **Message a task directly from the super view** (1.8.14): with a task's avatar filter on, or `@name` in All, your words go straight to that task's chat (up to 10000 characters), not through the super agent: sent, queued (or steered in), or said in place of its own question; a task with no chat gets a new chat that goes on with it. One Send; the options (model, thinking, context, when it works, reply language, files, New chat for one message) sit in a menu behind the icon next to Send. Your words show as your bubble with how it went; a paused task is refused with **Resume**. The super agent's `send` card goes the same way.
+- **Open a closed task again from the super view** (1.8.15, server): a message to a closed task (or the proposal card `reopen`) makes a new chat that opens the task again and then gives your words; the super view lists the 12 newest closed tasks. A message can also set the independent checks (0 up to `review.max_n`); for a closed task the number waits and is set once the task is open. The super agent can only propose it.
 - **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
 ### Fixed
 

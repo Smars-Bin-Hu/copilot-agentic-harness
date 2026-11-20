@@ -21,7 +21,7 @@ from core import config, messages, tasks
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
 
-from . import common, gatereview, health, task as task_ops, taskhtml, taskinsight, tasklife, tasksub, taskstages
+from . import common, gatereview, health, task as task_ops, taskarchive, taskhtml, taskinsight, tasklife, tasksub, taskstages
 
 BOARD_NAME = "board.html"
 MIN_INTERVAL = 1.0
@@ -266,6 +266,10 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
             row["actions"] = [item for item in row["actions"] if item["action"] != "confirm-req"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
         data = tasks.read(root, row["task"]) or {}
+        if row["status"] == "closed":
+            row["closed_at"] = taskarchive.closed_at(data)  # when the person closed it (the super view's Closed list)
+        elif data.get("pending_checks") is not None:
+            row["pending_checks"] = data["pending_checks"]  # kept for a reopened task (1.8.15); `Board.rows` sets it now the task is open
         row["open_conns"] = opened_marks(data) if row["status"] == "open" else []  # what the person opened for the task (1.7.38: connections, and the linked items): a mark under the name
         row["links"] = link_marks(root, data)  # the items of other tools the task is linked to (1.7.38): a small link icon in the list and on the card of the lobby, the tip lists them
         if row["status"] == "open":

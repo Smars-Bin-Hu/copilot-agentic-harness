@@ -280,5 +280,110 @@ class FilesAndRecordTests(DirectCase):
         self.assertEqual((found["ok"], found["how"], found["recorded"]), (True, "sent", False))
 
 
+class ReopenTests(DirectCase):
+    def close(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["status"] = "closed"
+            task_ops.note(data, "close", "done")
+
+    def state(self) -> Dict[str, Any]:
+        return task_ops.read(self.root, TASK)
+
+    def test_a_closed_task_is_reopened_in_a_new_chat_with_the_words(self) -> None:
+        self.close()
+        found = self.post({"text": "  one more thing\nplease  "})
+        self.assertEqual((found["ok"], found["how"], found["task"]), (True, "reopened", task_ops.name_of(TASK)))
+        self.assertNotIn("checks", found)
+        self.assertEqual(len(self.vs.made), 1)
+        self.assertEqual(self.vs.sent, [])
+        made = self.vs.made[0]
+        self.assertEqual(made["plan"]["name"], task_ops.name_of(TASK))
+        name = task_ops.name_of(TASK)
+        self.assertEqual(made["text"], f"/harness-my-task The task {name} is closed. Open it again with `harness task open {name}`, then go on with it.\n\none more thing\nplease")
+        line = self.sent_lines()[-1]
+        self.assertEqual((line["by"], line["kind"], line["reopen"]), ("super", "new-chat", True))
+        self.assertEqual(self.state()["status"], "closed")  # the agent opens it, not the board
+
+    def test_zh_reopen_words_come_in_chinese(self) -> None:
+        self.close()
+        self.post({"text": "x", "lang": "zh"})
+        self.assertIn("已关闭", self.vs.made[0]["text"])
+
+    def test_the_old_chat_that_works_or_waits_refuses_and_an_idle_one_is_left(self) -> None:
+        self.close()
+        self.vs.state = "busy"
+        self.assertEqual(self.post({"text": "x"}), {"ok": False, "why": "not-idle"})
+        self.vs.state = "idle"
+        self.assertEqual(self.post({"text": "x"})["how"], "reopened")  # a bound idle chat: still a new chat, never a message into the old one
+        self.assertEqual(self.vs.sent, [])
+
+    def test_a_task_that_is_gone_or_not_a_task_is_unknown(self) -> None:
+        self.assertEqual(self.post({"task": "ghost-archived", "text": "x"}), {"ok": False, "why": "unknown"})
+        with task_ops.locked(self.root, TASK) as data:
+            data["status"] = "weird"
+        self.assertEqual(self.post({"text": "x"}), {"ok": False, "why": "unknown"})
+
+    def test_checks_on_an_open_task_are_set_through_review_set(self) -> None:
+        found = self.post({"text": "x", "checks": 2})
+        self.assertEqual((found["how"], found["checks"]), ("sent", 2))
+        self.assertNotIn("checks_pending", found)
+        review = self.state()["review"]
+        self.assertEqual((review["n"], review["set"]["n"]), (2, 2))
+        self.assertEqual(self.post({"text": "y", "checks": 0})["checks"], 0)
+        self.assertEqual(self.state()["review"]["n"], 0)
+        self.assertNotIn("checks", self.post({"text": "z"}))  # absent: no change
+        self.assertEqual(self.state()["review"]["n"], 0)
+
+    def test_checks_on_a_closed_task_wait_until_it_is_open_then_are_set_once(self) -> None:
+        self.close()
+        found = self.post({"text": "x", "checks": 3})
+        self.assertEqual((found["how"], found["checks_pending"]), ("reopened", 3))
+        self.assertNotIn("checks", found)
+        self.assertEqual(self.state()["pending_checks"], 3)
+        self.assertNotEqual((self.state().get("review") or {}).get("n"), 3)
+        self.request("POST", "/api/board", {}, cookie=self.cookie)  # still closed: it stays
+        self.assertEqual(self.state()["pending_checks"], 3)
+        with task_ops.locked(self.root, TASK) as data:
+            data["status"] = "open"  # the agent opened it
+        status, board, _ = self.request("POST", "/api/board", {}, cookie=self.cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(self.state()["review"]["n"], 3)
+        self.assertNotIn("pending_checks", self.state())
+        row = next(item for item in board["rows"] if item["task"] == TASK)
+        self.assertNotIn("pending_checks", row)
+        events = [event["what"] for event in self.state()["events"]]
+        self.assertEqual(events.count("review-set"), 1)
+
+    def test_a_task_the_agent_opened_before_the_number_was_kept_gets_it_at_once(self) -> None:
+        self.close()
+        def opens(link: Any, plan: Any, text: Any, attachments: Any = None) -> Dict[str, Any]:
+            with task_ops.locked(self.root, TASK) as data:
+                data["status"] = "open"
+            return DirectLink.create(link, plan, text, attachments)
+
+        self.vs.create = lambda plan, text, attachments=None: opens(self.vs, plan, text, attachments)  # type: ignore[method-assign]
+        found = self.post({"text": "x", "checks": 1})
+        self.assertEqual((found["how"], found["checks"]), ("reopened", 1))
+        self.assertEqual(self.state()["review"]["n"], 1)
+        self.assertNotIn("pending_checks", self.state())
+
+    def test_a_bad_checks_value_refuses_before_anything_goes(self) -> None:
+        for value in (-1, 6, 10, "2", 2.5, True, [2], {"n": 2}):
+            self.assertEqual(self.post({"text": "x", "checks": value}), {"ok": False, "why": "checks"}, value)
+        self.close()
+        self.assertEqual(self.post({"text": "x", "checks": 99}), {"ok": False, "why": "checks"})
+        self.assertEqual((self.vs.sent, self.vs.made), ([], []))
+        self.assertNotIn("pending_checks", self.state())
+
+    def test_checks_null_is_no_change(self) -> None:
+        self.assertNotIn("checks", self.post({"text": "x", "checks": None}))
+
+    def test_a_paused_closed_task_refuses(self) -> None:
+        self.close()
+        with task_ops.locked(self.root, TASK) as data:
+            data["paused"] = {"since": "2026-11-18T00:00:00+00:00"}
+        self.assertEqual(self.post({"text": "x"}), {"ok": False, "why": "paused"})
+
+
 if __name__ == "__main__":
     unittest.main()

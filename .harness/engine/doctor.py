@@ -70,7 +70,8 @@ def check_python(report: Report) -> None:
     else:
         report.error(say("doctor.python.old", version=text))
     found = pace.info()  # 1.8.15: the factor every time limit of the board is multiplied by
-    report.ok(say("doctor.pace." + found["source"], factor=f"{found['factor']:g}", seconds=f"{found['seconds'] or 0:.2f}"))
+    key = {"measured": "doctor.pace.measured", "set": "doctor.pace.set"}.get(found["source"], "doctor.pace.default")
+    report.ok(say(key, factor=f"{found['factor']:g}", seconds=f"{found['seconds'] or 0:.2f}"))
 
 
 def check_interpreter(report: Report) -> None:

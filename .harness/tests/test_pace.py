@@ -82,5 +82,19 @@ class PaceTests(unittest.TestCase):
             self.assertEqual(pace.factor(self.root), 1.0, text)
 
 
+class GuardrailsTests(unittest.TestCase):
+    def test_the_guardrails_do_not_use_the_factor(self) -> None:
+        """A guard that cannot decide refuses; a slow computer does not change that. The hook timeout, the state lock, the retry of a held file and the approval waits stay as written."""
+        engine = Path(__file__).resolve().parents[1] / "engine"
+        guarded = [engine / "hook.py", engine / "core" / "state.py", engine / "core" / "approvals.py", *sorted((engine / "modules" / "gate").glob("*.py"))]
+        for path in guarded:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("import pace", text, path.name)
+            self.assertNotIn("pace.", text.replace("space.", ""), path.name)
+        hooks = json.loads((engine.parents[1] / ".github" / "hooks" / "harness.json").read_text(encoding="utf-8"))
+        limits = {entry.get("timeoutSec", entry.get("timeout")) for group in hooks.get("hooks", {}).values() for entry in (group if isinstance(group, list) else [group]) if isinstance(entry, dict)}
+        self.assertEqual(limits - {None}, {30})
+
+
 if __name__ == "__main__":
     unittest.main()

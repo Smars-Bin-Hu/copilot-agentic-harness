@@ -95,11 +95,11 @@ def setup_done(root: Path) -> bool:
 
 
 def doctor_seconds(root: Path) -> float:
-    """The deadline of the child `doctor`: `board.doctor_seconds` of the policy `task`, kept between DOCTOR_LIMITS; DOCTOR_TIMEOUT when it is not set or not a number."""
+    """The deadline of the child `doctor`: `board.doctor_seconds` of the policy `task` (DOCTOR_TIMEOUT when it is not set or not a number), times the pace factor,
+    kept between DOCTOR_LIMITS. 1.8.15: the value is scaled too, as `git_timeout_seconds` is: the shipped policy sets 300, written for a quick computer."""
     value = (config.policy_or_empty(root, "task").get("board") or {}).get("doctor_seconds")
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return min(pace.scaled(DOCTOR_TIMEOUT), DOCTOR_LIMITS[1])  # the default grows with the factor, up to the top bound
-    return min(max(float(value), DOCTOR_LIMITS[0]), DOCTOR_LIMITS[1])
+    base = DOCTOR_TIMEOUT if isinstance(value, bool) or not isinstance(value, (int, float)) else float(value)
+    return min(max(pace.scaled(base), DOCTOR_LIMITS[0]), DOCTOR_LIMITS[1])
 
 
 def crash_words(stderr: str, root: Path) -> str:

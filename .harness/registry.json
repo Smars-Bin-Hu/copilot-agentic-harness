@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.8.14",
+  "version": "1.8.15",
   "released": "2026-11-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -176,6 +176,7 @@
         ".harness/tests/test_boardserve.py",
         ".harness/tests/test_boardpairs.py",
         ".harness/tests/test_pace.py",
+        ".harness/tests/test_pace_limits.py",
         ".harness/tests/test_boardbackground.py",
         ".harness/tests/test_ahp.py",
         ".harness/tests/test_chatnew.py",

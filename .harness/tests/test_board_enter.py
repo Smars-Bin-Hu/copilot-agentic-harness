@@ -475,10 +475,12 @@ class ReadinessTests(TaskCase):
         """1.8.15: at a factor of 5 the host wait, the first wait and the default doctor deadline are 5 times the base (the doctor one stops at 1800); VS Code still starting or `cli-slow` is yellow, not red."""
         from core import pace
         with mock.patch.object(pace, "factor", return_value=5.0):
-            with mock.patch.object(ready.config, "policy_or_empty", return_value={}):  # the shipped policy sets 300 by hand: only a policy without it gets the scaled default
+            with mock.patch.object(ready.config, "policy_or_empty", return_value={}):
+                self.assertEqual(ready.doctor_seconds(self.root), 1500.0)
+            with mock.patch.object(ready.config, "policy_or_empty", return_value={"board": {"doctor_seconds": 300}}):  # the shipped policy sets 300: it is scaled too
                 self.assertEqual(ready.doctor_seconds(self.root), 1500.0)
             with mock.patch.object(ready.config, "policy_or_empty", return_value={"board": {"doctor_seconds": 600}}):
-                self.assertEqual(ready.doctor_seconds(self.root), 600.0)  # the person's own value is not scaled
+                self.assertEqual(ready.doctor_seconds(self.root), 1800.0)  # scaled, then kept under the top bound
             for why in ("starting", "cli-slow"):
                 for open_for in (None, int(ready.HOST_WAIT) + 5):  # past the base wait, still inside the scaled one
                     status = {"ready": False, "bound": 0, "unbound": 0, "why": why}

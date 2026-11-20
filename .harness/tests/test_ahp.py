@@ -6,6 +6,7 @@ import json
 import select
 import socket
 import struct
+import subprocess
 import threading
 import time
 import unittest
@@ -332,6 +333,13 @@ class SlowCodeCommandTests(unittest.TestCase):
 
 class PaceTests(unittest.TestCase):
     """1.8.15: the limits of the `code` command and of the calls grow with the pace factor, read at the moment of use; one `code` command runs at a time."""
+
+    def test_opening_a_folder_does_not_wait_behind_a_slow_agent_ask(self) -> None:
+        done = subprocess.CompletedProcess(["code"], 0, stdout=b"", stderr=b"")
+        with ahp._CODE_LOCK, mock.patch("core.procrun.run", return_value=done):  # an `agent endpoints` holds the lock
+            began = time.monotonic()
+            ahp.run_code("code", ["/some/folder"])
+            self.assertLess(time.monotonic() - began, 1.0)
 
     def run_with(self, factor: float) -> List[Any]:
         from core import pace

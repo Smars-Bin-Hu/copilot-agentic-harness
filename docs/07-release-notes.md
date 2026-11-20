@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.14 (1.8.0 – 1.8.14, 2026-11-17 – 2026-11-20)
+## 1.8.15 (1.8.0 – 1.8.15, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -29,6 +29,7 @@ To see which version you have: `harness --version`.
 - **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
 ### Fixed
 
+- On a slow work computer fixed time limits made slowness look like a failure (1.8.15): red lines, buttons turned off, "the board did not come back", a second board started, a promote stopped halfway. The board now measures how slow the computer is when it starts and multiplies every time limit that is not a guardrail by a factor from 1 to 5 (`board.slow_factor` in `task.json` sets it by hand); the pages use the same factor. A board that listens but answers late is a busy board, not a missing one: a second start opens it. Only one `code agent endpoints` runs at a time. The guardrails keep their limits.
 - On a slow work computer, calls of one session waited out and were refused, and two of them could write the same task file (1.8.1): the locks are locks of the system now, and a call waits up to 20 seconds.
 - The Agent Performance Review button made the agent stop and ask you to type the skill (1.8.2): the board now sends `/<skill>` itself once the task is open.
 - The gate let the agent run `harness task allow --conn`, `--links` or `--off` (1.8.0).

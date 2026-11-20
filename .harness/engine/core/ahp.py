@@ -126,7 +126,7 @@ def find_code(environ: Optional[Dict[str, str]] = None, platform: Optional[str] 
     return None
 
 
-_CODE_LOCK = threading.Lock()  # 1.8.15: one `code` command at a time from this process (the link thread, `doctor`, the launch settings): two slow ones at once only made each other slower
+_CODE_LOCK = threading.Lock()  # 1.8.15: one `code agent ...` at a time from this process (the link thread, the launch settings): two slow ones at once only made each other slower
 
 
 def call_timeout() -> float:
@@ -145,7 +145,10 @@ def run_code(code: str, arguments: List[str], timeout: Optional[float] = None, e
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     timeout = pace.scaled(CLI_TIMEOUT) if timeout is None else timeout  # a caller's own limit is used as it is
     try:
-        with _CODE_LOCK:
+        if arguments[:1] == ["agent"]:  # only the asks of the agent host wait for each other; opening a folder for the person never waits behind one
+            with _CODE_LOCK:
+                done = procrun.run([code] + arguments, capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
+        else:
             done = procrun.run([code] + arguments, capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         raise NotReady("cli-slow", f"no answer in {timeout:g} s") from None  # a busy computer, or a VS Code that is still starting: the link tries again, the person waits (1.7.41)

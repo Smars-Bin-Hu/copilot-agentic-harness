@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.12 (1.8.0 – 1.8.12, 2026-11-17 – 2026-11-20)
+## 1.8.13 (1.8.0 – 1.8.13, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -39,6 +39,10 @@ To see which version you have: `harness --version`.
 
 - A task folder grew to hundreds of files (1.8.9): every plan approval, check and promote dry run copied the whole work into `SNAPSHOT/`. A snapshot now keeps the list of files with their sha256, and only `REQ.md` and `PLAN.md`; the Files tab no longer lists `SNAPSHOT/`. Old copies stay until `harness task snapshot prune`.
 - A pairing link stopped working as soon as a newer one was made, and the page only said the code was wrong (1.8.11): a link now works once within 10 minutes, whatever came after it, and a refusal says why. On Windows two boards could take the same port and answer in turns; the port is the board's alone now.
+- On a slow work computer the Enter screen turned Enter off with every line green, saying the board did not answer (1.8.13): the board works the answer out on a thread of its own and sends the last one at once; one late answer is not counted, and while the last answer was ready (two minutes at most) Enter stays on and an amber line says the board is slow. An answer that took over 3 seconds is written to `.harness/runtime/board.log` with the time of each part.
+- `harness doctor` often ran out of its 300 seconds on a work computer (1.8.13): the target repositories are checked from their files, with no git command; uncommitted files are checked by promote when it writes. **Check again** shows the progress bar of the run it started.
+- VS Code had been open for minutes and the Enter screen still said to open it (1.8.13): the board looks for a VS Code window on a thread of its own, every 2 seconds, not only between two tries to reach VS Code.
+
 ### Retired
 
 - **The old autorun** (1.8.0): the default agent doing every step itself is gone; the scheduling chat must use a Claude model; the default run time is 480 minutes. `autorun.max_denies` and the `denied` stop reason are gone: a refusal parks the step. Remove `max_denies` from an override file.

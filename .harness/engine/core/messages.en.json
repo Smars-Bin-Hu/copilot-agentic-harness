@@ -1104,7 +1104,6 @@
   "doctor.target.none": "No target repository is set up (write repos_root in target.override.json); tasks stay in the harness's own repository",
   "doctor.target.problem": "Target repositories: {problem}",
   "doctor.target.no_repos": "repos_root has no git repository (a subfolder with .git is needed)",
-  "doctor.target.error": "Target repository {name}: {error}",
   "doctor.target.no_branch": "Target repository {name}: there is no local branch `{base_ref}`. Run git switch or git fetch once in that repository, or change base_ref under repos in target.override.json",
   "doctor.target.kind.kb": "Knowledge base",
   "doctor.target.kind.repo": "Target repository",

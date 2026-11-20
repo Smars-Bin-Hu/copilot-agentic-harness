@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import clip, messages, netonly
+from . import clip, messages, netonly, pace
 from . import systems as outside
 from .paths import utc_now
 from . import procrun
@@ -229,8 +229,8 @@ def test_seconds(kind: Dict[str, Any], server: Optional[Dict[str, Any]] = None) 
     """How long a test may take: `test.timeout` of the type; else 60 s for a program that keeps its own sign-in (a `tool` identity), else 15 s."""
     given = kind.get("test")
     if isinstance(given, dict) and isinstance(given.get("timeout"), (int, float)) and not isinstance(given.get("timeout"), bool):
-        return float(given["timeout"])
-    return float(TOOL_TEST_SECONDS if delivery(kind, server or {})["identity"] == "tool" else TEST_SECONDS)
+        return min(pace.scaled(float(given["timeout"])), max(600.0, float(given["timeout"])))  # 1.8.15: grown, but not past the 600 s bound
+    return pace.scaled(float(TOOL_TEST_SECONDS if delivery(kind, server or {})["identity"] == "tool" else TEST_SECONDS))
 
 
 UNTESTED = "untested"  # the `why` of a `reach` line: the sign-in is kept and no test has got through to the system yet
@@ -868,10 +868,11 @@ def judge(kind: Dict[str, Any], code: Optional[int], output: str) -> Dict[str, s
     return {"state": "ok", "why": "", "who": ""}
 
 
-def run_with(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str], line: str, cwd: Path, timeout: float = TEST_SECONDS,
+def run_with(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str], line: str, cwd: Path, timeout: Optional[float] = None,
              launch: Optional[Dict[str, str]] = None, alias: str = "") -> Tuple[Optional[int], str]:
     """Run a command line with this identity: in the environment (env, keyfile) or with Windows network credentials (netonly). `launch`: what VS Code is
     started with (tool folders, CA bundle, 1.7.11), so a test finds what the agent will."""
+    timeout = pace.scaled(TEST_SECONDS) if timeout is None else timeout
     how = delivery(kind, server)
     extra = {**(launch or {}), **(connection_env(alias, kind, server, identity) if alias else {}), **variables(kind, server, identity)}
     if how["identity"] == "netonly":

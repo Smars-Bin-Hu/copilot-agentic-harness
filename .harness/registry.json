@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.8.13",
+  "version": "1.8.14",
   "released": "2026-11-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -152,6 +152,7 @@
         ".harness/tests/test_superbrain.py",
         ".harness/tests/test_superact.py",
         ".harness/tests/test_superroute.py",
+        ".harness/tests/test_superdirect.py",
         ".harness/tests/test_superpreview.py",
         ".harness/tests/test_gate_ask.py",
         ".harness/tests/test_task_askturn.py",

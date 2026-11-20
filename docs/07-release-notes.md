@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.13 (1.8.0 – 1.8.13, 2026-11-17 – 2026-11-20)
+## 1.8.14 (1.8.0 – 1.8.14, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -25,6 +25,7 @@ To see which version you have: `harness --version`.
 - **Trying a change in an environment before the plan** (1.8.10): the agent may prove a change in DEV first, each write approved by you; its script is `trial-<name>` at the task root; `PLAN.md` then lists those writes under `Done before the plan`, with their evidence and how to undo them. The plan step of the ribbon has a small orange mark while such writes exist; its hover names the environments.
 
 - **The board in the background** (1.8.11): Start Harness starts the board with no terminal window to keep open; a small start window shows three stages (starting the board, waiting for the browser, pairing) and closes by itself when a paired page is open (a wheel in the terminal when Python has no tkinter). The console (Windows) or Terminal window (macOS, 1.8.12) is hidden meanwhile and closed at the end. A second double-click only opens the board. The power button at the top right of every page stops it; `harness task board --stop` too.
+- **Message a task directly from the super view** (1.8.14): with a task's avatar filter on, or `@name` in All, your words go straight to that task's chat (up to 10000 characters), not through the super agent: sent, queued (or steered in), or said in place of its own question; a task with no chat gets a new chat that goes on with it. One Send; the options (model, thinking, context, when it works, reply language, files, New chat for one message) sit in a menu behind the icon next to Send. Your words show as your bubble with how it went; a paused task is refused with **Resume**. The super agent's `send` card goes the same way.
 - **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
 ### Fixed
 
@@ -49,6 +50,7 @@ To see which version you have: `harness --version`.
 - **Accept and close at once** (1.8.4): it counts down 10 seconds, with Undo; leaving the page before then closes nothing.
 - **`DEV/_manual/`** (1.8.9): it is `DEV/_server/` now, a script run on a server and never promoted. An old task's `DEV/_manual/` still counts as one. A skill that writes `DEV/_manual/`, or a folder of its own at the task root, should write `DEV/_server/`, `TEST/` or `RUNS/<ENV>/` instead.
 - **Deploys to IST by the agent** (1.8.9): `sqlserver-jobs` deploys a script to DEV only; higher environments get the change from the repository. A job or a check runs on IST only when you say so for the task.
+- **Asking a task read-only from the super view's input** (1.8.14): an avatar filter or `@name` now messages the task (see Added). Questions asked before still show in the day's history.
 
 ## 1.7.46 (1.7.0 – 1.7.46, 2026-11-04 – 2026-11-16)
 

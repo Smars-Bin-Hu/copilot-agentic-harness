@@ -16,7 +16,7 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   shell.js, shell.css     the board and the task page only: the search pill and Cmd+K palette, the gear and the settings panel, the VS Code banner (fixed to the window, outside the page)
   bot3d.js                the 3D robot of the Enter screen (WebGL, no library); enter.js keeps a flat one when it cannot run
   companion.js, companion.css   the board only, a served page: the pop-out of the super agent view, a small always-on-top window (Document Picture-in-Picture, Chrome and Edge) with the same data and buttons
-  pet.js, super.js, super.css   the board only, a served page: the super agent view (1.8.1), with superhist.js for the earlier days of its chat, a messenger-like window of what waits for the person (`/api/super`) with the avatars of the tasks and a pet that walks over it (3D with bot3d.js, flat without WebGL); picked in the bar, never the default
+  pet.js, super.js, super.css   the board only, a served page: the super agent view (1.8.1), with superhist.js for the earlier days, superdirect.js for the direct message of its chat, a messenger-like window of what waits for the person (`/api/super`) with the avatars of the tasks and a pet that walks over it (3D with bot3d.js, flat without WebGL); picked in the bar, never the default
   enter.js, enter.css     a served page only: the Enter screen (wordmark, robot, hold to charge, the two blocks of `/api/ready`: Harness & Local required, From the company optional, and the VS Code button); a file on disk has none
   stop.js                 a served page only (1.8.11): the stop button at the top right (paired browsers; asks once, `POST /api/shutdown`), and the page that says the board has stopped and asks for nothing more
   readyui.js              a served page only: where a fix of the readiness answer leads (the setup form, a Tools window, the knowledge base window, the Terminal) and the VS Code button's restart (1.7.38)
@@ -51,7 +51,7 @@ from core.paths import cli_command
 
 WEB = Path(__file__).resolve().parent / "web"
 MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--ICON-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*THEME*/", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
-TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.", "setup.", "dock.", "term.", "connections.", "machine.", "tools.", "super.", "waits.")  # waits. (1.8.5): starting, error, being created, display name, on every page
+TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.", "setup.", "dock.", "term.", "connections.", "machine.", "tools.", "super.", "waits.", "send.refused.", "serve.refused.request")  # waits. (1.8.5): starting, error, being created, display name, on every page
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -144,7 +144,7 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
-    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "readybar.js", "autorun.js", "pet.js", "companion.js", "superhist.js", "super.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
+    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "readybar.js", "autorun.js", "pet.js", "companion.js", "superhist.js", "superdirect.js", "super.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
     return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"])
 
 

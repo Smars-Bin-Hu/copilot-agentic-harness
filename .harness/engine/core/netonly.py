@@ -14,6 +14,8 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from . import pace
+
 LOGON_NETCREDENTIALS_ONLY = 0x2
 CREATE_UNICODE_ENVIRONMENT = 0x400
 CREATE_NO_WINDOW = 0x08000000
@@ -84,8 +86,9 @@ def told(code: int, text: str, waited: int, error: int = 0) -> Tuple[Optional[in
     return code, text.split(MARK, 1)[1].lstrip("\r\n ")
 
 
-def run(account: str, password: str, command: str, cwd: Path, extra_env: Optional[Dict[str, str]] = None, timeout: float = 60.0) -> Tuple[Optional[int], str]:
+def run(account: str, password: str, command: str, cwd: Path, extra_env: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> Tuple[Optional[int], str]:
     """Run a shell command with these network credentials and wait: (exit code, what it printed). (None, why) when it could not start or took too long."""
+    timeout = pace.scaled(60.0) if timeout is None else timeout  # 1.8.15
     if not available():
         return None, "network credentials (runas /netonly) exist on Windows only"
     handle, name = tempfile.mkstemp(prefix="harness-as-", suffix=".txt")

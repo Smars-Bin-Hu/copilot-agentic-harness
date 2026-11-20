@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
-from core import gitread, messages, targets
+from core import gitread, messages, pace, targets
 
 from .common import CommandError, say
 
@@ -123,6 +123,7 @@ def grep_repo(repo: targets.Repo, commit: str, search: Search, tally: Tally, tim
     except (FileNotFoundError, PermissionError) as error:
         raise CommandError(say("target.git.missing")) from error
     prefix = commit + ":"
+    timeout = int(pace.scaled(timeout))  # 1.8.15
     try:
         assert process.stdout is not None
         for raw in process.stdout:

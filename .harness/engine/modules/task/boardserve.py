@@ -46,6 +46,8 @@ import json
 import os
 import hashlib
 import secrets
+import socket
+import http.client
 import subprocess
 import sys
 import threading
@@ -2490,10 +2492,18 @@ def handler_for(board: Board) -> type:
 def open_again(port: int) -> bool:
     """A second start: the running board opens the browser with a new code. The code stays in that process: this call only hears that it was done."""
     try:
-        with urlopen(Request(f"http://127.0.0.1:{port}/api/reopen", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=3) as answer:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/reopen", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=pace.scaled(STATUS_WAIT)) as answer:
             return answer.status == 200 and json.load(answer).get("opened") is True
     except (OSError, ValueError):
         return False
+
+
+def listening(error: BaseException) -> bool:
+    """Did something take the connection (and then not answer, or answer badly)? A refused or unreachable port is False."""
+    reason = getattr(error, "reason", error)  # URLError wraps the OSError
+    if isinstance(reason, (socket.timeout, TimeoutError)):
+        return True
+    return isinstance(reason, (ConnectionResetError, http.client.HTTPException))  # taken, then cut off; a refused port, an answer that is no JSON or an HTTP error is not a busy board
 
 
 def running_board(root: Path) -> int:
@@ -2503,10 +2513,12 @@ def running_board(root: Path) -> int:
     if not port:
         return 0
     try:
-        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=STATUS_WAIT) as answer:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=pace.scaled(STATUS_WAIT)) as answer:
             found = json.load(answer) if answer.status == 200 else None
-    except (OSError, ValueError):
-        return 0
+    except (OSError, ValueError) as error:
+        # 1.8.15: only a port nothing listens on is "no board". A port that took the connection and did not answer in time (a busy board on a slow computer) is the board of
+        # this copy, busy: it is opened again, not started twice. A busy board that someone else took the port from after a crash cannot be told apart: the file is trusted.
+        return port if listening(error) else 0
     if not isinstance(found, dict):
         return 0
     theirs = str(found.get("root") or "")
@@ -2519,7 +2531,7 @@ def running_board(root: Path) -> int:
 def page_flags(port: int) -> Dict[str, bool]:
     """`page_seen` (a page of the running board asked /api/status since the launch or the last reopen) and `page_paired` (a paired one did). The launcher of `--background` waits for them (1.8.11). Both False on any failure."""
     try:
-        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=STATUS_WAIT) as answer:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=pace.scaled(STATUS_WAIT)) as answer:
             found = json.load(answer) if answer.status == 200 else {}
     except (OSError, ValueError):
         return {"page_seen": False, "page_paired": False}
@@ -2673,9 +2685,10 @@ def terminal(out: Any) -> bool:
         return False
 
 
-def wait_for_browser(board: Board, address: str, out: Any, limit: float = OPEN_WAIT, every: float = WHEEL_EVERY) -> bool:
+def wait_for_browser(board: Board, address: str, out: Any, limit: Optional[float] = None, every: float = WHEEL_EVERY) -> bool:
     """A wheel in the terminal while the browser opens the board (on a slow computer, many seconds): it stops when the page paired, or after `limit` seconds with how to open
     the page by hand. Then Enter is read for a new code, as before. Whether the page paired."""
+    limit = pace.scaled(OPEN_WAIT) if limit is None else limit  # 1.8.15
     began = time.monotonic()
     shown = 0
     turn = 0

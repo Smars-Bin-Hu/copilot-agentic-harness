@@ -14,6 +14,8 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from core import pace
+
 QUIT_WAIT = 30.0  # seconds a VS Code is given to quit (a window may ask about a file)
 POLL = 0.5
 SETTLE = 3.0 if sys.platform.startswith("win") else 1.0  # a pause between "it has gone" and "open it": the host's socket and the window state are let go; on Windows the windows go before the process ends (1.7.41)
@@ -34,7 +36,7 @@ def ask_to_quit(run: Callable[..., Any] = subprocess.run, platform: str = sys.pl
     """Run the quit command. True when it could be run; its exit code says nothing (taskkill answers 128 for a helper process that has no window)."""
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if platform.startswith("win") else 0
     try:
-        run(quit_command(platform), capture_output=True, timeout=ASK_SECONDS, stdin=subprocess.DEVNULL, **({"creationflags": flags} if flags else {}))
+        run(quit_command(platform), capture_output=True, timeout=pace.scaled(ASK_SECONDS), stdin=subprocess.DEVNULL, **({"creationflags": flags} if flags else {}))
         return True
     except (OSError, subprocess.SubprocessError):
         return False
@@ -50,7 +52,7 @@ class Restart:
         self.chats = chats or (lambda: [])  # the chats VS Code lists as running or waiting for the person: the usual reason it does not quit
         self.ask = ask or ask_to_quit
         self.clock, self.sleep = clock, sleep
-        self.wait = QUIT_WAIT if wait is None else wait
+        self.wait = wait  # None: QUIT_WAIT grown by the pace, read when the restart runs (1.8.15)
         self.settle = SETTLE if settle is None else settle
         self.lock = threading.Lock()
         self.state, self.why, self.since = "idle", "", 0.0
@@ -91,7 +93,7 @@ class Restart:
                 if not self.ask():
                     self.set("failed", "no-command")
                     return
-                deadline = self.clock() + self.wait
+                deadline = self.clock() + (pace.scaled(QUIT_WAIT) if self.wait is None else self.wait)
                 while self.running():
                     if self.clock() >= deadline:
                         # not forced, not opened: VS Code is waiting for the person. Usually it asks "a chat is still running, quit anyway?" (`veto.chat`) or whether to save a file: the chats the host lists as running are named

@@ -638,7 +638,7 @@ class PageTests(unittest.TestCase):
         desk = source("desk.js")
         start = desk.index("function reviewButton()")
         button = desk[start:desk.index("\n  }\n", start)]
-        self.assertIn('if (!served() || !info || full.status !== "open") return null;', button)  # the task's setting: an earlier round is no reason to hide it
+        self.assertIn('if (!served() || !info || (full.status !== "open" && !closed) || (closed && desk.past)) return null;', button)  # the task's setting: an earlier round is no reason to hide it (1.8.18: a closed task shows its checks after the close, not in an earlier round)
         self.assertNotIn("desk.past ||", button)
         self.assertIn("const info = full.settings;", button)  # an earlier round is drawn as closed; the task is not
         self.assertIn('desk.past ? h("p", {class: "set-tip"}, t("desk.rv.current", {round: full.round})) : null', button)

@@ -471,6 +471,31 @@ class ReadinessTests(TaskCase):
             found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": 42}), clean))
             self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), (state, why))
 
+    def test_pace_grows_the_waits_and_a_slow_code_command_stays_yellow(self) -> None:
+        """1.8.15: at a factor of 5 the host wait, the first wait and the default doctor deadline are 5 times the base (the doctor one stops at 1800); VS Code still starting or `cli-slow` is yellow, not red."""
+        from core import pace
+        with mock.patch.object(pace, "factor", return_value=5.0):
+            with mock.patch.object(ready.config, "policy_or_empty", return_value={}):  # the shipped policy sets 300 by hand: only a policy without it gets the scaled default
+                self.assertEqual(ready.doctor_seconds(self.root), 1500.0)
+            with mock.patch.object(ready.config, "policy_or_empty", return_value={"board": {"doctor_seconds": 600}}):
+                self.assertEqual(ready.doctor_seconds(self.root), 600.0)  # the person's own value is not scaled
+            for why in ("starting", "cli-slow"):
+                for open_for in (None, int(ready.HOST_WAIT) + 5):  # past the base wait, still inside the scaled one
+                    status = {"ready": False, "bound": 0, "unbound": 0, "why": why}
+                    if open_for is not None:
+                        status["open_for"] = open_for
+                    found = settled(ready.Ready(self.root, StubLink(status), clean))
+                    vs = line(found, "vscode")
+                    self.assertEqual((vs["state"], vs["level"]), ("wait", "yellow"), (why, open_for))
+                found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": int(ready.HOST_WAIT * 5) + 5}), clean))
+                self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), ("fail", "no-host"))
+            one = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean)
+            one.found = {"errors": 1, "failed": "x", "timeout": 5}
+            self.assertEqual(one.next_wait(), ready.RETRY_TIMEOUT * 5)
+        with mock.patch.object(pace, "factor", return_value=1.0):
+            with mock.patch.object(ready.config, "policy_or_empty", return_value={}):
+                self.assertEqual(ready.doctor_seconds(self.root), ready.DOCTOR_TIMEOUT)
+
     def test_copilot_needs_a_model_and_a_host_that_says_it_is_ready(self) -> None:
         up = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
         for copilot, why in (({"models": 0, "problem": ""}, "nomodel"), ({"models": 0, "problem": "provider"}, "provider"), ({"models": 2, "problem": "client"}, "client")):

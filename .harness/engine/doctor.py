@@ -85,7 +85,7 @@ def check_interpreter(report: Report) -> None:
         report.error(say("doctor.interpreter.missing", name=name, consequence=consequence))
         return
     try:
-        result = procrun.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=INTERPRETER_SECONDS)
+        result = procrun.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=pace.scaled(INTERPRETER_SECONDS))
         problem = "" if result.returncode == 0 and result.stdout.strip() == "1" else say("doctor.interpreter.exit", code=result.returncode)
     except Exception as error:
         problem = f"{type(error).__name__}"

@@ -31,7 +31,7 @@ import time
 import uuid
 from typing import Any, Callable, Deque, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import quote, unquote, urlparse
-from . import procrun
+from . import pace, procrun
 
 PROTOCOL = "1.1.0"
 CLI_TIMEOUT = 25  # seconds for `code agent endpoints` and `code <folder>`
@@ -126,14 +126,27 @@ def find_code(environ: Optional[Dict[str, str]] = None, platform: Optional[str] 
     return None
 
 
-def run_code(code: str, arguments: List[str], timeout: float = CLI_TIMEOUT, extra: Optional[Dict[str, str]] = None) -> str:
+_CODE_LOCK = threading.Lock()  # 1.8.15: one `code` command at a time from this process (the link thread, `doctor`, the launch settings): two slow ones at once only made each other slower
+
+
+def call_timeout() -> float:
+    return pace.scaled(CALL_TIMEOUT)
+
+
+def create_timeout() -> float:
+    return pace.scaled(CREATE_TIMEOUT)
+
+
+def run_code(code: str, arguments: List[str], timeout: Optional[float] = None, extra: Optional[Dict[str, str]] = None) -> str:
     """Run the `code` command and return what it printed. Called from the background thread of the board only, never from a page request.
     `extra`: variables for a VS Code this starts (tool folders, CA bundle: core.launchenv); one that is open already keeps its own."""
     env = {key: value for key, value in os.environ.items() if not key.startswith("VSCODE_IPC") and key != "ELECTRON_RUN_AS_NODE"}  # the shim of a VS Code terminal does not know `agent`
     env.update(extra or {})
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    timeout = pace.scaled(CLI_TIMEOUT) if timeout is None else timeout  # a caller's own limit is used as it is
     try:
-        done = procrun.run([code] + arguments, capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
+        with _CODE_LOCK:
+            done = procrun.run([code] + arguments, capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         raise NotReady("cli-slow", f"no answer in {timeout:g} s") from None  # a busy computer, or a VS Code that is still starting: the link tries again, the person waits (1.7.41)
     except (OSError, subprocess.SubprocessError) as error:
@@ -271,7 +284,7 @@ class Decoder:
 class Unix:
     def __init__(self, path: str) -> None:
         self.sock = socket.socket(socket.AF_UNIX)
-        self.sock.settimeout(CALL_TIMEOUT)
+        self.sock.settimeout(call_timeout())
         self.sock.connect(path)
 
     def wait(self, timeout: float) -> bool:
@@ -358,7 +371,7 @@ class Connection:
         self._waiting: Dict[int, Dict[str, Any]] = {}  # id -> {event, message, error, method}
         self._given_up: Dict[int, Tuple[str, float]] = {}  # id -> (method, when its caller stopped waiting)
         self.late: Deque[Dict[str, Any]] = collections.deque(maxlen=LATE_KEPT)  # {method, id, late_s}: answers nobody waited for any more
-        self.default_timeout: Optional[float] = CALL_TIMEOUT  # what a call waits when it names no time (the board's link sets more)
+        self.default_timeout: Optional[float] = call_timeout()  # what a call waits when it names no time (the board's link sets more)
         self.pid: Any = None  # the editor process this host runs in, as `code agent endpoints` names it (1.7.38: the board reads its environment before any chat)
         self.instance = ""
 
@@ -367,7 +380,7 @@ class Connection:
         self.transport.write(("GET /?tkn=%s HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                               "Sec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n" % (quote(self._token, safe=""), key)).encode())
         raw = b""
-        end = time.monotonic() + CALL_TIMEOUT
+        end = time.monotonic() + call_timeout()
         while b"\r\n\r\n" not in raw:
             if time.monotonic() > end or not self.transport.wait(max(0.0, end - time.monotonic())):
                 raise AhpError("no answer to the upgrade")
@@ -503,7 +516,7 @@ class Connection:
             timeout = self.default_timeout
         if self._reader is not None:
             return self._call_read(method, params, timeout)
-        timeout = CALL_TIMEOUT if timeout is None else timeout  # without a reader, nobody would read the answer of a wait with no end
+        timeout = call_timeout() if timeout is None else timeout  # without a reader, nobody would read the answer of a wait with no end
         self.counter += 1
         mine = self.counter
         self.send({"jsonrpc": "2.0", "id": mine, "method": method, "params": params or {}})

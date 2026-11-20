@@ -612,6 +612,42 @@ class NoVsCodeTests(ServeCase):
         self.assertEqual(row["sub"], {"at": "2026-10-31T01:02:00+00:00", "what": "edit", "text": "", "kind": "hook"})
 
 
+class PaceTests(unittest.TestCase):
+    """1.8.15: the waits of the link are the base times the pace factor, read when used."""
+
+    def test_job_wait_follows_the_factor(self) -> None:
+        from core import pace
+        link = vslink.VsLink.__new__(vslink.VsLink) if hasattr(vslink, "VsLink") else None
+        if link is None:
+            self.skipTest("no link class")
+        waits: List[float] = []
+
+        class Done:
+            def wait(self, timeout: float) -> bool:
+                waits.append(timeout)
+                return True
+
+        class StubJob:
+            def __init__(self, *args: Any) -> None:
+                self.done = Done()
+                self.error = None
+                self.result = {}
+
+        link.check = lambda task, kind: ""  # type: ignore[method-assign]
+        link.jobs = mock.Mock()
+        link.wake = mock.Mock()
+        for factor in (1.0, 5.0):
+            with mock.patch.object(pace, "factor", return_value=factor), mock.patch.object(vslink, "Job", StubJob):
+                link.dispatch("send", "t", "x")
+        self.assertEqual(waits, [vslink.JOB_WAIT, vslink.JOB_WAIT * 5])
+
+    def test_scaled_values_are_made_at_use_not_at_import(self) -> None:
+        from core import pace
+        with mock.patch.object(pace, "factor", return_value=5.0):
+            self.assertEqual(pace.scaled(vslink.GATE_WAIT), vslink.GATE_WAIT * 5)
+            self.assertEqual(pace.scaled(vslink.UNDO_WAIT), vslink.UNDO_WAIT * 5)
+
+
 if __name__ == "__main__":
     unittest.main()
 

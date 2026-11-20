@@ -151,6 +151,8 @@ The gate is code that runs in the hooks, before a call. It does not ask a model.
 
 The agent cannot change these facts: the files that hold them are guardrail files, and an approval needs the code from the board.
 
+**The paired browser** (1.8.11). Every button of the board that acts needs a browser paired with the board; an unpaired one gets a refusal on every such request. A pairing lasts 30 days, across restarts of the board and of the browser. The cookie cannot be read by page scripts, and the board keeps only its SHA-256, with the date it runs out, in the guardrail folder in your home folder, where an agent cannot write. You pair by opening the board from Start Harness, or with **Pair this browser** on an unpaired page: the board opens itself, already paired, in your default browser. A pairing code works once, within 10 minutes. The gate refuses an agent that sends a request to the board, so an agent cannot ask for a pairing. One gap stays: while the board opens your browser, the address with the code is, for a moment, in the command line of that process, where another program of yours could read it.
+
 A script file counts like the same words in the command line: a type says which option names one (`sqlcmd -i file`), and the gate reads the file (at most 200 KB) and judges its statements with the same rules. A statement on the refuse list in it (`!!`, `:connect`, `KILL`) refuses the call, even when the connection is opened, and a company's rules do not turn that into a card; a file of reads only runs; any other waits for you, and so does a file it cannot read.
 
 A made-up subcommand of a tool pack's own program (`ado workitem`, when `ado` has no such command) is refused with one line and shows no card: there is nothing to approve.

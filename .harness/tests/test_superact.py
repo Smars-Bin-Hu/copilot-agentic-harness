@@ -173,6 +173,10 @@ class InvalidTests(BrainCase):
         """1.8.4: the proposal is judged by the row alone (open, not paused): `/api/super/send` makes a chat when the task has none."""
         self.assertTrue(one({"kind": "send", "task": "alpha", "text": "go on"})["ok"])
 
+    def test_the_agent_has_no_reopen_action(self) -> None:  # 1.8.21: "Reopen only" (no chat) is the person's click on a paired page; a proposal of it is refused
+        self.assertEqual(self.why({"kind": "action", "task": "done", "action": "reopen"}), "kind")
+        self.assertEqual(self.why({"kind": "action", "task": "done", "action": "reopen only"}), "kind")
+
     def test_reopen(self) -> None:
         self.assertEqual(self.why({"kind": "reopen", "task": "ghost", "text": "x"}), "unknown")
         self.assertEqual(self.why({"kind": "reopen", "task": "alpha", "text": "x"}), "open")  # an open task: use send

@@ -19,9 +19,9 @@ const SUPERDIRECT = (function () {
   const howOf = (how) => HOW[how] || HOW.sent;
 
   // ---------- the call ----------
-  // One message to one task: {ok: true, how, task} or {ok: false, why}. `options` is what `values()` of a menu gives.
-  async function send(task, text, options) {
-    if (!String(text || "").trim()) return {ok: false, why: "text.empty"};
+  // One message to one task: {ok: true, how, task} or {ok: false, why}. `options` is what `values()` of a menu gives. `allowEmpty` (1.8.21): a closed task may be reopened, or checked, with no words.
+  async function send(task, text, options, allowEmpty) {
+    if (!String(text || "").trim() && !allowEmpty) return {ok: false, why: "text.empty"};
     if (String(text).length > MAX) return {ok: false, why: "text.long"};
     try {
       const result = await SERVE.call("/api/super/send", {task, text, ...(options || {})}, 40);
@@ -104,8 +104,9 @@ const SUPERDIRECT = (function () {
   }
 
   // ---------- the menu ----------
-  // `box`: the textarea the words are typed in (a pasted picture becomes a file); `fit`: the node the menu keeps inside of (the view). Gives {button, tray, values, reading, clear, bind, close}.
-  function menu(box, fit) {
+  // `box`: the textarea the words are typed in (a pasted picture becomes a file); `fit`: the node the menu keeps inside of (the view); `closed` (1.8.21): task -> true when the task is closed (its checks are then "Checks after the close").
+  // Gives {button, tray, values, checks, reading, clear, bind, close, onchange}; `onchange` (set by the owner) runs whenever the choices are painted.
+  function menu(box, fit, closed) {
     let task = "", opened = false, pop = null, mine = null;  // mine: the checks of a card ("" none, "0".."9"); null: the page's
     const said = h("div", {class: "bad sa-dmsg"});
     const redraw = () => { if (!opened && !button.isConnected) { menus.delete(self); return; } paint(); if (opened) fill(); };
@@ -118,6 +119,7 @@ const SUPERDIRECT = (function () {
       button.querySelector(".sa-ddot").hidden = !different(level) && !count();
       button.title = t("super.direct.opts") + (note ? ": " + note : "");
       button.setAttribute("aria-label", button.title);
+      if (self.onchange) self.onchange();
     }
     const choose = (label, select) => h("label", {class: "sa-dfield"}, h("span", {class: "sa-dlabel"}, label), select);
     function fill() {
@@ -141,13 +143,15 @@ const SUPERDIRECT = (function () {
       busy.value = state.busy;
       const lang = h("select", {"aria-label": t("desk.send.lang")}, h("option", {value: ""}, t("board.new.thinking.default")), h("option", {value: "en"}, t("desk.send.lang.en")), h("option", {value: "zh"}, t("desk.send.lang.zh")));
       lang.value = state.lang;
-      const checks = h("select", {"aria-label": t("super.direct.checks.name"), title: t("super.direct.checks.tip")}, h("option", {value: ""}, t("super.direct.checks.none")), ...Array.from({length: MAXN + 1}, (_, n) => n).map((n) => h("option", {value: String(n)}, String(n))));
+      const shut = Boolean(closed && task && closed(task));  // a closed task: the checks are done on what was delivered, and the task is not reopened (1.8.20)
+      const checksName = t(shut ? "super.direct.checks.after.name" : "super.direct.checks.name");
+      const checks = h("select", {"aria-label": checksName, title: shut ? t("super.direct.checks.after.hint") : t("super.direct.checks.tip")}, h("option", {value: ""}, t("super.direct.checks.none")), ...Array.from({length: MAXN + 1}, (_, n) => n).map((n) => h("option", {value: String(n)}, String(n))));
       checks.value = mine === null ? state.checks : mine;
       const fresh = h("input", {type: "checkbox"});
       fresh.checked = state.newChat;
       const rows = [choose(t("board.new.model"), model), choose(t("board.new.thinking"), think)];
       if (sizes.length > 1) rows.push(choose(t("board.new.context"), room));
-      rows.push(choose(t("super.direct.busy"), busy), choose(t("desk.send.lang"), lang), choose(t("super.direct.checks.name"), checks));
+      rows.push(choose(t("super.direct.busy"), busy), choose(t("desk.send.lang"), lang), shut ? h("div", {class: "sa-dchecks"}, choose(h("b", null, checksName), checks), h("div", {class: "sa-dhint"}, t("super.direct.checks.after.hint"))) : choose(checksName, checks));
       const change = (key, value, again) => () => { state[key] = value(); keep(); for (const other of menus) other.redraw(); if (again) fill(); };
       model.addEventListener("change", () => { state.model = model.value; state.thinking = ""; state.context = ""; keep(); for (const other of menus) other.redraw(); });
       think.addEventListener("change", change("thinking", () => think.value));
@@ -205,6 +209,7 @@ const SUPERDIRECT = (function () {
     const self = {
       button, tray: files.tray, zone: files.zone, redraw, close, reading: files.reading,
       values: () => ({...values(task, mine === null ? undefined : mine), ...(count() ? {files: files.list()} : {})}),
+      checks() { const level = mine === null ? state.checks : mine; return level === "" ? null : Number(level); },  // the number of checks this box will send, or null (no change)
       presetChecks(level) { mine = level === undefined || level === null ? "" : String(level); paint(); },
       clear: () => files.clear(),
       bind(next) { if (next === task) return; task = next || ""; load(task).then(redraw, redraw); redraw(); },

@@ -408,7 +408,30 @@ a.sa-task:hover{text-decoration:underline}
 .sa-closedmenu{min-width:200px;max-width:min(320px,calc(100% - 16px));max-height:min(60vh,320px);overflow:auto}
 .sa-cl-item{display:flex;flex-direction:column;align-items:flex-start;gap:0;width:100%;text-align:left}
 .sa-cl-name,.sa-cl-title{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-cl-top{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:0}
+.sa-cl-top .sa-cl-name{flex:1 1 auto;min-width:0}
+/* 1.8.21: what a reopen will be (the Closed list), as a small mark: amber a new round, green the same round, red cannot yet */
+.sa-mtag{flex:none;font-size:11px;font-weight:600;line-height:1.5;border-radius:6px;padding:0 7px;white-space:nowrap;border:1px solid transparent}
+.sa-mtag.new,.sa-mode.new{background:var(--hot-bg);color:var(--hot);border-color:var(--hot-line)}
+.sa-mtag.same,.sa-mode.same{background:var(--good-bg);color:var(--good);border-color:var(--good-line)}
+.sa-mtag.no,.sa-mode.no{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
 .sa-cl-title{font-size:11.5px;color:var(--soft)}
 .sa-optx{margin-left:6px;border:1px solid var(--line2);border-radius:999px;padding:0 7px;font-size:11px;color:var(--soft)}
 .sa-opt.on .sa-optx,.sa-opt:hover .sa-optx{color:inherit;border-color:currentColor}
-.sa-to.sa-reopen{font-weight:600}
+.sa-to.sa-reopen{white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.45}
+.sa-to.sa-reopen.new{color:var(--hot)}
+.sa-to.sa-reopen.same{color:var(--good)}
+.sa-to.sa-reopen.no{color:var(--bad)}
+.sa-to-main{font-weight:600}
+.sa-to-rest{font-weight:400}
+.sa-to-link{display:inline;border:0;background:none;padding:0;margin:0 0 0 2px;font:inherit;font-weight:600;color:var(--ink);text-decoration:underline;cursor:pointer;vertical-align:baseline}
+.sa-to-link:disabled{opacity:.5;cursor:default}
+.sa-to-link:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px}
+/* the checks field of a closed task: the label and its one hint line (1.8.21) */
+.sa-dchecks{display:flex;flex-direction:column;gap:4px}
+.sa-dhint{color:var(--soft);font-size:12px;line-height:1.4}
+/* the reopen card: the mode badge and its one line above the message (1.8.21) */
+.sa-rmbox{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+.sa-rmbox[hidden]{display:none}
+.sa-mode{display:inline-block;font-size:12.5px;font-weight:600;border-radius:8px;padding:2px 9px;border:1px solid transparent;max-width:100%;overflow-wrap:anywhere}
+.sa-rmline{font-size:12.5px;color:var(--soft);overflow-wrap:anywhere}

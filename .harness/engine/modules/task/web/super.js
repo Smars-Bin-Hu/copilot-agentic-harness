@@ -66,8 +66,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const send = h("button", {type: "button", class: "sa-send", title: t("super.send"), "aria-label": t("super.send")}, "↑");
     // The direct message (superdirect.js): under an avatar (or after "@name") the words go to that task. The counter, the options menu (an icon next to Send) and the files it holds show only then.
     const counter = h("span", {class: "sa-dcount", hidden: "", title: t("super.direct.count.tip")});
-    const direct = SUPERDIRECT.menu(field, sv);
+    const direct = SUPERDIRECT.menu(field, sv, (task) => isClosed(task));  // the task is closed: its checks are "Checks after the close"
     direct.button.hidden = true;
+    direct.onchange = () => { drawHolder(); drawDirect(); };  // the checks were changed in the menu: the placeholder and the mark above the input follow (a closed task: checks after the close)
     const box = h("div", {class: "sa-box"}, field, newTask, counter, direct.button, send);
     const to = h("div", {class: "sa-to", hidden: "", title: t("super.direct.to.tip")});  // "To: <task>": where the words go while a task is targeted
     const complete = h("div", {class: "sa-comp", role: "listbox", hidden: "", "aria-label": t("super.route.pick")});
@@ -171,6 +172,13 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const closedOnly = () => closedList.filter((one) => one && one.task && !mates.some((mate) => mate.task === one.task));
     const isClosed = (task) => Boolean(task) && closedOnly().some((one) => one.task === task);
     const closedTitle = (one) => String((one && one.title) || "");
+    // 1.8.21: what a reopen of a closed task will be, said before the person presses. From the Closed list (`reopen` of the row: {mode: same | new | refused, round, next_round, why}); null when the server gave none (an older one).
+    const reopenOf = (task) => { const one = closedList.find((item) => item && item.task === task); return one && one.reopen && typeof one.reopen === "object" && one.reopen.mode ? one.reopen : null; };
+    const MODES = {new: ["new", "super.closed.mode.new"], same: ["same", "super.closed.mode.same"], partial: ["no", "super.closed.mode.partial"], checks: ["no", "super.closed.mode.checks"]};  // key -> [look, short word]
+    const MODE_WHY = {partial: "super.reopen.why.partial", checks: "super.reopen.why.checks"};
+    const modeKey = (info) => (!info ? "" : info.mode === "refused" ? (info.why === "checks" ? "checks" : "partial") : info.mode === "new" || info.mode === "same" ? info.mode : "");
+    const modeLine = (info) => { const key = modeKey(info); return key === "new" ? t("super.reopen.line.new", {n: Number(info.next_round) || (Number(info.round) || 1) + 1}) : key === "same" ? t("super.reopen.line.same") : MODE_WHY[key] ? t(MODE_WHY[key]) : ""; };
+    const modeTag = (info) => { const key = modeKey(info); return key ? h("span", {class: "sa-mtag " + MODES[key][0], title: modeLine(info)}, t(MODES[key][1])) : null; };
     function drawTeam(list, creating, shut) {
       mates = list; making = creating || [];
       if (shut) closedList = shut;
@@ -194,6 +202,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const closedBtn = shutList.length ? h("button", {type: "button", class: "sa-closed" + (isClosed(filter) ? " on" : ""), "aria-haspopup": "true", "aria-expanded": closedMenuNode ? "true" : "false", title: t("super.closed.tip", {n: shutList.length}), "aria-label": t("super.closed.tip", {n: shutList.length})},
         h("span", {class: "sa-ring", "aria-hidden": "true"}, h("span", {class: "sa-clico"}, "\u25A4")), h("span", {class: "sa-nm"}, t("super.closed", {n: shutList.length}))) : null;
       team.replaceChildren(all, ...nodes, ...makes, ...(closedBtn ? [closedBtn] : []));
+      actModes();
     }
     team.addEventListener("click", (event) => {
       const shut = event.target.closest(".sa-closed");
@@ -226,8 +235,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     function closedMenuOpen(from) {
       closedMenuClose(false);
       const items = closedOnly().map((one) => {
-        const node = h("button", {type: "button", role: "menuitem", class: "sa-skin sa-cl-item", "data-closed": one.task, title: one.task + (closedTitle(one) ? "\n" + closedTitle(one) : "") + (one.closed_at ? "\n" + t("super.closed.at", {when: when(one.closed_at, 5, 16)}) : "")},
-          h("span", {class: "sa-cl-name"}, one.task), closedTitle(one) && closedTitle(one) !== one.task ? h("span", {class: "sa-cl-title"}, closedTitle(one)) : null);
+        const node = h("button", {type: "button", role: "menuitem", class: "sa-skin sa-cl-item", "data-closed": one.task, title: one.task + (closedTitle(one) ? "\n" + closedTitle(one) : "") + (one.closed_at ? "\n" + t("super.closed.at", {when: when(one.closed_at, 5, 16)}) : "") + (modeLine(one.reopen) ? "\n" + modeLine(one.reopen) : "")},
+          h("span", {class: "sa-cl-top"}, h("span", {class: "sa-cl-name"}, one.task), modeTag(one.reopen)), closedTitle(one) && closedTitle(one) !== one.task ? h("span", {class: "sa-cl-title"}, closedTitle(one)) : null);
         node.addEventListener("click", () => { closedMenuClose(false); setFilter(one.task); field.focus(); });
         return node;
       });
@@ -423,23 +432,54 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), h("span", {class: "sa-actkind"}, one.task_kind || "dev"), go), h("div", {class: "sa-acttext"}, one.text));
       }
       if (one.kind === "send" || one.kind === "reopen") {  // a reopen card is a send card for a closed task: the same editable message and menu, its checks from the proposal, and the button says Reopen; the same options menu as the input; the receipt says how it went (sent, queued, said, new chat)
+        const shut = one.kind === "reopen";
         const box = h("textarea", {class: "sa-reply-box sa-acttextbox", rows: "3", maxlength: SUPERDIRECT.MAX, "aria-label": t("super.act.send.tip")});
         box.value = state.drafts.has(at) ? state.drafts.get(at) : (one.text || "");
         box.addEventListener("input", () => state.drafts.set(at, box.value));
-        const options = SUPERDIRECT.menu(box, sv);
+        const options = SUPERDIRECT.menu(box, sv, (task) => shut || isClosed(task));
         options.bind(one.task);
-        options.presetChecks(one.kind === "reopen" && Number.isInteger(one.checks) ? one.checks : "");  // the card holds its own checks: the box's are not its
-        const go = h("button", {type: "button", class: "act hot live"}, t(one.kind === "reopen" ? "super.act.reopen.go" : "super.act.send.go"));
+        options.presetChecks(state.picked.has(at) ? state.picked.get(at) : shut && Number.isInteger(one.checks) ? one.checks : "");  // the card holds its own checks: the box's are not its
+        const go = h("button", {type: "button", class: "act hot live"}, t(shut ? "super.act.reopen.go" : "super.act.send.go"));
+        const only = shut ? h("button", {type: "button", class: "act live", title: t("super.reopen.only.tip")}, t("super.reopen.only")) : null;  // 1.8.21: only the person's click opens the task with no chat
+        const modeBox = shut ? h("div", {class: "sa-rmbox"}) : null;
+        // 1.8.21: the mode of the reopen, above the message: what it will be before the person presses (or, with checks above 0, that it is checks after the close and not a reopen)
+        const drawMode = () => {
+          if (!shut) return;
+          const info = reopenOf(one.task), key = modeKey(info), n = options.checks(), after = n !== null && n > 0, cant = !after && key !== "" && info.mode === "refused";
+          state.picked.set(at, n === null ? "" : n);
+          go.textContent = t(after ? "super.act.reopen.after.go" : "super.act.reopen.go");
+          go.disabled = cant;
+          only.hidden = after;
+          only.disabled = cant;
+          const badge = after ? [h("span", {class: "sa-mode new"}, t("super.act.reopen.mode.after")), t(n === 1 ? "super.reopen.after.one" : "super.reopen.after.many", {n})]
+            : cant ? [h("span", {class: "sa-mode no"}, t("super.act.reopen.mode.no")), modeLine(info)]
+            : key === "new" ? [h("span", {class: "sa-mode new"}, t("super.act.reopen.mode.new", {n: Number(info.next_round) || (Number(info.round) || 1) + 1})), t("super.act.reopen.moves", {r: Number(info.round) || 1})]
+            : key === "same" ? [h("span", {class: "sa-mode same"}, t("super.act.reopen.mode.same")), t("super.act.reopen.same")] : null;
+          modeBox.hidden = !badge;
+          modeBox.replaceChildren(...(badge ? [badge[0], h("div", {class: "sa-rmline"}, badge[1], ...(cant && key === "partial" ? [" ", taskLink(one.task, t("super.reopen.recover"), "sa-to-link")] : []))] : []));
+          const link = modeBox.querySelector(".sa-to-link");
+          if (link) link.title = t("super.reopen.recover.tip");
+        };
+        options.onchange = drawMode;
+        drawMode();
         go.addEventListener("click", async () => {
           const text = box.value.trim();
-          if (!text || options.reading()) return;
+          if ((!text && !shut) || options.reading()) return;
           go.disabled = true; said.replaceChildren();
-          const result = await directSend(one.task, text, options.values(), true);
+          if (only) only.disabled = true;
+          const result = await directSend(one.task, text, options.values(), true, shut);
           if (result.ok) { options.clear(); state.done.set(at, SUPERDIRECT.howWord(result.how, result) + " \u00b7 " + stamp()); actDraw(state); emit(); return; }
-          go.disabled = false;
+          drawMode();
           said.replaceChildren(...refusalNodes(one.task, result.why, result.error, (words) => said.replaceChildren(words)));
         });
-        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), h("div", {class: "sa-reply"}, box, options.button, go), options.tray, said);
+        if (only) only.addEventListener("click", async () => {
+          go.disabled = true; only.disabled = true; said.replaceChildren();
+          const result = await reopenCall(one.task);
+          if (result.ok) { state.done.set(at, t("super.reopen.how") + " \u00b7 " + stamp()); actDraw(state); emit(); return; }
+          drawMode();
+          said.replaceChildren(...actBad(result.error));
+        });
+        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), modeBox, h("div", {class: "sa-reply"}, box, options.button, go, only), options.tray, said);
       }
       let button;
       if (one.action === "review set") {
@@ -475,7 +515,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       });
       return h("div", {class: "sa-actrow sa-actall"}, go, said);
     }
+    const modeSigOf = (list) => JSON.stringify((list || []).filter((one) => one && one.kind === "reopen").map((one) => reopenOf(one.task)));
     function actDraw(state) {
+      state.modes = modeSigOf(state.list);
       const rows = (state.list || []).map((one, at) => actRow(state, one, at));
       const all = actAll(state);
       state.box.replaceChildren(h("div", {class: "sa-acthd"}, t("super.act.head")), ...rows, ...(all ? [all] : []));
@@ -483,10 +525,14 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
     function actCard(message) {
       if (!message || !Array.isArray(message.proposals) || !message.proposals.length) return null;
-      const state = {box: h("div", {class: "sa-act"}), sig: "", list: message.proposals, drafts: new Map(), pressed: new Map(), done: new Map()};
+      const state = {box: h("div", {class: "sa-act"}), sig: "", modes: "", list: message.proposals, drafts: new Map(), pressed: new Map(), done: new Map(), picked: new Map()};
       ACT.set(message.id, state);
       actDraw(state);
       return state.box;
+    }
+    // The Closed list changed (a check began, a promote was put right): a reopen card that says what the reopen will be is drawn again with the new mode.
+    function actModes() {
+      for (const state of ACT.values()) if (state.box.isConnected && state.modes !== modeSigOf(state.list)) actDraw(state);
     }
     function actRefresh(message) {
       const state = ACT.get(message.id);
@@ -1159,13 +1205,21 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       return {left: left / talk.limit, full: moodNow() === "tired", tip: t("super.cost.tip", numbers), label: t("super.cost.label", numbers)};
     }
     const talkOff = () => (!talk ? "none" : moodNow() === "sleep" ? "asleep" : moodNow() === "tired" ? "limit" : "");
+    // The placeholder of the box; a closed task with checks above 0 gets the words of a note for the checks (1.8.21).
+    function drawHolder(off, routing) {
+      if (off === undefined) { routing = Boolean(filter); off = routing ? "" : talkOff(); }
+      const after = routing && isClosed(filter) && direct.checks() > 0;
+      field.placeholder = off ? t(OFF[off]) : routing ? t(isClosed(filter) ? (after ? "super.direct.after.ph" : "super.direct.reopen.ph") : "super.direct.ph", {task: filter}) : t("super.input.ph");
+      field.title = field.placeholder;
+    }
+    let sendOff = false, sendCant = false, toSig = "", reopening = "";  // sendCant: the target is a closed task that cannot be reopened (and no checks after the close are asked): Send waits
     function drawInput() {
       const routing = Boolean(filter);  // one task's avatar is on: the input asks that task, whatever the super chat's state
       const off = routing ? "" : talkOff(), blocked = routing ? false : Boolean(off) || thinkingNow(), quickOff = Boolean(talkOff()) || thinkingNow();
       field.disabled = Boolean(off);
-      field.placeholder = off ? t(OFF[off]) : routing ? t(isClosed(filter) ? "super.direct.reopen.ph" : "super.direct.ph", {task: filter}) : t("super.input.ph");
-      field.title = field.placeholder;
-      send.disabled = blocked;
+      sendOff = blocked;
+      send.disabled = blocked || sendCant;
+      drawHolder(off, routing);
       box.classList.toggle("off", Boolean(off));
       quick.hidden = Boolean(talkOff());
       if (!quick.children.length) {
@@ -1187,17 +1241,59 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       counter.hidden = !on;
       to.hidden = !on;
       direct.tray.classList.toggle("sa-off", !on);
-      if (!on) { field.maxLength = 2000; return; }
+      if (!on) { field.maxLength = 2000; sendCant = false; send.disabled = sendOff; return; }
       const name = target ? target.task : filter;
-      const shut = isClosed(name);
-      to.textContent = t(shut ? "super.direct.reopen" : "super.direct.to", {task: name});
-      to.title = t(shut ? "super.direct.reopen.tip" : "super.direct.to.tip");
-      to.classList.toggle("sa-reopen", shut);
+      const shut = isClosed(name), info = shut ? reopenOf(name) : null, n = shut ? direct.checks() : null;
+      const after = shut && n !== null && n > 0;  // checks after the close: the task stays closed (1.8.20)
+      sendCant = shut && !after && Boolean(info) && info.mode === "refused";
+      send.disabled = sendOff || sendCant;
+      drawMark(name, shut, info, after, n);
       direct.bind(name);
       const used = target ? target.text.length : 0;
       field.maxLength = SUPERDIRECT.MAX + (target ? typed.length - target.text.length : 0);
       counter.textContent = t("super.direct.count", {n: used, max: SUPERDIRECT.MAX});
       counter.classList.toggle("over", used >= SUPERDIRECT.MAX);
+    }
+    // The mark above the input (1.8.21): "To: task"; for a closed task "Reopen: task · what the reopen will be" with a Reopen only link (no chat, no message), a red "Cannot reopen" with the reason (and Open Recover when a promote wrote part), or "Checks after the close".
+    function drawMark(name, shut, info, after, n) {
+      const cant = shut && !after && Boolean(info) && info.mode === "refused", key = modeKey(info);
+      const sig = JSON.stringify([name, shut, after, n, info, reopening === name]);
+      if (sig === toSig) return;
+      toSig = sig;
+      to.className = "sa-to" + (shut ? " sa-reopen " + (after ? "new" : key === "same" ? "same" : cant ? "no" : "new") : "");
+      if (!shut) { to.textContent = t("super.direct.to", {task: name}); to.title = t("super.direct.to.tip"); return; }
+      const rest = after ? t(n === 1 ? "super.reopen.after.one" : "super.reopen.after.many", {n}) : modeLine(info);
+      const nodes = [h("b", {class: "sa-to-main"}, t(after ? "super.reopen.after.mark" : cant ? "super.reopen.cannot" : "super.direct.reopen", {task: name})), ...(rest ? [h("span", {class: "sa-to-rest"}, " \u00b7 " + rest)] : [])];
+      if (cant && key === "partial") { const link = taskLink(name, t("super.reopen.recover"), "sa-to-link"); link.title = t("super.reopen.recover.tip"); nodes.push(" ", link); }
+      else if (!after && !cant) {
+        const only = h("button", {type: "button", class: "sa-to-link", title: t("super.reopen.only.tip")}, t("super.reopen.only"));
+        only.disabled = reopening === name;
+        only.addEventListener("click", () => reopenOnly(name));
+        nodes.push(" ", only);
+      }
+      to.title = after ? t("super.direct.checks.after.hint") : cant ? rest : t("super.direct.reopen.tip");
+      to.replaceChildren(...nodes);
+    }
+    // The person opens a closed task again with no chat (the board's `reopen` action, paired page only): the same call for the mark and the card. {ok, text, new_round} or {ok: false, error}.
+    async function reopenCall(task) {
+      try {
+        const answer = await SERVE.post("/api/act", {action: "reopen", task, step: "act"});
+        const found = (answer && (answer.result || answer)) || {};
+        poll().then(schedule, schedule);
+        return {ok: true, new_round: Boolean(found.new_round), text: found.new_round ? t("super.reopen.done.new", {task, n: found.round}) : t("super.reopen.done.same", {task})};
+      } catch (error) { return {ok: false, error}; }
+    }
+    async function reopenOnly(task) {
+      if (reopening) return;
+      reopening = task;
+      drawDirect();
+      const result = await reopenCall(task);
+      reopening = "";
+      if (result.ok) addSys(result.text, task).classList.add("sa-dl");
+      else addSys(actBad(result.error), task, true).classList.add("sa-dl");
+      toSig = "";
+      drawDirect();
+      toBottom();
     }
     async function ask(body, text) {
       if (talkOff() || thinkingNow()) return;
@@ -1257,19 +1353,19 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
     // One direct message to one task (the input's, the card's and the pop-out's): {ok, how, text} with the line to show, or {ok: false, why, text}. Said in the task's thread, so the filter never hides it.
     // Not quiet: the person's words show as their own bubble (after the send, or at once when it may make a new chat: that takes long), then one line under it with the result. A refusal shows no bubble.
-    async function directSend(task, text, options, quiet) {
+    async function directSend(task, text, options, quiet, empty) {  // `empty`: a closed task may be reopened, or checked, with no words (1.8.21)
       const slow = !quiet && (Boolean(options && options.new_chat) || chatGone(rowFor(task)) || isClosed(task));
       let bubble = null, line = null;
       if (slow) {
-        bubble = addYou(text, new Date().toISOString(), task);
+        bubble = text ? addYou(text, new Date().toISOString(), task) : null;
         line = addSys(t(isClosed(task) ? "super.direct.reopening" : "super.direct.making", {task}), task, false, String(text).slice(0, 300));
         line.classList.add("sa-dl", "sa-pend");
       }
-      const result = await SUPERDIRECT.send(task, text, options);
+      const result = await SUPERDIRECT.send(task, text, options, empty || isClosed(task));
       if (!quiet) {
         const ok = result.ok;
         const nodes = ok ? [SUPERDIRECT.receipt(result.how, task, result) + (result.how === "said" ? " " + t("super.direct.skipped") : "")] : refusalNodes(task, result.why, result.error, (words) => { if (line && line.isConnected) { line.classList.remove("bad"); line.replaceChildren(words); } });
-        if (ok && !bubble) bubble = addYou(text, new Date().toISOString(), task);
+        if (ok && !bubble && text) bubble = addYou(text, new Date().toISOString(), task);
         if (!ok && bubble) { dropYou(bubble); bubble = null; }
         if (line) { line.className = "sa-sys sa-dl" + (ok ? "" : " bad"); line.replaceChildren(...nodes); line.title = String(text).slice(0, 300); }
         else line = addSys(nodes, task, !ok, String(text).slice(0, 300));
@@ -1292,10 +1388,13 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       if (!field.value) field.value = typed;  // refused: the words come back into the input
       field.dispatchEvent(new Event("input"));
     }
-    function submit() {
+    function submit(button) {
       const typed = field.value.trim();
-      if (!typed || routeBusy) return;
-      const target = routeTarget(typed);
+      if (routeBusy) return;
+      const bare = Boolean(button) && !typed && Boolean(filter) && isClosed(filter);  // the Send button with an empty box on a closed task: reopen it and hand it to the agent (1.8.21; Enter never does)
+      if (!typed && !bare) return;
+      const target = bare ? {task: filter, text: ""} : routeTarget(typed);
+      if (target && sendCant) return;  // a closed task that cannot be reopened
       if (target && direct.reading()) return;  // a file is still being read
       if (target) { submit_direct(target, typed); return; }
       const named = filter ? null : /^@([^\s,:;]+)/.exec(typed);  // "@name" that is no open task: never a question to the super agent (it costs Credits); the words stay in the box
@@ -1371,7 +1470,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       else if (event.key === "Escape") { event.preventDefault(); routePick = -1; routeNames = []; complete.hidden = true; }
     });
     field.addEventListener("input", () => { routePick = -1; routeComplete(); drawDirect(); });
-    send.addEventListener("click", submit);
+    send.addEventListener("click", () => submit(true));
     field.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); submit(); } });
     field.addEventListener("input", () => { setFold(false, false); field.style.height = "auto"; field.style.height = Math.min(120, field.scrollHeight) + "px"; });
     if (newTask) newTask.addEventListener("click", () => { const text = field.value.trim(); CHAT.create(text ? {text} : undefined); field.value = ""; });  // the text moved into the new-task dialog

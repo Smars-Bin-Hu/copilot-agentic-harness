@@ -59,7 +59,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
-from core import launchenv
+from core import launchenv, pace
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
@@ -2619,6 +2619,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     serving.start()  # 1.7.43: the page is answered as soon as the browser asks; before, the browser opened and waited until the terminal had said its lines
     if ready is None:
         board.ready.vs_running.get()  # is any VS Code running: the button of the Enter screen says Open or Restart from the first answer
+        threading.Thread(target=pace.measure_and_save, args=(root,), name="pace", daemon=True).start()  # 1.8.15: how slow this computer is, for every time limit after it
         board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104); 1.7.43: before the browser is asked to open, not after
 
     def button(action: str) -> str:  # the first line names the buttons as the board shows them (1.7.22), not as the command words

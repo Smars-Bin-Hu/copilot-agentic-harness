@@ -81,19 +81,105 @@ def ok() -> Dict[str, Any]:
     return {"_text": "", "exit_code": 0}
 
 
+class Wheel:
+    """The wheel in the terminal: one line, written over, cleared at the end."""
+
+    cancelled = False
+
+    def __init__(self, out: Any) -> None:
+        self.out = out
+        self.tty = boardserve.terminal(out)
+        self.shown = 0
+        self.turn = 0
+
+    def tick(self, stage: str, seconds: int) -> None:
+        line = f"{boardserve.WHEEL[self.turn % len(boardserve.WHEEL)]} " + say("serve.bg.wait", stage=stage_text(stage), seconds=seconds)
+        self.turn += 1
+        if self.tty:
+            try:
+                self.out.write("\r" + line + " " * max(0, self.shown - len(line)))
+                self.out.flush()
+            except (OSError, ValueError):  # a closed terminal: the wheel is a helper
+                self.tty = False
+            self.shown = len(line)
+
+    def end(self, text: str, lines: str = "", kind: str = "ready") -> None:
+        if self.shown:
+            try:
+                self.out.write("\r" + " " * self.shown + "\r")
+            except (OSError, ValueError):
+                pass
+            self.shown = 0
+        print(text, file=self.out, flush=True)
+        if lines:
+            print(lines, file=self.out, flush=True)
+
+
+class Both:
+    """The start window, and the same words in the terminal at the end (what stays after the window has gone)."""
+
+    def __init__(self, window: Any, out: Any) -> None:
+        self.window = window
+        self.wheel = Wheel(out)
+        self.wheel.tty = False
+
+    @property
+    def cancelled(self) -> bool:
+        return bool(self.window.cancelled)
+
+    def tick(self, stage: str, seconds: int) -> None:
+        self.window.tick(stage_text(stage), seconds)
+
+    def end(self, text: str, lines: str = "", kind: str = "ready") -> None:
+        self.wheel.end(text, lines, kind)
+        self.window.end(text, kind)
+
+
 def background(root: Path, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, *, start: Optional[Callable[..., Any]] = None, sleep: Callable[[float], Any] = time.sleep,
-               clock: Callable[[], float] = time.monotonic, limit: float = WAIT_LIMIT, every: float = boardserve.WHEEL_EVERY) -> Dict[str, Any]:
+               clock: Callable[[], float] = time.monotonic, limit: float = WAIT_LIMIT, every: float = boardserve.WHEEL_EVERY, splash: bool = False) -> Dict[str, Any]:
     """`task board --background`: reopen the board that runs, or start one in the background; a wheel with the seconds until the browser has the page. `start`, `sleep`, `clock` exist for the tests.
-    Exit 0 when the board runs (a page seen or not), 1 when it did not start."""
+    With `splash` (what the launchers ask for) the wheel is a small start window (`boardsplash`), when this Python can show one. Exit 0 when the board runs (a page seen or not), 1 when it did not start."""
     task_ops.person("task board --background", interactive, typed=False)
     out = out or sys.stdout
-    tty = boardserve.terminal(out)
+    window = None
+    if splash:
+        from . import boardsplash
+
+        window = boardsplash.open_window()
+    if window is None:
+        return wait(root, port, Wheel(out), start=start, sleep=sleep, clock=clock, limit=limit, every=every)
+    import threading
+
+    done: Dict[str, Any] = {}
+
+    def work() -> None:
+        ui = Both(window, out)
+        try:
+            done["result"] = wait(root, port, ui, start=start, sleep=sleep, clock=clock, limit=limit, every=every)
+        except CommandError as error:
+            done["error"] = error
+            ui.window.end(str(error), "failed")
+        except BaseException as error:  # noqa: BLE001 - shown, then raised again on the main thread
+            done["error"] = error
+            ui.window.end(str(error) or type(error).__name__, "failed")
+
+    thread = threading.Thread(target=work, name="board-start", daemon=True)
+    thread.start()
+    window.run()
+    thread.join(limit + 10)
+    if "error" in done:
+        raise done["error"]
+    return done.get("result", ok())
+
+
+def wait(root: Path, port: Optional[int], ui: Any, *, start: Optional[Callable[..., Any]], sleep: Callable[[float], Any], clock: Callable[[], float], limit: float, every: float) -> Dict[str, Any]:
+    """Start the board, or open the one that runs, then follow it until a paired page is open, shown on `ui` (the terminal wheel or the start window)."""
     child = None
     running = boardserve.running_board(root)
     if running:  # nothing in the running board changes: it opens the browser with a new code
         address = f"http://127.0.0.1:{running}/"
         if not boardserve.open_again(running):
-            print(say("serve.bg.not_opened", address=address), file=out, flush=True)
+            ui.end(say("serve.bg.not_opened", address=address), "", "warn")
             return ok()
         stage = "opening"
     else:
@@ -107,11 +193,11 @@ def background(root: Path, port: Optional[int] = None, out: Any = None, interact
             raise CommandError(say("serve.bg.spawn", error=error)) from error
         stage = "starting"
     began = clock()
-    shown = 0
-    turn = 0
     looked = -POLL_EVERY
     answered = running
     while True:
+        if ui.cancelled:  # the start window was closed: the board keeps running, the wait ends
+            return ok()
         seconds = clock() - began
         if seconds - looked >= POLL_EVERY:
             looked = seconds
@@ -122,46 +208,21 @@ def background(root: Path, port: Optional[int] = None, out: Any = None, interact
                 flags = boardserve.page_flags(answered)
                 stage = "pairing" if flags["page_seen"] else "opening"
                 if flags["page_paired"]:
-                    return finish(out, shown, say("serve.bg.already" if running else "serve.bg.running", address=f"http://127.0.0.1:{answered}/"))
+                    ui.end(say("serve.bg.already" if running else "serve.bg.running", address=f"http://127.0.0.1:{answered}/"))
+                    return ok()
             if not answered and child is not None and child.poll() is not None:
-                return failed(root, out, shown, say("serve.bg.why.died", code=child.returncode))
+                return failed(root, ui, say("serve.bg.why.died", code=child.returncode))
         if seconds >= limit:
             if answered:
-                return finish(out, shown, say("serve.bg.not_seen", address=f"http://127.0.0.1:{answered}/", stage=stage_text(stage)))
-            return failed(root, out, shown, say("serve.bg.why.late", seconds=int(limit)))
-        line = f"{boardserve.WHEEL[turn % len(boardserve.WHEEL)]} " + say("serve.bg.wait", stage=stage_text(stage), seconds=int(seconds))
-        turn += 1
-        if tty:
-            try:
-                out.write("\r" + line + " " * max(0, shown - len(line)))
-                out.flush()
-            except (OSError, ValueError):  # a closed terminal: the wheel is a helper
-                tty = False
-            shown = len(line)
+                ui.end(say("serve.bg.not_seen", address=f"http://127.0.0.1:{answered}/", stage=stage_text(stage)), "", "warn")
+                return ok()
+            return failed(root, ui, say("serve.bg.why.late", seconds=int(limit)))
+        ui.tick(stage, int(seconds))
         sleep(every)
 
 
-def clear(out: Any, shown: int) -> None:
-    if shown:
-        try:
-            out.write("\r" + " " * shown + "\r")
-        except (OSError, ValueError):
-            pass
-
-
-def finish(out: Any, shown: int, text: str) -> Dict[str, Any]:
-    clear(out, shown)
-    print(text, file=out, flush=True)
-    return ok()
-
-
-def failed(root: Path, out: Any, shown: int, why: str) -> Dict[str, Any]:
-    clear(out, shown)
-    path = log_path(root)
-    print(say("serve.bg.failed", why=why, log=path), file=out, flush=True)
-    lines = last_lines(path)
-    if lines:
-        print(lines, file=out, flush=True)
+def failed(root: Path, ui: Any, why: str) -> Dict[str, Any]:
+    ui.end(say("serve.bg.failed", why=why, log=log_path(root)), last_lines(log_path(root)), "failed")
     return {"_text": "", "exit_code": 1}
 
 

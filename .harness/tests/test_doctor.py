@@ -753,6 +753,7 @@ class LayoutTests(unittest.TestCase):
             "__future__", "argparse", "ast", "bisect", "codecs", "signal", "winreg", "statistics", "base64", "csv", "zipfile", "collections", "contextlib", "copy", "ctypes", "dataclasses", "datetime", "difflib", "hashlib", "hmac", "html", "http", "importlib", "io", "secrets", "threading", "xml",
             "concurrent", "json", "locale", "math", "msvcrt", "fcntl", "ntpath", "os", "pathlib", "pickle", "posixpath", "queue", "random", "re", "select", "shlex", "shutil", "socket", "ssl", "stat", "string", "struct", "subprocess", "sys", "tempfile", "time",
             "traceback", "typing", "unicodedata", "urllib", "uuid", "webbrowser",
+            "tkinter",  # optional in some Pythons: only boardsplash, which falls back to the terminal wheel without it
         }
         for path in sorted(ENGINE.rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))

@@ -7,5 +7,5 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-call .harness\bin\harness.cmd task board --background
+call .harness\bin\harness.cmd task board --background --splash
 if errorlevel 1 pause

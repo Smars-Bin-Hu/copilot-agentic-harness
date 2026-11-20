@@ -92,7 +92,7 @@ def list_text(result: Dict[str, Any]) -> str:
 def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
     person = approval.is_person()
     if args.background:
-        return boardbg.background(repo_root(), args.port)
+        return boardbg.background(repo_root(), args.port, splash=args.splash)
     if args.stop:
         return boardbg.stop(repo_root())
     if args.serve or (person and not args.once and args.refresh is None and not args.no_serve):  # a person gets the server by default
@@ -215,6 +215,7 @@ def register_task(subparsers: Any) -> None:
     how.add_argument("--background", action="store_true", help="what Start Harness runs (a person at a terminal): the board runs on its own in the background, its output in .harness/runtime/board.log, with a wheel here until the browser has opened the page; the terminal may be closed. A board that already runs is only opened again, nothing in it changes. Stop it with the button on its pages or with --stop")
     how.add_argument("--stop", action="store_true", help="a person at a terminal: ask the board of this copy to stop, and wait up to 30 s for it. Open tasks keep their state")
     how.add_argument("--no-serve", action="store_true", help="a person at a terminal: keep the page on disk fresh instead of serving it (no buttons that act, no task pages)")
+    board.add_argument("--splash", action="store_true", help="with --background (what Start Harness runs): a small start window instead of the wheel in the terminal, when this Python has tkinter and a screen; on Windows the launcher's console is hidden while it shows")
     board.add_argument("--port", type=int, default=None, help="with --serve: the port (default: board.port in task.json)")
     board.set_defaults(handler=cmd_board)
     shelf = commands.add_parser("archive", help="move closed tasks out of .workspace/sandbox/tasks/ into a folder you choose, usually outside the repository; one way. Without --apply it only says what would move")

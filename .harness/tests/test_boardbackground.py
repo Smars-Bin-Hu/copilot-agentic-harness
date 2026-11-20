@@ -233,6 +233,99 @@ class NoBoardTests(Home, TaskCase):
                 boardbg.background(self.root, interactive=True, start=mock.Mock())
 
 
+class FakeWindow:
+    """The start window without Tk: `run` waits until the wait has ended (or the person closed it)."""
+
+    def __init__(self, close_after: int = 0) -> None:
+        self.ticks: list = []
+        self.ends: list = []
+        self.cancelled = False
+        self.close_after = close_after
+        self.ended = threading.Event()
+
+    def tick(self, stage: str, seconds: int) -> None:
+        self.ticks.append((stage, seconds))
+        if self.close_after and len(self.ticks) >= self.close_after:
+            self.cancelled = True
+
+    def end(self, text: str, kind: str = "ready") -> None:
+        self.ends.append((text, kind))
+        self.ended.set()
+
+    def run(self) -> None:
+        while not self.ended.is_set() and not self.cancelled:
+            self.ended.wait(0.01)
+
+
+class SplashTests(Home, TaskCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.make_home()
+
+    def start(self, window, child, **more):
+        from modules.task import boardsplash
+
+        out = io.StringIO()
+        clock = Clock()
+        with mock.patch.object(boardsplash, "open_window", return_value=window):
+            found = boardbg.background(self.root, out=out, interactive=True, start=mock.Mock(return_value=child), sleep=clock.sleep, clock=clock, splash=True, **more)
+        return found, out.getvalue()
+
+    def test_a_failed_start_shows_in_the_window_and_the_terminal_keeps_the_log(self) -> None:
+        log = boardbg.log_path(self.root)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("last words\n", encoding="utf-8")
+        child = mock.Mock(returncode=3)
+        child.poll.return_value = 3
+        window = FakeWindow()
+        found, text = self.start(window, child)
+        self.assertEqual(found["exit_code"], 1)
+        self.assertEqual(len(window.ends), 1)
+        self.assertEqual(window.ends[0][1], "failed")
+        self.assertIn(messages.text("serve.bg.why.died", code=3), window.ends[0][0])
+        self.assertIn("last words", text, "the console, shown again for the pause, has the log lines")
+
+    def test_the_window_shows_the_stages_with_their_words_and_the_terminal_no_wheel(self) -> None:
+        child = mock.Mock()
+        child.poll.return_value = None
+        window = FakeWindow()
+        found, text = self.start(window, child, limit=3.0)
+        self.assertEqual(found["exit_code"], 1)
+        self.assertTrue(window.ticks)
+        self.assertEqual(window.ticks[0][0], messages.text("serve.bg.starting"))
+        self.assertNotIn("\r", text, "no wheel in the terminal behind the window")
+
+    def test_closing_the_window_ends_the_wait_and_leaves_the_board_running(self) -> None:
+        child = mock.Mock()
+        child.poll.return_value = None
+        window = FakeWindow(close_after=2)
+        found, _ = self.start(window, child)
+        self.assertEqual(found["exit_code"], 0)
+        self.assertFalse(window.ends)
+        child.terminate.assert_not_called()
+        child.kill.assert_not_called()
+
+    def test_no_tkinter_or_no_screen_falls_back_to_the_wheel(self) -> None:
+        from modules.task import boardsplash
+
+        child = mock.Mock(returncode=3)
+        child.poll.return_value = 3
+        out = io.StringIO()
+        clock = Clock()
+        with mock.patch.object(boardsplash, "open_window", return_value=None):
+            found = boardbg.background(self.root, out=out, interactive=True, start=mock.Mock(return_value=child), sleep=clock.sleep, clock=clock, splash=True)
+        self.assertEqual(found["exit_code"], 1)
+        self.assertIn(messages.text("serve.bg.why.died", code=3), out.getvalue())
+        with mock.patch.dict(sys.modules, {"tkinter": None}):
+            self.assertIsNone(boardsplash.open_window())
+
+    def test_the_console_is_left_alone_off_windows(self) -> None:
+        from modules.task import boardsplash
+
+        if os.name != "nt":
+            self.assertFalse(boardsplash.console(False))
+
+
 class LogTests(unittest.TestCase):
     def test_a_log_over_the_limit_becomes_dot_one_and_one_is_kept(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -319,6 +412,8 @@ class LaunchersTests(unittest.TestCase):
         sh = (root / "Start Harness.command").read_text(encoding="utf-8")
         self.assertIn("task board --background", cmd)
         self.assertIn("task board --background", sh)
+        self.assertIn("--background --splash", cmd)
+        self.assertIn("--background --splash", sh)
         self.assertEqual(cmd.count("pause"), 2)  # the missing Python, and an error of the board
         self.assertIn("if errorlevel 1 pause", cmd)
         self.assertIn("You can close this window", sh.strip().splitlines()[-1])

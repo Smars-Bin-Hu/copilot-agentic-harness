@@ -8,7 +8,7 @@ if ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; 
   exit 1
 fi
 echo "Starting the harness board. On a slow computer this takes a little while: the browser opens when it is ready."
-sh .harness/bin/harness task board --background
+sh .harness/bin/harness task board --background --splash
 code=$?
 if [ "$code" -ne 0 ]; then
   printf "The board did not start. Press Enter to close this window. "

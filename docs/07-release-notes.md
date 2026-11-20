@@ -24,7 +24,7 @@ To see which version you have: `harness --version`.
 - **A map of the task folder** (1.8.9): one place for each kind of file, in the rules the agent reads; no folder of its own. `generic-workflow-design` and `generic-workflow-build` follow it, so the skills they make do too.
 - **Trying a change in an environment before the plan** (1.8.10): the agent may prove a change in DEV first, each write approved by you; its script is `trial-<name>` at the task root; `PLAN.md` then lists those writes under `Done before the plan`, with their evidence and how to undo them. The plan step of the ribbon has a small orange mark while such writes exist; its hover names the environments.
 
-- **The board in the background** (1.8.11): Start Harness starts the board with no terminal window to keep open; its window shows a wheel through three stages (starting the board, waiting for the browser, pairing) and closes when a paired page is open. A second double-click only opens the board. The power button at the top right of every page stops it; `harness task board --stop` too.
+- **The board in the background** (1.8.11): Start Harness starts the board with no terminal window to keep open; a small start window shows three stages (starting the board, waiting for the browser, pairing) and closes by itself when a paired page is open (a wheel in the terminal when Python has no tkinter). A second double-click only opens the board. The power button at the top right of every page stops it; `harness task board --stop` too.
 - **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
 ### Fixed
 

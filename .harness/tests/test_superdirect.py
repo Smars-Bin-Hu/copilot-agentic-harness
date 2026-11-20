@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import unittest
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import support  # noqa: F401 - puts the engine on the path
@@ -405,6 +407,62 @@ class ReopenTests(DirectCase):
         with task_ops.locked(self.root, TASK) as data:
             data["paused"] = {"since": "2026-11-18T00:00:00+00:00"}
         self.assertEqual(self.post({"text": "x"}), {"ok": False, "why": "paused"})
+
+
+WEB = Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web"
+CORE = Path(__file__).resolve().parents[1] / "engine" / "core"
+NOT_WORDS = {"super.chatfold", "super.morning", "super.direct"}  # keys of the browser's storage, not message keys
+
+
+class PageWords(unittest.TestCase):
+    """1.8.21, the page side of the reopen modes (super.js, superdirect.js, super.css): no browser here, so the page's text is read."""
+
+    def source(self, name: str) -> str:
+        return (WEB / name).read_text(encoding="utf-8")
+
+    def test_every_key_the_super_view_names_is_in_both_languages(self) -> None:
+        tables = [json.loads((CORE / f"messages.{lang}.json").read_text(encoding="utf-8")) for lang in ("en", "zh")]
+        for name in ("super.js", "superdirect.js"):
+            for key in set(re.findall(r'"((?:super|send\.refused)\.[a-z0-9.]+)"', self.source(name))) - NOT_WORDS:
+                for table in tables:
+                    self.assertIn(key, table, f"{name}: {key}")
+
+    def test_the_new_words_sit_in_one_block_after_the_last_direct_key(self) -> None:
+        for lang in ("en", "zh"):
+            keys = list(json.loads((CORE / f"messages.{lang}.json").read_text(encoding="utf-8")))
+            at = keys.index("super.direct.how.after")
+            self.assertEqual(keys[at + 1], "super.closed.mode.new", lang)
+            self.assertEqual(keys[at + 29], "super.act.reopen.after.go", lang)
+
+    def test_a_chinese_text_is_in_no_page_file(self) -> None:
+        for name in ("super.js", "superdirect.js", "super.css"):
+            self.assertIsNone(re.search("[\u4e00-\u9fff]", self.source(name)), name)
+
+    def test_reopen_only_is_a_click_on_the_board_action_and_nothing_else_makes_it(self) -> None:
+        page = self.source("super.js")
+        self.assertEqual(len(re.findall(r'action: "reopen"', page)), 1)  # one place posts it: reopenCall
+        self.assertIn('SERVE.post("/api/act", {action: "reopen", task, step: "act"})', page)
+        self.assertEqual(len(re.findall(r"reopenCall\(", page)), 3)  # its definition, the mark's click and the card's click
+        self.assertNotIn("/api/act", self.source("superdirect.js"))
+
+    def test_the_checks_of_a_closed_task_are_named_checks_after_the_close(self) -> None:
+        menu = self.source("superdirect.js")
+        self.assertIn('t(shut ? "super.direct.checks.after.name" : "super.direct.checks.name")', menu)
+        self.assertIn("super.direct.checks.after.hint", menu)
+        self.assertIn("allowEmpty", menu)  # a closed task is reopened or checked with an empty box
+
+    def test_the_mark_and_the_card_keep_the_send_off_for_a_reopen_that_cannot_happen(self) -> None:
+        page = self.source("super.js")
+        self.assertIn('sendCant = shut && !after && Boolean(info) && info.mode === "refused"', page)
+        self.assertIn("if (target && sendCant) return;", page)
+        self.assertIn("go.disabled = cant;", page)  # the card
+
+    def test_the_closed_list_shows_the_mode_and_the_page_never_sends_nothing_to_an_open_task(self) -> None:
+        page = self.source("super.js")
+        self.assertIn('h("span", {class: "sa-cl-top"}, h("span", {class: "sa-cl-name"}, one.task), modeTag(one.reopen))', page)
+        self.assertIn("if (!typed && !bare) return;", page)  # Enter on an empty box sends nothing; only the Send button of a closed task does
+        self.assertIn("submit(true)", page)
+        self.assertEqual(superdirect.MAX_TEXT, 10000)
 
 
 if __name__ == "__main__":

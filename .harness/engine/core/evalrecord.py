@@ -200,7 +200,7 @@ def _close_at(state: Dict[str, Any]) -> Optional[float]:
 
 def _review(state: Dict[str, Any], passes: Any) -> Dict[str, Any]:
     review = state.get("review") if isinstance(state.get("review"), dict) else {}
-    here = [item for item in review.get("rounds") or [] if isinstance(item, dict) and item.get("task_round") == state.get("round")]
+    here = [item for item in review.get("rounds") or [] if isinstance(item, dict) and item.get("task_round") == state.get("round") and not item.get("after")]  # checks after the close (1.8.18) are not the task's own
     done = [item for item in here if item.get("verdict") and not item.get("refunded") and not item.get("dismissed")]
     waived = review.get("waived")
     return {

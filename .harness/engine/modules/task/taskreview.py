@@ -133,38 +133,63 @@ def counted(item: Dict[str, Any]) -> bool:
     return bool(item.get("verdict")) and not item.get("refunded") and not item.get("dismissed")
 
 
-def done_now(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """The finished checks of the current round of the task that count, in order."""
-    return [item for item in rounds_now(data) if counted(item)]
+def done_now(data: Dict[str, Any], after: bool = False) -> List[Dict[str, Any]]:
+    """The finished checks of the current round of the task that count, in order. `after`: the checks after the close instead."""
+    return [item for item in rounds_now(data, after) if counted(item)]
 
 
-def rounds_now(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """The checks of the task's current round (a new round after a promote starts the count again)."""
-    return [item for item in state_of(data)["rounds"] if item.get("task_round") == data["round"]]
+def rounds_now(data: Dict[str, Any], after: bool = False) -> List[Dict[str, Any]]:
+    """The checks of the task's current round (a new round after a promote starts the count again). The checks after the close (`after`, 1.8.18)
+    are kept apart: they are never the task's own checks, so they move no gate, dot or count of the work."""
+    return [item for item in state_of(data)["rounds"] if item.get("task_round") == data["round"] and bool(item.get("after")) == after]
 
 
-def pending(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    found = [item for item in rounds_now(data) if not item.get("verdict")]
+def pending(data: Dict[str, Any], after: bool = False) -> Optional[Dict[str, Any]]:
+    found = [item for item in rounds_now(data, after) if not item.get("verdict")]
     return found[-1] if found else None
 
 
-def passes(data: Dict[str, Any], digest: str) -> int:
+def passes(data: Dict[str, Any], digest: str, after: bool = False) -> int:
     """Passes in a row, counted back from the last check, all on the result as it is now."""
     count = 0
-    for item in reversed(done_now(data)):
+    for item in reversed(done_now(data, after)):
         if item["verdict"] != "PASS" or item["digest"] != digest or not digest:
             break
         count += 1
     return count
 
 
-def limit(root: Path, data: Dict[str, Any]) -> int:
+def limit(root: Path, data: Dict[str, Any], after: bool = False) -> int:
     review = state_of(data)
+    if after:
+        found = after_of(data)
+        return int(found.get("n") or 0) + settings(root)["extra_checks"] + int(found.get("extra") or 0)
     return review["n"] + settings(root)["extra_checks"] + review["extra"]
 
 
-def used(data: Dict[str, Any]) -> int:
-    return len(done_now(data))
+def used(data: Dict[str, Any], after: bool = False) -> int:
+    return len(done_now(data, after))
+
+
+# --- checks after the close (1.8.18) -----------------------------------------------------------------
+# A closed task that had no checks can be checked afterwards: the person sets n (`task review set` on the closed task, or `[review]=n` in a prompt
+# of a session that holds no open task), the agent binds its session with `task review after`, then runs `review start` and the reviewer as usual.
+# The task stays closed: no new round, DEV/ is not moved, nothing is promoted. A FAIL is only recorded; a fix is a new task (`task fork`).
+
+
+def after_of(data: Dict[str, Any]) -> Dict[str, Any]:
+    """`review.after` of the task: n, who set it and when, the session that checks it. Empty when the person never asked for checks after the close."""
+    found = state_of(data).get("after")
+    return found if isinstance(found, dict) else {}
+
+
+def is_after(data: Dict[str, Any]) -> bool:
+    """The task is closed: a check of it now is a check after the close."""
+    return data.get("status") == "closed"
+
+
+def after_n(data: Dict[str, Any]) -> int:
+    return int(after_of(data).get("n") or 0)
 
 
 def has_something(root: Path, task: str, data: Dict[str, Any]) -> bool:
@@ -182,9 +207,9 @@ def is_settled(data: Dict[str, Any]) -> bool:
     return data.get("status") == "closed" or (data.get("promote") or {}).get("state") == "done"
 
 
-def streak(data: Dict[str, Any]) -> int:
+def streak(data: Dict[str, Any], after: bool = False) -> int:
     """The passes in a row at the end of the checks of this round, all on the version the last check looked at. From the records alone."""
-    done = done_now(data)
+    done = done_now(data, after)
     if not done:
         return 0
     last, count = done[-1].get("digest"), 0
@@ -257,6 +282,16 @@ def summary(root: Path, task: str, data: Dict[str, Any], settled: bool = False) 
     }
 
 
+def after_summary(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """The checks after the close, with the keys of `summary`. The passes are counted on the files as they are now: a closed task's result does not change."""
+    done = done_now(data, True)
+    digest = tasksnap.results_digest(root, task)
+    return {
+        "n": after_n(data), "passes": passes(data, digest, True), "checks_used": used(data, True), "checks_limit": limit(root, data, True),
+        "pending_round": (pending(data, True) or {}).get("number"), "last_verdict": done[-1]["verdict"] if done else "", "waived": False, "digest": digest,
+    }
+
+
 def satisfied(root: Path, task: str, data: Dict[str, Any]) -> bool:
     info = summary(root, task, data)
     return info["n"] == 0 or info["passes"] >= info["n"] or info["waived"]
@@ -283,6 +318,8 @@ def round_dir(task: str, number: int) -> str:
 def package_text(root: Path, task: str, data: Dict[str, Any], entry: Dict[str, Any], files: List[Dict[str, Any]], diff_file: str, previous: Optional[Dict[str, Any]]) -> str:
     lines = [say("review.package.title", name=task_ops.name_of(task), number=entry["number"]), ""]
     lines.append(say("review.package.first") if entry["ordinal"] == 1 else say("review.package.later", ordinal=entry["ordinal"]))
+    if entry.get("after"):
+        lines += ["", say("review.package.after")]
     lines += ["", say("review.package.requirement"), ""]
     folder = tasks.task_dir(root, task)
     for name in (tasks.REQ_FILE, tasks.PLAN_NAME):
@@ -356,63 +393,75 @@ def mark_run(root: Path, task: str, data: Dict[str, Any]) -> str:
     return say("review.runs_marked", env=env, what=what, folder=f"{task}/{reviewcheck.RUNS_DIR}/{env}/", req=f"{task}/{tasks.REQ_FILE}")
 
 
+def require_checkable(data: Dict[str, Any]) -> bool:
+    """An open task, or a closed one whose person asked for checks after the close. True for the latter."""
+    if is_after(data):
+        if after_n(data) == 0:
+            raise CommandError(say("review.after.off", task=data["task"]))
+        return True
+    task_ops.require_open(data)
+    if state_of(data)["n"] == 0:
+        raise CommandError(say("review.off"))
+    return False
+
+
 def start(root: Path, raw_task: str = "") -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     early = ""
     with task_ops.locked(root, task) as data:  # what refuses before a round: no check is used; a run that is not back is handed to the person
-        task_ops.require_open(data)
-        review = state_of(data)
-        if review["n"] == 0:
-            raise CommandError(say("review.off"))
+        after = require_checkable(data)
         if not has_something(root, task, data):
             raise CommandError(say("review.nothing", task=task))
         early = not_ready(root, task, data)
-        if early and not data.get("handoff"):
+        if early and not data.get("handoff") and not after:
             early = mark_run(root, task, data) or early
     if early:
         raise CommandError(early)
     with task_ops.locked(root, task) as data:
-        task_ops.require_open(data)
+        after = require_checkable(data)
         review = state_of(data)
+        wanted = after_n(data) if after else review["n"]
         early = not_ready(root, task, data)
         if early:
             raise CommandError(early)
         digest = tasksnap.results_digest(root, task)
-        if passes(data, digest) >= review["n"]:
-            raise CommandError(say("review.enough", n=review["n"]))
-        waiting = pending(data)
-        if waiting is None and used(data) >= limit(root, data):
-            raise CommandError(say("review.limit", used=used(data), limit=limit(root, data), task=task))
+        if passes(data, digest, after) >= wanted:
+            raise CommandError(say("review.after.enough" if after else "review.enough", n=wanted))
+        waiting = pending(data, after)
+        if waiting is None and used(data, after) >= limit(root, data, after):
+            raise CommandError(say("review.after.limit" if after else "review.limit", used=used(data, after), limit=limit(root, data, after), task=task))
         diff_file = ""
         if any(relative.lower().startswith(tasks.DEV_NAME.lower() + "/") for relative, _ in tasksnap.result_files(root, task)) and (data.get("target_files") or data.get("manual_files")):
             _, text = task_ops.changes(root, task, data)
             path = tasks.task_dir(root, task) / tasks.CHANGES_NAME
             path.write_text(text, encoding="utf-8")
             diff_file = f"{task}/{tasks.CHANGES_NAME}"
-        done = done_now(data)
+        done = done_now(data, after)
         number = waiting["number"] if waiting else len(review["rounds"]) + 1
         snapshot = tasksnap.take(root, task, f"review-{number:03d}")
-        entry = waiting or {"number": number, "task_round": data["round"]}
+        entry = waiting or {"number": number, "task_round": data["round"], **({"after": True} if after else {})}
         entry.update(digest=snapshot["digest"], started_at=utc_now(), snapshot=snapshot["snapshot"], ordinal=len(done) + 1, verdict="")
         if waiting is None:
             review["rounds"].append(entry)
         previous = done[-1] if done and done[-1]["verdict"] != "PASS" else None
-        given_back = [item for item in rounds_now(data) if item.get("refunded") and item.get("number") != number]
+        given_back = [item for item in rounds_now(data, after) if item.get("refunded") and item.get("number") != number]
         if given_back and (not done or given_back[-1]["number"] > done[-1]["number"]):
             previous = given_back[-1]
         folder = root / round_dir(task, number)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / PACKAGE).write_text(package_text(root, task, data, entry, snapshot["files"], diff_file, previous), encoding="utf-8")
-        task_ops.note(data, "review-start", f"round-{number:03d}")
+        task_ops.note(data, "review-start", f"round-{number:03d}" + (" after" if after else ""))
         package = f"{round_dir(task, number)}/{PACKAGE}"
-        info = {"n": review["n"], "passes": passes(data, snapshot["digest"]), "checks_used": used(data), "checks_limit": limit(root, data)}
-    return {"task": task, "round": number, "package": package, "snapshot": snapshot["snapshot"], **info, "next": say("review.start.next", agent=AGENT, package=package)}
+        info = {"n": wanted, "passes": passes(data, snapshot["digest"], after), "checks_used": used(data, after), "checks_limit": limit(root, data, after), "after": after}
+    following = say("review.after.start.next", agent=AGENT, package=package, task=task_ops.name_of(task)) if after else say("review.start.next", agent=AGENT, package=package)
+    return {"task": task, "round": number, "package": package, "snapshot": snapshot["snapshot"], **info, "next": following}
 
 
 def record(root: Path, task: str, answer: str) -> Optional[Dict[str, Any]]:
     """Called by the hook when the reviewer's call has finished: close the open round with what it said. None if no round is open."""
     with task_ops.locked(root, task) as data:
-        entry = pending(data)
+        after = is_after(data)
+        entry = pending(data, after)
         if entry is None:
             return None
         verdict = parse_verdict(answer)
@@ -424,29 +473,51 @@ def record(root: Path, task: str, answer: str) -> Optional[Dict[str, Any]]:
                 found = {"dropped": [], "invalid": False}
             entry["dropped"] = found["dropped"]
             if found["invalid"]:
-                given = len([item for item in rounds_now(data) if item.get("refunded")])
+                given = len([item for item in rounds_now(data, after) if item.get("refunded")])
                 entry["invalid"] = True
                 entry["refunded"] = given < settings(root)["free_invalid"]
         folder = root / round_dir(task, entry["number"])
         folder.mkdir(parents=True, exist_ok=True)
         (folder / VERDICT_FILE).write_text(answer.rstrip() + "\n", encoding="utf-8")
-        task_ops.note(data, "review", f"round-{entry['number']:03d} {verdict}" + (" invalid" if entry.get("invalid") else ""))
+        task_ops.note(data, "review", f"round-{entry['number']:03d} {verdict}" + (" invalid" if entry.get("invalid") else "") + (" after" if after else ""))
         digest = tasksnap.results_digest(root, task)
-        info = {"verdict": verdict, "invalid": bool(entry.get("invalid")), "refunded": bool(entry.get("refunded")), "dropped": len(entry.get("dropped") or []), "round": entry["number"], "n": state_of(data)["n"], "passes": passes(data, digest), "checks_used": used(data), "checks_limit": limit(root, data)}
+        info = {"verdict": verdict, "invalid": bool(entry.get("invalid")), "refunded": bool(entry.get("refunded")), "dropped": len(entry.get("dropped") or []), "round": entry["number"], "n": after_n(data) if after else state_of(data)["n"], "passes": passes(data, digest, after), "checks_used": used(data, after), "checks_limit": limit(root, data, after), "after": after}
     return info
 
 
 def status(root: Path, raw_task: str = "") -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     data = task_ops.read(root, task)
-    info = summary(root, task, data, settled=True)
+    info = after_summary(root, task, data) if is_after(data) and after_of(data) else summary(root, task, data, settled=True)
     info.pop("digest")
     info["task"] = task
     info["next"] = next_text(root, task, data)
     return info
 
 
+def after_next(root: Path, task: str, data: Dict[str, Any]) -> str:
+    """What comes next in the checks after the close. A FAIL changes nothing in the task: a fix is a new task."""
+    info = after_summary(root, task, data)
+    if info["n"] == 0:
+        return say("review.after.off", task=task)
+    if info["pending_round"]:
+        return say("review.after.start.next", agent=AGENT, package=f"{round_dir(task, info['pending_round'])}/{PACKAGE}", task=task_ops.name_of(task))
+    done = done_now(data, True)
+    fail = f"{round_dir(task, done[-1]['number'])}/{VERDICT_FILE}" if done and done[-1]["verdict"] != "PASS" else ""
+    if info["passes"] >= info["n"]:
+        return say("review.after.done", n=info["n"])
+    if not has_something(root, task, data):
+        return say("review.nothing", task=task)
+    if info["checks_used"] >= info["checks_limit"]:
+        return say("review.after.limit", used=info["checks_used"], limit=info["checks_limit"], task=task) + (" " + say("review.after.fail", verdict=fail, name=task_ops.name_of(task)) if fail else "")
+    if fail:
+        return say("review.after.fail", verdict=fail, name=task_ops.name_of(task)) + " " + say("review.after.more", left=info["n"] - info["passes"], task=task_ops.name_of(task))
+    return say("review.after.more", left=info["n"] - info["passes"], task=task_ops.name_of(task))
+
+
 def next_text(root: Path, task: str, data: Dict[str, Any]) -> str:
+    if is_after(data) and after_of(data):
+        return after_next(root, task, data)
     info = summary(root, task, data)
     if info["n"] == 0:
         return say("review.off")
@@ -483,6 +554,8 @@ def set_by_person(root: Path, raw_task: str, number: int, interactive: Optional[
         raise CommandError(say("review.set.range", max=top))
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
+        if is_after(data):
+            return set_after(root, task, data, number, "person")
         task_ops.require_open(data)
         review = state_of(data)
         before = review["n"]
@@ -491,6 +564,48 @@ def set_by_person(root: Path, raw_task: str, number: int, interactive: Optional[
             review["set"] = {"n": number, "at": utc_now()}
             task_ops.note(data, "review-set", f"{before} -> {number}")
         return {"task": task, "n": number, "was": before, "changed": before != number, "checks_limit": limit(root, data), "next": say("review.set.next", n=number)}
+
+
+def set_after(root: Path, task: str, data: Dict[str, Any], number: int, by: str) -> Dict[str, Any]:
+    """Set n of the checks after the close, inside the caller's lock. `by`: `person` (the page or the terminal) or `prompt` (`[review]=n` in the person's words)."""
+    found = state_of(data).setdefault("after", {})
+    before = int(found.get("n") or 0)
+    number = min(number, settings(root)["max_n"])
+    if before != number:
+        found["n"] = number
+        found["set"] = {"n": number, "at": utc_now(), "by": by}
+        task_ops.note(data, "review-after-set", f"{before} -> {number}")
+    return {"task": task, "n": number, "was": before, "changed": before != number, "after": True, "checks_limit": limit(root, data, True), "next": say("review.after.set.next", n=number, task=task_ops.name_of(task))}
+
+
+def bind_after(root: Path, raw_task: str, session_id: str, surface: str = "vscode") -> Dict[str, Any]:
+    """`task review after`: this session checks a closed task. n is the person's: set on the page or at a terminal, or the `[review]=n` the hook kept from
+    the person's prompt in this session (`review_n`, set again by every prompt). The task stays closed; the session keeps it as `after_review`, where the
+    gate finds the task of a reviewer call when the session holds no open task."""
+    from core.state import admin_on, session, state_path
+
+    task = task_ops.resolve(root, raw_task)
+    if not state_path(root, surface, session_id).exists():
+        raise CommandError(say("task.session.missing", session_id=session_id))
+    with session(root, surface, session_id) as state:
+        if state.get("parent_session_id") or admin_on(state):
+            raise CommandError(say("review.after.session"))
+        asked = (state["modules"].get("task") or {}).get("review_n")
+        with task_ops.locked(root, task) as data:
+            if not is_after(data):
+                raise CommandError(say("review.after.open", task=task_ops.name_of(task)))
+            if isinstance(asked, int) and not isinstance(asked, bool) and asked > 0:
+                set_after(root, task, data, asked, "prompt")
+            if after_n(data) == 0:
+                raise CommandError(say("review.after.off", task=task))
+            if not has_something(root, task, data):
+                raise CommandError(say("review.nothing", task=task))
+            after_of(data).update(session=session_id, surface=surface, bound_at=utc_now())
+            task_ops.note(data, "review-after", say("task.note.session", session_id=session_id))
+        state["after_review"] = task
+    data = task_ops.read(root, task)
+    info = after_summary(root, task, data)
+    return {"task": task, "n": info["n"], "after": True, "passes": info["passes"], "checks_used": info["checks_used"], "checks_limit": info["checks_limit"], "next": after_next(root, task, data)}
 
 
 def checks_ok(root: Path, number: Any) -> bool:

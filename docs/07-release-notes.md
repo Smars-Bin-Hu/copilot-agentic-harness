@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.17 (1.8.0 – 1.8.17, 2026-11-17 – 2026-11-20)
+## 1.8.18 (1.8.0 – 1.8.18, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -29,6 +29,7 @@ To see which version you have: `harness --version`.
 - **Open a closed task again from the super view** (1.8.17): **Closed (n)** at the end of the avatars lists the recently closed tasks; pick one (or `@name`) and send a message, and the board makes a new chat that opens the task again and then gives your words. The send menu has **Independent checks** (no change, 0 up to the board's limit), for that one message; on a closed task they are set once it is open again. The super agent can propose the same as a `reopen` card you press. Only your press sets checks.
 - **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
 - **Green stamps on the Requirement, Changes and Scripts tabs** (1.8.16): the Requirement tab says when you confirmed it and with which code, amber when it changed since, as the Plan tab does; Changes says when the work was written back, to which branch, with the promote's code; a script of `DEV/_server/` that the gate let through shows **ran on DEV ×N**, each run in the hover (it says the call ran, not how it ended).
+- **Checks of a closed task** (1.8.18): a task closed without independent checks can be checked afterwards. Write `[review]=n` with its name in a chat, or set **Checks after the close** on its page; the agent runs `harness task review after <task>` and the reviewer. The task stays closed, `DEV/` is not moved, nothing is promoted. The page and the report show these checks in a block of their own; a FAIL is only recorded (fix it in a new task with `task fork`).
 
 ### Fixed
 
@@ -47,6 +48,7 @@ To see which version you have: `harness --version`.
 - On a slow work computer the Enter screen turned Enter off with every line green, saying the board did not answer (1.8.13): the board works the answer out on a thread of its own and sends the last one at once; one late answer is not counted, and while the last answer was ready (two minutes at most) Enter stays on and an amber line says the board is slow. An answer that took over 3 seconds is written to `.harness/runtime/board.log` with the time of each part.
 - `harness doctor` often ran out of its 300 seconds on a work computer (1.8.13): the target repositories are checked from their files, with no git command; uncommitted files are checked by promote when it writes. **Check again** shows the progress bar of the run it started.
 - VS Code had been open for minutes and the Enter screen still said to open it (1.8.13): the board looks for a VS Code window on a thread of its own, every 2 seconds, not only between two tries to reach VS Code.
+- Opening a closed task again failed on Windows with `WinError 5` when something had a file under `DEV/` open (1.8.18): the move of `DEV/` aside is tried again for 5 seconds; if it is still refused, the message says which folder and what to close, and the task is left as it was.
 
 ### Retired
 

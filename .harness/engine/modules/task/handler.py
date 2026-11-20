@@ -54,6 +54,17 @@ def open_task(ctx: Context) -> Optional[Dict[str, Any]]:
     return tasks.open_of(ctx.root, ctx.state)
 
 
+def after_task(ctx: Context) -> Optional[Dict[str, Any]]:
+    """The closed task this session checks after the close (`task review after`, 1.8.18), or None. Only while it is closed and the person asked for checks."""
+    from . import taskreview
+
+    name = ctx.state.get("after_review")
+    if not name:
+        return None
+    data = tasks.read(ctx.root, name)
+    return data if data and taskreview.is_after(data) and taskreview.after_n(data) > 0 else None
+
+
 def is_subagent_session(ctx: Context) -> bool:
     """A subagent runs in a session of its own, linked to its parent by core."""
     return bool(ctx.state.get("parent_session_id"))
@@ -169,8 +180,16 @@ def prompt_text(ctx: Context, asked: Optional[int] = None) -> str:
         lines.append(task_text(ctx, keep_review(ctx, data, asked)))
         return "\n".join(lines)
     lines.append(say("rules.task.entry"))
-    if asked:
-        lines.append(say("rules.review.no_task", n=asked))
+    checked = after_task(ctx)
+    if checked is not None:
+        from . import task as task_ops, taskreview
+
+        if asked:  # the person's words: the n of the closed task this session checks
+            with task_ops.locked(ctx.root, checked["task"]) as again:
+                taskreview.set_after(ctx.root, checked["task"], again, asked, "prompt")
+        lines.append(say("rules.review.after", task=checked["task"], next=taskreview.after_next(ctx.root, checked["task"], tasks.read(ctx.root, checked["task"]) or checked)))
+    elif asked:
+        lines.append(say("rules.review.no_task", n=asked, session_id=ctx.state["session_id"]))
     listed = open_tasks_text(ctx)
     if listed:
         lines.append(listed)
@@ -288,7 +307,12 @@ def on_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return mapreduce.on_call(ctx)
     data = open_task(ctx)
     if data is None:
-        return Decision(permission="deny", reason=say("rules.subagent.no_task", called=called, agent=taskreview.AGENT), facts={"kind": "subagent"})
+        checked = after_task(ctx) if called.lower() == taskreview.AGENT else None
+        if checked is None:
+            return Decision(permission="deny", reason=say("rules.subagent.no_task", called=called, agent=taskreview.AGENT), facts={"kind": "subagent"})
+        if taskreview.pending(checked, True) is None:  # a check after the close (1.8.18): only with its round open, as for an open task
+            return Decision(permission="deny", reason=say("review.call.no_round", agent=taskreview.AGENT), facts={"kind": "task-subagent"})
+        return None
     if called.lower() == WORKER:
         return worker_call(event, ctx, data)
     if called.lower() != taskreview.AGENT:
@@ -335,9 +359,14 @@ def on_subagent_start(event: HookEvent, ctx: Context) -> Optional[Decision]:
         if not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
             return None
         return Decision(context=say("autorun.start.worker", task=data["task"]) + "\n" + say("rules.language"))
-    if data is None or event.agent_type.strip().lower() != taskreview.AGENT:
+    if event.agent_type.strip().lower() != taskreview.AGENT:
         return None
-    waiting = taskreview.pending(data)
+    after = False
+    if data is None:
+        data, after = after_task(ctx), True
+    if data is None:
+        return None
+    waiting = taskreview.pending(data, after)
     if waiting is None:
         return None
     package = f"{taskreview.round_dir(data['task'], waiting['number'])}/{taskreview.PACKAGE}"
@@ -392,8 +421,10 @@ def on_review_done(event: HookEvent, ctx: Context) -> Optional[Decision]:
     """The reviewer's call has finished: what it said closes the open check."""
     from . import taskreview
 
-    data = open_task(ctx)
-    if data is None or event.tool_kind != "subagent" or event.subagent_target.strip().lower() != taskreview.AGENT:
+    if event.tool_kind != "subagent" or event.subagent_target.strip().lower() != taskreview.AGENT:
+        return None
+    data = open_task(ctx) or after_task(ctx)
+    if data is None:
         return None
     info = taskreview.record(ctx.root, data["task"], event.tool_response)
     if info is None:

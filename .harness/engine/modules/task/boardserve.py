@@ -634,7 +634,7 @@ class Board:
         """The row `Task settings` of the task page: the checks (0 to the cap), and the model and thinking level of the messages the board sends, from the models the host lists."""
         data = tasks.read(self.root, task) or {}
         model = chatsend.model_of(data) or {}
-        return {"n": taskreview.state_of(data)["n"], "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel") or (model.get("config") or {}).get("tier", ""), "context": (model.get("config") or {}).get("contextSize", 0), "options": self.link.chat_options(task),
+        return {"n": taskreview.state_of(data)["n"], "after_n": taskreview.after_n(data), "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel") or (model.get("config") or {}).get("tier", ""), "context": (model.get("config") or {}).get("contextSize", 0), "options": self.link.chat_options(task),
                 "models": self.link.model_list(), "ready": bool(self.link.status()["ready"])}
 
     def keep_override(self, key: str, value: Any) -> None:

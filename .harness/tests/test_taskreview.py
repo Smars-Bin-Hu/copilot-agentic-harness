@@ -386,6 +386,123 @@ class StopTests(ReviewCase):
         self.assertIn("TASK.md", reason)
 
 
+class AfterTests(ReviewCase):
+    """Checks of a closed task, after the close (1.8.18): the task stays closed, no new round, a FAIL is only recorded."""
+
+    def closed(self) -> None:
+        self.job(0)
+        self.cli_json("task", "close", "--task", "job")
+
+    def after(self, session: str = S1) -> Dict[str, Any]:
+        return self.cli_json("task", "review", "after", "job", "--session-id", session)
+
+    def after_check(self, text: str = PASS) -> Dict[str, Any]:
+        started = self.cli_json("task", "review", "start", "--task", "job")
+        self.assertEqual(self.call(), {})
+        self.answer(text)
+        return started
+
+    def test_a_closed_task_is_checked_twice_and_stays_closed(self) -> None:
+        self.closed()
+        before = self.data()
+        prompt = self.say("[review]=2 给已关闭的 job 做独立检查")
+        self.assertIn("task review after", json.dumps(prompt, ensure_ascii=False))  # the rule leads to the check after the close, not to `task open`
+        bound = self.after()
+        self.assertEqual((bound["n"], bound["passes"], bound["after"]), (2, 0, True))
+        started = self.after_check()
+        self.assertTrue(started["after"])
+        self.assertIn("--task job", started["next"])
+        self.assertIn("这次是关闭以后的检查", (self.root / started["package"]).read_text(encoding="utf-8"))
+        self.after_check()
+        data = self.data()
+        self.assertEqual((data["status"], data["round"], data["review"]["n"]), ("closed", before["round"], 0))  # the task's own checks are untouched
+        self.assertEqual([(item["verdict"], item.get("after")) for item in data["review"]["rounds"]], [("PASS", True), ("PASS", True)])
+        self.assertEqual(data["review"]["after"]["n"], 2)
+        self.assertTrue((self.folder() / "REVIEW" / "round-002" / "verdict.md").is_file())
+        info = self.cli_json("task", "review", "status", "--task", "job")
+        self.assertEqual((info["n"], info["passes"], info["checks_used"]), (2, 2, 2))
+        self.assertIn("通过了用户要求的 2 次检查", info["next"])
+        self.assertEqual(taskreview.dots(data)["total"], 0)  # the board's dots of the work do not count them
+        self.assertIn("2 次事后检查", self.refused("task", "review", "start", "--task", "job"))
+
+    def test_the_page_and_the_report_keep_them_apart_from_the_task_s_own_checks(self) -> None:
+        from modules.task import task_report, taskdesk, taskstages
+
+        self.closed()
+        self.say("[review]=2 查 job")
+        self.after()
+        self.after_check()
+        data = self.data()
+        page = taskdesk.reviews(self.root, JOB, data)
+        self.assertEqual((page["n"], page["rounds"]), (0, []))
+        self.assertEqual((page["after"]["n"], page["after"]["passes"], page["after"]["used"], [item["number"] for item in page["after"]["rounds"]]), (2, 1, 1, [1]))
+        self.assertIsNone(taskstages.reviewer(self.root, JOB, data))  # the stage ribbon of the work has no checks
+        text = task_report.render(self.root, JOB, data)
+        self.assertIn("这一轮没有做过独立检查", text)
+        self.assertIn("## 事后检查", text)
+        self.assertIn(f"{JOB}/REVIEW/round-001/verdict.md", text.split("## 事后检查")[1])
+        from core import evalrecord
+        from modules.task import taskinsight
+
+        self.assertEqual(taskinsight.review_rounds(data), [])
+        self.assertEqual((evalrecord._review(data, None)["rounds"], evalrecord._review(data, None)["valid"]), (0, 0))
+
+    def test_without_the_persons_n_nothing_starts_and_the_reviewer_is_refused(self) -> None:
+        self.closed()
+        self.say("给 job 做独立检查")
+        self.assertIn("用户没有要求", self.refused("task", "review", "after", "job", "--session-id", S1))
+        self.assertIn("用户没有要求", self.refused("task", "review", "start", "--task", "job"))
+        self.assertEqual(self.call()["permissionDecision"], "deny")
+        self.assertNotIn("after", self.data().get("review", {}))
+
+    def test_the_marker_holds_for_the_turn_it_was_written_in_only(self) -> None:
+        self.closed()
+        self.say("[review]=1 查 job")
+        self.say("好的，开始")  # a later prompt without the marker: the agent cannot use the earlier one
+        self.assertIn("用户没有要求", self.refused("task", "review", "after", "job", "--session-id", S1))
+
+    def test_the_reviewer_needs_an_open_round(self) -> None:
+        self.closed()
+        self.say("[review]=1 查 job")
+        self.after()
+        self.assertEqual(self.call()["permissionDecision"], "deny")
+
+    def test_a_fail_is_only_recorded_and_the_person_is_pointed_at_a_fork(self) -> None:
+        self.closed()
+        self.say("[review]=1 查 job")
+        self.after()
+        self.after_check(FAIL)
+        data = self.data()
+        self.assertEqual((data["status"], data["round"]), ("closed", 1))
+        self.assertEqual(data["review"]["rounds"][-1]["verdict"], "FAIL")
+        info = self.cli_json("task", "review", "status", "--task", "job")
+        self.assertIn("task fork", info["next"])
+        self.assertIn("round-001/verdict.md", info["next"])
+
+    def test_the_person_sets_n_of_a_closed_task_on_its_page(self) -> None:
+        self.closed()
+        found = taskreview.set_by_person(self.root, JOB, 3, interactive=True)
+        self.assertEqual((found["n"], found["after"]), (3, True))
+        data = self.data()
+        self.assertEqual((data["review"]["n"], data["review"]["after"]["n"], data["review"]["after"]["set"]["by"]), (0, 3, "person"))
+        self.say("查一下已关闭的 job")
+        self.assertEqual(self.after()["n"], 3)  # no marker needed: the person set it
+
+    def test_an_open_task_is_not_checked_this_way(self) -> None:
+        self.job(0)
+        self.say("[review]=1")
+        self.assertIn("是打开的", self.refused("task", "review", "after", "job", "--session-id", S1))
+
+    def test_picking_up_a_task_ends_the_check_after_the_close(self) -> None:
+        self.closed()
+        self.say("[review]=1 查 job")
+        self.after()
+        self.new("other")
+        self.cli_json("task", "close", "--task", "other")
+        self.cli_json("task", "review", "start", "--task", "job")
+        self.assertEqual(self.call()["permissionDecision"], "deny")  # the session holds no check after the close any more
+
+
 class SnapshotTests(ReviewCase):
     def test_what_is_a_result_and_what_is_not(self) -> None:
         yes = ("RCA.md", "REQ.md", "PLAN.md", "DEV/repo/a.sql", "TEST/case.md", "notes/x.md")

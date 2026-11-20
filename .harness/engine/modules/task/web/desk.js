@@ -77,7 +77,7 @@
     if (tab === "scripts") return Boolean(desk.scripts);  // the scripts run on a server and the check scripts (1.8.9)
     if (tab === "test") return Boolean(desk.test);
     if (tab === "evidence") return Boolean(desk.evidence && desk.evidence.length);  // the saved runs of the task (1.7.3), a tab of Results (1.7.9)
-    if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
+    if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0 || Boolean(desk.review.after && !desk.past);
     if (tab === "files") return desk.files.length > 0;
     if (tab === "trace") return Boolean(desk.trace && desk.trace.entries.length);
     if (tab === "intake") return Boolean(desk.intake) && served();  // a saved copy has no server to write to
@@ -838,7 +838,7 @@
   }
 
   // "Independent review" (1.6.33): a setting of the task, at the head of its page, not of a message. A click runs `task review set`, as at a terminal; `[review]=n` in a prompt still does the same, and is not shown.
-  // It is the task's, like the VS Code pill: it stays at the head of an earlier round too (1.6.109), says there that it sets the current round, and is gone only when the task is closed.
+  // It is the task's, like the VS Code pill: it stays at the head of an earlier round too (1.6.109), says there that it sets the current round. On a closed task (1.8.18) it sets the checks after the close.
   const SHIELD = ["M8 1.8l4.8 1.9v3.7c0 3-2 5.5-4.8 6.8-2.8-1.3-4.8-3.8-4.8-6.8V3.7L8 1.8z", "M5.8 8l1.6 1.6 2.9-3"];
   let closeReview = null;
   document.addEventListener("click", (event) => { if (closeReview && !event.target.closest(".tk-rv")) closeReview(); });
@@ -854,21 +854,24 @@
   function reviewButton() {
     const info = full.settings;
     closeReview = null;
-    if (!served() || !info || full.status !== "open") return null;
+    const closed = full.status === "closed";
+    if (!served() || !info || (full.status !== "open" && !closed) || (closed && desk.past)) return null;
     const can = SERVE.runs("review set");
+    const now = closed ? info.after_n || 0 : info.n;
     const choices = [];
     for (let n = 0; n <= info.max_n; n++) {
-      const choice = h("button", {type: "button", class: "chip" + (n === info.n ? " on" : ""), "aria-pressed": n === info.n ? "true" : "false", disabled: can ? null : "disabled"}, n ? String(n) : t("desk.rv.off"));
+      const choice = h("button", {type: "button", class: "chip" + (n === now ? " on" : ""), "aria-pressed": n === now ? "true" : "false", disabled: can ? null : "disabled"}, n ? String(n) : t("desk.rv.off"));
       choice.addEventListener("click", () => {
-        if (n === info.n) return;
+        if (n === now) return;
         choices.forEach((item) => { item.disabled = true; });
         SERVE.post("/api/act", {action: "review set", task: desk.name, n, step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
       });
       choices.push(choice);
     }
-    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.rv.button")), desk.past ? h("p", {class: "set-tip"}, t("desk.rv.current", {round: full.round})) : null, h("p", {class: "sub"}, t("desk.rv.hint")), h("p", {class: "set-warn"}, t("desk.rv.cost")), h("div", {class: "chips"}, choices));
-    const button = h("button", {type: "button", class: "rv-btn" + (info.n ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.rv.hint")},
-      icon(SHIELD, 14), h("span", {class: "rv-name"}, t("desk.rv.button")), h("b", null, info.n ? String(info.n) : t("desk.rv.off")));
+    const label = t(closed ? "desk.rv.after" : "desk.rv.button"), hint = t(closed ? "desk.rv.after.hint" : "desk.rv.hint");
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, label), desk.past ? h("p", {class: "set-tip"}, t("desk.rv.current", {round: full.round})) : null, h("p", {class: "sub"}, hint), h("p", {class: "set-warn"}, t("desk.rv.cost")), h("div", {class: "chips"}, choices));
+    const button = h("button", {type: "button", class: "rv-btn" + (now ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: hint},
+      icon(SHIELD, 14), h("span", {class: "rv-name"}, label), h("b", null, now ? String(now) : t("desk.rv.off")));
     const show = (on) => { if (on && closeEnvs) closeEnvs(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => show(pop.hidden));
     return [button, pop];
@@ -1595,7 +1598,10 @@
     if (tab === "scripts") return {name, count: String(desk.scripts.dev.length + desk.scripts.test.length)};
     if (tab === "test") return {name, count: desk.test.passed + "/" + desk.test.total};
     if (tab === "evidence") return {name, count: String(desk.evidence.length)};
-    if (tab === "review") return {name, count: desk.review.n ? desk.review.passes + "/" + desk.review.n : String(desk.review.rounds.length)};
+    if (tab === "review") {
+      const r = desk.review, later = !desk.past && r.after;
+      return {name, count: r.n ? r.passes + "/" + r.n : later && later.n ? later.passes + "/" + later.n : String(r.rounds.length + (later ? later.rounds.length : 0))};
+    }
     if (tab === "history") return {name, count: String(desk.history.length)};
     if (tab === "trace") return {name, count: desk.trace.entries.length + (desk.trace.cut ? "+" : "")};
     if (tab === "docs") return {name, count: String(extra().length)};
@@ -1665,27 +1671,42 @@
 
   function review() {
     const r = desk.review;
+    const later = !desk.past && r.after;
     const parts = [h("p", {class: "hint top"}, t("desk.review.hint"))];
-    parts.push(h("div", {class: "review-sum"},
-      r.n ? t("desk.review.sum", {n: r.n, passes: r.passes, used: r.used, limit: r.limit}) : t("desk.review.off"),
-      r.waived ? [" ", tag(t("desk.review.waived"), "hot")] : null,
-      r.pending ? [" ", tag(t("desk.review.running", {number: r.pending}), "good run")] : null));
-    if (!r.rounds.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.review.none"))));
-    for (const item of r.rounds) {
-      const verdict = item.verdict ? tag(item.verdict, item.verdict === "PASS" ? "good" : item.verdict === "FAIL" ? "bad" : "") : tag(t("desk.review.waiting"));
-      placeLinks = true;
-      const answer = item.answer ? blocks(item.answer.blocks) : h("p", {class: "sub"}, item.verdict ? t("desk.review.noanswer") : t("desk.review.pending"));
-      placeLinks = false;
-      parts.push(h("section", {class: "round " + (item.verdict === "FAIL" ? "fail" : item.verdict === "PASS" ? "pass" : "")},
-        h("div", {class: "round-head"}, h("strong", null, "round-" + String(item.number).padStart(3, "0")), " ", verdict, " ",
-          item.dismissed ? [tag(t("desk.review.dismissed"), "hot"), " "] : item.invalid ? [tag(t(item.refunded ? "desk.review.given_back" : "desk.review.invalid"), "hot"), " "] : null,
-          h("span", {class: "sub"}, when(item.started_at, 5, 16) + " · " + (item.current ? t("desk.review.current") : t("desk.review.earlier")))),
-        (h("article", {class: "md"}, answer, item.answer && item.answer.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)),
-        (item.dropped || []).length ? h("div", {class: "dropped"}, h("p", {class: "sub"}, t("desk.review.dropped")),
-          h("ul", null, item.dropped.map((found) => h("li", null, h("b", null, found.why), " ", found.text)))) : null,
-        item.package ? h("details", null, h("summary", {class: "sub"}, t("desk.review.given")), h("article", {class: "md"}, blocks(item.package.blocks))) : null));
+    if (later && !r.n && !r.rounds.length) parts.push(h("p", {class: "sub"}, t("desk.review.task.none")));  // only checks after the close: the task itself ran none
+    else {
+      parts.push(h("div", {class: "review-sum"},
+        r.n ? t("desk.review.sum", {n: r.n, passes: r.passes, used: r.used, limit: r.limit}) : t("desk.review.off"),
+        r.waived ? [" ", tag(t("desk.review.waived"), "hot")] : null,
+        r.pending ? [" ", tag(t("desk.review.running", {number: r.pending}), "good run")] : null));
+      if (!r.rounds.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.review.none"))));
+      parts.push(...r.rounds.map(roundCard));
+    }
+    if (later) {  // checks after the close (1.8.18): never the task's own, so a block of their own
+      parts.push(h("h3", {class: "review-after"}, t("desk.review.after")));
+      parts.push(h("p", {class: "hint"}, t("desk.review.after.hint")));
+      parts.push(h("div", {class: "review-sum"},
+        later.n ? t("desk.review.after.sum", {n: later.n, passes: later.passes, used: later.used, limit: later.limit}) : t("desk.review.off"),
+        later.pending ? [" ", tag(t("desk.review.running", {number: later.pending}), "good run")] : null));
+      if (!later.rounds.length) parts.push(h("p", {class: "sub"}, t("desk.review.after.none")));
+      parts.push(...later.rounds.map(roundCard));
     }
     return parts;
+  }
+
+  function roundCard(item) {
+    const verdict = item.verdict ? tag(item.verdict, item.verdict === "PASS" ? "good" : item.verdict === "FAIL" ? "bad" : "") : tag(t("desk.review.waiting"));
+    placeLinks = true;
+    const answer = item.answer ? blocks(item.answer.blocks) : h("p", {class: "sub"}, item.verdict ? t("desk.review.noanswer") : t("desk.review.pending"));
+    placeLinks = false;
+    return h("section", {class: "round " + (item.verdict === "FAIL" ? "fail" : item.verdict === "PASS" ? "pass" : "")},
+      h("div", {class: "round-head"}, h("strong", null, "round-" + String(item.number).padStart(3, "0")), " ", verdict, " ",
+        item.dismissed ? [tag(t("desk.review.dismissed"), "hot"), " "] : item.invalid ? [tag(t(item.refunded ? "desk.review.given_back" : "desk.review.invalid"), "hot"), " "] : null,
+        h("span", {class: "sub"}, when(item.started_at, 5, 16) + " · " + (item.current ? t("desk.review.current") : t("desk.review.earlier")))),
+      (h("article", {class: "md"}, answer, item.answer && item.answer.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)),
+      (item.dropped || []).length ? h("div", {class: "dropped"}, h("p", {class: "sub"}, t("desk.review.dropped")),
+        h("ul", null, item.dropped.map((found) => h("li", null, h("b", null, found.why), " ", found.text)))) : null,
+      item.package ? h("details", null, h("summary", {class: "sub"}, t("desk.review.given")), h("article", {class: "md"}, blocks(item.package.blocks))) : null);
   }
 
   // TEST/defects.md: the open defects first, each with its text; the fixed ones folded. The status is what `task defects sync` wrote.

@@ -8,7 +8,7 @@
   task pause|resume                          a person puts a task aside and takes it back (tasklife.py)
   task handoff tests|run --env E | clear     the agent hands the tests of an environment, or a run before the write-back, to the person; the board says it waits (tasklife.py)
   task approve-plan|confirm-req|approve-promote|recover  a person at a terminal
-  task review start|status                   independent checks, `[review]=n` (taskreview.py); set|extend|waive|dismiss: a person at a terminal
+  task review start|status|after             independent checks, `[review]=n` (taskreview.py); after: of a closed task; set|extend|waive|dismiss: a person at a terminal
   task snapshot list|prune                   the copies made at the gates (tasksnap.py)
   target list|show                           the target repositories (policy target.json): where they are, what their base branch is
   target refs <name>...                      where names are used: every target repository and the knowledge base, in one search (refs.py)
@@ -236,6 +236,10 @@ def register_task(subparsers: Any) -> None:
 
     add_review("start", "snapshot the result, write REVIEW/round-NNN/package.md and open the check; then call the reviewer", lambda a: taskreview.start(repo_root(), a.task))
     add_review("status", "n, the passes that count now, the checks used and what comes next", lambda a: taskreview.status(repo_root(), a.task))
+    after = review_commands.add_parser("after", help="check a closed task after the close, as many times as the person asked ([review]=n in their prompt, or set on its page): binds this session to it; then review start and the reviewer. The task stays closed")
+    after.add_argument("name", help="the closed task (its name or folder)")
+    after.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
+    after.set_defaults(handler=lambda a: taskreview.bind_after(repo_root(), a.name, a.session_id))
     set_n = add_review("set", "the person sets how many independent checks the result must pass in a row, 0 to the cap (terminal only)", guarded("task review set", lambda a: taskreview.set_by_person(repo_root(), a.task, a.n)))
     set_n.set_defaults(person_only=True)
     with_force(set_n)

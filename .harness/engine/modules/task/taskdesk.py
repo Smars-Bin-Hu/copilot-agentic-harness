@@ -66,22 +66,28 @@ def read_doc(path: Path, base: str = "") -> Optional[Dict[str, Any]]:
 
 def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """The independent checks of the task: the counts `task review status` gives, and every round with the reviewer's answer
-    and the package it was given, newest first. `current`: the round looked at the result as it is now."""
-    empty = {"n": 0, "passes": 0, "used": 0, "limit": 0, "pending": None, "waived": False, "rounds": []}
+    and the package it was given, newest first. `current`: the round looked at the result as it is now.
+    `after` (1.8.18): the checks after the close, in the same form, or None; their rounds are not in `rounds`."""
+    empty = {"n": 0, "passes": 0, "used": 0, "limit": 0, "pending": None, "waived": False, "rounds": [], "after": None}
     try:
         info = taskreview.summary(root, task, data, settled=True)
-        rounds = []
+        later = taskreview.after_summary(root, task, data) if taskreview.after_of(data) else None
+        rounds, after_rounds = [], []
         for item in reversed(taskreview.state_of(data)["rounds"]):
             number = int(item.get("number") or 0)
             folder = tasks.task_dir(root, task) / tasksnap.REVIEW_DIR / f"round-{number:03d}"
-            rounds.append({
+            digest = (later if item.get("after") and later else info)["digest"]
+            (after_rounds if item.get("after") else rounds).append({
                 "number": number, "task_round": item.get("task_round", 1), "ordinal": item.get("ordinal"), "verdict": item.get("verdict") or "",
-                "started_at": item.get("started_at", ""), "current": bool(info["digest"]) and item.get("digest") == info["digest"] and item.get("task_round") == data.get("round"),
+                "started_at": item.get("started_at", ""), "current": bool(digest) and item.get("digest") == digest and item.get("task_round") == data.get("round"),
                 "answer": read_doc(folder / taskreview.VERDICT_FILE), "package": read_doc(folder / taskreview.PACKAGE),
                 "invalid": bool(item.get("invalid")), "refunded": bool(item.get("refunded")), "dismissed": bool(item.get("dismissed")),
                 "dropped": [{"why": taskreview.why_text(found), "text": str(found.get("text", ""))[:300]} for found in item.get("dropped") or [] if isinstance(found, dict)],
             })
-        return {"n": info["n"], "passes": info["passes"], "used": info["checks_used"], "limit": info["checks_limit"], "pending": info["pending_round"], "waived": info["waived"], "rounds": rounds}
+        after = None
+        if later is not None:
+            after = {"n": later["n"], "passes": later["passes"], "used": later["checks_used"], "limit": later["checks_limit"], "pending": later["pending_round"], "rounds": after_rounds}
+        return {"n": info["n"], "passes": info["passes"], "used": info["checks_used"], "limit": info["checks_limit"], "pending": info["pending_round"], "waived": info["waived"], "rounds": rounds, "after": after}
     except Exception:  # noqa: BLE001 - a page must not fail over the checks of one task
         return empty
 

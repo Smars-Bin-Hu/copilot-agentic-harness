@@ -35,6 +35,9 @@ LOCK_DIR_NAME = "copilot-harness-locks"
 # Windows refuses a file for a moment while another process still has it open (WinError 5): the board reading a state file, an antivirus scan.
 # Seen on a work PC (2026-11-17): a hook that met it could not decide, and its call was refused. `atomic_write` tries `os.replace` again for this long.
 REPLACE_RETRY_SECONDS = 1.0
+# A folder moved aside (`DEV/` to `DEV_r<n>/` when a promoted task is opened again) is refused while anything has a file in it open; a scan of a
+# whole folder takes longer than one file's (WinError 5 on a work PC, 2026-11-20), so `move_aside` waits longer.
+MOVE_RETRY_SECONDS = 5.0
 # Safety nets so a missing SubagentStop does not leave entries behind for a later child session to claim.
 SUBAGENT_ACTIVE_TTL_SECONDS = 1800.0
 PENDING_PROMPT_TTL_SECONDS = 300.0
@@ -146,9 +149,9 @@ def atomic_write(path: Path, value: Any, compact: bool = False) -> None:
         raise
 
 
-def _replace(source: str, target: str) -> None:
+def _replace(source: str, target: str, seconds: float = REPLACE_RETRY_SECONDS) -> None:
     """`os.replace`, tried again for a moment when Windows refuses it because another process has the target open (REPLACE_RETRY_SECONDS)."""
-    deadline = time.monotonic() + REPLACE_RETRY_SECONDS
+    deadline = time.monotonic() + seconds
     while True:
         try:
             os.replace(source, target)
@@ -157,6 +160,12 @@ def _replace(source: str, target: str) -> None:
             if time.monotonic() >= deadline:
                 raise
             time.sleep(0.02)
+
+
+def move_aside(source: Path, target: Path) -> None:
+    """Rename a file or a folder to a name that is not taken, tried again for MOVE_RETRY_SECONDS while Windows refuses it (WinError 5:
+    a terminal or an Explorer window in the folder, a scan, a sync). PermissionError when it is still refused."""
+    _replace(str(source), str(target), MOVE_RETRY_SECONDS)
 
 
 def lock_file(path: Path) -> Path:

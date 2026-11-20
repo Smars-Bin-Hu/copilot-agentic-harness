@@ -254,6 +254,7 @@ class Ready:
         self.misses = 0  # doctor runs in a row that failed or found errors: the wait before the next one grows (RETRY_FAILED)
         self.at = 0.0
         self.running = False
+        self.asked_again = False  # 1.8.13: the running doctor was asked for by Check again: its line shows the bar, not the old answer
         self.optional_kept: Any = None  # (what the items read, when, the answer)
         self.checker = checker or reachcheck.Checker(root)  # the board's own look at the connections (1.7.19)
         self.vs_running = running or Running(clock=clock)  # is any VS Code running on this computer
@@ -323,7 +324,7 @@ class Ready:
                 step = str(self.steps.get("step") or "") or "-"
                 found = dict(found, failed=messages.text("ready.doctor.timeout", seconds=f"{found['timeout']:g}", step=step))
             self.misses = self.misses + 1 if found.get("errors") or found.get("failed") else 0
-            self.found, self.at, self.running = found, self.clock(), False
+            self.found, self.at, self.running, self.asked_again = found, self.clock(), False, False
 
     # --- the required checks ---------------------------------------------------------------------------------------
 
@@ -385,8 +386,8 @@ class Ready:
     def doctor_line(self) -> Dict[str, Any]:
         self.start_doctor()
         with self.lock:
-            found = self.found
-        if found is None:
+            found, again = self.found, self.running and self.found is not None and self.asked_again
+        if found is None or again:  # 1.8.13: Check again shows the bar too; before, the old answer stayed until the new one came, so the press seemed to do nothing
             return {"state": "check", "why": "running", **self.doctor_progress()}
         if found["failed"]:
             return {"state": "fail", "why": "failed", "detail": found["failed"]}
@@ -426,6 +427,8 @@ class Ready:
         if busy:
             return False
         self.drop_doctor()
+        with self.lock:
+            self.asked_again = True
         self.start_doctor()
         return True
 

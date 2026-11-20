@@ -109,7 +109,7 @@ Create `.harness/policies/target.override.json`:
 
 - `~`, `%USERPROFILE%` and `$HOME` in a path are expanded.
 - A repository name takes only letters, digits, `_`, `.` and `-`.
-- To check: `doctor` (lists every repository, its branch, and whether it has uncommitted files) and `target list`.
+- To check: `doctor` (lists every repository, whether its base branch is there, and the branch it is on; read from the files, no git command, so it is quick on a slow computer. Uncommitted files are checked by promote, when it writes) and `target list`.
 
 ## Knowledge base
 

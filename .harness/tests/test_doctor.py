@@ -815,34 +815,19 @@ class BusyComputerTests(unittest.TestCase):
                 doctor.check_vscode(report)
             self.assertEqual((reach.called, find.called), (probed, probed), board)
 
-    def test_a_git_that_did_not_answer_in_time_is_asked_once_more_and_a_real_fault_is_not(self) -> None:
+    def test_the_target_check_reads_files_and_starts_no_git(self) -> None:
+        """1.8.13: four git processes per repository took minutes on a work computer and the board's doctor ran out of time; the check reads .git, the refs and HEAD."""
+        import doctor
         from unittest import mock
 
-        import doctor
-        from core import targets
-
-        def slow() -> None:
-            try:
-                raise subprocess.TimeoutExpired("git", 30)
-            except subprocess.TimeoutExpired as error:
-                raise targets.TargetError("git rev-parse did not end within 30 seconds") from error
-
-        good = {"has_base_ref": True}
-        answers = iter([None, good])
-
-        def once_slow(*_args: object) -> dict:
-            found = next(answers)
-            if found is None:
-                slow()
-            return found
-
-        with mock.patch.object(doctor.targets, "summary", side_effect=once_slow) as summary:
-            self.assertEqual(doctor.target_summary(object(), 30), good)
-        self.assertEqual(summary.call_count, 2)
-        with mock.patch.object(doctor.targets, "summary", side_effect=lambda *_args: slow()) as summary, self.assertRaises(targets.TargetError) as caught:
-            doctor.target_summary(object(), 30)
-        self.assertEqual(summary.call_count, 2)
-        self.assertIsInstance(caught.exception.__cause__, subprocess.TimeoutExpired)  # check_targets says it as a busy computer
-        with mock.patch.object(doctor.targets, "summary", side_effect=targets.TargetError("not a git repository")) as summary, self.assertRaises(targets.TargetError):
-            doctor.target_summary(object(), 30)
-        self.assertEqual(summary.call_count, 1)
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder) / "app"
+            (repo / ".git" / "refs" / "heads").mkdir(parents=True)
+            (repo / ".git" / "refs" / "heads" / "feature").write_text("abc\n", encoding="utf-8")
+            (repo / ".git" / "HEAD").write_text("ref: refs/heads/feature\n", encoding="utf-8")
+            (repo / ".git" / "packed-refs").write_text("# pack-refs\n0123 refs/remotes/origin/main\n", encoding="utf-8")
+            with mock.patch("subprocess.run", side_effect=AssertionError("no git")), mock.patch("subprocess.Popen", side_effect=AssertionError("no git")):
+                self.assertTrue(doctor.base_ref_found(repo, "feature"))
+                self.assertTrue(doctor.base_ref_found(repo, "origin/main"))
+                self.assertTrue(doctor.base_ref_found(repo, "refs/remotes/origin/main"))
+                self.assertFalse(doctor.base_ref_found(repo, "release"))

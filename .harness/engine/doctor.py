@@ -8,7 +8,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +20,7 @@ from core.registry import load_registry
 from core.events import CONFIG_KEYS
 from core.state import TRACKED_EVENTS
 from core import procrun
+from core import setup as core_setup
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -836,32 +836,36 @@ def check_targets(report: Report, root: Path) -> None:
         if not found.problems:
             report.warn(say("doctor.target.no_repos"))
         return
-    for name in found.names():
+    for name in found.names():  # 1.8.13: read from the files, no git process: on a work computer git took minutes here, and promote checks the working tree itself (`targets.look`)
         repo = found.repos[name]
-        try:
-            info = target_summary(repo, found.timeout)
-        except targets.TargetError as error:
-            busy = isinstance(error.__cause__, subprocess.TimeoutExpired)
-            report.error(say("doctor.target.busy" if busy else "doctor.target.error", name=name, error=error))
+        path = Path(repo.path)
+        if not (path / ".git").exists():
+            report.error(say("doctor.target.not_git", name=name, path=path))
             continue
-        if not info["has_base_ref"]:
+        if not base_ref_found(path, repo.base_ref):
             report.error(say("doctor.target.no_branch", name=name, base_ref=repo.base_ref))
             continue
-        state = say("doctor.target.clean") if info["clean"] else say("doctor.target.dirty", files=info["uncommitted_files"])
+        plain = (path / ".git").is_dir()  # a worktree's .git is a file: its branch is not read here
+        branch = (core_setup.head_branch(path) or "(detached)") if plain else "?"
         kind = say("doctor.target.kind.kb" if repo.knowledge_base else "doctor.target.kind.repo")
-        report.ok(say("doctor.target.info", kind=kind, name=name, base_ref=repo.base_ref, commit=info["base_commit"], date=info["base_commit_date"][:10], branch=info["current_branch"], state=state))
-        if repo.knowledge_base and info["current_branch"] != repo.base_ref:
+        report.ok(say("doctor.target.found", kind=kind, name=name, base_ref=repo.base_ref, branch=branch))
+        if repo.knowledge_base and plain and branch != repo.base_ref:
             report.warn(say("doctor.target.kb_branch", name=name, base_ref=repo.base_ref))
 
 
-def target_summary(repo: Any, timeout: int) -> Dict[str, Any]:
-    """`targets.summary`, asked once more when git gave no answer in time (1.7.45): on a busy work computer the first git start of a while can be slow, and the next one is not."""
-    try:
-        return targets.summary(repo, timeout)
-    except targets.TargetError as error:
-        if not isinstance(error.__cause__, subprocess.TimeoutExpired):
-            raise
-    return targets.summary(repo, timeout)
+def base_ref_found(path: Path, base_ref: str) -> bool:
+    """Is `base_ref` a branch, a remote branch or a tag of the repository? From the ref files and packed-refs, with no git process. A full `refs/...` name is looked up as it is."""
+    if base_ref.startswith("refs/"):
+        folder = path / ".git"
+        if not folder.is_dir():
+            return True  # a worktree keeps its refs elsewhere: promote checks it
+        if (folder / base_ref).is_file():
+            return True
+        try:
+            return base_ref in (folder / "packed-refs").read_text(encoding="utf-8", errors="replace").split()
+        except OSError:
+            return False
+    return core_setup.has_ref(path, base_ref)
 
 
 def check_location(report: Report, root: Path) -> None:

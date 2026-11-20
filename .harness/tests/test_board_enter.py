@@ -271,9 +271,11 @@ class ReadinessTests(TaskCase):
         self.assertTrue(check.doctor_again())
         self.assertTrue(until(lambda: len(runs) == 2))
         self.assertFalse(check.doctor_again())  # one runs already
+        self.assertEqual(check.doctor_line()["state"], "check", "1.8.13: the line shows the run that Check again started, not the old answer")
         gate.set()
         self.assertTrue(until(lambda: not check.running))
         self.assertEqual(len(runs), 2)
+        self.assertEqual(check.doctor_line()["state"], "fail")
 
     def test_the_board_starts_doctor_below_normal_priority(self) -> None:
         engine = self.root / ".harness" / "engine"

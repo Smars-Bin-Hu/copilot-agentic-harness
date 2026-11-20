@@ -2064,9 +2064,9 @@ def handler_for(board: Board) -> type:
                 self.answer(200, {"stopping": True})
                 board.stop_asked.set()
                 return None
-            if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the cache of the link and of the one doctor run; it waits for nothing
+            if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the last answer of `Ready.keep_fresh`; it waits for nothing
                 try:
-                    return self.answer(200, board.ready.answer(board.paired(self.token())))
+                    return self.answer(200, board.ready.latest(board.paired(self.token())))  # 1.8.13: worked out on a thread of its own, sent at once
                 except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
                     return self.answer(500, {"error": f"{type(error).__name__}: {error}"[:300]})
             if path == "/api/live":  # the Live tab of an open task: the latest items of its chat, from the memory of the link (no file, no call to the host); `rev` makes an unchanged poll tiny

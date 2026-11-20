@@ -535,7 +535,7 @@
         setClass(p, "m" + (soft ? " soft" : "") + ((req && view.state === "fail") || (!req && view.level === "red") ? " bad" : "")); if (p.hidden) p.hidden = false;  // a red row has a red note, not an amber one (F1 U1)
       } else if (!p.hidden) { p.hidden = true; p.dataset.k = ""; }
     });
-    const down = Boolean(chk0.error);
+    const down = Boolean(chk0.error) && (chk0.misses || 0) >= 2;  // 1.8.13: one late answer is not a board that is down: Enter stayed off with every line green
     if (down && all) all = false;
     errLine.hidden = !down; setText(errLine, down ? t("board.enter.noanswer", {error: chk0.error}) : "");
     const ready = all && !pending && !down && slot(ORDER.length - 1);
@@ -620,8 +620,8 @@
   function poll() {
     if (!open || chk0.inflight || document.hidden) return;
     chk0.inflight = true;
-    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.error = ""; if (data.restart && !chk0.restarting) chk0.restart = data.restart; } else chk0.error = "bad answer"; },
-      (error) => { chk0.error = String(error.message || error).slice(0, 200); })
+    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.error = ""; chk0.misses = 0; if (data.restart && !chk0.restarting) chk0.restart = data.restart; } else { chk0.error = "bad answer"; chk0.misses = (chk0.misses || 0) + 1; } },
+      (error) => { chk0.error = String(error.message || error).slice(0, 200); chk0.misses = (chk0.misses || 0) + 1; })
       .then(() => {
         chk0.inflight = false; settle();
         // A line the server does not know yet (the one doctor run) is asked again after a second, not at the next 3 s poll. Still one cheap read.

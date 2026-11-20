@@ -24,6 +24,7 @@ import shutil
 import os
 import subprocess
 import sys
+import copy
 import threading
 import time
 from pathlib import Path
@@ -55,6 +56,10 @@ STUCK = ("off", "no-cli", "cli-failed", "many")  # nothing the person can do by 
 # for HOST_WAIT seconds; then as a VS Code that does not let the board in, with the Restart button.
 GETTING_READY = ("none", "starting", "error", "cli-slow")
 HOST_WAIT = 180.0
+FRESH_FOR = 20.0  # 1.8.13: seconds after the page's last question that the answer is still worked out
+KEEP_EVERY = 2.0  # 1.8.13: the pause between two answers worked out
+FIRST_WAIT = 5.0  # 1.8.13: how long the first question waits for the first answer
+SLOW_ANSWER = 3.0  # 1.8.13: an answer that took longer is written to the board's log, with the time of each part
 
 
 def short(text: Any) -> str:
@@ -254,6 +259,11 @@ class Ready:
         self.misses = 0  # doctor runs in a row that failed or found errors: the wait before the next one grows (RETRY_FAILED)
         self.at = 0.0
         self.running = False
+        self.kept: Optional[Dict[str, Any]] = None  # 1.8.13: the last answer of `keep_fresh`
+        self.asked_at = -1e9
+        self.worker: Optional[threading.Thread] = None
+        self.first = threading.Event()
+        self.took: Dict[str, float] = {}
         self.asked_again = False  # 1.8.13: the running doctor was asked for by Check again: its line shows the bar, not the old answer
         self.optional_kept: Any = None  # (what the items read, when, the answer)
         self.checker = checker or reachcheck.Checker(root)  # the board's own look at the connections (1.7.19)
@@ -661,16 +671,69 @@ class Ready:
             out.append({"key": key, "level": "red" if state == "fail" else "yellow", "code": why, "text": plain(text), "why": plain(short(reason)), "fix": fix})
         return out
 
+    def latest(self, paired: bool) -> Dict[str, Any]:
+        """1.8.13: what `/api/ready` sends: the last answer a thread of its own worked out, at once. On a work computer one answer took more than the page's 8 s, the page
+        counted that as "the board did not answer" and turned Enter off, with every line green. The thread works while the page asks (FRESH_FOR s after the last question).
+        Until the first answer is there: every line is still being checked."""
+        with self.lock:
+            self.asked_at = self.clock()
+            kept = self.kept
+            if self.worker is None or not self.worker.is_alive():
+                self.worker = threading.Thread(target=self.keep_fresh, name="ready-answer", daemon=True)
+                self.worker.start()
+        if kept is None:
+            self.first.wait(FIRST_WAIT)
+            with self.lock:
+                kept = self.kept
+        if kept is None:
+            return {"ready": False, "checks": [{"id": name, "blocking": True, "group": "required", "state": "check", "why": "running", "level": "grey"} for name in self.REQUIRED],
+                    "optional": {"items": [], "problems": [], "identities": [], "count": 0}, "problems": {"required": [], "optional": []}, "vscode_button": {"kind": "open", "label": messages.text("ready.vs.open"), "up": False, "identities": 0}}
+        out = copy.deepcopy(kept)
+        if not paired:  # worked out for a paired browser: this one is not
+            for line in out["checks"]:
+                if line["id"] == "paired":
+                    line.update(state="fail", why="unpaired")
+                    line["level"] = self.level(line)
+            out["ready"] = False
+            out["problems"]["required"] = self.required_problems(out["checks"], out.get("vscode_button") or {})
+        return out
+
+    def keep_fresh(self) -> None:
+        """Work the answer out again and again while the page asks; stop FRESH_FOR s after its last question. A slow answer is written to the board's log with the time of each part."""
+        while True:
+            with self.lock:
+                if self.clock() - self.asked_at > FRESH_FOR:
+                    self.worker = None
+                    return
+            began = time.monotonic()
+            try:
+                found = self.answer(True)
+            except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
+                found = {"ready": False, "checks": [{"id": "doctor", "blocking": True, "group": "required", "state": "fail", "why": "failed", "level": "red", "detail": short(f"{type(error).__name__}: {error}")}],
+                         "optional": {"items": [], "problems": [], "identities": [], "count": 0}, "problems": {"required": [], "optional": []}, "vscode_button": {}}
+            spent = time.monotonic() - began
+            if spent > SLOW_ANSWER:
+                parts = ", ".join(f"{name} {value:.1f}" for name, value in sorted((getattr(self, "took", {}) or {}).items(), key=lambda item: -item[1]) if value >= 0.1)
+                print(messages.text("ready.slow", seconds=f"{spent:.1f}", parts=parts or "-"), flush=True)
+            with self.lock:
+                self.kept = found
+            self.first.set()
+            time.sleep(KEEP_EVERY)
+
     def answer(self, paired: bool) -> Dict[str, Any]:
         """`{ready, checks, optional, problems, vscode_button, restart}`. `checks`: the five required lines `{id, group, blocking, level, state, why, ...}`. `state`: ok, wait (it comes by itself), fail (needs the person), check
         (not known yet). `ready`: every required line is ok, and only then Enter is on (1.7.38)."""
         checks: List[Dict[str, Any]] = []
+        took: Dict[str, float] = {}
 
         def add(name: str, make: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
+            began = time.monotonic()
             try:
                 line = make()
             except Exception as error:  # noqa: BLE001 - a check that breaks is told as failed, with its reason
                 line = {"state": "fail", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
+            finally:
+                took[name] = time.monotonic() - began
             line = dict(line, id=name, blocking=True, group="required")
             checks.append(line)
             return line
@@ -680,16 +743,23 @@ class Ready:
         add("doctor", self.doctor_line)
         vscode = add("vscode", self.vscode)
         add("copilot", lambda: self.copilot(vscode))  # Copilot is judged by the connection, before the settings are
+        began = time.monotonic()
         try:
             self.without_settings(vscode)
         except Exception:  # noqa: BLE001 - a check of the settings that breaks leaves the line as the connection says
             pass
+        took["settings"] = time.monotonic() - began
+        began = time.monotonic()
         try:
             if not self.quitting():
                 self.checker.maybe()  # the board asks the connections itself: the screen need not wait for a chat
         except Exception:  # noqa: BLE001 - a check of the connections that cannot start is not a reason to fail a poll
             pass
+        took["connections"] = time.monotonic() - began
+        began = time.monotonic()
         optional = self.optional()
+        took["optional"] = time.monotonic() - began
+        self.took = took
         if vscode["state"] == "ok" and vscode.get("env") != launchenv.CARRIED and any(entry.get("env_wrong") for entry in optional["items"]):  # a hook's old word does not count against a VS Code the board saw carry the settings
             vscode["level"] = "yellow"  # opened, but without this computer's settings (1.7.24)
             vscode["env_wrong"] = True

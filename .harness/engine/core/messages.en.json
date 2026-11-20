@@ -3692,6 +3692,7 @@
   "board.enter.d.doctor.errors": "{n} errors",
   "board.enter.d.doctor.errors.one": "1 error",
   "board.enter.doctor.again": "Check again",
+  "ready.slow": "The Enter screen's check took {seconds} s ({parts}).",
   "ready.doctor.timeout": "no answer in {seconds} s; it stopped at the step {step}. The computer may be busy. It runs again by itself in 10 minutes, or press Check again.",
   "board.enter.d.doctor.failed": "could not run",
   "board.enter.d.vscode.none": "not open",

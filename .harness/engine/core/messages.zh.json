@@ -3692,6 +3692,7 @@
   "board.enter.d.doctor.errors": "{n} 个错误",
   "board.enter.d.doctor.errors.one": "1 个错误",
   "board.enter.doctor.again": "再检查",
+  "ready.slow": "Enter 页的检查用了 {seconds} 秒（{parts}）。",
   "ready.doctor.timeout": "{seconds} 秒内没跑完，停在 {step} 这一步。电脑可能太忙。10 分钟后会自己再跑一次，也可以点“再检查”。",
   "board.enter.d.doctor.failed": "没跑起来",
   "board.enter.d.vscode.none": "没打开",

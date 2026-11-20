@@ -7,6 +7,7 @@ import os
 import subprocess
 import re
 import tempfile
+import io
 import threading
 import time
 import types
@@ -256,6 +257,32 @@ class ReadinessTests(TaskCase):
         now[0] += ready.RETRY_TIMEOUT
         check.answer(True)
         self.assertTrue(until(lambda: len(runs) == 2 and not check.running))
+
+    def test_the_page_gets_the_last_answer_at_once_while_a_slow_one_is_worked_out(self) -> None:
+        """1.8.13: one answer took more than the page's 8 s on a work computer; the page called the board down and turned Enter off with every line green."""
+        check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), lambda _root: {"errors": 0, "first": "", "failed": ""})
+        settled(check)
+        first = check.latest(True)
+        self.assertEqual(len(first["checks"]), len(ready.Ready.REQUIRED))
+        gate = threading.Event()
+        real = check.answer
+
+        def slow(paired: bool) -> Dict[str, Any]:
+            gate.wait(5)
+            return real(paired)
+
+        out = io.StringIO()
+        with mock.patch.object(check, "answer", side_effect=slow), mock.patch.object(ready, "SLOW_ANSWER", 0.05), mock.patch("sys.stdout", out):
+            time.sleep(1.2)  # the thread is now inside a slow answer
+            began = time.monotonic()
+            again = check.latest(True)
+            self.assertLess(time.monotonic() - began, 0.5, "the page is not kept waiting")
+            self.assertEqual([line["id"] for line in again["checks"]], [line["id"] for line in first["checks"]])
+            unpaired = check.latest(False)
+            self.assertFalse(unpaired["ready"])
+            self.assertEqual(next(line for line in unpaired["checks"] if line["id"] == "paired")["state"], "fail")
+            gate.set()
+            self.assertTrue(until(lambda: bool(out.getvalue().strip()), 5), "a slow answer is written to the log with its parts")
 
     def test_check_again_runs_doctor_now_and_not_twice_at_once(self) -> None:
         now, runs, gate = [100.0], [], threading.Event()

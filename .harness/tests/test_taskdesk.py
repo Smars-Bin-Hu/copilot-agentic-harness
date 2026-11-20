@@ -821,6 +821,38 @@ class DeskTests(ServeCase):
         found = taskdesk.desk(self.root, "job1", ())["plan_approval"]
         self.assertEqual((found["approved"], found["changed"]), (True, True))
 
+    def test_the_requirement_tab_knows_when_it_was_confirmed_with_which_code_and_whether_it_changed(self) -> None:
+        """1.8.16: the same green line as the Plan tab."""
+        self.assertEqual(taskdesk.desk(self.root, "job1", ())["req_approval"], {"approved": False, "at": "", "code": "", "changed": False})
+        confirm_requirement(self.root, TASK)
+        typed = next(event["detail"] for event in reversed(self.data()["events"]) if event["what"] == "confirm-req")  # the start of the sha256 the person typed
+        found = taskdesk.desk(self.root, "job1", ())["req_approval"]
+        self.assertEqual((found["approved"], found["code"], found["changed"]), (True, approval.code_of(typed), False))
+        self.assertEqual(found["at"], self.data()["req"]["confirmed_at"])
+        text = (self.task / "REQ.md").read_text(encoding="utf-8")
+        (self.task / "REQ.md").write_text(text.replace("## Done when", "## Done when\n\n- One more thing.\n", 1) if "## Done when" in text else text + "\n## Done when\n\n- One more thing.\n", encoding="utf-8")
+        self.assertTrue(taskdesk.desk(self.root, "job1", ())["req_approval"]["changed"])
+
+    def test_the_changes_tab_says_when_the_work_was_written_back_and_with_which_code(self) -> None:
+        self.assertIsNone(taskdesk.promote_stamp({"promote": {"state": "dry_run"}}))
+        found = taskdesk.promote_stamp({"promote": {"state": "done", "at": "2026-11-20T10:00:00+00:00", "branch": "feature/x", "approved_at": "2026-11-20T09:00:00+00:00", "approved_plan_sha256": "abcdef0123"}})
+        self.assertEqual(found, {"state": "done", "at": "2026-11-20T10:00:00+00:00", "branch": "feature/x", "approved_at": "2026-11-20T09:00:00+00:00", "code": "ABCDEF"})
+        self.assertEqual(taskdesk.promote_stamp({"promote": {"state": "partial", "branch": "b"}})["code"], "")
+
+    def test_a_server_script_carries_the_calls_that_named_it(self) -> None:
+        from core import calls
+
+        script = self.task / "DEV" / "_server" / "load_rows.sql"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text("select 1\n", encoding="utf-8")
+        (self.task / "DEV" / "_server" / "other.sql").write_text("select 2\n", encoding="utf-8")
+        calls.note(self.root, TASK, "sqlcmd -S dev-db -i DEV/_server/load_rows.sql", "sqlserver", "DEV", "write", "approved", "Q7K2ZD")
+        calls.note(self.root, TASK, "sqlcmd -S dev-db -i DEV/_server/not_load_rows.sql", "sqlserver", "DEV", "write", "plan")
+        calls.note(self.root, TASK, "sqlcmd -S dev-db -Q select", "sqlserver", "DEV", "read", "allow")
+        rows = {item["path"]: item for item in taskdesk.desk(self.root, "job1", ())["scripts"]["dev"]}
+        self.assertEqual([(run["env"], run["how"], run["code"]) for run in rows["DEV/_server/load_rows.sql"]["runs"]], [("DEV", "approved", "Q7K2ZD")])
+        self.assertEqual(rows["DEV/_server/other.sql"]["runs"], [])
+
 
 def boardserve_actions(root):
     from modules.task import boardserve

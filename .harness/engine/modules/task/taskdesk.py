@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import systems as outside
-from core import approval, config, messages, outbox, pinfiles, tasks
+from core import approval, calls, config, messages, outbox, pinfiles, tasks
 from core.paths import cli_command, utc_now
 
 from . import accept, autorun, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
@@ -386,6 +386,44 @@ def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def req_approval(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """1.8.16: the Requirement tab's line, as the Plan tab has one: `approved` (ever confirmed), when, the code the person typed (the start of the sha256 of REQ.md as they
+    read it, from the newest `confirm-req` event; "" when the event is gone), and `changed`: what it asks for is not what was confirmed."""
+    kept = data.get("req") if isinstance(data.get("req"), dict) else {}
+    if not kept.get("confirmed_sha256"):
+        return {"approved": False, "at": "", "code": "", "changed": False}
+    said = next((str(event.get("detail") or "") for event in reversed(data.get("events") or []) if isinstance(event, dict) and event.get("what") == "confirm-req"), "")
+    return {"approved": True, "at": str(kept.get("confirmed_at") or ""), "code": approval.code_of(said) if said else "", "changed": task_ops.req_state(root, task) == "changed"}
+
+
+def promote_stamp(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """1.8.16: the Changes tab's line once the work was written back: `state` done or partial, when, the branch, when the promote was approved and its code (the start of the
+    plan's sha256, as approve-promote asked for it). None before a promote."""
+    record = data.get("promote") if isinstance(data.get("promote"), dict) else {}
+    if record.get("state") not in ("done", "partial"):
+        return None
+    digest = str(record.get("approved_plan_sha256") or "")
+    return {"state": record["state"], "at": str(record.get("at") or ""), "branch": str(record.get("branch") or ""), "approved_at": str(record.get("approved_at") or ""), "code": approval.code_of(digest) if digest else ""}
+
+
+def server_runs(root: Path, task: str, paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """1.8.16: for each script of `DEV/_server/`, the calls the gate let through that named it (`.task/calls.jsonl`): `{at, system, env, how, code}`, oldest first.
+    A call names a script when its command holds the script's path under the task folder or its file name as a word of its own. A run before 1.7.9 left no line."""
+    try:
+        found = calls.read(root, task)
+    except Exception:  # noqa: BLE001 - the tab shows the scripts anyway
+        return {}
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for path in paths:
+        name = path.rsplit("/", 1)[-1]
+        pattern = re.compile(r"(?:^|[\\/\s\"'=])" + re.escape(name) + r"(?:$|[\s\"';])")
+        runs = [{"at": str(line.get("at") or ""), "system": str(line.get("system") or ""), "env": str(line.get("env") or ""), "how": str(line.get("how") or ""), "code": str(line.get("code") or "")}
+                for line in found if isinstance(line, dict) and pattern.search(str(line.get("command") or ""))]
+        if runs:
+            out[path] = runs
+    return out
+
+
 def plan_approval(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """What the Plan tab says about the approval, from what approve-plan stored: `approved` (ever), when, the code (the start of the plan's sha256 the person
     typed when the requirement was confirmed before; with one code for both files it is the plan's part), and `changed`: PLAN.md or the requirement is not what was approved."""
@@ -436,7 +474,7 @@ TEST_RECORDS = re.compile(r"(results-.*\.md|summary\.md|defects\.md|steps-.*\.md
 TEST_RECORD_DIRS = ("evidence", "runs")
 
 
-def scripts(files: List[Dict[str, Any]], changes_view: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def scripts(files: List[Dict[str, Any]], changes_view: Dict[str, Any], runs: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> Optional[Dict[str, Any]]:
     """The Scripts tab: the files of `DEV/_server/` (scripts run on a server; `mark` new or changed from the Changes data) and the check scripts of `TEST/`, never the records of a test run.
     `files` is the Files tab list (same order, no hidden name, no link). None when there is nothing."""
     marks = {item["path"]: {"create": "new", "modify": "changed"}.get(item.get("action"), "") for item in changes_view.get("files") or []}
@@ -446,7 +484,7 @@ def scripts(files: List[Dict[str, Any]], changes_view: Dict[str, Any]) -> Option
         if item.get("kind") == "folder":
             continue
         if parts[0] == "DEV" and len(parts) > 2 and tasks.is_manual("/".join(parts[1:])):
-            dev.append({"path": item["path"], "size": item["size"], "mark": marks.get("/".join(parts[1:]), "")})
+            dev.append({"path": item["path"], "size": item["size"], "mark": marks.get("/".join(parts[1:]), ""), "runs": (runs or {}).get(item["path"], [])})
         elif parts[0] == "TEST" and len(parts) > 1 and parts[1].lower() not in TEST_RECORD_DIRS and not (len(parts) == 2 and TEST_RECORDS.match(parts[1])):
             test.append({"path": item["path"], "size": item["size"]})
     return {"dev": dev, "test": test} if dev or test else None
@@ -592,8 +630,8 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
-        "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
+        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view, server_runs(root, task, [item["path"] for item in listed if item["path"].startswith(tasks.DEV_NAME + "/") and tasks.is_manual(item["path"].split("/", 1)[-1])])), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
+        "plan_approval": plan_approval(root, task, data), "req_approval": req_approval(root, task, data), "promote_stamp": promote_stamp(data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),
         "req_changed": needs_req(data) and row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),

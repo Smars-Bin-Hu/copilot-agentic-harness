@@ -343,7 +343,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     // The card is drawn again in place when its proposals change (the server checks them at every poll); words typed in a Send box stay.
     const ACT = new Map();  // message id -> {box, sig, list, drafts, pressed, done}
     const ACT_ALL = ["archive", "pause", "resume", "close", "review set"];  // "Do all" only for what needs no code and no dialog of its own
-    const ACT_WHY = {unknown: "super.act.why.unknown", state: "super.act.why.state", kind: "super.act.why.kind", n: "super.act.why.n", text: "super.act.why.text", paused: "super.act.why.paused", closed: "super.act.why.closed", empty: "super.act.why.empty", long: "super.act.why.long", name: "super.act.why.name", taken: "super.act.why.taken", bad: "super.act.why.bad"};
+    const ACT_WHY = {unknown: "super.act.why.unknown", state: "super.act.why.state", kind: "super.act.why.kind", n: "super.act.why.n", text: "super.act.why.text", paused: "super.act.why.paused", closed: "super.act.why.closed", empty: "super.act.why.empty", long: "super.act.why.long", name: "super.act.why.name", taken: "super.act.why.taken", bad: "super.act.why.bad", open: "super.act.why.open", checks: "super.act.why.checks"};
     const actSig = (list) => JSON.stringify(list || []);
     const actWhat = (one) => (one.kind === "send" ? t("super.act.send.to", {task: one.task})
       : one.kind === "new" ? t("super.act.new", {name: one.name})

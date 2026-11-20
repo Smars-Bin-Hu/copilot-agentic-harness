@@ -499,6 +499,8 @@ class Board:
         self.link.overlay(result["tasks"])
         moved = False
         for row in result["tasks"]:
+            if row.get("pending_checks") is not None:  # 1.8.15: the person asked for checks with a message that reopens the task; it is open now
+                self.apply_checks(row)
             moved = self.settle(row) or moved
             health.with_context(self.root, row, row.get("chat"))
         if moved:
@@ -519,6 +521,16 @@ class Board:
                 item["error"] = say("host.copilot") if item["error"] == "copilot" else say("host.never") if item["error"] == "never" else say("host.other", error="AhpError") if item["error"] in ("other", "slow") else say("host.said", words=item["error"])
         return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": making, "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
+
+    def apply_checks(self, row: Dict[str, Any]) -> None:
+        """Set the checks a reopened task was waiting for (`taskreview.apply_pending`, the code path of `review set`), then show them on the row. Never raises: a look at the board must not fail over it."""
+        try:
+            if taskreview.apply_pending(self.root, str(row["task"])):
+                noted(self.root, str(row["task"]), "review set")
+                row["checks"] = tasklife.checks_of(tasks.read(self.root, row["task"]) or {})
+            row.pop("pending_checks", None)
+        except Exception:  # noqa: BLE001
+            pass
 
     def task_is_open(self, task: str) -> bool:
         """Is this task (as an approval entry names it: its folder) open? A task that cannot be read is not."""
@@ -2365,6 +2377,7 @@ def handler_for(board: Board) -> type:
                             said = superroute.said_of(board.link, paths[item["task"]])  # the agent's last words, from what the link holds
                             if said:
                                 item["said"] = said
+                    view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.15: the recently closed tasks the board still shows, to open again with `/api/super/send`
                     view["making"] = result.get("making") or []  # 1.8.5: chats the board made whose task is not there yet
                     return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows

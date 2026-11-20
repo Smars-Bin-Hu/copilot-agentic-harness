@@ -493,6 +493,37 @@ def set_by_person(root: Path, raw_task: str, number: int, interactive: Optional[
         return {"task": task, "n": number, "was": before, "changed": before != number, "checks_limit": limit(root, data), "next": say("review.set.next", n=number)}
 
 
+def checks_ok(root: Path, number: Any) -> bool:
+    """Is this a number of checks the board may set (`set_by_person` would take it): a whole number from 0 up to the cap (`review.max_n`), never a bool."""
+    return isinstance(number, int) and not isinstance(number, bool) and 0 <= number <= settings(root)["max_n"]
+
+
+def set_pending(root: Path, raw_task: str, number: int) -> bool:
+    """A person's n for a task that is closed (1.8.15, reopen from the super view): kept in `pending_checks` of the task state, applied by `apply_pending` once the task is open.
+    True when the task is open already (the caller applies it now). It changes nothing the person cannot change back; the checks are never set from a request the paired browser did not make."""
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        data["pending_checks"] = number
+        return data["status"] == "open"
+
+
+def apply_pending(root: Path, raw_task: str) -> Optional[Dict[str, Any]]:
+    """Set the n kept by `set_pending` through `set_by_person` (the board's `review set`) when the task is open, then forget it (a value that cannot be set any more, as the cap fell, is forgotten too).
+    A closed task keeps it. None when nothing was pending or nothing was done."""
+    task = task_ops.resolve(root, raw_task)
+    data = task_ops.read(root, task)
+    number = data.get("pending_checks")
+    if number is None or data["status"] != "open":
+        return None
+    try:
+        done = set_by_person(root, task, number if isinstance(number, int) else -1, interactive=True)
+    except CommandError:
+        done = None
+    with task_ops.locked(root, task) as again:
+        again.pop("pending_checks", None)
+    return done
+
+
 def extend(root: Path, raw_task: str, checks: int, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:
     person("task review extend", interactive)
     task = task_ops.resolve(root, raw_task)

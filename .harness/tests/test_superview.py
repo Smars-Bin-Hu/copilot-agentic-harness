@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 import support  # noqa: F401 - puts the engine on the path
 from test_boardserve import ServeCase, TASK
 
-from modules.task import superview
+from modules.task import superview, task as task_ops
 
 STOP = [{"action": "pause", "command": "harness task pause --task t"}, {"action": "close", "command": ""}]
 
@@ -25,6 +25,22 @@ def row(task: str, why: str = "", waited: Any = None, since: str = "", state: st
 
 def result(*rows: Dict[str, Any]) -> Dict[str, Any]:
     return {"rows": list(rows), "as_of": "2026-11-17T00:00:00+00:00", "hidden": 0}
+
+
+class ClosedListTests(unittest.TestCase):
+    def test_closed_tasks_newest_first_at_most_twelve(self) -> None:
+        rows = [row(f"c{index:02d}", status="closed", kind="dev", title=f"T{index}", closed_at=f"2026-11-{index + 1:02d}T00:00:00+00:00") for index in range(15)] + [row("open-one"), row("odd", status="new")]
+        found = superview.closed_of(rows)
+        self.assertEqual(len(found), 12)
+        self.assertEqual([item["task"] for item in found][:3], ["c14", "c13", "c12"])
+        self.assertEqual(found[0], {"task": "c14", "kind": "dev", "closed_at": "2026-11-15T00:00:00+00:00", "title": "T14"})
+        self.assertEqual(superview.closed_of(rows, 2)[1]["task"], "c13")
+
+    def test_without_closed_at_the_update_time_stands_in_and_bad_input_is_empty(self) -> None:
+        found = superview.closed_of([row("a", status="closed", updated_at="2026-11-02T00:00:00+00:00"), row("b", status="closed", updated_at="2026-11-03T00:00:00+00:00"), "x", None, {"status": "closed"}])
+        self.assertEqual([item["task"] for item in found], ["b", "a"])
+        self.assertEqual(found[0]["closed_at"], "2026-11-03T00:00:00+00:00")
+        self.assertEqual((superview.closed_of(None), superview.closed_of({}), superview.closed_of([])), ([], [], []))
 
 
 class BuildTests(unittest.TestCase):
@@ -202,6 +218,20 @@ class RouteTests(ServeCase):
         self.assertEqual(data["items"][0]["task"], TASK.rsplit("/", 1)[-1])
         board_rows = self.request("POST", "/api/board", {})[1]["rows"]
         self.assertEqual(data["items"][0]["why"], board_rows[0]["waiting_why"])
+
+    def test_the_route_lists_the_closed_tasks(self) -> None:
+        self.assertEqual(self.request("POST", "/api/super", {})[1]["closed"], [])
+        with task_ops.locked(self.root, TASK) as data:
+            data["status"] = "closed"
+            data["title"] = "A title"
+            task_ops.note(data, "close", "done")
+        found = self.request("POST", "/api/super", {})[1]
+        self.assertEqual(found["mates"], [])
+        self.assertEqual(len(found["closed"]), 1)
+        item = found["closed"][0]
+        self.assertEqual((item["task"], item["title"]), (TASK.rsplit("/", 1)[-1], "A title"))
+        self.assertEqual(set(item), {"task", "kind", "closed_at", "title"})
+        self.assertTrue(item["closed_at"])
 
 
 if __name__ == "__main__":

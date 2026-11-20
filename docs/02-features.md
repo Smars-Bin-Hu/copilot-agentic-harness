@@ -264,6 +264,7 @@ The third button of the board's header. It is never the default and the board do
 - **Previews**: a plan approval shows the plan's steps, a promote approval the changed files with their added and removed lines, a requirement to confirm what to do, what not to do and when it is done, and a delivery its summary and changed files (click to unfold).
 - **Steer and Stop**: right click a task's avatar while it works.
 - **Say something while it asks**: when an agent waits on its own question, the reply box (also on the task page and in the pop-out) sends your own words: the board skips the question and the agent goes on from what you said. A command confirmation still needs its buttons.
+- **Open a closed task again** (1.8.15): a message to a closed task, or a `reopen` card the super agent proposes, opens a new chat that opens the task again and then gives it your words. The view lists the 12 newest closed tasks. A message can also set the independent checks (the number waits until the task is open again); only your click sets them.
 - **Proposals**: ask the super agent for anything (archive, pause, autorun, checks, work for a task, a new task). It never acts: its answer ends with a card of the board's own buttons, checked against the board as it is now, and nothing happens until you press.
 - **Pop-out**: (1.8.3: also the reply box, previews, asking a task, and Steer / Stop from its list) the button in the header opens a small window that stays on top of other windows (Document Picture-in-Picture: Chrome and Edge only; company policy may block it).
 

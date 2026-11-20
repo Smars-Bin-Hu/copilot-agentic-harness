@@ -1,47 +1,145 @@
-// The stop button (1.8.11): a small icon at the top right of every served page, next to the Terminal toggle, shown only to a paired browser. A click asks once, then the board
-// stops (`POST /api/shutdown`) and the page says so and asks for nothing more: every timer, every request and every redraw of the page ends.
+// The top right of every served page (1.8.17, the person's choice of two prototypes): one row, one height. The search pill stays as it is; next to it a pill with the
+// greeting, the Terminal toggle (moved in from term.js) and the stop button. The stop button is quiet grey, soft red on hover or while its window is open, and shown to a
+// paired browser only. A click opens a card (Cancel has the focus, so a stray Enter stops nothing); Stop board posts `/api/shutdown`; a card says it is stopping, or that it
+// did not stop, with Try again. After the stop every timer, request and redraw ends and the page is one calm screen: the robot asleep, how to start it again.
 "use strict";
 
 const STOP = (function () {
-  function icon() {
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", "0 0 16 16");
-    svg.setAttribute("width", "14");
-    svg.setAttribute("height", "14");
+  const NS = "http://www.w3.org/2000/svg";
+  const PATHS = {power: ["M12 4v7", "M7.2 7.4a7 7 0 1 0 9.6 0"], warn: ["M12 6v7", "M12 17.4v.1"]};
+  function icon(name) {
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("aria-hidden", "true");
-    for (const [tag, attrs] of [["path", {d: "M4.6 3.6a6 6 0 1 0 6.8 0"}], ["path", {d: "M8 1.5v6"}]]) {
-      const part = document.createElementNS(ns, tag);
-      part.setAttribute("fill", "none");
-      part.setAttribute("stroke", "currentColor");
-      part.setAttribute("stroke-width", "1.7");
-      part.setAttribute("stroke-linecap", "round");
-      for (const name of Object.keys(attrs)) part.setAttribute(name, attrs[name]);
+    for (const d of PATHS[name]) {
+      const part = document.createElementNS(NS, "path");
+      part.setAttribute("d", d);
       svg.append(part);
     }
     return svg;
   }
-  // After the stop nothing may ask the server again: the timers and the redraws end, a request that is still made never comes back, and the page is replaced by one sentence.
+  // The robot asleep (closed eyes, two z). Drawn from the tokens of the theme, so light and dark both hold.
+  function robot() {
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 96 112");
+    svg.setAttribute("class", "sd-robot");
+    svg.setAttribute("aria-hidden", "true");
+    const add = (tag, attrs) => { const node = document.createElementNS(NS, tag); for (const key of Object.keys(attrs)) node.setAttribute(key, attrs[key]); svg.append(node); return node; };
+    add("ellipse", {cx: 48, cy: 104, rx: 26, ry: 4, fill: "var(--robot-shadow)"});
+    add("path", {d: "M48 22V12", stroke: "var(--robot-line)", "stroke-width": 2, "stroke-linecap": "round"});
+    add("circle", {cx: 48, cy: 9, r: 3.4, fill: "var(--robot-feet)", stroke: "var(--robot-line)", "stroke-width": 1.5});
+    add("rect", {x: 29, y: 64, width: 38, height: 30, rx: 12, fill: "var(--robot-body)", stroke: "var(--robot-line)", "stroke-width": 1.5});
+    add("rect", {x: 33, y: 94, width: 11, height: 6, rx: 3, fill: "var(--robot-feet)", stroke: "var(--robot-line)", "stroke-width": 1.2});
+    add("rect", {x: 52, y: 94, width: 11, height: 6, rx: 3, fill: "var(--robot-feet)", stroke: "var(--robot-line)", "stroke-width": 1.2});
+    add("rect", {x: 20, y: 22, width: 56, height: 42, rx: 17, fill: "var(--robot-head)", stroke: "var(--robot-line)", "stroke-width": 1.5});
+    add("rect", {x: 27, y: 31, width: 42, height: 24, rx: 12, fill: "var(--robot-visor)"});
+    add("path", {d: "M35 44q5 4.4 10 0", fill: "none", stroke: "var(--soft)", "stroke-width": 1.8, "stroke-linecap": "round"});
+    add("path", {d: "M51 44q5 4.4 10 0", fill: "none", stroke: "var(--soft)", "stroke-width": 1.8, "stroke-linecap": "round"});
+    add("text", {x: 80, y: 22, "font-size": 11, "font-weight": 700, fill: "var(--soft)", opacity: ".8"}).textContent = "z";
+    add("text", {x: 87, y: 12, "font-size": 8, "font-weight": 700, fill: "var(--soft)", opacity: ".55"}).textContent = "z";
+    return svg;
+  }
+
+  // After the stop nothing may ask the server again: the timers and the redraws end, a request that is still made never comes back, and the page is one calm screen.
   function stopped() {
     window.fetch = () => new Promise(() => {});
     window.requestAnimationFrame = () => 0;
     for (let id = window.setTimeout(() => {}, 0); id > 0; id--) { window.clearTimeout(id); window.clearInterval(id); }
     document.querySelectorAll('meta[http-equiv="refresh"]').forEach((node) => node.remove());
+    const theme = document.documentElement.getAttribute("data-theme");
     document.documentElement.className = "";  // the Enter screen hides `main` with a class of the page
+    if (theme) document.documentElement.setAttribute("data-theme", theme);
     document.body.className = "board-stopped-page";
-    document.body.replaceChildren(h("div", {class: "board-stopped", role: "status"}, h("p", null, t("board.stop.done"))));
+    const chip = h("span", {class: "sd-chip"}, icon("power"), "Start Harness");
+    document.body.replaceChildren(h("div", {class: "board-stopped", role: "status"}, robot(), h("h1", null, t("board.stop.done.title")), h("p", null, t("board.stop.done.sub")),
+      h("div", {class: "sd-start"}, h("span", null, t("board.stop.done.lead")), chip), h("p", {class: "sd-fine"}, t("board.stop.done.fine"))));
   }
+
+  // The card: confirm, stopping, failed. One at a time, over a scrim; Esc and a click on the scrim close it except while stopping; Tab stays inside.
+  function card(button) {
+    const before = document.activeElement;
+    const scrim = h("div", {class: "sd-scrim"});
+    let state = "";
+    const close = () => {
+      document.removeEventListener("keydown", onKey, true);
+      scrim.remove();
+      document.body.classList.remove("has-dialog");
+      button.setAttribute("aria-expanded", "false");
+      delete button.dataset.busy;
+      (before && before.isConnected ? before : button).focus({preventScroll: true});
+    };
+    const show = (next, error) => {
+      state = next;
+      button.setAttribute("aria-expanded", "true");
+      if (next === "stopping") button.dataset.busy = "1"; else delete button.dataset.busy;
+      const title = h("h3", {id: "sd-t"}, t(next === "confirm" ? "board.stop.title" : next === "stopping" ? "board.stop.stopping" : "board.stop.fail.title"));
+      const said = h("p", {id: "sd-d"}, t(next === "confirm" ? "board.stop.conseq" : next === "stopping" ? "board.stop.stopping.sub" : "board.stop.fail.sub"));
+      const mark = next === "stopping" ? h("span", {class: "sd-spin", "aria-hidden": "true"}) : icon(next === "failed" ? "warn" : "power");
+      const body = [title, said];
+      if (next === "stopping") body.push(h("div", {class: "sd-bar", "aria-hidden": "true"}, h("i")));
+      if (next === "failed") body.push(h("code", {class: "sd-err"}, error || ""));
+      let actions = null;
+      if (next !== "stopping") {
+        const back = h("button", {type: "button", class: "sd-btn"}, t(next === "confirm" ? "board.stop.cancel" : "board.stop.close"));
+        const go = h("button", {type: "button", class: "sd-btn danger"}, t(next === "confirm" ? "board.stop.go" : "board.stop.again"));
+        back.addEventListener("click", close);
+        go.addEventListener("click", run);
+        actions = h("div", {class: "sd-act"}, back, go);
+      }
+      const box = h("div", {class: "sd-dlg" + (next === "failed" ? " fail" : ""), role: "alertdialog", "aria-modal": "true", "aria-labelledby": "sd-t", "aria-describedby": "sd-d", "aria-busy": next === "stopping" ? "true" : null, tabindex: "-1"},
+        h("div", {class: "sd-top"}, h("span", {class: "sd-ic"}, mark), h("div", null, body)), actions);
+      scrim.replaceChildren(box);
+      const first = box.querySelector(".sd-btn");
+      (first || box).focus({preventScroll: true});
+    };
+    const run = () => {
+      show("stopping");
+      SERVE.call("/api/shutdown", {}, 10).then(() => { close(); stopped(); }, (error) => show("failed", error.message || String(error)));
+    };
+    const onKey = (event) => {
+      if (!scrim.isConnected) return;
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (state !== "stopping") close(); return; }
+      if (event.key === "Tab") {
+        const items = [...scrim.querySelectorAll("button")];
+        if (!items.length) { event.preventDefault(); return; }
+        const at = items.indexOf(document.activeElement);
+        if (event.shiftKey && at <= 0) { event.preventDefault(); items[items.length - 1].focus(); }
+        else if (!event.shiftKey && (at === items.length - 1 || at < 0)) { event.preventDefault(); items[0].focus(); }
+      }
+    };
+    scrim.addEventListener("click", (event) => { if (event.target === scrim && state !== "stopping") close(); });
+    document.addEventListener("keydown", onKey, true);
+    document.body.append(scrim);
+    document.body.classList.add("has-dialog");
+    show("confirm");
+  }
+
   function mount() {
     if (typeof SERVE === "undefined") return;
-    const button = h("button", {type: "button", class: "board-stop", title: t("board.stop.tip"), "aria-label": t("board.stop.tip"), hidden: ""});
-    button.append(icon());
-    button.addEventListener("click", () => {
-      if (!window.confirm(t("board.stop.confirm"))) return;
-      button.disabled = true;
-      SERVE.call("/api/shutdown", {}, 10).then(stopped, (error) => { button.disabled = false; window.alert(t("board.stop.failed", {error: error.message})); });
-    });
-    document.body.append(button);
-    SERVE.ready.then(() => SERVE.call("/api/status", {}, 8)).then((data) => { button.hidden = !data.paired; }, () => {});
+    const name = typeof DATA !== "undefined" && DATA && DATA.serve && typeof DATA.serve.user === "string" ? DATA.serve.user.trim() : "";
+    const button = h("button", {type: "button", class: "hd-ib hd-stop", "aria-label": t("board.stop.tip"), "aria-haspopup": "dialog", "aria-expanded": "false", hidden: ""}, icon("power"), h("span", {class: "hd-tip", role: "tooltip"}, t("board.stop.tip")));
+    button.addEventListener("click", () => { if (button.getAttribute("aria-expanded") !== "true") card(button); });
+    const toggle = document.querySelector(".term-toggle");  // term.js made it: it moves into the pill
+    const parts = [];
+    if (name) parts.push(h("span", {class: "hd-hi", title: t("board.enter.hi") + name}, t("board.enter.hi"), h("b", null, name)));
+    if (toggle) parts.push(parts.length ? h("i", {class: "hd-sep"}) : null, toggle);
+    const sepStop = h("i", {class: "hd-sep", hidden: ""});
+    parts.push(sepStop, button);
+    const pill = h("div", {class: "hd-acct" + (name ? " named" : "")}, parts);
+    if (!name && !toggle) pill.hidden = true;
+    document.body.append(pill);
+    const root = document.documentElement;
+    root.classList.add("has-hd");
+    if (name) root.classList.add("hd-named");  // the Enter screen's own greeting steps back: it is in the pill
+    const place = () => { root.style.setProperty("--hd-right", (pill.hidden ? 16 : pill.offsetWidth + 16 + 8) + "px"); };
+    place();
+    if (window.ResizeObserver) new ResizeObserver(place).observe(pill);
+    SERVE.ready.then(() => SERVE.call("/api/status", {}, 8)).then((data) => {
+      button.hidden = !data.paired;
+      sepStop.hidden = !data.paired || !(name || toggle);
+      if (data.paired) pill.hidden = false;
+      place();
+    }, () => {});
   }
   return {mount, stopped};
 })();

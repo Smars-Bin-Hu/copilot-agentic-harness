@@ -31,10 +31,58 @@ html.en-open .dock-home{display:none}  /* the Enter screen is where the house go
 .term-tab,.term-add,.term-x{border:0;background:none;color:var(--soft);font:12px var(--sans);cursor:pointer;padding:3px 6px;border-radius:6px}.term-tab{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.term-tab.on{color:var(--ink,var(--text));background:var(--line2)}.term-tab.busy::before{content:"\25cf ";color:var(--good-dot)}
 .term-out{flex:1;min-height:0;margin:0;padding:8px 10px;overflow:auto;font:12px/1.45 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}.term-line{display:flex;align-items:center;gap:6px;padding:6px 10px;border-top:1px solid var(--line2)}.term-mark{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--soft);font:12px var(--mono)}.term-in{flex:1;min-width:0;border:0;outline:0;background:none;color:inherit;font:12px var(--mono)}.term-stop[hidden]{display:none}.term-grip{position:absolute;left:0;bottom:0;width:18px;height:18px;cursor:nesw-resize;touch-action:none;background:linear-gradient(45deg,var(--soft) 0 1.5px,transparent 1.5px 4px,var(--soft) 4px 5.5px,transparent 5.5px) no-repeat 3px 100%/10px 10px;opacity:.6}.term-grip:hover{opacity:1}.term-line{padding-left:20px}
 body.has-dialog .term-toggle{visibility:hidden}
-/* 1.8.11: the stop button of the board, left of the Terminal toggle; after the stop the page holds one sentence */
-.board-stop{position:fixed;top:56px;right:62px;z-index:1200;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid var(--line2);border-radius:8px;background:var(--panel,var(--bg));color:var(--soft);cursor:pointer}.board-stop[hidden]{display:none}.board-stop:hover{color:var(--bad)}.board-stop:disabled{opacity:.5;cursor:default}
-body.has-dialog .board-stop{visibility:hidden}
-.board-stopped-page{display:flex;min-height:100vh;align-items:center;justify-content:center;background:var(--bg)}.board-stopped{max-width:34em;padding:24px;text-align:center;font:16px/1.5 var(--sans);color:var(--ink,var(--text))}
+/* 1.8.17: the top right, one row (stop.js): the search pill, then a pill with the greeting, the Terminal toggle and the stop button; the stop card; the stopped page */
+html.has-hd .sh-pill,html.has-hd.en-open .sh-pill{right:var(--hd-right,16px)}
+html.hd-named .en-hi{display:none}
+.hd-acct{position:fixed;top:14px;right:16px;z-index:1200;display:inline-flex;align-items:center;height:34px;padding:0 3px;border:1px solid var(--line2);border-radius:999px;background:var(--card);box-shadow:var(--shadow);color:var(--soft);font:13px var(--sans);max-width:calc(100vw - 32px)}
+.hd-acct[hidden]{display:none}
+.hd-acct.named{padding-left:13px}
+.hd-hi{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:24ch;min-width:0}
+.hd-hi b{color:var(--ink);font-weight:600}
+.hd-sep{flex:none;width:1px;height:16px;margin:0 4px;background:var(--line2)}.hd-sep[hidden]{display:none}
+.hd-acct.named>.hd-sep:first-of-type{margin-left:10px}
+.hd-acct .term-toggle{position:relative;top:auto;right:auto;z-index:auto;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:50%;background:none;font:600 11px var(--mono)}
+.hd-acct .term-toggle:hover,.hd-acct .term-toggle.on{background:var(--hover)}
+.hd-acct .term-toggle.busy,.hd-acct .term-toggle.ended{box-shadow:inset 0 0 0 1px var(--good-dot)}.hd-acct .term-toggle.broke{box-shadow:inset 0 0 0 1px var(--bad)}
+.hd-ib{position:relative;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:50%;background:none;color:var(--soft);cursor:pointer;transition:color .15s,background .15s}
+.hd-ib[hidden]{display:none}
+.hd-ib svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.hd-ib:focus-visible,.hd-acct .term-toggle:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.hd-stop:hover,.hd-stop:focus-visible,.hd-stop[aria-expanded="true"]{color:var(--bad);background:var(--bad-bg)}
+.hd-stop[aria-expanded="true"]{box-shadow:inset 0 0 0 1px var(--bad-line)}
+.hd-stop[data-busy="1"] svg{animation:hd-pulse 1.2s ease-in-out infinite}@keyframes hd-pulse{50%{opacity:.3}}
+.hd-tip{position:absolute;top:calc(100% + 8px);right:-4px;white-space:nowrap;padding:5px 9px;border-radius:8px;background:var(--btn);color:var(--btn-ink);font:500 12px var(--sans);opacity:0;transform:translateY(-3px);pointer-events:none;transition:opacity .12s,transform .12s}
+.hd-tip::before{content:"";position:absolute;top:-4px;right:14px;width:8px;height:8px;background:var(--btn);transform:rotate(45deg);border-radius:2px}
+.hd-stop:hover .hd-tip,.hd-stop:focus-visible .hd-tip{opacity:1;transform:none}.hd-stop[aria-expanded="true"] .hd-tip{opacity:0}
+body.has-dialog .hd-acct{visibility:hidden}
+@media (max-width:900px){.hd-hi{max-width:12ch}}
+.sd-scrim{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;padding:16px;background:var(--scrim)}
+.sd-dlg{width:min(380px,100%);padding:20px 20px 16px;border-radius:20px;color:var(--ink);background:var(--over);border:1px solid var(--glass-line);box-shadow:var(--glass-hi),var(--glass-shadow);font:13px/1.5 var(--sans);animation:sd-in .16s ease-out;outline:0}
+@keyframes sd-in{from{opacity:0;transform:translateY(-8px) scale(.985)}to{opacity:1;transform:none}}
+.sd-top{display:flex;gap:14px;align-items:flex-start}
+.sd-ic{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--track);color:var(--soft)}
+.sd-ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.sd-dlg.fail .sd-ic{background:var(--bad-bg);color:var(--bad)}
+.sd-dlg h3{margin:1px 0 4px;font-size:15.5px;font-weight:650}
+.sd-dlg p{margin:0;color:var(--soft)}
+.sd-err{display:block;margin-top:10px;padding:7px 10px;border:1px solid var(--bad-line);border-radius:10px;background:var(--bad-bg);color:var(--bad);font:12px/1.45 var(--mono);overflow-wrap:anywhere}
+.sd-act{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.sd-btn{display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font:550 13px var(--sans);cursor:pointer}
+.sd-btn:hover{background:var(--hover);border-color:var(--ink)}
+.sd-btn.danger{border-color:transparent;background:var(--bad);color:var(--card)}.sd-btn.danger:hover{filter:brightness(.92)}
+.sd-btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.sd-spin{width:18px;height:18px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--ink);animation:sd-spin .8s linear infinite}@keyframes sd-spin{to{transform:rotate(360deg)}}
+.sd-bar{height:3px;margin-top:16px;border-radius:2px;overflow:hidden;background:var(--track)}.sd-bar i{display:block;height:100%;width:40%;border-radius:2px;background:var(--ink);opacity:.55;animation:sd-slide 1.3s ease-in-out infinite}@keyframes sd-slide{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+@media (prefers-reduced-motion:reduce){.sd-spin,.sd-bar i,.sd-dlg,.hd-stop[data-busy="1"] svg{animation:none}.hd-tip{transition:none}}
+.board-stopped-page{display:flex;min-height:100vh;margin:0;align-items:center;justify-content:center;background:radial-gradient(ellipse 70% 60% at 50% 35%,var(--card),var(--bg) 78%);color:var(--ink)}
+.board-stopped{display:flex;flex-direction:column;align-items:center;max-width:34em;padding:24px;text-align:center;font:13.5px/1.5 var(--sans)}
+.board-stopped .sd-robot{width:92px;height:auto;margin-bottom:14px}
+.board-stopped h1{margin:0 0 4px;font-size:18px;font-weight:650}
+.board-stopped p{margin:0;color:var(--soft)}
+.sd-start{display:inline-flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin-top:16px;color:var(--soft);font-size:13px}
+.sd-chip{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 11px;border:1px solid var(--line2);border-radius:999px;background:var(--card);color:var(--ink);font:550 12.5px var(--mono)}
+.sd-chip svg{width:14px;height:14px;fill:none;stroke:var(--soft);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.board-stopped .sd-fine{margin-top:22px;font-size:12px;opacity:.85}
 
 .kb-servers{flex:none;display:flex;align-items:center;gap:6px;margin-top:10px;overflow-x:auto;white-space:nowrap;padding-bottom:2px}.kb-servers[hidden]{display:none}.kb-sv-head{font-size:12px;color:var(--soft);margin-right:2px}.kb-sv{display:inline-flex;align-items:center;gap:5px;flex:none;padding:2px 8px;border:1px solid var(--line2);border-radius:999px;font:12px var(--mono)}.kb-sv em{font-style:normal;font-size:10.5px;color:var(--soft)}.kb-sv-dot{width:7px;height:7px;border-radius:50%;background:var(--soft)}.kb-sv.own .kb-sv-dot{background:none;border:1.5px solid var(--hot)}.kb-sv-up{border:0;background:none;color:var(--hot);padding:0 0 0 2px;font-size:13px;line-height:1;cursor:pointer}.kb-sv-up:hover{color:var(--ink)}.kb-sv-win{max-width:min(460px,calc(100vw - 32px))}.kb-sv-lines{margin:8px 0;padding-left:18px;max-height:240px;overflow:auto}.kb-sv-lines code{overflow-wrap:anywhere}
 /* A narrow window has no gutter: the buttons lie in a row along the bottom edge, where the page keeps room for them (shell.css), not in a column over the content. */

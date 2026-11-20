@@ -417,7 +417,8 @@ class LaunchersTests(unittest.TestCase):
         self.assertIn("--background --splash", sh)
         self.assertEqual(cmd.count("pause"), 2)  # the missing Python, and an error of the board
         self.assertIn("if errorlevel 1 pause", cmd)
-        self.assertIn("You can close this window", sh.strip().splitlines()[-1])
+        self.assertIn("You can close this window", sh)
+        self.assertIn("then close w", sh, "macOS: the Terminal window is closed once the script has ended")
 
 
 if __name__ == "__main__":

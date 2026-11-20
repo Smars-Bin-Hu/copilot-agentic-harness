@@ -1,7 +1,7 @@
 """The start window of Start Harness (1.8.11): a small window without a frame, like the one a game shows while it loads, in place of the wheel in the terminal.
 
 It shows the stage of `boardbg.background` and the seconds, and closes by itself once a paired page is open. A start that fails stays on screen with the reason and a Close button.
-Tk runs on the main thread; the launcher's wait runs on another and talks to it through a queue only. On Windows the console window of `Start Harness.cmd` is hidden while the window shows, and shown
+Tk runs on the main thread; the launcher's wait runs on another and talks to it through a queue only. On Windows the console window of `Start Harness.cmd` (on macOS the Terminal window of `Start Harness.command`) is hidden while the window shows, and shown
 again when the start failed, so its `pause` can be seen. No tkinter, or no screen: `open_window` returns None and the terminal wheel is used. Stdlib only.
 """
 
@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import queue
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -25,10 +27,30 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 
-def console(show: bool) -> bool:
-    """Hide or show the console window of this process (Windows). Whether there was one. Never fails: the window is a helper."""
-    if os.name != "nt":
+def terminal_window(show: bool) -> bool:
+    """macOS: hide or show the Terminal window this process runs in (found by its tty), as `console` does on Windows. Whether it was found. Never fails."""
+    if sys.platform != "darwin" or os.environ.get("TERM_PROGRAM") != "Apple_Terminal":
         return False
+    try:
+        tty = os.ttyname(sys.stdin.fileno())
+    except (OSError, ValueError, AttributeError):
+        return False
+    script = (
+        'tell application "Terminal"\n set found to false\n repeat with w in windows\n'
+        f'  if tty of selected tab of w is "{tty}" then\n   set visible of w to {"true" if show else "false"}\n   set found to true\n  end if\n'
+        ' end repeat\n return found\nend tell'
+    )
+    try:
+        done = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0 and done.stdout.strip() == "true"
+
+
+def console(show: bool) -> bool:
+    """Hide or show the console window of this process: the console on Windows, the Terminal window on macOS. Whether there was one. Never fails: the window is a helper."""
+    if os.name != "nt":
+        return terminal_window(show)
     try:
         import ctypes
 

@@ -278,10 +278,10 @@ const COMPANION = (function () {
       const list = items();
       return state.view === "card" && list.length ? list[Math.min(Math.max(current(), 0), list.length - 1)].task : "";
     }
-    // "@name words": the name is one of the open tasks and ends at a space, the end or , : ; (longest name first, as the super view reads it).
+    // "@name words": the name is one of the open or recently closed tasks and ends at a space, the end or , : ; (longest name first, as the super view reads it).
     function nameIn(text) {
       if (!text.startsWith("@")) return null;
-      for (const name of (state.snap.mates || []).map((mate) => mate.task).sort((a, b) => b.length - a.length)) {
+      for (const name of [...(state.snap.mates || []).map((mate) => mate.task), ...(state.snap.closed || []).map((one) => one.task)].sort((a, b) => b.length - a.length)) {  // a closed task too: the message reopens it
         if (text.startsWith("@" + name) && /^($|[\s,:;])/.test(text.slice(name.length + 1))) return {task: name, text: text.slice(name.length + 1).replace(/^[\s,:;]+/, "").trim()};
       }
       return null;

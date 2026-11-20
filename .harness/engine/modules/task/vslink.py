@@ -31,7 +31,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from core import ahp, config, launchenv, messages, tasks
+from core import ahp, config, launchenv, messages, pace, tasks
 from core.paths import utc_now
 
 from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
@@ -561,7 +561,7 @@ class VsLink:
         job = Job(kind, task, text, model, plan, attachments)
         self.jobs.put(job)
         self.wake.set()
-        if not job.done.wait(JOB_WAIT):
+        if not job.done.wait(pace.scaled(JOB_WAIT)):
             job.cancelled = True  # a late thread must not send what the person was told failed
             raise Refused("timeout")
         if job.error is not None:
@@ -603,7 +603,7 @@ class VsLink:
         job = Job(kind, task, "", None, payload)
         self.jobs.put(job)
         self.wake.set()
-        if not job.done.wait(JOB_WAIT):
+        if not job.done.wait(pace.scaled(JOB_WAIT)):
             job.cancelled = True  # a late thread must not answer what the person was told failed
             raise Refused("timeout")
         if job.error is not None:
@@ -681,7 +681,7 @@ class VsLink:
             self.backoff.reset()
             if hasattr(link, "start_reader"):
                 link.start_reader()  # 1.8.7: one thread reads; the lanes call at once, and nobody waits in place for another's answer
-                link.default_timeout = BACKGROUND_TIMEOUT
+                link.default_timeout = pace.scaled(BACKGROUND_TIMEOUT)
             try:
                 self._serve(link)
             except (ahp.AhpError, OSError, ValueError):
@@ -1134,7 +1134,7 @@ class VsLink:
         """Who the host says made the chat (`vscode` is right). The host lists a chat only after its first turn began: asked for a few seconds. Empty: not known."""
         found = ahp.initiator_of(state.get("_meta"))
         tail = resource.rsplit("/", 1)[-1]
-        end = time.monotonic() + INITIATOR_WAIT
+        end = time.monotonic() + pace.scaled(INITIATOR_WAIT)
         while not found:
             for item in link.sessions():
                 if str(item.get("resource") or "").rsplit("/", 1)[-1] == tail:
@@ -1157,7 +1157,7 @@ class VsLink:
         plan = job.plan or {}
         made = plan.get("made") if isinstance(plan.get("made"), dict) else None
         resource = str(plan.get("session") or "ahp-session:/" + str(uuid.uuid4()))
-        wait = None if getattr(link, "reading", lambda: False)() else ahp.CREATE_TIMEOUT  # without a reader nobody would read a late answer
+        wait = None if getattr(link, "reading", lambda: False)() else ahp.create_timeout()  # without a reader nobody would read a late answer
         try:
             if plan.get("again"):
                 try:
@@ -1218,7 +1218,7 @@ class VsLink:
                 self.created.append(made)
             if made is not None:
                 made["chat"] = chat
-            self.expect[resource] = {"stub": stub, "until": time.monotonic() + EXPECT_FOR}  # the host lists it only once the first turn runs: until then the cache holds the stub
+            self.expect[resource] = {"stub": stub, "until": time.monotonic() + pace.scaled(EXPECT_FOR)}  # the host lists it only once the first turn runs: until then the cache holds the stub
             self.chats[chat] = held
             self.sess[resource] = {"channel": resource, "state": ahp.trimmed_session(state), "seen": {}}
         try:
@@ -1248,7 +1248,7 @@ class VsLink:
         agent = {"uri": str(plan["agent"])}
         resource, chat = str(plan.get("session") or ""), str(plan.get("chat") or "")
         stub: Optional[Dict[str, Any]] = None
-        wait = None if getattr(link, "reading", lambda: False)() else ahp.CREATE_TIMEOUT  # 1.8.7: making the chat waits for VS Code with no limit
+        wait = None if getattr(link, "reading", lambda: False)() else ahp.create_timeout()  # 1.8.7: making the chat waits for VS Code with no limit
         if not resource or not chat:
             with self.lock:
                 if self.super_making:
@@ -1269,7 +1269,7 @@ class VsLink:
             stub = {"resource": resource, "provider": ahp.LOCAL_PROVIDER, "title": "", "status": ahp.IN_PROGRESS, "defaultChat": chat, "chats": [{"resource": chat}],
                     "workingDirectories": [ahp.folder_uri(self.root)], "modifiedAt": ahp.utc_stamp()}
             with self.lock:
-                self.expect[resource] = {"stub": stub, "until": time.monotonic() + EXPECT_FOR}  # the host lists it only once the first turn runs
+                self.expect[resource] = {"stub": stub, "until": time.monotonic() + pace.scaled(EXPECT_FOR)}  # the host lists it only once the first turn runs
                 self.chats[chat] = held
                 self.sess[resource] = {"channel": resource, "state": ahp.trimmed_session(state), "seen": {}}
         else:
@@ -1319,7 +1319,7 @@ class VsLink:
             if job.cancelled:
                 raise Refused("timeout")
             gate = self._gate(job.task)
-            if not gate.acquire(timeout=GATE_WAIT):  # 1.8.7: the person's lane and the background (relay, follow, Start) may send to one chat at once: one at a time
+            if not gate.acquire(timeout=pace.scaled(GATE_WAIT)):  # 1.8.7: the person's lane and the background (relay, follow, Start) may send to one chat at once: one at a time
                 gate = None
                 raise Refused("not-idle")
             binding = self._recheck(link, job.task, job.kind)
@@ -1400,7 +1400,7 @@ class VsLink:
 
     def _settle(self, link: ahp.Connection, held: Dict[str, Any]) -> None:
         """Wait until the chat has no running turn (a stop takes a moment), reading the host's notices meanwhile; at most `UNDO_WAIT` seconds."""
-        end = time.monotonic() + UNDO_WAIT
+        end = time.monotonic() + pace.scaled(UNDO_WAIT)
         while time.monotonic() < end:
             with self.lock:
                 if not held["state"].get("activeTurn"):

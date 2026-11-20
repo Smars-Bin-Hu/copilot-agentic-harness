@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from core import config, tasks
+from core import config, pace, tasks
 from core.paths import utc_now
 
 from . import autorun, chatctx, task as task_ops, taskreview, tasksub
@@ -138,7 +138,7 @@ def decide(root: Path, task: str, data: Dict[str, Any], state: Dict[str, Any], s
             relay["next_at"] = ""  # something is running: a wait for a relay is void
         if pit and pit.get("sent"):
             pit["busy"] = True
-            if age(pit["sent"], now) > COMPACT_WAIT:
+            if age(pit["sent"], now) > pace.scaled(COMPACT_WAIT):  # 1.8.15
                 run["pit"] = None  # the compaction does not end: give the chat back
             return {"did": "compacting"}
         if not pit and percent_limit > 0 and found["percent"] is not None and found["percent"] >= percent_limit:

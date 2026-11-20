@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import tasks
+from core import pace, tasks
 from core.paths import utc_now
 
 from . import autorun, autorun_relay, task as task_ops
@@ -103,7 +103,7 @@ def step(root: Path, task: str, order: Dict[str, Any], state: Dict[str, Any], st
         order.update(stage="compact" if state.get("turns") else "send", stage_at=now.isoformat())
         return "config"
     if stage == "compact":
-        if waited > (COMPACT_WAIT if order["sent"] else IDLE_WAIT):
+        if waited > pace.scaled(COMPACT_WAIT if order["sent"] else IDLE_WAIT):  # 1.8.15
             order["stage"] = "over"
             return fail(root, task, "the chat did not finish /compact in time")
         if not order["sent"]:
@@ -125,7 +125,7 @@ def step(root: Path, task: str, order: Dict[str, Any], state: Dict[str, Any], st
         return "compacting"
     if stage == "send":
         if status not in ("idle", "error"):
-            if waited > IDLE_WAIT:
+            if waited > pace.scaled(IDLE_WAIT):
                 order["stage"] = "over"
                 return fail(root, task, "the chat stayed busy, so the first message was not sent")
             return "wait"

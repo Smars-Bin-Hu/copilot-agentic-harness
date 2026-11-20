@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.16 (1.8.0 – 1.8.16, 2026-11-17 – 2026-11-20)
+## 1.8.18 (1.8.0 – 1.8.18, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -25,11 +25,15 @@ To see which version you have: `harness --version`.
 - **Trying a change in an environment before the plan** (1.8.10): the agent may prove a change in DEV first, each write approved by you; its script is `trial-<name>` at the task root; `PLAN.md` then lists those writes under `Done before the plan`, with their evidence and how to undo them. The plan step of the ribbon has a small orange mark while such writes exist; its hover names the environments.
 
 - **The board in the background** (1.8.11): Start Harness starts the board with no terminal window to keep open; a small start window shows three stages (starting the board, waiting for the browser, pairing) and closes by itself when a paired page is open (a wheel in the terminal when Python has no tkinter). The console (Windows) or Terminal window (macOS, 1.8.12) is hidden meanwhile and closed at the end. A second double-click only opens the board. The power button at the top right of every page stops it; `harness task board --stop` too.
+- **Message a task directly from the super view** (1.8.14): with a task's avatar filter on, or `@name` in All, your words go straight to that task's chat (up to 10000 characters), not through the super agent: sent, queued (or steered in), or said in place of its own question; a task with no chat gets a new chat that goes on with it. One Send; the options (model, thinking, context, when it works, reply language, files, New chat for one message) sit in a menu behind the icon next to Send. Your words show as your bubble with how it went; a paused task is refused with **Resume**. The super agent's `send` card goes the same way.
+- **Open a closed task again from the super view** (1.8.17): **Closed (n)** at the end of the avatars lists the recently closed tasks; pick one (or `@name`) and send a message, and the board makes a new chat that opens the task again and then gives your words. The send menu has **Independent checks** (no change, 0 up to the board's limit), for that one message; on a closed task they are set once it is open again. The super agent can propose the same as a `reopen` card you press. Only your press sets checks.
 - **Pairing you do not see** (1.8.11): a browser stays paired for 30 days, across restarts of the board and of the browser. When a page is not paired, **Pair this browser** on it opens the board in your default browser, already paired.
-- **Checks of a closed task** (1.8.16): a task closed without independent checks can be checked afterwards. Write `[review]=n` with its name in a chat, or set **Checks after the close** on its page; the agent runs `harness task review after <task>` and the reviewer. The task stays closed, `DEV/` is not moved, nothing is promoted. The page and the report show these checks in a block of their own; a FAIL is only recorded (fix it in a new task with `task fork`).
+- **Green stamps on the Requirement, Changes and Scripts tabs** (1.8.16): the Requirement tab says when you confirmed it and with which code, amber when it changed since, as the Plan tab does; Changes says when the work was written back, to which branch, with the promote's code; a script of `DEV/_server/` that the gate let through shows **ran on DEV ×N**, each run in the hover (it says the call ran, not how it ended).
+- **Checks of a closed task** (1.8.18): a task closed without independent checks can be checked afterwards. Write `[review]=n` with its name in a chat, or set **Checks after the close** on its page; the agent runs `harness task review after <task>` and the reviewer. The task stays closed, `DEV/` is not moved, nothing is promoted. The page and the report show these checks in a block of their own; a FAIL is only recorded (fix it in a new task with `task fork`).
 
 ### Fixed
 
+- On a slow work computer fixed time limits made slowness look like a failure (1.8.15): red lines, buttons turned off, "the board did not come back", a second board started, a promote stopped halfway. The board now measures how slow the computer is when it starts and multiplies every time limit that is not a guardrail by a factor from 1 to 5 (`board.slow_factor` in `task.json` sets it by hand); the pages use the same factor. A board that listens but answers late is a busy board, not a missing one: a second start opens it. Only one `code agent endpoints` runs at a time. The guardrails keep their limits.
 - On a slow work computer, calls of one session waited out and were refused, and two of them could write the same task file (1.8.1): the locks are locks of the system now, and a call waits up to 20 seconds.
 - The Agent Performance Review button made the agent stop and ask you to type the skill (1.8.2): the board now sends `/<skill>` itself once the task is open.
 - The gate let the agent run `harness task allow --conn`, `--links` or `--off` (1.8.0).
@@ -44,7 +48,7 @@ To see which version you have: `harness --version`.
 - On a slow work computer the Enter screen turned Enter off with every line green, saying the board did not answer (1.8.13): the board works the answer out on a thread of its own and sends the last one at once; one late answer is not counted, and while the last answer was ready (two minutes at most) Enter stays on and an amber line says the board is slow. An answer that took over 3 seconds is written to `.harness/runtime/board.log` with the time of each part.
 - `harness doctor` often ran out of its 300 seconds on a work computer (1.8.13): the target repositories are checked from their files, with no git command; uncommitted files are checked by promote when it writes. **Check again** shows the progress bar of the run it started.
 - VS Code had been open for minutes and the Enter screen still said to open it (1.8.13): the board looks for a VS Code window on a thread of its own, every 2 seconds, not only between two tries to reach VS Code.
-- Opening a closed task again failed on Windows with `WinError 5` when something had a file under `DEV/` open (1.8.16): the move of `DEV/` aside is tried again for 5 seconds; if it is still refused, the message says which folder and what to close, and the task is left as it was.
+- Opening a closed task again failed on Windows with `WinError 5` when something had a file under `DEV/` open (1.8.18): the move of `DEV/` aside is tried again for 5 seconds; if it is still refused, the message says which folder and what to close, and the task is left as it was.
 
 ### Retired
 
@@ -52,6 +56,7 @@ To see which version you have: `harness --version`.
 - **Accept and close at once** (1.8.4): it counts down 10 seconds, with Undo; leaving the page before then closes nothing.
 - **`DEV/_manual/`** (1.8.9): it is `DEV/_server/` now, a script run on a server and never promoted. An old task's `DEV/_manual/` still counts as one. A skill that writes `DEV/_manual/`, or a folder of its own at the task root, should write `DEV/_server/`, `TEST/` or `RUNS/<ENV>/` instead.
 - **Deploys to IST by the agent** (1.8.9): `sqlserver-jobs` deploys a script to DEV only; higher environments get the change from the repository. A job or a check runs on IST only when you say so for the task.
+- **Asking a task read-only from the super view's input** (1.8.14): an avatar filter or `@name` now messages the task (see Added). Questions asked before still show in the day's history.
 
 ## 1.7.46 (1.7.0 – 1.7.46, 2026-11-04 – 2026-11-16)
 

@@ -80,7 +80,7 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
         lines += ["", say("mdreport.fetched", count=len(fetched), files=messages.joined(fetched[:30]) + (say("mdreport.fetched.more") if len(fetched) > 30 else ""))]
     now = [item for item in review.get("rounds") or [] if item.get("task_round") == data["round"]]
     checks = [item for item in now if not item.get("after")]
-    later = [item for item in now if item.get("after")]  # checks after the close (1.8.16): never the task's own, so a table of their own
+    later = [item for item in now if item.get("after")]  # checks after the close (1.8.18): never the task's own, so a table of their own
     no_verdict, refunded, dismissed = say("mdreport.checks.no_verdict"), say("mdreport.checks.refunded"), say("mdreport.checks.dismissed")  # a check that does not count says so in its row
 
     def table(items: List[Dict[str, Any]]) -> List[str]:

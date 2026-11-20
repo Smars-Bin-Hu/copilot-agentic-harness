@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import boardperson, messages
+from core import boardperson, messages, pace
 from core.paths import runtime_dir
 
 from . import boardserve
@@ -139,10 +139,11 @@ class Both:
 
 
 def background(root: Path, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, *, start: Optional[Callable[..., Any]] = None, sleep: Callable[[float], Any] = time.sleep,
-               clock: Callable[[], float] = time.monotonic, limit: float = WAIT_LIMIT, every: float = boardserve.WHEEL_EVERY, splash: bool = False) -> Dict[str, Any]:
+               clock: Callable[[], float] = time.monotonic, limit: Optional[float] = None, every: float = boardserve.WHEEL_EVERY, splash: bool = False) -> Dict[str, Any]:
     """`task board --background`: reopen the board that runs, or start one in the background; a wheel with the seconds until the browser has the page. `start`, `sleep`, `clock` exist for the tests.
     With `splash` (what the launchers ask for) the wheel is a small start window (`boardsplash`), when this Python can show one. Exit 0 when the board runs (a page seen or not), 1 when it did not start."""
     task_ops.person("task board --background", interactive, typed=False)
+    limit = pace.scaled(WAIT_LIMIT) if limit is None else limit  # 1.8.15: grown at the moment of use
     out = out or sys.stdout
     window = None
     if splash:
@@ -177,6 +178,7 @@ def background(root: Path, port: Optional[int] = None, out: Any = None, interact
 
 def wait(root: Path, port: Optional[int], ui: Any, *, start: Optional[Callable[..., Any]], sleep: Callable[[float], Any], clock: Callable[[], float], limit: float, every: float) -> Dict[str, Any]:
     """Start the board, or open the one that runs, then follow it until a paired page is open, shown on `ui` (the terminal wheel or the start window)."""
+    limit = pace.scaled(WAIT_LIMIT) if limit is None else limit  # 1.8.15: grown at the moment of use
     child = None
     running = boardserve.running_board(root)
     if running:  # nothing in the running board changes: it opens the browser with a new code
@@ -234,9 +236,10 @@ def failed(root: Path, ui: Any, why: str) -> Dict[str, Any]:
     return {"_text": "", "exit_code": 1}
 
 
-def stop(root: Path, out: Any = None, interactive: Optional[bool] = None, *, sleep: Callable[[float], Any] = time.sleep, clock: Callable[[], float] = time.monotonic, wait: float = STOP_WAIT) -> Dict[str, Any]:
+def stop(root: Path, out: Any = None, interactive: Optional[bool] = None, *, sleep: Callable[[float], Any] = time.sleep, clock: Callable[[], float] = time.monotonic, wait: Optional[float] = None) -> Dict[str, Any]:
     """`task board --stop`: ask the board of this copy to stop (the file of the guardrail folder), wait for it to go. A person only. No board running: it says so."""
     task_ops.person("task board --stop", interactive, typed=False)
+    wait = pace.scaled(STOP_WAIT) if wait is None else wait  # 1.8.15
     out = out or sys.stdout
     if not boardserve.running_board(root):
         print(say("serve.stop.none"), file=out, flush=True)

@@ -139,7 +139,7 @@ def done_now(data: Dict[str, Any], after: bool = False) -> List[Dict[str, Any]]:
 
 
 def rounds_now(data: Dict[str, Any], after: bool = False) -> List[Dict[str, Any]]:
-    """The checks of the task's current round (a new round after a promote starts the count again). The checks after the close (`after`, 1.8.16)
+    """The checks of the task's current round (a new round after a promote starts the count again). The checks after the close (`after`, 1.8.18)
     are kept apart: they are never the task's own checks, so they move no gate, dot or count of the work."""
     return [item for item in state_of(data)["rounds"] if item.get("task_round") == data["round"] and bool(item.get("after")) == after]
 
@@ -171,7 +171,7 @@ def used(data: Dict[str, Any], after: bool = False) -> int:
     return len(done_now(data, after))
 
 
-# --- checks after the close (1.8.16) -----------------------------------------------------------------
+# --- checks after the close (1.8.18) -----------------------------------------------------------------
 # A closed task that had no checks can be checked afterwards: the person sets n (`task review set` on the closed task, or `[review]=n` in a prompt
 # of a session that holds no open task), the agent binds its session with `task review after`, then runs `review start` and the reviewer as usual.
 # The task stays closed: no new round, DEV/ is not moved, nothing is promoted. A FAIL is only recorded; a fix is a new task (`task fork`).
@@ -606,6 +606,37 @@ def bind_after(root: Path, raw_task: str, session_id: str, surface: str = "vscod
     data = task_ops.read(root, task)
     info = after_summary(root, task, data)
     return {"task": task, "n": info["n"], "after": True, "passes": info["passes"], "checks_used": info["checks_used"], "checks_limit": info["checks_limit"], "next": after_next(root, task, data)}
+
+
+def checks_ok(root: Path, number: Any) -> bool:
+    """Is this a number of checks the board may set (`set_by_person` would take it): a whole number from 0 up to the cap (`review.max_n`), never a bool."""
+    return isinstance(number, int) and not isinstance(number, bool) and 0 <= number <= settings(root)["max_n"]
+
+
+def set_pending(root: Path, raw_task: str, number: int) -> bool:
+    """A person's n for a task that is closed (1.8.17, reopen from the super view): kept in `pending_checks` of the task state, applied by `apply_pending` once the task is open.
+    True when the task is open already (the caller applies it now). It changes nothing the person cannot change back; the checks are never set from a request the paired browser did not make."""
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        data["pending_checks"] = number
+        return data["status"] == "open"
+
+
+def apply_pending(root: Path, raw_task: str) -> Optional[Dict[str, Any]]:
+    """Set the n kept by `set_pending` through `set_by_person` (the board's `review set`) when the task is open, then forget it (a value that cannot be set any more, as the cap fell, is forgotten too).
+    A closed task keeps it. None when nothing was pending or nothing was done."""
+    task = task_ops.resolve(root, raw_task)
+    data = task_ops.read(root, task)
+    number = data.get("pending_checks")
+    if number is None or data["status"] != "open":
+        return None
+    try:
+        done = set_by_person(root, task, number if isinstance(number, int) else -1, interactive=True)
+    except CommandError:
+        done = None
+    with task_ops.locked(root, task) as again:
+        again.pop("pending_checks", None)
+    return done
 
 
 def extend(root: Path, raw_task: str, checks: int, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:

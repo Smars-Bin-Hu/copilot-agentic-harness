@@ -387,7 +387,7 @@ class StopTests(ReviewCase):
 
 
 class AfterTests(ReviewCase):
-    """Checks of a closed task, after the close (1.8.16): the task stays closed, no new round, a FAIL is only recorded."""
+    """Checks of a closed task, after the close (1.8.18): the task stays closed, no new round, a FAIL is only recorded."""
 
     def closed(self) -> None:
         self.job(0)

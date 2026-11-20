@@ -19,7 +19,7 @@ from core.paths import utc_now
 from . import chatsend, intake, task as task_ops, tasklife
 from .common import CommandError
 
-MAX_TEXT = 5000  # characters of what the person asks for
+MAX_TEXT = 10000  # characters of what the person asks for
 MAX_DOMAINS = 20  # domains a request may name (a knowledge base has few)
 MAX_LINKS = 10  # tickets a new task may be linked to at once
 PERMISSIONS = {"allow-all": "autoApprove"}  # the page's word -> `config.autoApprove` of the host. One only (1.6.38): with another, the agent's first command waits in VS Code before there is a task to show on the board

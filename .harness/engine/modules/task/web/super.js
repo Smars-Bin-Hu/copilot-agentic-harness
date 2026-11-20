@@ -64,7 +64,12 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const field = h("textarea", {class: "sa-field", rows: 1, maxlength: 2000, placeholder: t("super.input.ph"), "aria-label": t("super.input.ph")});
     const newTask = SERVE.runs("create") ? h("button", {type: "button", class: "sa-new", title: t("super.new.tip")}, t("super.new.go")) : null;
     const send = h("button", {type: "button", class: "sa-send", title: t("super.send"), "aria-label": t("super.send")}, "↑");
-    const box = h("div", {class: "sa-box"}, field, newTask, send);
+    // The direct message (superdirect.js): under an avatar (or after "@name") the words go to that task. The counter, the options menu (an icon next to Send) and the files it holds show only then.
+    const counter = h("span", {class: "sa-dcount", hidden: "", title: t("super.direct.count.tip")});
+    const direct = SUPERDIRECT.menu(field, sv);
+    direct.button.hidden = true;
+    const box = h("div", {class: "sa-box"}, field, newTask, counter, direct.button, send);
+    const to = h("div", {class: "sa-to", hidden: "", title: t("super.direct.to.tip")});  // "To: <task>": where the words go while a task is targeted
     const complete = h("div", {class: "sa-comp", role: "listbox", hidden: "", "aria-label": t("super.route.pick")});
     // The pop-out (companion.js): a small window that stays on top of every other window. Only where the browser can open one (Document Picture-in-Picture: Chrome, Edge).
     const popUp = typeof COMPANION !== "undefined" ? h("button", {type: "button", class: "sa-pop"}, "⇱") : null;
@@ -97,13 +102,13 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const queue = h("div", {class: "sa-queue", hidden: ""}, queueList, doneBox);
     const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => linked(text)) : null;  // the earlier days (superhist.js)
     sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
-      h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, box));
+      h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, direct.tray, to, box));
 
     foldBtn.addEventListener("click", () => setFold(!chatFolded, true));
     foldLine.addEventListener("click", () => setFold(false, true));
     drawFold();
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
-    let teamSig = "", bannerSig = "", mates = [], making = [], localThink = 0, failed = "";
+    let teamSig = "", bannerSig = "", mates = [], making = [], closedList = [], localThink = 0, failed = "";
     let pollTimer = 0, patrolToken = 0, noticeBusy = false, chain = Promise.resolve(), lastMate = "";
     let pointing = null, holdUntil = 0;  // the item the pet showed on a click (a second click soon after opens its task); the pet stays put until holdUntil
     let watchers = 0;  // the pop-out window is one: while it is open the data keeps coming, shown or not
@@ -162,12 +167,17 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
 
     // ---------- the avatars ----------
-    function drawTeam(list, creating) {
+    // The recently closed tasks (1.8.17): not on the strip as avatars but behind one control at its end. A task is "closed" here only while it has no avatar: once it is open again its avatar takes over.
+    const closedOnly = () => closedList.filter((one) => one && one.task && !mates.some((mate) => mate.task === one.task));
+    const isClosed = (task) => Boolean(task) && closedOnly().some((one) => one.task === task);
+    const closedTitle = (one) => String((one && one.title) || "");
+    function drawTeam(list, creating, shut) {
       mates = list; making = creating || [];
-      const sig = JSON.stringify([list, making]) + "|" + filter;
+      if (shut) closedList = shut;
+      const sig = JSON.stringify([list, making, closedList]) + "|" + filter;
       if (sig === teamSig) return;
       teamSig = sig;
-      if (filter && !list.some((mate) => mate.task === filter)) filter = "";
+      if (filter && !list.some((mate) => mate.task === filter) && !isClosed(filter)) filter = "";
       const all = h("button", {type: "button", class: "sa-mate all" + (filter ? "" : " on"), "data-task": "", title: t("super.team.all.tip")}, h("span", {class: "sa-ring"}, t("super.team.all")), h("span", {class: "sa-nm"}, t("super.team.all")));
       const nodes = list.map((mate, at) => {
         const state = MATE[mate.state] ? mate.state : "idle";
@@ -180,12 +190,59 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       // One avatar for each task the board is still making: a spinner and its name; not a filter, no menu.
       const makes = making.map((one) => h("span", {class: "sa-mk", "data-making": one.name, title: makingTip(one)},
         h("span", {class: "sa-ring"}, makingInfo(one).stage === "refused" || makingInfo(one).stage === "lost" ? h("span", {class: "mk-dot", "aria-hidden": "true"}) : spinner("sa-spin")), h("span", {class: "sa-nm"}, one.name), h("span", {class: "sa-mkst"}, makingMarks(one, true))));
-      team.replaceChildren(all, ...nodes, ...makes);
+      const shutList = closedOnly();
+      const closedBtn = shutList.length ? h("button", {type: "button", class: "sa-closed" + (isClosed(filter) ? " on" : ""), "aria-haspopup": "true", "aria-expanded": closedMenuNode ? "true" : "false", title: t("super.closed.tip", {n: shutList.length}), "aria-label": t("super.closed.tip", {n: shutList.length})},
+        h("span", {class: "sa-ring", "aria-hidden": "true"}, h("span", {class: "sa-clico"}, "\u25A4")), h("span", {class: "sa-nm"}, t("super.closed", {n: shutList.length}))) : null;
+      team.replaceChildren(all, ...nodes, ...makes, ...(closedBtn ? [closedBtn] : []));
     }
     team.addEventListener("click", (event) => {
+      const shut = event.target.closest(".sa-closed");
+      if (shut) { if (closedMenuNode) closedMenuClose(true); else closedMenuOpen(shut); return; }
       const mate = event.target.closest(".sa-mate");
       if (mate) setFilter(mate.dataset.task === filter ? "" : mate.dataset.task);
     });
+    // ---------- the list of the closed tasks: a small menu under the control; picking one sets the filter to it (the input then reopens it) ----------
+    let closedMenuNode = null, closedMenuFrom = null;
+    function closedMenuClose(back) {
+      if (!closedMenuNode) return;
+      closedMenuNode.remove();
+      closedMenuNode = null;
+      removeEventListener("pointerdown", closedMenuOutside, true);
+      removeEventListener("keydown", closedMenuKey, true);
+      const from = closedMenuFrom;
+      closedMenuFrom = null;
+      if (from && from.isConnected) { from.setAttribute("aria-expanded", "false"); if (back) from.focus(); }
+    }
+    function closedMenuOutside(event) { if (closedMenuNode && !closedMenuNode.contains(event.target) && !(closedMenuFrom && closedMenuFrom.contains(event.target))) closedMenuClose(false); }
+    function closedMenuKey(event) {
+      if (!closedMenuNode) return;
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closedMenuClose(true); return; }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const list = [...closedMenuNode.querySelectorAll("button.sa-cl-item")];
+      if (!list.length) return;
+      event.preventDefault();
+      list[(list.indexOf(document.activeElement) + (event.key === "ArrowDown" ? 1 : -1) + list.length) % list.length].focus();
+    }
+    function closedMenuOpen(from) {
+      closedMenuClose(false);
+      const items = closedOnly().map((one) => {
+        const node = h("button", {type: "button", role: "menuitem", class: "sa-skin sa-cl-item", "data-closed": one.task, title: one.task + (closedTitle(one) ? "\n" + closedTitle(one) : "") + (one.closed_at ? "\n" + t("super.closed.at", {when: when(one.closed_at, 5, 16)}) : "")},
+          h("span", {class: "sa-cl-name"}, one.task), closedTitle(one) && closedTitle(one) !== one.task ? h("span", {class: "sa-cl-title"}, closedTitle(one)) : null);
+        node.addEventListener("click", () => { closedMenuClose(false); setFilter(one.task); field.focus(); });
+        return node;
+      });
+      closedMenuNode = h("div", {class: "sa-skins sa-closedmenu", role: "menu", "aria-label": t("super.closed.menu")}, h("div", {class: "sa-skins-head"}, t("super.closed.head")), ...items);
+      closedMenuFrom = from;
+      from.setAttribute("aria-expanded", "true");
+      sv.append(closedMenuNode);
+      const box = hostBox(), at = from.getBoundingClientRect(), size = {w: closedMenuNode.offsetWidth, h: closedMenuNode.offsetHeight};
+      closedMenuNode.style.left = clamp(at.right - box.left - size.w, 0, Math.max(0, box.width - size.w)) + "px";
+      closedMenuNode.style.top = clamp(at.bottom - box.top + 4, 0, Math.max(0, box.height - size.h)) + "px";
+      const first = closedMenuNode.querySelector("button.sa-cl-item");
+      if (first) first.focus();
+      addEventListener("pointerdown", closedMenuOutside, true);
+      addEventListener("keydown", closedMenuKey, true);
+    }
     // ---------- the menu of an avatar (1.8.2): right click or the menu key. Steer and Stop, only while the task works ----------
     let mateMenuNode = null, mateMenuFrom = null;
     const mateMenuWorks = (task) => Boolean(["work", "stuck"].includes((mates.find((mate) => mate.task === task) || {}).state) || rowFor(task).state === "working");
@@ -291,7 +348,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
 
     // ---------- the messages ----------
-    function addSys(text) { add(h("div", {class: "sa-sys"}, text)); }
+    // A line of the chat. With a task it belongs to that task's thread (the filter of another task hides it, the filter of this one and All show it); `title`: the words it is about.
+    function addSys(text, task, bad, title) { const node = h("div", {class: "sa-sys" + (bad ? " bad" : ""), "data-task": task || null, title: title || null}, text); add(node, true); return node; }
     // A long day: the chat shows its last FOLD messages; the older ones are behind "Show earlier" (the task items are never folded).
     const FOLD = 40, chatRows = [];
     let unfolded = false;
@@ -302,10 +360,26 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       earlier.textContent = hide ? t("super.earlier", {n: hide}) : "";
     }
     earlier.addEventListener("click", () => { unfolded = true; foldChat(); });
-    function addYou(text, at) {
-      const row = h("div", {class: "sa-row me"}, h("div", {class: "sa-bub", title: at ? when(at, 11, 16) : null}, text));
+    // The person's words. With a `task` they are a message to that task (a direct one): the row belongs to its thread, and long words fold after FOLD_LINES lines behind "Show more".
+    const FOLD_LINES = 8;
+    function addYou(text, at, task) {
+      const body = h("div", {class: "sa-ytext"}, text), bub = h("div", {class: "sa-bub", title: at ? when(at, 11, 16) : null}, body);
+      if (task && routeEstimate(text) > FOLD_LINES) {
+        const more = h("button", {type: "button", class: "sa-askmore sa-ymore"}, t("super.more"));
+        body.classList.add("sa-clip");
+        more.addEventListener("click", () => { body.classList.remove("sa-clip"); more.remove(); });
+        bub.append(more);
+      }
+      const row = h("div", {class: "sa-row me", "data-task": task || null}, bub);
       chatRows.push(row);
       add(row, true);
+      foldChat();
+      return row;
+    }
+    function dropYou(row) {
+      const at = chatRows.indexOf(row);
+      if (at >= 0) chatRows.splice(at, 1);
+      row.remove();
       foldChat();
     }
     function addAgent(message) {
@@ -321,9 +395,10 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     // The card is drawn again in place when its proposals change (the server checks them at every poll); words typed in a Send box stay.
     const ACT = new Map();  // message id -> {box, sig, list, drafts, pressed, done}
     const ACT_ALL = ["archive", "pause", "resume", "close", "review set"];  // "Do all" only for what needs no code and no dialog of its own
-    const ACT_WHY = {unknown: "super.act.why.unknown", state: "super.act.why.state", kind: "super.act.why.kind", n: "super.act.why.n", text: "super.act.why.text", paused: "super.act.why.paused", closed: "super.act.why.closed", empty: "super.act.why.empty", long: "super.act.why.long", name: "super.act.why.name", taken: "super.act.why.taken", bad: "super.act.why.bad"};
+    const ACT_WHY = {open: "super.act.why.open", checks: "super.act.why.checks", unknown: "super.act.why.unknown", state: "super.act.why.state", kind: "super.act.why.kind", n: "super.act.why.n", text: "super.act.why.text", paused: "super.act.why.paused", closed: "super.act.why.closed", empty: "super.act.why.empty", long: "super.act.why.long", name: "super.act.why.name", taken: "super.act.why.taken", bad: "super.act.why.bad"};
     const actSig = (list) => JSON.stringify(list || []);
     const actWhat = (one) => (one.kind === "send" ? t("super.act.send.to", {task: one.task})
+      : one.kind === "reopen" ? t("super.act.reopen.to", {task: one.task})
       : one.kind === "new" ? t("super.act.new", {name: one.name})
       : one.action === "review set" ? t("super.act.set.what", {task: one.task, n: one.n})
       : one.action === "steer" ? t("super.act.steer.what", {task: one.task})
@@ -347,17 +422,24 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         go.addEventListener("click", () => { state.pressed.set(at, stamp()); CHAT.create({name: one.name, kind: one.task_kind, text: one.text}); });
         return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), h("span", {class: "sa-actkind"}, one.task_kind || "dev"), go), h("div", {class: "sa-acttext"}, one.text));
       }
-      if (one.kind === "send") {
-        const box = h("textarea", {class: "sa-reply-box sa-acttextbox", rows: "3", maxlength: 2000, "aria-label": t("super.act.send.tip")});
+      if (one.kind === "send" || one.kind === "reopen") {  // a reopen card is a send card for a closed task: the same editable message and menu, its checks from the proposal, and the button says Reopen; the same options menu as the input; the receipt says how it went (sent, queued, said, new chat)
+        const box = h("textarea", {class: "sa-reply-box sa-acttextbox", rows: "3", maxlength: SUPERDIRECT.MAX, "aria-label": t("super.act.send.tip")});
         box.value = state.drafts.has(at) ? state.drafts.get(at) : (one.text || "");
         box.addEventListener("input", () => state.drafts.set(at, box.value));
-        const go = h("button", {type: "button", class: "act hot live"}, t("super.act.send.go"));
-        go.addEventListener("click", () => {
+        const options = SUPERDIRECT.menu(box, sv);
+        options.bind(one.task);
+        options.presetChecks(one.kind === "reopen" && Number.isInteger(one.checks) ? one.checks : "");  // the card holds its own checks: the box's are not its
+        const go = h("button", {type: "button", class: "act hot live"}, t(one.kind === "reopen" ? "super.act.reopen.go" : "super.act.send.go"));
+        go.addEventListener("click", async () => {
           const text = box.value.trim();
-          if (!text) return;
-          post(go, () => (mateMenuWorks(one.task) ? SERVE.post("/api/queue", {task: one.task, text, lang: ""}) : SERVE.post("/api/send", {task: one.task, kind: "answer", body: text, note: "", lang: "", step: "act"})));
+          if (!text || options.reading()) return;
+          go.disabled = true; said.replaceChildren();
+          const result = await directSend(one.task, text, options.values(), true);
+          if (result.ok) { options.clear(); state.done.set(at, SUPERDIRECT.howWord(result.how, result) + " \u00b7 " + stamp()); actDraw(state); emit(); return; }
+          go.disabled = false;
+          said.replaceChildren(...refusalNodes(one.task, result.why, result.error, (words) => said.replaceChildren(words)));
         });
-        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), h("div", {class: "sa-reply"}, box, go), said);
+        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), h("div", {class: "sa-reply"}, box, options.button, go), options.tray, said);
       }
       let button;
       if (one.action === "review set") {
@@ -729,7 +811,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const kind = previewKind(item);
       if (!kind) return null;
       const box = h("details", {class: "sa-pv", hidden: ""});
-      if (!PREVIEW_ASKED.has(item.id)) PREVIEW_ASKED.set(item.id, SERVE.call("/api/super/preview", {task: item.task, kind}, 8).then((result) => result || {}, () => ({})));
+      if (!PREVIEW_ASKED.has(item.id)) PREVIEW_ASKED.set(item.id, SERVE.call("/api/super/preview", {task: item.task, kind}, 30).then((result) => result || {}, () => ({})));
       PREVIEW_ASKED.get(item.id).then((result) => previewFill(box, item, kind, result));
       return box;
     }
@@ -1081,7 +1163,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const routing = Boolean(filter);  // one task's avatar is on: the input asks that task, whatever the super chat's state
       const off = routing ? "" : talkOff(), blocked = routing ? false : Boolean(off) || thinkingNow(), quickOff = Boolean(talkOff()) || thinkingNow();
       field.disabled = Boolean(off);
-      field.placeholder = off ? t(OFF[off]) : routing ? t("super.route.ph", {task: filter}) : t("super.input.ph");
+      field.placeholder = off ? t(OFF[off]) : routing ? t(isClosed(filter) ? "super.direct.reopen.ph" : "super.direct.ph", {task: filter}) : t("super.input.ph");
       field.title = field.placeholder;
       send.disabled = blocked;
       box.classList.toggle("off", Boolean(off));
@@ -1095,6 +1177,27 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       }
       for (const button of quick.children) button.disabled = quickOff;
       routeComplete();
+      drawDirect();
+    }
+    // The direct message: the counter, the options menu and the length limit follow the target of the words (the avatar, or "@name" in All).
+    function drawDirect() {
+      const typed = field.value.trim(), target = routeTarget(typed), on = Boolean(target) && !talkOff() || Boolean(filter);
+      direct.button.hidden = !on;
+      if (newTask) newTask.hidden = on;  // the room is for the words and the options
+      counter.hidden = !on;
+      to.hidden = !on;
+      direct.tray.classList.toggle("sa-off", !on);
+      if (!on) { field.maxLength = 2000; return; }
+      const name = target ? target.task : filter;
+      const shut = isClosed(name);
+      to.textContent = t(shut ? "super.direct.reopen" : "super.direct.to", {task: name});
+      to.title = t(shut ? "super.direct.reopen.tip" : "super.direct.to.tip");
+      to.classList.toggle("sa-reopen", shut);
+      direct.bind(name);
+      const used = target ? target.text.length : 0;
+      field.maxLength = SUPERDIRECT.MAX + (target ? typed.length - target.text.length : 0);
+      counter.textContent = t("super.direct.count", {n: used, max: SUPERDIRECT.MAX});
+      counter.classList.toggle("over", used >= SUPERDIRECT.MAX);
     }
     async function ask(body, text) {
       if (talkOff() || thinkingNow()) return;
@@ -1108,7 +1211,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       localThink = Date.now();
       applyMood(); drawInput(); schedule(); emit();
       let result;
-      try { result = await SERVE.call("/api/super/ask", body || {text: typed}, 10); } catch (error) { result = (error && error.data && typeof error.data === "object" && error.data.why) ? error.data : {ok: false, why: "none"}; }
+      try { result = await SERVE.call("/api/super/ask", body || {text: typed}, 30); } catch (error) { result = (error && error.data && typeof error.data === "object" && error.data.why) ? error.data : {ok: false, why: "none"}; }
       if (result && result.ok === false) {
         localThink = 0;
         const at = pendingYou.indexOf(mine); if (at >= 0) pendingYou.splice(at, 1);
@@ -1124,46 +1227,80 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const routeKey = (why) => ROUTE_WHY[why] || "super.route.why.other";
     const routeEstimate = (text) => String(text).split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 60)), 0);  // the lines an answer takes, about
     let routeBusy = false, routePick = -1, routeNames = [];
+    const routeNamesAll = () => [...mates.map((mate) => mate.task), ...closedOnly().map((one) => one.task)];  // the open tasks, then the closed ones (a message to one of those reopens it)
     // Where the typed words go: the task of the filter, or the task named after "@" (the name ends at a space or a mark, not inside a longer name), else the super chat (null).
     function routeTarget(typed) {
       if (filter) return {task: filter, text: typed};
       if (!typed.startsWith("@")) return null;
-      for (const name of mates.map((mate) => mate.task).sort((a, b) => b.length - a.length)) {
+      for (const name of routeNamesAll().sort((a, b) => b.length - a.length)) {
         if (!typed.startsWith("@" + name) || !/^($|[\s,:;])/.test(typed.slice(name.length + 1))) continue;  // the name ends at a space, the end or , : ; (not inside a longer name such as job.v2)
         return {task: name, text: typed.slice(name.length + 1).replace(/^[\s,:;]+/, "").trim()};
       }
       return null;
     }
-    // One ask to one task (the view's and the pop-out's): "" when it went, else the reason code.
-    async function routeAsk(task, text) {
-      if (!text) return "empty";
-      try {
-        const result = await SERVE.call("/api/super/route", {task, text, lang: ""}, 10);
-        return !result || result.ok === false ? (result && result.why) || "other" : "";
-      } catch (error) {
-        return error && error.status === 403 ? "unpaired" : error && error.data && typeof error.data === "object" && error.data.why ? error.data.why : "other";
+    // The refusal of a direct message as the nodes of one line: the words and, when the task is paused, a Resume button for that one task (the board's own `resume`, as its card or row has). `after` says what to do once it ran.
+    function refusalNodes(task, why, error, after) {
+      const out = [SUPERDIRECT.refusal(task, why, error)];
+      if (why === "paused") {
+        const button = actionButton(rowFor(task), {action: "resume"}, "sa-resume");
+        button.addEventListener("click", () => {
+          let tries = 0;
+          const look = setInterval(() => {  // the board draws the new state after its own call: the line tells when the task is back
+            if (++tries > 14 || !button.isConnected) { clearInterval(look); return; }
+            const row = (rowsOf() || []).find((one) => one.name === task || one.task === task);
+            if (row && !row.paused_since) { clearInterval(look); if (after) after(t("super.direct.resumed", {task})); }
+          }, 500);
+        });
+        out.push(button);
       }
+      return out;
     }
-    async function routeSend(target, typed) {
+    // One direct message to one task (the input's, the card's and the pop-out's): {ok, how, text} with the line to show, or {ok: false, why, text}. Said in the task's thread, so the filter never hides it.
+    // Not quiet: the person's words show as their own bubble (after the send, or at once when it may make a new chat: that takes long), then one line under it with the result. A refusal shows no bubble.
+    async function directSend(task, text, options, quiet) {
+      const slow = !quiet && (Boolean(options && options.new_chat) || chatGone(rowFor(task)) || isClosed(task));
+      let bubble = null, line = null;
+      if (slow) {
+        bubble = addYou(text, new Date().toISOString(), task);
+        line = addSys(t(isClosed(task) ? "super.direct.reopening" : "super.direct.making", {task}), task, false, String(text).slice(0, 300));
+        line.classList.add("sa-dl", "sa-pend");
+      }
+      const result = await SUPERDIRECT.send(task, text, options);
+      if (!quiet) {
+        const ok = result.ok;
+        const nodes = ok ? [SUPERDIRECT.receipt(result.how, task, result) + (result.how === "said" ? " " + t("super.direct.skipped") : "")] : refusalNodes(task, result.why, result.error, (words) => { if (line && line.isConnected) { line.classList.remove("bad"); line.replaceChildren(words); } });
+        if (ok && !bubble) bubble = addYou(text, new Date().toISOString(), task);
+        if (!ok && bubble) { dropYou(bubble); bubble = null; }
+        if (line) { line.className = "sa-sys sa-dl" + (ok ? "" : " bad"); line.replaceChildren(...nodes); line.title = String(text).slice(0, 300); }
+        else line = addSys(nodes, task, !ok, String(text).slice(0, 300));
+        line.classList.add("sa-dl");
+        if (bubble || !ok) toBottom();
+      }
+      if (result.ok) poll().then(schedule, schedule);
+      return result;
+    }
+    async function submit_direct(target, typed) {
       routeBusy = true;
+      const options = direct.values();
       field.value = "";
       field.style.height = "auto";
       routeComplete();
-      const why = await routeAsk(target.task, target.text);
+      drawDirect();
+      const result = await directSend(target.task, target.text, options);
       routeBusy = false;
-      if (why) {  // refused: say why in the stream, the words go back into the input
-        if (!field.value) field.value = typed;
-        field.dispatchEvent(new Event("input"));
-        addSys(t(routeKey(why)));
-        return;
-      }
-      poll().then(schedule, schedule);
+      if (result.ok) { direct.clear(); drawInput(); return; }
+      if (!field.value) field.value = typed;  // refused: the words come back into the input
+      field.dispatchEvent(new Event("input"));
     }
     function submit() {
       const typed = field.value.trim();
       if (!typed || routeBusy) return;
       const target = routeTarget(typed);
-      if (target) routeSend(target, typed); else ask(null);
+      if (target && direct.reading()) return;  // a file is still being read
+      if (target) { submit_direct(target, typed); return; }
+      const named = filter ? null : /^@([^\s,:;]+)/.exec(typed);  // "@name" that is no open task: never a question to the super agent (it costs Credits); the words stay in the box
+      if (named) { addSys(t("super.route.noname", {name: named[1]}), "", true, typed.slice(0, 300)).classList.add("sa-dl"); return; }
+      ask(null);
     }
     // The ask rows: one per ask, drawn again in place when its state changes (never added twice).
     function routeBuild(item) {
@@ -1208,19 +1345,21 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       for (const item of asks || []) { const entry = item && ROUTE_ASKS.get(item.id); if (entry) routeDraw(entry, item); }
     }
     // "@" completion: the open task names, filtered as the person types; ArrowUp/ArrowDown move, Enter or Tab pick, Esc closes, a click picks.
-    const label = (task) => String((mates.find((mate) => mate.task === task) || {}).label || "");
+    const label = (task) => String((mates.find((mate) => mate.task === task) || closedOnly().find((one) => one.task === task) || {}).label || (closedOnly().find((one) => one.task === task) || {}).title || "");
     function routeComplete() {
       const word = /^@([^\s]*)$/.exec(field.value);
-      routeNames = !filter && word ? mates.filter((mate) => (mate.task + " " + (mate.label || "")).toLowerCase().includes(word[1].toLowerCase())).map((mate) => mate.task).slice(0, 8) : [];
+      const fits = (name, extra) => (name + " " + (extra || "")).toLowerCase().includes(word[1].toLowerCase());
+      routeNames = !filter && word ? [...mates.filter((mate) => fits(mate.task, mate.label)).map((mate) => mate.task), ...closedOnly().filter((one) => fits(one.task, closedTitle(one))).map((one) => one.task)].slice(0, 8) : [];  // open tasks first, then the closed ones
       if (routePick >= routeNames.length) routePick = routeNames.length - 1;
       if (routePick < 0 && routeNames.length) routePick = 0;
       complete.hidden = !routeNames.length;
-      complete.replaceChildren(...routeNames.map((name, at) => h("div", {class: "sa-opt" + (at === routePick ? " on" : ""), role: "option", "aria-selected": String(at === routePick), "data-task": name}, ...(label(name) ? [name, h("span", {class: "sa-optl"}, " \u00b7 " + label(name))] : [name]))));
+      complete.replaceChildren(...routeNames.map((name, at) => h("div", {class: "sa-opt" + (at === routePick ? " on" : ""), role: "option", "aria-selected": String(at === routePick), "data-task": name}, ...[name, ...(label(name) ? [h("span", {class: "sa-optl"}, " \u00b7 " + label(name))] : []), ...(isClosed(name) ? [h("span", {class: "sa-optx", title: t("super.direct.reopen.tip")}, t("super.closed.mark"))] : [])])));
     }
     function routeChoose(name) {
       field.value = "@" + name + " ";
       routePick = -1;
       routeComplete();
+      drawDirect();
       field.focus();
     }
     complete.addEventListener("mousedown", (event) => event.preventDefault());
@@ -1231,7 +1370,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       else if (isEnter(event) || event.key === "Tab") { event.preventDefault(); event.stopImmediatePropagation(); routeChoose(routeNames[Math.max(0, routePick)]); }
       else if (event.key === "Escape") { event.preventDefault(); routePick = -1; routeNames = []; complete.hidden = true; }
     });
-    field.addEventListener("input", () => { routePick = -1; routeComplete(); });
+    field.addEventListener("input", () => { routePick = -1; routeComplete(); drawDirect(); });
     send.addEventListener("click", submit);
     field.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey) { event.preventDefault(); submit(); } });
     field.addEventListener("input", () => { setFold(false, false); field.style.height = "auto"; field.style.height = Math.min(120, field.scrollHeight) + "px"; });
@@ -1243,7 +1382,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       if (shown) fit();  // the board's banner above the view may have gone (hidden by the person): the view takes the room it left
       data = result;
       talk = spoken && typeof spoken === "object" && spoken.state ? spoken : null;
-      drawTeam(result.mates || [], result.making);
+      drawTeam(result.mates || [], result.making, Array.isArray(result.closed) ? result.closed : []);
       if (talk && talk.state !== "thinking" && localThink && Date.now() - localThink > 4000) localThink = 0;  // the server is done (a message, or nothing to say)
       routeMerge(talk ? talk.messages : [], talk ? talk.asks : []);
       reconcile(result.items || []);
@@ -1264,7 +1403,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     function poll() {
       if (!live() || SERVE.busy()) return Promise.resolve();
       const spoken = talkGone && Date.now() - talkGone < 60000 ? Promise.resolve(null)
-        : SERVE.ready.then(() => SERVE.call("/api/super/talk", {}, 6)).then((answer) => { talkGone = 0; return answer; }, () => { talkGone = Date.now(); return null; });
+        : SERVE.ready.then(() => SERVE.call("/api/super/talk", {}, 30)).then((answer) => { talkGone = 0; return answer; }, () => { talkGone = Date.now(); return null; });
       return Promise.all([SERVE.post("/api/super", {}), spoken]).then(([result, answer]) => { if (live()) apply(result, answer); }, (error) => {
         if (!live()) return;
         failed = error && error.offline ? t("board.serve.stopped") : t("super.unavailable");
@@ -1315,7 +1454,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     // What the pop-out window reads (companion.js): the data this view already holds, and a call when it changes. It never asks the server itself.
     function snapshot() {
       const status = (data && data.status) || {};
-      return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work" || mate.state === "start").length, making: making.slice(), watching: status.watching || 0, stuck: count(status.stuck), error: count(status.error), failed,
+      return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work" || mate.state === "start").length, making: making.slice(), closed: closedOnly(), watching: status.watching || 0, stuck: count(status.stuck), error: count(status.error), failed,
         mood: moodNow(), thinking: thinkingNow(), off: talkOff(), cost: costNow(),
         messages: talk ? (talk.messages || []).filter((message) => message && message.role !== "you") : [], mates, loaded: data !== null};
     }
@@ -1328,10 +1467,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const replyFor = (item) => { const entry = item && (item.why === "stopped" || SAYS(item)) ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };
     const previewFor = (item) => previewBox(item);
     const asksOf = (task) => ((talk && talk.asks) || []).filter((one) => one && one.task === task).map((one) => ({...one, line: one.state === "sent" ? t("super.route.waiting") : one.state === "queued" ? t("super.route.queued") : one.state === "failed" ? t(routeKey(one.why || one.end)) : ""}));
-    async function askTask(task, text) {
-      const why = await routeAsk(task, String(text || "").trim());
-      if (!why) poll().then(schedule, schedule);
-      return {ok: !why, why, text: why ? t(routeKey(why)) : ""};
+    async function askTask(task, text) {  // the pop-out's input: a direct message too, with the options of this browser
+      const result = await directSend(task, String(text || "").trim(), SUPERDIRECT.valuesFor(task), false);
+      return {ok: result.ok, why: result.ok ? "" : result.why, text: result.ok ? "" : SUPERDIRECT.refusal(task, result.why, result.error)};
     }
     const pop = {alertMarks: () => alertMarks((data && data.status) || {}), replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose, jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
       taskLink, ask: (text) => ask(null, text), watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, openVS: () => SERVE.openVS()};

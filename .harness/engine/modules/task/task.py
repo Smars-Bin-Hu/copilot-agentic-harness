@@ -207,7 +207,7 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
             data["updated_at"] = utc_now()
             atomic_write(path, data)
         state["active_task"] = task
-        state.pop("after_review", None)  # a task picked up ends the checks after the close this session was doing (1.8.16)
+        state.pop("after_review", None)  # a task picked up ends the checks after the close this session was doing (1.8.18)
     approved = tasks.plan_approved(root, task, data)
     result: Dict[str, Any] = {
         "task": task, "round": data["round"], "resumed": resumed and not new_round, "new_round": new_round,

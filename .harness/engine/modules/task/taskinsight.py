@@ -517,7 +517,7 @@ def review_rounds(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     found = []
     for item in (data.get("review") or {}).get("rounds") or []:
         if item.get("after"):
-            continue  # a check after the close (1.8.16) is not the task's own: not in its report's checks
+            continue  # a check after the close (1.8.18) is not the task's own: not in its report's checks
         started, finished = copilot_events.seconds(item.get("started_at")), copilot_events.seconds(item.get("finished_at"))
         found.append({
             "number": item.get("number"), "task_round": item.get("task_round"), "verdict": item.get("verdict") or "", "started_at": item.get("started_at", ""),

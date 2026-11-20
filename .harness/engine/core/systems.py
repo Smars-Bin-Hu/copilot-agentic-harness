@@ -17,7 +17,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import schema
+from . import pace, schema
 from . import procrun
 
 ALLOW, TASK, OUTBOX, HUMAN, DENY = "allow", "task", "outbox", "human", "deny"
@@ -254,10 +254,11 @@ def environments(systems: Dict[str, Any], only_openable: bool = False) -> Dict[s
 
 def run_probe(command: str, cwd: Optional[Path] = None) -> Tuple[Optional[int], str]:
     """(exit code, output) of a probe, run in the shell as a person would type it. (None, why) when it could not run or took too long."""
+    seconds = pace.scaled(PROBE_SECONDS)  # 1.8.15
     try:
-        done = procrun.run(command, shell=True, cwd=str(cwd) if cwd else None, capture_output=True, text=True, errors="replace", timeout=PROBE_SECONDS)
+        done = procrun.run(command, shell=True, cwd=str(cwd) if cwd else None, capture_output=True, text=True, errors="replace", timeout=seconds)
     except subprocess.TimeoutExpired:
-        return None, f"no answer in {PROBE_SECONDS} s"
+        return None, f"no answer in {int(seconds)} s"
     except (OSError, ValueError) as error:
         return None, f"{type(error).__name__}: {error}"
     return done.returncode, (done.stdout + done.stderr)[:PROBE_OUTPUT]

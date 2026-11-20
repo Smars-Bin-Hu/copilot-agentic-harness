@@ -118,3 +118,13 @@ def build(result: Dict[str, Any], age_up: Optional[int] = None) -> Dict[str, Any
     status = {"watching": len(mates), "working": tally.count("work") + tally.count("start"), "waiting": tally.count("you"), "idle": tally.count("idle"), "as_of": result.get("as_of") or "",
               "oldest_s": max(waited) if waited else None, "stuck": sum(1 for item in items if item["why"] == "stuck"), "error": sum(1 for item in items if item["why"] == "error")}
     return {"status": status, "mates": mates, "items": items}
+
+
+CLOSED_LISTED = 12  # the recently closed tasks the super view lists (1.8.17): the board's own rows hold them (`closed_shown`)
+
+
+def closed_of(rows: Any, limit: int = CLOSED_LISTED) -> List[Dict[str, Any]]:
+    """The closed tasks of the board's rows, newest first (by `closed_at`, else `updated_at`), at most `limit`: `{task, kind, closed_at, title}`. A pure function; what is not a row is left out."""
+    found = [row for row in rows if isinstance(row, dict) and row.get("status") == "closed" and row.get("task")] if isinstance(rows, list) else []
+    found.sort(key=lambda row: str(row.get("closed_at") or row.get("updated_at") or ""), reverse=True)
+    return [{"task": name_of(row), "kind": str(row.get("kind") or ""), "closed_at": str(row.get("closed_at") or row.get("updated_at") or ""), "title": str(row.get("title") or "")} for row in found[:limit]]

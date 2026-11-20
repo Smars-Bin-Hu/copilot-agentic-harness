@@ -55,7 +55,7 @@ def open_task(ctx: Context) -> Optional[Dict[str, Any]]:
 
 
 def after_task(ctx: Context) -> Optional[Dict[str, Any]]:
-    """The closed task this session checks after the close (`task review after`, 1.8.16), or None. Only while it is closed and the person asked for checks."""
+    """The closed task this session checks after the close (`task review after`, 1.8.18), or None. Only while it is closed and the person asked for checks."""
     from . import taskreview
 
     name = ctx.state.get("after_review")
@@ -310,7 +310,7 @@ def on_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
         checked = after_task(ctx) if called.lower() == taskreview.AGENT else None
         if checked is None:
             return Decision(permission="deny", reason=say("rules.subagent.no_task", called=called, agent=taskreview.AGENT), facts={"kind": "subagent"})
-        if taskreview.pending(checked, True) is None:  # a check after the close (1.8.16): only with its round open, as for an open task
+        if taskreview.pending(checked, True) is None:  # a check after the close (1.8.18): only with its round open, as for an open task
             return Decision(permission="deny", reason=say("review.call.no_round", agent=taskreview.AGENT), facts={"kind": "task-subagent"})
         return None
     if called.lower() == WORKER:

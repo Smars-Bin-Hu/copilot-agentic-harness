@@ -6,6 +6,7 @@ import json
 import select
 import socket
 import struct
+import subprocess
 import threading
 import time
 import unittest
@@ -328,6 +329,54 @@ class SlowCodeCommandTests(unittest.TestCase):
             with self.assertRaises(ahp.NotReady) as caught:
                 ahp.run_code("code", ["agent", "endpoints"])
         self.assertEqual(caught.exception.why, "cli-failed")
+
+
+class PaceTests(unittest.TestCase):
+    """1.8.15: the limits of the `code` command and of the calls grow with the pace factor, read at the moment of use; one `code` command runs at a time."""
+
+    def test_opening_a_folder_does_not_wait_behind_a_slow_agent_ask(self) -> None:
+        done = subprocess.CompletedProcess(["code"], 0, stdout=b"", stderr=b"")
+        with ahp._CODE_LOCK, mock.patch("core.procrun.run", return_value=done):  # an `agent endpoints` holds the lock
+            began = time.monotonic()
+            ahp.run_code("code", ["/some/folder"])
+            self.assertLess(time.monotonic() - began, 1.0)
+
+    def run_with(self, factor: float) -> List[Any]:
+        from core import pace
+        seen: List[Any] = []
+
+        def fake(argv: Any, **kwargs: Any) -> Any:
+            seen.append(kwargs.get("timeout"))
+            return mock.Mock(returncode=0, stdout=b"")
+        with mock.patch.object(pace, "factor", return_value=factor), mock.patch("core.procrun.run", side_effect=fake):
+            ahp.run_code("code", ["agent", "endpoints"])
+            ahp.run_code("code", ["agent", "endpoints"], timeout=7)  # a caller's own limit is not scaled again
+            self.timeouts = (ahp.call_timeout(), ahp.create_timeout())
+        return seen
+
+    def test_limits_are_the_base_times_the_factor(self) -> None:
+        self.assertEqual(self.run_with(1.0), [ahp.CLI_TIMEOUT, 7])
+        self.assertEqual(self.timeouts, (ahp.CALL_TIMEOUT, ahp.CREATE_TIMEOUT))
+        self.assertEqual(self.run_with(5.0), [ahp.CLI_TIMEOUT * 5, 7])
+        self.assertEqual(self.timeouts, (ahp.CALL_TIMEOUT * 5, ahp.CREATE_TIMEOUT * 5))
+
+    def test_one_code_command_runs_at_a_time(self) -> None:
+        running: List[int] = []
+        most = [0]
+
+        def slow(argv: Any, **kwargs: Any) -> Any:
+            running.append(1)
+            most[0] = max(most[0], len(running))
+            time.sleep(0.05)
+            running.pop()
+            return mock.Mock(returncode=0, stdout=b"")
+        with mock.patch("core.procrun.run", side_effect=slow):
+            threads = [threading.Thread(target=ahp.run_code, args=("code", ["agent", "endpoints"])) for _ in range(4)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        self.assertEqual(most[0], 1)
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import messages
+from . import messages, pace
 from . import connections as conn_core
 from .paths import utc_now
 
@@ -446,7 +446,7 @@ def windows_without_settings(root: Path, endpoints: Optional[Callable[[], List[A
             code = ahp.find_code()
             if not code:
                 return []
-            found = ahp.parse_endpoints(ahp.run_code(code, ["agent", "endpoints"], timeout=10))
+            found = ahp.parse_endpoints(ahp.run_code(code, ["agent", "endpoints"], timeout=pace.scaled(10)))
         else:
             found = endpoints()
         out: List[Dict[str, Any]] = []
@@ -601,7 +601,7 @@ def system_roots(platform: str = sys.platform, run: Callable[..., Any] = subproc
     if platform != "darwin":
         return []
     try:
-        done = run(["security", "find-certificate", "-a", "-p", *MAC_KEYCHAINS], capture_output=True, text=True, timeout=SECONDS)
+        done = run(["security", "find-certificate", "-a", "-p", *MAC_KEYCHAINS], capture_output=True, text=True, timeout=pace.scaled(SECONDS))
     except (OSError, subprocess.SubprocessError):
         return []
     return pem_blocks(done.stdout or "")
@@ -660,7 +660,7 @@ def chain_windows(host: str, proxy: str, run: Callable[..., Any] = subprocess.ru
     # The values go into the script's text: `-Command <script> <args>` hands the script no $args. Both were checked to hold no quote (make, proxy_address).
     host, port = split_host(host)
     script = WINDOWS_CHAIN.replace("__HOST__", host).replace("__PORT__", str(port)).replace("__PROXY__", proxy)
-    done = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=SECONDS,
+    done = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=pace.scaled(SECONDS),
                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     out = done.stdout or ""
     found = re.search(r"^PROXY (.*)$", out, re.MULTILINE)
@@ -681,7 +681,7 @@ def chain_openssl(host: str, proxy: str, run: Callable[..., Any] = subprocess.ru
         raise ValueError(say("launch.ca.no_openssl"))
     host, port = split_host(host)
     argv = [program, "s_client", "-showcerts", "-servername", host, "-connect", f"{host}:{port}"] + (["-proxy", proxy] if proxy else [])
-    done = run(argv, input="", capture_output=True, text=True, timeout=SECONDS)
+    done = run(argv, input="", capture_output=True, text=True, timeout=pace.scaled(SECONDS))
     blocks = pem_blocks(done.stdout or "")
     if not blocks:
         raise chain_failed(((done.stderr or "").strip().splitlines() or ["-"])[-1], host, proxy)
@@ -693,8 +693,9 @@ def chain(host: str, proxy: str) -> Tuple[List[str], str]:
     return chain_windows(host, proxy) if os.name == "nt" else chain_openssl(host, proxy)
 
 
-def check(bundle: Path, host: str, proxy: str, timeout: float = SECONDS) -> Tuple[bool, str]:
+def check(bundle: Path, host: str, proxy: str, timeout: Optional[float] = None) -> Tuple[bool, str]:
     """Can a tool that trusts only this bundle reach `host` (through `proxy`)? The same check as az's Python makes. `(ok, why)`."""
+    timeout = pace.scaled(SECONDS) if timeout is None else timeout
     context = ssl.create_default_context(cafile=str(bundle))
     try:
         host, wanted = split_host(host)

@@ -165,8 +165,29 @@ class InvalidTests(BrainCase):
         self.assertEqual(self.why({"kind": "send", "task": "done", "text": "x"}), "closed")
         self.assertEqual(self.why({"kind": "send", "task": "alpha", "text": "  "}), "empty")
         self.assertEqual(self.why({"kind": "send", "task": "alpha"}), "empty")
-        self.assertEqual(self.why({"kind": "send", "task": "alpha", "text": "x" * 2001}), "long")
-        self.assertTrue(one({"kind": "send", "task": "alpha", "text": "x" * 2000})["ok"])
+        self.assertEqual(self.why({"kind": "send", "task": "alpha", "text": "x" * 10001}), "long")
+        self.assertTrue(one({"kind": "send", "task": "alpha", "text": "x" * 10000})["ok"])  # 1.8.4: up to what /api/super/send takes
+        self.assertTrue(one({"kind": "send", "task": "alpha", "text": "x" * 2001})["ok"])
+
+    def test_send_does_not_need_a_chat(self) -> None:
+        """1.8.4: the proposal is judged by the row alone (open, not paused): `/api/super/send` makes a chat when the task has none."""
+        self.assertTrue(one({"kind": "send", "task": "alpha", "text": "go on"})["ok"])
+
+    def test_reopen(self) -> None:
+        self.assertEqual(self.why({"kind": "reopen", "task": "ghost", "text": "x"}), "unknown")
+        self.assertEqual(self.why({"kind": "reopen", "task": "alpha", "text": "x"}), "open")  # an open task: use send
+        self.assertEqual(self.why({"kind": "reopen", "task": "done", "text": " "}), "empty")
+        self.assertEqual(self.why({"kind": "reopen", "task": "done"}), "empty")
+        self.assertEqual(self.why({"kind": "reopen", "task": "done", "text": "x" * 10001}), "long")
+        for value in (-1, 10, "2", 2.5, True, [1]):
+            self.assertEqual(self.why({"kind": "reopen", "task": "done", "text": "x", "checks": value}), "checks", value)
+        good = one({"kind": "reopen", "task": "done", "text": "  go again ", "checks": 2})
+        self.assertEqual((good["ok"], good["kind"], good["task"], good["text"], good["checks"]), (True, "reopen", "done", "go again", 2))
+        self.assertNotIn("checks", one({"kind": "reopen", "task": "done", "text": "x"}))
+        self.assertTrue(one({"kind": "reopen", "task": "done", "text": "x" * 10000, "checks": 0})["ok"])
+
+    def test_send_still_refuses_a_closed_task(self) -> None:
+        self.assertEqual(self.why({"kind": "send", "task": "done", "text": "x"}), "closed")
 
     def test_new(self) -> None:
         self.assertEqual(self.why({"kind": "new", "name": "alpha", "text": "x"}), "taken")

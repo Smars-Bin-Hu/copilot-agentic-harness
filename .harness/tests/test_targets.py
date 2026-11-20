@@ -311,15 +311,16 @@ class DoctorTests(HarnessTestCase):
         self.override({"repos_root": str(self.repos)})
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("目标仓库 repo_b：main 在", result.stdout)
-        self.assertIn("工作区干净", result.stdout)
+        self.assertIn("目标仓库 repo_b：基准分支 `main` 在，当前分支 main", result.stdout)
 
-    def test_uncommitted_files_are_said_but_are_not_an_error(self) -> None:
+    def test_uncommitted_files_are_left_to_promote(self) -> None:
+        """1.8.13: doctor reads the repository's files and runs no git, so it does not count uncommitted files; promote checks the working tree when it writes."""
         self.override({"repos_root": str(self.repos)})
         (self.repos / "repo_b" / "x.txt").write_text("x", encoding="utf-8")
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("1 个未提交的文件", result.stdout)
+        self.assertIn("目标仓库 repo_b：基准分支 `main` 在", result.stdout)
+        self.assertNotIn("未提交", result.stdout)
 
     def test_a_missing_repos_root_is_an_error(self) -> None:
         self.override({"repos_root": str(self.root / "missing")})

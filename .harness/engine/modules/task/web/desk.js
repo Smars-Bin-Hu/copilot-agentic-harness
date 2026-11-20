@@ -838,7 +838,7 @@
   }
 
   // "Independent review" (1.6.33): a setting of the task, at the head of its page, not of a message. A click runs `task review set`, as at a terminal; `[review]=n` in a prompt still does the same, and is not shown.
-  // It is the task's, like the VS Code pill: it stays at the head of an earlier round too (1.6.109), says there that it sets the current round. On a closed task (1.8.16) it sets the checks after the close.
+  // It is the task's, like the VS Code pill: it stays at the head of an earlier round too (1.6.109), says there that it sets the current round. On a closed task (1.8.18) it sets the checks after the close.
   const SHIELD = ["M8 1.8l4.8 1.9v3.7c0 3-2 5.5-4.8 6.8-2.8-1.3-4.8-3.8-4.8-6.8V3.7L8 1.8z", "M5.8 8l1.6 1.6 2.9-3"];
   let closeReview = null;
   document.addEventListener("click", (event) => { if (closeReview && !event.target.closest(".tk-rv")) closeReview(); });
@@ -1682,7 +1682,7 @@
       if (!r.rounds.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.review.none"))));
       parts.push(...r.rounds.map(roundCard));
     }
-    if (later) {  // checks after the close (1.8.16): never the task's own, so a block of their own
+    if (later) {  // checks after the close (1.8.18): never the task's own, so a block of their own
       parts.push(h("h3", {class: "review-after"}, t("desk.review.after")));
       parts.push(h("p", {class: "hint"}, t("desk.review.after.hint")));
       parts.push(h("div", {class: "review-sum"},
@@ -2074,7 +2074,7 @@
       const rows = items.map((item) => {
         const on = item.path === scriptOpen;
         const tag = mark[item.mark] ? h("span", {class: "tag fmark " + mark[item.mark]}, markText()[mark[item.mark]]) : null;
-        const button = h("button", {type: "button", class: "file script-row" + (on ? " on" : ""), "aria-expanded": on ? "true" : "false", title: item.path}, h("span", {class: "script-path"}, item.path), h("span", {class: "sub"}, size(item.size)), tag);
+        const button = h("button", {type: "button", class: "file script-row" + (on ? " on" : ""), "aria-expanded": on ? "true" : "false", title: item.path}, h("span", {class: "script-path"}, item.path), h("span", {class: "sub"}, size(item.size)), tag, key === "dev" ? ranMark(item.runs) : null);
         button.addEventListener("click", () => { scriptOpen = on ? "" : item.path; draw(true); });
         if (!on) return button;
         const known = desk.files.find((file) => file.path === item.path) || {path: item.path, size: item.size, kind: "text"};
@@ -2501,6 +2501,7 @@
   function changes() {
     const c = desk.changes;
     const parts = desk.commit ? [h("h3", null, t("desk.changes.commit")), ...commit()] : [];  // written back: the commit is what comes next
+    if (!desk.past) { const stamp = promoteStamp(); if (stamp) parts.unshift(stamp); }
     if (desk.past && desk.past.branch) parts.push(h("p", {class: "hint top"}, t("desk.round.written", {branch: desk.past.branch, state: desk.past.promote.state, at: when(desk.past.promote.at, 0, 16)})));
     if (desk.past && !c.kept) parts.push(h("p", {class: "hint"}, t("desk.round.nodiff")));
     if (desk.past && !c.kept && c.files.length) {  // no counts to show: only the names are known
@@ -2716,12 +2717,35 @@
     return h("p", {class: "plan-approval"}, tag(t(a.changed ? "desk.plan.approval.changed" : "desk.plan.approval.yes", {at: when(a.at, 0, 16), code: a.code}), (a.changed ? "hot" : "good") + " long"));
   }
 
+  // 1.8.16: the same line over the requirement (what confirm-req stored) and over the changes once written back (what promote stored); nothing new is kept.
+  function reqApproval() {
+    const a = desk.req_approval;
+    if (!a) return null;
+    if (!a.approved) return h("p", {class: "plan-approval"}, tag(t("desk.req.approval.none"), "hot long"));
+    const key = a.changed ? (a.code ? "desk.req.approval.changed" : "desk.req.approval.changed.nocode") : (a.code ? "desk.req.approval.yes" : "desk.req.approval.yes.nocode");
+    return h("p", {class: "plan-approval"}, tag(t(key, {at: when(a.at, 0, 16), code: a.code}), (a.changed ? "hot" : "good") + " long"));
+  }
+  function promoteStamp() {
+    const p = desk.promote_stamp;
+    if (!p) return null;
+    const key = p.state === "partial" ? "desk.changes.promoted.partial" : "desk.changes.promoted";
+    const how = p.code ? t("desk.changes.promoted.how", {at: when(p.approved_at, 0, 16), code: p.code}) : "";
+    return h("p", {class: "plan-approval"}, tag(t(key, {at: when(p.at, 0, 16), branch: p.branch || "-"}) + how, (p.state === "partial" ? "hot" : "good") + " long"));
+  }
+  // A script of DEV/_server/ that the gate let through in a call (.task/calls.jsonl): a green mark with how many times; the hover names each run.
+  function ranMark(runs) {
+    if (!runs || !runs.length) return null;
+    const last = runs[runs.length - 1];
+    const lines = runs.map((run) => when(run.at, 0, 16) + " \u00b7 " + [run.system, run.env].filter(Boolean).join(" ") + (run.code ? " \u00b7 " + t("desk.scripts.ran.code", {code: run.code}) : run.how ? " \u00b7 " + run.how : ""));
+    return h("span", {class: "tag good", title: t("desk.scripts.ran.tip") + "\n" + lines.join("\n")}, t(runs.length === 1 ? "desk.scripts.ran.one" : "desk.scripts.ran", {env: last.env || last.system || "", n: runs.length}));
+  }
+
   function body() {
     if (current === "live") return livePane();
     if (current === "overview") {
       return [h("p", {class: "hint top"}, t("desk.overview.hint") + (doc("REQ.md") ? " " + t("desk.overview.req") : "")), markdown("TASK.md", t("desk.missing.task"))];
     }
-    if (current === "req") return [reqOffer(), desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null, h("p", {class: "hint top"}, t("desk.req.hint")), markdown("REQ.md", t("desk.missing.req"))];
+    if (current === "req") return [reqOffer(), reqApproval(), desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null, h("p", {class: "hint top"}, t("desk.req.hint")), markdown("REQ.md", t("desk.missing.req"))];
     if (current === "design") return [h("p", {class: "hint top"}, t("desk.design.hint")), markdown(FILES.design, t("desk.missing.design"))];
     if (current === "rca") return [h("p", {class: "hint top"}, t("desk.rca.hint")), markdown(FILES.rca, t("desk.missing.rca"))];
     if (current === "plan") return [h("p", {class: "hint top"}, t("desk.plan.hint")), planApproval(), markdown("PLAN.md", t("desk.missing.plan"))];

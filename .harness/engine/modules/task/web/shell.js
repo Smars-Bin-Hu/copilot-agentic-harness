@@ -213,16 +213,17 @@ const SHELL = (function () {
   // Restart board: the only way to new code and new texts that needs no terminal. The page waits for the new process, and pairs with the code it was given.
   function restartRow() {
     const go = h("button", {type: "button", class: "act"}, t("board.shell.restart"));
-    const back = (code, left) => {
+    const WAIT_BACK = 180 * Math.max(1, Number(DATA.pace) || 1) * 1000;  // as long as the launcher waits for the new process (180 s), by time, not by a count of tries
+    const back = (code, until) => {
       SERVE.call("/api/status", {}, 2).then(() => { location.hash = "pair=" + code; }, () => {
-        if (left > 0) setTimeout(() => back(code, left - 1), 500);
+        if (Date.now() < until) setTimeout(() => back(code, until), 500);
         else { said.textContent = t("board.shell.restart.failed"); said.hidden = false; go.disabled = false; }
       });
     };
     go.addEventListener("click", () => {
       go.disabled = true;
       go.textContent = t("board.shell.restarting");
-      SERVE.post("/api/restart", {}).then((data) => setTimeout(() => back(data.result.code, 60), 800), (error) => { said.textContent = error.message || String(error); said.hidden = false; go.disabled = false; go.textContent = t("board.shell.restart"); });
+      SERVE.post("/api/restart", {}).then((data) => setTimeout(() => back(data.result.code, Date.now() + WAIT_BACK), 800), (error) => { said.textContent = error.message || String(error); said.hidden = false; go.disabled = false; go.textContent = t("board.shell.restart"); });
     });
     return h("div", null, h("div", {class: "sp-row"}, h("span", null, t("board.shell.restart.label")), go), h("p", {class: "sp-note"}, t("board.shell.restart.hint")));
   }

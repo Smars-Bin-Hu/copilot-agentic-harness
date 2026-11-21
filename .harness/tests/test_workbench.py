@@ -52,15 +52,11 @@ class WorkbenchWordsTests(unittest.TestCase):
         return [json.loads((CORE / f"messages.{lang}.json").read_text(encoding="utf-8")) for lang in ("en", "zh")]
 
     def test_every_key_the_workbench_names_is_in_both_languages(self) -> None:
-        used = {key for key in re.findall(r'"((?:super|board)\.[a-z0-9.]+)"', source("workbench.js")) if not key.endswith(".")}  # "super.wb.mode." + name is checked below
+        used = {key for key in re.findall(r'"((?:super|board)\.[a-z0-9.]+)"', source("workbench.js")) if not key.endswith(".")}
         self.assertGreater(len(used), 20)
         for key in sorted(used):
             for table in self.tables():
                 self.assertIn(key, table, key)
-        for name in ("focus", "wb"):  # built from a name: written out here so a missing one is found
-            for table in self.tables():
-                self.assertIn(f"super.wb.mode.{name}", table)
-                self.assertIn(f"super.wb.mode.{name}.tip", table)
 
     def test_the_workbench_words_have_the_same_places_in_both_languages_and_reach_the_page(self) -> None:
         en, zh = self.tables()

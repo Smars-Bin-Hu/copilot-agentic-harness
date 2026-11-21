@@ -51,7 +51,8 @@ const WORKBENCH = (function () {
     const waitEl = h("span", {class: "wb-w", hidden: ""});
     const back = h("button", {type: "button", class: "wb-back", title: t("super.wb.back"), "aria-label": t("super.wb.back")}, "←");
     const modeBtns = {};
-    for (const name of ["focus", "wb"]) modeBtns[name] = h("button", {type: "button", title: t("super.wb.mode." + name + ".tip")}, t("super.wb.mode." + name));
+    const MODE = {focus: "super.wb.mode.focus", wb: "super.wb.mode.wb"}, MODE_TIP = {focus: "super.wb.mode.focus.tip", wb: "super.wb.mode.wb.tip"};  // written out: a search for a key finds its place
+    for (const name of ["focus", "wb"]) modeBtns[name] = h("button", {type: "button", title: t(MODE_TIP[name])}, t(MODE[name]));
     const ICON = {q: "☰", t: "⌥", d: "▤", p: "▭"};
     const LABEL = {q: "super.wb.panel.queue", t: "super.wb.panel.agents", d: "super.wb.panel.data", p: "super.wb.panel.task"};
     const queueCount = h("span", {class: "wb-cnt", hidden: ""});

@@ -354,8 +354,11 @@ a.sa-task:hover{text-decoration:underline}
 @keyframes sapulse{50%{box-shadow:0 0 0 3px var(--hot-bg)}}
 .sa-actbad{flex:1 1 100%;min-width:0}
 .sa-actbad:empty{display:none}
-.sa-steerline{flex:1 1 100%;min-width:0;box-sizing:border-box}
-.sa-steerline[hidden]{display:none}
+.sa-steerrow{flex:1 1 100%;display:flex;align-items:center;gap:6px;min-width:0}
+.sa-steerrow[hidden]{display:none}
+.sa-steerrow .sa-steerline{flex:1 1 auto;width:auto;min-width:0;box-sizing:border-box}
+.sa-steerrow .act{flex:none}
+.sa-steershut{padding:2px 7px;color:var(--soft)}
 /* Accept: the countdown and Undo take the button's place */
 .sa-accept{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
 .sa-accept .act{margin:0}

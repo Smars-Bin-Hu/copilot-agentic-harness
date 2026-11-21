@@ -287,8 +287,6 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         return node;
       };
       const said = h("div", {class: "bad sa-matebad"});
-      const line = h("input", {type: "text", class: "sa-mateline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task}), "aria-label": t("super.mate.steer.ph", {task})});
-      const lineRow = h("div", {class: "sa-materow", hidden: ""}, line);
       let busy = false;
       const send = (call, line) => {
         if (busy) return;
@@ -296,13 +294,10 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         said.replaceChildren();
         call.then(() => { mateMenuClose(true); addSys(line); }, (error) => { busy = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
       };
-      const steer = item("super.mate.steer", () => { lineRow.hidden = false; line.focus(); });
+      const steerIn = steerBox(task, (words) => send(mateSteer(task, words), t("super.mate.steered", {task})), "sa-materow");
+      const lineRow = steerIn.row;
+      const steer = item("super.mate.steer", () => steerIn.open());
       const stop = item("super.mate.stop", () => send(mateStop(task), t("super.mate.stopped", {task})));
-      line.addEventListener("keydown", (event) => {
-        if (!isEnter(event) || event.shiftKey || !line.value.trim()) return;
-        event.preventDefault();
-        send(mateSteer(task, line.value.trim()), t("super.mate.steered", {task}));
-      });
       mateMenuNode = h("div", {class: "sa-skins sa-matemenu", role: "menu", "aria-label": t("super.mate.menu", {task})}, h("div", {class: "sa-skins-head"}, task), steer, lineRow, stop, said);
       mateMenuFrom = mate;
       sv.append(mateMenuNode);
@@ -595,27 +590,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         if (ctl.code === code) ctl.arm();
       }
     }
-    // The window View opens: the call as the server shows it (what the task page's View shows, without its layout): the words of its type, the system, the text it writes, the files it reads, the command as written.
-    function callWindow(call, onCode) {
-      const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
-      copy.addEventListener("click", () => { navigator.clipboard.writeText(call.command || "").then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
-      const close = h("button", {type: "button", class: "act"}, t("desk.window.close"));
-      const chip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, call.code);  // a click copies the code, puts it in the card's box and closes this window
-      const scripts = (call.layout && (call.layout.scripts || (call.layout.script ? [call.layout.script] : []))) || [];
-      const says = (call.says || []).filter(Boolean);
-      const body = call.body && call.body.text ? call.body : null;
-      const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), says.length ? h("p", null, says.join(" · ")) : null,
-        h("p", {class: "sub"}, h("b", null, call.system || "-"), call.env && call.env !== "none" ? " (" + call.env + ")" : "", call.target ? " · " + call.target : ""),
-        h("p", {class: "sub"}, t("desk.outbox.asked", {at: when(call.created_at, 0, 16)}), " ", chip),
-        h("div", {class: "win-body"},
-          body ? [h("p", {class: "sub"}, h("b", null, body.label || t("desk.outbox.body")), body.path ? " · " + body.path : ""), h("pre", {class: "cmd-script", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null] : null,
-          scripts.filter((script) => script && script.text).map((script) => [h("p", null, h("b", null, script.path)), h("pre", {class: "cmd-script", tabindex: "0"}, script.text), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null]),
-          h("p", {class: "sub"}, t("desk.outbox.as_written")), h("pre", {class: "cmd-script", tabindex: "0"}, call.command || "")),
-        call.draft ? h("p", {class: "sub"}, t("super.call.draft", {file: call.draft})) : null, h("div", {class: "row win-foot"}, copy, close)]);
-      view.box.classList.add("wide");
-      close.addEventListener("click", view.close);
-      chip.addEventListener("click", () => { navigator.clipboard.writeText(call.code).then(() => {}, () => {}); view.close(); if (onCode) onCode(call.code); });
-    }
+    // The window View opens is the task page's, whole (callview.js): the call as the server shows it (`/api/super/preview`, taskdesk.outbox_view). View marks it as seen; the code chip fills the card's box.
     function callRow(item, one) {
       const can = SERVE.runs("approve-action");
       const code = one.code;
@@ -648,10 +623,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         SERVE.post("/api/super/preview", {task: item.task, kind: "call", code}).then((result) => {
           view.disabled = false;
           if (!result || result.ok !== true || !result.call) { said.textContent = t("super.call.gone"); return; }
-          VIEWED.set(code, result.call.seen || {});
-          CHANGED.delete(code);
-          armAll(code);
-          callWindow(result.call, (typed) => { TYPED.set(code, typed); input.value = typed; armAll(code); yes.focus(); });
+          CALLVIEW.open(result.call, {
+            onOpen: (call) => { VIEWED.set(code, call.seen || {}); CHANGED.delete(code); armAll(code); },  // seen: Approve is held to the files as they are now
+            onCode: (typed) => { TYPED.set(code, typed); input.value = typed; armAll(code); yes.focus(); }});
         }, (error) => { view.disabled = false; said.replaceChildren(...actBad(error)); });
       });
       const send = () => {
@@ -675,6 +649,25 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       return node;
     }
 
+    // The one-line steer box (1.8.24), for the Stuck card and the avatar's menu: the input, a Send button (as the reply box has) and a small x. Enter or Send sends; Escape or x closes; the steer button
+    // opens it, and while it holds words a second press only focuses it, so typed words are not lost. After a send the caller closes it (the words go).
+    function steerBox(task, send, extra) {
+      const line = h("input", {type: "text", class: "sa-mateline sa-steerline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task}), "aria-label": t("super.mate.steer.ph", {task})});
+      const go = h("button", {type: "button", class: "act hot sa-reply-go sa-steergo"}, t("super.reply.send"));
+      const shut = h("button", {type: "button", class: "act sa-steershut", title: t("super.steer.close"), "aria-label": t("super.steer.close")}, "\u2715");
+      const row = h("div", {class: "sa-steerrow" + (extra ? " " + extra : ""), hidden: ""}, line, go, shut);
+      const text = () => line.value.trim();
+      const open = () => { row.hidden = false; line.focus(); };
+      const close = () => { row.hidden = true; line.value = ""; };
+      const push = () => { if (text()) send(text()); };
+      go.addEventListener("click", push);
+      shut.addEventListener("click", close);
+      line.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
+        if (isEnter(event) && !event.shiftKey) { event.preventDefault(); push(); }
+      });
+      return {row, line, open, close, toggle: () => { if (row.hidden) open(); else if (text()) line.focus(); else close(); }};  // a second press hides the box only when it is empty
+    }
     // ---------- an error and a stuck chat (1.8.4) ----------
     function errorButtons(item) {
       const retry = h("button", {type: "button", class: "act hot live", "data-act": "retry", title: t(item.resumable === false ? "super.retry.no" : "super.retry.tip")}, t("super.retry"));
@@ -688,19 +681,18 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
     function stuckButtons(item) {
       const said = h("div", {class: "bad sa-actbad"});
-      const line = h("input", {type: "text", class: "sa-mateline sa-steerline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task: item.task}), "aria-label": t("super.mate.steer.ph", {task: item.task}), hidden: ""});
       const steer = h("button", {type: "button", class: "act hot live", "data-act": "steer"}, t("super.mate.steer"));
       const stop = h("button", {type: "button", class: "act live", "data-act": "stop"}, t("super.mate.stop"));
       let busy = false;
       const send = (call, receipt, said_) => {  // the mate menu's own calls (mateSteer, mateStop)
         if (busy) return;
         busy = true; said.replaceChildren();
-        call.then(() => { busy = false; const entry = known.get(item.id); if (entry) entry.clicked = t(receipt); addSys(said_); poll(); emit(); }, (error) => { busy = false; said.replaceChildren(...actBad(error)); });
+        call.then(() => { busy = false; box.close(); const entry = known.get(item.id); if (entry) entry.clicked = t(receipt); addSys(said_); poll(); emit(); }, (error) => { busy = false; said.replaceChildren(...actBad(error)); });
       };
-      steer.addEventListener("click", () => { line.hidden = !line.hidden; if (!line.hidden) line.focus(); });
-      line.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey && line.value.trim()) { event.preventDefault(); send(mateSteer(item.task, line.value.trim()), "super.done.steered", t("super.mate.steered", {task: item.task})); } });
+      const box = steerBox(item.task, (words) => send(mateSteer(item.task, words), "super.done.steered", t("super.mate.steered", {task: item.task})));
+      steer.addEventListener("click", box.toggle);
       stop.addEventListener("click", () => send(mateStop(item.task), "super.done.stopped", t("super.mate.stopped", {task: item.task})));
-      return [steer, stop, line, said];
+      return [steer, stop, box.row, said];
     }
 
     // ---------- Accept and close (1.8.4): 10 s in the page, then the accept is sent ----------

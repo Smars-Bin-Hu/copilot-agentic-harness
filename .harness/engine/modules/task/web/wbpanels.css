@@ -118,6 +118,7 @@ html[data-theme="dark"]{--wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--
 .wbp-more{fill:var(--soft);font-family:var(--mono)}
 .wbp-boss{fill:var(--robot-head);stroke:var(--robot-line)}
 .wbp-bosseye{fill:var(--good-dot)}
+.wbp-bossg{cursor:pointer;outline:none}.wbp-bossg:hover .wbp-boss{stroke-width:2.4}.wbp-bossg:focus-visible .wbp-boss{stroke:var(--ink);stroke-width:2.6}
 .wbp-bossname{fill:var(--ink);font-weight:600}
 .wbp-pulse{fill:none;stroke:var(--good-dot);stroke-opacity:.22}
 

@@ -59,7 +59,7 @@ const WORKBENCH = (function () {
     };
     // The four calls of the bridge: what a click on a bridge avatar does is what a click on the avatar of super.js does (the avatar row stays in the DOM, hidden).
     const bridgeCalls = {
-      pick(task) { const mate = mateOf(task); if (mate) mate.click(); setTimeout(() => update(), 0); },  // the ring of the target moves at once, not at the next refresh
+      pick(task) { const mate = task ? mateOf(task) : sv.querySelector(".sa-team .sa-mate.all"); if (mate) mate.click(); setTimeout(() => update(), 0); },  // the ring of the target moves at once, not at the next refresh
       menu(task, x, y) {
         const mate = mateOf(task);
         if (!mate) return;

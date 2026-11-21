@@ -85,7 +85,7 @@ class PageTests(unittest.TestCase):
     def test_the_palette_only_navigates(self) -> None:
         """No call that changes a task: the file reads `/api/board`, writes `/api/language`, restarts the board with `/api/restart`, and never reaches the functions that act."""
         shell = source("shell.js")
-        self.assertEqual(sorted(set(re.findall(r'SERVE\.post\("(/api/[a-z]+)"', shell))), ["/api/board", "/api/language", "/api/restart"])
+        self.assertEqual(sorted(set(re.findall(r'SERVE\.post\("(/api/[a-z]+)"', shell))), ["/api/board", "/api/language", "/api/reboard"])
         for word in ("SERVE.act", "approve", "promote", "/api/act", "/api/send", "/api/steer", "/api/stop", "/api/close", "/api/archive", "/api/confirm", "/api/answer", "/api/create", "/api/compact", "fetch("):
             self.assertNotIn(word, shell.replace("never calls approve, promote, send, steer", ""), word)
         self.assertIn('event.key === "k"', shell)

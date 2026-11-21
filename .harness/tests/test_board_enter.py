@@ -286,6 +286,22 @@ class ReadinessTests(TaskCase):
             gate.set()
             self.assertTrue(until(lambda: bool(out.getvalue().strip()), 5), "a slow answer is written to the log with its parts")
 
+    def test_a_board_older_than_the_folder_says_so_before_doctor(self) -> None:
+        """1.8.23: the folder was updated while the board ran in the background; doctor then said the guardrail files differ. The line says the board is older."""
+        from core import registry
+
+        runs = []
+        check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), lambda _root: runs.append(1) or {"errors": 1, "first": "x", "failed": ""})
+        with mock.patch.object(registry, "harness_version", return_value="1.8.23"):
+            check.started = "1.8.12"
+            line = check.doctor_line()
+            self.assertEqual((line["state"], line["why"], line["started"], line["now"]), ("fail", "stale", "1.8.12", "1.8.23"))
+            self.assertEqual(runs, [], "doctor is not run for it")
+            check.started = "1.8.23"
+            self.assertIsNone(check.stale())
+        check.started = ""
+        self.assertIsNone(check.stale(), "a test without a board never says so")
+
     def test_check_again_runs_doctor_now_and_not_twice_at_once(self) -> None:
         now, runs, gate = [100.0], [], threading.Event()
 

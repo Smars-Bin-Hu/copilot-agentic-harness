@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import time
+import json
 import os
 import socket
 import subprocess
@@ -325,6 +327,57 @@ class SplashTests(Home, TaskCase):
 
         if os.name != "nt":
             self.assertFalse(boardsplash.console(False))
+
+
+class StaleBoardTests(Home, TaskCase):
+    """1.8.23: a double-click after an update stops the board of the older release, so the new one starts and accepts the new guardrail files."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.make_home()
+
+    def test_an_older_board_is_stopped_and_the_same_release_is_kept(self) -> None:
+        from core import registry
+
+        alive = [True, True, False]
+        ui = boardbg.Wheel(io.StringIO())
+        clock = Clock()
+        with mock.patch.object(registry, "harness_version", return_value="1.8.23"), mock.patch.object(boardserve, "running_release", return_value="1.8.12"), \
+                mock.patch.object(boardserve, "running_board", side_effect=lambda _root: 8765 if alive.pop(0) else 0):
+            self.assertTrue(boardbg.retire_stale(self.root, 8765, ui, sleep=clock.sleep, clock=clock))
+        self.assertTrue(boardserve.stop_file(self.root).is_file())
+        self.assertIn("1.8.12", ui.out.getvalue())
+        boardserve.stop_file(self.root).unlink()
+        with mock.patch.object(registry, "harness_version", return_value="1.8.23"), mock.patch.object(boardserve, "running_release", return_value="1.8.23"):
+            self.assertFalse(boardbg.retire_stale(self.root, 8765, ui, sleep=clock.sleep, clock=clock))
+        self.assertFalse(boardserve.stop_file(self.root).is_file(), "the same release is only opened")
+
+    def test_a_board_that_does_not_stop_in_time_is_opened_as_it_is(self) -> None:
+        from core import registry
+
+        clock = Clock()
+        with mock.patch.object(registry, "harness_version", return_value="1.8.23"), mock.patch.object(boardserve, "running_release", return_value="1.8.12"), \
+                mock.patch.object(boardserve, "running_board", return_value=8765):
+            self.assertFalse(boardbg.retire_stale(self.root, 8765, boardbg.Wheel(io.StringIO()), sleep=clock.sleep, clock=clock))
+
+
+class FreshTextsTests(unittest.TestCase):
+    def test_the_pages_read_the_table_again_when_its_file_changed(self) -> None:
+        """1.8.23: an old board served new pages with the names of texts its table did not have yet (board.stop.title)."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "messages.en.json"
+            path.write_text(json.dumps({"a": "one"}), encoding="utf-8")
+            with mock.patch.object(messages, "table_path", return_value=path):
+                messages._TABLES.pop("en", None)  # noqa: SLF001
+                messages._STAMPS.pop("en", None)  # noqa: SLF001
+                try:
+                    self.assertEqual(messages.fresh_table("en")["a"], "one")
+                    path.write_text(json.dumps({"a": "one", "b": "two"}), encoding="utf-8")
+                    os.utime(path, (time.time() + 5, time.time() + 5))
+                    self.assertEqual(messages.fresh_table("en").get("b"), "two")
+                finally:
+                    messages._TABLES.pop("en", None)  # noqa: SLF001
+                    messages._STAMPS.pop("en", None)  # noqa: SLF001
 
 
 class LogTests(unittest.TestCase):

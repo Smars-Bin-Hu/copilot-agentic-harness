@@ -152,7 +152,12 @@ class ServeTests(ServeCase):
             self.assertEqual(self.request("POST", "/api/company", {"op": "packcheck"}, cookie=cookie)[1]["result"]["word"], "acme")
 
     def test_restart_is_for_the_paired_browser_and_gives_the_next_code(self) -> None:
-        self.assertEqual(self.request("POST", "/api/restart", {})[0], 403)
+        self.assertEqual(self.request("POST", "/api/reboard", {})[0], 403)
+        cookie = self.pair()
+        with mock.patch.object(boardserve.Board, "restart", return_value={"code": "next"}) as restart:  # 1.8.23: the request reaches the board's restart, not the VS Code one
+            status, data, _ = self.request("POST", "/api/reboard", {}, cookie=cookie)
+        self.assertEqual((status, data["result"]), (200, {"code": "next"}))
+        restart.assert_called_once()
         board = types.SimpleNamespace(server=mock.Mock(), next_code="")
         with mock.patch.object(boardserve.threading, "Timer") as timer:
             code = boardserve.Board.restart(board)["code"]

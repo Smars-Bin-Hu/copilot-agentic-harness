@@ -365,12 +365,14 @@
     }
     if (state === "wait") tag = id === "copilot" ? t("board.enter.d.copilot.vscode") : id === "vscode" && c.why === "getting-ready" ? t("board.enter.d.vscode.getting-ready") : t("board.enter.tag.wait");  // 1.8.8: its window is open, its host not up yet
     else if (id === "paired") tag = t("board.enter.d.paired.unpaired");
+    else if (id === "doctor" && c.why === "stale") tag = t("board.enter.d.doctor.stale");  // 1.8.23: the folder holds a newer release than the board runs
     else if (id === "doctor") tag = c.why === "failed" ? t("board.enter.d.doctor.failed") : t(c.n === 1 ? "board.enter.d.doctor.errors.one" : "board.enter.d.doctor.errors", vals);
     else if (id === "vscode") tag = c.why === "none" ? t("board.enter.d.vscode.none") : c.why === "env" ? t("board.enter.d.vscode.noenv") : c.why === "unseen" ? t("board.enter.d.vscode.unseen") : t("board.enter.d.vscode.stuck");
     else if (id === "copilot") tag = c.why === "vscode" ? t("board.enter.d.copilot.vscode") : t("board.enter.d.copilot.fail");
     else tag = t("board.enter.tag.fail");
     if (id === "setup") note = word("board.enter.m.setup." + c.why, vals);
     else if (id === "paired") note = t("board.enter.m.paired.unpaired");
+    else if (id === "doctor" && c.why === "stale") note = t("board.enter.m.doctor.stale", {started: c.started, now: c.now});
     else if (id === "doctor") note = word("board.enter.m.doctor." + c.why + (c.why === "errors" && c.n === 1 ? ".one" : ""), vals, plainWords(c.detail || ""));
     else if (id === "vscode") note = c.why === "none" && recentlyOpened() ? t("board.enter.m.vscode.opened") : c.why === "none" ? t("board.enter.m.vscode.none", {button: buttonWords()})
       : c.why === "no-host" ? t("board.enter.m.vscode.no-host", {since: clock(c.since), button: buttonWords()})  // 1.8.8: open for minutes, the board still not let in: Restart
@@ -528,7 +530,12 @@
             links.forEach((fix, index) => nodes.push(index ? " · " : gap, READY.link(fix, {done: () => poll(), onState: showRestart, opened: () => { chk0.opened = Date.now(); }, fail: (error) => { chk0.fail = error.message; render(); }}, fix.short || fix.label)));
           }
           if (id === "paired") nodes.push(" ", SERVE.pairControl());  // 1.8.11: one click opens the board paired in the default browser
-          if (id === "doctor" && c && c.integrity) nodes.push(" ", READY.acceptButton(() => poll()));
+          if (id === "doctor" && c && c.why === "stale" && typeof SHELL !== "undefined") {  // 1.8.23: one click to the new release; the restart accepts its guardrail files
+            const b = h("button", {type: "button", class: "en-open"}, t("board.enter.restart"));
+            b.addEventListener("click", () => SHELL.restartBoard(b, (words) => { chk0.fail = words; render(); }));
+            nodes.push(h("br"), b);
+          }
+          else if (id === "doctor" && c && c.integrity) nodes.push(" ", READY.acceptButton(() => poll()));
           else if (id === "doctor" && c && c.state === "fail") nodes.push(" ", READY.link({to: "doctor"}, {done: () => poll()}, t("board.enter.doctor.again")));  // 1.7.45: run doctor now, not when its wait is over  // guardrail files not as accepted (1.7.39): the board accepts them after listing them
           if (!req && c && c.launch) { const b = h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")); nodes.push(h("br"), t("board.enter.m.systems.launch"), h("br"), b); }
           p.replaceChildren(...nodes);

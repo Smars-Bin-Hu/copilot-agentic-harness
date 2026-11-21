@@ -211,20 +211,23 @@ const SHELL = (function () {
     return seg;
   }
   // Restart board: the only way to new code and new texts that needs no terminal. The page waits for the new process, and pairs with the code it was given.
-  function restartRow() {
-    const go = h("button", {type: "button", class: "act"}, t("board.shell.restart"));
+  // 1.8.23: also the button of the Enter screen when the folder holds a newer release than the board runs. `fail(words)` puts the words where the caller shows them.
+  function restartBoard(go, fail) {
     const WAIT_BACK = 180 * Math.max(1, Number(DATA.pace) || 1) * 1000;  // as long as the launcher waits for the new process (180 s), by time, not by a count of tries
+    const label = go.textContent;
     const back = (code, until) => {
-      SERVE.call("/api/status", {}, 2).then(() => { location.hash = "pair=" + code; }, () => {
+      SERVE.call("/api/status", {}, 2).then(() => { location.hash = "pair=" + code; location.reload(); }, () => {
         if (Date.now() < until) setTimeout(() => back(code, until), 500);
-        else { said.textContent = t("board.shell.restart.failed"); said.hidden = false; go.disabled = false; }
+        else { fail(t("board.shell.restart.failed")); go.disabled = false; go.textContent = label; }
       });
     };
-    go.addEventListener("click", () => {
-      go.disabled = true;
-      go.textContent = t("board.shell.restarting");
-      SERVE.post("/api/restart", {}).then((data) => setTimeout(() => back(data.result.code, Date.now() + WAIT_BACK), 800), (error) => { said.textContent = error.message || String(error); said.hidden = false; go.disabled = false; go.textContent = t("board.shell.restart"); });
-    });
+    go.disabled = true;
+    go.textContent = t("board.shell.restarting");
+    SERVE.post("/api/reboard", {}).then((data) => setTimeout(() => back(data.result.code, Date.now() + WAIT_BACK), 800), (error) => { fail(error.message || String(error)); go.disabled = false; go.textContent = label; });
+  }
+  function restartRow() {
+    const go = h("button", {type: "button", class: "act"}, t("board.shell.restart"));
+    go.addEventListener("click", () => restartBoard(go, (words) => { said.textContent = words; said.hidden = false; }));
     return h("div", null, h("div", {class: "sp-row"}, h("span", null, t("board.shell.restart.label")), go), h("p", {class: "sp-note"}, t("board.shell.restart.hint")));
   }
   function buildSettings() {
@@ -357,5 +360,5 @@ const SHELL = (function () {
   buildFixed();
   if (tabKeep.get("harness.reopen") === "settings") { tabKeep.set("harness.reopen", null); openSettings(); }  // the page loaded again after a language change: the panel comes back
 
-  return {provide, visit, vs, banner: bannerNode, vsPill, openPalette, closePalette, openSettings, closeSettings, isOpen: () => open() || settingsOpen()};
+  return {provide, visit, vs, restartBoard, banner: bannerNode, vsPill, openPalette, closePalette, openSettings, closeSettings, isOpen: () => open() || settingsOpen()};
 })();

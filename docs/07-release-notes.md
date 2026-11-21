@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.22 (1.8.0 – 1.8.22, 2026-11-17 – 2026-11-20)
+## 1.8.23 (1.8.0 – 1.8.23, 2026-11-17 – 2026-11-20)
 
 ### Added
 
@@ -54,6 +54,7 @@ To see which version you have: `harness --version`.
 - `harness doctor` often ran out of its 300 seconds on a work computer (1.8.13): the target repositories are checked from their files, with no git command; uncommitted files are checked by promote when it writes. **Check again** shows the progress bar of the run it started.
 - VS Code had been open for minutes and the Enter screen still said to open it (1.8.13): the board looks for a VS Code window on a thread of its own, every 2 seconds, not only between two tries to reach VS Code.
 - Opening a closed task again failed on Windows with `WinError 5` when something had a file under `DEV/` open (1.8.18): the move of `DEV/` aside is tried again for 5 seconds; if it is still refused, the message says which folder and what to close, and the task is left as it was.
+- After an update of the folder while the board ran in the background (1.8.23), the board kept the old code: doctor said the guardrail files differ (the hook refused the agent meanwhile) and new pages showed names like `board.stop.title`. The Enter screen now says the board is older, with **Restart board**; a double-click of Start Harness stops it and starts the new release; the restart accepts the new guardrail files. **Restart board** in the settings restarted VS Code instead of the board: it has its own path now.
 
 ### Retired
 

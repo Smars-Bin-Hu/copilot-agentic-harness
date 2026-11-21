@@ -48,6 +48,22 @@ def table(language: str = DEFAULT_LANGUAGE) -> Dict[str, str]:
     return _TABLES[language]
 
 
+_STAMPS: Dict[str, float] = {}
+
+
+def fresh_table(language: str = DEFAULT_LANGUAGE) -> Dict[str, str]:
+    """`table`, read again when its file changed since (1.8.23): a board that runs while the folder is updated sends the new pages with their new texts, not the
+    names of texts its old table does not have. One `stat` per call; only the pages ask (a command or a hook reads the table once)."""
+    try:
+        stamp = table_path(language).stat().st_mtime
+    except OSError:
+        return table(language)
+    if _STAMPS.get(language) != stamp:
+        _TABLES.pop(language, None)
+        _STAMPS[language] = stamp
+    return table(language)
+
+
 def configured(root: Optional[Path] = None) -> Any:
     """What `user.json` (with its override) says, as written. None when it cannot be read: that is doctor's to report."""
     from . import config, paths  # here, not at the top: every module imports this one

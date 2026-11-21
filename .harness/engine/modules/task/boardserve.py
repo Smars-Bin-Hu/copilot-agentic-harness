@@ -364,6 +364,7 @@ class Board:
         self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
         self.brain = superbrain.Brain(root, self.link, self.rows, served=lambda: self.served)  # 1.8.1: the super agent chat (`/api/super/ask`, `/api/super/talk`)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
+        self.ready.started = self.version.split(" ")[0]  # 1.8.23: the release number only (the stamp moves with any edit)
         self.restarter = vsrestart.Restart(launchenv.vscode_running, self.open_vscode, gone=self.link.hurry, chats=lambda: self.other_chats([]))  # the VS Code button of the screen (1.7.38): quit, wait, open
         self.ready.restart = self.restarter
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
@@ -2285,7 +2286,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": {"changed": integrity.changes(board.root), "was": str((listed or {}).get("harness") or ""), "now": integrity._registry_version(board.root)}})  # noqa: SLF001
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
-            if path == "/api/restart":  # Restart board: the paired browser only
+            if path == "/api/reboard":  # Restart board: the paired browser only. 1.8.23: its own path; under /api/restart, the VS Code restart above answered and the board never restarted
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 return self.answer(200, {"result": board.restart()})
@@ -2607,6 +2608,16 @@ def running_board(root: Path) -> int:
         return port if not theirs or Path(theirs).resolve() == root.resolve() else 0
     except OSError:
         return 0
+
+
+def running_release(port: int) -> str:
+    """1.8.23: the release number the board on this port started with (`started` of /api/status, without its stamp), or "" when it does not say."""
+    try:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", PROBE: "1", "Content-Type": "application/json"}), timeout=pace.scaled(STATUS_WAIT)) as answer:
+            found = json.load(answer) if answer.status == 200 else {}
+    except (OSError, ValueError):
+        return ""
+    return str(found.get("started") or "").split(" ")[0] if isinstance(found, dict) else ""
 
 
 def page_flags(port: int) -> Dict[str, bool]:

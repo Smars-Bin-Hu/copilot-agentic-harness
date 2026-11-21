@@ -1,4 +1,4 @@
-"""1.8.23: the pages the board server sends link their style, scripts and texts as cacheable files (`/asset/`); a page that is a file stays one file."""
+"""1.8.24: the pages the board server sends link their style, scripts and texts as cacheable files (`/asset/`); a page that is a file stays one file."""
 from __future__ import annotations
 
 import hashlib

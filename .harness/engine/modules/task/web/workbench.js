@@ -1,4 +1,4 @@
-// The super agent workbench (1.8.x): a full-screen layer that takes the place of the narrow super agent view while the board is in its "super" mode.
+// The super agent workbench (1.8.24): a full-screen layer that takes the place of the narrow super agent view while the board is in its "super" mode.
 // It does not draw the chat or the queue. It MOVES the nodes of super.js into its own places (never a clone: their listeners and their data stay) and puts them back when it closes:
 //   - the `.sa` section (the chat, the avatars, the pet, the input) goes into the middle column;
 //   - the `.sa-queue` node (the cards that wait for the person) goes into the left Queue panel (Workbench) or into one card at the bottom right (Focus: the first item only).
@@ -214,7 +214,7 @@ const WORKBENCH = (function () {
         tab.tab.firstChild.setAttribute("aria-selected", on ? "true" : "false");
       }
     }
-    // A frame that was not shown asked nothing (common.js pollEvery): it looks again at once when it shows (1.8.22).
+    // A frame that was not shown asked nothing (common.js pollEvery): it looks again at once when it shows (1.8.24).
     function wake(frame) { setTimeout(() => { try { frame.contentDocument.dispatchEvent(new Event("visibilitychange")); } catch (error) { /* not loaded yet: it asks on its next round */ } }, 0); }
     function select(name) { active = name; syncTask(); }
     function dropTab(tab) {

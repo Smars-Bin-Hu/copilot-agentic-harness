@@ -1,4 +1,4 @@
-// The panels of the super agent workbench (1.8.x): the tree of the agents that run, the Data panel, the picture of Focus, the avatar of a task, the card that shows on a hover, the task line of a queue item and the short entrance.
+// The panels of the super agent workbench (1.8.24): the tree of the agents that run, the Data panel, the picture of Focus, the avatar of a task, the card that shows on a hover, the task line of a queue item and the short entrance.
 // Everything is drawn from the rows the board already has (`rows()`: status, state, brief.aiu, chat.context, chat.model, stages, checks, autorun, open_conns, agents); nothing is asked of the server.
 // A panel is drawn again only when its signature changes; a time that runs (the wait of a task, how long a subagent has run) is a text the one-second timer sets, nothing more.
 // A value a row does not have shows "-"; nothing is made up (there is no name of a subagent and no count of the mappers that are done: only what `agents` holds).

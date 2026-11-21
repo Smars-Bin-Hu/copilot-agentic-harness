@@ -925,7 +925,7 @@ def task_row(root: Path, task: str, data: Optional[Dict[str, Any]], everything: 
 
 
 def row_named(root: Path, name: str) -> Optional[Dict[str, Any]]:
-    """The row of the task called `name` (open or closed), or None. 1.8.22: one task is read, not all of them (a task page asks this every 3 s): the folder of that name first,
+    """The row of the task called `name` (open or closed), or None. 1.8.24: one task is read, not all of them (a task page asks this every 3 s): the folder of that name first,
     then, for a task whose name is not its folder's, every task as `list_tasks` does."""
     for task in tasks.folders(root):
         if task_ops.name_of(task) == name:

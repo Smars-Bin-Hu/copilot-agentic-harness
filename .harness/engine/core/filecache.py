@@ -1,4 +1,4 @@
-"""Files the board server read before, kept while they do not change (1.8.22).
+"""Files the board server read before, kept while they do not change (1.8.24).
 
 A task page read some 360 files each time it was drawn, and drew again every 3 s; on a computer whose virus check looks at every file that is opened, that took 10-20 s.
 In the board server, a file whose (modification time, size, inode, change time) is the same as at the last read is not opened again: a `stat` is enough. A write by `state.atomic_write`

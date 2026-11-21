@@ -1,4 +1,4 @@
-"""1.8.22: the board server reads a file again only when it changed, and a task page reads the tools policy once and one task's row, not every task's."""
+"""1.8.24: the board server reads a file again only when it changed, and a task page reads the tools policy once and one task's row, not every task's."""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ class FileCacheTests(unittest.TestCase):
         self.assertNotEqual(filecache.sha256(self.file), before)
 
     def test_in_one_pass_a_fresh_file_is_read_once_and_a_change_is_still_read(self) -> None:
-        """1.8.22: action-approvals.json gets the beat of every `harness wait` every few seconds, and each task's row of one board drawing asked for it."""
+        """1.8.24: action-approvals.json gets the beat of every `harness wait` every few seconds, and each task's row of one board drawing asked for it."""
         filecache.enable()
         self.file.write_text('{"a": 5}', encoding="utf-8")  # fresh: never kept across passes
         with filecache.one_pass():

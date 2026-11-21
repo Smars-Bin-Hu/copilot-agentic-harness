@@ -85,7 +85,7 @@ def base_dir(root: Path, task: str) -> Path:
 def read(root: Path, task: str) -> Optional[Dict[str, Any]]:
     """task.json, or None when the task was never started or the file cannot be read."""
     try:
-        data = json.loads(filecache.read_text(state_file(root, task)))  # 1.8.22: the board server reads it again only when it changed
+        data = json.loads(filecache.read_text(state_file(root, task)))  # 1.8.24: the board server reads it again only when it changed
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None

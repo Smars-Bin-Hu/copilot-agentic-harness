@@ -498,7 +498,7 @@ class Board:
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
-        with filecache.one_pass():  # 1.8.22: a file is read once for all the rows, even one that changes every few seconds
+        with filecache.one_pass():  # 1.8.24: a file is read once for all the rows, even one that changes every few seconds
             return self._rows()
 
     def _rows(self) -> Dict[str, Any]:
@@ -2749,7 +2749,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:
-        filecache.enable()  # 1.8.22: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
+        filecache.enable()  # 1.8.24: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
         while serving.is_alive():
             if board.stop_asked.wait(STOP_EVERY) or stop_wanted(root):  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too; the stop button and `--stop` end it here
                 break

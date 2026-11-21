@@ -1,4 +1,4 @@
-"""What an open task runs right now, for the Agents running screen (1.8.x): the subagents of its session, the autorun worker step, an independent check, the mapper grant.
+"""What an open task runs right now, for the Agents running screen (1.8.24): the subagents of its session, the autorun worker step, an independent check, the mapper grant.
 
 Only files the engine already writes are read: the session state (`subagents.active`, `modules.task.mapreduce`), the autorun ledger (only while the run is on) and task.json (`review`, already loaded).
 Never raises: a file that is gone or broken gives empty values.

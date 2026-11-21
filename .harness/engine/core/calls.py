@@ -40,7 +40,7 @@ def note(root: Path, task: str, command: str, system: str, env: str, verb: str, 
 
 def read(root: Path, task: str) -> List[Dict[str, Any]]:
     try:
-        lines = filecache.read_text(path(root, task)).splitlines()  # 1.8.22: read again only when it changed
+        lines = filecache.read_text(path(root, task)).splitlines()  # 1.8.24: read again only when it changed
     except OSError:
         return []
     out: List[Dict[str, Any]] = []

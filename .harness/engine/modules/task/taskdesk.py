@@ -208,7 +208,7 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
 
 
 def tools_systems(root: Path) -> Dict[str, Any]:
-    """The systems of the tools policy (tool packs, connections and the .env merged in): read once per page and given to each view (1.8.22: each view read them again, some 60 files a time)."""
+    """The systems of the tools policy (tool packs, connections and the .env merged in): read once per page and given to each view (1.8.24: each view read them again, some 60 files a time)."""
     found = config.policy_or_empty(root, "tools").get("systems")
     return found if isinstance(found, dict) else {}
 

@@ -247,7 +247,7 @@ Run `harness task board` in your own terminal. It serves the board of every task
 
 The third button of the board's header. It is never the default and the board does not keep the choice.
 
-**The workbench** (1.8.23): the view fills the whole window, in one of two modes (the switch at the top; the board keeps your choice):
+**The workbench** (1.8.24): the view fills the whole window, in one of two modes (the switch at the top; the board keeps your choice):
 
 - **Workbench**: the chat in the middle, with the avatars and the pet. On the left, **Queue** (the cards below) and **Agents running**: a tree of the super agent, each open task, and the subagents a task runs now (reviewers of a check round, the autorun worker and its step, mappers with how many were started; only the kind and the count are known, not what each one does). On the right, **Data** (working, waiting, errors, AIU today, subagents now, and one line per task with no name: how long it waited, AIU, context, stage; point at a line for the name, the model and effort, the checks, autorun, the connections open to it) and **Task**: a task page opened inside the workbench, in tabs. The four buttons at the top open and close each panel; a side with none open goes away and the chat widens.
 - **Focus**: only the chat, and a picture of the agents at work: the super agent, a line to each task, and a small circle for each subagent it runs. What waits for you comes one card at a time at the bottom right: the oldest first; **Later ›** puts it last; **—** folds it into one button. **Open task** shows the task page in a window over the screen.

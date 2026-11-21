@@ -281,3 +281,18 @@ li .tr-call>summary:hover .tr-cmdline{color:var(--ink)}li .tr-call[open] .tr-cmd
 .tr-full{margin:4px 0 2px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--hover);font:12px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto}
 .tr-sys{display:inline-flex;align-items:center;gap:5px;margin-left:6px;padding:0 8px;border:1px solid var(--line);border-radius:999px;font:11.5px/1.6 var(--mono);white-space:nowrap;cursor:help}
 .tr-sys i{flex:none;width:6px;height:6px;border-radius:50%;background:var(--good-dot)}.tr-sys.w{border-color:var(--hot);color:var(--hot)}.tr-sys.w i{background:var(--hot-dot)}
+/* Embed mode (`?embed=1`, class `embed` on <html> from theme.js): the task page inside the board's workbench frame. The frame has its own tabs with the name; the fixed buttons, the wallpaper and the banner are the board's, not the frame's. */
+html.embed .sh-pill,html.embed .sh-gear,html.embed .setp,html.embed .dock-btn,html.embed .term-toggle,html.embed .hd-acct,html.embed #sp,html.embed .vs-banner,html.embed .tk-back,html.embed .tk-stage,html.embed .tk-checks,html.embed .tk-ctx,html.embed .tk-tools .vs-btn,html.embed .tk-tools .vs-pill{display:none!important}
+html.embed body{background:var(--bg)}
+html.embed main{max-width:none;padding:0 12px 28px}
+html.embed .tk-head{min-height:34px;margin:0 -12px;padding:4px 12px;gap:8px}
+html.embed .tk-name{font-size:14px;max-width:none;flex:0 1 auto}
+html.embed .tk-tools{border-left:0;padding-left:0}
+html.embed .tk-icon{width:26px;height:26px}
+html.embed .tk-info,html.embed .tk-info-l{flex-wrap:wrap}
+html.embed .tk-info-l{white-space:normal}
+html.embed .tk-tabs,html.embed .tk-top,html.embed .tk-sub{overflow-x:auto;max-width:100%}
+html.embed .tk-menu{max-width:calc(100vw - 24px)}
+html.embed .tk-pane,html.embed .tk-surface,html.embed .tk-need{min-width:0}
+html.embed img,html.embed video,html.embed table,html.embed pre{max-width:100%}
+html.embed pre{overflow-x:auto}

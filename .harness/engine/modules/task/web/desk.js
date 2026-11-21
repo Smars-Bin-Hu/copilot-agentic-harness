@@ -7,6 +7,13 @@
 
 (function () {
   const app = document.getElementById("app");
+  // Embed mode (?embed=1, class `embed` set in theme.js): a link that goes to the board or to another task page opens at the top level, not inside the frame. A link with its own target, a download or a report stays as it is.
+  if (document.documentElement.classList.contains("embed")) {
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest ? event.target.closest("a[href]") : null;
+      if (link && !link.getAttribute("target") && !link.hasAttribute("download") && /^\/(task\/|$|\?)/.test(link.getAttribute("href"))) link.setAttribute("target", "_top");
+    }, true);
+  }
   let full = DATA.desk;  // the task as the server gave it; `desk` is what the page draws: this, or an earlier round of it (pastView)
   let desk = full;
   let shown = JSON.stringify(full);

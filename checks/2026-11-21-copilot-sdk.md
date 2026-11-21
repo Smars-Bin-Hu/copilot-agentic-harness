@@ -69,6 +69,19 @@ $env:HTTP_PROXY  = "http://127.0.0.1:9000"
 
 ## 第 4 步：登录（任选一种能用的，从上往下试）
 
+0. **（推荐，2026-11-21 补充）用 SDK 自带的设备码登录，什么都不用装**。这台电脑上没有 `gh`，winget 的源也坏了，所以先用这个：
+
+   ```powershell
+   Invoke-WebRequest -Proxy http://127.0.0.1:9000 -OutFile "$env:USERPROFILE\sdk-probe\login.py" `
+     https://raw.githubusercontent.com/Smars-Bin-Hu/copilot-agentic-harness/pc-tests/checks/2026-11-21-copilot-sdk-login.py
+   & $py "$env:USERPROFILE\sdk-probe\login.py"
+   ```
+
+   它会打印一个网址（github.com/login/device）和一个码。在浏览器里打开网址，输入码，批准。批准后脚本应该打印 `after: signed in = True`，然后回到第 3 步再跑一次探针。
+   - 如果公司账号是通过 Microsoft Entra 登录的（登录 GitHub 时跳到公司的微软登录页），改用 `& $py "$env:USERPROFILE\sdk-probe\login.py" --kind entra`。
+   - 如果公司用的是 `xxx.ghe.com` 这种地址，改用 `--kind proxima`，它会问你地址。
+   - 如果显示 `needs-plaintext-consent`，说明它找不到安全的地方存登录信息，这一步什么都没存，拍照发回。
+
 1. **已经有 GitHub CLI（`gh`）**：运行 `gh auth status`。如果已经登录，SDK 会直接用它；回到第 3 步再运行一次，`[3]` 应该显示 `way: gh-cli`。
 2. **能装 Copilot CLI**：运行 `winget install GitHub.Copilot`，装好后运行 `copilot login`，按提示在浏览器里输入设备码。登录完回到第 3 步再运行一次。
 3. **公司允许 fine-grained token**：在 GitHub 网页上建一个 fine-grained personal access token，只勾 **Copilot Requests** 这一项权限。然后**在你自己的 PowerShell 里**运行 `$env:COPILOT_GITHUB_TOKEN = "<token>"`，回到第 3 步再运行一次。token 只放在这个窗口的环境变量里，不要发给我，也不要拍进照片。

@@ -151,7 +151,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
     data = dict(data, pace=pace.factor())  # 1.8.15: the time limits of the page grow with this computer's slowness (`core.pace`)
     texts = page_text()
     if not linked:
-        data["text"] = texts  # 1.8.15: the time limits of the page grow with this computer's slowness (`core.pace`)
+        data["text"] = texts  # a file on its own carries its texts; a linked page loads them from /asset/ (window.PAGE_TEXT, 1.8.22)
     css = "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *([AUTORUN_CSS] if "autorun.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([REOPEN_CSS] if "reopen.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *([SUPER_CSS] if "super.js" in scripts else []), *([COMPANION_CSS] if "companion.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])])
     js = "\n".join(read(name) for name in scripts)
     parts = {

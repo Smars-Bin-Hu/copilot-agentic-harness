@@ -1865,7 +1865,7 @@
   "super.wb.pipe.step.requirement": "Req",
   "super.wb.pipe.step.plan": "Plan",
   "super.wb.pipe.step.developing": "Dev",
-  "super.wb.pipe.step.writeback": "Write-back",
+  "super.wb.pipe.step.writeback": "Promote",
   "super.wb.pipe.step.done": "Done",
   "super.wb.pipe.step.guide": "Guide",
   "super.wb.pipe.step.doing": "Doing",

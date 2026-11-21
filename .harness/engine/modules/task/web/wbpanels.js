@@ -293,6 +293,7 @@ const WBPANELS = (function () {
     const ASK_TEXT = {answer: "super.wb.ask.answer", call: "super.wb.ask.call", req: "super.wb.ask.req", plan: "super.wb.ask.plan", promote: "super.wb.ask.promote", accept: "super.wb.ask.accept", other: "super.wb.ask.other"};
     const stepName = (lane, step) => (STEP_TEXT[step] ? t(STEP_TEXT[step]) : step);  // an environment of the test lane is its own name
     const laneName = (lane) => t(LANE_TEXT[lane] || LANE_TEXT.qa);
+    const LANE_TIP = {dev: "super.wb.pipe.tip.dev", test: "super.wb.pipe.tip.test", simple: "super.wb.pipe.tip.simple", qa: "super.wb.pipe.tip.qa"};
     function lanesOf(list) {  // [{lane, steps: [id]}] for the kinds the board has, open or closed
       const kinds = new Set(list.map((info) => info.place.lane));
       for (const lane of Object.keys(closedBy)) if (closedBy[lane]) kinds.add(lane);
@@ -304,6 +305,8 @@ const WBPANELS = (function () {
         return {lane, steps: ["guide", ...shown, "done"], cut: envs.slice(PIPE_ENVS)};
       });
     }
+    // The pipeline: per kind of task, its steps as arrows from left to right; the open tasks under the step they are in; the step where most tasks wait for the
+    // person is lit; the last step (Done) is the count of closed tasks of that kind. Few words: the kind is one word (the hover names the kinds), no lines of help.
     function pipeBlock(list) {
       const lanes = lanesOf(list);
       let worst = null;
@@ -312,34 +315,32 @@ const WBPANELS = (function () {
         if (n && (!worst || n > worst.n)) worst = {lane: one.lane, step, n};
       }
       const rows = lanes.map((one) => {
-        const cells = one.steps.map((step, at) => {
+        const wide = one.steps.length === 2 ? "3.3" : "1";
+        const flow = [], track = [];
+        one.steps.forEach((step, at) => {
           const last = at === one.steps.length - 1;
           const here = last ? [] : list.filter((info) => info.place.lane === one.lane && (info.place.step === step || (one.cut && one.cut.length && at === one.steps.length - 2 && one.cut.indexOf(info.place.step) >= 0)));
-          const small = here.length > 6, extra = here.length - PIPE_CAP, key = one.lane + ":" + step;
-          const jam = worst && worst.lane === one.lane && worst.step === step;
-          return h("div", {class: "wbp-pcol" + (jam ? " wbp-jam" : ""), style: one.steps.length === 2 && !last ? "grid-column:span 4" : null},
-            h("h6", null, h("span", null, stepName(one.lane, step)), h("b", null, String(last ? (closedBy[one.lane] || 0) : here.length))),
-            h("div", {class: "wbp-dots"}, here.slice(0, PIPE_CAP).map((info) => avatar(info, small ? 12 : 15)), extra > 0 ? h("button", {type: "button", class: "wbp-plus", "data-wbp-col": key}, "+" + extra) : null));
+          const count = last ? (closedBy[one.lane] || 0) : here.length, grow = last ? ".7" : wide;
+          const lit = worst && worst.lane === one.lane && worst.step === step;
+          flow.push(h("div", {class: "wbp-chev" + (last ? " wbp-cdone" : "") + (lit ? " wbp-jam" : "") + (!count ? " wbp-cnone" : ""), style: "flex:" + grow + " 1 0"}, h("span", null, stepName(one.lane, step)), h("b", null, String(count))));
+          const extra = here.length - PIPE_CAP;
+          track.push(h("div", {class: "wbp-cell", style: "flex:" + grow + " 1 0"}, here.slice(0, PIPE_CAP).map((info) => avatar(info, 11)), extra > 0 ? h("button", {type: "button", class: "wbp-plus", "data-wbp-col": one.lane + ":" + step}, "+" + extra) : null));
         });
-        return h("div", {class: "wbp-lane"}, h("div", {class: "wbp-lk"}, h("b", null, laneName(one.lane)), h("span", null, String(list.filter((info) => info.place.lane === one.lane).length))),
-          h("div", {class: "wbp-pipe", style: "grid-template-columns:repeat(" + (one.steps.length === 2 ? 5 : one.steps.length) + ",minmax(0,1fr))"}, cells));
+        return h("div", {class: "wbp-lane"}, h("div", {class: "wbp-lk", title: t(LANE_TIP[one.lane] || LANE_TIP.qa)}, laneName(one.lane)), h("div", null, h("div", {class: "wbp-flow"}, flow), h("div", {class: "wbp-track"}, track)));
       });
-      const waits = list.filter((info) => info.kind === "wait").length;
-      const extra = worst ? t("super.wb.pipe.jam2", {n: waits, lane: laneName(worst.lane), stage: stepName(worst.lane, worst.step), k: worst.n}) : t("super.wb.pipe.calm");
       const wide = opened.pipe ? h("div", {class: "wbp-list"}, list.slice().sort((a, b) => a.place.lane.localeCompare(b.place.lane) || RANK[a.kind] - RANK[b.kind] || a.name.localeCompare(b.name)).map((info) => h("div", {class: "wbp-look " + KC(info.kind), "data-wbp-task": info.name, "data-wbp-hv": ""}, avatar(info, 16), h("span", {class: "wbp-ln1"}, info.shown), h("span", {class: "wbp-r"}, laneName(info.place.lane) + " · " + stepName(info.place.lane, info.place.step))))) : null;
-      return block("pipe", t("super.wb.data.pipe"), extra, [rows.length ? h("div", {class: "wbp-lanes"}, rows) : h("div", {class: "wbp-ok wbp-soft"}, t("super.wb.pipe.none")), wide], list.length ? toggleBtn("pipe", opened.pipe ? t("super.wb.data.less") : t("super.wb.pipe.list")) : null);
+      return block("pipe", t("super.wb.data.pipe"), "", [rows.length ? h("div", {class: "wbp-lanes"}, rows) : h("div", {class: "wbp-ok wbp-soft"}, t("super.wb.pipe.none")), wide], list.length ? toggleBtn("pipe", opened.pipe ? t("super.wb.data.less") : t("super.wb.pipe.list")) : null);
     }
-    // What waits for the person, by the decision asked (the same for every kind of task).
+    // What waits for the person, by the decision asked (the same for every kind): ranked bars, the most first; a decision nobody waits on is not shown.
     function askBlock(list) {
       const waiting = list.filter((info) => info.kind === "wait");
       if (!waiting.length) return null;
-      const cells = DECISIONS.map((one) => one[0]).filter((key) => key !== "other" || waiting.some((info) => info.decision === "other")).map((key) => {
-        const here = waiting.filter((info) => info.decision === key), extra = here.length - PIPE_CAP;
-        return h("div", {class: "wbp-pcol" + (here.length && here.length === Math.max(...DECISIONS.map((d) => waiting.filter((info) => info.decision === d[0]).length)) ? " wbp-jam" : "")},
-          h("h6", null, h("span", null, t(ASK_TEXT[key])), h("b", null, String(here.length))),
-          h("div", {class: "wbp-dots"}, here.slice(0, PIPE_CAP).map((info) => avatar(info, here.length > 6 ? 12 : 15)), extra > 0 ? h("button", {type: "button", class: "wbp-plus", "data-wbp-col": "ask:" + key}, "+" + extra) : null));
-      });
-      return block("ask", t("super.wb.data.ask") + " · " + waiting.length, t("super.wb.ask.scope"), [h("div", {class: "wbp-asks"}, cells)]);
+      const groups = DECISIONS.map((one) => ({key: one[0], here: waiting.filter((info) => info.decision === one[0])})).filter((one) => one.here.length).sort((a, b) => b.here.length - a.here.length);
+      const most = groups[0].here.length;
+      const bars = groups.map((one) => h("div", {class: "wbp-rk"}, h("span", {class: "wbp-rkl"}, t(ASK_TEXT[one.key])),
+        h("span", {class: "wbp-rkbar"}, h("b", {style: "width:" + Math.max(8, one.here.length / most * 100).toFixed(1) + "%"}), h("span", {class: "wbp-rkav"}, one.here.slice(0, 8).map((info) => avatar(info, 11)), one.here.length > 8 ? h("button", {type: "button", class: "wbp-plus", "data-wbp-col": "ask:" + one.key}, "+" + (one.here.length - 8)) : null)),
+        h("span", {class: "wbp-rkn"}, String(one.here.length))));
+      return h("section", {class: "wbp-blk"}, h("div", {class: "wbp-bt"}, h("span", null, t("super.wb.data.ask")), h("b", {class: "wbp-btn"}, String(waiting.length))), h("div", {class: "wbp-rks"}, bars));
     }
     function timeBlock(list) {
       const known = list.filter((info) => info.time);

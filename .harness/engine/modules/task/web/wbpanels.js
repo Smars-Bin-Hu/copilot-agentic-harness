@@ -147,7 +147,7 @@ const WBPANELS = (function () {
 
     // ---- the Data panel ----
     function dataNode(list) {
-      const waits = SUPER.waiting(list.map((info) => info.row));
+      const waits = list.filter((info) => info.kind === "wait").length;  // a task in error counts once, as an error (as the head of the super view)
       const total = {work: 0, err: 0, aiu: 0, subs: 0};
       let top = 0;
       for (const info of list) {

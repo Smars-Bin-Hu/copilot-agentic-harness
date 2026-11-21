@@ -262,7 +262,7 @@ const WORKBENCH = (function () {
       panels2.update({tree: visible("t"), data: visible("d"), scene: mode === "focus", tall});
     }
     function update() {
-      const count = SUPER.waiting(rowsOf());
+      const count = SUPER.waiting(rowsOf().filter((row) => row.state !== "error" && row.state !== "broken"));  // as the head of the super view: a task in error is told as an error, not a wait
       waitEl.hidden = !count;
       waitEl.textContent = t("super.wb.waits", {n: count});
       waitEl.title = t("board.mode.super.badge", {n: count});

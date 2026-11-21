@@ -5,8 +5,8 @@
 // Two views, picked in the top bar: Workbench (the chat in the middle, four panels that open and close: left Queue and Agents, right Data and Task) and Focus (the chat and a picture;
 // what waits comes as one card at a time). A window taller than wide uses the Tall layout: nothing covers anything, everything stacks downward.
 // A link to a task page inside the layer opens that task in the Task pane (a tab with an iframe of `/task/<name>?embed=1`; a loaded frame is hidden, never destroyed, so a tab switch is instant).
-// `.wb-tree`, `.wb-data` and `.wb-scene` are empty places for the tree of running agents, the data panel and the picture of Focus.
-// Needs common.js and super.js (SUPER.waiting); board.js calls `WORKBENCH.create`.
+// The tree of running agents, the Data panel, the picture of Focus, the hover card of a task and the task line of a queue item are drawn by wbpanels.js from the rows of the board; this file only gives them their places and says which are on screen.
+// Needs common.js, super.js (SUPER.waiting) and wbpanels.js; board.js calls `WORKBENCH.create`.
 "use strict";
 
 const WORKBENCH = (function () {
@@ -32,6 +32,7 @@ const WORKBENCH = (function () {
     const superView = options.superView;
     const sv = superView.node;
     const rowsOf = options.rows || (() => []);
+    const panels2 = WBPANELS.create({rows: rowsOf});  // the drawing of the panels
     let mode = store.get("mode", "wb") === "focus" ? "focus" : "wb";
     let panels = {q: true, t: true, d: true, p: true};
     try { const saved = JSON.parse(store.get("panels", "{}")); for (const key of PANELS) if (typeof saved[key] === "boolean") panels[key] = saved[key]; } catch (error) { /* the default */ }
@@ -79,11 +80,9 @@ const WORKBENCH = (function () {
     const queueEmpty = h("div", {class: "wb-soon wb-qempty"}, t("super.wb.queue.empty"));
     queueBody.append(queueEmpty);
     const treeBody = panel("t", "super.wb.head.agents");
-    const tree = h("div", {class: "wb-tree"}, h("div", {class: "wb-soon"}, t("super.wb.tree.soon")));
-    treeBody.append(tree);
+    treeBody.append(panels2.tree);
     const dataBody = panel("d", "super.wb.head.data");
-    const data = h("div", {class: "wb-data"}, h("div", {class: "wb-soon"}, t("super.wb.data.soon")));
-    dataBody.append(data);
+    dataBody.append(panels2.data);
 
     // The Task pane: tabs, one iframe each. Made once and never moved (a moved iframe reloads); CSS puts it in the right column, in the window of Focus, or under the chat.
     const tabsEl = h("div", {class: "wb-tabs", role: "tablist"});
@@ -97,7 +96,7 @@ const WORKBENCH = (function () {
     const left = h("aside", {class: "wb-side wb-l"}, pn.q, pn.t);
     const right = h("aside", {class: "wb-side wb-r"}, pn.d, pn.p);
     const center = h("div", {class: "wb-center"});
-    const scene = h("section", {class: "wb-scene"}, h("div", {class: "wb-scene-in wb-soon"}, t("super.wb.scene.soon")));
+    const scene = h("section", {class: "wb-scene"}, panels2.scene);
     const dock = h("nav", {class: "wb-dock", "aria-label": t("super.wb.dock")}, PANELS.map((key) => docks[key]));
     const main = h("div", {class: "wb-main"}, left, center, right, scene, dock);
 
@@ -122,6 +121,7 @@ const WORKBENCH = (function () {
       if (!queueList) return;
       const list = items(), line = ordered(), count = list.length, now = line[0] || null;
       const nowId = now ? now.dataset.id : "";
+      panels2.decorate(queueList);  // the task of each item: its avatar and name at the top
       const sig = mode + "|" + count + "|" + line.map((node) => node.dataset.id).join(",");
       for (const node of queueList.children) node.classList.toggle("wb-cur", mode === "focus" && node === now);
       queueEmpty.hidden = count > 0;
@@ -179,6 +179,7 @@ const WORKBENCH = (function () {
       if (inChat) { if (cardBox.parentNode !== sv) sv.insertBefore(cardBox, sv.querySelector(".sa-quick")); } else if (cardBox.parentNode !== root) root.append(cardBox);
       drawQueue();
       syncTask();
+      paint();
       requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));  // super.js puts the pet back in its corner
     }
     function setMode(next) { if (mode === next) return; mode = next; store.set("mode", mode); cardSig = ""; layout(); }
@@ -252,11 +253,16 @@ const WORKBENCH = (function () {
     });
 
     // ---- open and close ----
+    function paint() {  // the panels that are on screen are drawn (again only when what they show changed)
+      if (!open) return;
+      panels2.update({tree: visible("t"), data: visible("d"), scene: mode === "focus", tall});
+    }
     function update() {
       const count = SUPER.waiting(rowsOf());
       waitEl.hidden = !count;
       waitEl.textContent = t("super.wb.waits", {n: count});
       waitEl.title = t("board.mode.super.badge", {n: count});
+      if (open) { paint(); panels2.decorate(queueList); }
     }
     let queued = false;
     const changed = () => { if (queued) return; queued = true; Promise.resolve().then(() => { queued = false; if (open) drawQueue(); }); };
@@ -267,13 +273,15 @@ const WORKBENCH = (function () {
       queueNode = sv.querySelector(".sa-queue");
       queueList = queueNode ? queueNode.querySelector(".sa-qlist") : null;
       if (queueNode) queueHome = {parent: queueNode.parentNode, next: queueNode.nextSibling};
-      if (!root.parentNode) document.body.append(root);
+      if (!root.parentNode) { document.body.append(root); panels2.bind(root); }
       center.append(sv);
       root.hidden = false;
       document.documentElement.classList.add("wb-lock");
       cardSig = "";
       layout();  // the columns first: the pet of super.js stands in the corner of the place it has
       superView.show();
+      panels2.start();
+      panels2.intro(root);
       if (queueList) {
         observer = new MutationObserver(changed);
         observer.observe(queueList, {childList: true, attributes: true, attributeFilter: ["hidden"], subtree: true});
@@ -285,6 +293,7 @@ const WORKBENCH = (function () {
       superView.hide();
       if (!open) return;
       open = false;
+      panels2.stop();
       if (observer) { observer.disconnect(); observer = null; }
       cardBox.remove();
       for (const node of queueList ? queueList.children : []) node.classList.remove("wb-cur");

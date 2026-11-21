@@ -52,7 +52,7 @@ class WorkbenchWordsTests(unittest.TestCase):
         return [json.loads((CORE / f"messages.{lang}.json").read_text(encoding="utf-8")) for lang in ("en", "zh")]
 
     def test_every_key_the_workbench_names_is_in_both_languages(self) -> None:
-        used = {key for key in re.findall(r'"((?:super|board)\.[a-z0-9.]+)"', source("workbench.js")) if not key.endswith(".")}
+        used = {key for name in ("workbench.js", "wbpanels.js") for key in re.findall(r'"((?:super|board|stage|waits|desk)\.[a-z0-9.]+)"', source(name)) if not key.endswith(".")}
         self.assertGreater(len(used), 20)
         for key in sorted(used):
             for table in self.tables():
@@ -68,11 +68,10 @@ class WorkbenchWordsTests(unittest.TestCase):
             self.assertTrue(key.startswith(taskhtml.TEXT_PREFIXES), key)  # the page gets the messages with these prefixes
 
     def test_the_page_files_have_no_chinese_and_no_hard_coded_english_label(self) -> None:
-        for name in ("workbench.js", "workbench.css"):
+        for name in ("workbench.js", "workbench.css", "wbpanels.js", "wbpanels.css"):
             self.assertIsNone(re.search("[一-鿿]", source(name)), name)
-        script = source("workbench.js")
-        for word in ("written back", "write back"):
-            self.assertNotIn(word, script)
+            for word in ("written back", "write back"):
+                self.assertNotIn(word, source(name))
 
     def test_the_task_pane_asks_for_the_embedded_page_and_keeps_its_frames(self) -> None:
         script = source("workbench.js")
@@ -83,6 +82,49 @@ class WorkbenchWordsTests(unittest.TestCase):
     def test_the_task_link_is_read_only_from_a_task_page_address(self) -> None:
         script = source("workbench.js")
         self.assertIn(r"/^\/task\/([^/?#]+)(?:[?#].*)?$/", script)
+
+
+class WorkbenchPanelsTests(unittest.TestCase):
+    def test_the_panels_file_is_served_before_the_workbench_with_its_style(self) -> None:
+        page = taskhtml.board_page([], "2026-11-20T00:00:00+00:00", 0, SERVE)
+        self.assertIn("const WBPANELS = (function", page)
+        self.assertLess(page.index("const WBPANELS = (function"), page.index("const WORKBENCH = (function"))
+        self.assertIn(".wbp-av{", page)
+        self.assertLess(page.index(".wb-root{"), page.index(".wbp-av{"))
+        self.assertNotIn("const WBPANELS = (function", taskhtml.board_page([], "2026-11-20T00:00:00+00:00", 0, None))
+
+    def test_the_panels_are_drawn_from_the_rows_and_ask_for_nothing(self) -> None:
+        script = source("wbpanels.js")
+        for needle in ("function treeNode", "function dataNode", "function sceneSVG", "function hoverCard", "function decorate", "function intro", "function idOf", "function paint"):
+            self.assertIn(needle, script)
+        for call in ("fetch(", "XMLHttpRequest", "EventSource", "WebSocket"):
+            self.assertNotIn(call, script)  # no request of its own: the rows are the board's
+
+    def test_a_panel_is_drawn_again_only_when_its_signature_changed(self) -> None:
+        script = source("wbpanels.js")
+        self.assertIn("if (sigs[key] === sig && node.firstChild) return;", script)
+
+    def test_the_scene_and_the_entrance_stand_still_under_reduced_motion_and_lite(self) -> None:
+        script, style = source("wbpanels.js"), source("wbpanels.css")
+        self.assertIn('document.documentElement.classList.contains("lite")', script)
+        self.assertIn("prefers-reduced-motion: reduce", script)
+        self.assertIn("if (still()) return;", script)  # no entrance
+        self.assertIn("html.lite .wbp-intro", style)
+        self.assertIn("prefers-reduced-motion:reduce", style)
+
+    def test_the_queue_item_finds_its_task_in_the_data_task_of_the_item(self) -> None:
+        script = source("wbpanels.js")
+        self.assertIn("node.dataset.task", script)
+        self.assertIn('node.classList.contains("item")', script)
+
+    def test_the_send_button_keeps_its_own_colours(self) -> None:
+        self.assertIn(":where(.wb-root) button{font:inherit;color:inherit}", source("workbench.css"))
+
+    def test_every_identity_colour_has_a_light_and_a_dark_value(self) -> None:
+        style = source("wbpanels.css")
+        for number in range(8):
+            self.assertEqual(len(re.findall(rf"--wbp-id{number}:", style)), 2, number)
+            self.assertIn(f".wbp-i{number}{{--id:var(--wbp-id{number})}}", style)
 
 
 if __name__ == "__main__":

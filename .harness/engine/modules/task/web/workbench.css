@@ -4,7 +4,7 @@ html.wb-lock{overflow:hidden}
 .wb-root{--wb-lw:clamp(260px,22vw,340px);--wb-rw:clamp(320px,38vw,680px);position:fixed;inset:0;z-index:100;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;overflow:hidden}
 .wb-root[hidden],.wb-root [hidden]{display:none}
 .wb-root *{box-sizing:border-box}
-.wb-root button{font:inherit;color:inherit}
+:where(.wb-root) button{font:inherit;color:inherit}  /* no weight: the buttons of super.js keep their own colours (the Send button is the button colour on the button ink) */
 .wb-no-l{--wb-lw:0px}
 .wb-no-r{--wb-rw:0px}
 .wb-sp{flex:1}
@@ -92,7 +92,6 @@ html.wb-lock{overflow:hidden}
 
 /* Focus: the picture on the right (an empty place for now), the task in a window in the middle of the screen */
 .wb-m-focus .wb-scene{display:block;grid-column:2;grid-row:1;min-width:0;min-height:0;position:relative;overflow:hidden;border-left:1px solid var(--line);background:radial-gradient(ellipse at 50% 22%,var(--good-bg) 0,transparent 62%),var(--bg)}
-.wb-scene-in{padding:16px}
 .wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{display:grid;position:fixed;inset:0;z-index:40;place-items:center;background:var(--scrim);border:0;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
 html.lite .wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{-webkit-backdrop-filter:none;backdrop-filter:none}
 .wb-m-focus:not(.wb-tall) .wb-pn-p{width:min(1080px,78vw);height:84vh;border:1px solid var(--line2);border-radius:14px;overflow:hidden;box-shadow:var(--glass-shadow)}

@@ -12,6 +12,7 @@
   approve-command              a person approves a git command the gate refused (gate module)
   admin on|off|status          a person switches admin mode on for one session: it may then change guardrail files (gate module)
   stats, logs prune            numbers from the session logs; delete old logs (observe module)
+  speed [--days N]             where the time of the Copilot agents goes on this computer, and what is slow now (core/speed.py)
   eval list|show|check         fixed scenarios, judged from a finished run (evalcheck module)
   --version [--short]          the harness release, date and authors (from .harness/registry.json); --short prints one line
 
@@ -126,6 +127,12 @@ def _toolpack_remove(name: str) -> dict:
     return toolpacks.remove(repo_root(), name)
 
 
+def _speed():
+    from core import speed  # loaded only for `harness speed`
+
+    return speed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="harness", description="Harness CLI")
     parser.add_argument("--version", action=ShowVersion)
@@ -179,6 +186,9 @@ def build_parser() -> argparse.ArgumentParser:
     link_remove = link_commands.add_parser("remove", help="forget a folder added with `toolpack add` and take back the skills it put (to .harness/runtime/toolpack-backup/). A factory pack is turned off by taking it out of `use` in the knowledge base (a person at a terminal only)")
     link_remove.add_argument("name", help="the pack's name, or the folder")
     link_remove.set_defaults(handler=lambda a: _toolpack_remove(a.name), person_only=True)
+    timing = commands.add_parser("speed", help="where the time of the Copilot agents goes on this computer: the model, the network, starting processes, the tools, CPU and memory. Each run is kept and shown next to the one before")
+    timing.add_argument("--days", type=int, default=None, help="the history of the last N days (default 7)")
+    timing.set_defaults(handler=lambda a: _speed().run(repo_root(), a.days), render=lambda result: _speed().render(result))
     task_commands.register(commands)
     gate_commands.register(commands)
     observe_commands.register(commands)

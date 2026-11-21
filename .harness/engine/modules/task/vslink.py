@@ -626,8 +626,15 @@ class VsLink:
         with self.lock:
             self.losses += 1 if self.ready and not ready else 0
             self.ready, self.why = ready, why
+            waited = time.monotonic() - self.open_at if ready and self.open_at else 0.0
             if ready:
                 self.open_at = 0.0  # a later loss counts its wait from then, not from before this connection
+        if waited > 0:
+            try:
+                from core import speednet
+                speednet.record_vscode_start(self.root, waited)  # `harness speed`: seconds from a window seen to connected
+            except Exception:  # noqa: BLE001 - a helper must not disturb the link
+                pass
 
     def hurry(self) -> None:
         """The board just opened VS Code: look for its host every second for a while. The wait had grown to a minute while no window was open, and the Enter screen stayed

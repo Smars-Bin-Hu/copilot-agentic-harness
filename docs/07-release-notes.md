@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.23 (1.8.0 – 1.8.23, 2026-11-17 – 2026-11-20)
+## 1.8.24 (1.8.0 – 1.8.24, 2026-11-17 – 2026-11-21)
 
 ### Added
 
@@ -33,6 +33,7 @@ To see which version you have: `harness --version`.
 - **Green stamps on the Requirement, Changes and Scripts tabs** (1.8.16): the Requirement tab says when you confirmed it and with which code, amber when it changed since, as the Plan tab does; Changes says when the work was written back, to which branch, with the promote's code; a script of `DEV/_server/` that the gate let through shows **ran on DEV ×N**, each run in the hover (it says the call ran, not how it ended).
 - **Checks of a closed task** (1.8.18): a task closed without independent checks can be checked afterwards. Write `[review]=n` with its name in a chat, or set **Checks after the close** on its page; the agent runs `harness task review after <task>` and the reviewer. The task stays closed, `DEV/` is not moved, nothing is promoted. The page and the report show these checks in a block of their own; a FAIL is only recorded (fix it in a new task with `task fork`).
 - **The top right in one row, and a calmer stop** (1.8.19): the search pill and, next to it, one pill with your name, the Terminal toggle and the stop button. Stopping asks in a card (Cancel has the focus), shows that it is stopping or why it did not stop, and ends on a page with the robot asleep and how to start again.
+- **Where the time of the agents goes: `harness speed`** (1.8.24): from Copilot's own records of the last 7 days, the time of a model call, its first word, a hook and a tool call, grouped by how many agents were working at once; what starting a hook's process costs; what the CPU, the memory, the busiest programs and the network to the Copilot server (through the proxy, handshake only) do now; how long VS Code took to connect. One verdict line from fixed rules. Run it once when the computer is quiet and once while several agents work: the second run shows the first one's numbers next to its own.
 
 ### Fixed
 

@@ -153,7 +153,9 @@ class WorkbenchDeckTests(unittest.TestCase):
 
     def test_the_pet_of_super_js_is_replaced_by_a_stand_in_that_does_nothing(self) -> None:
         script = source("workbench.js")
-        self.assertIn("PET.create = stillPet", script)
+        self.assertIn("return {create, taskOf, stillPet};", script)
+        self.assertIn("(options.makePet || PET.create)(sv)", source("super.js"))
+        self.assertIn("makePet: typeof WORKBENCH !== \"undefined\" ? WORKBENCH.stillPet : undefined", source("board.js"))
         self.assertIn("new Proxy(own", script)
         self.assertNotIn("requestAnimationFrame", script)
 

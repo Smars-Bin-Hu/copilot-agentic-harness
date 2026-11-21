@@ -583,7 +583,7 @@
   const controls = h("div", {class: "controls"}, chips, roundBox, kinds, search, clear);
   const modeButtons = {};
   // The super agent view (1.8.1, super.js): a served board only. It is one more way to look at the board, picked in the bar; the pick is not kept.
-  const superView = typeof SUPER !== "undefined" && DATA.serve ? SUPER.create({rows: () => rows}) : null;
+  const superView = typeof SUPER !== "undefined" && DATA.serve ? SUPER.create({rows: () => rows, makePet: typeof WORKBENCH !== "undefined" ? WORKBENCH.stillPet : undefined}) : null;
   const workbench = superView && typeof WORKBENCH !== "undefined" ? WORKBENCH.create({superView, rows: () => rows, back: () => setMode(keep.get("mode", "lobby") === "list" ? "list" : "lobby"), open: () => setMode("super")}) : null;  // the full-screen layer that holds the super agent view
   const badge = h("span", {class: "sa-badge", hidden: ""});
   const modeNames = superView ? ["lobby", "list", "super"] : ["lobby", "list"];

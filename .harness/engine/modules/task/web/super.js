@@ -1530,7 +1530,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       sv.hidden = false;
       fit();
       if (!pet) {
-        pet = PET.create(sv);
+        pet = (options.makePet || PET.create)(sv);  // 1.8.24: the workbench gives a stand-in that does nothing (the bridge takes the pet's place)
         pet.node.title = t("super.pet.tip");
         pet.onClick(petClick); pet.onDouble(petDouble); pet.onDrop(petDrop);
         drawOrbit();

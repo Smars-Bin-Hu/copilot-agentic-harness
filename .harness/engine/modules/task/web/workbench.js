@@ -37,25 +37,18 @@ const WORKBENCH = (function () {
   const LIMITS = {l: [220, 560], r: [300, 1400]};  // the narrowest and widest a side can be dragged to (the right one is also kept 700 px short of the window)
   const RECHARGE = [25, 50];
 
-  // The pet of super.js is not wanted in the deck (the bridge takes its place). super.js makes it when its view first shows; this stand-in has the same calls and does nothing:
-  // no 3D robot, no timer, no frame, and nothing is put in the page. Made only when a workbench exists, so the view on its own keeps its pet.
+  // The pet of super.js is not wanted in the deck (the bridge takes its place). board.js gives this stand-in to SUPER.create (`makePet`): the same calls, doing nothing:
+  // no 3D robot, no timer, no frame, and nothing is put in the page.
   function stillPet() {
     const idle = () => undefined;
     const own = {node: h("button", {type: "button", class: "sa-pet", hidden: ""}), solid: false, held: () => false, at: () => ({x: 0, y: 0}), size: () => ({w: 0, h: 0}), walkTo: () => Promise.resolve(), orbit: idle};
     return new Proxy(own, {get: (target, key) => (key in target ? target[key] : idle)});
-  }
-  let petOff = false;
-  function noPet() {
-    if (petOff || typeof PET === "undefined") return;
-    petOff = true;
-    PET.create = stillPet;
   }
 
   function create(options) {
     const superView = options.superView;
     const sv = superView.node;
     const rowsOf = options.rows || (() => []);
-    noPet();
     const mateOf = (task) => (task ? [...sv.querySelectorAll(".sa-team .sa-mate[data-task]")].find((node) => node.dataset.task === task) || null : null);
     const placeAt = (menu, x, y) => {  // super.js puts its menus under the avatar it knows; the avatar of the bridge is elsewhere, so the menu goes to the point asked
       if (!menu) return;
@@ -159,7 +152,7 @@ const WORKBENCH = (function () {
     const bridge = h("div", {class: "wb-bridge", "aria-label": t("super.wb.bridge")});
     if (panels2.bridge) bridge.append(panels2.bridge);
     const center = h("div", {class: "wb-center"}, bridge);
-    const scene = h("section", {class: "wb-scene"}, panels2.scene);
+    const scene = h("section", {class: "wb-scene", "aria-label": t("super.wb.scene.label")}, panels2.scene);
     const dock = h("nav", {class: "wb-dock", "aria-label": t("super.wb.dock")}, PANELS.map((key) => docks[key]));
     const main = h("div", {class: "wb-main"}, left, barL, center, barR, right, scene, dock);
 
@@ -538,5 +531,5 @@ const WORKBENCH = (function () {
     return {node: root, show, hide, update, setVscode, isOpen: () => open};
   }
 
-  return {create, taskOf};
+  return {create, taskOf, stillPet};
 })();

@@ -892,40 +892,57 @@ def state_of(status: str, paused: str, why: str, is_held: bool, is_active: bool)
     return "quiet" if is_held else "unheld"
 
 
+def task_row(root: Path, task: str, data: Optional[Dict[str, Any]], everything: bool = True) -> Optional[Dict[str, Any]]:
+    """The row of one task as `list_tasks` has it (`data`: its task.json, None when it cannot be read). None: a task that is not open and `everything` is not asked."""
+    if data is None:
+        return {
+            "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
+            "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "paused_since": "", "paused_by": "",
+            "state": "broken" if tasks.damaged(root, task) else "new", "held": False, "active": False,
+        }
+    if data.get("status") != "open" and not everything:
+        return None
+    aside = paused_since(data) if data.get("status") == "open" else ""
+    found = waiting(root, task, data) if data.get("status") == "open" and not aside else {"why": "", "since": ""}
+    waited = waited_since(data, found["since"]) if found["why"] else None
+    is_open = data.get("status") == "open"
+    is_held = is_open and held(root, data)
+    working = is_open and not aside and at_work(root, data, found["why"])
+    row = {
+        "task": task, "name": data.get("name") or task_ops.name_of(task), "title": str(data.get("title") or ""), "status": data.get("status", ""),
+        "kind": data.get("kind", ""), "reviews": data.get("reviews", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
+        "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"], "waiting_from": wait_clock(data, found["since"]) if found["why"] else "",
+        "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
+        "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
+        "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
+        "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "", "checks": checks_of(data),
+        "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),
+    }
+    if row["state"] == "unheld":
+        left = seconds_since(data.get("updated_at", ""))
+        row["unheld_s"] = round(left) if left is not None else None  # how long nobody has touched it
+    return row
+
+
+def row_named(root: Path, name: str) -> Optional[Dict[str, Any]]:
+    """The row of the task called `name` (open or closed), or None. 1.8.22: one task is read, not all of them (a task page asks this every 3 s): the folder of that name first,
+    then, for a task whose name is not its folder's, every task as `list_tasks` does."""
+    for task in tasks.folders(root):
+        if task_ops.name_of(task) == name:
+            row = task_row(root, task, tasks.read(root, task), True)
+            if row is not None and row["name"] == name:
+                return row
+    return next((row for row in list_tasks(root, True)["tasks"] if row["name"] == name), None)
+
+
 def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
     """Tasks by state (STATES): those that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`; one whose task.json is damaged, as `broken` (its status stays `new`: nothing else of it can be read).
     Every row has `state` (one of STATES), `held` and `active`; a row with no session on it has `unheld_s`."""
     rows = []
     for task in tasks.folders(root):
-        data = tasks.read(root, task)
-        if data is None:
-            rows.append({
-                "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
-                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "paused_since": "", "paused_by": "",
-                "state": "broken" if tasks.damaged(root, task) else "new", "held": False, "active": False,
-            })
-            continue
-        if data.get("status") != "open" and not everything:
-            continue
-        aside = paused_since(data) if data.get("status") == "open" else ""
-        found = waiting(root, task, data) if data.get("status") == "open" and not aside else {"why": "", "since": ""}
-        waited = waited_since(data, found["since"]) if found["why"] else None
-        is_open = data.get("status") == "open"
-        is_held = is_open and held(root, data)
-        working = is_open and not aside and at_work(root, data, found["why"])
-        rows.append({
-            "task": task, "name": data.get("name") or task_ops.name_of(task), "title": str(data.get("title") or ""), "status": data.get("status", ""),
-            "kind": data.get("kind", ""), "reviews": data.get("reviews", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
-            "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"], "waiting_from": wait_clock(data, found["since"]) if found["why"] else "",
-            "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
-            "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
-            "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
-            "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "", "checks": checks_of(data),
-            "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),
-        })
-        if rows[-1]["state"] == "unheld":
-            left = seconds_since(data.get("updated_at", ""))
-            rows[-1]["unheld_s"] = round(left) if left is not None else None  # how long nobody has touched it
+        row = task_row(root, task, tasks.read(root, task), everything)
+        if row is not None:
+            rows.append(row)
     rows.sort(key=lambda row: row["updated_at"], reverse=True)
     rows.sort(key=lambda row: (STATES.index(row["state"]), -(row["waited_s"] or 0)))
     return {

@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import messages, skillcheck, targets
+from . import filecache, messages, skillcheck, targets
 from .paths import runtime_dir, utc_now
 from .registry import harness_version
 
@@ -81,7 +81,7 @@ def _numbers(version: str) -> tuple:
 
 def manifest(folder: Path) -> Dict[str, Any]:
     try:
-        found = json.loads((folder / MANIFEST).read_text(encoding="utf-8-sig"))
+        found = json.loads(filecache.read_text(folder / MANIFEST, "utf-8-sig"))
     except FileNotFoundError:
         raise ToolpackError(say("toolpack.not_a_pack", folder=folder.name or str(folder))) from None
     except (OSError, ValueError) as error:
@@ -179,7 +179,7 @@ def _skills(folder: Path) -> List[Path]:
 
 def _json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8-sig"))
+        return json.loads(filecache.read_text(path, "utf-8-sig"))
     except (OSError, ValueError):
         return None
 
@@ -309,7 +309,7 @@ def unreadable(root: Path) -> List[Dict[str, Any]]:
         if folder.name in seen:
             continue
         try:
-            found = json.loads((folder / MANIFEST).read_text(encoding="utf-8-sig"))
+            found = json.loads(filecache.read_text(folder / MANIFEST, "utf-8-sig"))
             problem = "" if isinstance(found, dict) else say("toolpack.manifest.object")
         except FileNotFoundError:
             problem = say("toolpack.manifest.missing") if any((folder / part).exists() for part in (TYPES, "bin", RULES)) else ""

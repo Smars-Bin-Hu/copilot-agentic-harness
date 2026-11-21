@@ -61,7 +61,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
-from core import launchenv, pace
+from core import filecache, launchenv, pace
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
@@ -2678,6 +2678,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
     sync_on_start(root)
+    filecache.enable()  # 1.8.22: a file read before is read again only when it changed (a task page read some 360 files every 3 s)
     if ready is None and getattr(link, "running", False) is None:
         link.running = board.ready.vs_running.get  # 1.8.8: a VS Code window that is open but not reached yet is looked for every few seconds and told as getting ready (the tests keep their own)
     link.start()  # the thread only; the board does not wait for VS Code
@@ -2731,6 +2732,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         board.terminal.stop_all()
         link.stop()
         server.server_close()
+        filecache.enable(False)
         try:
             path.unlink()
         except OSError:

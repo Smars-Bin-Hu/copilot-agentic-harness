@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from core import config, tasks
+from core import config, filecache, tasks
 from core.paths import utc_now
 
 from . import commitmsg, common
@@ -69,11 +69,7 @@ def result_files(root: Path, task: str) -> List[Tuple[str, Path]]:
 
 
 def file_digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
+    return filecache.sha256(path)  # 1.8.22: the board server hashes a file again only when it changed
 
 
 def listing(root: Path, task: str) -> List[Dict[str, Any]]:

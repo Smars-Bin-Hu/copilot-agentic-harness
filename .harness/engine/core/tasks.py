@@ -16,6 +16,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from . import filecache
+
 TASKS_DIR = ".workspace/sandbox/tasks"
 # What kind of work a task is (it decides what "done" means) and how many files it gets.
 KINDS = ("qa", "rca", "design", "dev", "test", "kb", "other")  # other: fits none of the six; its standard of done is agreed with the person
@@ -83,8 +85,7 @@ def base_dir(root: Path, task: str) -> Path:
 def read(root: Path, task: str) -> Optional[Dict[str, Any]]:
     """task.json, or None when the task was never started or the file cannot be read."""
     try:
-        with state_file(root, task).open(encoding="utf-8") as handle:
-            data = json.load(handle)
+        data = json.loads(filecache.read_text(state_file(root, task)))  # 1.8.22: the board server reads it again only when it changed
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
@@ -110,7 +111,7 @@ def open_of(root: Path, state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def plan_digest(root: Path, task: str) -> str:
     """sha256 of PLAN.md, or an empty string when there is none."""
     try:
-        return hashlib.sha256(plan_file(root, task).read_bytes()).hexdigest()
+        return filecache.sha256(plan_file(root, task))
     except OSError:
         return ""
 
@@ -126,7 +127,7 @@ def req_digest(root: Path, task: str) -> str:
     added there must not undo an approval. A file with none of those sections counts as a whole, but for the confirmation
     line. An empty string when there is no REQ.md."""
     try:
-        text = (task_dir(root, task) / REQ_FILE).read_text(encoding="utf-8", errors="replace")
+        text = filecache.read_text(task_dir(root, task) / REQ_FILE, "utf-8", "replace")
     except OSError:
         return ""
     return req_digest_of(text)

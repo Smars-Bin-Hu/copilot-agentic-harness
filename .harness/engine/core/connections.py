@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import clip, messages, netonly, pace
+from . import clip, filecache, messages, netonly, pace
 from . import systems as outside
 from .paths import utc_now
 from . import procrun
@@ -257,7 +257,7 @@ def _write_value(value: str) -> str:
 def read_env(root: Path) -> Dict[str, str]:
     """The `.env` of this copy, `{KEY: value}`; nothing when there is none."""
     try:
-        lines = (root / ENV_FILE).read_text(encoding="utf-8-sig").splitlines()
+        lines = filecache.read_text(root / ENV_FILE, "utf-8-sig").splitlines()
     except OSError:
         return {}
     found: Dict[str, str] = {}

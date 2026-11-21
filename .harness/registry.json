@@ -190,6 +190,7 @@
         ".harness/tests/test_vslink.py",
         ".harness/tests/test_taskarchive.py",
         ".harness/tests/test_taskreopen.py",
+        ".harness/tests/test_filecache.py",
         ".harness/tests/test_reopen_page.py",
         ".harness/tests/test_domainskills.py",
         ".harness/tests/test_kbtranslate.py",

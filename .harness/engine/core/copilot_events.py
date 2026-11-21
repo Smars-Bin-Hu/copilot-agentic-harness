@@ -9,7 +9,7 @@ reader never raises, takes only numbers, times and names (no tool argument, no r
 finds nothing it understands. The caller then falls back to the hook log. The one piece of text it can take is the
 start of what the user typed, and only when the caller asks for it (`text_chars`): the page of a task shows it so a
 person knows which prompt a row is. It is never given to an agent. The one argument it can take is the command of a
-terminal tool, only when the caller asks for it (`commands`, 1.7.44): the Agent actions tab of a task shows it.
+terminal tool, only when the caller asks for it (`commands`, 1.8.22): the Agent actions tab of a task shows it.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ def seconds(stamp: Any) -> Optional[float]:
     return moment.timestamp() + extra
 
 
-COMMAND_CHARS = 4000  # a terminal command kept for the Agent actions tab (1.7.44): the harness's own log keeps none of a call that went through
+COMMAND_CHARS = 4000  # a terminal command kept for the Agent actions tab (1.8.22): the harness's own log keeps none of a call that went through
 
 
 def command_of(arguments: Any) -> str:
@@ -99,7 +99,7 @@ def new_prompt(at: float) -> Dict[str, Any]:
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
         "tools": [], "subagents": [], "skills": [], "models": [], "calls": [], "aiu": None, "premium_requests": None, "context_tokens": None,
         "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [], "cache_calls": [], "thinks": [],
-        "spends": [], "docs": [], "commands": [],  # commands: the terminal command of each call as it started, only when asked (1.7.44, the Agent actions tab). When the usage came (`at`, aiu, premium, input, output) and when REQ.md or PLAN.md of a task was written: a report splits a prompt by stage with them
+        "spends": [], "docs": [], "commands": [],  # commands: the terminal command of each call as it started, only when asked (1.8.22, the Agent actions tab). When the usage came (`at`, aiu, premium, input, output) and when REQ.md or PLAN.md of a task was written: a report splits a prompt by stage with them
     }
 
 

@@ -272,7 +272,7 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .script-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;width:100%;box-sizing:border-box}
 .script-path{min-width:0;overflow-wrap:anywhere;word-break:break-all}
 .script-view{margin:4px 0 10px 12px;min-width:0;overflow-x:auto}
-/* The Agent actions tab (1.7.44): the command of each call, a mark for a call to an outside system, the filter */
+/* The Agent actions tab (1.8.22): the command of each call, a mark for a call to an outside system, the filter */
 .tr-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.tr-bar .hint{flex:1 1 auto;min-width:0}
 .act.tr-only{flex:none;padding:2px 9px;font-size:15px;line-height:20px}.act.tr-only.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 li .tr-call>summary{list-style:none;cursor:pointer}li .tr-call>summary::-webkit-details-marker{display:none}

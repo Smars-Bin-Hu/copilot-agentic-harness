@@ -2568,8 +2568,8 @@
   // The Agent actions tab. Open, it asks for the tree (pull): the numbers of the whole task, what was blocked or failed, and one node per prompt with what the agent did for it, in order.
   // Until the tree comes, or where there is none, it is the plain list of the hook log. What the model thought is not in Copilot's record: only how long.
   const traceOpen = new Map();  // prompt number -> open; the newest is open until the person says otherwise
-  const cmdOpen = new Set();  // the calls whose whole command is open (1.7.44), by their start and tool
-  let onlyOutside = false;  // the filter of the tab (1.7.44): only the calls to outside systems
+  const cmdOpen = new Set();  // the calls whose whole command is open (1.8.22), by their start and tool
+  let onlyOutside = false;  // the filter of the tab (1.8.22): only the calls to outside systems
   const spent = (seconds) => (seconds > 0 && seconds < 10 ? seconds.toFixed(1) + " s" : clock(seconds));
 
   // What the person decided, in its place by time (1.7.38, F3 AP): one line for each (a call approved alone or in a batch, a connection opened or closed, a call not approved with the reason, the calls a close
@@ -2638,7 +2638,7 @@
       item.call ? callMark(item.call) : null,
       (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)])];
     const rowClass = (gate ? (item.decision === "held" ? "tr-held" : "tr-gate") : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "");
-    if (!gate && item.command) {  // a call that went through (1.7.44): the start of its command under it, the whole of it when the row opens
+    if (!gate && item.command) {  // a call that went through (1.8.22): the start of its command under it, the whole of it when the row opens
       const key = item.at + "|" + item.tool;
       const summary = h("summary", null, ...head, h("span", {class: "tr-cmdline"}, item.command.split("\n")[0]));
       const box = h("details", {class: "tr-call", open: cmdOpen.has(key) ? "" : null}, summary, h("pre", {class: "tr-full", tabindex: "0"}, item.command));
@@ -2651,7 +2651,7 @@
         item.reason ? reasonNode(item.reason) : null,
         item.error ? h("div", {class: "sub"}, item.error) : null));
   }
-  // The mark of a call to an outside system (1.7.44): the system, the environment and what the call does; a write or a run stands out. The hover says what let it through.
+  // The mark of a call to an outside system (1.8.22): the system, the environment and what the call does; a write or a run stands out. The hover says what let it through.
   function callMark(call) {
     const env = call.env && call.env !== "none" ? " \u00b7 " + call.env.toUpperCase() : "";
     const how = ["allow", "plan", "runner", "opened", "approved"].includes(call.how) ? call.how : "unknown";

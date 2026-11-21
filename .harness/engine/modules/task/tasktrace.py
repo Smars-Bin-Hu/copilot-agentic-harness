@@ -279,7 +279,7 @@ def settle(node: Dict[str, Any], item: Dict[str, Any], stopped_at: Optional[floa
             row["stopped"] = True
 
 
-COMMAND_CHARS = 4000  # a command shown on the Agent actions tab (1.7.44): its first line on the row, the whole of it when the row opens
+COMMAND_CHARS = 4000  # a command shown on the Agent actions tab (1.8.22): its first line on the row, the whole of it when the row opens
 
 
 def _one(text: str) -> str:
@@ -287,7 +287,7 @@ def _one(text: str) -> str:
 
 
 def with_commands(node: Dict[str, Any], started: List[Dict[str, Any]], outside: List[Dict[str, Any]]) -> None:
-    """(1.7.44) The command of each call of a prompt that went through, from Copilot's record (the harness's log keeps none: only a call that was refused or held); and for a call
+    """(1.8.22) The command of each call of a prompt that went through, from Copilot's record (the harness's log keeps none: only a call that was refused or held); and for a call
     to an outside system, what the gate noted of it (`calls.jsonl`): `call` {system, env, verb, how, code}. A call is matched by its start, within SAME_CALL_S, the same tool first."""
     moment = copilot_events.seconds
     left = [dict(item, t=moment(item.get("at")) if not isinstance(item.get("at"), (int, float)) else float(item["at"])) for item in started]
@@ -316,7 +316,7 @@ def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     entries += decisions(root, data, task, [session["session_id"] for session in info["sessions"]])  # the person's decisions, each in the prompt it came in (F3 AP)
     nodes = nodes_of(info, entries)
     outside, started = calls.read(root, task), []
-    if taskinsight.events_allowed(root):  # (1.7.44) the commands, from Copilot's record, asked for here only
+    if taskinsight.events_allowed(root):  # (1.8.22) the commands, from Copilot's record, asked for here only
         for session in info["sessions"]:
             path = copilot_events.events_path(str(session.get("session_id") or ""))
             record = copilot_events.read(path, 0, True) if path is not None else None

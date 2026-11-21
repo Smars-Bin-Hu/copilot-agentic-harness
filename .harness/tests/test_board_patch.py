@@ -556,7 +556,7 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('item.stopped ? tag(t("desk.trace.stopped"))', (WEB / "desk.js").read_text(encoding="utf-8"))
 
     def test_a_call_that_went_through_shows_its_command_and_a_call_to_an_outside_system_its_mark(self) -> None:
-        """1.7.44: the harness's log keeps no command of a call that went through; Copilot's record does. Each tool row gets the command that started with it (the same tool first),
+        """1.8.22: the harness's log keeps no command of a call that went through; Copilot's record does. Each tool row gets the command that started with it (the same tool first),
         and a call the gate noted for an outside system (`calls.jsonl`) gets {system, env, verb, how, code}. A secret in a command is masked."""
         stamp = lambda second: f"2026-11-01T09:41:{second:02d}+00:00"  # noqa: E731
         sql = 'sqlcmd -S db1,5150 -E -C -d SSISDB -Q "SELECT name\nFROM catalog.folders"'

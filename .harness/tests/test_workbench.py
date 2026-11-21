@@ -172,7 +172,7 @@ class WorkbenchPanelsTests(unittest.TestCase):
     def test_the_panels_are_drawn_from_the_rows_and_ask_for_nothing(self) -> None:
         script = source("wbpanels.js")
         for needle in ("function treeNode", "function dataNode", "function sceneSVG", "function hoverCard", "function decorate", "function intro", "function idOf", "function paint",
-                       "function bridgeGroups", "function columnOf", "function fitOf", "function lookBlock", "function pipeBlock", "function timeBlock", "function spendBlock", "function openList", "function paintBridge"):
+                       "function bridgeGroups", "function placeOf", "function askBlock", "function fitOf", "function lookBlock", "function pipeBlock", "function timeBlock", "function spendBlock", "function openList", "function paintBridge"):
             self.assertIn(needle, script)
         for call in ("fetch(", "XMLHttpRequest", "EventSource", "WebSocket"):
             self.assertNotIn(call, script)  # no request of its own: the rows are the board's
@@ -290,10 +290,19 @@ console.log("ok");
 """)
         self.assertIn("ok", out)
 
-    def test_a_step_of_the_ribbon_is_put_in_one_of_the_five_columns(self) -> None:
+    def test_each_kind_of_task_has_its_own_lane_and_a_wait_its_decision(self) -> None:
         out = self.run_js(r"""
-const want = {requirement: 0, plan: 1, guide: 1, developing: 2, doing: 2, env: 2, writeback: 3, byhand: 3, done: 3, "": 2, nothing: 2};
-for (const [id, col] of Object.entries(want)) assert.strictEqual(W.columnOf(id), col, id);
+const P = (kind, now) => W.placeOf(kind, now);
+assert.deepStrictEqual(P("dev", {id: "plan"}), {lane: "dev", step: "plan"});
+assert.deepStrictEqual(P("kb", {id: "done"}), {lane: "dev", step: "writeback"}, "open at done: waits to be closed");
+assert.deepStrictEqual(P("dev", {id: "byhand"}), {lane: "dev", step: "writeback"});
+assert.deepStrictEqual(P("test", {id: "env", label: "ist"}), {lane: "test", step: "IST"});
+assert.deepStrictEqual(P("test", {id: "guide"}), {lane: "test", step: "guide"});
+for (const kind of ["rca", "design", "other"]) assert.deepStrictEqual(P(kind, {id: "doing"}), {lane: "simple", step: "doing"});
+assert.deepStrictEqual(P("qa", undefined), {lane: "qa", step: "open"});
+assert.deepStrictEqual(P("", undefined), {lane: "qa", step: "open"}, "no kind: the plainest lane");
+const want = {asking: "answer", outbox: "call", req: "req", plan: "plan", promote: "promote", commit: "promote", recover: "promote", accept: "accept", stopped: "other", "": "other"};
+for (const [why, key] of Object.entries(want)) assert.strictEqual(W.decisionOf(why), key, why);
 console.log("ok");
 """)
         self.assertIn("ok", out)

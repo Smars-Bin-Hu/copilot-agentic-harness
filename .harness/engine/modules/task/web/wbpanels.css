@@ -164,3 +164,12 @@ html[data-theme="dark"]{--wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--
 @keyframes wbpfade{from{opacity:0}to{opacity:1}}
 html.lite .wbp-intro,html.lite .wbp-in .wb-main{animation:none}
 @media (prefers-reduced-motion:reduce){.wbp-intro,.wbp-in .wb-main{animation:none}}
+
+/* the pipeline: one lane per kind of task, each with its own steps; and what waits for you, by decision */
+.wbp-lanes{display:flex;flex-direction:column;gap:4px}
+.wbp-lane{display:grid;grid-template-columns:62px minmax(0,1fr);gap:6px;align-items:stretch}
+.wbp-lk{display:flex;flex-direction:column;justify-content:center;font:10px var(--mono);color:var(--soft);min-width:0}.wbp-lk b{color:var(--ink);font-weight:600;overflow-wrap:anywhere}
+.wbp-lane .wbp-pcol{min-height:40px;padding:4px}.wbp-lane .wbp-pcol h6{margin-bottom:3px;letter-spacing:0;text-transform:none}
+.wbp-lane .wbp-pcol h6 span,.wbp-asks .wbp-pcol h6 span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.wbp-asks{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:4px}
+.wbp-asks .wbp-pcol{min-height:40px;padding:4px}.wbp-asks .wbp-pcol h6{letter-spacing:0;text-transform:none}

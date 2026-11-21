@@ -19,7 +19,7 @@ const WBPANELS = (function () {
   const KNOWN = {reviewer: "super.wb.sub.reviewer", worker: "super.wb.sub.worker", mapper: "super.wb.sub.mapper"};  // written out: a search for a key finds its place
   const TAGS = {autorun: "super.wb.tag.autorun", review: "super.wb.tag.review", mapper: "super.wb.tag.mapper"};
   const GRP = {err: "super.wb.grp.err", wait: "super.wb.grp.wait", work: "super.wb.grp.work", idle: "super.wb.grp.idle"};
-  const PIPE = ["super.wb.pipe.col.req", "super.wb.pipe.col.plan", "super.wb.pipe.col.dev", "super.wb.pipe.col.promote", "super.wb.pipe.col.done"];
+  const PIPE_ENVS = 4;  // the environments of the test lane shown; more go into the last one shown
   const TIME = [["model_s", "super.wb.time.model", "wbp-s-model"], ["tool_s", "super.wb.time.tool", "wbp-s-tool"], ["subagent_s", "super.wb.time.sub", "wbp-s-sub"], ["approval_s", "super.wb.time.appr", "wbp-s-appr"], ["waiting_s", "super.wb.time.you", "wbp-s-you"]];
   const BRIDGE_ORDER = ["err", "wait", "work", "idle"];  // the order of the groups on the bridge and in the Focus picture
   const TREE_ORDER = ["work", "err", "wait", "idle"];  // the order of the groups in the tree
@@ -65,12 +65,23 @@ const WBPANELS = (function () {
   const RANK = {err: 0, wait: 1, work: 2, idle: 3};
   const KC = (kind) => "wbp-k-" + kind;  // the class of a state (a plain "wait" or "work" is styled by the board elsewhere)
 
-  // The column of the pipeline (Req, Plan, Dev, Promote, Done) a task is in, from the id of the step of its ribbon that is "now".
-  // requirement -> Req; plan and the test guide -> Plan; developing, doing (rca, design, other) and the test of an environment -> Dev;
-  // writeback, apply by hand, and the last step (done) of a task that is still open -> Promote (the work is handed over, the task waits to be closed); no ribbon (a Q&A) or an unknown step -> Dev.
-  // The Done column holds no open task: it counts the closed ones.
-  const STEP_COLUMN = {requirement: 0, plan: 1, guide: 1, developing: 2, doing: 2, env: 2, writeback: 3, byhand: 3, done: 3};
-  function columnOf(stepId) { return Object.prototype.hasOwnProperty.call(STEP_COLUMN, stepId) ? STEP_COLUMN[stepId] : 2; }
+  // The pipeline has one lane per kind of task, each with the steps that kind really has (taskstages.py): dev and kb: requirement, plan, developing, write-back
+  // (or apply by hand), done; test: the guide, one step per environment, done; rca, design and other: doing, done; qa (no ribbon): open, done. A lane is drawn
+  // only for a kind the board has. The last step of a lane holds no open task: it counts the closed tasks of that kind (an open task whose ribbon is at done
+  // waits to be closed, so it stays in the step before).
+  const LANES = {dev: ["requirement", "plan", "developing", "writeback", "done"], simple: ["doing", "done"], qa: ["open", "done"]};
+  const LANE_OF = {dev: "dev", kb: "dev", test: "test", rca: "simple", design: "simple", other: "simple", qa: "qa"};
+  function laneOf(kind) { return LANE_OF[kind] || "qa"; }
+  // {lane, step}: where an open task is. `step` is the id of a step of its lane (for test: "guide" or the environment's name).
+  function placeOf(kind, now) {
+    const lane = laneOf(kind), id = now ? String(now.id || "") : "";
+    if (lane === "dev") return {lane, step: id === "byhand" || id === "done" ? "writeback" : (LANES.dev.indexOf(id) >= 0 ? id : "developing")};
+    if (lane === "test") return {lane, step: id === "env" ? String(now.label || "?").toUpperCase() : "guide"};
+    return {lane, step: lane === "qa" ? "open" : "doing"};
+  }
+  // What the person is asked to do, by the reason a task waits (tasklife.waiting): the second view of the pipeline, the same for every kind.
+  const DECISIONS = [["answer", ["asking"]], ["call", ["outbox"]], ["req", ["req"]], ["plan", ["plan"]], ["promote", ["promote", "commit", "recover"]], ["accept", ["accept"]], ["other", []]];
+  function decisionOf(why) { const found = DECISIONS.find((one) => one[1].indexOf(String(why || "")) >= 0); return found ? found[0] : "other"; }
 
   // How many avatars a bridge of this width holds: `few` with a name under each, `many` (smaller, grouped, two rows in the big picture).
   function fitOf(width, big) {
@@ -158,7 +169,7 @@ const WBPANELS = (function () {
     if (agents.mapper) tags.push("mapper");
     const kind = kindOf(row), gate = gateOf(row);
     return {
-      row, name, shown: shownName(row) || name, id: idOf(name), kind, tags, stage, col: columnOf(now ? now.id : ""),
+      row, name, shown: shownName(row) || name, id: idOf(name), kind, tags, stage, place: placeOf(String(row.kind || ""), now), decision: decisionOf(row.waiting_why),
       aiu: row.brief && finite(row.brief.aiu) ? row.brief.aiu : null,
       prem: row.brief && finite(row.brief.premium_requests) ? row.brief.premium_requests : null,
       ctx: meter ? {used: meter.used, window: meter.window, percent: meter.percent} : null,
@@ -201,7 +212,7 @@ const WBPANELS = (function () {
     const sigs = {tree: "", data: "", scene: "", bridge: ""};
     const fold = {work: true, err: true, wait: false, idle: false};  // the groups of the tree that are open
     const opened = {look: false, pipe: false, time: false, spend: false};  // the blocks of Data that show their whole list
-    let models = [], byName = new Map(), closedN = 0, timer = 0, root = null, current = null, rootNode = null, lastVis = null, pop = null, popSpec = null, frame = 0;
+    let models = [], byName = new Map(), closedN = 0, closedBy = {}, timer = 0, root = null, current = null, rootNode = null, lastVis = null, pop = null, popSpec = null, frame = 0;
 
     // ---- the avatar of a task: a round robot, the ring is its state, the eyes its own colour ----
     function avatar(info, size) {
@@ -276,18 +287,59 @@ const WBPANELS = (function () {
       const body = found.length ? h("div", {class: opened.look ? "wbp-list" : ""}, lines, more) : h("div", {class: "wbp-ok"}, t("super.wb.data.look.ok"));
       return block("look", t("super.wb.data.look") + " · " + found.length, "", [body]);
     }
-    function pipeBlock(list) {
-      const jam = PIPE.map((name, at) => list.filter((info) => info.col === at && info.kind === "wait").length);
-      const worst = jam.indexOf(Math.max(...jam));
-      const cols = PIPE.map((key, at) => {
-        const here = list.filter((info) => info.col === at && at < 4);
-        const small = here.length > 6, extra = here.length - PIPE_CAP;
-        return h("div", {class: "wbp-pcol" + (jam[worst] > 0 && at === worst ? " wbp-jam" : "")}, h("h6", null, t(key), h("b", null, String(at === 4 ? closedN : here.length))),
-          h("div", {class: "wbp-dots"}, here.slice(0, PIPE_CAP).map((info) => avatar(info, small ? 12 : 17)), extra > 0 ? h("button", {type: "button", class: "wbp-plus", "data-wbp-col": String(at)}, "+" + extra) : null));
+    const STEP_TEXT = {requirement: "super.wb.pipe.step.requirement", plan: "super.wb.pipe.step.plan", developing: "super.wb.pipe.step.developing", writeback: "super.wb.pipe.step.writeback",
+      done: "super.wb.pipe.step.done", guide: "super.wb.pipe.step.guide", doing: "super.wb.pipe.step.doing", open: "super.wb.pipe.step.open"};
+    const LANE_TEXT = {dev: "super.wb.pipe.lane.dev", test: "super.wb.pipe.lane.test", simple: "super.wb.pipe.lane.simple", qa: "super.wb.pipe.lane.qa"};
+    const ASK_TEXT = {answer: "super.wb.ask.answer", call: "super.wb.ask.call", req: "super.wb.ask.req", plan: "super.wb.ask.plan", promote: "super.wb.ask.promote", accept: "super.wb.ask.accept", other: "super.wb.ask.other"};
+    const stepName = (lane, step) => (STEP_TEXT[step] ? t(STEP_TEXT[step]) : step);  // an environment of the test lane is its own name
+    const laneName = (lane) => t(LANE_TEXT[lane] || LANE_TEXT.qa);
+    function lanesOf(list) {  // [{lane, steps: [id]}] for the kinds the board has, open or closed
+      const kinds = new Set(list.map((info) => info.place.lane));
+      for (const lane of Object.keys(closedBy)) if (closedBy[lane]) kinds.add(lane);
+      return ["dev", "test", "simple", "qa"].filter((lane) => kinds.has(lane)).map((lane) => {
+        if (lane !== "test") return {lane, steps: LANES[lane]};
+        const envs = [];
+        for (const info of list) if (info.place.lane === "test" && info.place.step !== "guide" && envs.indexOf(info.place.step) < 0) envs.push(info.place.step);
+        const shown = (envs.length ? envs : ["DEV", "IST", "UAT"]).slice(0, PIPE_ENVS);
+        return {lane, steps: ["guide", ...shown, "done"], cut: envs.slice(PIPE_ENVS)};
       });
-      const wide = opened.pipe ? h("div", {class: "wbp-list"}, list.slice().sort((a, b) => a.col - b.col || RANK[a.kind] - RANK[b.kind] || a.name.localeCompare(b.name)).map((info) => h("div", {class: "wbp-look " + KC(info.kind), "data-wbp-task": info.name, "data-wbp-hv": ""}, avatar(info, 16), h("span", {class: "wbp-ln1"}, info.shown), h("span", {class: "wbp-r"}, t(PIPE[info.col]))))) : null;
-      const extra = jam[worst] > 0 ? t("super.wb.pipe.jam", {n: jam[worst], stage: t(PIPE[worst])}) : t("super.wb.pipe.calm");
-      return block("pipe", t("super.wb.data.pipe"), extra, [h("div", {class: "wbp-pipe"}, cols), wide], list.length ? toggleBtn("pipe", opened.pipe ? t("super.wb.data.less") : t("super.wb.pipe.list")) : null);
+    }
+    function pipeBlock(list) {
+      const lanes = lanesOf(list);
+      let worst = null;
+      for (const one of lanes) for (const step of one.steps) {
+        const n = list.filter((info) => info.place.lane === one.lane && info.place.step === step && info.kind === "wait").length;
+        if (n && (!worst || n > worst.n)) worst = {lane: one.lane, step, n};
+      }
+      const rows = lanes.map((one) => {
+        const cells = one.steps.map((step, at) => {
+          const last = at === one.steps.length - 1;
+          const here = last ? [] : list.filter((info) => info.place.lane === one.lane && (info.place.step === step || (one.cut && one.cut.length && at === one.steps.length - 2 && one.cut.indexOf(info.place.step) >= 0)));
+          const small = here.length > 6, extra = here.length - PIPE_CAP, key = one.lane + ":" + step;
+          const jam = worst && worst.lane === one.lane && worst.step === step;
+          return h("div", {class: "wbp-pcol" + (jam ? " wbp-jam" : ""), style: one.steps.length === 2 && !last ? "grid-column:span 4" : null},
+            h("h6", null, h("span", null, stepName(one.lane, step)), h("b", null, String(last ? (closedBy[one.lane] || 0) : here.length))),
+            h("div", {class: "wbp-dots"}, here.slice(0, PIPE_CAP).map((info) => avatar(info, small ? 12 : 15)), extra > 0 ? h("button", {type: "button", class: "wbp-plus", "data-wbp-col": key}, "+" + extra) : null));
+        });
+        return h("div", {class: "wbp-lane"}, h("div", {class: "wbp-lk"}, h("b", null, laneName(one.lane)), h("span", null, String(list.filter((info) => info.place.lane === one.lane).length))),
+          h("div", {class: "wbp-pipe", style: "grid-template-columns:repeat(" + (one.steps.length === 2 ? 5 : one.steps.length) + ",minmax(0,1fr))"}, cells));
+      });
+      const waits = list.filter((info) => info.kind === "wait").length;
+      const extra = worst ? t("super.wb.pipe.jam2", {n: waits, lane: laneName(worst.lane), stage: stepName(worst.lane, worst.step), k: worst.n}) : t("super.wb.pipe.calm");
+      const wide = opened.pipe ? h("div", {class: "wbp-list"}, list.slice().sort((a, b) => a.place.lane.localeCompare(b.place.lane) || RANK[a.kind] - RANK[b.kind] || a.name.localeCompare(b.name)).map((info) => h("div", {class: "wbp-look " + KC(info.kind), "data-wbp-task": info.name, "data-wbp-hv": ""}, avatar(info, 16), h("span", {class: "wbp-ln1"}, info.shown), h("span", {class: "wbp-r"}, laneName(info.place.lane) + " · " + stepName(info.place.lane, info.place.step))))) : null;
+      return block("pipe", t("super.wb.data.pipe"), extra, [rows.length ? h("div", {class: "wbp-lanes"}, rows) : h("div", {class: "wbp-ok wbp-soft"}, t("super.wb.pipe.none")), wide], list.length ? toggleBtn("pipe", opened.pipe ? t("super.wb.data.less") : t("super.wb.pipe.list")) : null);
+    }
+    // What waits for the person, by the decision asked (the same for every kind of task).
+    function askBlock(list) {
+      const waiting = list.filter((info) => info.kind === "wait");
+      if (!waiting.length) return null;
+      const cells = DECISIONS.map((one) => one[0]).filter((key) => key !== "other" || waiting.some((info) => info.decision === "other")).map((key) => {
+        const here = waiting.filter((info) => info.decision === key), extra = here.length - PIPE_CAP;
+        return h("div", {class: "wbp-pcol" + (here.length && here.length === Math.max(...DECISIONS.map((d) => waiting.filter((info) => info.decision === d[0]).length)) ? " wbp-jam" : "")},
+          h("h6", null, h("span", null, t(ASK_TEXT[key])), h("b", null, String(here.length))),
+          h("div", {class: "wbp-dots"}, here.slice(0, PIPE_CAP).map((info) => avatar(info, here.length > 6 ? 12 : 15)), extra > 0 ? h("button", {type: "button", class: "wbp-plus", "data-wbp-col": "ask:" + key}, "+" + extra) : null));
+      });
+      return block("ask", t("super.wb.data.ask") + " · " + waiting.length, t("super.wb.ask.scope"), [h("div", {class: "wbp-asks"}, cells)]);
     }
     function timeBlock(list) {
       const known = list.filter((info) => info.time);
@@ -310,7 +362,7 @@ const WBPANELS = (function () {
       const wide = opened.spend ? h("div", {class: "wbp-list"}, top.map((info) => h("div", {class: "wbp-look " + KC(info.kind), "data-wbp-task": info.name, "data-wbp-hv": ""}, avatar(info, 16), h("span", {class: "wbp-ln1"}, info.shown), h("span", {class: "wbp-r"}, info.aiu.toFixed(1))))) : null;
       return block("spend", t("super.wb.data.spend"), t("super.wb.spend.scope"), [head, wide], top.length > 3 ? toggleBtn("spend", opened.spend ? t("super.wb.data.less") : t("super.wb.spend.all")) : null);
     }
-    function dataNode(list) { return [lookBlock(list), pipeBlock(list), timeBlock(list), spendBlock(list)]; }
+    function dataNode(list) { return [lookBlock(list), askBlock(list), pipeBlock(list), timeBlock(list), spendBlock(list)].filter(Boolean); }
 
     // ---- the bridge and the picture of Focus: one drawing, two sizes ----
     function subLetter(info, at) {  // the letter of the at-th circle of a task: its groups in order, one circle for each running subagent
@@ -504,7 +556,7 @@ const WBPANELS = (function () {
 
     // ---- drawing, only when a signature changed ----
     const treeSig = (info) => [info.name, info.shown, info.kind, info.tags.join("+"), info.subs.map((one) => one.label + "@" + one.since).join(","), info.row.state, info.now, info.gate ? info.gate.n : -1];
-    const dataSig = (info) => [info.name, info.shown, info.kind, info.col, info.aiu, info.prem, info.ctx ? info.ctx.percent : null, info.gate ? info.gate.n + "/" + info.gate.m : null, info.time ? TIME.map((part) => Math.round(info.time[part[0]])).join(",") : null,
+    const dataSig = (info) => [info.name, info.shown, info.kind, info.place.lane + ":" + info.place.step, info.decision, info.aiu, info.prem, info.ctx ? info.ctx.percent : null, info.gate ? info.gate.n + "/" + info.gate.m : null, info.time ? TIME.map((part) => Math.round(info.time[part[0]])).join(",") : null,
       (Array.isArray(info.row.warn) ? info.row.warn : []).map((item) => item && item.rule + ":" + item.n).join(",")];
     function refresh(vis) {
       lastVis = vis;
@@ -512,6 +564,8 @@ const WBPANELS = (function () {
       const all = rowsOf() || [];
       const open = all.filter((row) => row && row.status === "open");
       closedN = all.reduce((sum, row) => sum + (row && row.status === "closed" ? 1 : 0), 0);
+      closedBy = {};
+      for (const row of all) if (row && row.status === "closed") { const lane = laneOf(String(row.kind || "")); closedBy[lane] = (closedBy[lane] || 0) + 1; }
       models = open.map(infoOf);
       byName = new Map(models.map((info) => [info.name, info]));
       for (const info of models) {
@@ -522,7 +576,7 @@ const WBPANELS = (function () {
       const sorted = models.slice().sort((a, b) => RANK[a.kind] - RANK[b.kind] || (a.kind === "wait" ? b.waited - a.waited : 0) || a.name.localeCompare(b.name));
       for (const node of [tree, data, scene, bridge]) node.classList.toggle("wbp-down", vis.down);
       if (vis.tree) paint("tree", tree, JSON.stringify([vis.down, sorted.length > TREE_FLAT ? TREE_ORDER.map((kind) => fold[kind]) : 0, sorted.map(treeSig)]), () => treeNode(sorted));
-      if (vis.data) paint("data", data, JSON.stringify([vis.down, closedN, opened, sorted.map(dataSig)]), () => dataNode(sorted));
+      if (vis.data) paint("data", data, JSON.stringify([vis.down, closedBy, opened, sorted.map(dataSig)]), () => dataNode(sorted));
       if (vis.scene) paintBridge(scene, "scene", true, vis);
       if (vis.bridge) paintBridge(bridge, "bridge", false, vis);
       if (popSpec && pop) fillList();
@@ -604,7 +658,12 @@ const WBPANELS = (function () {
         const toggle = target.closest("[data-wbp-open]");
         if (toggle) { const key = toggle.getAttribute("data-wbp-open"); opened[key] = !opened[key]; if (lastVis) refresh(lastVis); return; }
         const col = target.closest("[data-wbp-col]");
-        if (col) { const at = Number(col.getAttribute("data-wbp-col")); openList(t(PIPE[at]), () => models.filter((info) => info.col === at && at < 4).sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.name.localeCompare(b.name)), col.getBoundingClientRect()); }
+        if (col) {
+          const [lane, step] = String(col.getAttribute("data-wbp-col")).split(":");
+          const ask = lane === "ask";
+          openList(ask ? t(ASK_TEXT[step] || ASK_TEXT.other) : laneName(lane) + " · " + stepName(lane, step),
+            () => models.filter((info) => (ask ? info.kind === "wait" && info.decision === step : info.place.lane === lane && info.place.step === step)).sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.name.localeCompare(b.name)), col.getBoundingClientRect());
+        }
       });
     }
 
@@ -653,5 +712,5 @@ const WBPANELS = (function () {
   }
   let introPlayed = false;
 
-  return {create, idOf, fitOf, bridgeGroups, columnOf};
+  return {create, idOf, fitOf, bridgeGroups, placeOf, decisionOf};
 })();

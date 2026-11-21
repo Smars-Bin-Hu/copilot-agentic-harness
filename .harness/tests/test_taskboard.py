@@ -519,6 +519,10 @@ class PauseTests(BoardCase):
         self.assertEqual(tasklife.offwork(self.root, interactive=True)["left_work"], ["ask"])
         found = tasklife.offwork(self.root, interactive=True, waiting={"ask"})
         self.assertEqual((found["paused"], found["left"]), (["ask"], []))
+        self.new("chat", session=S2)
+        with mock.patch.object(tasklife, "at_work", return_value=False):  # the hook log says it is not at work; the board's chat says it is: the board's word wins
+            found = tasklife.offwork(self.root, interactive=True, working={"chat"})
+        self.assertEqual((found["paused"], found["left_work"]), ([], ["chat"]))
         self.assertTrue(tasklife.waits_for_person("stopped"))
         self.assertFalse(tasklife.waits_for_person("go-plan") or tasklife.waits_for_person(""))
 

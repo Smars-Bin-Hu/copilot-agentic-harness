@@ -530,17 +530,22 @@ class Board:
         return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": making, "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
 
-    def waiting_names(self) -> List[str]:
-        """The tasks the board shows as not at work or as waiting for the person, as the page counts them for Off work (1.8.24): after the link to VS Code, so a chat that asks "Allow this command?" is in. A
-        task that waits for a plan or an answer while the agent is mid-turn is in too, whatever the hook log says."""
-        found = []
+    def off_work_sets(self) -> Tuple[List[str], List[str]]:
+        """What the page counts for Off work (1.8.24), after the link to VS Code: (the tasks that wait for the person or are not at work, the tasks the board shows as working). A chat that asks "Allow this
+        command?" is a wait, and so is a plan to approve while the agent is mid-turn, whatever the hook log says; a task the board shows as working and that waits for nothing is left."""
+        waits, works = [], []
         for row in self.rows()["rows"]:
             if row.get("status") != "open" or row.get("paused_since"):
                 continue
-            why = str(row.get("waiting_why") or "")
-            if row.get("state") != "working" or (tasklife.waits_for_person(why) and not starting_now(row)):  # a task the board just told to go on is at work
-                found.append(str(row.get("task") or ""))
-        return found
+            name = str(row.get("task") or "")
+            if row.get("state") != "working" or (tasklife.waits_for_person(str(row.get("waiting_why") or "")) and not starting_now(row)):  # a task the board just told to go on is at work
+                waits.append(name)
+            else:
+                works.append(name)
+        return waits, works
+
+    def waiting_names(self) -> List[str]:
+        return self.off_work_sets()[0]
 
     def apply_checks(self, row: Dict[str, Any]) -> None:
         """Set the checks a reopened task was waiting for (`taskreview.apply_pending`, the code path of `review set`), then show them on the row. Never raises: a look at the board must not fail over it."""
@@ -886,7 +891,8 @@ class Board:
             if "pause" not in self.actions:
                 raise CommandError(say("serve.action.off", action=action))
             if action == "offwork":
-                result = tasklife.offwork(self.root, interactive=True, waiting=self.waiting_names())
+                waits, works = self.off_work_sets()
+                result = tasklife.offwork(self.root, interactive=True, waiting=waits, working=works)
             else:
                 result = tasklife.onwork(self.root, interactive=True)
             for name in result.get("paused") or result.get("resumed") or []:

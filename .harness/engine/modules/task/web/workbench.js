@@ -95,7 +95,7 @@ const WORKBENCH = (function () {
 
     const left = h("aside", {class: "wb-side wb-l"}, pn.q, pn.t);
     const right = h("aside", {class: "wb-side wb-r"}, pn.d, pn.p);
-    const center = h("main", {class: "wb-center"});
+    const center = h("div", {class: "wb-center"});
     const scene = h("section", {class: "wb-scene"}, h("div", {class: "wb-scene-in wb-soon"}, t("super.wb.scene.soon")));
     const dock = h("nav", {class: "wb-dock", "aria-label": t("super.wb.dock")}, PANELS.map((key) => docks[key]));
     const main = h("div", {class: "wb-main"}, left, center, right, scene, dock);
@@ -270,14 +270,15 @@ const WORKBENCH = (function () {
       center.append(sv);
       root.hidden = false;
       document.documentElement.classList.add("wb-lock");
+      cardSig = "";
+      layout();  // the columns first: the pet of super.js stands in the corner of the place it has
       superView.show();
       if (queueList) {
         observer = new MutationObserver(changed);
         observer.observe(queueList, {childList: true, attributes: true, attributeFilter: ["hidden"], subtree: true});
       }
-      cardSig = "";
       update();
-      layout();
+      drawQueue();
     }
     function hide() {
       superView.hide();

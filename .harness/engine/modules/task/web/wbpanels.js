@@ -174,7 +174,7 @@ const WBPANELS = (function () {
       const W = tall ? 540 : 700, sx = W / 2, sy = tall ? 30 : 88, sr = tall ? 18 : 38;
       let tr, perRow;
       if (tall) { tr = clamp((W - 40) / Math.max(n, 1) / 2.7, 4, 15); perRow = Math.max(1, n); }
-      else { tr = n <= 6 ? 28 : n <= 10 ? 24 : n <= 16 ? 18 : n <= 24 ? 14 : 11; perRow = Math.max(1, Math.min(n, Math.floor((W - 40) / (2 * tr + (n <= 10 ? 34 : 14))))); }
+      else { tr = n <= 6 ? 28 : n <= 10 ? 24 : n <= 16 ? 20 : n <= 24 ? 17 : 14; perRow = Math.max(1, Math.min(n, Math.floor((W - 40) / (2 * tr + (n <= 10 ? 34 : 14))))); }
       const cellW = (W - 40) / perRow;
       const sr2 = tall ? 4 : n <= 10 ? 9 : n <= 24 ? 6.5 : 5, pitch = 2 * sr2 + 3;
       const cols = Math.max(1, Math.floor(cellW / pitch));

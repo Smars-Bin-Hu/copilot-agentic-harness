@@ -29,7 +29,8 @@ html.wb-lock{overflow:hidden}
 .wb-cnt[hidden]{display:none}
 
 /* the grid */
-.wb-main{display:grid;min-height:0;min-width:0;position:relative}
+.wb-main{display:grid;min-height:0;min-width:0;position:relative;margin-right:64px}  /* the round buttons of the board (dock.css, shell.css) stand in a gutter at the right edge ... */
+@media (max-width:900px){.wb-main{margin-right:0;margin-bottom:72px}}  /* ... and in a row at the bottom on a narrow window */
 .wb-m-wb .wb-main{grid-template-columns:var(--wb-lw) minmax(0,1fr) var(--wb-rw)}
 .wb-m-focus .wb-main{grid-template-columns:minmax(0,1fr) minmax(300px,46%)}
 .wb-l{grid-column:1;grid-row:1}

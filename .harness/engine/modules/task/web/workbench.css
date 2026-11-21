@@ -93,7 +93,7 @@ html.wb-lock{overflow:hidden}
 /* Focus: the picture on the right (an empty place for now), the task in a window in the middle of the screen */
 .wb-m-focus .wb-scene{display:block;grid-column:2;grid-row:1;min-width:0;min-height:0;position:relative;overflow:hidden;border-left:1px solid var(--line);background:radial-gradient(ellipse at 50% 22%,var(--good-bg) 0,transparent 62%),var(--bg)}
 .wb-scene-in{padding:16px}
-.wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{display:grid;position:fixed;inset:0;z-index:6;place-items:center;background:var(--scrim);border:0;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{display:grid;position:fixed;inset:0;z-index:40;place-items:center;background:var(--scrim);border:0;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
 html.lite .wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{-webkit-backdrop-filter:none;backdrop-filter:none}
 .wb-m-focus:not(.wb-tall) .wb-pn-p{width:min(1080px,78vw);height:84vh;border:1px solid var(--line2);border-radius:14px;overflow:hidden;box-shadow:var(--glass-shadow)}
 
@@ -135,9 +135,9 @@ html.lite .wb-in{animation:none}
 .wb-m-focus .wb-pt{display:none}
 .wb-tall.wb-m-wb .wb-main{grid-template-rows:minmax(0,1fr) auto auto auto}
 .wb-tall.wb-m-wb .wb-pn-q,.wb-tall.wb-m-wb .wb-pn-t,.wb-tall.wb-m-wb .wb-pn-d{grid-row:2;height:30vh}
-.wb-tall.wb-m-wb.wb-task-on .wb-pn-q,.wb-tall.wb-m-wb.wb-task-on .wb-pn-t,.wb-tall.wb-m-wb.wb-task-on .wb-pn-d{height:24vh}
+.wb-tall.wb-m-wb.wb-task-on .wb-pn-q,.wb-tall.wb-m-wb.wb-task-on .wb-pn-t,.wb-tall.wb-m-wb.wb-task-on .wb-pn-d{height:22vh}
 .wb-tall.wb-m-wb .wb-pn-d.wb-sized{max-height:none}
-.wb-tall.wb-m-wb .wb-pn-p{grid-row:3;height:34vh}
+.wb-tall.wb-m-wb .wb-pn-p{grid-row:3;height:32vh}
 .wb-tall.wb-m-wb .wb-dock{display:flex;grid-row:4;grid-column:1;justify-content:space-around;border-top:1px solid var(--line);background:var(--card);padding:8px 0 10px}
 .wb-dk{border:0;background:none;color:var(--soft);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px;position:relative;cursor:pointer;padding:2px 14px}
 .wb-dk.on{color:var(--ink)}

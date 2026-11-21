@@ -157,6 +157,9 @@ class WorkbenchDeckTests(unittest.TestCase):
         self.assertIn("(options.makePet || PET.create)(sv)", source("super.js"))
         self.assertIn("makePet: typeof WORKBENCH !== \"undefined\" ? WORKBENCH.stillPet : undefined", source("board.js"))
         self.assertIn("new Proxy(own", script)
+        self.assertIn("held: () => true", script)  # review 1 of the deck: "held" keeps super.js from sending it to carry items (a new item shows at once) or to patrol
+        self.assertIn("if (answer && answer.ok === false) popError = String(answer.reason", script)  # a refused recharge says why
+        self.assertIn("extra + n > RECHARGE_MAX", script)
         self.assertNotIn("requestAnimationFrame", script)
 
 

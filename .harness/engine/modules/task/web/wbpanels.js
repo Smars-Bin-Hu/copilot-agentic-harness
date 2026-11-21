@@ -300,7 +300,7 @@ const WBPANELS = (function () {
         if (lane !== "test") return {lane, steps: LANES[lane]};
         const envs = [];
         for (const info of list) if (info.place.lane === "test" && info.place.step !== "guide" && envs.indexOf(info.place.step) < 0) envs.push(info.place.step);
-        const shown = (envs.length ? envs : ["DEV", "IST", "UAT"]).slice(0, PIPE_ENVS);
+        const shown = envs.slice(0, PIPE_ENVS);  // only the environments the open test tasks are in: none is made up (review 1)
         return {lane, steps: ["guide", ...shown, "done"], cut: envs.slice(PIPE_ENVS)};
       });
     }

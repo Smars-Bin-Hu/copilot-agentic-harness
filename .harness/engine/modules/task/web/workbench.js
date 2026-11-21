@@ -36,12 +36,13 @@ const WORKBENCH = (function () {
   const sideOf = (key) => (key === "q" || key === "t" ? "l" : "r");
   const LIMITS = {l: [220, 560], r: [300, 1400]};  // the narrowest and widest a side can be dragged to (the right one is also kept 700 px short of the window)
   const RECHARGE = [25, 50];
+  const RECHARGE_MAX = 200;  // what the server allows a day (superbrain.EXTRA_MAX): a button that would pass it is off
 
   // The pet of super.js is not wanted in the deck (the bridge takes its place). board.js gives this stand-in to SUPER.create (`makePet`): the same calls, doing nothing:
-  // no 3D robot, no timer, no frame, and nothing is put in the page.
+  // no 3D robot, no timer, no frame, and nothing is put in the page. It is always "held": super.js then never sends it to carry an item or to patrol, so a new item shows at once (review 1 of the deck).
   function stillPet() {
     const idle = () => undefined;
-    const own = {node: h("button", {type: "button", class: "sa-pet", hidden: ""}), solid: false, held: () => false, at: () => ({x: 0, y: 0}), size: () => ({w: 0, h: 0}), walkTo: () => Promise.resolve(), orbit: idle};
+    const own = {node: h("button", {type: "button", class: "sa-pet", hidden: ""}), solid: false, held: () => true, at: () => ({x: 0, y: 0}), size: () => ({w: 0, h: 0}), walkTo: () => Promise.resolve(), orbit: idle};
     return new Proxy(own, {get: (target, key) => (key in target ? target[key] : idle)});
   }
 
@@ -58,7 +59,7 @@ const WORKBENCH = (function () {
     };
     // The four calls of the bridge: what a click on a bridge avatar does is what a click on the avatar of super.js does (the avatar row stays in the DOM, hidden).
     const bridgeCalls = {
-      pick(task) { const mate = mateOf(task); if (mate) mate.click(); },
+      pick(task) { const mate = mateOf(task); if (mate) mate.click(); setTimeout(() => update(), 0); },  // the ring of the target moves at once, not at the next refresh
       menu(task, x, y) {
         const mate = mateOf(task);
         if (!mate) return;
@@ -215,7 +216,7 @@ const WORKBENCH = (function () {
       const extra = talk ? Math.floor(Number(talk.extra) || 0) : 0;
       const line = info ? t("super.wb.batt.left", {left: info.numbers.left, limit: info.numbers.limit}) : now ? now.label : "";
       const buttons = RECHARGE.map((n, at) => {
-        const one = h("button", {type: "button", class: "wb-rc" + (at === 0 ? " pri" : ""), disabled: popBusy ? "" : null}, t(at === 0 ? "super.wb.batt.recharge" : "super.wb.batt.plus", {n}));
+        const one = h("button", {type: "button", class: "wb-rc" + (at === 0 ? " pri" : ""), disabled: popBusy || extra + n > RECHARGE_MAX ? "" : null}, t(at === 0 ? "super.wb.batt.recharge" : "super.wb.batt.plus", {n}));
         one.addEventListener("click", () => recharge(n));
         return one;
       });
@@ -226,7 +227,7 @@ const WORKBENCH = (function () {
       popError = "";
       popBusy = true;
       drawPop();
-      SERVE.post("/api/super/recharge", {amount: amountNow}).then(() => { popBusy = false; return readTalk(); }, (error) => { popBusy = false; popError = String((error && error.message) || error || ""); drawPop(); });
+      SERVE.post("/api/super/recharge", {amount: amountNow}).then((answer) => { popBusy = false; if (answer && answer.ok === false) popError = String(answer.reason || ""); return readTalk(); }, (error) => { popBusy = false; popError = String((error && error.message) || error || ""); drawPop(); });
     }
     function placePop() {
       const at = batt.getBoundingClientRect();

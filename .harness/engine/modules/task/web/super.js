@@ -716,6 +716,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const row = rowFor(item.task);
       const wrap = h("span", {class: "sa-accept"});
       const button = h("button", {type: "button", class: "act hot live", "data-act": "accept", "data-label": t("board.action.accept")}, t("board.action.accept"));
+      SERVE.running(item.task, "accept", button);  // an accept that goes on behind the page (serve.js) shows "working" here too
       button.addEventListener("click", () => {
         button.disabled = true;
         COUNT_BAD.delete(item.id);

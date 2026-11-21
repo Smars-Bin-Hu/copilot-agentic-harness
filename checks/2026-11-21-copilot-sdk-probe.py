@@ -85,12 +85,19 @@ async def main(args):
         if not auth.is_authenticated:
             print("      " + " ".join(str(auth.status_message or "").split())[:300])
             return
-        models = await client.list_models()
-        ids = [m.id for m in models]
-        say(4, bool(ids), "%d models: %s" % (len(ids), ", ".join(ids)[:600]))
-        with tempfile.TemporaryDirectory() as folder:
-            seconds, text, _ = await turn(client, folder, args.model, "Reply with the single word OK.", hooks=False)
-        say(5, "OK" in text.upper(), "one turn in an empty folder, %s s, model %s, reply: %s" % (seconds, args.model, text))
+        try:
+            models = await client.list_models()
+            ids = [m.id for m in models]
+            say(4, bool(ids), "%d models: %s" % (len(ids), ", ".join(ids)[:600]))
+        except Exception as error:  # noqa: BLE001 - go on: a turn may still work
+            say(4, False, "model list refused: " + short(error)[:200])
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                seconds, text, _ = await turn(client, folder, args.model, "Reply with the single word OK.", hooks=False)
+            say(5, "OK" in text.upper(), "one turn in an empty folder, %s s, model %s, reply: %s" % (seconds, args.model, text))
+        except Exception as error:  # noqa: BLE001
+            say(5, False, "turn refused: " + short(error)[:300])
+            return
         if args.harness:
             folder = os.path.abspath(args.harness)
             seconds, text, counts = await turn(client, folder, args.model,

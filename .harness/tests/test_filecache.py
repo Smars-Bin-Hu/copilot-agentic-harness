@@ -29,7 +29,13 @@ class FileCacheTests(unittest.TestCase):
         self.folder = Path(tempfile.mkdtemp())
         self.file = self.folder / "a.json"
         self.file.write_text('{"a": 1}', encoding="utf-8")
+        self.age(self.file)
         self.addCleanup(filecache.enable, False)
+
+    def age(self, path: Path) -> None:
+        """A file written a while ago: only such a file is kept (a fresh one is read every time)."""
+        old = time.time_ns() - 10 * filecache.FRESH_NS
+        os.utime(path, ns=(old, old))
 
     def test_off_by_default_every_read_opens_the_file(self) -> None:
         self.assertFalse(filecache.enabled())
@@ -52,10 +58,16 @@ class FileCacheTests(unittest.TestCase):
         self.assertEqual(filecache.read_text(self.file), '{"a": 2}')
         state.atomic_write(self.file, {"a": 3})
         self.assertEqual(json.loads(filecache.read_text(self.file)), {"a": 3})
+
+    def test_a_fresh_file_is_read_every_time_so_two_writes_in_one_clock_tick_are_both_seen(self) -> None:
+        """Windows: a coarse clock, and st_ctime is the creation time. Two in-place writes of the same size may carry the same stamp; a file this young is never kept."""
+        filecache.enable()
+        self.file.write_text('{"a": 2}', encoding="utf-8")
         stamp = self.file.stat().st_mtime_ns
-        self.file.write_text('{"a": 4}', encoding="utf-8")
-        os.utime(self.file, ns=(stamp, stamp))  # an editor that keeps the time: the change time still moves
-        self.assertEqual(filecache.read_text(self.file), '{"a": 4}')
+        self.assertEqual(filecache.read_text(self.file), '{"a": 2}')
+        self.file.write_text('{"a": 3}', encoding="utf-8")
+        os.utime(self.file, ns=(stamp, stamp))  # the same time as the first write
+        self.assertEqual(filecache.read_text(self.file), '{"a": 3}')
 
     def test_a_file_that_is_gone_raises_and_is_never_served_from_memory(self) -> None:
         filecache.enable()
@@ -76,7 +88,6 @@ class FileCacheTests(unittest.TestCase):
         OPENS.clear()
         self.assertEqual(filecache.sha256(self.file), before)
         self.assertEqual(opened(self.file), 0)
-        time.sleep(0.01)
         self.file.write_text('{"b": 1}', encoding="utf-8")
         self.assertNotEqual(filecache.sha256(self.file), before)
 

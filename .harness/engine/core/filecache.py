@@ -2,7 +2,8 @@
 
 A task page read some 360 files each time it was drawn, and drew again every 3 s; on a computer whose virus check looks at every file that is opened, that took 10-20 s.
 In the board server, a file whose (modification time, size, inode, change time) is the same as at the last read is not opened again: a `stat` is enough. A write by `state.atomic_write`
-puts a new file in place (a new inode), so a change is always seen, even within one tick of the clock.
+puts a new file in place (a new inode), so a change is always seen. A file changed in the last FRESH_NS is never kept (as git does with a "racy" file): two writes of the same size within
+one tick of a coarse clock (Windows: about 15 ms; there `st_ctime` is the creation time, so it does not move on a write) would look the same, and the second would never be read.
 
 Off by default: only the board server turns it on (`enable`). A hook, the gate and the command line are short processes and read the file every time, as before.
 What is kept is the text (or the sha256); a JSON value is parsed again for each caller (a caller may change what it gets). At most MAX_FILES entries; a text is kept up to MAX_BYTES.
@@ -13,11 +14,13 @@ from __future__ import annotations
 import hashlib
 import os
 import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable, Tuple, Union
 
 MAX_FILES = 2000
+FRESH_NS = 2_000_000_000  # a file younger than this is read every time
 MAX_BYTES = 2 * 1024 * 1024
 
 _on = False
@@ -49,7 +52,7 @@ def _kept_or(target: Path, kind: str, make: Callable[[Path], Any], size_limit: i
             _kept.move_to_end(key)
             return found[1]
     value = make(target)
-    if info.st_size <= size_limit:
+    if info.st_size <= size_limit and time.time_ns() - info.st_mtime_ns > FRESH_NS:
         with _lock:
             _kept[key] = (stamp, value)
             _kept.move_to_end(key)

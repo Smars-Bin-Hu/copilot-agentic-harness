@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, copilot_events, redact
+from core import calls, config, copilot_events, redact
 from core.logs import read_tail, session_log_path
 
 from . import common, taskinsight
@@ -279,6 +279,35 @@ def settle(node: Dict[str, Any], item: Dict[str, Any], stopped_at: Optional[floa
             row["stopped"] = True
 
 
+COMMAND_CHARS = 4000  # a command shown on the Agent actions tab (1.7.44): its first line on the row, the whole of it when the row opens
+
+
+def _one(text: str) -> str:
+    return " ".join(str(text or "").split())
+
+
+def with_commands(node: Dict[str, Any], started: List[Dict[str, Any]], outside: List[Dict[str, Any]]) -> None:
+    """(1.7.44) The command of each call of a prompt that went through, from Copilot's record (the harness's log keeps none: only a call that was refused or held); and for a call
+    to an outside system, what the gate noted of it (`calls.jsonl`): `call` {system, env, verb, how, code}. A call is matched by its start, within SAME_CALL_S, the same tool first."""
+    moment = copilot_events.seconds
+    left = [dict(item, t=moment(item.get("at")) if not isinstance(item.get("at"), (int, float)) else float(item["at"])) for item in started]
+    for row in node["rows"]:
+        if row["kind"] != "tool" or row.get("command"):
+            continue
+        at = moment(row["at"])
+        near = [item for item in left if at is not None and item["t"] is not None and abs(item["t"] - at) <= SAME_CALL_S]
+        found = min(near, key=lambda item: (item["name"].lower() != str(row.get("tool") or "").lower(), abs(item["t"] - at)), default=None)
+        if found is None:
+            continue
+        left.remove(found)
+        row["command"] = _clip(found["command"], COMMAND_CHARS)
+        said = _one(found["command"])
+        call = next((item for item in outside if _one(item.get("command")) == said and abs((moment(item.get("at")) or 0.0) - at) <= 60), None)
+        if call is not None:
+            outside.remove(call)
+            row["call"] = {key: str(call.get(key) or "") for key in ("system", "env", "verb", "how", "code")}
+
+
 def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """The prompts of the task, newest first, with what the agent did for each; `stats`, the numbers of the whole task; `problems`, what was blocked or failed, newest first. Empty: nothing to show."""
     info = taskinsight.of_task(root, task, None, True)
@@ -286,7 +315,14 @@ def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     entries = [item for session in info["sessions"] for item in entries_of(root, surface, session["session_id"], str(data.get("created_at") or ""))]
     entries += decisions(root, data, task, [session["session_id"] for session in info["sessions"]])  # the person's decisions, each in the prompt it came in (F3 AP)
     nodes = nodes_of(info, entries)
+    outside, started = calls.read(root, task), []
+    if taskinsight.events_allowed(root):  # (1.7.44) the commands, from Copilot's record, asked for here only
+        for session in info["sessions"]:
+            path = copilot_events.events_path(str(session.get("session_id") or ""))
+            record = copilot_events.read(path, 0, True) if path is not None else None
+            started += [item for prompt in (record or {}).get("prompts") or [] for item in prompt.get("commands") or []]
     for node, item in zip(nodes, info["prompts"]):
+        with_commands(node, started, outside)
         path = None if item.get("until") else copilot_events.events_path(item.get("session_id") or "")
         stopped = copilot_events.cancelled_at(path) if path is not None else None
         settle(node, item, copilot_events.seconds(stopped) if stopped else None)

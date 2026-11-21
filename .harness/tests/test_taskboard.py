@@ -129,6 +129,12 @@ class EventsFileTests(unittest.TestCase):
         self.write(one_prompt(self.start, 1, 1, 1))
         self.assertNotIn(SECRET, json.dumps(copilot_events.read(self.path)))
 
+    def test_the_command_of_a_terminal_call_is_kept_only_when_asked(self) -> None:
+        """1.7.44: the Agent actions tab asks for it; a report, the board's numbers and the review never do."""
+        self.write(one_prompt(self.start, 1, 1, 1))
+        self.assertEqual(copilot_events.read(self.path)["prompts"][0]["commands"], [])
+        self.assertEqual([item["command"] for item in copilot_events.read(self.path, 0, True)["prompts"][0]["commands"]], [SECRET])
+
     def test_a_file_that_is_missing_broken_or_empty_gives_none(self) -> None:
         self.assertIsNone(copilot_events.read(self.path))
         self.write([], "not json\n{\"type\": 1}\n[]\n")

@@ -2568,6 +2568,8 @@
   // The Agent actions tab. Open, it asks for the tree (pull): the numbers of the whole task, what was blocked or failed, and one node per prompt with what the agent did for it, in order.
   // Until the tree comes, or where there is none, it is the plain list of the hook log. What the model thought is not in Copilot's record: only how long.
   const traceOpen = new Map();  // prompt number -> open; the newest is open until the person says otherwise
+  const cmdOpen = new Set();  // the calls whose whole command is open (1.7.44), by their start and tool
+  let onlyOutside = false;  // the filter of the tab (1.7.44): only the calls to outside systems
   const spent = (seconds) => (seconds > 0 && seconds < 10 ? seconds.toFixed(1) + " s" : clock(seconds));
 
   // What the person decided, in its place by time (1.7.38, F3 AP): one line for each (a call approved alone or in a batch, a connection opened or closed, a call not approved with the reason, the calls a close
@@ -2628,17 +2630,35 @@
     if (item.kind === "subagent") return h("li", {class: "tr-agent"}, stamp, h("div", {class: "what"}, h("b", null, item.agent), " ", tag(t("desk.trace.subagent")), h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds) + " \u00b7 " + t("desk.trace.calls", {n: item.tool_calls || 0}) + (item.model ? " \u00b7 " + item.model : ""))));
     if (item.kind === "decision") return decisionRow(item, stamp);
     const gate = item.kind === "gate";
-    return h("li", {class: (gate ? (item.decision === "held" ? "tr-held" : "tr-gate") : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "")}, stamp,
-      h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
-        gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub", title: item.rule}, " \u00b7 " + ruleWords(item.rule)) : null] : null,
-        !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
-        !gate && item.ok === null ? [" ", item.stopped ? tag(t("desk.trace.stopped")) : tag(t("desk.trace.running"), "good run")] : null,
-        item.seconds ? h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds)) : null,
-        (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)]),
+    const head = [h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
+      gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub", title: item.rule}, " \u00b7 " + ruleWords(item.rule)) : null] : null,
+      !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
+      !gate && item.ok === null ? [" ", item.stopped ? tag(t("desk.trace.stopped")) : tag(t("desk.trace.running"), "good run")] : null,
+      item.seconds ? h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds)) : null,
+      item.call ? callMark(item.call) : null,
+      (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)])];
+    const rowClass = (gate ? (item.decision === "held" ? "tr-held" : "tr-gate") : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "");
+    if (!gate && item.command) {  // a call that went through (1.7.44): the start of its command under it, the whole of it when the row opens
+      const key = item.at + "|" + item.tool;
+      const summary = h("summary", null, ...head, h("span", {class: "tr-cmdline"}, item.command.split("\n")[0]));
+      const box = h("details", {class: "tr-call", open: cmdOpen.has(key) ? "" : null}, summary, h("pre", {class: "tr-full", tabindex: "0"}, item.command));
+      summary.addEventListener("click", () => { if (box.open) cmdOpen.delete(key); else cmdOpen.add(key); });  // a click, not `toggle`: a poll draws the row again, open as it was
+      return h("li", {class: rowClass}, stamp, h("div", {class: "what"}, box, item.error ? h("div", {class: "sub"}, item.error) : null));
+    }
+    return h("li", {class: rowClass}, stamp,
+      h("div", {class: "what"}, ...head,
         item.command ? [" ", h("code", null, item.command)] : null,
         item.reason ? reasonNode(item.reason) : null,
         item.error ? h("div", {class: "sub"}, item.error) : null));
   }
+  // The mark of a call to an outside system (1.7.44): the system, the environment and what the call does; a write or a run stands out. The hover says what let it through.
+  function callMark(call) {
+    const env = call.env && call.env !== "none" ? " \u00b7 " + call.env.toUpperCase() : "";
+    const how = ["allow", "plan", "runner", "opened", "approved"].includes(call.how) ? call.how : "unknown";
+    const tip = t("desk.evidence.leave." + how + ".tip") + (call.code ? " " + t("desk.trace.call.code", {code: call.code}) : "");
+    return [" ", h("span", {class: "tr-sys" + (call.verb && call.verb !== "read" ? " w" : ""), title: tip}, h("i"), call.system + env + (call.verb ? " \u00b7 " + call.verb : ""))];
+  }
+  const outsideRow = (row) => Boolean(row.call) || (row.kind === "gate" && /external|system/.test(String(row.rule || "")));  // a call to an outside system, or one the gate refused or held as one
   // What the hook refused for is a word of the harness, not the name of its rule (`external-unpinned`): the words of the table, else the name with its dashes taken out (1.7.38, C13 FR 11).
   const ruleWords = (rule) => { const key = "desk.trace.rule." + rule; return Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : String(rule).replace(/[-_.]+/g, " "); };
   // The reason in full is what tells the agent the right way, and it comes last: a long one shows its start and opens to the whole.
@@ -2701,7 +2721,13 @@
         if (holder) { traceOpen.set(holder.n, true); traceMark.opened = true; }
       }
     }
-    if (tree && tree.prompts && tree.prompts.length) return [h("p", {class: "hint top"}, t("desk.trace.hint.tree")), notes, traceStats(tree.stats), traceProblems(tree), h("div", {class: "tr-tree"}, tree.prompts.map((node, index) => promptNode(node, index === 0)))];
+    if (tree && tree.prompts && tree.prompts.length) {
+      const only = h("button", {type: "button", class: "act tr-only" + (onlyOutside ? " on" : ""), title: t(onlyOutside ? "desk.trace.only.off" : "desk.trace.only.tip"), "aria-pressed": onlyOutside ? "true" : "false"}, "\u21c4");
+      only.addEventListener("click", () => { onlyOutside = !onlyOutside; draw(true); });
+      const shown = onlyOutside ? tree.prompts.map((node) => ({...node, rows: node.rows.filter(outsideRow), cut: 0})).filter((node) => node.rows.length) : tree.prompts;
+      return [h("div", {class: "tr-bar"}, h("p", {class: "hint top"}, t("desk.trace.hint.tree")), only), notes, traceStats(tree.stats), traceProblems(tree),
+        shown.length ? h("div", {class: "tr-tree"}, shown.map((node, index) => promptNode(node, index === 0))) : h("p", {class: "sub"}, t("desk.trace.only.none"))];
+    }
     return [h("p", {class: "hint top"}, t("desk.trace.hint")), notes, h("ol", {class: "timeline trace"}, found.entries.slice().reverse().map(traceRow)), found.cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: found.cut})) : null];
   }
 

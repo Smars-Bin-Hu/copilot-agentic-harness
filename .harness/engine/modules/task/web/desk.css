@@ -272,3 +272,12 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .script-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;width:100%;box-sizing:border-box}
 .script-path{min-width:0;overflow-wrap:anywhere;word-break:break-all}
 .script-view{margin:4px 0 10px 12px;min-width:0;overflow-x:auto}
+/* The Agent actions tab (1.7.44): the command of each call, a mark for a call to an outside system, the filter */
+.tr-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.tr-bar .hint{flex:1 1 auto;min-width:0}
+.act.tr-only{flex:none;padding:2px 9px;font-size:15px;line-height:20px}.act.tr-only.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+li .tr-call>summary{list-style:none;cursor:pointer}li .tr-call>summary::-webkit-details-marker{display:none}
+.tr-cmdline{display:block;margin-top:2px;font:12px/1.5 var(--mono);color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+li .tr-call>summary:hover .tr-cmdline{color:var(--ink)}li .tr-call[open] .tr-cmdline{display:none}
+.tr-full{margin:4px 0 2px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--hover);font:12px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto}
+.tr-sys{display:inline-flex;align-items:center;gap:5px;margin-left:6px;padding:0 8px;border:1px solid var(--line);border-radius:999px;font:11.5px/1.6 var(--mono);white-space:nowrap;cursor:help}
+.tr-sys i{flex:none;width:6px;height:6px;border-radius:50%;background:var(--good-dot)}.tr-sys.w{border-color:var(--hot);color:var(--hot)}.tr-sys.w i{background:var(--hot-dot)}

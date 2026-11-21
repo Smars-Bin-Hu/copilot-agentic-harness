@@ -8,7 +8,8 @@ The file is Copilot's, not ours: its format is not documented and may change, an
 reader never raises, takes only numbers, times and names (no tool argument, no result), and returns None when it
 finds nothing it understands. The caller then falls back to the hook log. The one piece of text it can take is the
 start of what the user typed, and only when the caller asks for it (`text_chars`): the page of a task shows it so a
-person knows which prompt a row is. It is never given to an agent.
+person knows which prompt a row is. It is never given to an agent. The one argument it can take is the command of a
+terminal tool, only when the caller asks for it (`commands`, 1.7.44): the Agent actions tab of a task shows it.
 """
 
 from __future__ import annotations
@@ -84,12 +85,21 @@ def seconds(stamp: Any) -> Optional[float]:
     return moment.timestamp() + extra
 
 
+COMMAND_CHARS = 4000  # a terminal command kept for the Agent actions tab (1.7.44): the harness's own log keeps none of a call that went through
+
+
+def command_of(arguments: Any) -> str:
+    """The command a terminal tool was given, or "" for any other tool."""
+    found = arguments.get("command") if isinstance(arguments, dict) else None
+    return found[:COMMAND_CHARS] if isinstance(found, str) else ""
+
+
 def new_prompt(at: float) -> Dict[str, Any]:
     return {
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
         "tools": [], "subagents": [], "skills": [], "models": [], "calls": [], "aiu": None, "premium_requests": None, "context_tokens": None,
         "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [], "cache_calls": [], "thinks": [],
-        "spends": [], "docs": [],  # when the usage came (`at`, aiu, premium, input, output) and when REQ.md or PLAN.md of a task was written: a report splits a prompt by stage with them
+        "spends": [], "docs": [], "commands": [],  # commands: the terminal command of each call as it started, only when asked (1.7.44, the Agent actions tab). When the usage came (`at`, aiu, premium, input, output) and when REQ.md or PLAN.md of a task was written: a report splits a prompt by stage with them
     }
 
 
@@ -253,11 +263,11 @@ def start_of(content: Any, limit: int) -> str:
 
 
 KEPT = 64  # how many records `read` keeps
-_kept: Dict[Tuple[str, int], Tuple[Tuple[int, int], bytes]] = {}  # (file, text_chars) -> (mtime and size, the record, pickled)
+_kept: Dict[Tuple[str, int, bool], Tuple[Tuple[int, int], bytes]] = {}  # (file, text_chars, commands) -> (mtime and size, the record, pickled)
 _kept_lock = threading.Lock()
 
 
-def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
+def read(path: Path, text_chars: int = 0, commands: bool = False) -> Optional[Dict[str, Any]]:
     """What the main agent of the session did, one entry per user message. None when the file gives nothing.
 
     A subagent's own turns and tools are left out (its rows carry an `agentId`): the call that started it is one tool
@@ -270,12 +280,12 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
         info = path.stat()
     except OSError:
         return None
-    key, stamp = (str(path), text_chars), (info.st_mtime_ns, info.st_size)
+    key, stamp = (str(path), text_chars, commands), (info.st_mtime_ns, info.st_size)
     with _kept_lock:
         kept = _kept.get(key)
     if kept and kept[0] == stamp:
         return pickle.loads(kept[1])
-    record = _read(path, text_chars)
+    record = _read(path, text_chars, commands)
     with _kept_lock:
         _kept.pop(key, None)
         _kept[key] = (stamp, pickle.dumps(record, pickle.HIGHEST_PROTOCOL))
@@ -284,7 +294,7 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
     return record
 
 
-def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
+def _read(path: Path, text_chars: int, commands: bool = False) -> Optional[Dict[str, Any]]:
     prompts: List[Dict[str, Any]] = []
     current: Optional[Dict[str, Any]] = None
     turn_started: Optional[float] = None
@@ -369,6 +379,9 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
             elif kind == "tool.execution_start":
                 tools[str(data.get("toolCallId"))] = {"name": str(data.get("toolName") or ""), "at": at, "asked": 0.0, "person": waits_for_person(str(data.get("toolName") or ""), data.get("arguments"))}
                 current["docs"].extend(dict(found, at=at) for found in task_docs(str(data.get("toolName") or ""), data.get("arguments")))
+                said = command_of(data.get("arguments")) if commands else ""
+                if said:
+                    current["commands"].append({"at": at, "name": str(data.get("toolName") or ""), "command": said})
             elif kind == "tool.execution_complete":
                 started = tools.pop(str(data.get("toolCallId")), None)
                 if started is not None:

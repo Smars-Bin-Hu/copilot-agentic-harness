@@ -555,6 +555,33 @@ class WalkThroughTests(unittest.TestCase):
         self.assertTrue(running["rows"][0]["stopped"])
         self.assertIn('item.stopped ? tag(t("desk.trace.stopped"))', (WEB / "desk.js").read_text(encoding="utf-8"))
 
+    def test_a_call_that_went_through_shows_its_command_and_a_call_to_an_outside_system_its_mark(self) -> None:
+        """1.7.44: the harness's log keeps no command of a call that went through; Copilot's record does. Each tool row gets the command that started with it (the same tool first),
+        and a call the gate noted for an outside system (`calls.jsonl`) gets {system, env, verb, how, code}. A secret in a command is masked."""
+        stamp = lambda second: f"2026-11-01T09:41:{second:02d}+00:00"  # noqa: E731
+        sql = 'sqlcmd -S db1,5150 -E -C -d SSISDB -Q "SELECT name\nFROM catalog.folders"'
+        node = {"rows": [{"kind": "tool", "at": stamp(2), "tool": "bash", "ok": True}, {"kind": "tool", "at": stamp(30), "tool": "bash", "ok": True},
+                         {"kind": "tool", "at": stamp(31), "tool": "view", "ok": True}, {"kind": "gate", "at": stamp(40), "tool": "bash", "decision": "held", "command": "ado comment 1"},
+                         {"kind": "tool", "at": stamp(50), "tool": "bash", "ok": True}]}
+        started = [{"at": copilot_events.seconds(stamp(2)), "name": "bash", "command": "ls RUNS/DEV"},
+                   {"at": copilot_events.seconds(stamp(31)), "name": "bash", "command": sql},
+                   {"at": copilot_events.seconds(stamp(50)), "name": "bash", "command": "curl -H 'Authorization: Bearer abcdefghijklmnopqrstuvwx' https://x"}]
+        outside = [{"at": stamp(31), "command": " ".join(sql.split()), "system": "db-dev", "env": "dev", "verb": "read", "how": "allow"}]
+        tasktrace.with_commands(node, started, outside)
+        ls, query, view, held, curl = node["rows"]
+        self.assertEqual((ls["command"], ls.get("call")), ("ls RUNS/DEV", None))
+        self.assertEqual(query["command"], sql)  # a second off, the same tool: not the `view` beside it
+        self.assertEqual(query["call"], {"system": "db-dev", "env": "dev", "verb": "read", "how": "allow", "code": ""})
+        self.assertNotIn("command", view)
+        self.assertEqual(held["command"], "ado comment 1")  # a refused or held call keeps what the gate saw
+        self.assertNotIn("abcdefghijklmnopqrstuvwx", curl["command"])
+        self.assertEqual(outside, [])
+        self.assertEqual(copilot_events.command_of({"command": "ls"}), "ls")
+        self.assertEqual(copilot_events.command_of({"filePath": "a.md"}), "")
+        code = (WEB / "desk.js").read_text(encoding="utf-8")
+        for needle in ("function callMark(call)", 'h("span", {class: "tr-cmdline"}', "cmdOpen.has(key)", "onlyOutside ? tree.prompts.map", 'class: "act tr-only"'):
+            self.assertIn(needle, code)
+
     def test_a_long_path_in_the_trace_is_a_path_and_a_key_in_it_is_still_masked(self) -> None:
         path = "/work/company/repositories/sales-repo/src/orders/daily/load.sql"
         row = {"at": "2026-11-01T08:00:00+00:00", "event": "PreToolUse", "tool_name": "Write", "decision": "deny", "target": {"paths": [path, "/a/" + "k" * 60 + "/b.sql"]}}

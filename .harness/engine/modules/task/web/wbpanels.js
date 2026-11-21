@@ -471,8 +471,10 @@ const WBPANELS = (function () {
       }
       const out = [...back, ...moving, ...front, ...marks];
       if (!quiet && !down) out.push(el("circle", {cx: sx, cy: sy, r: sr + 6, class: "wbp-pulse"}, el("animate", {attributeName: "r", values: (sr + 3) + ";" + (sr + (big ? 20 : 10)) + ";" + (sr + 3), dur: "3s", repeatCount: "indefinite"})));
-      out.push(el("rect", {x: sx - sr, y: sy - sr, width: sr * 2, height: sr * 2, rx: (sr * .34).toFixed(1), class: "wbp-boss"}),
-        el("circle", {cx: (sx - sr * .36).toFixed(1), cy: (sy - sr * .08).toFixed(1), r: (sr * .16).toFixed(1), class: "wbp-bosseye"}), el("circle", {cx: (sx + sr * .36).toFixed(1), cy: (sy - sr * .08).toFixed(1), r: (sr * .16).toFixed(1), class: "wbp-bosseye"}));
+      out.push(el("g", {class: "wbp-bossg", "data-wbp-boss": "", role: "button", tabindex: "0", "aria-label": t("super.wb.bridge.boss.tip")},  // a click on the super agent itself: the target goes back to All (1.8.24)
+        el("title", null, t("super.wb.bridge.boss.tip")),
+        el("rect", {x: sx - sr, y: sy - sr, width: sr * 2, height: sr * 2, rx: (sr * .34).toFixed(1), class: "wbp-boss"}),
+          el("circle", {cx: (sx - sr * .36).toFixed(1), cy: (sy - sr * .08).toFixed(1), r: (sr * .16).toFixed(1), class: "wbp-bosseye"}), el("circle", {cx: (sx + sr * .36).toFixed(1), cy: (sy - sr * .08).toFixed(1), r: (sr * .16).toFixed(1), class: "wbp-bosseye"})));
       if (big) out.push(el("text", {x: sx, y: sy + sr + 18, "text-anchor": "middle", class: "wbp-bossname", "font-size": 12.5}, t("super.name")));
       if (!nodes.length) out.push(el("text", {x: sx, y: (big ? sy + sr + 46 : sy + sr + 30), "text-anchor": "middle", class: "wbp-lb wbp-k-idle", "font-size": 12}, t("super.wb.none")));
       const content = Math.max(H, Math.ceil(bottom + 10));  // a picture that needs more height than the place has is drawn smaller, never cut
@@ -516,7 +518,7 @@ const WBPANELS = (function () {
       pop.style.top = Math.round(clamp(rect.bottom + 8, 8, Math.max(8, innerHeight - 300))) + "px";
     }
     const sortedOf = (kind) => models.filter((info) => info.kind === kind).sort((a, b) => (kind === "wait" ? b.waited - a.waited : 0) || a.name.localeCompare(b.name));
-    function pickIt(name) { closeList(); if (pickTask && name) pickTask(name); }
+    function pickIt(name) { closeList(); if (pickTask) pickTask(name); }  // "" is the super agent itself: back to All
     function wire(node) {  // the clicks of a picture (the bridge, the Focus picture)
       let press = null, held = false;
       node.addEventListener("click", (event) => {
@@ -527,6 +529,7 @@ const WBPANELS = (function () {
         if (more) { const kind = more.getAttribute("data-wbp-more"); openList(t(GRP[kind]), () => sortedOf(kind), more.getBoundingClientRect()); return; }
         const chip = target.closest("[data-wbp-closed]");
         if (chip) { const box = chip.getBoundingClientRect(); if (closedChip) closedChip(box.left, box.bottom); return; }
+        if (target.closest("[data-wbp-boss]")) { pickIt(""); return; }
         const one = target.closest(".wbp-t[data-wbp-task]");
         if (one) pickIt(one.getAttribute("data-wbp-task"));
       });
@@ -539,8 +542,8 @@ const WBPANELS = (function () {
       node.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         const target = event.target && event.target.closest ? event.target : null;
-        const more = target && target.closest("[data-wbp-more]"), one = target && target.closest(".wbp-t[data-wbp-task]");
-        if (more) { event.preventDefault(); more.dispatchEvent(new MouseEvent("click", {bubbles: true})); } else if (one) { event.preventDefault(); pickIt(one.getAttribute("data-wbp-task")); }
+        const more = target && target.closest("[data-wbp-more]"), one = target && target.closest(".wbp-t[data-wbp-task]"), boss = target && target.closest("[data-wbp-boss]");
+        if (boss) { event.preventDefault(); pickIt(""); } else if (more) { event.preventDefault(); more.dispatchEvent(new MouseEvent("click", {bubbles: true})); } else if (one) { event.preventDefault(); pickIt(one.getAttribute("data-wbp-task")); }
       });
       node.addEventListener("pointerdown", (event) => {  // a long press (a finger) is the right click
         if (event.pointerType === "mouse" || !menuTask) return;

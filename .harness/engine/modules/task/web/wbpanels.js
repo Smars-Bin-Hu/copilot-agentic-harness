@@ -303,6 +303,7 @@ const WBPANELS = (function () {
       const withAiu = list.filter((info) => info.aiu !== null), withPrem = list.filter((info) => info.prem !== null);
       const aiu = withAiu.reduce((sum, info) => sum + info.aiu, 0), prem = withPrem.reduce((sum, info) => sum + info.prem, 0);
       const top = withAiu.slice().sort((a, b) => b.aiu - a.aiu || a.name.localeCompare(b.name));
+      if (!withAiu.length && !withPrem.length) return block("spend", t("super.wb.data.spend"), t("super.wb.spend.scope"), [h("div", {class: "wbp-ok wbp-soft"}, t("super.wb.spend.none"))]);  // nothing recorded: one plain line, no dashes
       const tops = top.slice(0, 3).map((info) => h("span", {class: "wbp-topx", "data-wbp-task": info.name, "data-wbp-hv": ""}, avatar(info, 17), info.aiu.toFixed(1)));
       const head = h("div", {class: "wbp-spend"}, h("div", {class: "wbp-big"}, withAiu.length ? t("super.wb.hv.aiu.value", {n: (Math.round(aiu * 10) / 10).toFixed(1)}) : NONE),
         h("div", {class: "wbp-big wbp-sm"}, withPrem.length ? Math.round(prem * 10) / 10 + " " + t("super.wb.spend.premium") : NONE), h("div", {class: "wbp-tops"}, tops));

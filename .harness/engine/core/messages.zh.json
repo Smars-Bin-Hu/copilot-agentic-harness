@@ -1865,6 +1865,7 @@
   "super.wb.data.time": "时间去哪了",
   "super.wb.time.known": "{n} 个任务里 {k} 个有 Copilot 记录",
   "super.wb.time.none": "还没有打开的任务有 Copilot 的用时记录。",
+  "super.wb.spend.none": "还没有打开的任务记录了 Credits。",
   "super.wb.time.model": "模型思考",
   "super.wb.time.tool": "工具",
   "super.wb.time.sub": "子 agent",

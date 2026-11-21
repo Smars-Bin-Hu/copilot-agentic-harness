@@ -1865,6 +1865,7 @@
   "super.wb.data.time": "Where the time goes",
   "super.wb.time.known": "{k} of {n} tasks have Copilot's record",
   "super.wb.time.none": "No open task has Copilot's record of its time yet.",
+  "super.wb.spend.none": "No open task has its Credits recorded yet.",
   "super.wb.time.model": "model thinking",
   "super.wb.time.tool": "tools",
   "super.wb.time.sub": "subagents",

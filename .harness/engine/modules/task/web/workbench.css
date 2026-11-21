@@ -1,0 +1,149 @@
+/* The super agent workbench (workbench.js): a full-screen layer over the board with the chat of super.js in the middle. Colours come from tokens.css only.
+   Wide Workbench: panels left | chat | panels right. Focus: chat | picture, one card at the bottom right. Tall (a window taller than wide): everything stacks downward. */
+html.wb-lock{overflow:hidden}
+.wb-root{--wb-lw:clamp(260px,22vw,340px);--wb-rw:clamp(320px,38vw,680px);position:fixed;inset:0;z-index:120;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;overflow:hidden}
+.wb-root[hidden],.wb-root [hidden]{display:none}
+.wb-root *{box-sizing:border-box}
+.wb-root button{font:inherit;color:inherit}
+.wb-no-l{--wb-lw:0px}
+.wb-no-r{--wb-rw:0px}
+.wb-sp{flex:1}
+
+/* the top bar; the right end is left free for the search and settings pill of the board (shell.css) */
+.wb-top{display:flex;align-items:center;gap:12px;padding:7px 12px;padding-right:var(--wb-pill,196px);border-bottom:1px solid var(--line);background:var(--card);min-width:0;min-height:48px}
+.wb-back{border:0;background:none;color:var(--soft);padding:4px 8px;font-size:17px;cursor:pointer;border-radius:8px;flex:none}
+.wb-back:hover{color:var(--ink);background:var(--hover)}
+.wb-bot{width:26px;height:26px;border-radius:9px;background:var(--robot-head);border:1px solid var(--robot-line);position:relative;flex:none}
+.wb-bot::before,.wb-bot::after{content:"";position:absolute;top:10px;width:5px;height:5px;border-radius:50%;background:var(--good-dot)}
+.wb-bot::before{left:6px}.wb-bot::after{right:6px}
+.wb-name{font-size:14px;white-space:nowrap}
+.wb-w{color:var(--hot);font-size:12.5px;white-space:nowrap}
+.wb-lbl{color:var(--soft);font-size:11.5px;white-space:nowrap}
+.wb-seg{display:flex;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:2px;flex:none}
+.wb-seg button{border:0;background:none;padding:3px 10px;color:var(--soft);border-radius:7px;font-size:12.5px;position:relative;cursor:pointer;white-space:nowrap}
+.wb-seg button:hover{color:var(--ink)}
+.wb-seg button.on{background:var(--raise);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.wb-ic{font-size:12px;margin-right:2px}
+.wb-cnt{display:inline-grid;place-items:center;min-width:15px;height:15px;margin-left:5px;border-radius:8px;background:var(--hot-dot);color:var(--bg);font-size:10px;font-weight:700;padding:0 4px;vertical-align:1px}
+.wb-cnt[hidden]{display:none}
+
+/* the grid */
+.wb-main{display:grid;min-height:0;min-width:0;position:relative}
+.wb-m-wb .wb-main{grid-template-columns:var(--wb-lw) minmax(0,1fr) var(--wb-rw)}
+.wb-m-focus .wb-main{grid-template-columns:minmax(0,1fr) minmax(300px,46%)}
+.wb-l{grid-column:1;grid-row:1}
+.wb-m-wb .wb-center{grid-column:2}
+.wb-m-wb .wb-r{grid-column:3;grid-row:1}
+.wb-m-focus .wb-center{grid-column:1}
+.wb-center{grid-row:1;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.wb-side{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--card)}
+.wb-l{border-right:1px solid var(--line)}
+.wb-r{border-left:1px solid var(--line)}
+.wb-m-wb .wb-no-l .wb-l,.wb-no-l .wb-l,.wb-no-r .wb-r{display:none}
+.wb-m-focus .wb-l{display:none}
+.wb-m-focus .wb-r{display:none}
+.wb-dock,.wb-scene{display:none}
+
+/* the chat of super.js in the middle: its own width limit goes, its height is the column's */
+.wb-center .sa{flex:1 1 0;min-height:0;height:auto!important;max-width:960px;margin:0 auto;width:100%}
+.wb-center .sa.sa-fold-on .sa-streamwrap{flex:1 1 auto;height:auto;min-height:0}
+.wb-center .sa.sa-fold-on .sa-stream{display:block}
+.wb-center .sa .sa-fold,.wb-center .sa .sa-foldline{display:none!important}
+
+/* a panel */
+.wb-pn{display:flex;flex-direction:column;min-height:0;min-width:0;flex:1 1 0}
+.wb-pn+.wb-pn{border-top:1px solid var(--line)}
+.wb-pn-q{flex-grow:3}
+.wb-pn-t{flex-grow:2}
+.wb-pn-d.wb-sized{flex:0 0 auto;max-height:46%}
+.wb-ph{display:flex;align-items:center;gap:8px;padding:9px 12px 6px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);flex:none}
+.wb-ph b{color:var(--ink);font-weight:650}
+.wb-pc{color:var(--hot);font-weight:700}
+.wb-x{margin-left:auto;border:0;background:none;color:var(--soft);cursor:pointer;border-radius:6px;padding:0 5px;font-size:13px;line-height:20px}
+.wb-x:hover{color:var(--ink);background:var(--hover)}
+.wb-pb{flex:1 1 auto;min-height:0;overflow:auto;padding:0 10px 10px}
+.wb-soon{color:var(--soft);font-size:12.5px;padding:8px 2px}
+.wb-qb{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.wb-qb .wb-qempty{padding:8px 12px}
+.wb-qb .sa-queue{flex:1 1 auto;max-height:none!important;margin:0;border-bottom:0;box-shadow:none;background:transparent;z-index:auto}
+.wb-qb .sa-qlist{padding-left:10px;padding-right:10px}
+.wb-qb .sa-row .sa-mini{display:none}
+.wb-qb .sa-bub{max-width:100%}
+.wb-qb .sa-qdone summary{padding-left:12px}
+
+/* the Task pane */
+.wb-pn-p{background:var(--card)}
+.wb-tabbar{display:flex;align-items:flex-end;gap:2px;padding:6px 8px 0;border-bottom:1px solid var(--line);flex:none;min-width:0}
+.wb-tabs{display:flex;align-items:flex-end;gap:2px;overflow-x:auto;scrollbar-width:none;min-width:0;flex:0 1 auto}
+.wb-tab{display:flex;align-items:center;gap:2px;border-radius:8px 8px 0 0;border:1px solid transparent;border-bottom:0;color:var(--soft);flex:none;max-width:200px;min-width:0;margin-bottom:-1px}
+.wb-tab.on{background:var(--bg);color:var(--ink);border-color:var(--line)}
+.wb-tab-n{border:0;background:none;padding:5px 2px 5px 10px;font:12.5px var(--mono);color:inherit;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:160px}
+.wb-tab-x{border:0;background:none;color:var(--soft);cursor:pointer;padding:0 7px 0 3px;font-size:11px;line-height:24px}
+.wb-tab-x:hover{color:var(--ink)}
+.wb-out{margin-left:auto;margin-bottom:3px;padding:2px 8px;color:var(--soft);text-decoration:none;border-radius:6px;font-size:15px;flex:none}
+.wb-out:hover{color:var(--ink);background:var(--hover)}
+.wb-out[hidden]+.wb-closelayer{margin-left:auto}
+.wb-closelayer{margin:0 0 3px 0;flex:none}
+.wb-frames{flex:1 1 auto;min-height:0;position:relative;background:var(--bg)}
+.wb-frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
+.wb-task-empty{padding:16px}
+
+/* Focus: the picture on the right (an empty place for now), the task in a window in the middle of the screen */
+.wb-m-focus .wb-scene{display:block;grid-column:2;grid-row:1;min-width:0;min-height:0;position:relative;overflow:hidden;border-left:1px solid var(--line);background:radial-gradient(ellipse at 50% 22%,var(--good-bg) 0,transparent 62%),var(--bg)}
+.wb-scene-in{padding:16px}
+.wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{display:grid;position:fixed;inset:0;z-index:6;place-items:center;background:var(--scrim);border:0;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+html.lite .wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{-webkit-backdrop-filter:none;backdrop-filter:none}
+.wb-m-focus:not(.wb-tall) .wb-pn-p{width:min(1080px,78vw);height:84vh;border:1px solid var(--line2);border-radius:14px;overflow:hidden;box-shadow:var(--glass-shadow)}
+
+/* the card of Focus: the first item of the queue; the others stay hidden; "Later" sends it to the end; the dash puts the card away */
+.wb-cardbox{position:fixed;right:18px;bottom:76px;z-index:30;width:min(420px,calc(100vw - 36px))}
+.wb-card{display:flex;flex-direction:column;max-height:min(72vh,620px);background:var(--raise);border:1px solid var(--line2);border-top:3px solid var(--hot-dot);border-radius:14px;box-shadow:var(--glass-shadow);overflow:hidden}
+.wb-many .wb-card{box-shadow:0 6px 0 -2px var(--raise),0 7px 0 -2px var(--line2),var(--glass-shadow)}
+.wb-ch{display:flex;align-items:center;gap:8px;padding:8px 10px 2px 14px;font-size:12px;color:var(--soft);flex:none}
+.wb-of{font:11.5px var(--mono)}
+.wb-later,.wb-min{border:0;background:none;color:var(--soft);cursor:pointer;border-radius:6px;padding:2px 8px}
+.wb-later:hover,.wb-min:hover{color:var(--ink);background:var(--hover)}
+.wb-later:disabled{opacity:.4;cursor:default}
+.wb-later:disabled:hover{color:var(--soft);background:none}
+.wb-cb{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;overflow:hidden}
+.wb-cb .sa-queue{flex:1 1 auto;max-height:none!important;margin:0;border:0;box-shadow:none;background:transparent;z-index:auto}
+.wb-cb .sa-qlist{padding:4px 12px 12px;max-height:min(56vh,500px)}
+.wb-cb .sa-qlist>.item:not(.wb-cur){display:none}
+.wb-cb .sa-qlist>.item{margin:0}
+.wb-cb .sa-qdone{display:none}
+.wb-cb .sa-row .sa-mini{display:none}
+.wb-cb .sa-bub{max-width:100%}
+.wb-bell{display:none;margin-left:auto;border:0;border-radius:999px;padding:8px 14px;background:var(--hot-dot);color:var(--bg);font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
+.wb-cardbox.wb-min .wb-card{display:none}
+.wb-cardbox.wb-min .wb-bell{display:block}
+.wb-in{animation:wbin .28s ease-out}
+@keyframes wbin{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+html.lite .wb-in{animation:none}
+@media (prefers-reduced-motion:reduce){.wb-in{animation:none}}
+
+/* Tall: nothing covers anything; panels and the task stack under the chat */
+.wb-tall .wb-main{grid-template-columns:minmax(0,1fr)}
+.wb-tall .wb-side{display:contents}
+.wb-tall .wb-pn{grid-column:1;flex:none;background:var(--card);border-top:1px solid var(--line2)}
+.wb-tall .wb-center{grid-column:1;grid-row:1}
+.wb-tall .wb-top .wb-pt{display:none}
+.wb-tall .wb-top{gap:8px;padding-left:8px}
+.wb-tall.wb-m-wb .wb-main{grid-template-rows:minmax(0,1fr) auto auto auto}
+.wb-tall.wb-m-wb .wb-pn-q,.wb-tall.wb-m-wb .wb-pn-t,.wb-tall.wb-m-wb .wb-pn-d{grid-row:2;height:30vh}
+.wb-tall.wb-m-wb.wb-task-on .wb-pn-q,.wb-tall.wb-m-wb.wb-task-on .wb-pn-t,.wb-tall.wb-m-wb.wb-task-on .wb-pn-d{height:24vh}
+.wb-tall.wb-m-wb .wb-pn-d.wb-sized{max-height:none}
+.wb-tall.wb-m-wb .wb-pn-p{grid-row:3;height:34vh}
+.wb-tall.wb-m-wb .wb-dock{display:flex;grid-row:4;grid-column:1;justify-content:space-around;border-top:1px solid var(--line);background:var(--card);padding:8px 0 10px}
+.wb-dk{border:0;background:none;color:var(--soft);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px;position:relative;cursor:pointer;padding:2px 14px}
+.wb-dk.on{color:var(--ink)}
+.wb-dk .wb-ic{font-size:17px;margin:0}
+.wb-dk .wb-cnt{position:absolute;right:4px;top:-3px;margin:0}
+.wb-tall.wb-m-focus .wb-main{grid-template-rows:200px minmax(0,1fr) auto}
+.wb-tall.wb-m-focus.wb-task-on .wb-main{grid-template-rows:110px minmax(0,1fr) auto}
+.wb-tall.wb-m-focus .wb-scene{grid-column:1;grid-row:1;border-left:0;border-bottom:1px solid var(--line)}
+.wb-tall.wb-m-focus .wb-center{grid-row:2}
+.wb-tall.wb-m-focus .wb-pn-p{grid-row:3;height:40vh}
+.wb-tall .wb-center .sa{max-width:none}
+.sa>.wb-cardbox{position:static;width:auto;margin:0 12px 8px}
+.sa>.wb-cardbox .wb-card{max-height:34vh}
+.sa>.wb-cardbox .wb-cb .sa-qlist{max-height:22vh}

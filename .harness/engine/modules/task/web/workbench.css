@@ -1,7 +1,7 @@
 /* The super agent workbench (workbench.js): a full-screen layer over the board with the chat of super.js in the middle. Colours come from tokens.css only.
    Wide Workbench: panels left | chat | panels right. Focus: chat | picture, one card at the bottom right. Tall (a window taller than wide): everything stacks downward. */
 html.wb-lock{overflow:hidden}
-.wb-root{--wb-lw:clamp(260px,22vw,340px);--wb-rw:clamp(320px,38vw,680px);position:fixed;inset:0;z-index:180;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;overflow:hidden}
+.wb-root{--wb-lw:clamp(260px,22vw,340px);--wb-rw:clamp(320px,38vw,680px);position:fixed;inset:0;z-index:100;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;overflow:hidden}
 .wb-root[hidden],.wb-root [hidden]{display:none}
 .wb-root *{box-sizing:border-box}
 .wb-root button{font:inherit;color:inherit}
@@ -9,8 +9,8 @@ html.wb-lock{overflow:hidden}
 .wb-no-r{--wb-rw:0px}
 .wb-sp{flex:1}
 
-/* the top bar. The layer is above the fixed controls of the board (shell.css, z-index 160): back to the board for them; Cmd+K still works */
-.wb-top{display:flex;align-items:center;gap:12px;padding:7px 12px;border-bottom:1px solid var(--line);background:var(--card);min-width:0;min-height:48px}
+/* the top bar. The layer is under the fixed controls of the board (search and account at the top right, the round buttons at the bottom right: z-index 160 and 1200) and under the dialogs (165): the bar leaves their corner free */
+.wb-top{display:flex;align-items:center;gap:12px;padding:7px 12px;padding-right:var(--wb-corner,350px);border-bottom:1px solid var(--line);background:var(--card);min-width:0;min-height:48px}
 .wb-back{border:0;background:none;color:var(--soft);padding:4px 8px;font-size:17px;cursor:pointer;border-radius:8px;flex:none}
 .wb-back:hover{color:var(--ink);background:var(--hover)}
 .wb-bot{width:26px;height:26px;border-radius:9px;background:var(--robot-head);border:1px solid var(--robot-line);position:relative;flex:none}
@@ -96,7 +96,7 @@ html.lite .wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{-webkit-backdrop-filter:non
 .wb-m-focus:not(.wb-tall) .wb-pn-p{width:min(1080px,78vw);height:84vh;border:1px solid var(--line2);border-radius:14px;overflow:hidden;box-shadow:var(--glass-shadow)}
 
 /* the card of Focus: the first item of the queue; the others stay hidden; "Later" sends it to the end; the dash puts the card away */
-.wb-cardbox{position:fixed;right:18px;bottom:18px;z-index:30;width:min(420px,calc(100vw - 36px))}
+.wb-cardbox{position:fixed;right:80px;bottom:18px;z-index:30;width:min(420px,calc(100vw - 36px))}
 .wb-card{display:flex;flex-direction:column;max-height:min(72vh,620px);background:var(--raise);border:1px solid var(--line2);border-top:3px solid var(--hot-dot);border-radius:14px;box-shadow:var(--glass-shadow);overflow:hidden}
 .wb-many .wb-card{box-shadow:0 6px 0 -2px var(--raise),0 7px 0 -2px var(--line2),var(--glass-shadow)}
 .wb-ch{display:flex;align-items:center;gap:8px;padding:8px 10px 2px 14px;font-size:12px;color:var(--soft);flex:none}
@@ -128,6 +128,7 @@ html.lite .wb-in{animation:none}
 .wb-tall .wb-center{grid-column:1;grid-row:1}
 .wb-tall .wb-top .wb-pt{display:none}
 .wb-tall .wb-top{gap:8px;padding-left:8px}
+@media (max-width:1300px){.wb-lbl{display:none}}
 .wb-tall.wb-m-wb .wb-main{grid-template-rows:minmax(0,1fr) auto auto auto}
 .wb-tall.wb-m-wb .wb-pn-q,.wb-tall.wb-m-wb .wb-pn-t,.wb-tall.wb-m-wb .wb-pn-d{grid-row:2;height:30vh}
 .wb-tall.wb-m-wb.wb-task-on .wb-pn-q,.wb-tall.wb-m-wb.wb-task-on .wb-pn-t,.wb-tall.wb-m-wb.wb-task-on .wb-pn-d{height:24vh}

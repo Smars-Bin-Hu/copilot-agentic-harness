@@ -768,7 +768,7 @@ class PairedOnlyTests(CreateCase):
         self.assertNotIn("tkn", found)
 
     def test_the_page_has_the_button_the_dialog_and_the_texts(self) -> None:
-        page = self.request("GET", "/")[1]["text"]
+        page = self.whole(self.request("GET", "/")[1]["text"])  # the page and the files it links
         self.assertIn("CHAT.create()", page)
         self.assertIn("function create(preset)", page)
         self.assertIn('"board.new.go"', page)

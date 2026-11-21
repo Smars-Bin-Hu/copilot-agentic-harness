@@ -178,7 +178,7 @@ html.lite .wbp-intro,html.lite .wbp-in .wb-main{animation:none}
 .wbp-lane{grid-template-columns:34px minmax(0,1fr)!important;align-items:start}
 .wbp-lk{font:600 10.5px var(--mono);color:var(--soft);line-height:22px;cursor:help;display:block}
 .wbp-flow{display:flex}
-.wbp-chev{position:relative;min-width:0;height:22px;margin-right:-6px;background:var(--card,#1a2024);clip-path:polygon(0 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,0 100%,8px 50%);display:flex;align-items:center;justify-content:center;gap:4px;font:10.5px var(--mono);color:var(--soft);padding:0 9px 0 12px;white-space:nowrap;overflow:hidden}
+.wbp-chev{position:relative;min-width:0;height:22px;margin-right:-6px;background:rgba(255,255,255,.075);clip-path:polygon(0 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,0 100%,8px 50%);display:flex;align-items:center;justify-content:center;gap:4px;font:10.5px var(--mono);color:var(--soft);padding:0 9px 0 12px;white-space:nowrap;overflow:hidden}
 .wbp-chev:first-child{clip-path:polygon(0 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,0 100%);border-radius:5px 0 0 5px;padding-left:7px}
 .wbp-chev span{overflow:hidden;text-overflow:ellipsis}.wbp-chev b{color:var(--ink);font-weight:600}
 .wbp-chev.wbp-jam{background:linear-gradient(90deg,rgba(232,169,60,.34),rgba(232,169,60,.18));color:#f3d39a}.wbp-chev.wbp-jam b{color:#fff}

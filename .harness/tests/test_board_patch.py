@@ -518,7 +518,8 @@ class NoCodeInChatTests(unittest.TestCase):
     def test_the_approval_still_asks_for_its_code_where_a_person_types_it(self) -> None:
         source = (WEB / "serve.js").read_text(encoding="utf-8")
         self.assertIn('t("board.serve.code")', source)
-        self.assertIn("code: input.value.trim()", source)
+        self.assertIn("const code = input.value.trim()", source)  # 1.8.25: read once, so a window that comes back after a late refusal keeps it
+        self.assertIn('{...body, step: "act", code,', source)  # and it goes with the act step
 
 
 class PromoteTermTests(unittest.TestCase):

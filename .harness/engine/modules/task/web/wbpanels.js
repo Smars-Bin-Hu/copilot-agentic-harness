@@ -49,6 +49,7 @@ const WBPANELS = (function () {
     return "idle";
   }
   const RANK = {err: 0, wait: 1, work: 2, idle: 3};
+  const KC = (kind) => "wbp-k-" + kind;  // the class of a state (a plain "wait" or "work" is styled by the board elsewhere)
 
   // What a panel needs of a row, once per refresh.
   function subsOf(row) {
@@ -101,7 +102,7 @@ const WBPANELS = (function () {
 
     // ---- the avatar of a task: a round robot, the ring is its state, the eyes its own colour ----
     function avatar(info, size) {
-      return h("span", {class: "wbp-av wbp-i" + info.id + " " + info.kind, style: "--s:" + (size || 20) + "px", "data-wbp-task": info.name, "data-wbp-hv": ""});
+      return h("span", {class: "wbp-av wbp-i" + info.id + " " + KC(info.kind), style: "--s:" + (size || 20) + "px", "data-wbp-task": info.name, "data-wbp-hv": ""});
     }
 
     // ---- the cells that run ----
@@ -127,9 +128,9 @@ const WBPANELS = (function () {
       const kids = h("div", {class: "wbp-kids"});
       for (const info of list) {
         const tags = info.tags.map((key) => h("span", {class: "wbp-tg", title: t(TAGS[key])}, t(TAGS[key])));
-        const word = h("span", {class: "wbp-st " + info.kind}, wordOf(info));
+        const word = h("span", {class: "wbp-st " + KC(info.kind)}, wordOf(info));
         const state = info.kind === "wait" ? [word, " ", runCell(h("span", {class: "wbp-tm"}), "wait", info.name)] : [word];
-        kids.append(h("div", {class: "wbp-tn " + info.kind, "data-wbp-task": info.name},
+        kids.append(h("div", {class: "wbp-tn " + KC(info.kind), "data-wbp-task": info.name},
           avatar(info, 20), h("a", {class: "wbp-nm", href: taskUrl(info.name), title: info.name}, info.shown), h("span", {class: "wbp-stw"}, state), tags));
         if (info.subs.length) {
           const sub = h("div", {class: "wbp-kids wbp-subs"});
@@ -155,14 +156,14 @@ const WBPANELS = (function () {
         if (info.aiu !== null) { total.aiu += info.aiu; top = Math.max(top, info.aiu); }
         total.subs += info.subsN;
       }
-      const num = (kind, value, key) => h("div", {class: "wbp-num " + kind}, h("b", null, String(value)), h("span", {title: t(NUMS[key])}, t(NUMS[key])));
+      const num = (kind, value, key) => h("div", {class: "wbp-num " + (kind ? KC(kind) : "")}, h("b", null, String(value)), h("span", {title: t(NUMS[key])}, t(NUMS[key])));
       const nums = h("div", {class: "wbp-nums"}, num("work", total.work, "work"), num("wait", waits, "wait"), num("err", total.err, "err"), num("", Math.round(total.aiu * 10) / 10, "aiu"), num("", total.subs, "subs"));
       const head = h("div", {class: "wbp-dr wbp-dh"}, h("span"), ...["wait", "aiu", "ctx", "stage"].map((key) => h("span", null, t(COLS[key]))));
       const lines = list.map((info) => {
         const wait = info.kind === "wait" ? runCell(h("span"), "wait", info.name) : h("span", null, info.kind === "work" ? "·" : wordOf(info));
         const aiu = h("span", {class: "wbp-m"}, h("span", {class: "wbp-bar"}, h("b", {class: "aiu", style: "width:" + (info.aiu !== null && top > 0 ? clamp(info.aiu / top * 100, 0, 100).toFixed(1) : 0) + "%"})), info.aiu === null ? NONE : info.aiu.toFixed(1));
         const ctx = h("span", {class: "wbp-m"}, h("span", {class: "wbp-bar"}, h("b", {class: info.ctx && info.ctx.percent >= FULL ? "full" : "", style: "width:" + (info.ctx ? clamp(info.ctx.percent, 0, 100).toFixed(1) : 0) + "%"})), info.ctx ? Math.round(info.ctx.percent) + "%" : NONE);
-        return h("div", {class: "wbp-dr " + info.kind, "data-wbp-task": info.name, "data-wbp-hv": ""}, avatar(info, 18), h("span", {class: "wbp-wt"}, wait), aiu, ctx, h("span", {class: "wbp-sg", title: info.stage || null}, info.stage || NONE));
+        return h("div", {class: "wbp-dr " + KC(info.kind), "data-wbp-task": info.name, "data-wbp-hv": ""}, avatar(info, 18), h("span", {class: "wbp-wt"}, wait), aiu, ctx, h("span", {class: "wbp-sg", title: info.stage || null}, info.stage || NONE));
       });
       return [nums, h("div", {class: "wbp-table"}, head, lines.length ? lines : h("div", {class: "wb-soon"}, t("super.wb.none")))];
     }
@@ -194,9 +195,9 @@ const WBPANELS = (function () {
         const x = 20 + cellW * ((index % perRow) + 0.5) + (perRow - inRow) * cellW / 2, y = firstY + rowNo * rowH + tr;
         const x0 = sx, y0 = sy + sr, y1 = y - tr, bend = tall ? 8 : 34, cx = (x0 + x) / 2, cy = (y0 + y1) / 2 + bend;
         const path = "M" + x0 + "," + y0 + " Q" + cx.toFixed(1) + "," + cy.toFixed(1) + " " + x.toFixed(1) + "," + y1.toFixed(1);
-        back.push(el("path", {d: path, class: "wbp-ln " + info.kind}));
+        back.push(el("path", {d: path, class: "wbp-ln " + KC(info.kind)}));
         if ((info.kind === "work" || info.kind === "wait") && (index < 14 || quiet)) {
-          const dot = el("circle", {r: tall ? 2.2 : 3.4, class: "wbp-dot " + info.kind});
+          const dot = el("circle", {r: tall ? 2.2 : 3.4, class: "wbp-dot " + KC(info.kind)});
           if (quiet) { dot.setAttribute("cx", (0.25 * x0 + 0.5 * cx + 0.25 * x).toFixed(1)); dot.setAttribute("cy", (0.25 * y0 + 0.5 * cy + 0.25 * y1).toFixed(1)); }
           else dot.append(el("animateMotion", Object.assign({dur: info.kind === "work" ? "2.2s" : "3s", begin: "-" + ((index * 0.37) % 2.2).toFixed(2) + "s", repeatCount: "indefinite", path}, info.kind === "wait" ? {keyPoints: "1;0", keyTimes: "0;1", calcMode: "linear"} : {})));
           back.push(dot);
@@ -213,14 +214,14 @@ const WBPANELS = (function () {
           const perMore = Math.min(cols, slots[index]), gx = x + ((count % perMore) - (perMore - 1) / 2) * pitch, gy = y + tr + (lines ? 22 : 12) + sr2 + Math.floor(count / perMore) * pitch;
           front.push(el("text", {x: gx.toFixed(1), y: (gy + 3).toFixed(1), "text-anchor": "middle", class: "wbp-more", "font-size": tall ? 8 : 10}, "+" + (info.subsN - count)));
         }
-        const ids = el("g", {class: "wbp-t wbp-i" + info.id + " " + info.kind, "data-wbp-task": info.name, "data-wbp-hv": ""},
+        const ids = el("g", {class: "wbp-t wbp-i" + info.id + " " + KC(info.kind), "data-wbp-task": info.name, "data-wbp-hv": ""},
           el("circle", {cx: x.toFixed(1), cy: y.toFixed(1), r: tr, class: "wbp-body"}),
           el("circle", {cx: (x - tr * .3).toFixed(1), cy: (y - tr * .1).toFixed(1), r: (tr * .14).toFixed(2), class: "wbp-eye"}),
           el("circle", {cx: (x + tr * .3).toFixed(1), cy: (y - tr * .1).toFixed(1), r: (tr * .14).toFixed(2), class: "wbp-eye"}),
           el("circle", {cx: x.toFixed(1), cy: y.toFixed(1), r: tr + 3, class: "wbp-hit"}));
         front.push(ids);
         if (lines) {
-          const label = el("text", {x: x.toFixed(1), y: (y + tr + 16).toFixed(1), "text-anchor": "middle", class: "wbp-lb " + info.kind, "font-size": 11.5}, info.kind === "wait" ? "" : wordOf(info));
+          const label = el("text", {x: x.toFixed(1), y: (y + tr + 16).toFixed(1), "text-anchor": "middle", class: "wbp-lb " + KC(info.kind), "font-size": 11.5}, info.kind === "wait" ? "" : wordOf(info));
           if (info.kind === "wait") { label.append(el("tspan", {class: "wbp-lw"}, wordOf(info) + " "), el("tspan", {class: "wbp-lt"})); runCell(label.lastChild, "wait", info.name); }
           front.push(label);
         }
@@ -292,7 +293,7 @@ const WBPANELS = (function () {
         [t("super.wb.hv.aiu"), info.aiu === null ? NONE : t("super.wb.hv.aiu.value", {n: info.aiu.toFixed(1)})], [t("super.wb.hv.checks"), checks],
         [t("super.wb.hv.autorun"), row.autorun ? t("super.wb.hv.on") : t("super.wb.hv.off")],
         [t("super.wb.hv.subs"), info.subs.length ? info.subs.map((one) => one.label).join(", ") : t("super.wb.hv.none")], [t("super.wb.hv.conns"), conns]];
-      return [h("h4", {title: info.name}, info.shown), h("div", {class: "wbp-hs " + info.kind}, "● " + state), h("dl", null, rowsOfCard.map((pair) => [h("dt", null, pair[0]), h("dd", null, pair[1])]))];
+      return [h("h4", {title: info.name}, info.shown), h("div", {class: "wbp-hs " + KC(info.kind)}, "● " + state), h("dl", null, rowsOfCard.map((pair) => [h("dt", null, pair[0]), h("dd", null, pair[1])]))];
     }
     function showHover(node) {
       const info = byName.get(nameOfEl(node));
@@ -337,7 +338,7 @@ const WBPANELS = (function () {
         const sig = kind + "|" + id + "|" + shown;
         if (chip && chip.dataset.sig === sig) continue;
         const fresh = h("a", {class: "wbp-qt", href: taskUrl(name), title: name, "data-sig": sig, "data-wbp-task": name, "data-wbp-hv": ""},
-          h("span", {class: "wbp-av wbp-i" + id + " " + kind, style: "--s:18px", "aria-hidden": "true"}), h("span", {class: "wbp-qn"}, shown));
+          h("span", {class: "wbp-av wbp-i" + id + " " + KC(kind), style: "--s:18px", "aria-hidden": "true"}), h("span", {class: "wbp-qn"}, shown));
         if (chip) chip.replaceWith(fresh); else node.insertBefore(fresh, node.firstChild);
       }
     }

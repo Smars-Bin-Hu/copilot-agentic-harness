@@ -3,10 +3,10 @@
 :root,html[data-theme="light"]{--wbp-id0:#1d6fd6;--wbp-id1:#c2307f;--wbp-id2:#4f8a10;--wbp-id3:#b07d00;--wbp-id4:#7a4fd0;--wbp-id5:#0d8f86;--wbp-id6:#d2551f;--wbp-id7:#5b6270}
 html[data-theme="dark"]{--wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--wbp-id3:#ffd166;--wbp-id4:#c6a5ff;--wbp-id5:#6ee7d8;--wbp-id6:#ff9f7a;--wbp-id7:#d0d4dc}
 .wbp-i0{--id:var(--wbp-id0)}.wbp-i1{--id:var(--wbp-id1)}.wbp-i2{--id:var(--wbp-id2)}.wbp-i3{--id:var(--wbp-id3)}.wbp-i4{--id:var(--wbp-id4)}.wbp-i5{--id:var(--wbp-id5)}.wbp-i6{--id:var(--wbp-id6)}.wbp-i7{--id:var(--wbp-id7)}
-:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wait{--c:var(--hot-dot);--tx:var(--hot)}
-:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).work{--c:var(--good-dot);--tx:var(--good)}
-:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).err{--c:var(--bad);--tx:var(--bad)}
-:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).idle{--c:var(--soft);--tx:var(--soft)}
+:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wbp-k-wait{--c:var(--hot-dot);--tx:var(--hot)}
+:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wbp-k-work{--c:var(--good-dot);--tx:var(--good)}
+:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wbp-k-err{--c:var(--bad);--tx:var(--bad)}
+:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wbp-k-idle{--c:var(--soft);--tx:var(--soft)}
 
 /* the avatar of a task: a round robot; the ring is its state, the eyes are its own colour */
 .wbp-av{--s:20px;position:relative;flex:none;display:inline-block;width:var(--s);height:var(--s);border-radius:50%;border:max(1.5px,calc(var(--s) * .08)) solid var(--c);background:var(--robot-head);vertical-align:middle}
@@ -78,7 +78,7 @@ html[data-theme="dark"]{--wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--
 .wb-tall .wbp-cap{left:10px;top:6px;font-size:10px}
 .wb-tall.wb-task-on .wbp-cap{display:none}
 .wbp-ln{fill:none;stroke:var(--c);stroke-opacity:.45;stroke-width:1.3}
-.wbp-ln.idle{stroke-opacity:.25;stroke-dasharray:3 5}
+.wbp-ln.wbp-k-idle{stroke-opacity:.25;stroke-dasharray:3 5}
 .wbp-dot{fill:var(--c)}
 .wbp-body{fill:var(--robot-head);stroke:var(--c);stroke-width:2.2}
 .wbp-eye{fill:var(--id)}

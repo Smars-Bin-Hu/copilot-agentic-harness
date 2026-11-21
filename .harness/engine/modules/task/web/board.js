@@ -584,6 +584,7 @@
   const modeButtons = {};
   // The super agent view (1.8.1, super.js): a served board only. It is one more way to look at the board, picked in the bar; the pick is not kept.
   const superView = typeof SUPER !== "undefined" && DATA.serve ? SUPER.create({rows: () => rows}) : null;
+  const workbench = superView && typeof WORKBENCH !== "undefined" ? WORKBENCH.create({superView, rows: () => rows, back: () => setMode("lobby")}) : null;  // the full-screen layer that holds the super agent view
   const badge = h("span", {class: "sa-badge", hidden: ""});
   const modeNames = superView ? ["lobby", "list", "super"] : ["lobby", "list"];
   const seg = h("div", {class: "lb-seg", role: "group"}, modeNames.map((name) => {
@@ -599,6 +600,7 @@
     badge.hidden = !count;
     badge.textContent = count;
     badge.title = t("board.mode.super.badge", {n: count});
+    if (workbench) workbench.update();
   }
   function drawMode() {
     for (const name of Object.keys(modeButtons)) modeButtons[name].classList.toggle("on", name === mode);
@@ -607,7 +609,7 @@
     more.hidden = !asList || !hidden;
     lobby.node.hidden = mode !== "lobby";
     if (mode !== "lobby") lobby.hide();
-    if (superView) { if (mode === "super") superView.show(); else superView.hide(); }
+    if (superView) { const view = workbench || superView; if (mode === "super") view.show(); else view.hide(); }
   }
 
   app.replaceChildren(

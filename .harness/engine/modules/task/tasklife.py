@@ -729,7 +729,7 @@ def offwork(root: Path, interactive: Optional[bool] = None, waiting: Optional[An
     """The person leaves for the day (1.8.24): every open task that is not paused and not under autorun, and that waits for the person, is put aside at once, so the night is not counted as waiting.
     Whether the agent is in the middle of a turn does not matter for a task that waits (a chat that asks "Allow this command?", a plan to approve): only a task that is really working, and one under autorun, are left and named.
     A pause changes the board only: no hook refuses a call of a paused task, `harness wait` goes on, an Allow in the chat lets the agent go on; a prompt or a pick-up of the session ends the pause.
-    `waiting`: names or folders of tasks the caller knows wait for the person (the served board knows what the chat in VS Code asks; a file does not). `working`: tasks the caller knows are at work (the board's word, from the chat, wins over the hook log): they are left, unless they wait."""
+    `waiting`: names or folders of tasks the caller knows wait for the person (the served board knows what the chat in VS Code asks; a file does not). `working`: tasks the caller knows are at work (the board's word, from the chat, wins over the hook log): they are left, whatever the files say."""
     task_ops.person("task offwork", interactive, typed=False)
     known = {str(item) for item in (waiting or ())}
     busy_now = {str(item) for item in (working or ())}
@@ -743,7 +743,7 @@ def offwork(root: Path, interactive: Optional[bool] = None, waiting: Optional[An
             if (data.get("autorun") or {}).get("state") == "on":
                 auto.append(name)
                 continue
-            if (at_work(root, data) or task in busy_now or name in busy_now) and task not in known and name not in known and not waits_for_person(WAITING_WHY(root, task, data)["why"]):
+            if task not in known and name not in known and (task in busy_now or name in busy_now or (at_work(root, data) and not waits_for_person(WAITING_WHY(root, task, data)["why"]))):
                 at_it.append(name)
                 continue
             data["paused"] = {"since": utc_now(), "by": OFFWORK}

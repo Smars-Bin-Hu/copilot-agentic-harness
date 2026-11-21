@@ -445,27 +445,32 @@
     pick.replaceChildren(h("span", {class: "sub"}, t("board.select.count", {count: selected.size}) + (frees ? " \u00b7 " + t("board.select.frees", {size: fileSize(frees)}) : "") + " "), go, none);
   }
 
-  // Off work and back to work (M38-2): every open task that is not at work is paused at once, and later only those are taken back.
-  // Served, the buttons act (no pairing, as for pause); a page on disk copies the command instead.
+  // Off work and back to work (M38-2, 1.8.24: one small pill, the words in the hover): every open task that waits for the person, or is not at work, is paused at once, and later only those are taken back.
+  // A task under autorun, and one really at work (the board shows it as working and it waits for nothing), is left. Served, the buttons act (no pairing, as for pause); a page on disk copies the command instead.
   const shift = h("div", {class: "shift"});
   const said = h("div", {class: "sub shift-said"});
   const canShift = typeof SERVE !== "undefined" && SERVE.runs("pause");
+  const realWait = (row) => !!row.waiting_why && !String(row.waiting_why).startsWith("go-") && !(row.starting && !row.starting.late);  // the rule of Python's `tasklife.waits_for_person`
   function drawShift() {
-    const off = rows.filter((row) => row.status === "open" && !row.paused_since && !row.autorun && stateOf(row, live) !== "working").length;
+    const off = rows.filter((row) => row.status === "open" && !row.paused_since && !row.autorun && (stateOf(row, live) !== "working" || realWait(row))).length;
     const on = rows.filter((row) => row.status === "open" && row.paused_by === "offwork").length;
-    const button = (action, count, label, hint) => {
-      const node = h("button", {type: "button", class: "act" + (count ? "" : " locked"), title: t(hint), "data-label": t(label, {count})}, t(label, {count}));
+    const button = (action, count, icon, label, hint) => {
+      const words = t(label, {count});
+      const node = h("button", {type: "button", class: "shift-btn" + (count ? "" : " zero"), title: words + "\n" + t(hint), "aria-label": words, "data-label": icon + " " + count}, h("span", {class: "ic", "aria-hidden": "true"}, icon), String(count));
       if (!count) node.disabled = true;
       node.addEventListener("click", () => {
         if (!canShift) { copyCommand(node, cli + " task " + action); return; }
         node.disabled = true;
-        SERVE.post("/api/act", {action, task: "", step: "act"}).then((data) => { said.textContent = data.result.next || ""; return refresh(); },
-          (error) => { said.textContent = error.message || String(error); node.disabled = false; });
+        SERVE.post("/api/act", {action, task: "", step: "act"}).then((data) => {
+          const board = data.result.board || {};
+          said.textContent = board.text || data.result.next || ""; said.title = board.tip || "";
+          return refresh();
+        }, (error) => { said.textContent = error.message || String(error); said.title = ""; node.disabled = false; });
       });
       return node;
     };
     // replaceChildren writes a null as the word "null": on a page on disk, with no server, "New task" and the VS Code pill are not there (N4, 1.6.11).
-    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint")]);
+    shift.replaceChildren(...[button("offwork", off, "\u263e", "board.offwork", "board.offwork.hint"), button("onwork", on, "\u2600", "board.onwork", "board.onwork.hint")]);
     newSlot.replaceChildren(...[rows.length ? newTask() : null].filter(Boolean));
     paintFound(DATA.serve && DATA.serve.kb_found);
     paintSpace(DATA.serve && DATA.serve.space);

@@ -530,6 +530,18 @@ class Board:
         return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": making, "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
 
+    def waiting_names(self) -> List[str]:
+        """The tasks the board shows as not at work or as waiting for the person, as the page counts them for Off work (1.8.24): after the link to VS Code, so a chat that asks "Allow this command?" is in. A
+        task that waits for a plan or an answer while the agent is mid-turn is in too, whatever the hook log says."""
+        found = []
+        for row in self.rows()["rows"]:
+            if row.get("status") != "open" or row.get("paused_since"):
+                continue
+            why = str(row.get("waiting_why") or "")
+            if row.get("state") != "working" or (tasklife.waits_for_person(why) and not starting_now(row)):  # a task the board just told to go on is at work
+                found.append(str(row.get("task") or ""))
+        return found
+
     def apply_checks(self, row: Dict[str, Any]) -> None:
         """Set the checks a reopened task was waiting for (`taskreview.apply_pending`, the code path of `review set`), then show them on the row. Never raises: a look at the board must not fail over it."""
         try:
@@ -873,10 +885,13 @@ class Board:
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
                 raise CommandError(say("serve.action.off", action=action))
-            result = (tasklife.offwork if action == "offwork" else tasklife.onwork)(self.root, interactive=True)
+            if action == "offwork":
+                result = tasklife.offwork(self.root, interactive=True, waiting=self.waiting_names())
+            else:
+                result = tasklife.onwork(self.root, interactive=True)
             for name in result.get("paused") or result.get("resumed") or []:
                 noted(self.root, name, action)
-            return result
+            return dict(result, board=tasklife.board_said(action, result))  # 1.8.24: the board's answer has no command in it
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = False if action in SETTINGS else self.idle(action, task)

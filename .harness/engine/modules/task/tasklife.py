@@ -717,24 +717,66 @@ def resume(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -
 OFFWORK = "offwork"  # `paused.by` of the tasks the person put aside all at once; `task onwork` takes back only those
 
 
-def offwork(root: Path, interactive: Optional[bool] = None) -> Dict[str, Any]:
-    """The person leaves for the day: every open task that is not paused, not at work and not under autorun is put aside at once,
-    so the night is not counted as waiting. A task the agent is working on is left and named; so is one under autorun."""
+def waits_for_person(why: str) -> bool:
+    """Is this waiting reason (`waiting()["why"]`) a real wait for the person? Empty is no wait; a `go-` mark (an approval was given, the agent is not told yet) is the person's own answer, no wait."""
+    return bool(why) and not str(why).startswith("go-")
+
+
+WAITING_WHY = waiting  # `offwork` has a parameter of the same name
+
+
+def offwork(root: Path, interactive: Optional[bool] = None, waiting: Optional[Any] = None) -> Dict[str, Any]:
+    """The person leaves for the day (1.8.24): every open task that is not paused and not under autorun, and that waits for the person, is put aside at once, so the night is not counted as waiting.
+    Whether the agent is in the middle of a turn does not matter for a task that waits (a chat that asks "Allow this command?", a plan to approve): only a task that is really working, and one under autorun, are left and named.
+    A pause changes the board only: no hook refuses a call of a paused task, `harness wait` goes on, an Allow in the chat lets the agent go on; a prompt or a pick-up of the session ends the pause.
+    `waiting`: names or folders of tasks the caller knows wait for the person (the served board knows what the chat in VS Code asks; a file does not)."""
     task_ops.person("task offwork", interactive, typed=False)
-    paused, busy = [], []
+    known = {str(item) for item in (waiting or ())}
+    paused, at_it, auto = [], [], []
     for item in task_ops.open_tasks(root):
         task = item["task"]
+        name = task_ops.name_of(task)
         with task_ops.locked(root, task) as data:
             if data.get("status") != "open" or paused_since(data):
                 continue
-            if at_work(root, data) or (data.get("autorun") or {}).get("state") == "on":
-                busy.append(task_ops.name_of(task))
+            if (data.get("autorun") or {}).get("state") == "on":
+                auto.append(name)
+                continue
+            if at_work(root, data) and task not in known and name not in known and not waits_for_person(WAITING_WHY(root, task, data)["why"]):
+                at_it.append(name)
                 continue
             data["paused"] = {"since": utc_now(), "by": OFFWORK}
             task_ops.note(data, "pause", OFFWORK)
-            paused.append(task_ops.name_of(task))
-    return {"paused": paused, "left": busy, "next": messages.text("task.offwork.next", count=len(paused), command=cli_command())
+            paused.append(name)
+    busy = at_it + auto
+    return {"paused": paused, "left": busy, "left_work": at_it, "left_autorun": auto, "next": messages.text("task.offwork.next", count=len(paused), command=cli_command())
             + (" " + messages.text("task.offwork.left", names=", ".join(busy)) if busy else "")}
+
+
+NAMES_SHOWN = 4  # names in the board's answer; the rest is "+N more" and the full list is in the hover
+
+
+def names_line(names: List[str]) -> str:
+    """The names for a sentence: the first few, then how many more."""
+    names = [str(name) for name in names]
+    shown = ", ".join(names[:NAMES_SHOWN])
+    return shown + (" " + messages.text("board.offwork.more", count=len(names) - NAMES_SHOWN) if len(names) > NAMES_SHOWN else "")
+
+
+def board_said(action: str, result: Dict[str, Any]) -> Dict[str, str]:
+    """What the board says after Off work or Back to work, with no command in it (the board has a button): `text`, and `tip` with the full lists of names."""
+    if action == "offwork":
+        parts = [("board.offwork.done", {"count": len(result.get("paused") or [])}, None), ("board.offwork.left.work", {}, result.get("left_work") or []), ("board.offwork.left.autorun", {}, result.get("left_autorun") or [])]
+    else:
+        parts = [("board.onwork.done", {"count": len(result.get("resumed") or [])}, None), ("board.onwork.kept", {}, result.get("still_paused") or [])]
+    text, tip = [], []
+    for key, args, names in parts:
+        if names is None:
+            text.append(messages.text(key, **args))
+        elif names:
+            text.append(messages.text(key, names=names_line(names)))
+            tip.append(messages.text(key, names=", ".join(names)))
+    return {"text": " ".join(text), "tip": "\n".join(tip) if len(tip) and any(len(r) > NAMES_SHOWN for r in [result.get(k) or [] for k in ("left_work", "left_autorun", "still_paused")]) else ""}
 
 
 def onwork(root: Path, interactive: Optional[bool] = None) -> Dict[str, Any]:

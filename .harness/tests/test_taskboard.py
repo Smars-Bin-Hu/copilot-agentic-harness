@@ -485,6 +485,58 @@ class PauseTests(BoardCase):
         self.assertEqual((found["paused"], found["left"]), ([], ["job"]))
         self.assertFalse(self.data().get("paused"))
 
+    def write_task(self, name: str, **fields: Any) -> None:
+        path = self.root / BASE / name / ".task" / "task.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.update(fields)
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    def test_offwork_pauses_what_waits_for_the_person_whatever_the_turn_state(self) -> None:
+        """1.8.24: a plan that waits while the session made a hook call lately is a wait; only a task really working, and one under autorun, are left and named by reason."""
+        self.new("plan", "dev")
+        (self.root / BASE / "plan" / "PLAN.md").write_text("# plan\n", encoding="utf-8")
+        self.new("busy", session=S2)  # waits for nothing: the agent is in the middle of a turn
+        self.prompt("s3")
+        self.new("auto", session="s3")
+        self.write_task("auto", autorun={"state": "on"})
+        for name in ("plan", "busy"):
+            self.assertTrue(tasklife.at_work(self.root, self.data(name)), name)
+        found = tasklife.offwork(self.root, interactive=True)
+        self.assertEqual(found["paused"], ["plan"])
+        self.assertEqual((found["left_work"], found["left_autorun"]), (["busy"], ["auto"]))
+        self.assertEqual(self.data("plan")["paused"]["by"], tasklife.OFFWORK)
+        self.assertFalse(self.data("busy").get("paused"))
+        self.assertFalse(self.data("auto").get("paused"))
+        back = tasklife.onwork(self.root, interactive=True)  # as it was: the plan goes on waiting, the night is not counted
+        self.assertEqual(back["resumed"], ["plan"])
+        self.assertFalse(self.data("plan").get("paused"))
+        self.assertEqual(self.listed()["tasks"][0]["waiting_why"], "plan")
+
+    def test_offwork_pauses_a_task_the_caller_knows_waits_though_the_agent_is_at_work(self) -> None:
+        """The chat asks "Allow this command?": only the served board knows (the link to VS Code); it passes the names."""
+        self.new("ask")
+        self.assertTrue(tasklife.at_work(self.root, self.data("ask")))
+        self.assertEqual(tasklife.offwork(self.root, interactive=True)["left_work"], ["ask"])
+        found = tasklife.offwork(self.root, interactive=True, waiting={"ask"})
+        self.assertEqual((found["paused"], found["left"]), (["ask"], []))
+        self.assertTrue(tasklife.waits_for_person("stopped"))
+        self.assertFalse(tasklife.waits_for_person("go-plan") or tasklife.waits_for_person(""))
+
+    def test_the_board_answer_has_no_command_and_cuts_long_lists(self) -> None:
+        names = [f"task-number-{n}" for n in range(30)]
+        result = {"paused": names[:7], "left_work": names, "left_autorun": ["x"], "resumed": names[:3], "still_paused": names}
+        for language in ("en", "zh"):
+            with mock.patch.dict(os.environ, {messages.ENVIRONMENT: language}):
+                messages.reset()
+                self.addCleanup(messages.reset)
+                for action in ("offwork", "onwork"):
+                    said = tasklife.board_said(action, result)
+                    self.assertNotIn("harness ", said["text"] + said["tip"])
+                    self.assertNotIn("task onwork", said["text"] + said["tip"])
+                    self.assertNotIn("task-number-10", said["text"])
+                    self.assertIn("task-number-29", said["tip"])
+                    self.assertLess(len(said["text"]), 400)
+
     def test_offwork_and_onwork_are_the_persons(self) -> None:
         self.new()
         self.stop()

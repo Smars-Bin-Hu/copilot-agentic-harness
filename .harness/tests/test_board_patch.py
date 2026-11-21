@@ -128,6 +128,22 @@ assert.strictEqual(bar.on, false, "scrolled free: the bar is back");
 
 
 @unittest.skipUnless(NODE, "node is not installed")
+class OffWorkPillTests(unittest.TestCase):
+    """1.8.24: Off work and Back to work are one small pill of two icon buttons; the words are in the hover and the aria label; a count of 0 is off; the count is the rule of the server."""
+
+    def test_the_header_has_the_pill_with_the_words_in_the_hover(self) -> None:
+        source = between((WEB / "board.js").read_text(encoding="utf-8"), "const realWait = ", "newSlot.replaceChildren")
+        self.assertIn('"\\u263e"', source)
+        self.assertIn('"\\u2600"', source)
+        self.assertIn('"aria-label": words', source)
+        self.assertIn('title: words + "\\n" + t(hint)', source)
+        self.assertIn("node.disabled = true", source)
+        self.assertIn("board.offwork.done", (ENGINE / "modules" / "task" / "tasklife.py").read_text(encoding="utf-8"))
+        self.assertIn("go-", source)  # the rule of `tasklife.waits_for_person`
+        css = (WEB / "ui.css").read_text(encoding="utf-8")
+        self.assertIn(".shift-btn.zero", css)
+
+
 class PairingLinkTests(unittest.TestCase):
     def test_a_link_pasted_into_a_tab_that_shows_the_board_is_read(self) -> None:
         """Only what follows the # changes then, so the page does not load again; the code stayed in the address bar and the page said "not paired"."""

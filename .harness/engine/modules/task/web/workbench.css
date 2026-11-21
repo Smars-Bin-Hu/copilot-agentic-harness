@@ -129,6 +129,7 @@ html.lite .wb-in{animation:none}
 .wb-tall .wb-top .wb-pt{display:none}
 .wb-tall .wb-top{gap:8px;padding-left:8px}
 @media (max-width:1300px){.wb-lbl{display:none}}
+.wb-m-focus .wb-pt{display:none}
 .wb-tall.wb-m-wb .wb-main{grid-template-rows:minmax(0,1fr) auto auto auto}
 .wb-tall.wb-m-wb .wb-pn-q,.wb-tall.wb-m-wb .wb-pn-t,.wb-tall.wb-m-wb .wb-pn-d{grid-row:2;height:30vh}
 .wb-tall.wb-m-wb.wb-task-on .wb-pn-q,.wb-tall.wb-m-wb.wb-task-on .wb-pn-t,.wb-tall.wb-m-wb.wb-task-on .wb-pn-d{height:24vh}

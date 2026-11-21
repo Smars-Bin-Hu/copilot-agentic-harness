@@ -10,6 +10,8 @@
 .cmd-sep{margin:6px 0;border-top:1px dashed var(--line);color:var(--soft);font-size:11px;line-height:1.2}.cmd-sep span{background:var(--card);padding:0 6px;position:relative;top:-6px;margin-left:1em}  /* the next command of a line (1.7.38) */
 .tk-parts{margin:2px 0 8px}.tk-parts .tk-writes{display:block;margin-left:0}.tk-parts ol{margin:2px 0 0;padding-left:22px}.tk-parts li{margin:0 0 8px}.tk-parts li .tk-call-say{margin:0}.tk-parts li .tk-call-facts{margin:2px 0 4px}
 .cmd-line.in{padding-left:2em}.cmd-prog{font-weight:700}.cmd-opt{color:var(--soft)}.cmd-val{color:var(--ink)}.cmd-block{padding:4px 0 4px 4em;white-space:pre-wrap;color:var(--good)}.cmd-fmt .kw,.cmd-script .kw{font-weight:650}
+.ev{display:inline-flex;align-items:center;gap:4px;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:0 7px;height:20px;border-radius:6px;border:1px solid var(--line2);background:var(--track);color:var(--ink);cursor:pointer;vertical-align:1px}
+.ev.agent{border-color:var(--good-line)}.ev.missing{border-color:var(--bad);color:var(--bad);text-decoration:line-through;cursor:default}
 .code-chip{font-size:13px;height:24px;padding:0 10px;letter-spacing:1px;border-color:var(--hot-dot);background:var(--hot-bg)}.code-chip:hover{background:var(--hot-dot);color:#fff}
 /* a wide window: the head and the buttons stay, one body scrolls both ways; a block inside it scrolls sideways only (flat) */
 .dialog.wide{overflow:hidden}.dialog.wide .win-body{flex:0 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;margin:0 -4px;padding:0 4px}

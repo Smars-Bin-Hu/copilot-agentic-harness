@@ -190,8 +190,6 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .tk-call .bad{color:var(--bad);font-size:12.5px;flex:1 1 100%}
 .act.big{font-size:13px;padding:5px 14px}
 /* an evidence citation (1.7.8): a chip in the text, the window on a click; the table's row tools */
-.ev{display:inline-flex;align-items:center;gap:4px;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:0 7px;height:20px;border-radius:6px;border:1px solid var(--line2);background:var(--track);color:var(--ink);cursor:pointer;vertical-align:1px}
-.ev.agent{border-color:var(--good-line)}.ev.missing{border-color:var(--bad);color:var(--bad);text-decoration:line-through;cursor:default}
 .ico{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--soft);font:inherit;font-size:12px;cursor:pointer;vertical-align:middle}.ico:hover{color:var(--ink);border-color:var(--line2)}
 .evidence tr.uncited td{color:var(--soft)}.evidence .ev-tools{white-space:nowrap}.evidence .chip{height:22px;font-size:12px;padding:0 8px}
 /* the output of a run in the window (1.7.9): a table per result set with a sticky head, numbers right, NULL dim; the notes; Table / Text */

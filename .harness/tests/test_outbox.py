@@ -395,7 +395,7 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertIn('SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code, reason, note: note || ""})', desk)  # 1.7.38: with the reason the person chose
         self.assertIn("shade.addEventListener(\"click\"", (taskhtml.WEB / "serve.js").read_text(encoding="utf-8"))  # a click beside the window closes it
         self.assertIn('view.box.classList.add("wide")', desk)
-        self.assertIn(".cmd-scroll{max-height:min(50vh,520px);overflow:auto", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))  # the window scrolls both ways
+        self.assertIn(".cmd-scroll{max-height:min(50vh,520px);overflow:auto", (taskhtml.WEB / "callview.css").read_text(encoding="utf-8"))  # the window scrolls both ways
         self.assertIn('"outbox", "asking", "accept"]', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
         en, zh = messages.table("en"), messages.table("zh")
         for key in ("task.waiting.outbox", "outbox.state.dismissed", "gate.action.dismissed", "desk.outbox.view", "desk.outbox.approve", "desk.outbox.dismiss", "desk.outbox.window", "desk.outbox.view_first"):

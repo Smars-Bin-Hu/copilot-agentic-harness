@@ -207,11 +207,15 @@ const WORKBENCH = (function () {
       if (one) out.href = taskUrl(one.name);
       for (const tab of tabs) {
         const on = tab === one;
+        const was = tab.frame.hidden;
         tab.frame.hidden = !on;
+        if (on && was) wake(tab.frame);
         tab.tab.classList.toggle("on", on);
         tab.tab.firstChild.setAttribute("aria-selected", on ? "true" : "false");
       }
     }
+    // A frame that was not shown asked nothing (common.js pollEvery): it looks again at once when it shows (1.8.22).
+    function wake(frame) { setTimeout(() => { try { frame.contentWindow.dispatchEvent(new Event("visibilitychange")); } catch (error) { /* not loaded yet: it asks on its next round */ } }, 0); }
     function select(name) { active = name; syncTask(); }
     function dropTab(tab) {
       tab.frame.remove();
@@ -276,6 +280,7 @@ const WORKBENCH = (function () {
       if (!root.parentNode) { document.body.append(root); panels2.bind(root); }
       center.append(sv);
       root.hidden = false;
+      for (const tab of tabs) if (!tab.frame.hidden) wake(tab.frame);
       document.documentElement.classList.add("wb-lock");
       cardSig = "";
       layout();  // the columns first: the pet of super.js stands in the corner of the place it has

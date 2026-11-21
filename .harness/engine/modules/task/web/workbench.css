@@ -11,12 +11,13 @@ html.wb-lock{overflow:hidden}
 
 /* the top bar. The layer is under the fixed controls of the board (search and account at the top right, the round buttons at the bottom right: z-index 160 and 1200) and under the dialogs (165): the bar leaves their corner free */
 .wb-top{display:flex;align-items:center;gap:12px;padding:7px 12px;padding-right:var(--wb-corner,350px);border-bottom:1px solid var(--line);background:var(--card);min-width:0;min-height:48px}
+.wb-id{display:flex;align-items:center;gap:12px;min-width:0;flex:none}
 .wb-back{border:0;background:none;color:var(--soft);padding:4px 8px;font-size:17px;cursor:pointer;border-radius:8px;flex:none}
 .wb-back:hover{color:var(--ink);background:var(--hover)}
 .wb-bot{width:26px;height:26px;border-radius:9px;background:var(--robot-head);border:1px solid var(--robot-line);position:relative;flex:none}
 .wb-bot::before,.wb-bot::after{content:"";position:absolute;top:10px;width:5px;height:5px;border-radius:50%;background:var(--good-dot)}
 .wb-bot::before{left:6px}.wb-bot::after{right:6px}
-.wb-name{font-size:14px;white-space:nowrap}
+.wb-name{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wb-w{color:var(--hot);font-size:12.5px;white-space:nowrap}
 .wb-lbl{color:var(--soft);font-size:11.5px;white-space:nowrap}
 .wb-seg{display:flex;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:2px;flex:none}
@@ -127,7 +128,8 @@ html.lite .wb-in{animation:none}
 .wb-tall .wb-pn{grid-column:1;flex:none;background:var(--card);border-top:1px solid var(--line2)}
 .wb-tall .wb-center{grid-column:1;grid-row:1}
 .wb-tall .wb-top .wb-pt{display:none}
-.wb-tall .wb-top{gap:8px;padding-left:8px}
+.wb-tall .wb-top{gap:6px 10px;padding:6px 12px;flex-wrap:wrap}
+.wb-tall .wb-id{flex:1 1 100%;padding-right:var(--wb-corner,350px)}
 @media (max-width:1300px){.wb-lbl{display:none}}
 .wb-m-focus .wb-pt{display:none}
 .wb-tall.wb-m-wb .wb-main{grid-template-rows:minmax(0,1fr) auto auto auto}

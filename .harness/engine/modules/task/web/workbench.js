@@ -60,7 +60,7 @@ const WORKBENCH = (function () {
       toggles[key] = h("button", {type: "button", class: "wb-tg", title: t(LABEL[key]), "aria-pressed": "false"}, h("span", {class: "wb-ic", "aria-hidden": "true"}, ICON[key]), " ", t(LABEL[key]), key === "q" ? queueCount : null);
       docks[key] = h("button", {type: "button", class: "wb-dk", "aria-pressed": "false"}, h("span", {class: "wb-ic", "aria-hidden": "true"}, ICON[key]), t(LABEL[key]), key === "q" ? dockCount : null);
     }
-    const top = h("header", {class: "wb-top"}, back, h("span", {class: "wb-bot", "aria-hidden": "true"}), h("b", {class: "wb-name"}, t("super.name")), waitEl,
+    const top = h("header", {class: "wb-top"}, h("div", {class: "wb-id"}, back, h("span", {class: "wb-bot", "aria-hidden": "true"}), h("b", {class: "wb-name"}, t("super.name"))), waitEl,
       h("div", {class: "wb-seg", role: "group", "aria-label": t("super.wb.mode")}, modeBtns.focus, modeBtns.wb), h("span", {class: "wb-sp"}),
       h("span", {class: "wb-lbl wb-pt"}, t("super.wb.side.left")), h("div", {class: "wb-seg wb-pt", role: "group"}, toggles.q, toggles.t),
       h("span", {class: "wb-lbl wb-pt"}, t("super.wb.side.right")), h("div", {class: "wb-seg wb-pt", role: "group"}, toggles.d, toggles.p));

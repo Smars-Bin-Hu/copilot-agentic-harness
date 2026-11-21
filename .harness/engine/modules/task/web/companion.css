@@ -1,139 +1,78 @@
-/* The pop-out of the super agent view (1.8.1): the button in the view, and the small always-on-top window (companion.js). The window's document gets a copy of every style of the page,
-   so these rules run there too. Colours come from tokens.css only. */
+/* The pop-out of the super agent view (1.8.1; 1.8.24: a plain chat window): the button in the view, and the small always-on-top window (companion.js). The window's document gets a copy of every style of the page,
+   so these rules run there too. Colours come from tokens.css only. The window never sets its size: the layout follows whatever size it is dragged to (from 250 x 300 up). */
 .sa-pop{margin:8px 0 0;border:1px solid var(--line2);background:transparent;color:var(--soft);border-radius:8px;width:30px;height:26px;font:inherit;font-size:15px;line-height:1;cursor:pointer;flex:none}
 .sa-pop:hover:not(:disabled){color:var(--ink);background:var(--hover)}
 .sa-pop:disabled{opacity:.45;cursor:help}
-html body.cp-doc{margin:0;padding:0;min-height:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);--lb-work:var(--good-dot);--lb-you:var(--hot-dot);--lb-rest:var(--soft);--lb-left:var(--hot-dot)}
-.cp{position:relative;height:100vh;box-sizing:border-box;padding-top:46px;display:flex;flex-direction:column;font-size:13px}
-.cp.shake .cp-win{animation:cpshake .45s 2}
-.cp-win{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--glass);border-top:1px solid var(--glass-line)}
-.cp-chrome{display:flex;align-items:center;gap:6px;padding:5px 8px 5px 10px;border-bottom:1px solid var(--line);font-size:12px;user-select:none;flex:none}
-.cp-pin{color:var(--soft);cursor:help}
+html body.cp-doc{margin:0;padding:0;min-height:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink)}
+.cp{height:100vh;box-sizing:border-box;display:flex;flex-direction:column;font-size:13px;min-width:0}
+.cp-top{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);flex:none;min-width:0}
+.cp-counts{display:flex;align-items:center;gap:10px;min-width:0;overflow:hidden;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.cp-n{display:inline-flex;align-items:center;gap:4px;cursor:help;white-space:nowrap}
+.cp-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.cp-dot.run{background:var(--good-dot)}.cp-dot.wait{background:var(--hot-dot)}.cp-dot.err{background:var(--bad)}.cp-dot.quiet{background:var(--soft)}
 .cp-sp{flex:1}
-.cp-cb{border:0;background:transparent;color:var(--soft);border-radius:6px;padding:0 6px;font:inherit;font-size:13px;line-height:20px;cursor:pointer}
-.cp-cb:hover,.cp-cb.on{background:var(--hover);color:var(--ink)}
-.cp-dialog{display:flex;gap:8px;align-items:center;margin:8px 12px 0;padding:6px 10px;border:1px solid var(--hot-line);border-radius:10px;background:var(--hot-bg);font-size:12px;flex:none}
+.cp-cb{position:relative;border:1px solid var(--line2);background:transparent;color:var(--soft);border-radius:8px;min-width:28px;height:28px;padding:0 6px;font:inherit;font-size:14px;line-height:1;cursor:pointer;flex:none}
+.cp-cb:hover{background:var(--hover);color:var(--ink)}
+.cp-cb.on{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.cp-badge{position:absolute;right:-7px;top:-8px;min-width:16px;height:16px;box-sizing:border-box;padding:0 4px;border-radius:8px;background:var(--hot-dot);color:var(--bg);font-size:10.5px;font-weight:700;line-height:16px;text-align:center}
+.cp-badge[hidden]{display:none}
+.cp-dialog{display:flex;gap:8px;align-items:center;margin:8px 10px 0;padding:6px 10px;border:1px solid var(--hot-line);border-radius:10px;background:var(--hot-bg);font-size:12px;flex:none}
 .cp-dialog[hidden]{display:none}
 .cp-dialog span{flex:1;min-width:0}
-.cp-main{flex:1;min-height:0;overflow:auto;padding:8px 12px 4px}
-.cp-stat{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--soft);margin-bottom:7px;flex-wrap:wrap}
-.cp-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
-.cp-dot.run{background:var(--good-dot)}.cp-dot.wait{background:var(--hot-dot)}
-.cp-cost{margin-left:auto;display:inline-flex}
-.cp-meta{color:var(--soft);font-size:12px}
-.cp-pill{width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:6px 2px;font:inherit;font-size:13px;display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer}
-.cp-pill b{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:10px;background:var(--hot-dot);color:var(--bg);font-size:12px;padding:0 5px;box-sizing:border-box}
-.cp-pill .cp-meta{overflow:hidden;text-overflow:ellipsis}
-.cp-card{border:1px solid var(--hot-line);border-radius:12px;padding:9px 11px;background:var(--card)}
-.cp-card.fresh{animation:cpnew .45s cubic-bezier(.2,.9,.3,1.2)}
+.cp-b{border:1px solid var(--line2);background:transparent;color:var(--ink);border-radius:8px;padding:3px 9px;font:inherit;font-size:12.5px;white-space:nowrap;cursor:pointer;text-decoration:none}
+.cp-b:hover{background:var(--hover)}
+.cp-b.main{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+/* the card: one item that waits; it scrolls inside when the window is short, the chat keeps the rest */
+.cp-cardbox{flex:none;max-height:55%;overflow:auto;padding:8px 10px 0;min-width:0}
+.cp-cardbox[hidden]{display:none}
+.cp-card{border:1px solid var(--hot-line);border-left:3px solid var(--hot-dot);border-radius:10px;padding:8px 10px;background:var(--card);min-width:0;overflow:hidden}
 .cp-head{display:flex;align-items:center;gap:6px;font-size:12px;min-width:0}
-.cp-head .cp-why{color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.cp-nav{margin-left:auto;display:flex;align-items:center;gap:2px;color:var(--soft);font-size:11.5px;white-space:nowrap}
-.cp-task{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--kbd);border-radius:5px;padding:0 6px;text-decoration:none;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
-a.cp-task:hover{text-decoration:underline}
-.cp-av{width:22px;height:22px;border-radius:50%;background:var(--bg);border:1px solid var(--hot-line);display:grid;place-items:center;overflow:hidden;flex:none}
-.cp-av svg{width:20px;height:20px;overflow:hidden}
-.cp-av .lb-bubble{display:none}
-.cp-av .lb-floaty,.cp-av .lb-eye,.cp-av .lb-arm,.cp-av .lb-bulb{animation:none!important}
-.cp-text{font-size:14px;margin:7px 0 5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.cp-task{font-family:var(--mono);font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}
+.cp-why{color:var(--hot);border:1px solid var(--hot-line);border-radius:999px;padding:0 7px;font-size:11px;white-space:nowrap;flex:none;max-width:45%;overflow:hidden;text-overflow:ellipsis}
+.cp-wait{margin-left:auto;color:var(--soft);white-space:nowrap;flex:none}
+.cp-text{font-size:13.5px;margin:6px 0 6px;white-space:pre-wrap;overflow-wrap:anywhere}
 .cp-text.ask{cursor:pointer;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;line-clamp:5;overflow:hidden;font-family:var(--mono);font-size:12.5px;word-break:break-word}
 .cp-text.ask.open{display:block;max-height:200px;overflow:auto}
-.cp-note{font-size:12px;color:var(--soft);margin:0 0 7px}
-.cp-judg{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:4px;border:1px solid var(--line2);font-size:10px;color:var(--soft);cursor:help}
-.cp-more{margin:0 0 7px}
-.cp-more summary{font-size:12px;color:var(--soft);cursor:pointer;width:max-content}
-.cp-more pre{margin:6px 0 0;padding:6px 9px;background:var(--kbd);border-radius:7px;white-space:pre-wrap;word-break:break-all;font:12px var(--mono);max-height:140px;overflow:auto}
+.cp-text.ask.prose{font-family:inherit;font-size:13.5px;-webkit-line-clamp:4;line-clamp:4}
+.cp-text[hidden]{display:none}
+.cp-joint{font-size:12px;color:var(--soft);margin:0 0 6px}
 .cp-acts{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
 .cp-acts .act{margin:0;text-decoration:none;display:inline-block}
-.cp-keys{font-size:10.5px;color:var(--soft);margin-top:8px;opacity:.85}
-.cp-foot{flex:none;padding:4px 12px 10px}
-.cp-foot[hidden]{display:none}
-.cp-btns{display:flex;align-items:center;gap:2px}
-.cp-b{border:1px solid var(--line2);background:transparent;color:var(--ink);border-radius:8px;padding:3px 9px;font:inherit;font-size:12.5px;white-space:nowrap;cursor:pointer;text-decoration:none}
-.cp-b.ghost{border-color:transparent;color:var(--soft)}
-.cp-b.ghost:hover:not(:disabled){background:var(--hover);color:var(--ink)}
-.cp-b.main{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
-.cp-b:disabled{opacity:.45;cursor:default}
-.cp-askrow{display:flex;gap:6px;margin-top:6px}
-.cp-askrow[hidden]{display:none}
-.cp-askwhy{margin-top:4px;font-size:12px;color:var(--bad,#b42318);line-height:1.35}
-.cp-askwhy[hidden]{display:none}
-.cp-field{flex:1;min-width:0;border:1px solid var(--line2);background:var(--bg);color:var(--ink);border-radius:8px;padding:5px 9px;font:inherit;font-size:13px}
-.cp-list{display:flex;flex-direction:column;gap:6px}
-.cp-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);color:inherit;border-radius:10px;padding:6px 8px;text-align:left;width:100%;font:inherit;cursor:pointer}
-.cp-row:hover{border-color:var(--hot-line)}
-.cp-et{flex:1;min-width:0;display:flex;flex-direction:column}
-.cp-et b{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cp-et span{font-size:11.5px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cp-go{color:var(--soft)}
-.cp-none{padding:8px 2px}
-.cp-today{margin-top:8px;font-size:12px}
-.cp-ok{display:block;margin-top:2px;color:var(--good)}
-.cp-clear{text-align:center;padding:14px 0}
-.cp-toast{position:absolute;left:50%;bottom:54px;transform:translateX(-50%);background:var(--good-bg);color:var(--good);border:1px solid var(--good-line);border-radius:999px;padding:2px 10px;font-size:12px;animation:cptoast 1.4s forwards;white-space:nowrap;max-width:92%;overflow:hidden;text-overflow:ellipsis;z-index:5}
-.cp-bub{position:absolute;left:10px;right:10px;top:52px;background:var(--pop);border:1px solid var(--line2);border-radius:14px;padding:9px 12px;font-size:13px;box-shadow:var(--glass-shadow);opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;pointer-events:none;z-index:11;max-height:55%;overflow:auto}
-.cp-bub.on{opacity:1;transform:none;pointer-events:auto}
-.cp-bub .cp-you{display:block;color:var(--soft);font-size:12px;margin-bottom:3px}
-.cp-bub .cp-ans{white-space:pre-wrap;overflow-wrap:anywhere}
-.cp-bub .cp-judg{margin-left:6px;vertical-align:1px}
-.cp-x{position:absolute;right:6px;top:4px;border:0;background:transparent;color:var(--soft);font:inherit;font-size:15px;cursor:pointer;line-height:1}
-/* the pet: on the top edge, swinging its feet; it waves on a new item, dozes after a quiet minute, rests when the limit is used */
-.cp-perch{position:absolute;right:56px;top:0;width:58px;height:76px;z-index:6;pointer-events:none;--c:var(--good-dot)}
-.cp-perch svg{width:58px;height:75px;overflow:visible}
-.cp-perch .lb-bot{--c:var(--good-dot)}
-.cp-perch.hop svg{animation:cphop .5s cubic-bezier(.3,1.6,.5,1) 1}
-.cp.m-sleep .cp-perch .lb-bot{--c:var(--soft)}
-.cp.m-tired .cp-perch .lb-bot{--c:var(--bad)}
-.cp-perch .lb-pose-sit .lb-floaty,.cp-perch .lb-pose-idle .lb-floaty{animation:none}
-.cp-perch .lb-pose-sit .lb-shadow,.cp-perch .lb-pose-idle .lb-shadow{opacity:0}
-.cp-perch .lb-pose-sit .lb-feet,.cp-perch .lb-pose-idle .lb-feet{transform-box:fill-box;transform-origin:50% 0;animation:cpswing 3.2s ease-in-out infinite}
-.cp-perch .lb-pose-sit .lb-feet+.lb-feet,.cp-perch .lb-pose-idle .lb-feet+.lb-feet{animation-delay:1.6s}
-.cp.m-tired .cp-perch .lb-eye{animation:none!important;opacity:.45}
-.cp-think{position:absolute;right:20px;top:2px;z-index:7;display:none;background:var(--pop);border:1px solid var(--line2);border-radius:10px;padding:2px 7px}
-.cp.thinking .cp-think{display:block}
-.cp-dots i{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--soft);margin:0 1px;animation:cpdot 1s infinite;vertical-align:middle}
-.cp-dots i:nth-child(2){animation-delay:.15s}.cp-dots i:nth-child(3){animation-delay:.3s}
-.cp-bat{position:absolute;right:50px;top:4px;z-index:7;display:none;color:var(--bad);font-size:14px}
-.cp.m-tired .cp-bat{display:block}
-@keyframes cpswing{0%,100%{transform:rotate(7deg)}50%{transform:rotate(-7deg)}}
-@keyframes cphop{0%,100%{transform:translateY(0)}40%{transform:translateY(-14px)}}
-@keyframes cpshake{20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
-@keyframes cpnew{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@keyframes cptoast{0%{opacity:0;transform:translate(-50%,6px)}20%{opacity:1;transform:translate(-50%,0)}80%{opacity:1}100%{opacity:0}}
-@keyframes cpdot{50%{transform:translateY(-3px);opacity:.4}}
-@media (prefers-reduced-motion:reduce){.cp *,.cp-card{animation:none!important;transition:none!important}}
-/* 1.8.3: the reply box and the folded preview of the super view inside the card, the last ask of a task, and the Steer / Stop menu of a list row. Nothing may pass the window's width. */
-.cp-card{min-width:0;overflow:hidden}
+.cp-acts .sa-call{flex:1 1 100%}
+.cp-acts .sa-code{flex:1 1 7em}
+.cp-nav{margin-left:auto;display:flex;align-items:center;gap:2px;color:var(--soft);font-size:11.5px;white-space:nowrap}
+.cp-nav .cp-cb{border:0;min-width:0;height:22px;padding:0 5px;font-size:13px}
+.cp-card .sa-xtra{margin:0 0 6px}
 .cp-card .sa-reply{margin-top:6px}
 .cp-card .sa-reply-box{flex:1 1 100%;max-height:120px}
 .cp-card .sa-reply.sent{display:none}
 .cp-card .sa-pv{margin:6px 0;max-height:150px;overflow:auto}
 .cp-card .sa-pvlist{padding-left:16px}
 .cp-card .sa-pvpath{overflow-wrap:anywhere}
-.cp-qa{margin:6px 0;padding:5px 8px;border-radius:8px;background:var(--kbd);font-size:12px;min-width:0}
-.cp-qq{color:var(--soft);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
-.cp-qline{margin-top:3px;overflow-wrap:anywhere}
-.cp-qans{margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere;cursor:pointer;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:8;line-clamp:8;overflow:hidden}
-.cp-qans.open{display:block;max-height:220px;overflow:auto}
-.cp-menu{position:absolute;z-index:12;width:min(250px,calc(100% - 12px));box-sizing:border-box;background:var(--pop);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--glass-shadow);padding:4px;display:flex;flex-direction:column;gap:2px}
-.cp-menuhead{padding:3px 8px;font:12px var(--mono);color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cp-menuitem{border:0;background:none;color:var(--ink);font:inherit;font-size:13px;text-align:left;padding:5px 8px;border-radius:7px;cursor:pointer}
-.cp-menuitem:hover:not(:disabled),.cp-menuitem:focus-visible{background:var(--hover);outline:none}
-.cp-menuitem:disabled{opacity:.5;cursor:default}
-.cp-menurow[hidden]{display:none}
-.cp-menuline{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--line2);background:var(--bg);color:var(--ink);border-radius:7px}
-.cp-menubad{font-size:12px;padding:0 8px;overflow-wrap:anywhere}
-.cp-menubad:empty{display:none}
-/* 1.8.4: a question or a delivery is words, not a command; the held call fits the narrow card */
-.cp-text.ask.prose{font-family:inherit;font-size:14px;-webkit-line-clamp:4;line-clamp:4}
-.cp-text[hidden]{display:none}
-.cp-card .sa-xtra{margin:0 0 6px}
-.cp-acts .sa-call{flex:1 1 100%}
-.cp-acts .sa-code{flex:1 1 7em}
-/* 1.8.5: starting, not seen to start, being made: one short line of marks under the counts */
-.cp-waits{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:12px;color:var(--soft);margin:-2px 0 7px;min-width:0}
-.cp-wt{display:inline-flex;align-items:center;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
-.cp-wt .cp-spin{width:.8em;height:.8em;color:var(--good-dot)}
-.cp-late{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--hot-dot);margin-right:5px;flex:none}
-/* 1.8.7: a task being created, in the line of marks: its name, then the step and the time */
-.cp-mk{gap:6px}.cp-mk .cp-mk-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:3em}.cp-mk .mk-st{flex:1 1 0}
+/* the chat: the person's words on the right, the agent's on the left, newest at the bottom */
+.cp-chat{flex:1;min-height:0;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.cp-chat>*{flex:none}
+.cp-row{display:flex;min-width:0}
+.cp-row.me{justify-content:flex-end}
+.cp-bub{max-width:88%;box-sizing:border-box;border-radius:14px;padding:7px 11px;background:var(--card);border:1px solid var(--line);font-size:13px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
+.cp-bub.me{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.cp-bub.pending{opacity:.7}
+.cp-bub .sa-ic,.cp-bub code{font:12px var(--mono);background:var(--kbd);color:var(--ink);border-radius:4px;padding:0 4px}
+.cp-bub.me .cp-at{background:transparent;color:inherit;padding:0;opacity:.85}
+.cp-bub a{color:inherit;text-decoration:underline}
+.cp-bub.cp-think{display:flex;gap:3px;align-items:center}
+.cp-think i{width:5px;height:5px;border-radius:50%;background:var(--soft);animation:cpdot 1s infinite}
+.cp-think i:nth-child(2){animation-delay:.15s}.cp-think i:nth-child(3){animation-delay:.3s}
+.cp-ask{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cp-line{font-size:12px;color:var(--soft);text-align:right}
+.cp-line.bad{color:var(--bad)}
+/* the input: the box grows up to four lines */
+.cp-in{flex:none;padding:6px 10px 10px}
+.cp-note{font-size:12px;color:var(--soft);margin:0 2px 5px;overflow-wrap:anywhere}
+.cp-note[hidden]{display:none}
+.cp-box{display:flex;align-items:flex-end;gap:6px;border:1px solid var(--line2);background:var(--bg);border-radius:14px;padding:4px 4px 4px 10px}
+.cp-field{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:13px;line-height:1.4;resize:none;padding:5px 0;max-height:96px}
+.cp-send{width:28px;height:28px;border:0;border-radius:8px;background:var(--btn);color:var(--btn-ink);font:inherit;font-size:15px;line-height:1;cursor:pointer;flex:none}
+.cp-send:disabled{opacity:.4;cursor:default}
+@keyframes cpdot{50%{transform:translateY(-3px);opacity:.4}}
+@media (prefers-reduced-motion:reduce){.cp *{animation:none!important;transition:none!important}}

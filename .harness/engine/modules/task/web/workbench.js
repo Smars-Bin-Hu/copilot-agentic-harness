@@ -529,7 +529,7 @@ const WORKBENCH = (function () {
       superView.setVscode(status);
       paint();
     }
-    return {node: root, show, hide, update, setVscode, isOpen: () => open};
+    return {node: root, show, hide, update, setVscode, isOpen: () => open, openTask: (name) => { if (open) openTask(name); }};  // openTask: the pop-out's Open (the board shows the deck first)
   }
 
   return {create, taskOf, stillPet};

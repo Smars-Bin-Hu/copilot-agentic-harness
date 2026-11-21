@@ -497,6 +497,10 @@ class Board:
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
+        with filecache.one_pass():  # 1.8.22: a file is read once for all the rows, even one that changes every few seconds
+            return self._rows()
+
+    def _rows(self) -> Dict[str, Any]:
         self.close_promoted()
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served, rewrite=False)
         self.link.overlay(result["tasks"])

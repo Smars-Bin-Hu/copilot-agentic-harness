@@ -584,7 +584,7 @@
   const modeButtons = {};
   // The super agent view (1.8.1, super.js): a served board only. It is one more way to look at the board, picked in the bar; the pick is not kept.
   const superView = typeof SUPER !== "undefined" && DATA.serve ? SUPER.create({rows: () => rows}) : null;
-  const workbench = superView && typeof WORKBENCH !== "undefined" ? WORKBENCH.create({superView, rows: () => rows, back: () => setMode("lobby")}) : null;  // the full-screen layer that holds the super agent view
+  const workbench = superView && typeof WORKBENCH !== "undefined" ? WORKBENCH.create({superView, rows: () => rows, back: () => setMode(keep.get("mode", "lobby") === "list" ? "list" : "lobby"), open: () => setMode("super")}) : null;  // the full-screen layer that holds the super agent view
   const badge = h("span", {class: "sa-badge", hidden: ""});
   const modeNames = superView ? ["lobby", "list", "super"] : ["lobby", "list"];
   const seg = h("div", {class: "lb-seg", role: "group"}, modeNames.map((name) => {
@@ -620,7 +620,7 @@
   draw();
   drawMode();
   SHELL.vs(vscode);
-  if (superView) superView.setVscode(vscode);
+  if (superView) (workbench || superView).setVscode(vscode);
   // What Cmd+K can open on the board: its tasks, the two views and the filters (it only changes what is shown; it never acts on a task).
   SHELL.provide(() => ({tasks: rows,
     views: [{id: "list", label: t("board.shell.view.list"), kw: "list table", run: () => setMode("list")}, {id: "lobby", label: t("board.shell.view.lobby"), kw: "lobby robots floor", run: () => setMode("lobby")},
@@ -642,7 +642,7 @@
     archiveTo = data.archive_to || "";
     paintElsewhere(DATA.serve ? data.held_elsewhere || [] : []);
     SHELL.vs(data.vscode);
-    if (superView) superView.setVscode(data.vscode);
+    if (superView) (workbench || superView).setVscode(data.vscode);
     if (DATA.serve) { DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); }
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null, data.making || []]);
     if (text !== shown) { rows = data.rows; making = data.making || []; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else { paintStamp(); paintSpace(data.space); }

@@ -88,6 +88,76 @@ class WorkbenchWordsTests(unittest.TestCase):
         self.assertIn(r"/^\/task\/([^/?#]+)(?:[?#].*)?$/", script)
 
 
+class WorkbenchDeckTests(unittest.TestCase):
+    """The command deck: the shell's own behaviour is read from the page text; the look is checked in the lab with screenshots."""
+
+    def test_the_top_bar_has_only_the_way_out_the_name_the_battery_and_focus(self) -> None:
+        script = source("workbench.js")
+        for needle in ('class: "wb-back"', 'class: "wb-batt"', 'class: "wb-focus"', 'class: "wb-tools"'):
+            self.assertIn(needle, script)
+        for gone in ("wb-seg", "wb-tg", "modeBtns", "super.wb.side.left", "super.wb.mode.wb", "waitEl"):
+            self.assertNotIn(gone, script)  # no View switch, no Left/Right panel toggles, no "N wait" text
+
+    def test_the_board_chrome_is_hidden_under_the_lock_class_not_removed(self) -> None:
+        style = source("workbench.css")
+        rule = re.search(r"html\.wb-lock :is\(([^)]*)\)\{display:none!important\}", style)
+        self.assertIsNotNone(rule)
+        for name in (".sh-pill", ".sh-gear", ".dock-btn", ".hd-acct", ".term-toggle"):
+            self.assertIn(name, rule.group(1))
+        for gone in ("--wb-corner", "margin-right:64px", "right:80px"):
+            self.assertNotIn(gone, style)  # the room kept for the board's buttons is gone
+
+    def test_the_deck_is_always_dark_and_uses_no_blur(self) -> None:
+        self.assertIn('html[data-theme="dark"],:where(.wb-root){', source("tokens.css"))  # the dark set also on the layer (no weight: the board's file pages carry tokens.css too)
+        style = source("workbench.css")
+        self.assertNotIn("backdrop-filter", style)
+        self.assertIn(".wb-root::after{", style)
+        self.assertIn(".wb-root.wb-down::after{", style)  # the lit edge, and its red form when VS Code is not linked
+        self.assertIn("pointer-events:none", style.split(".wb-root::after{", 1)[1].split("}", 1)[0])
+
+    def test_panels_fold_and_a_folded_side_is_a_rail(self) -> None:
+        script, style = source("workbench.js"), source("workbench.css")
+        for needle in ("function foldPanel", "wb-fold-btn", "wb-rail", 'store.set("fold"', 'SIDES = {l: ["q", "t"], r: ["d", "p"]}'):
+            self.assertIn(needle, script)
+        self.assertIn("--wb-lw:44px", style)
+        self.assertIn(".wb-pn.wb-fold .wb-pb", style)
+
+    def test_the_two_bars_resize_the_sides_and_keep_the_widths(self) -> None:
+        script = source("workbench.js")
+        for needle in ("setPointerCapture", '"pointermove"', '"dblclick"', 'store.set("widths"', "--wb-\" + side + \"wu"):
+            self.assertIn(needle, script)
+        self.assertIn("var(--wb-lwu,", source("workbench.css"))
+
+    def test_minimize_leaves_the_mode_and_a_pill_brings_it_back(self) -> None:
+        script = source("workbench.js")
+        for needle in ("minimized = true", 'class: "wb-orb"', "options.open", "orb.hidden = !minimized", "SUPER.waiting(rowsOf())"):
+            self.assertIn(needle, script)
+        board = source("board.js")
+        self.assertIn("open: () => setMode(\"super\")", board)
+        self.assertIn("(workbench || superView).setVscode(", board)  # the layer hears of a VS Code that is down
+
+    def test_the_battery_reads_super_js_and_the_popover_recharges_by_post(self) -> None:
+        script = source("workbench.js")
+        for needle in (".sa-cost .sa-cell", "MutationObserver(costChanged)", 'SERVE.post("/api/super/recharge", {amount: amountNow})', 'SERVE.call("/api/super/talk"', "RECHARGE = [25, 50]", "super.wb.batt.added", "super.wb.batt.today"):
+            self.assertIn(needle, script)
+
+    def test_the_bridge_gets_its_four_calls_and_its_container(self) -> None:
+        script = source("workbench.js")
+        self.assertIn("WBPANELS.create(Object.assign({rows: rowsOf}, bridgeCalls))", script)
+        for call in ("pick(task)", "menu(task, x, y)", "closed(x, y)", "target()"):
+            self.assertIn(call, script)
+        for needle in ('"contextmenu"', ".sa-team .sa-mate[data-task]", ".sa-team .sa-closed", ".sa-team .sa-mate.on[data-task]", "if (panels2.bridge) bridge.append(panels2.bridge)", "bridge: mode === \"wb\""):
+            self.assertIn(needle, script)
+        style = source("workbench.css")
+        self.assertIn(".wb-center .sa-team,.wb-center .sa-head,.wb-center .sa-pet{display:none!important}", style)
+
+    def test_the_pet_of_super_js_is_replaced_by_a_stand_in_that_does_nothing(self) -> None:
+        script = source("workbench.js")
+        self.assertIn("PET.create = stillPet", script)
+        self.assertIn("new Proxy(own", script)
+        self.assertNotIn("requestAnimationFrame", script)
+
+
 class WorkbenchPanelsTests(unittest.TestCase):
     def test_the_panels_file_is_served_before_the_workbench_with_its_style(self) -> None:
         page = taskhtml.board_page([], "2026-11-20T00:00:00+00:00", 0, SERVE)

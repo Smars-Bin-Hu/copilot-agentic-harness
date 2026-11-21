@@ -115,7 +115,7 @@ DESK_REFRESH = 3  # seconds between two reads of a task page (10 until 1.7.26: a
 REFRESH = 3  # seconds between two boards in the browser when `board.refresh_seconds` of the task policy says nothing
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
-CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
+CSP = ("default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
@@ -610,7 +610,7 @@ class Board:
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "space": found["space"]}, self.refresh), hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "space": found["space"]}, self.refresh), hidden=found["hidden"], linked=True)
 
     def desk(self, name: str, trace_tree: bool = False) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served, trace_tree)  # the tree reads whole logs: only for a Trace tab that is open
@@ -693,7 +693,7 @@ class Board:
         return {"wall": self.set_wall_folder({"folder": text}), "cancelled": False} if text else {"wall": wallpaper.listing(self.root), "cancelled": True}
 
     def desk_page(self, name: str) -> str:
-        return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH))
+        return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH), linked=True)
 
     def report_info(self, name: str) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
         task = task_ops.resolve(self.root, name)
@@ -705,12 +705,12 @@ class Board:
     def perf_page(self, name: str) -> str:
         """The Agent Performance Review page of a task (1.7.41): the accounts per prompt, the facts, the review's findings, the notes of each prompt, the call timeline."""
         task = task_ops.resolve(self.root, name)
-        return taskhtml.perf_page(perfreview.page_data(self.root, task))
+        return taskhtml.perf_page(perfreview.page_data(self.root, task), linked=True)
 
     def report_page(self, name: str) -> str:
         """The time-and-usage page as the server sends it: the Gate verdicts have buttons, and the page can be saved."""
         _task, info, now = self.report_info(name)
-        return taskhtml.task_page(info, 0, now, serve={"actions": self.served})
+        return taskhtml.task_page(info, 0, now, serve={"actions": self.served}, linked=True)
 
     def saved_report(self, name: str) -> Tuple[str, str]:
         """The same page as one file to keep or send (file name, page): as of now, verdicts shown, no buttons, no calls."""
@@ -2007,7 +2007,7 @@ def handler_for(board: Board) -> type:
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
             if path == "/setup":
-                return self.send(200, taskhtml.setup_page(board.serve_info({}, 0)).encode("utf-8"), "text/html; charset=utf-8")
+                return self.send(200, taskhtml.setup_page(board.serve_info({}, 0), linked=True).encode("utf-8"), "text/html; charset=utf-8")
             if path in ("/", "/board.html") or path.startswith("/task/"):
                 if path in ("/", "/board.html"):
                     board.look_at_page(True)
@@ -2018,6 +2018,20 @@ def handler_for(board: Board) -> type:
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            if path.startswith("/asset/"):  # the style, the scripts and the texts of a served page (`taskhtml.asset_of`): shipped code and the UI's own words, nothing secret, so no pairing. The same Origin and Sec-Fetch-Site checks as /wall/
+                origin = self.headers.get("Origin", "")
+                if (origin and origin not in allowed_origins) or self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
+                    return self.send(403, b"", "text/plain")
+                name = path[len("/asset/"):]
+                found = taskhtml.asset_of(name)
+                if found is None:
+                    return self.send(404, b"", "text/plain")
+                body, kind = found
+                tag = f'"{name.split(".")[0]}"'
+                headers = {"ETag": tag, "Cache-Control": "private, max-age=31536000, immutable"}
+                if self.headers.get("If-None-Match", "") == tag:
+                    return self.send(304, b"", kind, headers)
+                return self.send(200, body, kind, headers)
             if path.startswith("/wall/"):  # one picture of the wallpaper folder: read only, by its bare name. Another site's page may not use it (Origin, Sec-Fetch-Site)
                 origin = self.headers.get("Origin", "")
                 if (origin and origin not in allowed_origins) or self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):

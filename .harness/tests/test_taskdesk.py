@@ -573,8 +573,9 @@ class DeskTests(ServeCase):
         self.assertNotIn("X-Harness-Board", page)
         self.assertNotIn("--task job1", page, "the commands the buttons would copy are left out")
         self.assertNotIn(str(self.root), page, "no path of this computer")
-        self.assertIn("另存为 HTML", self.request("GET", "/task/job1")[1]["text"], "the live page offers the copy")
-        self.assertIn("/snapshot/", self.request("GET", "/task/job1")[1]["text"])
+        live = self.whole(self.request("GET", "/task/job1")[1]["text"])  # the page and the files it links
+        self.assertIn("另存为 HTML", live, "the live page offers the copy")
+        self.assertIn("/snapshot/", live)
         self.assertEqual(self.request("GET", "/snapshot/no_such_task")[0], 404)
         self.assertEqual(self.request("GET", "/snapshot/..%2F..%2Fetc")[0], 404)
         self.assertEqual(self.request("GET", "/snapshot/job1", host="evil.example")[0], 403)

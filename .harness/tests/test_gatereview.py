@@ -214,7 +214,7 @@ class PageTests(GateCase):
         self.assertEqual(status, 200)
         served = page_data(data["text"])
         self.assertIn("steer", served["serve"]["actions"])
-        self.assertIn("/api/verdict", data["text"])  # serve.js and task.js are in
+        self.assertIn("/api/verdict", self.whole(data["text"]))  # serve.js and task.js are in
         self.assertEqual(served["info"]["gate"]["count"], 3)
         self.assertIn("connect-src 'self'", headers["Content-Security-Policy"])
         self.cli_json("task", "report")
@@ -248,9 +248,9 @@ class PageTests(GateCase):
         self.assertEqual(self.request("GET", "/report-save/job1", host="evil.example:80")[0], 403)
 
     def test_the_served_link_to_save_is_in_the_script_of_the_page_and_the_texts_exist_in_both_languages(self) -> None:
-        text = self.request("GET", "/tasks/job1/report.html")[1]["text"]
+        text = self.whole(self.request("GET", "/tasks/job1/report.html")[1]["text"])
         self.assertIn("/report-save/", text)
         en, zh = (json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{name}.json").read_text(encoding="utf-8")) for name in ("en", "zh"))
         for key in [key for key in en if key.startswith(("report.gate", "report.save", "report.kpi.gate", "gate.refused", "event.gate"))]:
             self.assertIn(key, zh)
-        self.assertIn(messages.text("report.kpi.gate"), json.dumps(page_data(text)["text"], ensure_ascii=False))
+        self.assertIn(messages.text("report.kpi.gate"), text)  # the texts are in the file the page links

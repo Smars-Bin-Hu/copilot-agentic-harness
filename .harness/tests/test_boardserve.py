@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import io
+import re
 import json
 import os
 import socket
@@ -91,6 +92,11 @@ class ServeCase(TaskCase):
         except ValueError:
             data = {}
         return response.status, data, dict(response.getheaders())
+
+    def whole(self, page: str) -> str:
+        """A served page with the files it links (`/asset/`) put in: what the browser ends up with."""
+        from modules.task import taskhtml
+        return page + "".join(taskhtml.asset_of(name)[0].decode("utf-8") for name in re.findall(r'(?:href|src)="/asset/([0-9a-f]{20}\.(?:css|js))"', page))
 
     def code(self) -> str:
         return self.links[0].split("#pair=", 1)[1]

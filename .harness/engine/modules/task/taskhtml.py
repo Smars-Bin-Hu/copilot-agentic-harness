@@ -41,11 +41,14 @@ table is the one place for wording; the scripts hold none).
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
+import threading
+from collections import OrderedDict
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import messages, pace
 from core.paths import cli_command
@@ -72,8 +75,45 @@ def as_json(data: Dict[str, Any]) -> str:
     return json.dumps(data, ensure_ascii=False, sort_keys=True).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
+_READ: Dict[str, Tuple[Tuple[int, int], str]] = {}  # the shipped page files, read again only when the file changed (mtime and size)
+
+
 def read(name: str) -> str:
-    return (WEB / name).read_text(encoding="utf-8")
+    path = WEB / name
+    info = path.stat()
+    stamp = (info.st_mtime_ns, info.st_size)
+    found = _READ.get(name)
+    if found is None or found[0] != stamp:
+        found = (stamp, path.read_text(encoding="utf-8"))
+        _READ[name] = found
+    return found[1]
+
+
+ASSET_LIMIT = 64  # assets kept in memory: the newest ones
+ASSET_NAME = re.compile(r"[0-9a-f]{20}\.(css|js)")
+ASSET_TYPES = {"css": "text/css; charset=utf-8", "js": "text/javascript; charset=utf-8"}
+_ASSETS: "OrderedDict[str, Tuple[bytes, str]]" = OrderedDict()
+_ASSET_LOCK = threading.Lock()
+
+
+def keep_asset(content: str, extension: str) -> str:
+    """Keep one asset of a linked page and give its link: the name is the first 20 hex digits of the content's sha256."""
+    body = content.encode("utf-8")
+    name = f"{hashlib.sha256(body).hexdigest()[:20]}.{extension}"
+    with _ASSET_LOCK:
+        _ASSETS[name] = (body, ASSET_TYPES[extension])
+        _ASSETS.move_to_end(name)
+        while len(_ASSETS) > ASSET_LIMIT:
+            _ASSETS.popitem(last=False)
+    return f"/asset/{name}"
+
+
+def asset_of(name: str) -> Optional[Tuple[bytes, str]]:
+    """(content, content type) of an asset a linked page has, or None."""
+    if not ASSET_NAME.fullmatch(name):
+        return None
+    with _ASSET_LOCK:
+        return _ASSETS.get(name)
 
 
 def icon() -> str:
@@ -101,33 +141,49 @@ SPACE_CSS = "space.css"  # the pages that have space.js get the 3D stage behind 
 WALL_CSS = "wall.css"  # ... and, with wall.js, the glass panels over a wallpaper and the Background part of the settings, over everything else
 
 
-def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], refresh: int = 0, styles: Optional[List[str]] = None) -> str:
-    """One file: the skeleton with the style, the scripts and the data in it. `styles`: what goes between the tokens and ui.css."""
-    data = dict(data, text=page_text(), pace=pace.factor())  # 1.8.15: the time limits of the page grow with this computer's slowness (`core.pace`)
+STYLE_BLOCK = "<style>\n/*CSS*/\n</style>"
+SCRIPT_BLOCK = "<script>\n/*JS*/\n</script>"
+
+
+def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], refresh: int = 0, styles: Optional[List[str]] = None, linked: bool = False) -> str:
+    """One file: the skeleton with the style, the scripts and the data in it. `styles`: what goes between the tokens and ui.css.
+    `linked` (the board server's pages): the style, the scripts and the texts are files of `/asset/` (`asset_of`) that the browser keeps; the theme and the data stay in the page."""
+    data = dict(data, pace=pace.factor())  # 1.8.15: the time limits of the page grow with this computer's slowness (`core.pace`)
+    texts = page_text()
+    if not linked:
+        data["text"] = texts  # 1.8.15: the time limits of the page grow with this computer's slowness (`core.pace`)
+    css = "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *([AUTORUN_CSS] if "autorun.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([REOPEN_CSS] if "reopen.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *([SUPER_CSS] if "super.js" in scripts else []), *([COMPANION_CSS] if "companion.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])])
+    js = "\n".join(read(name) for name in scripts)
     parts = {
         "<!--REFRESH-->": f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else "",
         "<!--ICON-->": icon(),
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
         "/*THEME*/": read("theme.js"),
-        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *([AUTORUN_CSS] if "autorun.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([REOPEN_CSS] if "reopen.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *([SUPER_CSS] if "super.js" in scripts else []), *([COMPANION_CSS] if "companion.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])]),
+        "/*CSS*/": css,
         "<!--DATA-->": as_json(data),
-        "/*JS*/": "\n".join(read(name) for name in scripts),
+        "/*JS*/": js,
     }
     skeleton_text = read(skeleton)
     for mark in parts:
         if skeleton_text.count(mark) != 1:
             raise ValueError(f"{skeleton}: the mark {mark} must be there once")
+    if linked:  # the style and the scripts are links; the script of the page stays last in the body, after the data
+        if STYLE_BLOCK not in skeleton_text or SCRIPT_BLOCK not in skeleton_text:
+            raise ValueError(f"{skeleton}: the style and the script must be in their own blocks")
+        text_link = keep_asset(f"window.PAGE_TEXT={as_json(texts)};", "js")
+        skeleton_text = skeleton_text.replace(STYLE_BLOCK, f'<link rel="stylesheet" href="{keep_asset(css, "css")}">', 1).replace(SCRIPT_BLOCK, f'<script src="{text_link}"></script>\n<script src="{keep_asset(js, "js")}"></script>', 1)
+        parts = {mark: value for mark, value in parts.items() if mark not in ("/*CSS*/", "/*JS*/")}
     # One pass over the skeleton: a mark that happens to be inside the data or a script is not touched.
     return MARKS.sub(lambda found: parts[found.group(0)], skeleton_text).replace(PAGE_LANGUAGE, f'<html lang="{messages.language()}">', 1)
 
 
-def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, Any]] = None, serve: Optional[Dict[str, Any]] = None) -> str:
+def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, Any]] = None, serve: Optional[Dict[str, Any]] = None, linked: bool = False) -> str:
     """now: what the task waits for at this moment (tasklife.waiting_now), or None.
     serve: set when the board server sends the page (the Gate verdicts get buttons, and a link to save the page).
     Without it the page is a file: it shows the verdicts and has no calls to a server."""
     if serve is not None:
-        return build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh)
+        return build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh, linked=linked)
     return build("task.html", ["common.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
 
 
@@ -137,17 +193,17 @@ def saved_report(info: Dict[str, Any], now: Optional[Dict[str, Any]] = None) -> 
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)
 
 
-def perf_page(data: Dict[str, Any]) -> str:
+def perf_page(data: Dict[str, Any], linked: bool = False) -> str:
     """The Agent Performance Review page of a task (1.7.41), served only: it reads nothing and has no buttons but a way back to the report."""
-    return build("perfpage.html", ["common.js", "perf.js", "perfpage.js"], say("report.perf.page.title", name=data["name"]), {"perf": data}, 0, ["page.css", "perfpage.css"])
+    return build("perfpage.html", ["common.js", "perf.js", "perfpage.js"], say("report.perf.page.title", name=data["name"]), {"perf": data}, 0, ["page.css", "perfpage.css"], linked)
 
 
-def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: Optional[Dict[str, Any]] = None, hidden: int = 0) -> str:
+def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: Optional[Dict[str, Any]] = None, hidden: int = 0, linked: bool = False) -> str:
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
     scripts = ["common.js", "serve.js", "chat.js", "reopen.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "readybar.js", "autorun.js", "pet.js", "companion.js", "superhist.js", "superdirect.js", "super.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
-    return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"])
+    return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"], linked)
 
 
 DESK_STYLES = ["page.css", "diffview.css", "highlight.css", "stmts.css", "batch.css"]
@@ -156,15 +212,15 @@ DESK_STYLES = ["page.css", "diffview.css", "highlight.css", "stmts.css", "batch.
 SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
 
 
-def setup_page(serve: Dict[str, Any]) -> str:
+def setup_page(serve: Dict[str, Any], linked: bool = False) -> str:
     """Get ready, as the board server sends it. It has no Enter screen: it is where a new copy goes from there."""
-    return build("setup.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js"], say("setup.title"), {"serve": serve, "getReady": True}, 0, ["page.css"])
+    return build("setup.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js"], say("setup.title"), {"serve": serve, "getReady": True}, 0, ["page.css"], linked)
 
 
-def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> str:
+def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None, linked: bool = False) -> str:
     """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
     Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
     if serve is not None:
-        return build("desk.html", ["common.js", "serve.js", "chat.js", "reopen.js", "status.js", "highlight.js", "stmts.js", "batch.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "autorun.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
+        return build("desk.html", ["common.js", "serve.js", "chat.js", "reopen.js", "status.js", "highlight.js", "stmts.js", "batch.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "readyui.js", "enter.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "autorun.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES, linked=linked)
     page = build("desk.html", ["common.js", "status.js", "highlight.js", "stmts.js", "diffview.js", "space.js", "wall.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

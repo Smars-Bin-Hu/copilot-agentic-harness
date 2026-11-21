@@ -2692,7 +2692,6 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
     sync_on_start(root)
-    filecache.enable()  # 1.8.22: a file read before is read again only when it changed (a task page read some 360 files every 3 s)
     if ready is None and getattr(link, "running", False) is None:
         link.running = board.ready.vs_running.get  # 1.8.8: a VS Code window that is open but not reached yet is looked for every few seconds and told as getting ready (the tests keep their own)
     link.start()  # the thread only; the board does not wait for VS Code
@@ -2734,6 +2733,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:
+        filecache.enable()  # 1.8.22: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
         while serving.is_alive():
             if board.stop_asked.wait(STOP_EVERY) or stop_wanted(root):  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too; the stop button and `--stop` end it here
                 break

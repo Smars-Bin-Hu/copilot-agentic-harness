@@ -20,21 +20,24 @@ from pathlib import Path
 from typing import Any, Callable, Tuple, Union
 
 MAX_FILES = 2000
+MAX_TOTAL = 64 * 1024 * 1024  # all the texts kept together, at most
 FRESH_NS = 2_000_000_000  # a file younger than this is read every time
 MAX_BYTES = 2 * 1024 * 1024
 
 _on = False
 _lock = threading.Lock()
+_size = 0  # the characters of the texts kept now
 _kept: "OrderedDict[str, Tuple[Tuple[int, int, int, int], Any]]" = OrderedDict()
 
 
 def enable(on: bool = True) -> None:
     """The board server keeps what it read (`on`); off: every read opens the file again, and what was kept is dropped."""
-    global _on
+    global _on, _size
     _on = on
     if not on:
         with _lock:
             _kept.clear()
+            _size = 0
 
 
 def enabled() -> bool:
@@ -51,13 +54,17 @@ def _kept_or(target: Path, kind: str, make: Callable[[Path], Any], size_limit: i
         if found is not None and found[0] == stamp:
             _kept.move_to_end(key)
             return found[1]
+    global _size
     value = make(target)
     if info.st_size <= size_limit and time.time_ns() - info.st_mtime_ns > FRESH_NS:
         with _lock:
+            old = _kept.pop(key, None)
+            _size -= len(old[1]) if old is not None else 0
             _kept[key] = (stamp, value)
-            _kept.move_to_end(key)
-            while len(_kept) > MAX_FILES:
-                _kept.popitem(last=False)
+            _size += len(value)
+            while len(_kept) > MAX_FILES or _size > MAX_TOTAL:
+                _gone, (_stamp, dropped) = _kept.popitem(last=False)
+                _size -= len(dropped)
     return value
 
 

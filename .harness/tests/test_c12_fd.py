@@ -279,7 +279,7 @@ class WordsTests(unittest.TestCase):
             self.assertNotIn("{n}", table["desk.outbox.script.note.one"], language)
         self.assertEqual(messages.table("en")["desk.outbox.lines.one"], "(1 line)")
         self.assertIn("1 line,", messages.table("en")["desk.outbox.script.note.one"])
-        js = (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "desk.js").read_text(encoding="utf-8")
+        js = (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "callview.js").read_text(encoding="utf-8")
         self.assertIn('lines === 1 ? "desk.outbox.lines.one"', js)
         self.assertIn('lines === 1 ? "desk.outbox.script.note.one"', js)
 

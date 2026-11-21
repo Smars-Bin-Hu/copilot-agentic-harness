@@ -303,7 +303,7 @@ class AskReasonTests(unittest.TestCase):
         self.assertEqual(taskdesk.call_words("x -S s -Q 'UPDATE t SET a = 1'", {"say": [{"pattern": "UPDATE", "text": "an update"}]}, Path("/nowhere"))["why"], "")
 
     def test_the_page_puts_the_reason_under_the_statement_in_the_hover(self) -> None:
-        desk = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "desk.js").read_text(encoding="utf-8")
+        desk = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "callview.js").read_text(encoding="utf-8")
         self.assertIn('t("desk.outbox.zone.why", {why})', desk)
         both_languages(self, "desk.outbox.zone.why")
 

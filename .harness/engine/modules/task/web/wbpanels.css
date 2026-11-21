@@ -3,10 +3,10 @@
 :root,html[data-theme="light"]{--wbp-id0:#1d6fd6;--wbp-id1:#c2307f;--wbp-id2:#4f8a10;--wbp-id3:#b07d00;--wbp-id4:#7a4fd0;--wbp-id5:#0d8f86;--wbp-id6:#d2551f;--wbp-id7:#5b6270}
 html[data-theme="dark"]{--wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--wbp-id3:#ffd166;--wbp-id4:#c6a5ff;--wbp-id5:#6ee7d8;--wbp-id6:#ff9f7a;--wbp-id7:#d0d4dc}
 .wbp-i0{--id:var(--wbp-id0)}.wbp-i1{--id:var(--wbp-id1)}.wbp-i2{--id:var(--wbp-id2)}.wbp-i3{--id:var(--wbp-id3)}.wbp-i4{--id:var(--wbp-id4)}.wbp-i5{--id:var(--wbp-id5)}.wbp-i6{--id:var(--wbp-id6)}.wbp-i7{--id:var(--wbp-id7)}
-:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wbp-k-wait{--c:var(--hot-dot);--tx:var(--hot)}
-:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wbp-k-work{--c:var(--good-dot);--tx:var(--good)}
-:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wbp-k-err{--c:var(--bad);--tx:var(--bad)}
-:is(.wbp-av,.wbp-tn,.wbp-dr,.wbp-st,.wbp-hs,.wbp-num,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb).wbp-k-idle{--c:var(--soft);--tx:var(--soft)}
+:is(.wbp-av,.wbp-tn,.wbp-st,.wbp-hs,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb,.wbp-grp,.wbp-look,.wbp-bub,.wbp-br,.wbp-brl,.wbp-pi).wbp-k-wait{--c:var(--hot-dot);--tx:var(--hot)}
+:is(.wbp-av,.wbp-tn,.wbp-st,.wbp-hs,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb,.wbp-grp,.wbp-look,.wbp-bub,.wbp-br,.wbp-brl,.wbp-pi).wbp-k-work{--c:var(--good-dot);--tx:var(--good)}
+:is(.wbp-av,.wbp-tn,.wbp-st,.wbp-hs,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb,.wbp-grp,.wbp-look,.wbp-bub,.wbp-br,.wbp-brl,.wbp-pi).wbp-k-err{--c:var(--bad);--tx:var(--bad)}
+:is(.wbp-av,.wbp-tn,.wbp-st,.wbp-hs,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb,.wbp-grp,.wbp-look,.wbp-bub,.wbp-br,.wbp-brl,.wbp-pi).wbp-k-idle{--c:var(--soft);--tx:var(--soft)}
 
 /* the avatar of a task: a round robot; the ring is its state, the eyes are its own colour */
 .wbp-av{--s:20px;position:relative;flex:none;display:inline-block;width:var(--s);height:var(--s);border-radius:50%;border:max(1.5px,calc(var(--s) * .08)) solid var(--c);background:var(--robot-head);vertical-align:middle}
@@ -35,25 +35,51 @@ html[data-theme="dark"]{--wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--
 .wbp-sub i{width:16px;height:16px;border-radius:5px;background:var(--good-bg);color:var(--good);font:700 10px/16px var(--mono);text-align:center;font-style:normal;flex:none}
 .wbp-sl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .wbp-sub .wbp-tm{margin-left:auto;flex:none}
+.wbp-now i{background:transparent;color:var(--soft)}
+.wbp-nw{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font:11.5px var(--mono);color:var(--ink)}
+.wbp-gate{margin-left:auto;flex:none;font:11px var(--mono);color:var(--bad);cursor:default}
+.wbp-grp{display:flex;justify-content:space-between;align-items:center;width:100%;margin:5px 0 2px;padding:2px 6px;border:none;border-radius:6px;background:var(--hover);font:10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--tx);cursor:pointer}
+.wbp-grp b{font-weight:600}
 
-/* the Data panel */
+/* the Data panel: four blocks, each a summary that opens */
 .wb-data{padding-top:2px}
-.wbp-nums{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-bottom:8px}
-.wbp-num{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:5px 8px;min-width:0}
-.wbp-num b{display:block;font-size:17px;line-height:1.25;color:var(--tx,var(--ink))}
-.wbp-num span{display:block;font-size:10.5px;line-height:1.25;color:var(--soft);overflow:hidden;text-overflow:ellipsis}
-.wbp-table{display:flex;flex-direction:column;font:11.5px var(--mono)}
-.wbp-dr{display:grid;grid-template-columns:22px minmax(40px,.8fr) minmax(70px,1.3fr) minmax(70px,1.3fr) minmax(40px,1.2fr);align-items:center;gap:0 6px;padding:3px 6px;border-radius:6px;min-width:0}
-.wbp-dr>*{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wbp-dh{font:10.5px var(--sans);color:var(--soft);padding-bottom:3px}
-.wbp-dr[data-wbp-hv]:hover{background:var(--hover)}
-.wbp-wt{color:var(--tx)}
-.wbp-m{display:flex;align-items:center;gap:6px}
-.wbp-bar{display:inline-block;flex:1 1 20px;max-width:74px;height:5px;border-radius:3px;background:var(--track);overflow:hidden}
-.wbp-bar b{display:block;height:100%;background:var(--soft)}
-.wbp-bar b.aiu{background:var(--run)}
-.wbp-bar b.full{background:var(--bad)}
-.wbp-sg{font-family:var(--sans);color:var(--soft)}
+.wbp-blk{padding:7px 2px 9px;border-bottom:1px dashed var(--line2)}
+.wbp-blk:last-child{border-bottom:none}
+.wbp-bt{display:flex;align-items:baseline;gap:8px;min-width:0;font:10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--soft);margin-bottom:6px}
+.wbp-bt>span{white-space:nowrap}
+.wbp-bt em{font-style:normal;color:var(--soft);text-transform:none;letter-spacing:0;font:11.5px var(--sans);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.wbp-bt .wbp-morebtn{margin-left:auto}
+.wbp-bt em+.wbp-morebtn{margin-left:4px}
+.wbp-morebtn,.wbp-plus{border:none;background:none;color:var(--run);font:11.5px var(--mono);padding:2px 0;cursor:pointer;white-space:nowrap;letter-spacing:0;text-transform:none}
+.wbp-morebtn:hover,.wbp-plus:hover{text-decoration:underline}
+.wbp-ok{color:var(--good);font-size:12.5px}
+.wbp-ok.wbp-soft{color:var(--soft)}
+.wbp-look{display:flex;align-items:center;gap:8px;padding:3px 4px;border-radius:6px;font-size:12.5px;min-width:0}
+.wbp-look[data-wbp-hv]:hover{background:var(--hover)}
+.wbp-why{flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx)}
+.wbp-ln1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font:11.5px var(--mono);color:var(--soft)}
+.wbp-r{margin-left:auto;flex:none;font:11.5px var(--mono);color:var(--soft)}
+.wbp-list{max-height:170px;overflow:auto}
+.wbp-pipe{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.wbp-pcol{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:5px 5px 6px;min-height:62px;min-width:0}
+.wbp-pcol.wbp-jam{border-color:var(--hot-dot);background:var(--hot-bg,var(--bg))}
+.wbp-pcol h6{margin:0 0 5px;display:flex;justify-content:space-between;gap:4px;font:10px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--soft);font-weight:500}
+.wbp-pcol h6 b{color:var(--ink)}
+.wbp-dots{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.wbp-dots .wbp-av{border-width:1.5px}
+.wbp-plus{font-size:10px;color:var(--soft)}
+.wbp-two{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--track)}
+.wbp-two b{display:block;height:100%}
+.wbp-s-model{background:#7c8cf8}.wbp-s-tool{background:var(--good-dot)}.wbp-s-sub{background:#2bb5a6}.wbp-s-appr{background:#c9a15a}.wbp-s-you{background:var(--hot-dot)}
+.wbp-leg{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:6px;font-size:11.5px;color:var(--soft)}
+.wbp-leg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.wbp-leg b{font:11.5px var(--mono);color:var(--ink);font-weight:500}
+.wbp-spend{display:flex;align-items:flex-end;gap:14px;min-width:0}
+.wbp-big{font:600 22px/1 var(--mono);letter-spacing:-.02em;white-space:nowrap}
+.wbp-big.wbp-sm{font-size:14px;color:var(--soft)}
+.wbp-tops{display:flex;gap:10px;margin-left:auto;min-width:0}
+.wbp-topx{display:flex;align-items:center;gap:5px;font:11.5px var(--mono);color:var(--soft)}
+.wbp-look.wbp-k-err .wbp-why{color:var(--bad)}.wbp-look.wbp-k-wait .wbp-why{color:var(--hot)}
 
 /* the card of a task, on a hover */
 .wbp-hover{position:fixed;z-index:200;width:300px;max-width:calc(100vw - 16px);background:var(--pop);border:1px solid var(--line2);border-radius:12px;padding:12px 14px;box-shadow:var(--glass-shadow);font-size:12.5px;pointer-events:none}
@@ -95,12 +121,42 @@ html[data-theme="dark"]{--wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--
 .wbp-bossname{fill:var(--ink);font-weight:600}
 .wbp-pulse{fill:none;stroke:var(--good-dot);stroke-opacity:.22}
 
+/* the bridge (workbench.js puts it at the top of the centre column) and the picture of Focus */
+.wbp-bridge{flex:none;position:relative;height:190px;min-width:0;overflow:hidden}
+.wb-tall .wbp-bridge{height:160px}
+.wbp-bridge .wbp-svg{position:absolute;inset:0}
+.wbp-closed{position:absolute;right:6px;top:4px;z-index:2;font:10.5px var(--mono);letter-spacing:.06em;border-radius:999px;padding:2px 9px;background:transparent;border:1px solid var(--line2);color:var(--soft);cursor:pointer}
+.wbp-closed:hover{color:var(--ink);border-color:var(--soft)}
+.wbp-t,.wbp-bub{cursor:pointer;outline:none}
+.wbp-t:focus-visible .wbp-body,.wbp-bub:focus-visible circle{stroke:var(--ink);stroke-width:3.2}
+.wbp-lnhit{fill:none;stroke:transparent;stroke-width:9;pointer-events:stroke}
+.wbp-ring{fill:none;stroke:var(--ink);stroke-width:1.4;pointer-events:none}
+.wbp-nmlb{fill:var(--soft);font-family:var(--mono)}
+.wbp-more-ln{stroke-dasharray:2 4;stroke-width:2.2;stroke-opacity:.3}
+.wbp-bub circle{fill:var(--c);fill-opacity:.14;stroke:var(--c);stroke-width:1.5;stroke-dasharray:3 3}
+.wbp-bub text{fill:var(--tx);font-weight:700;font-family:var(--mono);pointer-events:none}
+.wbp-bub:hover circle{fill-opacity:.28}
+.wbp-br{fill:none;stroke:var(--c);stroke-opacity:.55}
+.wbp-brl{fill:var(--tx);font-family:var(--mono);letter-spacing:.08em}
+.wbp-gatebadge circle{fill:var(--bad)}
+.wbp-gatebadge text{fill:#fff;font-weight:700;pointer-events:none}
+.wbp-dim{opacity:.45;filter:grayscale(.7)}
+.wb-tree.wbp-down,.wb-data.wbp-down{opacity:.6}
+/* a list that opens on a "+N" */
+.wbp-pop{position:fixed;z-index:150;background:var(--pop);border:1px solid var(--line2);border-radius:11px;padding:10px 12px;box-shadow:var(--glass-shadow);font-size:12.5px}
+.wbp-pop h5{margin:0 0 6px;font:10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--soft);font-weight:500}
+.wbp-pl{max-height:240px;overflow:auto;display:flex;flex-direction:column}
+.wbp-pi{display:flex;align-items:center;gap:8px;padding:4px 5px;border:none;border-radius:6px;background:none;color:var(--ink);text-align:left;cursor:pointer;min-width:0;font:inherit}
+.wbp-pi:hover{background:var(--hover)}
+.wbp-pn{font:12px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.wbp-pt{flex:none;font:11px var(--mono);color:var(--tx)}
+
 /* the entrance: once for each load of the page, under 0.6 s; none under reduced motion or html.lite (wbpanels.js does not start it then) */
 .wbp-intro{position:absolute;inset:0;z-index:50;display:grid;place-items:center;background:var(--bg);animation:wbpveil .6s ease-out forwards}
 .wbp-ibot{grid-area:1/1;width:76px;height:76px;border-radius:24px;background:var(--robot-head);border:1px solid var(--robot-line);position:relative;animation:wbpscale .45s cubic-bezier(.2,.9,.3,1.2) both}
 .wbp-ibot::before,.wbp-ibot::after{content:"";position:absolute;top:30px;width:12px;height:12px;border-radius:50%;background:var(--good-dot)}
 .wbp-ibot::before{left:18px}.wbp-ibot::after{right:18px}
-.wbp-ring{grid-area:1/1;width:76px;height:76px;border-radius:50%;border:2px solid var(--good-dot);animation:wbpring .6s ease-out both}
+.wbp-ring0{grid-area:1/1;width:76px;height:76px;border-radius:50%;border:2px solid var(--good-dot);animation:wbpring .6s ease-out both}
 .wbp-in .wb-main{animation:wbpfade .5s ease-out both}
 @keyframes wbpscale{from{transform:scale(.35);opacity:0}to{transform:scale(1);opacity:1}}
 @keyframes wbpring{from{transform:scale(.8);opacity:.7}to{transform:scale(3.2);opacity:0}}

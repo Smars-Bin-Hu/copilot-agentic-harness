@@ -51,6 +51,10 @@ POLICY_SCHEMA = {
                 "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept", "reopen"]}},
             },
         },
+        "speed": {
+            "type": "object",
+            "properties": {"host": {"type": "string", "minLength": 1, "maxLength": 253}, "days": {"type": "integer", "minimum": 1, "maximum": 90}},
+        },
         "commit": {"type": "object", "properties": {"coauthor": {"type": "string"}}},
         "transcript": {"type": "object", "properties": {"keep_days": {"type": "number", "minimum": 0}}},
         "snapshots": {

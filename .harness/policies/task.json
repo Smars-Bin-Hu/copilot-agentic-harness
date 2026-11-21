@@ -78,6 +78,10 @@
     "context_percent": 70,
     "context_notice": 50
   },
+  "speed": {
+    "host": "api.githubcopilot.com",
+    "days": 7
+  },
   "commit": {
     "coauthor": "GitHub Copilot Coding Agents"
   }

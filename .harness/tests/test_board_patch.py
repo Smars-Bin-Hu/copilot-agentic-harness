@@ -129,7 +129,7 @@ assert.strictEqual(bar.on, false, "scrolled free: the bar is back");
 
 @unittest.skipUnless(NODE, "node is not installed")
 class OffWorkPillTests(unittest.TestCase):
-    """1.8.24: Off work and Back to work are one small pill of two icon buttons; the words are in the hover and the aria label; a count of 0 is off; the count is the rule of the server."""
+    """1.8.25: Off work and Back to work are one small pill of two icon buttons; the words are in the hover and the aria label; a count of 0 is off; the count is the rule of the server."""
 
     def test_the_header_has_the_pill_with_the_words_in_the_hover(self) -> None:
         source = between((WEB / "board.js").read_text(encoding="utf-8"), "const realWait = ", "newSlot.replaceChildren")
@@ -187,7 +187,7 @@ ready.then(() => {
 @unittest.skipUnless(NODE, "node is not installed")
 class RefreshRhythmTests(unittest.TestCase):
     def test_polling_waits_while_the_page_is_hidden_and_while_the_last_request_is_not_back(self) -> None:
-        source = between((WEB / "common.js").read_text(encoding="utf-8"), "const unseen = ", "// What the task waits for")  # 1.8.24: with unseen(), which pollEvery asks
+        source = between((WEB / "common.js").read_text(encoding="utf-8"), "const unseen = ", "// What the task waits for")  # 1.8.25: with unseen(), which pollEvery asks
         script = r"""
 const assert = require("assert");
 let timers = [], seen = [];
@@ -215,7 +215,7 @@ setImmediate(() => {
     assert.strictEqual(calls, 3, "shown again: asked at once");
     release();
     setImmediate(() => {
-      global.window = {frameElement: {hidden: false, getClientRects: () => []}};  // 1.8.24: a task page in a frame of the workbench that is not shown
+      global.window = {frameElement: {hidden: false, getClientRects: () => []}};  // 1.8.25: a task page in a frame of the workbench that is not shown
       tick(); assert.strictEqual(calls, 3, "a frame not shown: nothing is asked");
       global.window = {frameElement: {hidden: false, getClientRects: () => [{}]}};
       tick(); assert.strictEqual(calls, 4, "the frame shows: asked");
@@ -518,7 +518,7 @@ class NoCodeInChatTests(unittest.TestCase):
     def test_the_approval_still_asks_for_its_code_where_a_person_types_it(self) -> None:
         source = (WEB / "serve.js").read_text(encoding="utf-8")
         self.assertIn('t("board.serve.code")', source)
-        self.assertIn("const code = input.value.trim()", source)  # 1.8.24: read once, so a window that comes back after a late refusal keeps it
+        self.assertIn("const code = input.value.trim()", source)  # 1.8.25: read once, so a window that comes back after a late refusal keeps it
         self.assertIn('{...body, step: "act", code,', source)  # and it goes with the act step
 
 

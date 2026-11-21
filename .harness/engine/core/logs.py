@@ -63,7 +63,7 @@ def read_lines(path: Path) -> List[Dict[str, Any]]:
     """The lines of a JSONL file that parse. A half-written last line is skipped."""
     rows: List[Dict[str, Any]] = []
     try:
-        for line in filecache.read_text(path).split("\n"):  # 1.8.24: the board server reads a log again only when it grew. Not splitlines(): a JSON text may hold U+2028
+        for line in filecache.read_text(path).split("\n"):  # 1.8.25: the board server reads a log again only when it grew. Not splitlines(): a JSON text may hold U+2028
             if not line.strip():
                 continue
             try:
@@ -87,7 +87,7 @@ def read_tail(path: Path, max_bytes: int) -> List[Dict[str, Any]]:
             return size > max_bytes, handle.read().decode("utf-8", errors="replace")
 
     try:
-        cut, text = filecache.kept(path, f"tail:{max_bytes}", tail)  # 1.8.24: the board server reads a log again only when it grew
+        cut, text = filecache.kept(path, f"tail:{max_bytes}", tail)  # 1.8.25: the board server reads a log again only when it grew
     except OSError:
         return []
     lines = text.splitlines()

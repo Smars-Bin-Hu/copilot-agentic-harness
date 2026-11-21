@@ -24,7 +24,7 @@ class OverrideError(ValueError):
 
 
 def read_json(path: Path) -> Any:
-    from . import filecache  # 1.8.24: the board server keeps a policy it read while the file does not change
+    from . import filecache  # 1.8.25: the board server keeps a policy it read while the file does not change
 
     return json.loads(filecache.read_text(path, "utf-8-sig"))
 

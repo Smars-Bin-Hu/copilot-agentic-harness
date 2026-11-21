@@ -832,7 +832,7 @@ class WordsOfTheBoardTests(unittest.TestCase):
         self.assertNotIn("自己新关联", zh)
 
     def test_the_view_window_closes_with_close_not_cancel(self) -> None:
-        for file, name in (("callview.js", "function open(item, options)"), ("desk.js", "function evidenceWindow(item)")):  # the window of a held call moved to callview.js (1.8.24)
+        for file, name in (("callview.js", "function open(item, options)"), ("desk.js", "function evidenceWindow(item)")):  # the window of a held call moved to callview.js (1.8.25)
             text = (WEB / file).read_text(encoding="utf-8")
             start = text.index(name)
             part = text[start:text.index("\n  }\n", start)]

@@ -38,7 +38,7 @@ def say(key: str, /, **values: Any) -> str:
 
 def read(path: Path) -> str:
     try:
-        return filecache.read_text(path, "utf-8-sig", "replace")  # 1.8.24: read again only when it changed
+        return filecache.read_text(path, "utf-8-sig", "replace")  # 1.8.25: read again only when it changed
     except OSError:
         return ""
 

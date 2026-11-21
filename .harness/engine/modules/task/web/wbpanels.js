@@ -1,4 +1,4 @@
-// The panels of the super agent workbench (1.8.24, the command deck): the bridge (the super agent over its tasks), the tree of the agents that run, the Data panel, the picture of Focus, the avatar of a task, the card that shows on a hover, the task line of a queue item and the short entrance.
+// The panels of the super agent workbench (1.8.25, the command deck): the bridge (the super agent over its tasks), the tree of the agents that run, the Data panel, the picture of Focus, the avatar of a task, the card that shows on a hover, the task line of a queue item and the short entrance.
 // Everything is drawn from the rows the board already has (`rows()`: status, state, brief, chat.context, chat.model, stages, checks, autorun, open_conns, warn, sub, agents); nothing is asked of the server.
 // A panel is drawn again only when its signature changes; a time that runs (the wait of a task, how long a subagent has run) is a text the one-second timer sets, nothing more. The line "now" of a working task is the `row.sub` the board already has: it changes when the rows change, never by a timer.
 // A value a row does not have shows "-"; nothing is made up (there is no name of a subagent and no count of the mappers that are done: only what `agents` holds; `agents.gate` and `brief.time` may be absent).
@@ -471,7 +471,7 @@ const WBPANELS = (function () {
       }
       const out = [...back, ...moving, ...front, ...marks];
       if (!quiet && !down) out.push(el("circle", {cx: sx, cy: sy, r: sr + 6, class: "wbp-pulse"}, el("animate", {attributeName: "r", values: (sr + 3) + ";" + (sr + (big ? 20 : 10)) + ";" + (sr + 3), dur: "3s", repeatCount: "indefinite"})));
-      out.push(el("g", {class: "wbp-bossg", "data-wbp-boss": "", role: "button", tabindex: "0", "aria-label": t("super.wb.bridge.boss.tip")},  // a click on the super agent itself: the target goes back to All (1.8.24)
+      out.push(el("g", {class: "wbp-bossg", "data-wbp-boss": "", role: "button", tabindex: "0", "aria-label": t("super.wb.bridge.boss.tip")},  // a click on the super agent itself: the target goes back to All (1.8.25)
         el("title", null, t("super.wb.bridge.boss.tip")),
         el("rect", {x: sx - sr, y: sy - sr, width: sr * 2, height: sr * 2, rx: (sr * .34).toFixed(1), class: "wbp-boss"}),
           el("circle", {cx: (sx - sr * .36).toFixed(1), cy: (sy - sr * .08).toFixed(1), r: (sr * .16).toFixed(1), class: "wbp-bosseye"}), el("circle", {cx: (sx + sr * .36).toFixed(1), cy: (sy - sr * .08).toFixed(1), r: (sr * .16).toFixed(1), class: "wbp-bosseye"})));

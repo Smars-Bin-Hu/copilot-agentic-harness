@@ -492,7 +492,7 @@ class PauseTests(BoardCase):
         path.write_text(json.dumps(data), encoding="utf-8")
 
     def test_offwork_pauses_what_waits_for_the_person_whatever_the_turn_state(self) -> None:
-        """1.8.24: a plan that waits while the session made a hook call lately is a wait; only a task really working, and one under autorun, are left and named by reason."""
+        """1.8.25: a plan that waits while the session made a hook call lately is a wait; only a task really working, and one under autorun, are left and named by reason."""
         self.new("plan", "dev")
         (self.root / BASE / "plan" / "PLAN.md").write_text("# plan\n", encoding="utf-8")
         self.new("busy", session=S2)  # waits for nothing: the agent is in the middle of a turn

@@ -445,7 +445,7 @@
     pick.replaceChildren(h("span", {class: "sub"}, t("board.select.count", {count: selected.size}) + (frees ? " \u00b7 " + t("board.select.frees", {size: fileSize(frees)}) : "") + " "), go, none);
   }
 
-  // Off work and back to work (M38-2, 1.8.24: one small pill, the words in the hover): every open task that waits for the person, or is not at work, is paused at once, and later only those are taken back.
+  // Off work and back to work (M38-2, 1.8.25: one small pill, the words in the hover): every open task that waits for the person, or is not at work, is paused at once, and later only those are taken back.
   // A task under autorun, and one really at work (the board shows it as working and it waits for nothing), is left. Served, the buttons act (no pairing, as for pause); a page on disk copies the command instead.
   const shift = h("div", {class: "shift"});
   const said = h("div", {class: "sub shift-said"});

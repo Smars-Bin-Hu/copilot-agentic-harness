@@ -69,7 +69,7 @@ def result_files(root: Path, task: str) -> List[Tuple[str, Path]]:
 
 
 def file_digest(path: Path) -> str:
-    return filecache.sha256(path)  # 1.8.24: the board server hashes a file again only when it changed
+    return filecache.sha256(path)  # 1.8.25: the board server hashes a file again only when it changed
 
 
 def listing(root: Path, task: str) -> List[Dict[str, Any]]:

@@ -726,7 +726,7 @@ WAITING_WHY = waiting  # `offwork` has a parameter of the same name
 
 
 def offwork(root: Path, interactive: Optional[bool] = None, waiting: Optional[Any] = None, working: Optional[Any] = None) -> Dict[str, Any]:
-    """The person leaves for the day (1.8.24): every open task that is not paused and not under autorun, and that waits for the person, is put aside at once, so the night is not counted as waiting.
+    """The person leaves for the day (1.8.25): every open task that is not paused and not under autorun, and that waits for the person, is put aside at once, so the night is not counted as waiting.
     Whether the agent is in the middle of a turn does not matter for a task that waits (a chat that asks "Allow this command?", a plan to approve): only a task that is really working, and one under autorun, are left and named.
     A pause changes the board only: no hook refuses a call of a paused task, `harness wait` goes on, an Allow in the chat lets the agent go on; a prompt or a pick-up of the session ends the pause.
     `waiting`: names or folders of tasks the caller knows wait for the person (the served board knows what the chat in VS Code asks; a file does not). `working`: tasks the caller knows are at work (the board's word, from the chat, wins over the hook log): they are left, whatever the files say."""
@@ -968,7 +968,7 @@ def task_row(root: Path, task: str, data: Optional[Dict[str, Any]], everything: 
 
 
 def row_named(root: Path, name: str) -> Optional[Dict[str, Any]]:
-    """The row of the task called `name` (open or closed), or None. 1.8.24: one task is read, not all of them (a task page asks this every 3 s): the folder of that name first,
+    """The row of the task called `name` (open or closed), or None. 1.8.25: one task is read, not all of them (a task page asks this every 3 s): the folder of that name first,
     then, for a task whose name is not its folder's, every task as `list_tasks` does."""
     for task in tasks.folders(root):
         if task_ops.name_of(task) == name:

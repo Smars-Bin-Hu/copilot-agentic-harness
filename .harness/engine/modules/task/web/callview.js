@@ -1,4 +1,4 @@
-// The window "The command the agent wants to run" (1.8.24): one dialog for a held call, drawn by the task page (desk.js) and by the super view's queue (super.js). The call is what
+// The window "The command the agent wants to run" (1.8.25): one dialog for a held call, drawn by the task page (desk.js) and by the super view's queue (super.js). The call is what
 // `taskdesk.outbox_view` gives (words, facts, layout, statements, files seen): this file only draws it. The page says what opening it means (`onOpen`: the call counts as seen), what the code chip does
 // (`onCode`) and what follows a close (`onClose`).
 "use strict";

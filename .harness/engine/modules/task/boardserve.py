@@ -498,7 +498,7 @@ class Board:
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
-        with filecache.one_pass():  # 1.8.24: a file is read once for all the rows, even one that changes every few seconds
+        with filecache.one_pass():  # 1.8.25: a file is read once for all the rows, even one that changes every few seconds
             return self._rows()
 
     def _rows(self) -> Dict[str, Any]:
@@ -531,7 +531,7 @@ class Board:
                 "space": self.space.view(result["tasks"])}
 
     def off_work_sets(self) -> Tuple[List[str], List[str]]:
-        """What the page counts for Off work (1.8.24), after the link to VS Code: (the tasks that wait for the person or are not at work, the tasks the board shows as working). A chat that asks "Allow this
+        """What the page counts for Off work (1.8.25), after the link to VS Code: (the tasks that wait for the person or are not at work, the tasks the board shows as working). A chat that asks "Allow this
         command?" is a wait, and so is a plan to approve while the agent is mid-turn, whatever the hook log says; a task the board shows as working and that waits for nothing is left."""
         waits, works = [], []
         for row in self.rows()["rows"]:
@@ -897,7 +897,7 @@ class Board:
                 result = tasklife.onwork(self.root, interactive=True)
             for name in result.get("paused") or result.get("resumed") or []:
                 noted(self.root, name, action)
-            return dict(result, board=tasklife.board_said(action, result))  # 1.8.24: the board's answer has no command in it
+            return dict(result, board=tasklife.board_said(action, result))  # 1.8.25: the board's answer has no command in it
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = False if action in SETTINGS else self.idle(action, task)
@@ -2374,7 +2374,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.brain.summary() if data.get("kind") == "summary" else board.brain.ask(data.get("text")))
                 except Exception as error:  # noqa: BLE001 - the page shows the refusal
                     return self.answer(500, {"error": str(error)})
-            if path == "/api/super/recharge":  # 1.8.24: more Credits for the super agent, today only ({amount: 25 | 50}; 200 a day at most). {ok: true, extra, base, limit} or {ok: false, why: amount | cap}. It lifts a spend limit: the paired browser only (an agent has no cookie, and the gate refuses its request to the port)
+            if path == "/api/super/recharge":  # 1.8.25: more Credits for the super agent, today only ({amount: 25 | 50}; 200 a day at most). {ok: true, extra, base, limit} or {ok: false, why: amount | cap}. It lifts a spend limit: the paired browser only (an agent has no cookie, and the gate refuses its request to the port)
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
@@ -2782,7 +2782,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:
-        filecache.enable()  # 1.8.24: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
+        filecache.enable()  # 1.8.25: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
         while serving.is_alive():
             if board.stop_asked.wait(STOP_EVERY) or stop_wanted(root):  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too; the stop button and `--stop` end it here
                 break

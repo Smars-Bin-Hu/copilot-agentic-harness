@@ -1,4 +1,4 @@
-// The pop-out of the super agent view (1.8.1, "the companion"; 1.8.24: a plain chat window): a small window that stays on top of every other window, so the person can work in VS Code and still talk to the super agent and handle what waits.
+// The pop-out of the super agent view (1.8.1, "the companion"; 1.8.25: a plain chat window): a small window that stays on top of every other window, so the person can work in VS Code and still talk to the super agent and handle what waits.
 // It is a Document Picture-in-Picture window (Chrome, Edge): `documentPictureInPicture.requestWindow`, opened from a click. Its document is empty, so the styles of this page are copied in
 // (they are inlined in the page, with companion.css) and `data-theme` / `lite` follow the page. The window shares this page's JavaScript and never asks the server: it reads what the super view holds
 // (`pop.snapshot`, `pop.chat`) and is told when that changes (`pop.subscribe`); super.js keeps polling while the window is open, even when the view itself is not shown.

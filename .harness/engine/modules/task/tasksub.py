@@ -129,7 +129,7 @@ def from_hooklog(root: Path, data: Dict[str, Any]) -> Optional[Dict[str, str]]:
     if not session:
         return None
     path = session_log_path(root, str(data.get("surface") or "vscode"), session)
-    for row in reversed(read_tail(path, TAIL_BYTES)):  # 1.8.24: the same cached tail the gate count reads
+    for row in reversed(read_tail(path, TAIL_BYTES)):  # 1.8.25: the same cached tail the gate count reads
         if row.get("event") in ("PreToolUse", "PostToolUse", "PostToolUseFailure") and row.get("tool_name"):
             return {"at": str(row.get("at") or ""), "what": str(row["tool_name"]), "text": str(row.get("skill") or ""), "kind": "hook"}
     return None

@@ -319,7 +319,7 @@ class ServeTests(ServeCase):
         self.assertFalse(self.data()["paused"])
 
     def test_off_work_passes_the_rows_the_board_shows_as_waiting_and_answers_with_no_command(self) -> None:
-        """1.8.24: the agent is at work by the hook log, the chat asks "Allow this command?" (the link says so): Off work pauses it, and the answer has no command."""
+        """1.8.25: the agent is at work by the hook log, the chat asks "Allow this command?" (the link says so): Off work pauses it, and the answer has no command."""
         self.agent_at_work()
         row = {"task": TASK, "name": "x", "status": "open", "paused_since": "", "state": "waiting", "waiting_why": "confirm"}
         board = boardserve.Board(self.root, False, self.port, ["pause", "resume"])

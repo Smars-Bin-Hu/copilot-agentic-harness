@@ -1,4 +1,4 @@
-/* The pop-out of the super agent view (1.8.1; 1.8.24: a plain chat window): the button in the view, and the small always-on-top window (companion.js). The window's document gets a copy of every style of the page,
+/* The pop-out of the super agent view (1.8.1; 1.8.25: a plain chat window): the button in the view, and the small always-on-top window (companion.js). The window's document gets a copy of every style of the page,
    so these rules run there too. Colours come from tokens.css only. The window never sets its size: the layout follows whatever size it is dragged to (from 250 x 300 up). */
 .sa-pop{margin:8px 0 0;border:1px solid var(--line2);background:transparent;color:var(--soft);border-radius:8px;width:30px;height:26px;font:inherit;font-size:15px;line-height:1;cursor:pointer;flex:none}
 .sa-pop:hover:not(:disabled){color:var(--ink);background:var(--hover)}

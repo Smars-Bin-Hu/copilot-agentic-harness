@@ -6,7 +6,7 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   tokens.css, ui.css      the look, shared: the colours of the light and the dark theme, and how things look under them; theme.js sets the theme and Lite before the page is drawn
   status.js, status.css   the small status marks (model, context ring, run time, mini stage ribbon, TODO) under a task name and on the lobby card; the ribbon is shared: the task page draws its stage strip from it and opens a card on it (`Status.card`)
   batch.js, batch.css           a served task page only: the box over two held calls or more, one code for the ticked ones (1.7.38, F3)
-  callview.js, callview.css     the task page and the board (1.8.24): the one window "The command the agent wants to run" of a held call, drawn by desk.js and by the super view's queue
+  callview.js, callview.css     the task page and the board (1.8.25): the one window "The command the agent wants to run" of a held call, drawn by desk.js and by the super view's queue
   stmts.js, stmts.css           the task page and the board: the statements of a held call one by one, numbered, each with its system and how its type judges it, the reads folded (1.7.38, F3)
   reopen.js, reopen.css         a served task page and the board (1.8.21): the card that says what a reopen of a closed task will be (same round, a new round, or why not) and the two ways on, the pill of the task page and the icon of a closed row in the list
   rounds.js, rounds.css         a served task page only: the earlier rounds of the chat, at the top of the Live tab
@@ -157,7 +157,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
     data = dict(data, pace=pace.factor())  # 1.8.15: the time limits of the page grow with this computer's slowness (`core.pace`)
     texts = page_text()
     if not linked:
-        data["text"] = texts  # a file on its own carries its texts; a linked page loads them from /asset/ (window.PAGE_TEXT, 1.8.24)
+        data["text"] = texts  # a file on its own carries its texts; a linked page loads them from /asset/ (window.PAGE_TEXT, 1.8.25)
     css = "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([CALLVIEW_CSS] if "callview.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *([AUTORUN_CSS] if "autorun.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([REOPEN_CSS] if "reopen.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *([SUPER_CSS] if "super.js" in scripts else []), *([WORKBENCH_CSS] if "workbench.js" in scripts else []), *([WBPANELS_CSS] if "wbpanels.js" in scripts else []), *([COMPANION_CSS] if "companion.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])])
     js = "\n".join(read(name) for name in scripts)
     parts = {

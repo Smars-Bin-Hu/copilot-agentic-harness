@@ -270,7 +270,7 @@ const SERVE = (function () {
     });
   }
 
-  // A slow approval must not block the page (1.8.24). The task+action that waits for the server is kept here, not on a button: the board, the task page and the super queue draw their buttons again every few seconds,
+  // A slow approval must not block the page (1.8.25). The task+action that waits for the server is kept here, not on a button: the board, the task page and the super queue draw their buttons again every few seconds,
   // and each new button asks `running` for its state. The page itself is never held (`busy` stays false); only the button of that task+action says "working" and cannot be pressed again.
   const LATE = 700;  // a window with a Confirm button stays at most this long (ms) while the server has not answered; then it closes and the action goes on behind the page
   const RUNNING = new Map();  // "task\0action" -> the buttons drawn for it
@@ -380,7 +380,7 @@ const SERVE = (function () {
       post("/api/act", {...body, step: "act"}).then(done, (error) => { button.textContent = button.dataset.label; failed(error); });
       return;
     }
-    // The preview works the plan out (git on every repository): it can take long. The button says so and cannot be pressed again; the page keeps working meanwhile (1.8.24).
+    // The preview works the plan out (git on every repository): it can take long. The button says so and cannot be pressed again; the page keeps working meanwhile (1.8.25).
     if (running(row.name, item.action)) return;
     hold(row.name, item.action, button);
     post("/api/act", {...body, step: "preview"}).then((data) => {

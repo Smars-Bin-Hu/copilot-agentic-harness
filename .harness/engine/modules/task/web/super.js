@@ -649,7 +649,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       return node;
     }
 
-    // The one-line steer box (1.8.24), for the Stuck card and the avatar's menu: the input, a Send button (as the reply box has) and a small x. Enter or Send sends; Escape or x closes; the steer button
+    // The one-line steer box (1.8.25), for the Stuck card and the avatar's menu: the input, a Send button (as the reply box has) and a small x. Enter or Send sends; Escape or x closes; the steer button
     // opens it, and while it holds words a second press only focuses it, so typed words are not lost. After a send the caller closes it (the words go).
     function steerBox(task, send, extra) {
       const line = h("input", {type: "text", class: "sa-mateline sa-steerline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task}), "aria-label": t("super.mate.steer.ph", {task})});
@@ -1523,7 +1523,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       sv.hidden = false;
       fit();
       if (!pet) {
-        pet = (options.makePet || PET.create)(sv);  // 1.8.24: the workbench gives a stand-in that does nothing (the bridge takes the pet's place)
+        pet = (options.makePet || PET.create)(sv);  // 1.8.25: the workbench gives a stand-in that does nothing (the bridge takes the pet's place)
         pet.node.title = t("super.pet.tip");
         pet.onClick(petClick); pet.onDouble(petDouble); pet.onDrop(petDrop);
         drawOrbit();

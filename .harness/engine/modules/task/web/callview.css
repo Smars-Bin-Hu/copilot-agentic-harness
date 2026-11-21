@@ -1,4 +1,4 @@
-/* The window of a held call (callview.js, 1.8.24) and the pieces its card shares: the facts line, the command laid out, the body block, the code chip, the wide dialog. Moved out of desk.css so the board has it too. */
+/* The window of a held call (callview.js, 1.8.25) and the pieces its card shares: the facts line, the command laid out, the body block, the code chip, the wide dialog. Moved out of desk.css so the board has it too. */
 .tk-facts{display:grid;gap:5px;min-width:240px;max-width:340px}.tk-fact{display:flex;align-items:baseline;justify-content:space-between;gap:24px}.tk-fact>span:last-child{text-align:right;overflow-wrap:anywhere}.tk-fact>.sub{flex:none;margin:0}
 .tk-fact .unnamed .why{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:var(--approval);color:#fff;font-size:10px;font-weight:700;cursor:help}
 .tk-call-facts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;margin:4px 0 8px}

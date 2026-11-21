@@ -1,4 +1,4 @@
-"""One window for a held call (callview.js, 1.8.24): the task page and the super view's queue draw it with the same code, and the board carries what it needs.
+"""One window for a held call (callview.js, 1.8.25): the task page and the super view's queue draw it with the same code, and the board carries what it needs.
 Also the steer box (a Send button) and the click on the super agent block of the bridge. No browser here: the page's files are read; the look is checked in the lab with screenshots."""
 
 from __future__ import annotations

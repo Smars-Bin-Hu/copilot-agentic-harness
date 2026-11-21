@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, copilot_events, domainskills, messages, outbox, tasks
+from core import config, copilot_events, domainskills, filecache, messages, outbox, tasks
 from core.logs import session_log_path
 from core.paths import cli_command, repo_root, utc_now
 from core.state import SUBAGENT_ACTIVE_TTL_SECONDS, admin_on, atomic_write, session, state_lock, state_path
@@ -854,7 +854,7 @@ STATES = ("broken", "error", "waiting", "working", "quiet", "unheld", "paused", 
 def session_state(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     """The state file of the session of this task, as it is on disk (never written); empty when it is gone or cannot be read."""
     try:
-        state = json.loads(state_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or "")).read_text(encoding="utf-8-sig"))
+        state = json.loads(filecache.read_text(state_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or "")), encoding="utf-8-sig"))
         return state if isinstance(state, dict) else {}
     except (OSError, ValueError, TypeError):
         return {}

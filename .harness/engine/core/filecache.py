@@ -89,6 +89,12 @@ def _kept_or(target: Path, kind: str, make: Callable[[Path], Any], size_limit: i
     return value
 
 
+def kept(path: Union[str, Path], kind: str, make: Callable[[Path], Any]) -> Any:
+    """`make(path)`, kept under `kind` while the file does not change (what `make` gives must not be changed by the caller: give back text or a tuple). Off: `make` every time."""
+    target = Path(path)
+    return _kept_or(target, kind, make) if _on else make(target)
+
+
 def read_text(path: Union[str, Path], encoding: str = "utf-8", errors: str = "strict") -> str:
     """`Path.read_text`, kept while the file does not change. Raises as `read_text` does (a file that is gone raises, it is never served from what was kept)."""
     target = Path(path)

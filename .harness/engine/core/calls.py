@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 
-from . import approvals, tasks
+from . import approvals, filecache, tasks
 from .paths import utc_now
 
 FILE = "calls.jsonl"
@@ -40,7 +40,7 @@ def note(root: Path, task: str, command: str, system: str, env: str, verb: str, 
 
 def read(root: Path, task: str) -> List[Dict[str, Any]]:
     try:
-        lines = path(root, task).read_text(encoding="utf-8").splitlines()
+        lines = filecache.read_text(path(root, task)).splitlines()  # 1.8.22: read again only when it changed
     except OSError:
         return []
     out: List[Dict[str, Any]] = []

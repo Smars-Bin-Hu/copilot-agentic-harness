@@ -215,7 +215,7 @@ const WORKBENCH = (function () {
       }
     }
     // A frame that was not shown asked nothing (common.js pollEvery): it looks again at once when it shows (1.8.22).
-    function wake(frame) { setTimeout(() => { try { frame.contentWindow.dispatchEvent(new Event("visibilitychange")); } catch (error) { /* not loaded yet: it asks on its next round */ } }, 0); }
+    function wake(frame) { setTimeout(() => { try { frame.contentDocument.dispatchEvent(new Event("visibilitychange")); } catch (error) { /* not loaded yet: it asks on its next round */ } }, 0); }
     function select(name) { active = name; syncTask(); }
     function dropTab(tab) {
       tab.frame.remove();

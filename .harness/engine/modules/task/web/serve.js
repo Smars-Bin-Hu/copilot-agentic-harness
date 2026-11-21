@@ -310,9 +310,9 @@ const SERVE = (function () {
       done();
     }, (error) => {
       clearTimeout(timer);
-      if (!late) return hooks.stay(error);
+      if (!late && view.box.isConnected) return hooks.stay(error);  // the window is still there: the reason shows in it
       release(task, action);
-      hooks.again(error);
+      hooks.again(error);  // the window is gone (late, or the person closed it meanwhile): it comes back with the reason, never a refusal nobody sees
     });
   }
 
@@ -340,8 +340,9 @@ const SERVE = (function () {
     no.addEventListener("click", view.close);
     go.addEventListener("click", () => {
       go.disabled = true;
+      no.disabled = true;  // the request is out: Cancel would not take it back
       settle(view, run(true, calls.map((call) => call.code)), ctx.task, "accept", ctx.button, {
-        stay: (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; },
+        stay: (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; no.disabled = false; },
         again: (error) => askVoid(calls, run, ctx, error.message)});
     });
     return view;
@@ -407,11 +408,12 @@ const SERVE = (function () {
     const send = () => {
       if (yes.disabled) return;
       yes.disabled = true;
+      no.disabled = true;  // the request is out: Cancel would not take it back
       yes.textContent = t("board.serve.working");
       const code = input.value.trim(), asleep = Boolean(quiet && quiet.checked);
       // The server may be slow (git): the window stays 700 ms, then the action goes on behind the page. The code goes with the act step as ever.
       settle(view, post("/api/act", {...body, step: "act", code, ...(asleep ? {no_wake: true} : {})}), row.name, item.action, button, {
-        stay: (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; yes.textContent = t("board.serve.confirm"); },
+        stay: (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; no.disabled = false; yes.textContent = t("board.serve.confirm"); },
         again: (error) => codeWindow(button, row, item, body, joint, data, code, asleep, error.message)});
     };
     yes.addEventListener("click", send);

@@ -153,6 +153,20 @@ assert.strictEqual(windows().length, 0); assert.strictEqual(refreshed, 1); asser
 advance(2000); assert.strictEqual(windows().length, 0);   // the timer of the window is gone: nothing opens late
 """)
 
+    def test_cancel_is_off_once_confirm_went_out_and_a_refusal_never_lands_in_a_window_that_is_gone(self) -> None:
+        self.run_js(r"""
+const b = button(); BODY.append(b); await open(b);
+field().value = "NOPE"; press("board.serve.confirm").fire("click"); await flush();
+assert.strictEqual(press("board.serve.cancel").disabled, true);    // the request is out: Cancel would not take it back
+advance(300); acts.shift().no("not right"); await flush();
+assert.strictEqual(press("board.serve.cancel").disabled, false);   // refused in the window: Cancel is back
+press("board.serve.confirm").fire("click"); await flush();
+windows()[0].remove();                                              // the window went away before the answer (closed some other way)
+advance(300); acts.shift().no("still not right"); await flush();
+assert.strictEqual(windows().length, 1);                            // it comes back: a refusal nobody sees must not happen
+assert.ok(windows()[0].textContent.includes("still not right")); assert.strictEqual(field().value, "NOPE");
+""")
+
     def test_accept_with_held_calls_goes_on_behind_after_the_second_yes(self) -> None:
         self.run_js(r"""
 const b = button(); b.setAttribute("data-label", "Accept and close"); BODY.append(b);

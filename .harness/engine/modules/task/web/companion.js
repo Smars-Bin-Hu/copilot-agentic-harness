@@ -61,7 +61,8 @@ const COMPANION = (function () {
     // ---------- the top line ----------
     const COUNTS = [["run", "super.pop.n.run"], ["wait", "super.pop.n.wait"], ["err", "super.pop.n.err"], ["quiet", "super.pop.n.quiet"]];
     function drawTop(snap) {
-      const numbers = {run: snap.working, wait: snap.items.length, err: (snap.error || 0) + (snap.stuck || 0), quiet: snap.quiet || 0};
+      const broken = (item) => item.why === "error" || item.why === "stuck";  // their cards are in the list, their count is the red one: a task is in one count only
+      const numbers = {run: snap.working, wait: snap.items.filter((item) => !broken(item)).length, err: (snap.error || 0) + (snap.stuck || 0), quiet: snap.quiet || 0};
       counts.replaceChildren(...COUNTS.map(([key, name]) => h("span", {class: "cp-n", title: t(name)}, h("i", {class: "cp-dot " + key}), numbers[key])));
       const waiting = snap.items.length;
       badge.hidden = !waiting;

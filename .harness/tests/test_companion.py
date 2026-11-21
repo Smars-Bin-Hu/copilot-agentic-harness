@@ -36,6 +36,7 @@ class CompanionTests(unittest.TestCase):
             self.assertIn(f'"{key}"', self.js)
         self.assertIn('class: "cp-n", title: t(name)', self.js)
         self.assertIn("snap.quiet", self.js)
+        self.assertIn('snap.items.filter((item) => !broken(item)).length', self.js)  # a task with an error or a stuck chat is in the red count only, not in the waiting one too
         for dot in ("run", "wait", "err", "quiet"):
             self.assertIn(f".cp-dot.{dot}{{", source("companion.css"))
 

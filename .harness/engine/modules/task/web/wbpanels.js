@@ -187,7 +187,7 @@ const WBPANELS = (function () {
       const subRows = Math.max(0, ...slots.map((count) => Math.ceil(count / Math.min(cols, Math.max(count, 1)))));
       const rowH = 2 * tr + (lines ? 20 : 8) + (subRows ? subRows * pitch + 14 : 0) + 14;
       const rowsN = Math.max(1, Math.ceil(n / perRow));
-      const H = tall ? 200 : Math.max(420, Math.round(firstY + rowsN * rowH + 24));
+      const H = tall ? 200 : Math.max(380, Math.round(firstY + rowsN * rowH + 24));
       const out = [];
       const back = [], front = [];
       list.forEach((info, index) => {
@@ -231,7 +231,7 @@ const WBPANELS = (function () {
       out.push(el("rect", {x: sx - sr, y: sy - sr, width: sr * 2, height: sr * 2, rx: (sr * .34).toFixed(1), class: "wbp-boss"}));
       out.push(el("circle", {cx: (sx - sr * .36).toFixed(1), cy: (sy - sr * .08).toFixed(1), r: (sr * .16).toFixed(1), class: "wbp-bosseye"}), el("circle", {cx: (sx + sr * .36).toFixed(1), cy: (sy - sr * .08).toFixed(1), r: (sr * .16).toFixed(1), class: "wbp-bosseye"}));
       if (!tall) out.push(el("text", {x: sx, y: sy + sr + 20, "text-anchor": "middle", class: "wbp-bossname", "font-size": 12.5}, t("super.name")));
-      return el("svg", {viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet", role: "img", "aria-label": t("super.wb.scene.label"), class: "wbp-svg"}, out);
+      return el("svg", {viewBox: "0 0 " + W + " " + H, preserveAspectRatio: tall ? "xMidYMid meet" : "xMidYMin meet", role: "img", "aria-label": t("super.wb.scene.label"), class: "wbp-svg"}, out);
     }
     function subLetter(info, at) {  // the letter of the at-th circle of a task: its groups in order, one circle for each running subagent
       let left = at;

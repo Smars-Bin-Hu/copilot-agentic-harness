@@ -1557,7 +1557,45 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const status = (data && data.status) || {};
       return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work" || mate.state === "start").length, making: making.slice(), closed: closedOnly(), watching: status.watching || 0, stuck: count(status.stuck), error: count(status.error), failed,
         mood: moodNow(), thinking: thinkingNow(), off: talkOff(), cost: costNow(),
-        messages: talk ? (talk.messages || []).filter((message) => message && message.role !== "you") : [], mates, loaded: data !== null};
+        quiet: quietCount(), mates, loaded: data !== null};
+    }
+    // The tasks that are neither at work nor waiting nor in error: the idle ones and the paused ones, each once (the grey count of the pop-out).
+    function quietCount() {
+      const names = new Set(mates.filter((mate) => mate.state === "idle").map((mate) => mate.task));
+      for (const row of rowsOf() || []) if (row.status === "open" && row.paused_since) names.add(row.name || row.task);
+      return names.size;
+    }
+    // The chat as the pop-out draws it: the messages of the talk (the person's and the agent's), what was typed and the server has not listed yet, and the asks to one task, in time order.
+    function chatOf() {
+      const out = [];
+      for (const message of (talk && talk.messages) || []) {
+        if (!message || !message.id) continue;
+        out.push({id: "m" + message.id, role: message.role === "you" ? "you" : "agent", text: message.role === "you" && message.kind === "summary" ? t("super.quick.summary") : String(message.text || ""), at: String(message.at || "")});
+      }
+      for (const one of (talk && talk.asks) || []) {
+        if (!one || !one.id) continue;
+        out.push({id: "a" + one.id, role: "ask", task: one.task, text: String(one.text || ""), answer: String(one.answer || ""), state: one.state, at: String(one.at || ""),
+          line: one.state === "sent" ? t("super.route.waiting") : one.state === "queued" ? t("super.route.queued") : one.state === "failed" ? t(routeKey(one.why || one.end)) : ""});
+      }
+      out.sort((a, b) => a.at.localeCompare(b.at));
+      pendingYou.forEach((text, at) => out.push({id: "p" + at + text, role: "you", text: text === SUMMARY_ASKED ? t("super.quick.summary") : text, at: "", pending: true}));
+      return out;
+    }
+    // What the person types in the pop-out goes the way the view's own input sends it: "@task words" is a direct message (directSend), any other words ask the super agent (ask). {ok, text}: the line to show.
+    async function popSend(text) {
+      const typed = String(text || "").trim();
+      if (!typed) return {ok: false, text: ""};
+      if (typed.startsWith("@")) {
+        const saved = filter;
+        filter = "";  // the words name their task: the avatar the view has picked is not the target here
+        const target = routeTarget(typed);
+        filter = saved;
+        if (!target) { const named = /^@([^\s,:;]+)/.exec(typed); return {ok: false, text: t("super.route.noname", {name: named ? named[1] : ""})}; }
+        const result = await directSend(target.task, target.text, SUPERDIRECT.valuesFor(target.task), false);
+        return {ok: result.ok, text: result.ok ? SUPERDIRECT.receipt(result.how, target.task, result) : SUPERDIRECT.refusal(target.task, result.why, result.error)};
+      }
+      ask(null, typed);
+      return {ok: true, text: ""};
     }
     function watch(on) {
       watchers = Math.max(0, watchers + (on ? 1 : -1));
@@ -1567,13 +1605,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     // The pop-out's calls (companion.js): the same pieces as the view, never a copy of them.
     const replyFor = (item) => { const entry = item && (item.why === "stopped" || SAYS(item)) ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };
     const previewFor = (item) => previewBox(item);
-    const asksOf = (task) => ((talk && talk.asks) || []).filter((one) => one && one.task === task).map((one) => ({...one, line: one.state === "sent" ? t("super.route.waiting") : one.state === "queued" ? t("super.route.queued") : one.state === "failed" ? t(routeKey(one.why || one.end)) : ""}));
-    async function askTask(task, text) {  // the pop-out's input: a direct message too, with the options of this browser
-      const result = await directSend(task, String(text || "").trim(), SUPERDIRECT.valuesFor(task), false);
-      return {ok: result.ok, why: result.ok ? "" : result.why, text: result.ok ? "" : SUPERDIRECT.refusal(task, result.why, result.error)};
-    }
-    const pop = {alertMarks: () => alertMarks((data && data.status) || {}), replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose, jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
-      taskLink, ask: (text) => ask(null, text), watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, openVS: () => SERVE.openVS()};
+    const pop = {replyFor, previewFor, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose, jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
+      taskLink, chat: chatOf, rich: (text) => rich(text), send: popSend, front: (task) => { if (options.front) options.front(task || ""); }, watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }};
     if (popUp) {
       const reason = COMPANION.unsupported();
       popUp.disabled = Boolean(reason);

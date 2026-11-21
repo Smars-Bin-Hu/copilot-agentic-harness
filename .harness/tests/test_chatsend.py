@@ -548,7 +548,7 @@ class SettingsTests(SendCase):
         self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["stays"])
 
     def test_the_pages_have_the_script_and_the_texts(self) -> None:
-        page = self.request("GET", "/")[1]["text"]
+        page = self.whole(self.request("GET", "/")[1]["text"])  # the page and the files it links
         self.assertIn("const CHAT", page)
         self.assertIn('"board.action.send"', page)
         self.assertIn('"desk.send.go"', page)

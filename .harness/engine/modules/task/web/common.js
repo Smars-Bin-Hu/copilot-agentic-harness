@@ -4,7 +4,7 @@
 "use strict";
 
 const DATA = JSON.parse(document.getElementById("data").textContent);
-const TEXT = DATA.text || {};
+const TEXT = DATA.text || window.PAGE_TEXT || {};
 
 // Enter that ends a line. Not the Enter that picks a word in an input method: Chinese is typed with it.
 const isEnter = (event) => event.key === "Enter" && !event.isComposing && event.keyCode !== 229;

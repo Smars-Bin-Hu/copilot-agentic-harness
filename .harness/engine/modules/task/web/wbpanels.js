@@ -165,7 +165,7 @@ const WBPANELS = (function () {
         const ctx = h("span", {class: "wbp-m"}, h("span", {class: "wbp-bar"}, h("b", {class: info.ctx && info.ctx.percent >= FULL ? "full" : "", style: "width:" + (info.ctx ? clamp(info.ctx.percent, 0, 100).toFixed(1) : 0) + "%"})), info.ctx ? Math.round(info.ctx.percent) + "%" : NONE);
         return h("div", {class: "wbp-dr " + KC(info.kind), "data-wbp-task": info.name, "data-wbp-hv": ""}, avatar(info, 18), h("span", {class: "wbp-wt"}, wait), aiu, ctx, h("span", {class: "wbp-sg", title: info.stage || null}, info.stage || NONE));
       });
-      return [nums, h("div", {class: "wbp-table"}, head, lines.length ? lines : h("div", {class: "wb-soon"}, t("super.wb.none")))];
+      return [nums, h("div", {class: "wbp-table"}, lines.length ? head : null, lines.length ? lines : h("div", {class: "wb-soon"}, t("super.wb.none")))];
     }
 
     // ---- the picture of Focus ----

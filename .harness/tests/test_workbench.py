@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,6 +18,7 @@ from modules.task import taskhtml
 WEB = Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web"
 CORE = Path(__file__).resolve().parents[1] / "engine" / "core"
 SERVE = {"actions": [], "refresh": 10}
+NODE = shutil.which("node")
 
 
 def source(name: str) -> str:
@@ -95,7 +99,8 @@ class WorkbenchPanelsTests(unittest.TestCase):
 
     def test_the_panels_are_drawn_from_the_rows_and_ask_for_nothing(self) -> None:
         script = source("wbpanels.js")
-        for needle in ("function treeNode", "function dataNode", "function sceneSVG", "function hoverCard", "function decorate", "function intro", "function idOf", "function paint"):
+        for needle in ("function treeNode", "function dataNode", "function sceneSVG", "function hoverCard", "function decorate", "function intro", "function idOf", "function paint",
+                       "function bridgeGroups", "function columnOf", "function fitOf", "function lookBlock", "function pipeBlock", "function timeBlock", "function spendBlock", "function openList", "function paintBridge"):
             self.assertIn(needle, script)
         for call in ("fetch(", "XMLHttpRequest", "EventSource", "WebSocket"):
             self.assertNotIn(call, script)  # no request of its own: the rows are the board's
@@ -120,11 +125,106 @@ class WorkbenchPanelsTests(unittest.TestCase):
     def test_the_send_button_keeps_its_own_colours(self) -> None:
         self.assertIn(":where(.wb-root) button{font:inherit;color:inherit}", source("workbench.css"))
 
+    def test_the_bridge_takes_its_options_and_flags_and_is_optional(self) -> None:
+        script = source("wbpanels.js")
+        for needle in ("options.pick", "options.menu", "options.closed", "options.target", "vis.bridge", "vis.down", "ResizeObserver", "contextmenu", "pointerdown", "data-wbp-more", "data-wbp-closed", "const DOTS = 12", "gate.tip"):
+            self.assertIn(needle, script)
+        self.assertIn("return {tree, data, scene, bridge, update,", script)
+        self.assertIn("if (!down) for (const dot of dots)", script)  # no moving dot when VS Code is not linked
+        self.assertIn("if (quiet)", script)  # a still dot under reduced motion and lite
+
+    def test_what_is_not_sent_yet_is_never_made_up(self) -> None:
+        script = source("wbpanels.js")
+        self.assertIn("time.known !== true", script)  # a task without Copilot's record is not counted
+        self.assertIn("row.agents.gate", script)
+        self.assertIn("agents.gate", source("wbpanels.js"))
+        self.assertNotIn("Math.random", script)
+
+    def test_the_tree_and_the_data_say_what_they_hold_and_do_not_poll_for_it(self) -> None:
+        script = source("wbpanels.js")
+        self.assertIn("const TREE_FLAT = 12", script)
+        self.assertIn("a folded group is not drawn", script)
+        self.assertIn("row.sub", script)
+        self.assertNotIn("setInterval(() => { refresh", script)
+        self.assertEqual(script.count("setInterval("), 1)  # the one-second timer of the cells that run
+
+    def test_the_new_style_has_the_bridge_the_list_and_the_blocks(self) -> None:
+        style = source("wbpanels.css")
+        for needle in (".wbp-bridge{", ".wbp-closed{", ".wbp-pop{", ".wbp-blk{", ".wbp-grp{", ".wbp-gate{", ".wbp-dim{", ".wbp-pipe{"):
+            self.assertIn(needle, style)
+
     def test_every_identity_colour_has_a_light_and_a_dark_value(self) -> None:
         style = source("wbpanels.css")
         for number in range(8):
             self.assertEqual(len(re.findall(rf"--wbp-id{number}:", style)), 2, number)
             self.assertIn(f".wbp-i{number}{{--id:var(--wbp-id{number})}}", style)
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class WorkbenchPanelsLogicTests(unittest.TestCase):
+    """The pure functions of the bridge, run in node with the page's globals stubbed."""
+
+    def run_js(self, body: str) -> str:
+        script = r"""
+const fs = require("fs"), assert = require("assert");
+const code = fs.readFileSync(process.argv[2], "utf8");
+const make = new Function("window", "document", "TEXT", "t", "h", "stateOf", "shownName", "clock", code + "\nreturn WBPANELS;");
+const W = make({matchMedia: null}, {documentElement: {classList: {contains: () => false}}}, {}, (k) => k, () => null, (row) => row.state, (row) => row.name, (s) => String(s));
+""" + body
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "check.js"
+            file.write_text(script, encoding="utf-8")
+            done = subprocess.run([NODE, str(file), str(WEB / "wbpanels.js")], capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr + done.stdout)
+        return done.stdout
+
+    def test_fifty_tasks_are_grouped_by_state_and_each_state_has_one_more_bubble(self) -> None:
+        out = self.run_js(r"""
+const items = [];
+const add = (kind, count, extra) => { for (let i = 0; i < count; i++) items.push(Object.assign({name: kind + String(i).padStart(2, "0"), kind, subsN: 0, waited: 100 - i}, extra ? extra(i) : {})); };
+add("wait", 20); add("work", 10, (i) => ({subsN: i >= 7 ? i - 6 : 0})); add("idle", 5); add("err", 5);
+assert.strictEqual(W.fitOf(706, false).many, 17);
+const plan = W.bridgeGroups(items, W.fitOf(706, false));
+assert.ok(plan.grouped);
+const by = Object.fromEntries(plan.groups.map((g) => [g.kind, g]));
+assert.deepStrictEqual(plan.groups.map((g) => g.kind), ["err", "wait", "work", "idle"]);
+assert.strictEqual(by.err.show.length, 3); assert.strictEqual(by.err.more, 2);
+assert.strictEqual(by.work.show.length, 4); assert.strictEqual(by.work.more, 6);
+assert.strictEqual(by.idle.show.length, 1); assert.strictEqual(by.idle.more, 4);
+assert.strictEqual(by.wait.show.length, 5); assert.strictEqual(by.wait.more, 15);
+assert.deepStrictEqual(by.work.show.slice(0, 3).map((i) => i.name), ["work09", "work08", "work07"]);  // the three with subagents first
+assert.deepStrictEqual(by.wait.show.map((i) => i.name), ["wait00", "wait01", "wait02", "wait03", "wait04"]);  // the longest wait first
+const slots = plan.groups.reduce((n, g) => n + g.show.length + (g.more ? 1 : 0), 0);
+assert.ok(slots <= 17, "slots " + slots);
+console.log("ok");
+""")
+        self.assertIn("ok", out)
+
+    def test_few_tasks_are_not_grouped_by_count_and_a_narrow_bridge_still_shows_something_of_each_state(self) -> None:
+        out = self.run_js(r"""
+const few = [{name: "a", kind: "work", subsN: 0}, {name: "b", kind: "err"}, {name: "c", kind: "wait", waited: 5}];
+const plan = W.bridgeGroups(few, W.fitOf(700, false));
+assert.ok(!plan.grouped);
+assert.deepStrictEqual(plan.groups.map((g) => g.kind + g.show.length + g.more), ["err10", "wait10", "work10"]);
+const many = [];
+for (const kind of ["wait", "work", "idle", "err"]) for (let i = 0; i < 9; i++) many.push({name: kind + i, kind, subsN: 0, waited: i});
+const narrow = W.bridgeGroups(many, W.fitOf(380, false));
+for (const g of narrow.groups) assert.ok(g.show.length >= 1, g.kind);
+const total = narrow.groups.reduce((n, g) => n + g.show.length + (g.more ? 1 : 0), 0);
+assert.ok(total <= Math.max(W.fitOf(380, false).many, 6), "total " + total);
+const none = W.bridgeGroups([], W.fitOf(700, false));
+assert.deepStrictEqual(none.groups, []);
+console.log("ok");
+""")
+        self.assertIn("ok", out)
+
+    def test_a_step_of_the_ribbon_is_put_in_one_of_the_five_columns(self) -> None:
+        out = self.run_js(r"""
+const want = {requirement: 0, plan: 1, guide: 1, developing: 2, doing: 2, env: 2, writeback: 3, byhand: 3, done: 3, "": 2, nothing: 2};
+for (const [id, col] of Object.entries(want)) assert.strictEqual(W.columnOf(id), col, id);
+console.log("ok");
+""")
+        self.assertIn("ok", out)
 
 
 if __name__ == "__main__":

@@ -216,6 +216,7 @@ function actionButton(row, item, extra) {
   const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive" && !TALK.includes(item.action);
   const button = h("button", {class: "act" + (CHAT_ACTIONS.includes(item.action) ? " chat-act" : "") + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": shown}, shown);
   if (locked) button.disabled = true;
+  if (live) SERVE.running(row.name, item.action, button);  // an approval that goes on behind the page (serve.js): a button drawn again says "working" too
   if (chatGone(row) && CHAT_ACTIONS.includes(item.action) && item.action !== "send") {  // Send stays: its panel lets the person copy the message
     button.disabled = true;
     button.classList.remove("hot");  // it asks for nothing now, and the button beside it is the one to press

@@ -38,6 +38,8 @@ def stage_text(stage: str) -> str:
     """The words of a stage of the wheel."""
     if stage == "pairing":
         return say("serve.bg.pairing")
+    if stage == "restarting":
+        return say("serve.bg.restarting")
     return say("serve.bg.opening") if stage == "opening" else say("serve.bg.starting")
 
 
@@ -103,6 +105,16 @@ class Wheel:
                 self.tty = False
             self.shown = len(line)
 
+    def note(self, text: str) -> None:
+        """A line that stays above the wheel (1.8.23: an older board was stopped)."""
+        if self.shown:
+            try:
+                self.out.write("\r" + " " * self.shown + "\r")
+            except (OSError, ValueError):
+                pass
+            self.shown = 0
+        print(text, file=self.out, flush=True)
+
     def end(self, text: str, lines: str = "", kind: str = "ready", log: str = "") -> None:
         if self.shown:
             try:
@@ -129,6 +141,9 @@ class Both:
 
     def tick(self, stage: str, seconds: int) -> None:
         self.window.tick(stage_text(stage), seconds)
+
+    def note(self, text: str) -> None:
+        self.wheel.note(text)  # the terminal keeps it; the window shows the stage
 
     def end(self, text: str, lines: str = "", kind: str = "ready", log: str = "") -> None:
         self.wheel.end(text, lines, kind)
@@ -176,11 +191,45 @@ def background(root: Path, port: Optional[int] = None, out: Any = None, interact
     return done.get("result", ok())
 
 
+def retire_stale(root: Path, port: int, ui: Any, *, sleep: Callable[[float], Any] = time.sleep, clock: Callable[[], float] = time.monotonic) -> bool:
+    """1.8.23: the board that runs started on an older release than the folder holds (an update while it ran in the background): ask it to stop, as `--stop` does, and
+    wait for it to go, so the start that follows runs the new code and accepts the new guardrail files. True when it went; False when it is the same release, or when it
+    did not go in time (it is then opened as it is)."""
+    try:
+        from core import registry
+
+        now = str(registry.harness_version(root) or "")
+    except Exception:  # noqa: BLE001
+        return False
+    started = boardserve.running_release(port)
+    if not now or not started or started == now:
+        return False
+    path = boardserve.stop_file(root)
+    if path is None:
+        return False
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("stop\n", encoding="utf-8")
+    except OSError:
+        return False
+    began = clock()
+    limit = pace.scaled(STOP_WAIT)
+    while clock() - began < limit:
+        if not boardserve.running_board(root):
+            ui.note(say("serve.bg.restarted", started=started, now=now))
+            return True
+        ui.tick("restarting", int(clock() - began))
+        sleep(POLL_EVERY)
+    return False
+
+
 def wait(root: Path, port: Optional[int], ui: Any, *, start: Optional[Callable[..., Any]], sleep: Callable[[float], Any], clock: Callable[[], float], limit: float, every: float) -> Dict[str, Any]:
     """Start the board, or open the one that runs, then follow it until a paired page is open, shown on `ui` (the terminal wheel or the start window)."""
     limit = pace.scaled(WAIT_LIMIT) if limit is None else limit  # 1.8.15: grown at the moment of use
     child = None
     running = boardserve.running_board(root)
+    if running and retire_stale(root, running, ui, sleep=sleep, clock=clock):  # 1.8.23: an older release runs: it stops, and the new one starts below
+        running = 0
     if running:  # nothing in the running board changes: it opens the browser with a new code
         address = f"http://127.0.0.1:{running}/"
         if not boardserve.open_again(running):

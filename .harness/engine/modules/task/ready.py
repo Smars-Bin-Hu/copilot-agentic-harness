@@ -259,6 +259,7 @@ class Ready:
         self.misses = 0  # doctor runs in a row that failed or found errors: the wait before the next one grows (RETRY_FAILED)
         self.at = 0.0
         self.running = False
+        self.started = ""  # 1.8.23: the release number this board process started with (the board sets it); "" in a test without a board
         self.kept: Optional[Dict[str, Any]] = None  # 1.8.13: the last answer of `keep_fresh`
         self.asked_at = -1e9
         self.worker: Optional[threading.Thread] = None
@@ -393,7 +394,24 @@ class Ready:
             return {"state": "fail", "why": "nomodel"}
         return {"state": "ok", "why": "ok", "n": found["models"]}
 
+    def stale(self) -> Optional[Dict[str, str]]:
+        """1.8.23: the release this board process started with, when the folder now holds another one (`{started, now}`), else None. The board runs in the background
+        since 1.8.11, so an update of the folder no longer meets a start of the board: the guardrail files of the new release stay unaccepted (the hook refuses the agent's
+        commands meanwhile) and the old code serves new pages. A restart of the board accepts them (`integrity.accept_on_start`)."""
+        if not self.started:
+            return None
+        try:
+            from core import registry
+
+            now = str(registry.harness_version(self.root) or "")
+        except Exception:  # noqa: BLE001 - a registry that cannot be read is doctor's to report
+            return None
+        return {"started": self.started, "now": now} if now and now != self.started else None
+
     def doctor_line(self) -> Dict[str, Any]:
+        old = self.stale()
+        if old:  # before anything doctor says: its errors after an update are this
+            return {"state": "fail", "why": "stale", **old}
         self.start_doctor()
         with self.lock:
             found, again = self.found, self.running and self.found is not None and self.asked_again

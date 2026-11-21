@@ -61,7 +61,7 @@ def say(key: str, /, **values: Any) -> str:
 
 def page_text() -> Dict[str, str]:
     """The messages a page may show, by name. The scripts fill in the placeholders."""
-    return {key: value for key, value in messages.table(messages.language()).items() if key.startswith(TEXT_PREFIXES)}
+    return {key: value for key, value in messages.fresh_table(messages.language()).items() if key.startswith(TEXT_PREFIXES)}
 
 
 PAGE_LANGUAGE = '<html lang="en">'  # as the skeletons have it; the page gets the language of its texts

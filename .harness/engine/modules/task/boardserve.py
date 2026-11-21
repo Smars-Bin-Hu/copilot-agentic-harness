@@ -115,8 +115,9 @@ DESK_REFRESH = 3  # seconds between two reads of a task page (10 until 1.7.26: a
 REFRESH = 3  # seconds between two boards in the browser when `board.refresh_seconds` of the task policy says nothing
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
+# 'self' framing: the board page shows a task page (`/task/<name>?embed=1`) inside itself. No other site can frame any page of this server (frame-ancestors 'self' is the same origin only).
 CSP = ("default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
-       "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+       "base-uri 'none'; form-action 'none'; frame-ancestors 'self'; frame-src 'self'")
 
 
 def say(key: str, /, **values: Any) -> str:

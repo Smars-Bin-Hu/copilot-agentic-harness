@@ -91,6 +91,29 @@ class FileCacheTests(unittest.TestCase):
         self.file.write_text('{"b": 1}', encoding="utf-8")
         self.assertNotEqual(filecache.sha256(self.file), before)
 
+    def test_in_one_pass_a_fresh_file_is_read_once_and_a_change_is_still_read(self) -> None:
+        """1.8.22: action-approvals.json gets the beat of every `harness wait` every few seconds, and each task's row of one board drawing asked for it."""
+        filecache.enable()
+        self.file.write_text('{"a": 5}', encoding="utf-8")  # fresh: never kept across passes
+        with filecache.one_pass():
+            OPENS.clear()
+            filecache.read_text(self.file)
+            filecache.read_text(self.file)
+            self.assertEqual(opened(self.file), 1)
+            self.file.write_text('{"a": 66}', encoding="utf-8")
+            self.assertEqual(filecache.read_text(self.file), '{"a": 66}')
+        OPENS.clear()
+        filecache.read_text(self.file)
+        self.assertEqual(opened(self.file), 1)  # the pass is over: a fresh file is read again
+
+    def test_a_log_line_with_a_line_separator_in_its_text_stays_one_row(self) -> None:
+        from core import logs
+
+        filecache.enable()
+        log = self.folder / "a.jsonl"
+        log.write_text(json.dumps({"text": "one\u2028two"}, ensure_ascii=False) + "\n" + json.dumps({"n": 2}) + "\n{broken", encoding="utf-8")
+        self.assertEqual(logs.read_lines(log), [{"text": "one\u2028two"}, {"n": 2}])
+
     def test_turned_off_it_forgets(self) -> None:
         filecache.enable()
         filecache.read_text(self.file)

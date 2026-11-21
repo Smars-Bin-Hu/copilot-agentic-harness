@@ -12,6 +12,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+from . import filecache
 from .paths import logs_dir, utc_now
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
@@ -62,14 +63,15 @@ def read_lines(path: Path) -> List[Dict[str, Any]]:
     """The lines of a JSONL file that parse. A half-written last line is skipped."""
     rows: List[Dict[str, Any]] = []
     try:
-        with path.open(encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(row, dict):
-                    rows.append(row)
+        for line in filecache.read_text(path).split("\n"):  # 1.8.22: the board server reads a log again only when it grew. Not splitlines(): a JSON text may hold U+2028
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict):
+                rows.append(row)
     except OSError:
         pass
     return rows

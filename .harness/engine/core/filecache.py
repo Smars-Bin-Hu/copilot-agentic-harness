@@ -11,13 +11,14 @@ What is kept is the text (or the sha256); a JSON value is parsed again for each 
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Iterator, Tuple, Union
 
 MAX_FILES = 2000
 MAX_TOTAL = 64 * 1024 * 1024  # all the texts kept together, at most
@@ -27,6 +28,7 @@ MAX_BYTES = 2 * 1024 * 1024
 _on = False
 _lock = threading.Lock()
 _size = 0  # the characters of the texts kept now
+_pass = threading.local()  # one_pass(): what this thread read in the pass, fresh files too
 _kept: "OrderedDict[str, Tuple[Tuple[int, int, int, int], Any]]" = OrderedDict()
 
 
@@ -44,11 +46,28 @@ def enabled() -> bool:
     return _on
 
 
+@contextlib.contextmanager
+def one_pass() -> Iterator[None]:
+    """One drawing of the board (every task's row): a file is read once in it, even a file that changes all the time (`action-approvals.json` gets the beat of every
+    `harness wait` every few seconds, and each task's row asked for it). Still keyed on the stamp, so a change within the pass is read; forgotten when the pass ends. Only while the cache is on."""
+    outer = getattr(_pass, "kept", None)
+    if outer is None:
+        _pass.kept = {}
+    try:
+        yield
+    finally:
+        if outer is None:
+            _pass.kept = None
+
+
 def _kept_or(target: Path, kind: str, make: Callable[[Path], Any], size_limit: int = MAX_BYTES) -> Any:
     """What `make(target)` gives, kept under (kind, path) while the file does not change."""
     info = os.stat(target)
     stamp = (info.st_mtime_ns, info.st_size, info.st_ino, info.st_ctime_ns)
     key = f"{kind}\0{target}"
+    in_pass = getattr(_pass, "kept", None)
+    if in_pass is not None and in_pass.get(key, (None,))[0] == stamp:
+        return in_pass[key][1]
     with _lock:
         found = _kept.get(key)
         if found is not None and found[0] == stamp:
@@ -56,6 +75,8 @@ def _kept_or(target: Path, kind: str, make: Callable[[Path], Any], size_limit: i
             return found[1]
     global _size
     value = make(target)
+    if in_pass is not None and info.st_size <= size_limit:
+        in_pass[key] = (stamp, value)
     if info.st_size <= size_limit and time.time_ns() - info.st_mtime_ns > FRESH_NS:
         with _lock:
             old = _kept.pop(key, None)

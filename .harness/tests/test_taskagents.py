@@ -15,7 +15,8 @@ from core import tasks
 from core.autorunfiles import ledger_append
 from core.paths import utc_now
 from core.state import update_state
-from modules.task import taskagents, taskboard
+from core.logs import session_log_path
+from modules.task import common, taskagents, taskboard, tasksub
 
 
 class AgentsCase(TaskCase):
@@ -36,7 +37,45 @@ class AgentsCase(TaskCase):
         return {item["type"]: item["n"] for item in self.agents()["subs"]}
 
     def test_nothing_runs(self) -> None:
-        self.assertEqual(self.agents(), {"subs": [], "autorun": None, "review": None, "mapper": None})
+        self.assertEqual(self.agents(), {"subs": [], "autorun": None, "review": None, "mapper": None, "gate": {"n": 0, "minutes": 10}})
+
+    def hooklog(self, *rows: Dict[str, Any], raw: str = "") -> None:
+        path = session_log_path(self.root, "vscode", SESSION)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            for item in rows:
+                handle.write(json.dumps(item) + "\n")
+            handle.write(raw)
+
+    @staticmethod
+    def refusal(minutes_ago: float, decision: str = "deny", **more: Any) -> Dict[str, Any]:
+        at = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        return {"at": at, "event": "PreToolUse", "tool_name": "bash", "decision": decision, **more}
+
+    def test_the_gate_counts_the_refusals_of_the_last_ten_minutes_only(self) -> None:
+        self.assertEqual(self.agents()["gate"], {"n": 0, "minutes": 10})  # no log line of a refusal
+        self.hooklog(self.refusal(1), self.refusal(9), self.refusal(11), self.refusal(120), self.refusal(2, "allow"))
+        self.assertEqual(self.agents()["gate"], {"n": 2, "minutes": 10})
+
+    def test_a_call_held_for_the_person_is_not_a_refusal(self) -> None:
+        held = {"external": {"decision": sorted(common.HELD_DECISIONS)[0]}}
+        self.hooklog(self.refusal(1, **held), self.refusal(1, "ask"), self.refusal(1))
+        self.assertEqual(self.agents()["gate"]["n"], 1)
+
+    def test_a_broken_log_gives_no_count_and_no_error(self) -> None:
+        self.hooklog(self.refusal(1), raw="{half a line\n[1, 2]\nnot json at all\n" + json.dumps({"at": "yesterday", "event": "PreToolUse", "decision": "deny"}) + "\n")
+        self.assertEqual(self.agents()["gate"]["n"], 1)  # the lines that are no row, or have no time, are skipped
+        session_log_path(self.root, "vscode", SESSION).write_bytes(b"\xff\xfe\x00 broken")
+        self.assertEqual(self.agents()["gate"]["n"], 0)
+        self.assertEqual(taskagents.gate_of(self.root, {}), {"n": 0, "minutes": 10})
+
+    def test_the_last_tool_call_of_the_hook_log_is_the_same_as_before(self) -> None:
+        data = {"session_id": SESSION, "surface": "vscode"}
+        self.hooklog({"at": "2026-01-01T10:00:00Z", "event": "PostToolUse", "tool_name": "view"}, {"at": "2026-01-01T10:00:05Z", "event": "PreToolUse", "tool_name": "bash", "skill": "my-skill"},
+                     {"at": "2026-01-01T10:00:06Z", "event": "UserPromptSubmit"}, raw="{half")
+        self.assertEqual(tasksub.from_hooklog(self.root, data), {"at": "2026-01-01T10:00:05Z", "what": "bash", "text": "my-skill", "kind": "hook"})
+        self.assertIsNone(tasksub.from_hooklog(self.root, {"session_id": "", "surface": "vscode"}))
+        self.assertIsNone(tasksub.from_hooklog(self.root, {"session_id": "no-such", "surface": "vscode"}))
 
     def test_running_subagents_are_grouped_and_a_stop_takes_one_away(self) -> None:
         for name in ("reviewer", "worker", "reviewer"):
@@ -106,7 +145,7 @@ class AgentsCase(TaskCase):
 
     def test_a_broken_state_file_gives_empty_values(self) -> None:
         self.state_file(SESSION).write_text("{not json", encoding="utf-8")
-        self.assertEqual(self.agents(), {"subs": [], "autorun": None, "review": None, "mapper": None})
+        self.assertEqual(self.agents(), {"subs": [], "autorun": None, "review": None, "mapper": None, "gate": {"n": 0, "minutes": 10}})
         self.state_file(SESSION).write_text(json.dumps({"subagents": {"active": [{"at": "x"}, 5, {"agent_type": "worker", "at": time.time()}]}, "modules": 3}), encoding="utf-8")
         self.assertEqual(self.subs(), {"worker": 1})
 

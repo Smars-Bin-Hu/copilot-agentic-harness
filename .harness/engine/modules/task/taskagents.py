@@ -11,11 +11,13 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from core import filecache
+from core import copilot_events, filecache
 from core.autorunfiles import LEDGER_FILE, STEP_SHOWN, state_dir, steps_of
+from core.logs import read_tail, session_log_path
 from core.state import SUBAGENT_ACTIVE_TTL_SECONDS
 
-from . import autorun, mapreduce, tasklife
+from . import autorun, common, mapreduce, tasklife
+from .tasksub import TAIL_BYTES
 from .autorun_board import parse
 
 
@@ -83,18 +85,37 @@ def autorun_of(root: Any, task: str, data: Dict[str, Any]) -> Optional[Dict[str,
     return {"step": int(last.get("step") or 0), "total": len(steps_of(root, task)), "text": str(last.get("text") or "")[:STEP_SHOWN]}
 
 
+GATE_MINUTES = 10
+
+
+def gate_of(root: Any, data: Dict[str, Any], now: Optional[float] = None) -> Dict[str, int]:
+    """How many calls of the session the gate refused in the last `GATE_MINUTES`. A call held for the person is not a refusal. Reads the cached tail of the hook log (the same bytes `tasksub.from_hooklog` reads)."""
+    found = {"n": 0, "minutes": GATE_MINUTES}
+    session = str(data.get("session_id") or "")
+    if not session:
+        return found
+    since = (time.time() if now is None else now) - GATE_MINUTES * 60
+    for row in read_tail(session_log_path(root, str(data.get("surface") or "vscode"), session), TAIL_BYTES):
+        if row.get("event") != "PreToolUse" or row.get("decision") != "deny" or common.is_held(row):
+            continue
+        at = copilot_events.seconds(row.get("at"))
+        if at is not None and at >= since:
+            found["n"] += 1
+    return found
+
+
 def of(root: Any, task: str, data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """The `agents` of a row of the board: `{subs, autorun, review, mapper}`; None when task.json is not known. The caller asks only for an open task."""
+    """The `agents` of a row of the board: `{subs, autorun, review, mapper, gate}`; None when task.json is not known. The caller asks only for an open task."""
     if not isinstance(data, dict) or not data:
         return None
-    found: Dict[str, Any] = {"subs": [], "autorun": None, "review": None, "mapper": None}
+    found: Dict[str, Any] = {"subs": [], "autorun": None, "review": None, "mapper": None, "gate": {"n": 0, "minutes": GATE_MINUTES}}
     try:
         state = tasklife.session_state(root, data)
         found["subs"] = subs_of(state, time.time())
         found["mapper"] = mapper_of(state)
     except Exception:  # noqa: BLE001 - a broken state file: empty values
         pass
-    for key, make in (("review", lambda: review_of(data)), ("autorun", lambda: autorun_of(root, task, data))):
+    for key, make in (("gate", lambda: gate_of(root, data)), ("review", lambda: review_of(data)), ("autorun", lambda: autorun_of(root, task, data))):
         try:
             found[key] = make()
         except Exception:  # noqa: BLE001

@@ -1881,6 +1881,8 @@
   "super.line.tired": "Resting · today's limit is used",
   "super.cost.label": "{left} Credits left today",
   "super.cost.tip": "Super agent today: {spent} of {limit} Credits spent, {left} left.\nMessages, the robot's walk and the buttons cost nothing.",
+  "super.recharge.why.amount": "Only 25 or 50 Credits can be added at a time.",
+  "super.recharge.why.cap": "No more today: at most 200 extra Credits a day.",
   "super.earlier": "Show earlier ({n})",
   "super.hist.open": "Earlier days of the chat",
   "super.hist.title": "Earlier days",

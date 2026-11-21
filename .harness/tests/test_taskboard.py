@@ -1203,6 +1203,19 @@ class RoundsTests(TaskCase):
         self.assertEqual((brief["prompts"], brief["aiu"], brief["current"]["prompts"], brief["current"]["aiu"]), (2, 30.0, 1, 20.0))
         self.assertNotIn("current", brief["current"])
 
+    def test_the_row_says_where_the_time_went_from_the_sum_of_the_prompts(self) -> None:
+        rows = {item["name"]: item for item in taskboard.board_rows(self.root, True)[0]["tasks"]}
+        spent = rows[NAME]["brief"]["time"]
+        self.assertEqual((round(spent["model_s"]), round(spent["tool_s"]), round(spent["approval_s"]), round(spent["subagent_s"]), spent["known"]), (56, 30, 10, 24, True))  # two prompts of one_prompt
+        self.assertEqual(spent["waiting_s"], taskinsight.of_task(self.root, TASK)["totals"]["waiting_s"])
+        self.assertIn("time", rows[NAME]["brief"]["current"])
+
+    def test_the_time_is_not_known_without_copilots_record(self) -> None:
+        for source, model in (("hook-log", None), ("none", None), ("hook-log", 5.0), ("copilot-events", None)):
+            totals = {"prompts": 1, "active_s": 9.0, "waiting_s": 3.0, "aiu": None, "premium_requests": None, "reviews": 0, "review_fails": 0, "model_s": model, "tool_s": 1.0, "approval_s": 0.0, "subagent_s": 0.0}
+            spent = taskinsight.brief({"totals": totals, "source": source})["time"]
+            self.assertEqual(spent, {"model_s": None, "tool_s": None, "subagent_s": None, "approval_s": None, "waiting_s": None, "known": False})
+
     def test_the_page_carries_all_rounds_and_each_round(self) -> None:
         info, now = taskboard.insight(self.root, TASK)
         data = page_data(taskhtml.task_page(info, 0, now))["info"]

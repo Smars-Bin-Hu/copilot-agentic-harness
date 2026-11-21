@@ -892,6 +892,11 @@ def brief(result: Dict[str, Any]) -> Dict[str, Any]:
         "prompts": totals["prompts"], "active_s": totals["active_s"], "waiting_s": totals["waiting_s"], "aiu": totals["aiu"],
         "premium_requests": totals["premium_requests"], "reviews": totals["reviews"], "review_fails": totals["review_fails"], "source": result["source"],
     }
+    known = result["source"] == SOURCE_EVENTS and totals.get("model_s") is not None  # no model time without Copilot's record: no numbers
+    found["time"] = {  # 1.8.24: where the time went, from the per-prompt `split` already summed in the totals
+        "model_s": totals["model_s"] if known else None, "tool_s": totals["tool_s"] if known else None, "subagent_s": totals["subagent_s"] if known else None,
+        "approval_s": totals["approval_s"] if known else None, "waiting_s": totals["waiting_s"] if known else None, "known": known,
+    }
     if result.get("by_round"):
         found["current"] = brief(result["by_round"][str(result["current_round"])])
     return found

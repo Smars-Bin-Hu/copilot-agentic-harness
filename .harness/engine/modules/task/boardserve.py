@@ -2353,6 +2353,18 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.brain.summary() if data.get("kind") == "summary" else board.brain.ask(data.get("text")))
                 except Exception as error:  # noqa: BLE001 - the page shows the refusal
                     return self.answer(500, {"error": str(error)})
+            if path == "/api/super/recharge":  # 1.8.24: more Credits for the super agent, today only ({amount: 25 | 50}; 200 a day at most). {ok: true, extra, base, limit} or {ok: false, why: amount | cap}. It lifts a spend limit: the paired browser only (an agent has no cookie, and the gate refuses its request to the port)
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.brain.recharge(data.get("amount"))
+                    if not result.get("ok"):
+                        result["reason"] = say("super.recharge.why.cap") if result.get("why") == "cap" else say("super.recharge.why.amount")  # the words the page shows for the refusal
+                    else:
+                        print(say("serve.did", action="super recharge " + str(data.get("amount")) + " at " + utc_now(), task="-"), flush=True)
+                    return self.answer(200, result)
+                except Exception as error:  # noqa: BLE001 - the page shows the refusal
+                    return self.answer(500, {"error": str(error)})
             if path == "/api/super/send":  # 1.8.4: a direct message to one task's chat ({task, text, model?, thinking?, context?, new_chat?, busy?: queue | steer, lang?, files?}); not through the super agent. {ok: true, how: sent | queued | steered | said | new-chat, task, chat} or {ok: false, why}: see `superdirect`. The paired browser only
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

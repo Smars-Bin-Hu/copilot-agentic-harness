@@ -1881,6 +1881,8 @@
   "super.line.tired": "休息中 · 今天的额度用完了",
   "super.cost.label": "今天还剩 {left} Credits",
   "super.cost.tip": "Super agent 今天：已用 {spent} / {limit} Credits，还剩 {left}。\n消息、机器人走动和按钮都不花额度。",
+  "super.recharge.why.amount": "每次只能加 25 或 50 Credits。",
+  "super.recharge.why.cap": "今天不能再加了：每天最多加 200 Credits。",
   "super.earlier": "显示更早的（{n}）",
   "super.hist.open": "之前几天的对话",
   "super.hist.title": "之前几天",

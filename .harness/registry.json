@@ -153,6 +153,7 @@
         ".harness/tests/test_workbench.py",
         ".harness/tests/test_callview.py",
         ".harness/tests/test_actbehind.py",
+        ".harness/tests/test_headclear.py",
         ".harness/tests/test_superbrain.py",
         ".harness/tests/test_superact.py",
         ".harness/tests/test_superroute.py",

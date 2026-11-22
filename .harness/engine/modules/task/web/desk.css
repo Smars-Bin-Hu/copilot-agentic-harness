@@ -297,3 +297,11 @@ html.embed pre{overflow-x:auto}
 .tr-round-btn{justify-self:start}
 .tr-lv{margin:0;padding:0;border:0;background:none}
 .tr-call.tr-live .tr-lv{margin-top:4px}
+.tr-call.tr-live,.tr-call.tr-live .tr-lv,.tr-stream{min-width:0;max-width:100%}
+.tr-call.tr-live .tr-lv .lv-feed{overflow-x:auto}
+.tr-stream .tr-lv{overflow-x:auto}
+.timeline.trace li .what{min-width:0}
+.tr-lv .lv-feed>li,.tr-lv .fb,.tr-lv .tc-line{min-width:0;max-width:100%}
+.tr-lv .tc-line{flex-wrap:wrap}
+.tr-lv .tc-line{overflow:hidden}
+.tr-call.tr-live,.tr-round{overflow-x:auto;overflow-y:hidden}

@@ -376,3 +376,7 @@ button.lt-back{background:none;font:12px var(--sans);cursor:pointer}
 .lt-blist li{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px}
 .lt-bcmd{font:12px var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto}
 .lt-bname{min-width:0;flex:1 1 auto}
+/* after UX round 3: the card a line took you to glows once; narrow, the bar keeps its button and Latest */
+@keyframes lvflash{0%{box-shadow:0 0 0 0 var(--hot)}30%{box-shadow:0 0 0 4px var(--hot)}100%{box-shadow:0 0 0 0 transparent}}
+.lv-flash{animation:lvflash 1.5s ease-out;border-radius:12px}
+@media (max-width:560px){.wb-l{display:none!important}.lv-waitbar{gap:6px;padding:6px 8px}}

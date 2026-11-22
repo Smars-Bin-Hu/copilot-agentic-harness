@@ -3431,7 +3431,7 @@
   "desk.live.background": "{n} 个在后台运行",
   "desk.live.doing.run": "在运行 {what}",
   "desk.live.doing.think": "在思考",
-  "desk.live.doing.write": "在写回复",
+  "desk.live.doing.write": "正在回复",
   "desk.live.doing.model": "在等模型",
   "desk.live.read": "阅读视图",
   "desk.live.read.title": "agent 的回复",

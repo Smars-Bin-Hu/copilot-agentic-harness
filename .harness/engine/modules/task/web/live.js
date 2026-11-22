@@ -72,6 +72,7 @@ const LIVE = (function () {
   const lifeBack = h("button", {type: "button", class: "lt-back", hidden: "", "aria-expanded": "false"});  // B16: what runs on in the background; it opens to the list, a shell with Stop
   const backList = h("ul", {class: "lt-blist", hidden: ""});
   lifeBack.addEventListener("click", () => { backList.hidden = !backList.hidden; lifeBack.setAttribute("aria-expanded", String(!backList.hidden)); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !backList.hidden) { backList.hidden = true; lifeBack.setAttribute("aria-expanded", "false"); lifeBack.focus({preventScroll: true}); } });
   const life = h("div", {class: "lv-life calm"}, robot(), h("span", {class: "eq", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")), h("span", {class: "lt"}, lifeLabel, lifeSep, lifeRun), lifeDoing, lifeBack, backList);
   // B9: the title of the round stays at the top once its start is scrolled away: the first sentence of the person's words, the time, credits and calls as they go. A click goes back to the start.
   const barText = h("span", {class: "rb-t"});
@@ -187,7 +188,7 @@ const LIVE = (function () {
       rec.line = h("button", {type: "button", class: "tc-line ask-line", "aria-expanded": "false"}, rec.chev, rec.ico, rec.say, rec.tg, rec.fx, rec.el2);
       rec.qa = h("div", {class: "ask-qa", hidden: ""});
       rec.line.addEventListener("click", () => {
-        if (rec.item && rec.item.st === "wait") { const card = needLi.hidden ? null : needLi; if (card) { card.scrollIntoView({block: "center", behavior: "smooth"}); const first = card.querySelector("button, textarea"); if (first) first.focus({preventScroll: true}); } return; }
+        if (rec.item && rec.item.st === "wait") { const card = needLi.hidden ? null : (needLi.querySelector("section.wc[data-action='question']") || needLi); if (card) { flash(card); card.scrollIntoView({block: "center", behavior: "smooth"}); const first = card.querySelector("button, textarea"); if (first) first.focus({preventScroll: true}); } return; }
         rec.open = !rec.open; paintAsk(rec, rec.item);
       });
       body.append(rec.line, rec.qa);
@@ -581,9 +582,16 @@ const LIVE = (function () {
     if (sig !== rec.fxSig) { rec.fxSig = sig; rec.fx.replaceChildren(...out); }
   }
 
+  function flash(node) {  // the card a line or the bar took the person to: a short glow, so it is plain which one
+    node.classList.remove("lv-flash");
+    void node.offsetWidth;
+    node.classList.add("lv-flash");
+    setTimeout(() => node.classList.remove("lv-flash"), 1600);
+  }
   function toggle(rec) {
     if (!rec.fixed && rec.item && rec.item.k === "tool" && rec.el.classList.contains("is-wait") && !needLi.hidden) {  // a call that waits for the person: its card has the buttons and the whole command
       const card = [...needLi.querySelectorAll("section.wc")].find((node) => node.textContent.includes(rec.item.target || "\u0000")) || needLi;
+      flash(card);
       card.scrollIntoView({block: "center", behavior: "smooth"});
       const first = card.querySelector("button:not([disabled]), textarea");
       if (first) setTimeout(() => first.focus({preventScroll: true}), 350);
@@ -987,6 +995,7 @@ const LIVE = (function () {
   waitGo.addEventListener("click", () => {
     if (needLi.hidden) return;
     needLi.scrollIntoView({block: "center", behavior: "smooth"});
+    flash(needLi.querySelector("section.wc, section.tk-need") || needLi);
     const first = needLi.querySelector("button:not([disabled]), textarea");
     if (first) setTimeout(() => first.focus({preventScroll: true}), 350);
   });

@@ -69,7 +69,12 @@ const LIVE = (function () {
   const stale = h("p", {class: "sub lv-stale", hidden: ""}, t("desk.live.stale"));
   const lifeLabel = h("span", {class: "lt-l"}), lifeSep = h("span", {class: "lt-s"}, " \u00b7 "), lifeRun = h("b", {class: "lt-r"}, h("span", {class: "st-time"}));
   const life = h("div", {class: "lv-life calm"}, robot(), h("span", {class: "eq", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")), h("span", {class: "lt"}, lifeLabel, lifeSep, lifeRun));
-  const root = h("section", {class: "lv", hidden: ""}, head, stale, feed, calm, life);
+  // B9: the title of the round stays at the top once its start is scrolled away: the first sentence of the person's words, the time, credits and calls as they go. A click goes back to the start.
+  const barText = h("span", {class: "rb-t"});
+  const barStats = h("span", {class: "rb-s"});
+  const bar = h("button", {type: "button", class: "lv-roundbar", hidden: "", title: t("desk.live.bar.top")}, h("span", {class: "rb-n"}, t("desk.live.receipt.title")), barText, barStats);
+  const barWrap = h("div", {class: "lv-rbwrap"}, bar);  // sticky and of no height: the title floats over the feed and moves nothing when it shows
+  const root = h("section", {class: "lv", hidden: ""}, head, stale, barWrap, feed, calm, life);
   const roundsHere = (box) => { if (box.parentNode !== root) root.insertBefore(box, stale); };
 
   link.addEventListener("click", () => {
@@ -136,7 +141,12 @@ const LIVE = (function () {
     if (item.k === "me") {  // what the person said: a small mark; the words are in its card
       rec.tag = h("span", {class: "me-tag", role: "button"}, t("desk.live.you"));
       Status.card(rec.tag, () => saidCard(rec), t("desk.live.you"));
-      body.append(rec.tag);
+      // B9: the words themselves, three lines at most until the person asks for all of them
+      rec.mtx = h("div", {class: "me-tx"});
+      rec.mfiles = h("div", {class: "sub me-files", hidden: ""});
+      rec.mall = h("button", {type: "button", class: "lv-unfold me-all", hidden: "", "aria-expanded": "false"}, t("desk.live.fold.all"));
+      rec.mall.addEventListener("click", () => { rec.mopen = !rec.mopen; paintMe(rec); });
+      body.append(rec.tag, h("div", {class: "me-box"}, rec.mtx, rec.mfiles, rec.mall));
     } else if (item.k === "text") {
       rec.tx = h("div", {class: "tx md"});
       rec.cutm = h("span", {class: "cutm", hidden: ""}, t("desk.live.cut"));
@@ -399,6 +409,10 @@ const LIVE = (function () {
     rec.item = item;
     if (item.k === "me") {
       rec.tag.setAttribute("aria-label", t("desk.live.you") + ": " + item.text.slice(0, 200));
+      setText(rec.mtx, item.text + (item.cut ? " \u2026" : ""));
+      rec.mfiles.hidden = !item.files;
+      setText(rec.mfiles, item.files ? t("desk.live.files", {names: item.files.join(", ")}) : "");
+      paintMe(rec);
     } else if (item.k === "text") {
       growText(rec, item);
       rec.cutm.hidden = !item.cut;
@@ -445,6 +459,16 @@ const LIVE = (function () {
     } else {
       paintThought(rec, item);
     }
+  }
+
+  function paintMe(rec) {  // three lines, or all of them; the button only when there is more than three lines
+    rec.mtx.classList.toggle("me-clamp", !rec.mopen);
+    requestAnimationFrame(() => {
+      const more = rec.mopen || rec.mtx.scrollHeight > rec.mtx.clientHeight + 2;
+      rec.mall.hidden = !more;
+      setText(rec.mall, rec.mopen ? t("desk.live.fold.less") : t("desk.live.fold.all"));
+      rec.mall.setAttribute("aria-expanded", String(Boolean(rec.mopen)));
+    });
   }
 
   function paintAsk(rec, item) {
@@ -779,6 +803,7 @@ const LIVE = (function () {
     paintCalm(data, items);
     paintLife(data);
     rcFollow(data);
+    paintBar(data);
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
   }
 
@@ -863,6 +888,52 @@ const LIVE = (function () {
     for (const [key, group] of store) if (!used.has(group)) store.delete(key);
     return out;
   }
+
+  // --- the title of the round at the top (B9) ---------------------------------------------------------------------------------
+  const RB_ICONS = {time: [["circle", {cx: 8, cy: 8, r: 6}], ["path", {d: "M8 4.8V8l2.2 1.4"}]], credits: [["ellipse", {cx: 8, cy: 4.6, rx: 5, ry: 2}], ["path", {d: "M3 4.6v6.8c0 1.1 2.2 2 5 2s5-.9 5-2V4.6M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"}]],
+    tools: [["path", {d: "M9.8 2.4a3.3 3.3 0 0 0-3.9 4.3L2.4 10.2a1.3 1.3 0 0 0 1.8 1.8l3.5-3.5a3.3 3.3 0 0 0 4.3-3.9l-2 2-1.6-.4-.4-1.6z"}]]};
+  const firstSentence = (text) => { const one = String(text || "").replace(/\s+/g, " ").trim(); const end = one.search(/[.!?。！？](\s|$)/); return (end > 0 && end < 160 ? one.slice(0, end + 1) : one.slice(0, 160)) + (one.length > 160 && (end < 0 || end >= 160) ? "…" : ""); };
+  let barSig = "";
+  function paintBar(data) {
+    const me = st.head ? st.full.get(st.head) : null;
+    const facts = data && data.round ? data.round : null;
+    const runningSince = data && data.started ? Date.parse(data.started) : NaN;
+    const took = rc.data && typeof rc.data.ms === "number" ? rc.data.ms : null;
+    const sig = JSON.stringify([me && me.text, facts, data && data.started, took]);
+    if (sig !== barSig) {
+      barSig = sig;
+      setText(barText, me ? firstSentence(me.text) : "");
+      const parts = [];
+      if (!isNaN(runningSince)) { const clockNode = h("b", null, h("span", {class: "st-time"})); parts.push(h("span", {class: "rb-st", title: t("desk.rounds.time.now")}, lineSvg(RB_ICONS.time), clockNode)); running(clockNode, runningSince); }
+      else if (took !== null) parts.push(h("span", {class: "rb-st", title: t("desk.live.receipt.time", {time: clock(took / 1000)})}, lineSvg(RB_ICONS.time), h("b", null, clock(took / 1000))));
+      if (facts) {
+        parts.push(h("span", {class: "rb-st", title: typeof facts.credits === "number" ? t("desk.live.receipt.credits", {n: rcCredits(facts.credits)}) : t("desk.live.receipt.credits.none")}, lineSvg(RB_ICONS.credits), h("b", null, typeof facts.credits === "number" ? rcCredits(facts.credits) : "-")));
+        parts.push(h("span", {class: "rb-st", title: t("desk.live.receipt.calls", {n: facts.calls || 0})}, lineSvg(RB_ICONS.tools), h("b", null, String(facts.calls || 0))));
+      }
+      barStats.replaceChildren(...parts);
+      if (!isNaN(runningSince)) { Status.clock(); Status.tick(); }
+    }
+    placeBar();
+  }
+  function barTop() {  // under the page's own sticky header and tabs
+    let top = 0;
+    for (const node of document.querySelectorAll(".tk-head, .tk-tabs")) { const style = getComputedStyle(node); if (style.position === "sticky" && node.offsetParent !== null) top = Math.max(top, node.getBoundingClientRect().bottom); }
+    return Math.max(0, Math.round(top));
+  }
+  function placeBar() {
+    const me = st.head ? st.nodes.get(st.head) : null;
+    const show = Boolean(!root.hidden && st.data && st.data.bound && me && me.el.isConnected && barText.textContent);
+    if (!show) { bar.hidden = true; return; }
+    const top = barTop();
+    barWrap.style.top = top + "px";
+    const past = me.el.getBoundingClientRect().bottom < top + 8;
+    const feedEnd = feed.getBoundingClientRect().bottom > top + 60;
+    bar.hidden = !(past && feedEnd);
+  }
+  let barFrame = 0;
+  window.addEventListener("scroll", () => { if (!barFrame) barFrame = requestAnimationFrame(() => { barFrame = 0; placeBar(); }); }, {passive: true});
+  window.addEventListener("resize", () => placeBar(), {passive: true});
+  bar.addEventListener("click", () => { const me = st.head ? st.nodes.get(st.head) : null; if (me) window.scrollBy({top: me.el.getBoundingClientRect().top - barTop() - 8, behavior: "smooth"}); });
 
   // --- the receipt of a round that ended (B6): what it took and what it changed, as icons with numbers; each file opens to its diff ------------------------------------------------
   // The server counts the calls and the files the edit calls changed (`/api/live {receipt: turn}`); the gate's holds and refusals are the rows of its record (`st.gates`) inside the round's time.
@@ -958,6 +1029,7 @@ const LIVE = (function () {
       rc.turn = turn; rc.data = found;
       if (!found) again();
       rcPaint();
+      paintBar(st.data);
     }, () => { rc.busy = false; again(); });
     function again() { rc.failedAt = Date.now(); rc.tries += 1; if (rc.tries < 3) setTimeout(() => { if (turn === st.turn) rcFollow(st.data); }, 5200); }
   }

@@ -334,3 +334,16 @@ html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 .ask-dl dd{margin:0 0 6px;font-size:13.5px;color:var(--ink);overflow-wrap:anywhere}
 .tc-gate{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0 6px;padding:6px 10px;border-left:3px solid var(--hot);border-radius:6px;background:var(--hover);font-size:13px;color:var(--ink);overflow-wrap:anywhere}
 .tc-gate svg{flex:none;color:var(--hot)}
+/* B9: the person's words at the start of the round, three lines until opened; the title of the round that stays at the top once its start is scrolled away */
+.fi-me .fb{display:grid;gap:4px;min-width:0}
+.me-box{max-width:760px;padding:9px 13px;border:1px solid var(--line);border-radius:12px;background:var(--hover);min-width:0}
+.me-tx{font-size:14px;line-height:1.55;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.me-tx.me-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.me-files{margin-top:4px}
+.me-all{margin-top:6px}
+.lv-rbwrap{position:sticky;z-index:15;height:0}
+.lv-roundbar{position:absolute;left:0;right:0;top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;width:100%;box-sizing:border-box;margin:0;padding:8px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--soft);font:12.5px var(--sans);text-align:left;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.lv-roundbar .rb-n{font-weight:600;color:var(--ink);flex:none}
+.lv-roundbar .rb-t{flex:1 1 12em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.lv-roundbar .rb-s{display:inline-flex;gap:12px;flex:none}
+.rb-st{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.rb-st svg{width:14px;height:14px}.rb-st b{font-weight:550;color:var(--ink);font-variant-numeric:tabular-nums}

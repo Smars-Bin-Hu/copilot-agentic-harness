@@ -1009,6 +1009,33 @@ class AskItemTests(unittest.TestCase):
         self.assertNotIn("ok", chatlive.part_item({"kind": "toolCall", "toolCall": dict(call, confirmed="not-needed")}, "c1", False, False, None, None))
 
 
+class RoundFactsTests(unittest.TestCase):
+    """B9: the live numbers of the round's title: its calls (those that fell out of memory too) and its credits."""
+
+    @staticmethod
+    def usage(total: float) -> Dict[str, Any]:
+        return {"inputTokens": 1, "outputTokens": 1, "_meta": {"copilotUsage": {"sessionTotalNanoAiu": int(total * 1e9)}}}
+
+    def test_calls_count_what_fell_out_of_memory_and_credits_are_the_growth_since_the_turn_before(self) -> None:
+        state: Dict[str, Any] = {"turns": [{"id": "t0", "usage": self.usage(2.0)}], "activeTurn": None}
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "t1", "startedAt": "2026-01-01T10:00:00Z", "message": {"text": "go"}})
+        for n in range(ahp.PARTS_KEEP + 30):
+            ahp.reduce_chat(state, {"type": "chat/toolCallStart", "turnId": "t1", "toolCallId": f"c{n}", "toolName": "bash", "displayName": "Bash"})
+            ahp.reduce_chat(state, {"type": "chat/responsePart", "turnId": "t1", "part": {"kind": "markdown", "id": f"m{n}", "content": "x"}})
+        self.assertGreater(state["activeTurn"]["dropped"], 0)
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": self.usage(3.25)})
+        self.assertEqual(chatlive.round_facts(state), {"calls": ahp.PARTS_KEEP + 30, "credits": 1.25})
+        slim = ahp.slim({"id": "t9", "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": f"k{n}"}} for n in range(ahp.PARTS_KEEP + 7)]})
+        self.assertEqual(slim["droppedCalls"], 7)
+
+    def test_a_first_turn_counts_from_zero_and_an_unknown_total_is_none(self) -> None:
+        first = {"turns": [], "activeTurn": {"id": "t1", "responseParts": [], "usage": self.usage(0.5)}}
+        self.assertEqual(chatlive.round_facts(first), {"calls": 0, "credits": 0.5})
+        unknown = {"turns": [{"id": "t0", "usage": {}}], "activeTurn": {"id": "t1", "responseParts": [], "usage": self.usage(0.5)}}
+        self.assertIsNone(chatlive.round_facts(unknown)["credits"])
+        self.assertEqual(chatlive.round_facts({"turns": [], "activeTurn": None}), {"calls": 0, "credits": None})
+
+
 class ReceiptTests(unittest.TestCase):
     """The receipt of a turn (B6): the calls, and the files the edit and create calls changed with their lines and the calls that changed them."""
 

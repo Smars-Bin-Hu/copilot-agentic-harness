@@ -3421,6 +3421,7 @@
   "desk.live.sub": "this round of the agent's chat",
   "desk.live.whole": "Whole chat in VS Code",
   "desk.live.earlier": "Earlier steps of this round",
+  "desk.live.bar.top": "Back to the start of this round",
   "desk.live.gate.refused": "Refused by the gate",
   "desk.live.ok": "approved by you",
   "desk.live.ok.at": "approved by you · {time}",

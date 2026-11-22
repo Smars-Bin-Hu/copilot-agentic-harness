@@ -866,6 +866,22 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
     return {"items": items, "more": pointer is not None, "started": str(turn.get("startedAt") or "") if running else "", "before": pointer, "turn": str(turn.get("id") or "")}
 
 
+def round_facts(state: Dict[str, Any]) -> Dict[str, Any]:
+    """The live numbers of the last turn, for the title of the round that stays at the top of the Live tab (B9): `{calls, credits}`. `calls`: its tool calls, the ones that fell out of memory
+    too; `credits`: how much the session's total grew since the turn before ended, None when the host did not say both (as the receipt counts it)."""
+    from . import chatctx  # local: only this function needs it
+    turn, _running = last_turn(state)
+    if turn is None:
+        return {"calls": 0, "credits": None}
+    parts = turn.get("responseParts") if isinstance(turn.get("responseParts"), list) else []
+    calls = sum(1 for part in parts if isinstance(part, dict) and part.get("kind") == "toolCall") + (int(turn.get("droppedCalls") or 0) if isinstance(turn.get("droppedCalls"), int) else 0)
+    done = [one for one in state.get("turns") or [] if isinstance(one, dict) and one is not turn]
+    before = done[-1] if done else None
+    now = chatctx.session_total(turn.get("usage"))
+    then = chatctx.session_total(before.get("usage")) if before else (0.0 if not done else None)
+    return {"calls": calls, "credits": round(max(0.0, now - then), 2) if now is not None and then is not None else None}
+
+
 def all_turns(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Every turn of a chat state in memory, oldest first, the one that runs last."""
     turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)] if isinstance(state.get("turns"), list) else []

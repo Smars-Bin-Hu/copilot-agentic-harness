@@ -345,7 +345,8 @@ class VsLink:
             found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root, cached.setdefault("memo", {}), have, number, {sub["call"] for sub in subs})  # a call with a subagent is whole: `sub` goes on it
             chatlive.attach_subs(found["items"], [(sub, self.chats.get(sub["chat"])) for sub in subs], self.root, cached["state"])
             # `queued`: the messages that go after the running turn; `retry`: the last turn ended in an error that Try again can run again (1.6.99)
-            return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"]))}
+            return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"])),
+                    "round": chatlive.round_facts(cached["state"])}  # B9: the live numbers of the title of the round
 
     def older(self, task: str, turn: str, before: int, count: int = 60) -> Dict[str, Any]:
         """The steps of the turn `turn` that came before part `before` (the `before` of `live`), from the task's stream file: `{items, before}`, the newest `count` of them, oldest first. `before`: where

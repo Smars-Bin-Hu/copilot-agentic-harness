@@ -884,7 +884,13 @@ def slim(turn: Any) -> Any:
     if not isinstance(parts, list):
         return turn
     kept = [slim_part(part) for part in parts[-PARTS_KEEP:]]
-    return dict(turn, responseParts=kept, dropped=int(turn.get("dropped") or 0) + max(0, len(parts) - PARTS_KEEP))
+    gone = parts[:max(0, len(parts) - PARTS_KEEP)]
+    return dict(turn, responseParts=kept, dropped=int(turn.get("dropped") or 0) + len(gone), droppedCalls=int(turn.get("droppedCalls") or 0) + _calls_in(gone))
+
+
+def _calls_in(parts: List[Any]) -> int:
+    """How many tool calls are among `parts` (B9: a round counts the calls that fell out of memory too)."""
+    return sum(1 for part in parts if isinstance(part, dict) and part.get("kind") == "toolCall")
 
 
 UNBOUNDED = ("structuredContent", "resultMetadata")  # of a tool call in a snapshot: no limit on their size, and no page reads them
@@ -1153,6 +1159,7 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         return
     if len(parts) > PARTS_KEEP + 20:  # cut in steps, not on every action
         active["dropped"] = int(active.get("dropped") or 0) + len(parts) - PARTS_KEEP
+        active["droppedCalls"] = int(active.get("droppedCalls") or 0) + _calls_in(parts[:len(parts) - PARTS_KEEP])
         del parts[:len(parts) - PARTS_KEEP]
 
 

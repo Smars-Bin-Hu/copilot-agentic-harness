@@ -587,7 +587,8 @@ const CHAT = (function () {
         acts = [go];
         if (single.kind === "other") details.push(otherNote(single));
       } else {
-        body.push(h("ul", {class: "wc-qs"}, qs.map((item) => h("li", null, item.title))));
+        const listed = qs.filter((item) => (item.title || "").trim() && (item.title || "").trim() !== String(found.message || "").trim());  // a question whose title is the message itself is said once
+        if (listed.length) body.push(h("ul", {class: "wc-qs"}, listed.map((item) => h("li", null, item.title))));
         acts = [opts.answer || null];
       }
       details.push(h("p", null, t("desk.hint.question")));

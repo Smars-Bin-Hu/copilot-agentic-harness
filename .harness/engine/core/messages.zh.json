@@ -3421,6 +3421,7 @@
   "desk.live.sub": "agent 的 chat 的这一轮",
   "desk.live.whole": "在 VS Code 里看完整 chat",
   "desk.live.earlier": "这一轮更早的步骤",
+  "desk.live.gate.refused": "被 gate 拒绝",
   "desk.live.ok": "你批准的",
   "desk.live.ok.at": "你批准的 · {time}",
   "desk.live.ask.wait": "提问",

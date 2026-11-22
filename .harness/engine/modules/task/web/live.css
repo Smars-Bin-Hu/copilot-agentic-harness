@@ -332,3 +332,5 @@ html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 .ask-dl{margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:2px}
 .ask-dl dt{font-size:12.5px;color:var(--soft)}
 .ask-dl dd{margin:0 0 6px;font-size:13.5px;color:var(--ink);overflow-wrap:anywhere}
+.tc-gate{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0 6px;padding:6px 10px;border-left:3px solid var(--hot);border-radius:6px;background:var(--hover);font-size:13px;color:var(--ink);overflow-wrap:anywhere}
+.tc-gate svg{flex:none;color:var(--hot)}

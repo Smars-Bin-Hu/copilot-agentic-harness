@@ -632,6 +632,11 @@ const LIVE = (function () {
     const tab = input && rec.tab === "in" ? "in" : "out";
     const out = [];
     if (d.why) out.push(h("p", {class: "tc-why"}, String(d.why)));
+    const gate = rec.fixed || !rec.item ? "" : isHeld(rec.item);
+    if (gate === "refused" || gate === "past") {  // the gate stopped it: who and why first, in the gate's own words (its record in the hook log)
+      const why = (st.marks.get(rec.item.id) || {}).reason || "";
+      out.push(h("p", {class: "tc-gate"}, svg(ICONS.shield, 13), h("b", null, gate === "refused" ? t("desk.live.gate.refused") : t("desk.live.held.past")), why ? " \u00b7 " + why : ""));
+    }
     if (run && d.command) out.push(h("div", {class: "tc-cmd"}, h("span", {class: "tc-ps", "aria-hidden": "true"}, "$ "), String(d.command)), d.command_cut ? note("desk.live.call.cut") : null);
     if (input || (run && exit !== null)) {
       const pick = (name, key) => {
@@ -814,18 +819,22 @@ const LIVE = (function () {
       const line = h("button", {type: "button", class: "tc-line gp-line", "aria-expanded": "false"});
       const li = h("li", {class: "fi fi-group", "data-id": "~g:" + key}, h("i", {class: "dot"}), h("div", {class: "fb"}, line));
       found = {li, line, open: false, sig: "", members: []};
-      line.addEventListener("click", () => { found.open = !found.open; paintGroup(found, true); });
+      line.addEventListener("click", () => {  // the line stays where the pointer is: the page moves by what changed above it, if anything
+        const before = line.getBoundingClientRect().top;
+        found.open = !found.open; paintGroup(found);
+        const moved = line.getBoundingClientRect().top - before;
+        if (Math.abs(moved) > 1) window.scrollBy(0, moved);
+      });
       store.set(key, found);
     }
     return found;
   }
-  function paintGroup(group, toggled) {
+  function paintGroup(group) {
     group.line.setAttribute("aria-expanded", String(group.open));
     group.li.classList.toggle("is-open", group.open);
     for (const rec of group.members) rec.el.hidden = !group.open;
     const sig = group.members.map((rec) => { const item = rec.item || {}; return [item.id, item.st, item.kind, item.t0, item.t1, item.ms, item.add, item.del].join("|"); }).join("\u0001");
     if (sig !== group.sig) { group.sig = sig; group.line.replaceChildren(...groupLine(group)); group.line.setAttribute("aria-label", t("desk.live.group.steps", {n: group.members.length})); }
-    if (toggled && group.open && group.members[0]) group.members[0].el.scrollIntoView({block: "nearest"});
   }
   // `nodes`: records and plain nodes (the "earlier steps" control) in order; `store`: the groups of this list. The answer: the nodes in order, with a group's line before its steps.
   function fold(nodes, running, store) {
@@ -839,7 +848,7 @@ const LIVE = (function () {
         group.members = run;
         used.add(group);
         out.push(group.li, ...run.map((rec) => rec.el));
-        paintGroup(group, false);
+        paintGroup(group);
       } else for (const rec of run) { rec.el.hidden = false; out.push(rec.el); }
       run = [];
     };

@@ -69,7 +69,8 @@
   const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
   const vsBtn = h("button", {type: "button", class: "en-vs", hidden: "hidden"}, t("board.enter.open"));  // always beside Enter: Open, Restart, or Restart with identities (1.7.38)
   const vsNote = h("p", {class: "en-vsnote", role: "status", hidden: "hidden"});  // beside the VS Code button: what a restart is doing, or why it did not end (1.7.38, C11 T2-07)
-  const cta = h("div", {class: "en-cta"}, vsNote, vsBtn, go);
+  const card = h("div", {class: "en-card", role: "status", hidden: "hidden"});  // 1.8.x: above the buttons: gh's one-time code, the download of the agent host, or where gh is
+  const cta = h("div", {class: "en-cta"}, card, vsNote, vsBtn, go);
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
     h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, cta, hint));
@@ -353,7 +354,33 @@
   const buttonKind = () => (chk0.last && chk0.last.vscode_button ? chk0.last.vscode_button.kind : "open");
   const buttonWords = () => (chk0.last && chk0.last.vscode_button ? chk0.last.vscode_button.label : t("board.enter.open"));
   // A line of the first block -> {state, level, tag, note, soft, tip}: a short word on the line; the long words in the note under it only where the person must do something.
+  const ownHost = () => Boolean(chk0.last && chk0.last.action);  // 1.8.x: the board runs its own agent host: VS Code only has to be installed, Copilot is signed in through gh
+  const CARDED = ["signing-in", "no-gh", "host-preparing"];  // their words are on the card above the buttons, not under the line
+  function ghTip(c) {
+    const lines = [];
+    if (c.gh) lines.push(t("board.enter.gh.tip.gh", {path: c.gh, version: c.gh_version || "?"}));
+    if (c.login && c.state === "ok") lines.push(t("board.enter.gh.tip.account", {login: c.login}));
+    if (c.host_version) lines.push(t("board.enter.gh.tip.host", {version: c.host_version, seconds: c.host_seconds === undefined || c.host_seconds === null ? "?" : c.host_seconds}));
+    if (c.n) lines.push(t("board.enter.gh.tip.models", {n: c.n}));
+    return lines.join("\n");
+  }
+  function ownView(c) {
+    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, login: c.login || "", percent: c.host && typeof c.host.percent === "number" ? c.host.percent : 0, detail: plainWords(c.detail || "")};
+    if (c.state === "check") return {state: "check", level: "grey", tag: "", note: "", soft: false, tip: ""};
+    if (id === "vscode") {
+      const tip = c.version ? "VS Code " + c.version : "";
+      if (c.state === "ok") return {state: "ok", level: c.level || "ok", tag: c.version || t("board.enter.d.vscode.ok"), note: "", soft: true, tip};
+      return {state: c.state, level: c.level || "red", tag: word("board.enter.d.vscode." + c.why, vals, t("board.enter.tag.fail")), note: word("board.enter.m.vscode." + c.why, vals), soft: false, tip};
+    }
+    const tip = ghTip(c);
+    if (c.state === "ok") return {state: "ok", level: c.level || "ok", tag: c.login ? t("board.enter.d.copilot.signed", vals) : t("board.enter.d.copilot.ok", vals), note: "", soft: true, tip};
+    const tag = word("board.enter.d.copilot." + c.why, vals, t(c.state === "wait" ? "board.enter.tag.wait" : "board.enter.tag.fail"));
+    let note = c.why === "vscode" || CARDED.includes(c.why) ? "" : word("board.enter.m.copilot." + c.why, vals);
+    if (c.why === "signin" && c.last) note = word("board.enter.m.copilot.login." + c.last, vals) + (root.lang === "zh" ? "" : " ") + note;
+    return {state: c.state, level: c.level, tag, note, soft: c.state === "wait", tip};
+  }
   function reqView(c) {
+    if (ownHost() && (c.id === "vscode" || c.id === "copilot")) return ownView(c);
     const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || ""), since: clock(c.since)};
     let state = c.state, level = c.level || "grey", tag = "", note = "", tip = "";
     if (state === "fail" && id === "vscode" && c.why === "none" && recentlyOpened()) { state = "wait"; level = "yellow"; }
@@ -478,12 +505,12 @@
     let bar = li.querySelector(".pg");
     if (!c) { if (bar) bar.remove(); return; }
     if (!bar) { bar = h("div", {class: "pg"}, h("i")); li.insertBefore(bar, li.querySelector(".m")); }
-    const p = c.id === "doctor" && c.progress ? c.progress : null;
+    const p = c.id === "doctor" && c.progress ? c.progress : c.id === "copilot" && c.host && typeof c.host.percent === "number" ? {done: c.host.percent, total: 100, host: true} : null;
     const known = Boolean(p && p.total > 0);
     setClass(bar, "pg" + (known ? "" : " pg-any"));
     const width = known ? Math.max(4, Math.round(100 * p.done / p.total)) + "%" : "";
     if (bar.firstChild.style.width !== width) bar.firstChild.style.width = width;
-    if (!p) return;
+    if (!p || p.host) return;  // the host's percent is on the line's tag already
     setText(em, known ? t("board.enter.doctor.progress", {done: p.done, total: p.total, s: p.seconds}) : t("board.enter.doctor.seconds", {s: p.seconds}));
     li.title = p.step ? t("board.enter.doctor.step", {step: p.step}) : "";
   }
@@ -597,7 +624,58 @@
     return [kb, packs ? t(packs === 1 ? "board.enter.fold.pack" : "board.enter.fold.packs", {n: packs}) : "", signed ? t("board.enter.fold.signed", {n: signed}) : ""].filter(Boolean).join(" · ");
   }
   // The VS Code button: its words come from the server (Open, Restart, Restart with identities); it is the main button of the screen while VS Code is the line that is not ok.
+  function paintOwn(ready) {  // 1.8.x: the button is the fix of the VS Code or Copilot line (sign in, get gh, get VS Code), or what goes on; none when all is well
+    const act = chk0.last.action || {kind: "none"};
+    vsNote.hidden = true;
+    vsBtn.hidden = act.kind === "none";
+    setText(vsBtn, act.label || "");
+    vsBtn.disabled = Boolean(act.off) || chk0.acting;
+    vsBtn.classList.toggle("hot", !ready && !chk0.setup && !act.off);
+    vsBtn.title = act.url || "";
+    paintCard();
+  }
+  const mmss = (s) => { const n = Math.max(0, Math.round(Number(s) || 0)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
+  function paintCard() {
+    const c = (chk0.last.checks || []).find((x) => x.id === "copilot") || {};
+    const kind = c.why === "signing-in" && c.code ? "code" : c.why === "no-gh" ? "nogh" : c.host && c.host.state === "preparing" ? "prep" : c.host && c.host.state === "starting" && (c.host.seconds || 0) >= 5 ? "start" : "";
+    if (!kind) { if (!card.hidden) { card.hidden = true; card.dataset.k = ""; } return; }
+    const key = kind + "|" + (c.code || "") + "|" + root.lang;
+    if (card.dataset.k !== key) {  // made again only when what it holds changes; the times below change in place
+      card.dataset.k = key;
+      if (kind === "code") {
+        const copy = h("button", {type: "button", class: "en-mini"}, t("board.enter.gh.copy"));
+        copy.addEventListener("click", () => { try { navigator.clipboard.writeText(c.code).then(() => { copy.textContent = t("board.enter.gh.copied"); }); } catch (error) { /* the code stays on view */ } });
+        const openGh = h("button", {type: "button", class: "en-mini"}, t("board.enter.gh.open"));
+        openGh.addEventListener("click", () => window.open(c.url || "https://github.com/login/device", "_blank", "noopener"));
+        const cancel = h("button", {type: "button", class: "en-mini en-mini-end"}, t("board.enter.gh.cancel"));
+        cancel.addEventListener("click", () => { cancel.disabled = true; ask("/api/gh", {do: "cancel"}).then(poll, poll); });
+        card.replaceChildren(h("div", {class: "en-card-t"}, t("board.enter.gh.title")), h("div", {class: "en-code"}, c.code), h("div", {class: "en-card-acts"}, copy, openGh, cancel), h("p", {class: "en-card-w", "data-w": "1"}));
+      } else if (kind === "nogh") {
+        const input = h("input", {type: "text", placeholder: t("board.enter.gh.folder"), spellcheck: "false"});
+        const use = h("button", {type: "button", class: "en-mini"}, t("board.enter.gh.use"));
+        const said = h("p", {class: "en-card-w bad", hidden: "hidden"});
+        const send = () => { const path = input.value.trim(); if (!path) return; use.disabled = true; ask("/api/gh", {do: "folder", path}).then(() => { said.hidden = true; poll(); }, (error) => { said.hidden = false; said.textContent = error.message || String(error); }).then(() => { use.disabled = false; }); };
+        use.addEventListener("click", send);
+        input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); send(); } });
+        card.replaceChildren(h("div", {class: "en-card-t"}, h("i", {class: "en-dot bad"}), t("board.enter.gh.nogh")), h("p", {class: "en-card-w"}, t("board.enter.gh.nogh.about")), h("div", {class: "en-card-f"}, input, use), said);
+      } else {
+        card.replaceChildren(h("div", {class: "en-card-t"}, h("i", {class: "en-spin"}), t("board.enter.gh.prep")), h("div", {class: "pg"}, h("i")), h("p", {class: "en-card-w", "data-w": "1"}));
+      }
+    }
+    const w = card.querySelector("[data-w]");
+    if (w && kind === "code") setText(w, t("board.enter.gh.wait", {waited: mmss(c.waited), left: mmss(c.left)}));
+    if (w && (kind === "prep" || kind === "start")) {
+      setText(w, kind === "prep" ? t("board.enter.gh.prep.size", {done: c.host.downloaded_mb || 0, total: c.host.total_mb || 620}) : t("board.enter.gh.prep.start", {seconds: clock(c.host.seconds)}));
+      const bar = card.querySelector(".pg");
+      setClass(bar, "pg" + (kind === "prep" ? "" : " pg-any"));
+      const width = kind === "prep" ? Math.max(3, c.host.percent || 0) + "%" : "";
+      if (bar.firstChild.style.width !== width) bar.firstChild.style.width = width;
+    }
+    card.hidden = false;
+  }
   function paintButton(ready, checks) {
+    if (chk0.last && chk0.last.action) { paintOwn(ready); return; }
+    card.hidden = true;
     const live = Boolean(chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening"));
     const going = chk0.restarting || live;
     if (!chk0.last) { vsBtn.hidden = true; vsNote.hidden = true; return; }
@@ -702,6 +780,12 @@
   // The VS Code button (1.7.38): Open when none runs, Restart when one does, Restart with identities when a sign-in a window holds is saved and its test passed; Open with identities when none runs and there is such a sign-in (1.7.42). The board asks VS Code to quit the normal way and waits; it never kills it.
   vsBtn.addEventListener("click", () => {
     if (vsBtn.disabled) return;
+    const act = chk0.last && chk0.last.action;
+    if (act) {  // 1.8.x: sign in through gh, or GitHub's or VS Code's own download page (the board downloads nothing)
+      if (act.kind === "signin") { chk0.acting = true; render(); ask("/api/gh", {do: "login"}).then(() => {}, (error) => { chk0.fail = error.message || String(error); }).then(() => { chk0.acting = false; poll(); }); }
+      else if (act.url) window.open(act.url, "_blank", "noopener");
+      return;
+    }
     chk0.fail = ""; chk0.restarting = true; render();
     READY.vsAct(buttonKind(), {onState: showRestart, opened: () => { chk0.opened = Date.now(); setTimeout(poll, 1500); }})
       .catch((error) => { if (!error.quiet) chk0.fail = error.message || String(error); })

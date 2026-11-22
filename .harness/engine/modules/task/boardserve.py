@@ -599,6 +599,23 @@ class Board:
             print(say("serve.did", action="close (promoted)", task=name), flush=True)
         return closed
 
+    def gh(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """1.8.x, `/api/gh`: start gh's web sign-in (`login`; the page shows its code and address from `/api/ready`), stop it (`cancel`), or name the folder gh is in (`folder`)."""
+        step = str(data.get("do") or "")
+        if step == "login":
+            found = self.link.begin_login()
+        elif step == "cancel":
+            self.link.cancel_login()
+            found = self.link.login_state()
+        elif step == "folder":
+            launchenv.add_folder(self.root, "gh", str(data.get("path") or ""))  # `which` finds gh.exe on Windows by itself
+            found = {"state": "folder"}
+        else:
+            raise ValueError("do: login, cancel or folder")
+        self.ready.forget_gh()
+        print(say("serve.did", action="gh " + step, task="-"), flush=True)
+        return {key: value for key, value in found.items() if key != "token"}
+
     def open_vscode(self) -> None:
         """Bring the VS Code window of this folder forward, started with this computer's settings; the connections are checked at once. Raises the reason when it cannot be asked (`/api/open`, and the end of a restart)."""
         if not self.link.status().get("ready") and not launchenv.vscode_running():
@@ -2287,6 +2304,13 @@ def handler_for(board: Board) -> type:
                 try:
                     return self.answer(200, {"result": board.terminal.act(data)})
                 except CommandError as error:
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/gh":  # 1.8.x: "Copilot signed in (gh)" on the Enter screen: {do: login | cancel | folder, path?}. It starts gh's web sign-in or names gh's folder: the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    return self.answer(200, {"result": board.gh(data)})
+                except ValueError as error:  # a folder without gh in it: said on the page
                     return self.answer(409, {"error": str(error)})
             if path == "/api/doctor-again":  # (1.7.45) Check again on the doctor line: run doctor now, not when its wait is over. The paired browser only: it starts a program
                 if not board.paired(self.token()):

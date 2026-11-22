@@ -5,6 +5,7 @@
 //   kb      the knowledge base window:             DOCK.kbWindow(tab)
 //   term    a command the Terminal window runs:    TERM.run(line)
 //   sync    the company's copies: `company sync`, or with op prefix the company's word first (DOCK.syncCompany); the answer is a promise
+//   copilot 1.8.x, the board's own agent host:     signin (gh's web sign-in, POST /api/gh), or a download page (`url`)
 //   vscode  the VS Code button:                    open, open with identities, restart, or restart with identities (vsAct)
 // Needs common.js (h, t), serve.js (SERVE). The other windows are used when the page has them.
 "use strict";
@@ -49,6 +50,8 @@ const READY = (function () {
     else if (fix.to === "kb" && typeof DOCK !== "undefined") DOCK.kbWindow(fix.tab);
     else if (fix.to === "term" && typeof TERM !== "undefined") TERM.run(fix.run);
     else if (fix.to === "sync" && typeof DOCK !== "undefined") return DOCK.syncCompany(fix.op).then(() => { if (given.done) given.done(); });  // an error goes to the caller: the button says it
+    else if (fix.to === "copilot" && fix.kind === "signin") return SERVE.post("/api/gh", {do: "login"}).then(() => { if (given.done) given.done(); });  // 1.8.x: gh's web sign-in; the Enter screen shows its code
+    else if (fix.to === "copilot" && fix.url) window.open(fix.url, "_blank", "noopener");  // GitHub's or VS Code's own download page: the board downloads nothing
     else if (fix.to === "vscode") vsAct(fix.kind, given).catch((error) => { if (given.fail && !error.quiet) given.fail(error); });
     else if (fix.to === "doctor") return SERVE.post("/api/doctor-again", {}).then(() => { if (given.done) given.done(); });  // 1.7.45: doctor runs now; the line shows its progress at the next look
     return undefined;

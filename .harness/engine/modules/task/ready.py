@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import config, launchenv, messages, pace, readyitems, render, shortcmd, targets, tasks
+from core import config, ghauth, launchenv, messages, pace, readyitems, render, shortcmd, targets, tasks
 from core import connections as conn_core
 from core import reach, systems as outside
 
@@ -59,6 +59,9 @@ HOST_WAIT = 180.0
 FRESH_FOR = 20.0  # 1.8.13: seconds after the page's last question that the answer is still worked out
 KEEP_EVERY = 2.0  # 1.8.13: the pause between two answers worked out
 FIRST_WAIT = 5.0  # 1.8.13: how long the first question waits for the first answer
+GH_KEEP = 20.0  # 1.8.x: seconds what gh said (found, signed in, as whom) is kept; a sign-in that ends, or a folder given, asks again at once
+MODELS_GRACE = 30.0  # 1.8.x: seconds after gh's token was handed in which "no model yet" is still waiting; after that the host refused it
+VSCODE_PAGE = "https://code.visualstudio.com/"
 SLOW_ANSWER = 3.0  # 1.8.13: an answer that took longer is written to the board's log, with the time of each part
 
 
@@ -271,6 +274,7 @@ class Ready:
         self.vs_running = running or Running(clock=clock)  # is any VS Code running on this computer
         self.process_held: Optional[Dict[str, Any]] = None  # what the button goes by: the answer of `vs_running`, once it has stood for BUTTON_HOLD
         self.restart: Any = None  # the board sets it: what a restart of VS Code is doing (`vsrestart.Restart`)
+        self.gh_kept: Optional[Any] = None  # 1.8.x: (what `ghauth.check` said, when, the sign-in state then)
 
     # --- doctor: once, off the request thread ----------------------------------------------------------------------
 
@@ -339,7 +343,20 @@ class Ready:
 
     # --- the required checks ---------------------------------------------------------------------------------------
 
+    def own_host(self) -> bool:
+        """1.8.x: the link runs the board's own agent host (no VS Code window). A link of a test made before has none of it: its lines are read as before."""
+        return bool(getattr(self.link, "own_mode", False)) and callable(getattr(self.link, "host_state", None))
+
     def vscode(self) -> Dict[str, Any]:
+        """1.8.x: VS Code is installed (the board starts its agent host from it); it never has to be open."""
+        if not self.own_host():
+            return self.vscode_window()
+        found = self.link.installed()
+        if not found["found"]:
+            return {"state": "fail", "why": "off" if found.get("off") else "no-code", "download": VSCODE_PAGE}
+        return {"state": "ok", "why": "ok", "version": found.get("version", "")}
+
+    def vscode_window(self) -> Dict[str, Any]:
         status = self.link.status()
         if status.get("ready"):
             return {"state": "ok", "why": "ok", "n": int(status.get("bound", 0)) + int(status.get("unbound", 0))}
@@ -384,7 +401,72 @@ class Ready:
             return
         vscode.update(state="fail", why="env" if verdict["state"] == launchenv.MISSING else "unseen", detail=short(missing_words(verdict.get("missing") or [])), open=True, connected=True)  # connected: it runs, so the button restarts it
 
+    def gh_state(self, login: Dict[str, Any]) -> Dict[str, Any]:
+        """What gh says (`ghauth.check`), kept GH_KEEP seconds; asked again at once when the sign-in the page started changed its state. Runs gh twice: on the answer's thread, never a request's."""
+        now = self.clock()
+        with self.lock:
+            kept = self.gh_kept
+        if kept and now - kept[1] < GH_KEEP and kept[2] == login.get("state"):
+            return kept[0]
+        found = ghauth.check(self.root, launchenv.extra(self.root))
+        with self.lock:
+            self.gh_kept = (found, now, login.get("state"))
+        return found
+
+    def forget_gh(self) -> None:
+        with self.lock:
+            self.gh_kept = None
+
     def copilot(self, vscode: Dict[str, Any]) -> Dict[str, Any]:
+        """1.8.x: "Copilot signed in (gh)". Three things: gh is found, gh is signed in, the host has models once it got gh's token. `host` rides along while the agent host
+        is being prepared (the download of a first start), whatever the rest says, so the page can show its progress beside a sign-in."""
+        if not self.own_host():
+            return self.copilot_window(vscode)
+        if vscode["state"] != "ok":
+            return {"state": "wait", "why": "vscode"}
+        host = self.link.host_state()
+        login = self.link.login_state()
+        line = self.copilot_line(host, login)
+        if host.get("state") in ("starting", "preparing"):
+            line["host"] = {key: host.get(key) for key in ("state", "seconds", "downloaded_mb", "total_mb", "percent") if host.get(key) is not None}
+        return line
+
+    def copilot_line(self, host: Dict[str, Any], login: Dict[str, Any]) -> Dict[str, Any]:
+        if login.get("state") in ("starting", "waiting"):
+            return {"state": "wait", "why": "signing-in", "code": login.get("code", ""), "url": login.get("url", ""), "left": login.get("left"), "waited": login.get("waited")}
+        gh = self.gh_state(login)
+        if gh["why"] == "no-gh":
+            return {"state": "fail", "why": "no-gh", "download": ghauth.DOWNLOAD_PAGE}
+        if gh["why"] in ("cannot-run", "slow"):
+            return {"state": "fail", "why": "gh-broken", "detail": gh["why"], "gh": gh["gh"]}
+        if not gh["signed_in"]:
+            out: Dict[str, Any] = {"state": "fail", "why": "signin", "gh": gh["gh"], "gh_version": gh["version"]}
+            if login.get("state") in ("failed", "expired", "cancelled"):
+                out.update(last=login["state"], detail=short(login.get("why", "")))  # how the sign-in the page started ended
+            return out
+        about = {"login": gh["login"], "gh": gh["gh"], "gh_version": gh["version"], "host_version": host.get("version", ""), "host_seconds": host.get("seconds"), "host_starts": host.get("starts")}
+        state = host.get("state")
+        if state in ("stopped", "starting"):
+            return {"state": "wait", "why": "host-starting", **about}
+        if state == "preparing":
+            return {"state": "wait", "why": "host-preparing", **about}
+        if state == "failed":
+            return {"state": "fail", "why": "host-failed", "detail": short(host.get("why", "")), **about}
+        if state in ("no-code", "off"):
+            return {"state": "wait", "why": "vscode"}
+        if not self.link.status().get("ready"):
+            return {"state": "wait", "why": "connecting", **about}
+        models = int(self.link.copilot().get("models") or 0)
+        if models:
+            return {"state": "ok", "why": "ok", "n": models, **about}
+        handed = self.link.signin_state()
+        if handed.get("state") == "refused" or (handed.get("state") == "handed" and (handed.get("ago") or 0) >= MODELS_GRACE):
+            return {"state": "fail", "why": "refused", **about}
+        if handed.get("state") in ("no-gh", "not-signed-in", "cannot-run", "slow"):  # gh is signed in now, but was not when the host was opened: hand it now
+            self.link.sign_in_again()
+        return {"state": "wait", "why": "models", **about}
+
+    def copilot_window(self, vscode: Dict[str, Any]) -> Dict[str, Any]:
         if vscode["state"] != "ok":
             return {"state": "wait", "why": "vscode"}
         found = self.link.copilot()
@@ -639,6 +721,18 @@ class Ready:
         view = self.restart.view()
         return view["state"] in ("quitting", "opening") or (view["state"] == "failed" and 0 < view["since"] < QUIT_QUIET)
 
+    ACTIONS = {"signin": "signin", "refused": "signin", "no-gh": "get-gh", "signing-in": "signing", "host-preparing": "preparing", "host-starting": "preparing", "no-code": "get-vscode"}
+
+    def action(self, checks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """1.8.x: the button beside Enter: the fix of the VS Code or Copilot line that is not ok (sign in, get gh, get VS Code), or what goes on (preparing, signing in: off)."""
+        for line in checks:
+            if line["id"] in ("vscode", "copilot") and line["state"] != "ok":
+                kind = self.ACTIONS.get(str(line.get("why") or ""), "")
+                if kind:
+                    return {"kind": kind, "label": messages.text(f"ready.act.{kind}"), "off": kind in ("signing", "preparing"), "url": str(line.get("download") or "")}
+                return {"kind": "none"}
+        return {"kind": "none"}
+
     def vscode_button(self, vscode: Dict[str, Any], identities: int) -> Dict[str, Any]:
         """The VS Code button of the screen. `open`: no VS Code runs for this copy or at all; `restart`: one runs; `identities`: one runs and some connection has a sign-in saved that a window holds and a test that passed;
         `open-identities`: none runs and there is such a sign-in (1.7.42: the first open had no way to carry them, so it took two starts). `up`: one runs."""
@@ -671,6 +765,16 @@ class Ready:
             elif key == "doctor":
                 text, reason = (say("ready.r.doctor.failed"), line.get("detail", "")) if why == "failed" else (say("ready.r.doctor.errors.one" if line.get("n") == 1 else "ready.r.doctor.errors", n=line.get("n", "")), line.get("detail", ""))
                 fix = {} if line.get("integrity") else {"to": "doctor", "label": say("board.enter.doctor.again")}  # 1.7.45: run it now, not when its wait is over; guardrail files have their own button
+            elif key == "vscode" and self.own_host():
+                text, reason = say(f"ready.r.vscode.{'off' if why == 'off' else 'no-code'}"), say("ready.r.vscode.no-code.why")
+                fix = {"to": "copilot", "kind": "get-vscode", "url": line.get("download") or VSCODE_PAGE, "label": say("ready.act.get-vscode")} if why == "no-code" else {}
+            elif key == "copilot" and self.own_host():
+                if why == "vscode":
+                    continue
+                text, reason = say(f"ready.r.copilot.{why}"), say(f"board.enter.m.copilot.{why}", n=line.get("n", ""), detail=line.get("detail", ""))
+                kind = self.ACTIONS.get(why, "")
+                if kind in ("signin", "get-gh"):
+                    fix = {"to": "copilot", "kind": kind, "url": line.get("download", ""), "label": say(f"ready.act.{kind}")}
             elif key == "vscode":
                 if state == "wait":
                     text, reason = say("ready.r.vscode.wait"), say(f"board.enter.m.vscode.{why}", since=render.duration(line.get("since")))
@@ -763,7 +867,8 @@ class Ready:
         add("copilot", lambda: self.copilot(vscode))  # Copilot is judged by the connection, before the settings are
         began = time.monotonic()
         try:
-            self.without_settings(vscode)
+            if not self.own_host():  # 1.8.x: the board starts its own host with this copy's settings; a change after the start is H5's (restart the host)
+                self.without_settings(vscode)
         except Exception:  # noqa: BLE001 - a check of the settings that breaks leaves the line as the connection says
             pass
         took["settings"] = time.monotonic() - began
@@ -778,7 +883,7 @@ class Ready:
         optional = self.optional()
         took["optional"] = time.monotonic() - began
         self.took = took
-        if vscode["state"] == "ok" and vscode.get("env") != launchenv.CARRIED and any(entry.get("env_wrong") for entry in optional["items"]):  # a hook's old word does not count against a VS Code the board saw carry the settings
+        if not self.own_host() and vscode["state"] == "ok" and vscode.get("env") != launchenv.CARRIED and any(entry.get("env_wrong") for entry in optional["items"]):  # a hook's old word does not count against a VS Code the board saw carry the settings
             vscode["level"] = "yellow"  # opened, but without this computer's settings (1.7.24)
             vscode["env_wrong"] = True
         for line in checks:
@@ -786,6 +891,8 @@ class Ready:
         button = self.vscode_button(vscode, optional["identities"])
         required = self.required_problems(checks, button)
         out = {"ready": all(line["state"] == "ok" for line in checks), "checks": checks, "optional": optional, "problems": {"required": required, "optional": optional["problems"]}, "vscode_button": button}
+        if self.own_host():
+            out["action"] = self.action(checks)
         if self.restart is not None:
             out["restart"] = self.restart.view()
         return out

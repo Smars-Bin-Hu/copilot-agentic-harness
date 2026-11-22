@@ -188,6 +188,7 @@ class VsLink:
         self.turn = turn
         self.backoff = backoff or ahp.Backoff()
         self._opener = opener or self._open
+        self.own_mode = opener is None  # 1.8.x: the link runs the board's own agent host; a test that gives its own opener (a fake editor host) keeps the old lines of the Enter screen
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.wake = threading.Event()
@@ -621,6 +622,11 @@ class VsLink:
         return job.result
 
     # --- the thread ---------------------------------------------------------------------------------------------------------
+
+    def installed(self) -> Dict[str, Any]:
+        """1.8.x: is VS Code installed here (its `code` command found; it never has to be open), and which version. Files only, no program started."""
+        code = ahp.find_code()
+        return {"found": bool(code), "version": ahp.code_version(code) if code else "", "off": ahp.switched_off()}
 
     def own_host(self) -> agenthost.Host:
         """1.8.x: the board's own agent host, made once (`core.agenthost`); it gets the tool folders and the CA bundle of Local when it starts."""

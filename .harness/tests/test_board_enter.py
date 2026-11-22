@@ -850,7 +850,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("DATA.rows", code)  # status only, no task data
         self.assertNotIn("localStorage", code)  # nothing that lets a person skip it: the only memory is the tab's own session
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
-            self.assertIn(call, ("/api/ready", "/api/launch"))  # the one read and the person-only action (1.7.9: the company's launch script, Windows); the VS Code button calls /api/restart through readyui.js (serve.js)
+            self.assertIn(call, ("/api/ready", "/api/launch", "/api/gh"))  # 1.8.x: /api/gh is gh's web sign-in, the paired browser only  # the one read and the person-only action (1.7.9: the company's launch script, Windows); the VS Code button calls /api/restart through readyui.js (serve.js)
 
     def test_every_text_of_the_screen_is_in_both_languages(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")

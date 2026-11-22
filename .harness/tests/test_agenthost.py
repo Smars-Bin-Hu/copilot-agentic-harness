@@ -353,5 +353,177 @@ class VsLinkHostTest(unittest.TestCase):
         self.assertEqual(self.link.login_state(), {"state": "none"})
 
 
+class OwnLink:
+    """What `ready.Ready` reads of a link that runs the board's own agent host (1.8.x)."""
+
+    own_mode = True
+
+    def __init__(self) -> None:
+        self.installed_found = {"found": True, "version": "1.147.0", "off": False}
+        self.host = {"state": "ready", "version": "1.147.0", "seconds": 6.0, "starts": 1}
+        self.login = {"state": "none"}
+        self.handed = {"state": "handed", "login": "", "ago": 1.0}
+        self.connected = True
+        self.models = 25
+        self.again = 0
+
+    def installed(self) -> dict:
+        return self.installed_found
+
+    def host_state(self) -> dict:
+        return self.host
+
+    def login_state(self) -> dict:
+        return self.login
+
+    def signin_state(self) -> dict:
+        return self.handed
+
+    def status(self) -> dict:
+        return {"ready": self.connected, "why": "ok" if self.connected else "starting"}
+
+    def copilot(self) -> dict:
+        return {"models": self.models, "problem": ""}
+
+    def sign_in_again(self) -> None:
+        self.again += 1
+
+
+class ReadyOwnHostTest(unittest.TestCase):
+    """The Enter lines "VS Code installed" and "Copilot signed in (gh)", and the button beside Enter (1.8.x, H4)."""
+
+    GH_OK = {"gh": "/opt/gh", "version": "2.105.0", "signed_in": True, "login": "alex", "why": ""}
+
+    def setUp(self) -> None:
+        from unittest import mock
+
+        from modules.task import ready
+
+        self.ready_module = ready
+        self.tmp = Path(tempfile.mkdtemp(prefix="ready-own-"))
+        (self.tmp / ".harness").mkdir()
+        self.link = OwnLink()
+        self.ready = ready.Ready(self.tmp, self.link, doctor=lambda root: {"errors": 0, "first": "", "failed": ""})
+        self.gh = dict(self.GH_OK)
+        self.patch = mock.patch.object(ready.ghauth, "check", side_effect=lambda root=None, extra=None: dict(self.gh))
+        self.patch.start()
+
+    def tearDown(self) -> None:
+        self.patch.stop()
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def lines(self) -> tuple:
+        vscode = self.ready.vscode()
+        copilot = self.ready.copilot(vscode)
+        checks = [dict(vscode, id="vscode"), dict(copilot, id="copilot")]
+        return vscode, copilot, self.ready.action(checks)
+
+    def test_all_well(self) -> None:
+        vscode, copilot, action = self.lines()
+        self.assertEqual((vscode["state"], vscode["version"]), ("ok", "1.147.0"))
+        self.assertEqual((copilot["state"], copilot["n"], copilot["login"]), ("ok", 25, "alex"))
+        self.assertEqual(action["kind"], "none")
+
+    def test_vscode_not_installed(self) -> None:
+        self.link.installed_found = {"found": False, "version": "", "off": False}
+        vscode, copilot, action = self.lines()
+        self.assertEqual((vscode["state"], vscode["why"]), ("fail", "no-code"))
+        self.assertEqual(copilot["why"], "vscode")
+        self.assertEqual((action["kind"], action["url"]), ("get-vscode", self.ready_module.VSCODE_PAGE))
+
+    def test_no_gh(self) -> None:
+        self.gh = {"gh": "", "version": "", "signed_in": False, "login": "", "why": "no-gh", "download": "https://cli.github.com/"}
+        _, copilot, action = self.lines()
+        self.assertEqual((copilot["state"], copilot["why"]), ("fail", "no-gh"))
+        self.assertEqual((action["kind"], action["url"], action["off"]), ("get-gh", "https://cli.github.com/", False))
+
+    def test_gh_that_does_not_run_has_no_button(self) -> None:
+        self.gh = {"gh": "/x/gh", "version": "", "signed_in": False, "login": "", "why": "cannot-run"}
+        _, copilot, action = self.lines()
+        self.assertEqual(copilot["why"], "gh-broken")
+        self.assertEqual(action["kind"], "none")
+
+    def test_not_signed_in_offers_the_sign_in(self) -> None:
+        self.gh = {"gh": "/opt/gh", "version": "2.105.0", "signed_in": False, "login": "", "why": "not-signed-in"}
+        _, copilot, action = self.lines()
+        self.assertEqual((copilot["state"], copilot["why"]), ("fail", "signin"))
+        self.assertEqual((action["kind"], action["off"]), ("signin", False))
+
+    def test_a_sign_in_that_ran_out_is_told(self) -> None:
+        self.gh = {"gh": "/opt/gh", "version": "2.105.0", "signed_in": False, "login": "", "why": "not-signed-in"}
+        self.link.login = {"state": "expired", "why": "the code ran out"}
+        _, copilot, _ = self.lines()
+        self.assertEqual((copilot["why"], copilot["last"]), ("signin", "expired"))
+
+    def test_signing_in_shows_the_code_and_turns_the_button_off(self) -> None:
+        self.link.login = {"state": "waiting", "code": "5F59-4EB2", "url": "https://github.com/login/device", "left": 858, "waited": 42}
+        _, copilot, action = self.lines()
+        self.assertEqual((copilot["state"], copilot["why"], copilot["code"], copilot["left"]), ("wait", "signing-in", "5F59-4EB2", 858))
+        self.assertEqual((action["kind"], action["off"]), ("signing", True))
+
+    def test_preparing_rides_along_with_the_progress(self) -> None:
+        self.link.host = {"state": "preparing", "seconds": 40.0, "downloaded_mb": 210, "total_mb": 620, "percent": 33}
+        _, copilot, action = self.lines()
+        self.assertEqual((copilot["state"], copilot["why"]), ("wait", "host-preparing"))
+        self.assertEqual(copilot["host"]["percent"], 33)
+        self.assertEqual((action["kind"], action["off"]), ("preparing", True))
+
+    def test_preparing_while_not_signed_in_shows_both(self) -> None:
+        self.gh = {"gh": "/opt/gh", "version": "2.105.0", "signed_in": False, "login": "", "why": "not-signed-in"}
+        self.link.host = {"state": "preparing", "seconds": 40.0, "downloaded_mb": 210, "total_mb": 620, "percent": 33}
+        _, copilot, action = self.lines()
+        self.assertEqual(copilot["why"], "signin")  # the person can sign in while the host downloads
+        self.assertEqual(copilot["host"]["percent"], 33)
+        self.assertEqual(action["kind"], "signin")
+
+    def test_host_failed(self) -> None:
+        self.link.host = {"state": "failed", "why": "the agent host ended (exit 1)"}
+        _, copilot, _ = self.lines()
+        self.assertEqual((copilot["state"], copilot["why"]), ("fail", "host-failed"))
+        self.assertIn("exit 1", copilot["detail"])
+
+    def test_models_come_after_the_token(self) -> None:
+        self.link.models = 0
+        _, copilot, _ = self.lines()
+        self.assertEqual((copilot["state"], copilot["why"]), ("wait", "models"))
+        self.link.handed = {"state": "handed", "login": "", "ago": 40.0}
+        _, copilot, action = self.lines()
+        self.assertEqual((copilot["state"], copilot["why"]), ("fail", "refused"))
+        self.assertEqual(action["kind"], "signin")
+
+    def test_a_token_handed_before_gh_was_signed_in_is_handed_again(self) -> None:
+        self.link.models = 0
+        self.link.handed = {"state": "not-signed-in", "login": "", "ago": 50.0}
+        _, copilot, _ = self.lines()
+        self.assertEqual(copilot["why"], "models")
+        self.assertEqual(self.link.again, 1)
+
+    def test_gh_is_asked_again_only_when_it_may_have_changed(self) -> None:
+        calls = []
+        self.patch.stop()
+        from unittest import mock
+
+        self.patch = mock.patch.object(self.ready_module.ghauth, "check", side_effect=lambda root=None, extra=None: calls.append(1) or dict(self.gh))
+        self.patch.start()
+        self.lines()
+        self.lines()
+        self.assertEqual(len(calls), 1)  # kept
+        self.link.login = {"state": "done"}
+        self.lines()
+        self.assertEqual(len(calls), 2)  # the sign-in ended: asked again
+        self.ready.forget_gh()
+        self.lines()
+        self.assertEqual(len(calls), 3)
+
+    def test_problems_for_the_red_block(self) -> None:
+        self.gh = {"gh": "/opt/gh", "version": "2.105.0", "signed_in": False, "login": "", "why": "not-signed-in"}
+        vscode, copilot, action = self.lines()
+        found = self.ready.required_problems([dict(vscode, id="vscode"), dict(copilot, id="copilot")], {"kind": "none", "label": ""})
+        self.assertEqual(len(found), 1)
+        self.assertEqual((found[0]["key"], found[0]["fix"]["to"], found[0]["fix"]["kind"]), ("copilot", "copilot", "signin"))
+
+
 if __name__ == "__main__":
     unittest.main()

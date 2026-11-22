@@ -238,3 +238,27 @@ html[data-theme="dark"].has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);co
 .en-vsnote.bad{color:var(--bad);border-color:var(--bad)}
 /* 1.7.38 (F1 U2): a phone-wide window: the pill and the list are tall, so the wordmark sits at the top, above them, not in the middle where the pill covered it */
 @media (max-width:640px){.en-stage{justify-content:flex-start;padding-top:min(15vh,110px);padding-bottom:0}.en-foot{max-height:calc(100vh - 215px);overflow-y:auto;overscroll-behavior:contain}}  /* a low window: the list scrolls under the wordmark, it never rises over it */
+/* 1.8.x: the card above the buttons while Copilot is being signed in (gh's one-time code), the agent host is prepared (its download), or gh is not found (its folder) */
+.en-card{position:absolute;bottom:100%;right:0;margin:0 0 12px;width:min(340px,92vw);box-sizing:border-box;z-index:4;text-align:left;font:500 12.5px/1.45 var(--sans);color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);border-radius:10px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.en-card[hidden]{display:none}
+.en-card-t{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:6px;overflow-wrap:anywhere}
+.en-code{font:700 26px/1 var(--mono);letter-spacing:.12em;margin:6px 0 10px;user-select:all}
+.en-card-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.en-mini{height:26px;padding:0 10px;border-radius:13px;border:1px solid var(--line2);background:transparent;color:var(--en-ink);font:500 12px var(--sans);cursor:pointer;white-space:nowrap}
+.en-mini:hover:not(:disabled){border-color:var(--en-ink)}
+.en-mini:disabled{opacity:.5;cursor:default}
+.en-mini-end{margin-left:auto}
+.en-card-w{margin:8px 0 0;color:var(--soft);font-size:12px;overflow-wrap:anywhere}
+.en-card-w.bad{color:var(--bad)}
+.en-card-w[hidden]{display:none}
+.en-card-f{display:flex;gap:6px;margin-top:8px}
+.en-card-f input{flex:1;min-width:0;height:26px;box-sizing:border-box;background:transparent;border:1px solid var(--line2);border-radius:6px;color:var(--en-ink);padding:0 8px;font:12px var(--mono)}
+.en-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--soft)}.en-dot.bad{background:var(--bad)}
+.en-spin{flex:none;width:10px;height:10px;box-sizing:border-box;border:2px solid var(--hot-dot);border-right-color:transparent;border-radius:50%;animation:enspin 1s linear infinite}
+@keyframes enspin{to{transform:rotate(360deg)}}
+.en-card .pg{position:relative;height:4px;margin:8px 0 2px;border-radius:2px;overflow:hidden}
+.en-card .pg::before{content:"";position:absolute;inset:0;background:var(--soft);opacity:.3}
+.en-card .pg i{position:relative;display:block;height:100%;width:0;border-radius:inherit;background:var(--hot-dot);transition:width .6s ease}
+.en-card .pg.pg-any i{width:30%;animation:enslide 1.5s ease-in-out infinite alternate}
+@media (max-width:1100px){.en-card{position:static;order:-1;margin:0 auto 4px;width:min(360px,92vw)}}  /* stacked: the card sits above the buttons in the flow */
+@media (prefers-reduced-motion:reduce){.en-spin{animation:none}}

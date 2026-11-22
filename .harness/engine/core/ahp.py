@@ -127,6 +127,21 @@ def find_code(environ: Optional[Dict[str, str]] = None, platform: Optional[str] 
     return None
 
 
+def code_version(code: str) -> str:
+    """The version of the VS Code a `code` command belongs to, from its `package.json` (1.8.x): read from a file, no program started. Empty when it cannot be read."""
+    real = os.path.realpath(code)
+    top = os.path.dirname(os.path.dirname(real))  # .../app/bin/code (macOS), <install>/bin/code.cmd (Windows), /usr/share/code/bin/code (Linux)
+    for place in (os.path.join(top, "package.json"), os.path.join(top, "resources", "app", "package.json")):
+        try:
+            with open(place, encoding="utf-8") as handle:
+                found = json.load(handle).get("version")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(found, str) and re.match(r"^\d+\.\d+", found):
+            return found
+    return ""
+
+
 _CODE_LOCK = threading.Lock()  # 1.8.15: one `code agent ...` at a time from this process (the link thread, the launch settings): two slow ones at once only made each other slower
 
 

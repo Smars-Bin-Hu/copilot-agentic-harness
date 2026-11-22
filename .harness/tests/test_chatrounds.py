@@ -196,6 +196,108 @@ class ReadTests(RoundCase):
         self.assertNotEqual(data["result"]["rounds"][2]["rewind"]["why"], "compact")
 
 
+CHAT = "ahp-chat:/main"
+
+
+def turn_records(turn: str, at: str, text: str, parts: list, end: object = None, chat: str = CHAT, sub: object = None) -> list:
+    head = {"k": "turn", "chat": chat, "turn": turn, "at": at, "text": text}
+    if sub:
+        head["sub"] = sub
+    out = [head]
+    for number, part in enumerate(parts):
+        out.append({"k": "part", "chat": chat, "turn": turn, "i": number, "part": part})
+    if end:
+        out.append({"k": "end", "chat": chat, "turn": turn, "state": "complete", "duration": end, "usage": {}})
+    return out
+
+
+def said(text: str) -> dict:
+    return {"kind": "markdown", "id": "m", "content": text}
+
+
+def called(name: str) -> dict:
+    return {"kind": "toolCall", "toolCall": {"toolCallId": "c" + name, "toolName": name, "status": "completed"}}
+
+
+class StreamRoundTests(RoundCase):
+    def make(self) -> None:
+        self.events.unlink(missing_ok=True)
+        chatrounds._cache.clear()
+        records = (turn_records("t1", "2026-10-02T10:00:00.000Z", "first ask", [said("reading"), called("view"), called("view"), said("  "), said("done one")], end=4000)
+                   + turn_records("s1", "2026-10-02T10:00:01.000Z", "a subagent's task", [said("sub words")], end=1000, chat="ahp-chat:/sub", sub={"id": "x"})
+                   + turn_records("t2", "2026-10-02T10:05:00.000Z", "second ask", [called("edit")], end=2500)
+                   + turn_records("t3", "2026-10-02T10:10:00.000Z", "third ask is running", [said("working")]))
+        self.assertEqual(chatstream.append(self.root, self.task, records), 0)
+
+    def test_with_no_record_of_copilot_the_stream_gives_the_rounds_and_a_subagent_is_none(self) -> None:
+        self.make()
+        found = chatrounds.listing(self.root, self.task)
+        self.assertEqual([(item["head"], item["tools"], item["replies"], item["seconds"], item["aiu"], item["compact"]) for item in found],
+                         [("first ask", 2, 2, 4, None, False), ("second ask", 1, 0, 2, None, False), ("third ask is running", 0, 1, 0, None, False)])
+        self.assertEqual(found[0]["at"], "2026-10-02T10:00:00.000Z")
+        first = chatrounds.one(self.root, self.task, 0)
+        self.assertEqual((first["prompt"], first["tools"], len(first["texts"]), first["cut"], first["compact"]), ("first ask", {"view": 2}, 2, False, None))
+        self.assertNotIn("sub words", json.dumps(chatrounds.of_stream(self.root, self.task)))
+        self.assertEqual(chatrounds.of_stream(self.root, self.task)[0]["end"], "2026-10-02T10:00:04.000Z")
+        self.assertEqual(chatrounds.of_stream(self.root, self.task)[2]["end"], "2026-10-02T10:10:00.000Z")  # still running: as Copilot's round that has no later step
+        self.assertIsNone(chatrounds.one(self.root, self.task, 3))
+
+    def test_a_round_has_the_keys_of_one_from_copilot(self) -> None:
+        mine = chatrounds.of_session(SESSION)[0]
+        self.make()
+        self.assertEqual(set(chatrounds.of_stream(self.root, self.task)[0]), set(mine))
+
+    def test_once_copilot_has_a_round_the_answer_is_copilots_and_the_stream_is_not_mixed_in(self) -> None:
+        records = turn_records("t1", "2026-10-02T10:00:00.000Z", "stream ask", [said("x")], end=1000)
+        self.assertEqual(chatstream.append(self.root, self.task, records), 0)
+        self.assertEqual([item["head"] for item in chatrounds.listing(self.root, self.task)], ["fix the load second line", "thanks"])
+
+    def test_a_closed_task_without_its_transcript_has_the_rounds_of_the_stream_and_save_writes_them(self) -> None:
+        self.make()
+        data = json.loads(self.path.read_text(encoding="utf-8"))
+        data["status"] = "closed"
+        self.path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(len(chatrounds.listing(self.root, self.task)), 3)
+        self.assertEqual(chatrounds.save(self.root, self.task), 3)
+        chatstream.stream_file(self.root, self.task).unlink()
+        saved = chatrounds.saved(self.root, self.task)
+        self.assertEqual([item["prompt"] for item in saved or []], ["first ask", "second ask", "third ask is running"])
+        self.assertEqual([item["head"] for item in chatrounds.listing(self.root, self.task)], ["first ask", "second ask", "third ask is running"])
+
+    def test_a_broken_stream_gives_no_rounds_and_no_exception(self) -> None:
+        self.events.unlink()
+        chatstream.stream_file(self.root, self.task).write_bytes(b"\xff\x00 not json\n{\"k\": \"turn\"\n")
+        self.assertEqual(chatrounds.listing(self.root, self.task), [])
+        with mock.patch.object(chatstream, "read", side_effect=ValueError("boom")):
+            self.assertEqual(chatrounds.of_stream(self.root, self.task), [])
+        self.assertEqual(chatrounds.save(self.root, self.task), 0)
+
+    def test_a_stream_that_grows_gives_the_new_round_at_the_next_call(self) -> None:
+        self.make()
+        self.assertEqual(len(chatrounds.listing(self.root, self.task)), 3)
+        self.assertEqual(chatstream.append(self.root, self.task, turn_records("t4", "2026-10-02T10:20:00.000Z", "fourth", [])), 0)
+        self.assertEqual([item["head"] for item in chatrounds.listing(self.root, self.task)][-1], "fourth")
+
+    def test_a_huge_text_is_cut_and_says_so(self) -> None:
+        self.events.unlink()
+        self.assertEqual(chatstream.append(self.root, self.task, turn_records("t1", "2026-10-02T10:00:00.000Z", "p", [said("x" * (chatrounds.MAX_CHARS + 10))], end=1)), 0)
+        self.assertTrue(chatrounds.one(self.root, self.task, 0)["cut"])
+
+    def test_only_the_newest_rounds_are_kept(self) -> None:
+        self.make()
+        with mock.patch.object(chatrounds, "MAX_ROUNDS", 2):
+            self.assertEqual([item["head"] for item in chatrounds.listing(self.root, self.task)], ["second ask", "third ask is running"])
+
+    def test_the_route_lists_the_rounds_of_the_stream_and_one_carries_its_items(self) -> None:
+        self.make()
+        cookie = self.pair()
+        status, data, _ = self.request("POST", "/api/rounds", {"op": "list", "task": Path(TASK).name}, cookie)
+        self.assertEqual((status, len(data["result"]["rounds"])), (200, 3), data)
+        found = self.request("POST", "/api/rounds", {"op": "one", "task": Path(TASK).name, "n": 0}, cookie)[1]["result"]
+        self.assertEqual(found["prompt"], "first ask")
+        self.assertTrue(found.get("items"), found)
+
+
 class SaveTests(RoundCase):
     def test_a_closed_task_reads_its_saved_rounds_when_the_record_is_gone(self) -> None:
         self.assertEqual(chatrounds.save(self.root, self.task), 2)

@@ -1,0 +1,197 @@
+/* The panels of the super agent workbench (wbpanels.js): the tree of the agents that run, the Data panel, the picture of Focus, the avatar of a task, the hover card, the task line of a queue item, the entrance.
+   Colours come from tokens.css; the eight identity colours of the avatars are set here, one set for light and one for dark. State: amber waits for you, green works, red failed, grey quiet. */
+:root,html[data-theme="light"]{--wbp-id0:#1d6fd6;--wbp-id1:#c2307f;--wbp-id2:#4f8a10;--wbp-id3:#b07d00;--wbp-id4:#7a4fd0;--wbp-id5:#0d8f86;--wbp-id6:#d2551f;--wbp-id7:#5b6270}
+html[data-theme="dark"]{--wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--wbp-id3:#ffd166;--wbp-id4:#c6a5ff;--wbp-id5:#6ee7d8;--wbp-id6:#ff9f7a;--wbp-id7:#d0d4dc}
+.wbp-i0{--id:var(--wbp-id0)}.wbp-i1{--id:var(--wbp-id1)}.wbp-i2{--id:var(--wbp-id2)}.wbp-i3{--id:var(--wbp-id3)}.wbp-i4{--id:var(--wbp-id4)}.wbp-i5{--id:var(--wbp-id5)}.wbp-i6{--id:var(--wbp-id6)}.wbp-i7{--id:var(--wbp-id7)}
+:is(.wbp-av,.wbp-tn,.wbp-st,.wbp-hs,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb,.wbp-grp,.wbp-look,.wbp-bub,.wbp-br,.wbp-brl,.wbp-pi).wbp-k-wait{--c:var(--hot-dot);--tx:var(--hot)}
+:is(.wbp-av,.wbp-tn,.wbp-st,.wbp-hs,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb,.wbp-grp,.wbp-look,.wbp-bub,.wbp-br,.wbp-brl,.wbp-pi).wbp-k-work{--c:var(--good-dot);--tx:var(--good)}
+:is(.wbp-av,.wbp-tn,.wbp-st,.wbp-hs,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb,.wbp-grp,.wbp-look,.wbp-bub,.wbp-br,.wbp-brl,.wbp-pi).wbp-k-err{--c:var(--bad);--tx:var(--bad)}
+:is(.wbp-av,.wbp-tn,.wbp-st,.wbp-hs,.wbp-t,.wbp-ln,.wbp-dot,.wbp-lb,.wbp-grp,.wbp-look,.wbp-bub,.wbp-br,.wbp-brl,.wbp-pi).wbp-k-idle{--c:var(--soft);--tx:var(--soft)}
+
+/* the avatar of a task: a round robot; the ring is its state, the eyes are its own colour */
+.wbp-av{--s:20px;position:relative;flex:none;display:inline-block;width:var(--s);height:var(--s);border-radius:50%;border:max(1.5px,calc(var(--s) * .08)) solid var(--c);background:var(--robot-head);vertical-align:middle}
+.wbp-av::before,.wbp-av::after{content:"";position:absolute;top:36%;width:17%;height:17%;border-radius:50%;background:var(--id)}
+.wbp-av::before{left:24%}.wbp-av::after{right:24%}
+.wbp-av:hover,.sa-mate.wbp-hl .sa-ring{outline:2px solid var(--ink);outline-offset:2px}
+
+/* the tree of the agents that run */
+.wb-tree{font-size:12.5px;padding-top:2px}
+.wbp-root{display:flex;align-items:center;gap:8px;padding:2px 0 6px;min-width:0}
+.wbp-root b{white-space:nowrap}
+.wbp-bot{width:26px;height:26px;border-radius:9px;background:var(--robot-head);border:1px solid var(--robot-line);position:relative;flex:none}
+.wbp-bot::before,.wbp-bot::after{content:"";position:absolute;top:10px;width:5px;height:5px;border-radius:50%;background:var(--good-dot)}
+.wbp-bot::before{left:6px}.wbp-bot::after{right:6px}
+.wbp-w{color:var(--soft);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wbp-kids{margin-left:12px;border-left:1px solid var(--line2);padding-left:12px}
+.wbp-tn{display:flex;align-items:center;gap:7px;padding:3px 0;min-width:0}
+.wbp-nm{font:12px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto;color:var(--ink);text-decoration:none}
+.wbp-nm:hover{text-decoration:underline}
+.wbp-stw{flex:none;white-space:nowrap;font-size:11.5px;color:var(--tx)}
+.wbp-tm{font:11px var(--mono);color:var(--soft)}
+.wbp-tg{font-size:10.5px;border:1px solid var(--line2);border-radius:5px;padding:0 5px;color:var(--soft);flex:none;white-space:nowrap}
+.wbp-subs{margin-left:10px}
+.wbp-sub{display:flex;align-items:center;gap:7px;padding:2px 0;color:var(--soft);font-size:12px;position:relative;min-width:0}
+.wbp-sub::before{content:"";position:absolute;left:-12px;top:50%;width:9px;border-top:1px solid var(--line2)}
+.wbp-sub i{width:16px;height:16px;border-radius:5px;background:var(--good-bg);color:var(--good);font:700 10px/16px var(--mono);text-align:center;font-style:normal;flex:none}
+.wbp-sl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.wbp-sub .wbp-tm{margin-left:auto;flex:none}
+.wbp-now i{background:transparent;color:var(--soft)}
+.wbp-nw{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font:11.5px var(--mono);color:var(--ink)}
+.wbp-gate{margin-left:auto;flex:none;font:11px var(--mono);color:var(--bad);cursor:default}
+.wbp-grp{display:flex;justify-content:space-between;align-items:center;width:100%;margin:5px 0 2px;padding:2px 6px;border:none;border-radius:6px;background:var(--hover);font:10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--tx);cursor:pointer}
+.wbp-grp b{font-weight:600}
+
+/* the Data panel: four blocks, each a summary that opens */
+.wb-data{padding-top:2px}
+.wbp-blk{padding:7px 2px 9px;border-bottom:1px dashed var(--line2)}
+.wbp-blk:last-child{border-bottom:none}
+.wbp-bt{display:flex;align-items:baseline;gap:8px;min-width:0;font:10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--soft);margin-bottom:6px}
+.wbp-bt>span{white-space:nowrap}
+.wbp-bt em{font-style:normal;color:var(--soft);text-transform:none;letter-spacing:0;font:11.5px var(--sans);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.wbp-bt .wbp-morebtn{margin-left:auto}
+.wbp-bt em+.wbp-morebtn{margin-left:4px}
+.wbp-morebtn,.wbp-plus{border:none;background:none;color:var(--run);font:11.5px var(--mono);padding:2px 0;cursor:pointer;white-space:nowrap;letter-spacing:0;text-transform:none}
+.wbp-morebtn:hover,.wbp-plus:hover{text-decoration:underline}
+.wbp-ok{color:var(--good);font-size:12.5px}
+.wbp-ok.wbp-soft{color:var(--soft)}
+.wbp-look{display:flex;align-items:center;gap:8px;padding:3px 4px;border-radius:6px;font-size:12.5px;min-width:0}
+.wbp-look[data-wbp-hv]:hover{background:var(--hover)}
+.wbp-why{flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx)}
+.wbp-ln1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font:11.5px var(--mono);color:var(--soft)}
+.wbp-r{margin-left:auto;flex:none;font:11.5px var(--mono);color:var(--soft)}
+.wbp-list{max-height:170px;overflow:auto}
+.wbp-pipe{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.wbp-pcol{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:5px 5px 6px;min-height:62px;min-width:0}
+.wbp-pcol.wbp-jam{border-color:var(--hot-dot);background:var(--hot-bg,var(--bg))}
+.wbp-pcol h6{margin:0 0 5px;display:flex;justify-content:space-between;gap:4px;font:10px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--soft);font-weight:500}
+.wbp-pcol h6 b{color:var(--ink)}
+.wbp-dots{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.wbp-dots .wbp-av{border-width:1.5px}
+.wbp-plus{font-size:10px;color:var(--soft)}
+.wbp-two{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--track)}
+.wbp-two b{display:block;height:100%}
+.wbp-s-model{background:#7c8cf8}.wbp-s-tool{background:var(--good-dot)}.wbp-s-sub{background:#2bb5a6}.wbp-s-appr{background:#c9a15a}.wbp-s-you{background:var(--hot-dot)}
+.wbp-leg{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:6px;font-size:11.5px;color:var(--soft)}
+.wbp-leg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.wbp-leg b{font:11.5px var(--mono);color:var(--ink);font-weight:500}
+.wbp-spend{display:flex;align-items:flex-end;gap:14px;min-width:0}
+.wbp-big{font:600 22px/1 var(--mono);letter-spacing:-.02em;white-space:nowrap}
+.wbp-big.wbp-sm{font-size:14px;color:var(--soft)}
+.wbp-tops{display:flex;gap:10px;margin-left:auto;min-width:0}
+.wbp-topx{display:flex;align-items:center;gap:5px;font:11.5px var(--mono);color:var(--soft)}
+.wbp-look.wbp-k-err .wbp-why{color:var(--bad)}.wbp-look.wbp-k-wait .wbp-why{color:var(--hot)}
+
+/* the card of a task, on a hover */
+.wbp-hover{position:fixed;z-index:200;width:300px;max-width:calc(100vw - 16px);background:var(--pop);border:1px solid var(--line2);border-radius:12px;padding:12px 14px;box-shadow:var(--glass-shadow);font-size:12.5px;pointer-events:none}
+.wbp-hover h4{margin:0 0 2px;font:600 13px var(--mono);overflow-wrap:anywhere}
+.wbp-hs{color:var(--tx);font-size:12px;margin-bottom:8px}
+.wbp-hover dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:0}
+.wbp-hover dt{color:var(--soft)}
+.wbp-hover dd{margin:0;overflow-wrap:anywhere}
+.wbp-conn{display:inline-flex;align-items:center;gap:4px;margin-right:8px}
+.wbp-conn i{width:6px;height:6px;border-radius:50%;background:var(--good-dot)}
+
+/* the task of a queue item: its avatar and name at the top (super.js keeps the item; this line is put in by wbpanels.js) */
+.wb-root .sa-row.item{flex-wrap:wrap}
+.wbp-qt{flex:0 0 100%;display:flex;align-items:center;gap:7px;min-width:0;margin:0 0 4px;color:var(--ink);text-decoration:none;font:12px var(--mono)}
+.wbp-qt:hover .wbp-qn{text-decoration:underline}
+.wbp-qn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+
+/* the picture of Focus */
+.wbp-scene{position:absolute;inset:0}
+.wbp-svg{width:100%;height:100%;display:block}
+.wbp-cap{position:absolute;left:16px;top:12px;right:16px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wb-tall .wbp-cap{left:10px;top:6px;font-size:10px}
+.wb-tall.wb-task-on .wbp-cap{display:none}
+.wbp-ln{fill:none;stroke:var(--c);stroke-opacity:.45;stroke-width:1.3}
+.wbp-ln.wbp-k-idle{stroke-opacity:.25;stroke-dasharray:3 5}
+.wbp-dot{fill:var(--c)}
+.wbp-body{fill:var(--robot-head);stroke:var(--c);stroke-width:2.2}
+.wbp-eye{fill:var(--id)}
+.wbp-hit{fill:transparent;stroke:none}
+.wbp-t{cursor:default}
+.wbp-t:hover .wbp-body{stroke-width:3.4}
+.wbp-lb{fill:var(--tx)}
+.wbp-sl2{stroke:var(--good-dot);stroke-opacity:.5;stroke-width:1}
+.wbp-sc circle{fill:var(--good-bg);stroke:var(--good-dot);stroke-width:1.2}
+.wbp-sc text{fill:var(--good);font-family:var(--mono);font-weight:700}
+.wbp-more{fill:var(--soft);font-family:var(--mono)}
+.wbp-boss{fill:var(--robot-head);stroke:var(--robot-line)}
+.wbp-bosseye{fill:var(--good-dot)}
+.wbp-bossg{cursor:pointer;outline:none}.wbp-bossg:hover .wbp-boss{stroke-width:2.4}.wbp-bossg:focus-visible .wbp-boss{stroke:var(--ink);stroke-width:2.6}
+.wbp-bossname{fill:var(--ink);font-weight:600}
+.wbp-pulse{fill:none;stroke:var(--good-dot);stroke-opacity:.22}
+
+/* the bridge (workbench.js puts it at the top of the centre column) and the picture of Focus */
+.wbp-bridge{flex:none;position:relative;height:190px;min-width:0;overflow:hidden}
+.wb-tall .wbp-bridge{height:160px}
+.wbp-bridge .wbp-svg{position:absolute;inset:0}
+.wbp-closed{position:absolute;right:6px;top:4px;z-index:2;font:10.5px var(--mono);letter-spacing:.06em;border-radius:999px;padding:2px 9px;background:transparent;border:1px solid var(--line2);color:var(--soft);cursor:pointer}
+.wbp-closed:hover{color:var(--ink);border-color:var(--soft)}
+.wbp-t,.wbp-bub{cursor:pointer;outline:none}
+.wbp-t:focus-visible .wbp-body,.wbp-bub:focus-visible circle{stroke:var(--ink);stroke-width:3.2}
+.wbp-lnhit{fill:none;stroke:transparent;stroke-width:9;pointer-events:stroke}
+.wbp-ring{fill:none;stroke:var(--ink);stroke-width:1.4;pointer-events:none}
+.wbp-nmlb{fill:var(--soft);font-family:var(--mono)}
+.wbp-more-ln{stroke-dasharray:2 4;stroke-width:2.2;stroke-opacity:.3}
+.wbp-bub circle{fill:var(--c);fill-opacity:.14;stroke:var(--c);stroke-width:1.5;stroke-dasharray:3 3}
+.wbp-bub text{fill:var(--tx);font-weight:700;font-family:var(--mono);pointer-events:none}
+.wbp-bub:hover circle{fill-opacity:.28}
+.wbp-br{fill:none;stroke:var(--c);stroke-opacity:.55}
+.wbp-brl{fill:var(--tx);font-family:var(--mono);letter-spacing:.08em}
+.wbp-gatebadge circle{fill:var(--bad)}
+.wbp-gatebadge text{fill:#fff;font-weight:700;pointer-events:none}
+.wbp-dim{opacity:.45;filter:grayscale(.7)}
+.wb-tree.wbp-down,.wb-data.wbp-down{opacity:.6}
+/* a list that opens on a "+N" */
+.wbp-pop{position:fixed;z-index:150;background:var(--pop);border:1px solid var(--line2);border-radius:11px;padding:10px 12px;box-shadow:var(--glass-shadow);font-size:12.5px}
+.wbp-pop h5{margin:0 0 6px;font:10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--soft);font-weight:500}
+.wbp-pl{max-height:240px;overflow:auto;display:flex;flex-direction:column}
+.wbp-pi{display:flex;align-items:center;gap:8px;padding:4px 5px;border:none;border-radius:6px;background:none;color:var(--ink);text-align:left;cursor:pointer;min-width:0;font:inherit}
+.wbp-pi:hover{background:var(--hover)}
+.wbp-pn{font:12px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.wbp-pt{flex:none;font:11px var(--mono);color:var(--tx)}
+
+/* the entrance: once for each load of the page, under 0.6 s; none under reduced motion or html.lite (wbpanels.js does not start it then) */
+.wbp-intro{position:absolute;inset:0;z-index:50;display:grid;place-items:center;background:var(--bg);animation:wbpveil .6s ease-out forwards}
+.wbp-ibot{grid-area:1/1;width:76px;height:76px;border-radius:24px;background:var(--robot-head);border:1px solid var(--robot-line);position:relative;animation:wbpscale .45s cubic-bezier(.2,.9,.3,1.2) both}
+.wbp-ibot::before,.wbp-ibot::after{content:"";position:absolute;top:30px;width:12px;height:12px;border-radius:50%;background:var(--good-dot)}
+.wbp-ibot::before{left:18px}.wbp-ibot::after{right:18px}
+.wbp-ring0{grid-area:1/1;width:76px;height:76px;border-radius:50%;border:2px solid var(--good-dot);animation:wbpring .6s ease-out both}
+.wbp-in .wb-main{animation:wbpfade .5s ease-out both}
+@keyframes wbpscale{from{transform:scale(.35);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes wbpring{from{transform:scale(.8);opacity:.7}to{transform:scale(3.2);opacity:0}}
+@keyframes wbpveil{0%,55%{opacity:1}100%{opacity:0}}
+@keyframes wbpfade{from{opacity:0}to{opacity:1}}
+html.lite .wbp-intro,html.lite .wbp-in .wb-main{animation:none}
+@media (prefers-reduced-motion:reduce){.wbp-intro,.wbp-in .wb-main{animation:none}}
+
+/* the pipeline: one lane per kind of task, each with its own steps; and what waits for you, by decision */
+.wbp-lanes{display:flex;flex-direction:column;gap:4px}
+.wbp-lane{display:grid;grid-template-columns:62px minmax(0,1fr);gap:6px;align-items:stretch}
+.wbp-lk{display:flex;flex-direction:column;justify-content:center;font:10px var(--mono);color:var(--soft);min-width:0}.wbp-lk b{color:var(--ink);font-weight:600;overflow-wrap:anywhere}
+.wbp-lane .wbp-pcol{min-height:40px;padding:4px}.wbp-lane .wbp-pcol h6{margin-bottom:3px;letter-spacing:0;text-transform:none}
+.wbp-lane .wbp-pcol h6 span,.wbp-asks .wbp-pcol h6 span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.wbp-asks{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:4px}
+.wbp-asks .wbp-pcol{min-height:40px;padding:4px}.wbp-asks .wbp-pcol h6{letter-spacing:0;text-transform:none}
+
+/* v6: the pipeline flows (arrow steps), what waits on you is ranked bars */
+.wbp-lane{grid-template-columns:34px minmax(0,1fr)!important;align-items:start}
+.wbp-lk{font:600 10.5px var(--mono);color:var(--soft);line-height:22px;cursor:help;display:block}
+.wbp-flow{display:flex}
+.wbp-chev{position:relative;min-width:0;height:22px;margin-right:-6px;background:rgba(255,255,255,.075);clip-path:polygon(0 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,0 100%,8px 50%);display:flex;align-items:center;justify-content:center;gap:4px;font:10.5px var(--mono);color:var(--soft);padding:0 9px 0 12px;white-space:nowrap;overflow:hidden}
+.wbp-chev:first-child{clip-path:polygon(0 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,0 100%);border-radius:5px 0 0 5px;padding-left:7px}
+.wbp-chev span{overflow:hidden;text-overflow:ellipsis}.wbp-chev b{color:var(--ink);font-weight:600}
+.wbp-chev.wbp-jam{background:linear-gradient(90deg,rgba(232,169,60,.34),rgba(232,169,60,.18));color:#f3d39a}.wbp-chev.wbp-jam b{color:#fff}
+.wbp-chev.wbp-cdone{background:rgba(62,207,142,.12);color:#8fd9b5}.wbp-chev.wbp-cdone b{color:#b9f0d4}
+.wbp-chev.wbp-cnone{opacity:.55}
+.wbp-track{display:flex;margin-top:3px;min-height:12px}
+.wbp-cell{min-width:0;display:flex;flex-wrap:wrap;gap:2px;justify-content:center;padding:0 3px}
+.wbp-rks{display:flex;flex-direction:column;gap:4px}
+.wbp-rk{display:grid;grid-template-columns:84px minmax(0,1fr) 20px;align-items:center;gap:8px}
+.wbp-rkl{font-size:12px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wbp-rkbar{position:relative;height:17px;border-radius:5px;background:rgba(255,255,255,.03)}
+.wbp-rkbar>b{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:linear-gradient(90deg,rgba(232,169,60,.38),rgba(232,169,60,.14));border:1px solid rgba(232,169,60,.45)}
+.wbp-rkav{position:absolute;left:4px;top:2px;display:flex;gap:2px;align-items:center}
+.wbp-rkn{font:600 12.5px var(--mono);color:var(--hot-dot,#e8a93c);text-align:right}
+.wbp-btn{color:var(--hot-dot,#e8a93c);font-weight:600;margin-left:4px}

@@ -3,7 +3,7 @@
 /* The lobby of the board (lobby.js): one block for each state, full width, stacked; small robots, one pose for each state, one size for the whole page.
    Colours come from tokens.css. Every name starts with lb-. */
 .lb-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.lb-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.shift{display:inline-flex;gap:6px}.shift .act{margin:4px 0 0}.shift-said:empty{display:none}.shift-said{margin-top:6px}
+.lb-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.shift{display:inline-flex}.shift-said:empty{display:none}.shift-said{margin-top:6px}
 .lb-seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-top:4px}
 .lb-seg button{border:0;background:var(--card);color:var(--soft);padding:6px 14px;cursor:pointer;font:inherit;font-size:13px}
 .lb-seg button.on{background:var(--track);color:var(--ink)}

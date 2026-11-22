@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import messages, tasks
+from core import filecache, messages, tasks
 
 SIMPLE = ("rca", "design", "other")
 WRITES_BACK = ("dev", "kb")
@@ -38,7 +38,7 @@ def say(key: str, /, **values: Any) -> str:
 
 def read(path: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8-sig", errors="replace")
+        return filecache.read_text(path, "utf-8-sig", "replace")  # 1.8.25: read again only when it changed
     except OSError:
         return ""
 

@@ -38,6 +38,8 @@ DIGEST_CHARS = 2000
 MAX_TEXT = 1000  # characters of what the person types
 CLIP_NAME, CLIP_TITLE = 60, 100
 DEFAULT_LIMIT = 50.0  # Credits a local day
+RECHARGES = (25, 50)  # the Credits one press of the recharge button adds
+EXTRA_MAX = 200.0  # the most a person can add in one day
 LOST_AFTER = 180.0  # seconds after which a turn that the chat does not show and that does not run is given up
 NANO = copilot_events.NANO
 SUMMARY_ASK = "Give a short summary of what waits for me now, most urgent first."
@@ -176,7 +178,7 @@ class Brain:
     # -- the file --
 
     def fresh(self) -> Dict[str, Any]:
-        return {"day": self.now().date().isoformat(), "session": "", "chat": "", "sdk": "", "exchanges": [], "asks": [], "turn_nano": {}, "cost": {"session": "", "pos": 0, "nano": 0}, "prior_nano": 0}
+        return {"day": self.now().date().isoformat(), "session": "", "chat": "", "sdk": "", "exchanges": [], "asks": [], "turn_nano": {}, "cost": {"session": "", "pos": 0, "nano": 0}, "prior_nano": 0, "extra": 0.0, "recharges": []}
 
     def load(self) -> Dict[str, Any]:
         """The record of today. A file of another day, or one that cannot be read, gives a new one (no chat: the next turn makes it)."""
@@ -195,7 +197,30 @@ class Brain:
         base = self.fresh()
         base.update({key: found[key] for key in base if key in found})
         base["asks"] = [item for item in base["asks"] if superroute.valid(item)] if isinstance(base["asks"], list) else []
+        base["extra"] = self.extra_of(base)
+        base["recharges"] = [item for item in base["recharges"] if isinstance(item, dict)] if isinstance(base["recharges"], list) else []
         return base
+
+    @staticmethod
+    def extra_of(rec: Dict[str, Any]) -> float:
+        """The Credits the person added today. They are kept in today's record, as the spend is, and the history cannot touch it. A bad value is 0."""
+        found = rec.get("extra")
+        return float(found) if isinstance(found, (int, float)) and not isinstance(found, bool) and 0 <= found <= EXTRA_MAX else 0.0
+
+    def recharge(self, amount: Any) -> Dict[str, Any]:
+        """Add Credits to today's limit: 25 or 50 a press, 200 a day at most. `{ok: true, extra, base, limit}` or `{ok: false, why: amount | cap}`. Tomorrow's record starts with none."""
+        if isinstance(amount, bool) or not isinstance(amount, (int, float)) or amount not in RECHARGES:
+            return {"ok": False, "why": "amount"}
+        with self.lock:
+            rec = self.load()
+            extra = self.extra_of(rec)
+            if extra + amount > EXTRA_MAX:
+                return {"ok": False, "why": "cap", "extra": extra, "left": EXTRA_MAX - extra}
+            rec["extra"] = extra + amount
+            rec["recharges"] = (rec.get("recharges") or [])[-20:] + [{"at": utc_now(), "amount": int(amount), "by": "board"}]
+            self.save(rec)
+            base = limit_of(self.root)
+            return {"ok": True, "extra": rec["extra"], "base": base, "limit": base + rec["extra"]}
 
     def keep(self, rec: Dict[str, Any]) -> bool:
         """Put a day that ended into the history (an empty day is not kept). False when it could not be written: `super.json` then stays as it is, and the next load tries again."""
@@ -293,17 +318,18 @@ class Brain:
     # -- the page side --
 
     def talk(self) -> Dict[str, Any]:
-        """`{state, spent, limit, messages}`: `state` is asleep (VS Code is not linked), thinking (a turn runs), tired (today's limit is reached) or idle; `messages`: the person's and the agent's, oldest first,
+        """`{state, spent, limit, base, extra, messages}` (`limit` = `base`, the policy, + `extra`, what the person added today): `state` is asleep (VS Code is not linked), thinking (a turn runs), tired (today's limit is reached) or idle; `messages`: the person's and the agent's, oldest first,
         as `messages_of` gives them (the running turn's text so far is shown as it grows)."""
         with self.lock:
             rec = self.load()
             if self.sync(rec):
                 self.save(rec)
-            limit, spent = limit_of(self.root), self.spent(rec)
+            base, extra, spent = limit_of(self.root), self.extra_of(rec), self.spent(rec)
+            limit = base + extra
             messages = self.shown(messages_of(rec["exchanges"], self.partial), True)
             ready = bool(self.link.status().get("ready"))
             state = "asleep" if not ready else "thinking" if self.running(rec) else "tired" if spent >= limit else "idle"
-            return {"state": state, "spent": round(spent, 3), "limit": limit, "messages": messages, "asks": [superroute.public(item) for item in rec["asks"]]}
+            return {"state": state, "spent": round(spent, 3), "limit": limit, "base": base, "extra": extra, "messages": messages, "asks": [superroute.public(item) for item in rec["asks"]]}
 
     def shown(self, messages: List[Dict[str, Any]], proposals: bool) -> List[Dict[str, Any]]:
         """The agent's messages as the person sees them: the proposal block is cut out of `text`; with `proposals`, a message that had a block gets `proposals`, checked against the rows of this moment."""
@@ -419,7 +445,7 @@ class Brain:
                 self.save(rec)
             if not self.link.status().get("ready"):
                 return {"ok": False, "why": "asleep"}
-            if self.spent(rec) >= limit_of(self.root):
+            if self.spent(rec) >= limit_of(self.root) + self.extra_of(rec):
                 return {"ok": False, "why": "limit"}
             if self.running(rec):
                 return {"ok": False, "why": "busy"}

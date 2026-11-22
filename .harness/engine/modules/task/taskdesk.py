@@ -33,8 +33,7 @@ def say(key: str, /, **values: Any) -> str:
 
 def row_of(root: Path, name: str) -> Optional[Dict[str, Any]]:
     """The board row of the task called `name`, or None. Only a task the board lists can be opened: no path comes in."""
-    found = tasklife.list_tasks(root, True)["tasks"]
-    return next((row for row in found if row["name"] == name), None)
+    return tasklife.row_named(root, name)
 
 
 def documents(root: Path, task: str) -> List[Dict[str, Any]]:
@@ -208,11 +207,17 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
     return {"say": "", "why": "", "says": [], "writes": 0, "facts": cmdview.facts(command, system.get("show")), "body": body}
 
 
-def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
+def tools_systems(root: Path) -> Dict[str, Any]:
+    """The systems of the tools policy (tool packs, connections and the .env merged in): read once per page and given to each view (1.8.25: each view read them again, some 60 files a time)."""
+    found = config.policy_or_empty(root, "tools").get("systems")
+    return found if isinstance(found, dict) else {}
+
+
+def outbox_view(root: Path, task: str, systems: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """The calls of this task that wait for the person (1.7.7), oldest first, each with its facts (the pack's `show` patterns), the layout of its command and the file it reads, if any.
     The page draws a card for each; the code is in the draft's name too."""
     try:
-        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        systems = tools_systems(root) if systems is None else systems
         folder = tasks.task_dir(root, task)
         out = []
         waiting = outbox.pending_for(root, task)
@@ -243,11 +248,11 @@ def cut_command(command: Any, size: int = 80) -> str:
     return one if len(one) <= size else one[: size - 1].rstrip() + "\u2026"
 
 
-def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
+def approved_view(root: Path, task: str, systems: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """The calls of this task approved on the board or in a terminal and not run yet (1.7.24): the page keeps its green card, and tells the agent, until the command has run.
     1.7.25: each has a `title` (the sentence of its type's `say`, else the start of the command), so the card says which call was approved."""
     try:
-        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        systems = tools_systems(root) if systems is None else systems
         out = []
         for item in outbox.approved_for(root, task):
             said = ""
@@ -262,10 +267,10 @@ def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
         return []
 
 
-def opened_view(root: Path, task: str) -> List[Dict[str, Any]]:
+def opened_view(root: Path, task: str, systems: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """The held calls of this task whose connections the person opened from the card and that the agent has not run again (1.7.38): the page keeps a green card, and asks the person to tell the agent."""
     try:
-        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        systems = tools_systems(root) if systems is None else systems
         out = []
         for item in outbox.opened_for(root, task):
             said = ""
@@ -280,12 +285,12 @@ def opened_view(root: Path, task: str) -> List[Dict[str, Any]]:
         return []
 
 
-def allow_view(root: Path, data: Dict[str, Any], task: str = "") -> Dict[str, Any]:
+def allow_view(root: Path, data: Dict[str, Any], task: str = "", systems: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """The Task settings field "Open to the agent" (1.7.38): the connections the person opened for this task (`open`, each can be closed), the linked items when a connection of the task's tickets
     is opened by them (`links`), and the connections a held call of THIS task offers to open (`can`, for the words of the pop: not every connection there is). `any`: some connection could be opened,
     so the field is drawn even before a call is held. Nothing to draw when there is none of these. The switch ends with the task."""
     try:
-        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        systems = tools_systems(root) if systems is None else systems
         systems = systems if systems and not outside.validate(systems) else {}
     except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the field is then not drawn
         systems = {}
@@ -636,6 +641,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
     report = common.task_report_file(root, name, common.REPORT_HTML)
     review, events = reviews(root, task, data), history(data)
     listed, changes_view = taskfiles.listing(root, task), changed(root, task, data)
+    systems, is_open = tools_systems(root), row.get("status") == "open"
     return {
         "name": name, "task": task, "title": row.get("title") or "", "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "state": row.get("state", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
@@ -648,7 +654,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view, server_runs(root, task, [item["path"] for item in listed if item["path"].startswith(tasks.DEV_NAME + "/") and tasks.is_manual(item["path"].split("/", 1)[-1])])), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view, server_runs(root, task, [item["path"] for item in listed if item["path"].startswith(tasks.DEV_NAME + "/") and tasks.is_manual(item["path"].split("/", 1)[-1])])), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task, systems), "outbox": outbox_view(root, task, systems) if is_open else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task, systems) if is_open else [], "opened": opened_view(root, task, systems) if is_open else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "req_approval": req_approval(root, task, data), "promote_stamp": promote_stamp(data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

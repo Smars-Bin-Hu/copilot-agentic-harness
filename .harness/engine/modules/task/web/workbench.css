@@ -1,0 +1,214 @@
+/* The super agent workbench, the command deck (workbench.js): a full-screen layer over the board with the chat of super.js in the middle. Colours come from tokens.css only.
+   The deck is always dark: tokens.css gives `.wb-root` the dark set, whatever the board's theme is. Panels are plain translucent fills (no blur: the target computers are slow); the room is a still glow and a faint grid.
+   Wide deck: panels left | chat under the bridge | panels right, two bars to resize. Focus: chat | picture, one card at the bottom right. Tall (a window taller than wide): everything stacks downward. */
+html.wb-lock{overflow:hidden}
+/* no board chrome while the deck is open: the round buttons, the search and account pill (with the terminal and stop buttons) and the terminal. Hidden, not removed: the board has them again when the deck leaves. */
+html.wb-lock :is(.sh-pill,.sh-gear,.dock-btn,.dock-panel,.hd-acct,.term-toggle,.term){display:none!important}
+.wb-root{--wb-lw:var(--wb-lwu,clamp(260px,21vw,340px));--wb-rw:var(--wb-rwu,clamp(320px,31vw,560px));--wb-glass:rgba(16,19,21,.84);--wb-acc:var(--good-dot);--wb-accdim:rgba(62,207,142,.16);
+  --wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--wbp-id3:#ffd166;--wbp-id4:#c6a5ff;--wbp-id5:#6ee7d8;--wbp-id6:#ff9f7a;--wbp-id7:#d0d4dc;
+  position:fixed;inset:0;z-index:100;display:grid;grid-template-rows:38px minmax(0,1fr);color:var(--ink);font-size:14px;line-height:1.45;overflow:hidden;
+  background:radial-gradient(ellipse 70% 55% at 50% 0%,rgba(62,207,142,.10),transparent 70%),linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px) 0 0/44px 44px,linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px) 0 0/44px 44px,var(--bg)}
+/* the thin lit edge: it says "you are in the super agent mode"; it turns red when VS Code is not linked */
+.wb-root::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:80;border:1px solid rgba(62,207,142,.38);box-shadow:inset 0 0 26px rgba(62,207,142,.13)}
+.wb-root.wb-down{--wb-acc:var(--bad);--wb-accdim:rgba(239,91,91,.2)}
+.wb-root.wb-down::after{border-color:rgba(239,91,91,.6);box-shadow:inset 0 0 30px rgba(239,91,91,.2)}
+.wb-root[hidden],.wb-root [hidden]{display:none}
+.wb-root *{box-sizing:border-box}
+:where(.wb-root) button{font:inherit;color:inherit}  /* no weight: the buttons of super.js keep their own colours (the Send button is the button colour on the button ink) */
+.wb-rail-l{--wb-lw:44px}
+.wb-rail-r{--wb-rw:44px}
+.wb-sp{flex:1}
+
+/* the top bar: the way out, the name, the battery, the history buttons, and Focus */
+.wb-top{display:flex;align-items:center;gap:10px;padding:0 12px;min-width:0}
+.wb-back{width:26px;height:24px;padding:0;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--soft);cursor:pointer;display:grid;place-items:center;flex:none}
+.wb-back:hover{color:var(--ink);background:var(--hover)}
+.wb-bot{width:22px;height:22px;border-radius:7px;background:#1c2523;border:1px solid var(--wb-accdim);position:relative;flex:none;display:inline-block}
+.wb-bot::before,.wb-bot::after{content:"";position:absolute;top:8px;width:4px;height:4px;border-radius:50%;background:var(--wb-acc);box-shadow:0 0 6px var(--wb-acc)}
+.wb-bot::before{left:5px}.wb-bot::after{right:5px}
+.wb-name{font-size:13.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wb-batt{display:flex;align-items:center;gap:6px;border:0;background:none;padding:2px 4px;color:var(--soft);font:11px var(--mono);cursor:pointer;border-radius:6px;flex:none}
+.wb-batt:hover{background:var(--hover);color:var(--ink)}
+.wb-cell{position:relative;width:26px;height:12px;border:1.5px solid var(--soft);border-radius:3px;padding:1px;display:block}
+.wb-cell::after{content:"";position:absolute;right:-4px;top:3px;width:2px;height:4px;background:var(--soft);border-radius:0 1px 1px 0}
+.wb-cell i{display:block;height:100%;min-width:1px;background:var(--good-dot);border-radius:1px}
+.wb-cell.mid i{background:var(--hot-dot)}
+.wb-cell.low i,.wb-cell.full i{background:var(--bad)}
+.wb-cell.full{border-color:var(--bad)}.wb-cell.full::after{background:var(--bad)}
+.wb-batt:has(.low),.wb-batt:has(.full){color:var(--bad)}
+.wb-tools{display:inline-flex;align-items:center;gap:6px;flex:none}
+.wb-tools .sa-pop{margin:0;width:26px;height:24px;font-size:13px;border-color:var(--line)}
+.wb-focus{font:11.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--wb-accdim);border-radius:999px;padding:3px 12px;color:var(--soft);background:transparent;cursor:pointer;flex:none}
+.wb-focus:hover{color:var(--ink)}
+.wb-focus.on{background:var(--wb-acc);color:#06140e;border-color:var(--wb-acc);font-weight:700}
+.wb-ic{font-size:12px;margin-right:2px}
+.wb-cnt{display:inline-grid;place-items:center;min-width:15px;height:15px;margin-left:5px;border-radius:8px;background:var(--hot-dot);color:#111;font:700 9.5px/15px sans-serif;padding:0 4px;vertical-align:1px}
+.wb-cnt[hidden]{display:none}
+
+/* the battery popover */
+.wb-pop{position:fixed;z-index:92;width:300px;background:#181d1f;border:1px solid var(--line2);border-radius:11px;padding:11px 13px;box-shadow:0 12px 40px rgba(0,0,0,.6);font-size:12.5px}
+.wb-pop h5{margin:0 0 6px;font:10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--soft);font-weight:500}
+.wb-pa{color:var(--wb-acc);margin-top:3px}
+.wb-prow{display:flex;gap:6px;margin-top:9px}
+.wb-rc{border:1px solid var(--line2);border-radius:8px;background:var(--raise);padding:4px 10px;cursor:pointer;font-size:12.5px}
+.wb-rc.pri{background:var(--ink);color:#0b0d0e;border-color:var(--ink);font-weight:600}
+.wb-rc:disabled{opacity:.5;cursor:default}
+.wb-pnote{color:var(--soft);margin-top:8px;font-size:12px}
+.wb-perr{color:var(--bad);margin-top:8px;overflow-wrap:anywhere}
+
+/* the grid: left | bar | centre | bar | right */
+.wb-main{display:grid;min-height:0;min-width:0;position:relative}
+.wb-m-wb .wb-main{grid-template-columns:var(--wb-lw) 6px minmax(380px,1fr) 6px var(--wb-rw)}
+.wb-m-focus .wb-main{grid-template-columns:minmax(0,1fr) minmax(300px,48%)}
+.wb-l{grid-column:1;grid-row:1}
+.wb-bar-l{grid-column:2;grid-row:1}
+.wb-m-wb .wb-center{grid-column:3}
+.wb-bar-r{grid-column:4;grid-row:1}
+.wb-m-wb .wb-r{grid-column:5;grid-row:1}
+.wb-m-focus .wb-center{grid-column:1}
+.wb-center{grid-row:1;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.wb-side{display:flex;flex-direction:column;gap:6px;min-height:0;min-width:0;padding:6px}
+.wb-m-focus .wb-l,.wb-m-focus .wb-r{display:none}
+.wb-dock,.wb-scene,.wb-bar{display:none}
+.wb-m-wb:not(.wb-tall) .wb-bar{display:block;cursor:col-resize;position:relative;touch-action:none}
+.wb-bar::after{content:"";position:absolute;left:2px;top:0;bottom:0;width:1px;background:var(--line)}
+.wb-bar:hover::after,.wb-bar.drag::after{left:1px;width:3px;background:var(--wb-acc);box-shadow:0 0 10px var(--wb-acc)}
+.wb-rail-l .wb-bar-l,.wb-rail-r .wb-bar-r{cursor:default}
+.wb-rail-l .wb-bar-l:hover::after,.wb-rail-r .wb-bar-r:hover::after{left:2px;width:1px;background:var(--line);box-shadow:none}
+
+/* the bridge: the picture of the agents, which is also the row of avatars (wbpanels.js); the avatar row of super.js stays in the DOM, hidden, and the chat fills what is left */
+.wb-bridge{flex:none;height:190px;position:relative;min-width:0}
+.wb-bridge>*{width:100%;height:100%}
+.wb-tall .wb-bridge{height:160px}
+.wb-center .sa-team,.wb-center .sa-head,.wb-center .sa-pet{display:none!important}
+.wb-center .sa{flex:1 1 0;min-height:0;height:auto!important;max-width:800px;margin:0 auto;width:100%;padding:0 20px}
+.wb-center .sa.sa-fold-on .sa-streamwrap{flex:1 1 auto;height:auto;min-height:0}
+.wb-center .sa.sa-fold-on .sa-stream{display:block}
+.wb-center .sa .sa-fold,.wb-center .sa .sa-foldline{display:none!important}
+.wb-center .sa .sa-banner{order:1;margin:8px 0 0;background:#1f1212;border-color:#6a2a2a;color:#f0b4b4}  /* the banner of VS Code not linked: one line above the input */
+.wb-center .sa .sa-quick{order:2}
+.wb-center .sa .sa-input{order:3}
+.wb-center .sa .sa-filter{padding-left:0;padding-right:0}
+
+/* a panel: translucent glass, corner marks, a small-caps head with a fold button */
+.wb-pn{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;flex:1 1 0;background:var(--wb-glass);border:1px solid var(--line);border-radius:10px}
+.wb-pn::before,.wb-pn::after{content:"";position:absolute;width:9px;height:9px;border:1px solid var(--wb-acc);opacity:.55;pointer-events:none}
+.wb-pn::before{left:-1px;top:-1px;border-right:none;border-bottom:none;border-radius:10px 0 0 0}
+.wb-pn::after{right:-1px;bottom:-1px;border-left:none;border-top:none;border-radius:0 0 10px 0}
+.wb-pn-q{flex-grow:3}
+.wb-pn-t{flex-grow:2}
+.wb-pn-d.wb-sized{flex:0 1 auto;max-height:46%}
+.wb-pn.wb-fold{flex:0 0 auto}
+.wb-pn.wb-fold .wb-pb,.wb-pn.wb-fold .wb-frames{display:none}
+.wb-ph{display:flex;align-items:center;gap:8px;padding:7px 10px 5px;font:10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--soft);flex:none}
+.wb-ph b{color:var(--ink);font-weight:600}
+.wb-pn.wb-fold .wb-ph{cursor:pointer}
+.wb-pc{color:var(--hot);font-weight:700}
+.wb-fold-btn{margin-left:auto;width:22px;height:18px;padding:0;border:0;background:none;color:var(--soft);font-size:13px;line-height:1;cursor:pointer;border-radius:5px;flex:none}
+.wb-fold-btn:hover{color:var(--ink);background:var(--hover)}
+.wb-x{margin-left:auto;border:0;background:none;color:var(--soft);cursor:pointer;border-radius:6px;padding:0 5px;font-size:13px;line-height:20px}
+.wb-x:hover{color:var(--ink);background:var(--hover)}
+.wb-pb{flex:1 1 auto;min-height:0;overflow:auto;padding:2px 9px 9px}
+.wb-soon{color:var(--soft);font-size:12.5px;padding:8px 2px}
+.wb-qb{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.wb-qb .wb-qempty{padding:8px 12px}
+.wb-qb .sa-queue{flex:1 1 auto;max-height:none!important;margin:0;border-bottom:0;box-shadow:none;background:transparent;z-index:auto}
+.wb-qb .sa-qlist{padding-left:10px;padding-right:10px}
+.wb-qb .sa-row .sa-mini{display:none}
+.wb-qb .sa-bub{max-width:100%}
+.wb-qb .sa-qdone summary{padding-left:12px}
+
+/* a side whose two panels are folded is a narrow rail of icon buttons; a click on one opens its panel */
+.wb-rail{display:none}
+.wb-rail-l .wb-l .wb-rail,.wb-rail-r .wb-r .wb-rail{display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 0}
+.wb-rail-l .wb-l,.wb-rail-r .wb-r{padding:6px 0}
+.wb-rb{position:relative;width:30px;height:30px;padding:0;border-radius:9px;border:1px solid var(--wb-accdim);background:var(--wb-glass);color:var(--soft);font-size:14px;cursor:pointer}
+.wb-rb:hover{color:var(--ink);border-color:var(--wb-acc)}
+.wb-rb .wb-cnt{position:absolute;right:-5px;top:-5px;margin:0}
+
+/* the Task pane: the tab bar is the head of the panel */
+.wb-pn-p .wb-tabbar{display:flex;align-items:flex-end;gap:2px;padding:5px 6px 0 8px;border-bottom:1px solid var(--line);flex:none;min-width:0}
+.wb-pn-p.wb-fold .wb-tabbar{border-bottom:0;padding-bottom:4px;align-items:center;cursor:pointer}
+.wb-pn-p.wb-fold .wb-tabs{display:none}
+.wb-tabs{display:flex;align-items:flex-end;gap:2px;overflow-x:auto;scrollbar-width:none;min-width:0;flex:1 1 0}
+.wb-tlbl{font:600 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:0 8px 4px 2px;align-self:center;white-space:nowrap}
+.wb-tab{display:flex;align-items:center;gap:2px;border-radius:7px 7px 0 0;border:1px solid transparent;border-bottom:0;color:var(--soft);flex:none;max-width:200px;min-width:0;margin-bottom:-1px}
+.wb-tab.on{background:var(--bg);color:var(--ink);border-color:var(--line)}
+.wb-tab-n{border:0;background:none;padding:4px 2px 4px 10px;font:12px var(--mono);color:inherit;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:160px}
+.wb-tab-x{border:0;background:none;color:var(--soft);cursor:pointer;padding:0 7px 0 3px;font-size:11px;line-height:24px}
+.wb-tab-x:hover{color:var(--ink)}
+.wb-out{margin-bottom:3px;padding:2px 8px;color:var(--soft);text-decoration:none;border-radius:6px;font-size:15px;flex:none}
+.wb-out:hover{color:var(--ink);background:var(--hover)}
+.wb-pn-p .wb-fold-btn{margin:0 0 3px 4px;align-self:center}
+.wb-pn-p .wb-tlbl+.wb-tabs{flex:1 1 0}
+.wb-closelayer{display:none;margin:0 0 3px 0;flex:none}
+.wb-m-focus .wb-closelayer,.wb-tall .wb-closelayer{display:inline-block}
+.wb-m-focus .wb-pn-p .wb-fold-btn,.wb-tall .wb-pn-p .wb-fold-btn,.wb-tall .wb-ph .wb-fold-btn{display:none}
+.wb-frames{flex:1 1 auto;min-height:0;position:relative;background:var(--bg);border-radius:0 0 10px 10px;overflow:hidden}
+.wb-frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
+.wb-task-empty{padding:16px}
+
+/* Focus: the picture on the right, the task in a window in the middle of the screen */
+.wb-m-focus .wb-scene{display:block;grid-column:2;grid-row:1;min-width:0;min-height:0;position:relative;overflow:hidden;border-left:1px solid var(--line)}
+.wb-m-focus.wb-task-on:not(.wb-tall) .wb-r{display:grid;position:fixed;inset:0;z-index:40;place-items:center;background:var(--scrim);border:0;padding:0}
+.wb-m-focus:not(.wb-tall) .wb-pn-p{display:flex;width:min(1080px,78vw);height:84vh;flex:none;box-shadow:var(--glass-shadow)}
+
+/* the card of Focus: the first item of the queue; the others stay hidden; "Later" sends it to the end; the dash puts the card away */
+.wb-cardbox{position:fixed;right:18px;bottom:18px;z-index:30;width:min(420px,calc(100vw - 36px))}
+.wb-card{display:flex;flex-direction:column;max-height:min(72vh,620px);background:var(--raise);border:1px solid var(--line2);border-top:3px solid var(--hot-dot);border-radius:14px;box-shadow:var(--glass-shadow);overflow:hidden}
+.wb-many .wb-card{box-shadow:0 6px 0 -2px var(--raise),0 7px 0 -2px var(--line2),var(--glass-shadow)}
+.wb-ch{display:flex;align-items:center;gap:8px;padding:8px 10px 2px 14px;font-size:12px;color:var(--soft);flex:none}
+.wb-of{font:11.5px var(--mono)}
+.wb-later,.wb-min{border:0;background:none;color:var(--soft);cursor:pointer;border-radius:6px;padding:2px 8px}
+.wb-later:hover,.wb-min:hover{color:var(--ink);background:var(--hover)}
+.wb-later:disabled{opacity:.4;cursor:default}
+.wb-later:disabled:hover{color:var(--soft);background:none}
+.wb-cb{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;overflow:hidden}
+.wb-cb .sa-queue{flex:1 1 auto;max-height:none!important;margin:0;border:0;box-shadow:none;background:transparent;z-index:auto}
+.wb-cb .sa-qlist{padding:4px 12px 12px;max-height:min(56vh,500px)}
+.wb-cb .sa-qlist>.item:not(.wb-cur){display:none}
+.wb-cb .sa-qlist>.item{margin:0}
+.wb-cb .sa-qdone{display:none}
+.wb-cb .sa-row .sa-mini{display:none}
+.wb-cb .sa-bub{max-width:100%}
+.wb-bell{display:none;margin-left:auto;border:0;border-radius:999px;padding:8px 14px;background:var(--hot-dot);color:#111;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
+.wb-cardbox.wb-min .wb-card{display:none}
+.wb-cardbox.wb-min .wb-bell{display:block}
+.wb-in{animation:wbin .28s ease-out}
+@keyframes wbin{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+html.lite .wb-in{animation:none}
+@media (prefers-reduced-motion:reduce){.wb-in{animation:none}}
+
+/* Tall: nothing covers anything; panels and the task stack under the chat; four icons at the bottom */
+.wb-tall .wb-main{grid-template-columns:minmax(0,1fr)}
+.wb-tall .wb-side{display:contents}
+.wb-tall .wb-pn{grid-column:1;flex:none;margin:0 6px 6px}
+.wb-tall .wb-center{grid-column:1;grid-row:1}
+.wb-tall.wb-m-wb .wb-main{grid-template-rows:minmax(0,1fr) auto auto auto}
+.wb-tall.wb-m-wb .wb-pn-q,.wb-tall.wb-m-wb .wb-pn-t,.wb-tall.wb-m-wb .wb-pn-d{grid-row:2;height:30vh}
+.wb-tall.wb-m-wb.wb-task-on .wb-pn-q,.wb-tall.wb-m-wb.wb-task-on .wb-pn-t,.wb-tall.wb-m-wb.wb-task-on .wb-pn-d{height:22vh}
+.wb-tall.wb-m-wb .wb-pn-d.wb-sized{max-height:none}
+.wb-tall.wb-m-wb .wb-pn-p{grid-row:3;height:32vh}
+.wb-tall.wb-m-wb .wb-dock{display:flex;grid-row:4;grid-column:1;justify-content:space-around;border-top:1px solid var(--line);padding:6px 0 8px}
+.wb-dk{border:0;background:none;color:var(--soft);font:10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative;cursor:pointer;padding:2px 14px}
+.wb-dk.on{color:var(--wb-acc)}
+.wb-dk .wb-ic{font-size:16px;margin:0}
+.wb-dk .wb-cnt{position:absolute;right:4px;top:-3px;margin:0}
+.wb-tall.wb-m-focus .wb-main{grid-template-rows:200px minmax(0,1fr) auto}
+.wb-tall.wb-m-focus.wb-task-on .wb-main{grid-template-rows:110px minmax(0,1fr) auto}
+.wb-tall.wb-m-focus .wb-scene{grid-column:1;grid-row:1;border-left:0;border-bottom:1px solid var(--line)}
+.wb-tall.wb-m-focus .wb-center{grid-row:2}
+.wb-tall.wb-m-focus .wb-pn-p{grid-row:3;height:40vh}
+.wb-tall .wb-center .sa{max-width:none;padding:0 12px}
+.sa>.wb-cardbox{position:static;width:auto;margin:0 0 8px}
+.sa>.wb-cardbox .wb-card{max-height:34vh}
+.sa>.wb-cardbox .wb-cb .sa-qlist{max-height:22vh}
+
+/* minimized: back on the normal board, the mode is a small lit pill at the bottom right, left of the board's round buttons */
+.wb-orb{position:fixed;right:76px;bottom:24px;z-index:140;display:flex;align-items:center;gap:10px;padding:8px 14px 8px 9px;border-radius:999px;background:#101615;border:1px solid rgba(62,207,142,.5);box-shadow:0 0 22px rgba(62,207,142,.28);cursor:pointer;color:#e9eef0;font:inherit}
+.wb-orb[hidden]{display:none}
+.wb-orb .wb-bot{--wb-acc:var(--good-dot);--wb-accdim:rgba(62,207,142,.16)}
+.wb-orb b{font-size:13px}
+.wb-orb-w{color:#f4b64a;font:12px var(--mono)}
+@media (max-width:900px){.wb-orb{right:20px;bottom:84px}}
+.wb-pn-p.wb-fold .wb-fold-btn{margin-left:auto}

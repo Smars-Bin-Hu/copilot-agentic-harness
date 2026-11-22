@@ -190,7 +190,7 @@ class WindowTests(EvidenceCase):
         self.assertIn('open.addEventListener("click", () => { view.close(); openRun(item); });', desk)
         self.assertIn('runPick["file:" + item.file] = item.run;', desk)  # the Files tab opens the file at that run (hand test B90-c)
         self.assertIn('event.preventDefault(); event.stopPropagation(); if (item) evidenceWindow(item);', desk)  # a chip inside a link opens the window only
-        self.assertIn(".ev.missing{border-color:var(--bad)", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))
+        self.assertIn(".ev.missing{border-color:var(--bad)", (taskhtml.WEB / "callview.css").read_text(encoding="utf-8"))
         en, zh = messages.table("en"), messages.table("zh")
         for key in ("desk.evidence.tip", "desk.evidence.missing", "desk.evidence.see", "desk.evidence.open", "desk.evidence.output", "desk.evidence.nooutput"):
             self.assertIn(key, en, key)

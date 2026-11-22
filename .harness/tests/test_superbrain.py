@@ -257,6 +257,59 @@ class RefusalTests(BrainCase):
             self.assertEqual(self.brain.talk()["spent"], 0.0)
 
 
+class RechargeTests(BrainCase):
+    def test_a_recharge_lifts_todays_limit_and_talk_says_so(self) -> None:
+        self.assertEqual(self.brain.recharge(25), {"ok": True, "extra": 25.0, "base": 50.0, "limit": 75.0})
+        found = self.brain.talk()
+        self.assertEqual((found["base"], found["extra"], found["limit"]), (50.0, 25.0, 75.0))
+        self.assertEqual(self.brain.talk()["extra"], 25.0)
+        self.assertEqual(self.brain.load()["recharges"][0]["amount"], 25)  # who and when
+        with mock.patch.object(superbrain, "limit_of", return_value=10.0):
+            self.assertEqual(self.brain.talk()["limit"], 35.0)
+
+    def test_only_25_or_50_and_200_a_day(self) -> None:
+        for bad in (0, 10, 26, 100, -25, "25", None, True, 25.5):
+            self.assertEqual(self.brain.recharge(bad), {"ok": False, "why": "amount"}, bad)
+        for _ in range(4):
+            self.assertTrue(self.brain.recharge(50)["ok"])
+        self.assertEqual(self.brain.recharge(25)["why"], "cap")
+        self.assertEqual(self.brain.recharge(50)["why"], "cap")
+        self.assertEqual(self.brain.talk()["extra"], 200.0)
+
+    def test_the_cap_leaves_room_for_a_smaller_press(self) -> None:
+        for _ in range(3):
+            self.brain.recharge(50)
+        self.assertEqual(self.brain.recharge(50)["extra"], 200.0)
+        self.assertEqual(self.brain.recharge(25)["why"], "cap")
+
+    def test_tomorrow_starts_with_no_extra_and_a_delete_of_a_day_cannot_undo_it(self) -> None:
+        self.brain.ask("one")
+        self.brain.recharge(50)
+        self.assertEqual(self.brain.history_act(DAY.date().isoformat(), "delete"), {"ok": False, "why": "today"})
+        self.assertEqual(self.brain.talk()["extra"], 50.0)
+        self.assertEqual(superbrain.Brain(self.root, self.link, lambda: self.rows, now=lambda: self.when).talk()["extra"], 50.0)  # kept in the file
+        self.when = DAY + timedelta(days=1)
+        found = self.brain.talk()
+        self.assertEqual((found["extra"], found["limit"], found["base"]), (0.0, 50.0, 50.0))
+
+    def test_a_bad_extra_in_the_file_counts_as_none(self) -> None:
+        for bad in ("lots", -5, 9999, None, True):
+            rec = self.brain.fresh()
+            rec["extra"] = bad
+            self.brain.save(rec)
+            self.assertEqual(self.brain.talk()["extra"], 0.0)
+
+    def test_a_tired_brain_answers_again_after_a_recharge(self) -> None:
+        with mock.patch.object(superbrain, "limit_of", return_value=1.0):
+            self.brain.ask("one")
+            self.link.finish("a", credits=1.0)
+            self.assertEqual(self.brain.talk()["state"], "tired")
+            self.assertEqual(self.brain.ask("two"), {"ok": False, "why": "limit"})
+            self.brain.recharge(25)
+            self.assertEqual(self.brain.talk()["state"], "idle")
+            self.assertEqual(self.brain.ask("two"), {"ok": True})
+
+
 class SpendTests(BrainCase):
     def test_the_events_file_is_read_from_where_it_ended_and_a_half_line_waits(self) -> None:
         self.brain.ask("one")
@@ -312,7 +365,7 @@ class TalkTests(BrainCase):
         self.assertEqual([(item["role"], item["text"]) for item in growing], [("you", "what waits?"), ("agent", "Plan of task-001")])
         self.link.finish("Plan of task-001 first.")
         talk = self.brain.talk()
-        self.assertEqual(set(talk), {"state", "spent", "limit", "messages", "asks"})
+        self.assertEqual(set(talk), {"state", "spent", "limit", "base", "extra", "messages", "asks"})
         self.assertEqual([(item["id"], item["role"], item["text"]) for item in talk["messages"]], [("turn-1:you", "you", "what waits?"), ("turn-1:agent", "agent", "Plan of task-001 first.")])
         self.assertTrue(all(item["at"] for item in talk["messages"]))
         self.assertEqual((talk["state"], talk["limit"]), ("idle", 50.0))
@@ -411,6 +464,22 @@ class RouteTests(ServeCase):
         status, data, _ = self.request("POST", "/api/super/talk", {})
         self.assertEqual(status, 200)
         self.assertEqual((data["state"], data["messages"], data["limit"], data["spent"]), ("asleep", [], 50.0, 0.0))
+
+    def test_the_recharge_needs_a_paired_browser_and_takes_25_or_50(self) -> None:
+        path = "/api/super/recharge"
+        self.assertEqual(self.request("POST", path, {"amount": 25}, header=False)[0], 403)
+        self.assertEqual(self.request("POST", path, {"amount": 25}, origin="https://evil.example")[0], 403)
+        status, data, _ = self.request("POST", path, {"amount": 25})
+        self.assertEqual((status, data.get("unpaired")), (403, True))  # no cookie: an agent's request
+        self.assertEqual(self.request("POST", "/api/super/talk", {})[1]["extra"], 0.0)
+        cookie = self.pair()
+        inside = "Mozilla/5.0 Electron/30 Code/1.100 Safari/537.36"
+        self.assertEqual(self.request("POST", path, {"amount": 25}, cookie=cookie, agent=inside)[0], 403)  # a browser inside the editor is never paired
+        self.assertEqual(self.request("POST", path, {"amount": 25}, cookie=cookie)[1], {"ok": True, "extra": 25.0, "base": 50.0, "limit": 75.0, "language": "zh"})
+        refused = self.request("POST", path, {"amount": 30}, cookie=cookie)[1]
+        self.assertEqual((refused["ok"], refused["why"], bool(refused["reason"])), (False, "amount", True))
+        talk = self.request("POST", "/api/super/talk", {})[1]
+        self.assertEqual((talk["base"], talk["extra"], talk["limit"]), (50.0, 25.0, 75.0))
 
     def test_the_history_is_a_read_and_its_actions_need_a_paired_browser(self) -> None:
         for path in ("/api/super/history", "/api/super/history/act"):

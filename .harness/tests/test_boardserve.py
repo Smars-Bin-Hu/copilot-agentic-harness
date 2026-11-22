@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import io
+import re
 import json
 import os
 import socket
@@ -21,7 +22,7 @@ from taskcase import SESSION, TASK, TaskCase
 
 from core import messages, tasks
 from core.paths import board_serve_file
-from modules.task import boardpairs, boardserve, task as task_ops
+from modules.task import boardpairs, boardserve, tasklife, task as task_ops
 from modules.task.common import CommandError
 
 
@@ -91,6 +92,11 @@ class ServeCase(TaskCase):
         except ValueError:
             data = {}
         return response.status, data, dict(response.getheaders())
+
+    def whole(self, page: str) -> str:
+        """A served page with the files it links (`/asset/`) put in: what the browser ends up with."""
+        from modules.task import taskhtml
+        return page + "".join(taskhtml.asset_of(name)[0].decode("utf-8") for name in re.findall(r'(?:href|src)="/asset/([0-9a-f]{20}\.(?:css|js))"', page))
 
     def code(self) -> str:
         return self.links[0].split("#pair=", 1)[1]
@@ -311,6 +317,20 @@ class ServeTests(ServeCase):
         self.assertEqual(self.data()["paused"]["by"], "offwork")
         self.assertEqual(self.request("POST", "/api/act", {"action": "onwork", "task": ""})[0], 200)
         self.assertFalse(self.data()["paused"])
+
+    def test_off_work_passes_the_rows_the_board_shows_as_waiting_and_answers_with_no_command(self) -> None:
+        """1.8.25: the agent is at work by the hook log, the chat asks "Allow this command?" (the link says so): Off work pauses it, and the answer has no command."""
+        self.agent_at_work()
+        row = {"task": TASK, "name": "x", "status": "open", "paused_since": "", "state": "waiting", "waiting_why": "confirm"}
+        board = boardserve.Board(self.root, False, self.port, ["pause", "resume"])
+        with mock.patch.object(boardserve.Board, "rows", return_value={"rows": [row, dict(row, task="other", state="working", waiting_why=""), dict(row, task="paused", paused_since="2026-11-20T00:00:00+00:00")]}), \
+                mock.patch.object(tasklife, "at_work", return_value=True):
+            self.assertEqual(board.waiting_names(), [TASK])
+            result = board.act("offwork", "", "act")
+        self.assertEqual(self.data()["paused"]["by"], "offwork")
+        self.assertNotIn("harness ", result["board"]["text"])
+        self.assertIn("1", result["board"]["text"])
+        self.assertEqual(board.act("onwork", "", "act")["resumed"], result["paused"])
 
     def test_an_unconfirmed_requirement_refuses_the_plan_alone_and_one_code_does_both(self) -> None:
         """1.5.30: the page asks first (a dialog), the server refuses the plan alone, and `with_req` approves both with the code of both files."""

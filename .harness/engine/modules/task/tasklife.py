@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, copilot_events, domainskills, messages, outbox, tasks
+from core import config, copilot_events, domainskills, filecache, messages, outbox, tasks
 from core.logs import session_log_path
 from core.paths import cli_command, repo_root, utc_now
 from core.state import SUBAGENT_ACTIVE_TTL_SECONDS, admin_on, atomic_write, session, state_lock, state_path
@@ -721,24 +721,67 @@ def resume(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -
 OFFWORK = "offwork"  # `paused.by` of the tasks the person put aside all at once; `task onwork` takes back only those
 
 
-def offwork(root: Path, interactive: Optional[bool] = None) -> Dict[str, Any]:
-    """The person leaves for the day: every open task that is not paused, not at work and not under autorun is put aside at once,
-    so the night is not counted as waiting. A task the agent is working on is left and named; so is one under autorun."""
+def waits_for_person(why: str) -> bool:
+    """Is this waiting reason (`waiting()["why"]`) a real wait for the person? Empty is no wait; a `go-` mark (an approval was given, the agent is not told yet) is the person's own answer, no wait."""
+    return bool(why) and not str(why).startswith("go-")
+
+
+WAITING_WHY = waiting  # `offwork` has a parameter of the same name
+
+
+def offwork(root: Path, interactive: Optional[bool] = None, waiting: Optional[Any] = None, working: Optional[Any] = None) -> Dict[str, Any]:
+    """The person leaves for the day (1.8.25): every open task that is not paused and not under autorun, and that waits for the person, is put aside at once, so the night is not counted as waiting.
+    Whether the agent is in the middle of a turn does not matter for a task that waits (a chat that asks "Allow this command?", a plan to approve): only a task that is really working, and one under autorun, are left and named.
+    A pause changes the board only: no hook refuses a call of a paused task, `harness wait` goes on, an Allow in the chat lets the agent go on; a prompt or a pick-up of the session ends the pause.
+    `waiting`: names or folders of tasks the caller knows wait for the person (the served board knows what the chat in VS Code asks; a file does not). `working`: tasks the caller knows are at work (the board's word, from the chat, wins over the hook log): they are left, whatever the files say."""
     task_ops.person("task offwork", interactive, typed=False)
-    paused, busy = [], []
+    known = {str(item) for item in (waiting or ())}
+    busy_now = {str(item) for item in (working or ())}
+    paused, at_it, auto = [], [], []
     for item in task_ops.open_tasks(root):
         task = item["task"]
+        name = task_ops.name_of(task)
         with task_ops.locked(root, task) as data:
             if data.get("status") != "open" or paused_since(data):
                 continue
-            if at_work(root, data) or (data.get("autorun") or {}).get("state") == "on":
-                busy.append(task_ops.name_of(task))
+            if (data.get("autorun") or {}).get("state") == "on":
+                auto.append(name)
+                continue
+            if task not in known and name not in known and (task in busy_now or name in busy_now or (at_work(root, data) and not waits_for_person(WAITING_WHY(root, task, data)["why"]))):
+                at_it.append(name)
                 continue
             data["paused"] = {"since": utc_now(), "by": OFFWORK}
             task_ops.note(data, "pause", OFFWORK)
-            paused.append(task_ops.name_of(task))
-    return {"paused": paused, "left": busy, "next": messages.text("task.offwork.next", count=len(paused), command=cli_command())
+            paused.append(name)
+    busy = at_it + auto
+    return {"paused": paused, "left": busy, "left_work": at_it, "left_autorun": auto, "next": messages.text("task.offwork.next", count=len(paused), command=cli_command())
             + (" " + messages.text("task.offwork.left", names=", ".join(busy)) if busy else "")}
+
+
+NAMES_SHOWN = 4  # names in the board's answer; the rest is "+N more" and the full list is in the hover
+
+
+def names_line(names: List[str]) -> str:
+    """The names for a sentence: the first few, then how many more."""
+    names = [str(name) for name in names]
+    shown = ", ".join(names[:NAMES_SHOWN])
+    return shown + (" " + messages.text("board.offwork.more", count=len(names) - NAMES_SHOWN) if len(names) > NAMES_SHOWN else "")
+
+
+def board_said(action: str, result: Dict[str, Any]) -> Dict[str, str]:
+    """What the board says after Off work or Back to work, with no command in it (the board has a button): `text`, and `tip` with the full lists of names."""
+    if action == "offwork":
+        parts = [("board.offwork.done", {"count": len(result.get("paused") or [])}, None), ("board.offwork.left.work", {}, result.get("left_work") or []), ("board.offwork.left.autorun", {}, result.get("left_autorun") or [])]
+    else:
+        parts = [("board.onwork.done", {"count": len(result.get("resumed") or [])}, None), ("board.onwork.kept", {}, result.get("still_paused") or [])]
+    text, tip = [], []
+    for key, args, names in parts:
+        if names is None:
+            text.append(messages.text(key, **args))
+        elif names:
+            text.append(messages.text(key, names=names_line(names)))
+            tip.append(messages.text(key, names=", ".join(names)))
+    return {"text": " ".join(text), "tip": "\n".join(tip) if len(tip) and any(len(r) > NAMES_SHOWN for r in [result.get(k) or [] for k in ("left_work", "left_autorun", "still_paused")]) else ""}
 
 
 def onwork(root: Path, interactive: Optional[bool] = None) -> Dict[str, Any]:
@@ -858,7 +901,7 @@ STATES = ("broken", "error", "waiting", "working", "quiet", "unheld", "paused", 
 def session_state(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     """The state file of the session of this task, as it is on disk (never written); empty when it is gone or cannot be read."""
     try:
-        state = json.loads(state_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or "")).read_text(encoding="utf-8-sig"))
+        state = json.loads(filecache.read_text(state_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or "")), encoding="utf-8-sig"))
         return state if isinstance(state, dict) else {}
     except (OSError, ValueError, TypeError):
         return {}
@@ -896,40 +939,57 @@ def state_of(status: str, paused: str, why: str, is_held: bool, is_active: bool)
     return "quiet" if is_held else "unheld"
 
 
+def task_row(root: Path, task: str, data: Optional[Dict[str, Any]], everything: bool = True) -> Optional[Dict[str, Any]]:
+    """The row of one task as `list_tasks` has it (`data`: its task.json, None when it cannot be read). None: a task that is not open and `everything` is not asked."""
+    if data is None:
+        return {
+            "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
+            "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "paused_since": "", "paused_by": "",
+            "state": "broken" if tasks.damaged(root, task) else "new", "held": False, "active": False,
+        }
+    if data.get("status") != "open" and not everything:
+        return None
+    aside = paused_since(data) if data.get("status") == "open" else ""
+    found = waiting(root, task, data) if data.get("status") == "open" and not aside else {"why": "", "since": ""}
+    waited = waited_since(data, found["since"]) if found["why"] else None
+    is_open = data.get("status") == "open"
+    is_held = is_open and held(root, data)
+    working = is_open and not aside and at_work(root, data, found["why"])
+    row = {
+        "task": task, "name": data.get("name") or task_ops.name_of(task), "title": str(data.get("title") or ""), "status": data.get("status", ""),
+        "kind": data.get("kind", ""), "reviews": data.get("reviews", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
+        "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"], "waiting_from": wait_clock(data, found["since"]) if found["why"] else "",
+        "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
+        "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
+        "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
+        "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "", "checks": checks_of(data),
+        "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),
+    }
+    if row["state"] == "unheld":
+        left = seconds_since(data.get("updated_at", ""))
+        row["unheld_s"] = round(left) if left is not None else None  # how long nobody has touched it
+    return row
+
+
+def row_named(root: Path, name: str) -> Optional[Dict[str, Any]]:
+    """The row of the task called `name` (open or closed), or None. 1.8.25: one task is read, not all of them (a task page asks this every 3 s): the folder of that name first,
+    then, for a task whose name is not its folder's, every task as `list_tasks` does."""
+    for task in tasks.folders(root):
+        if task_ops.name_of(task) == name:
+            row = task_row(root, task, tasks.read(root, task), True)
+            if row is not None and row["name"] == name:
+                return row
+    return next((row for row in list_tasks(root, True)["tasks"] if row["name"] == name), None)
+
+
 def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
     """Tasks by state (STATES): those that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`; one whose task.json is damaged, as `broken` (its status stays `new`: nothing else of it can be read).
     Every row has `state` (one of STATES), `held` and `active`; a row with no session on it has `unheld_s`."""
     rows = []
     for task in tasks.folders(root):
-        data = tasks.read(root, task)
-        if data is None:
-            rows.append({
-                "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
-                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "paused_since": "", "paused_by": "",
-                "state": "broken" if tasks.damaged(root, task) else "new", "held": False, "active": False,
-            })
-            continue
-        if data.get("status") != "open" and not everything:
-            continue
-        aside = paused_since(data) if data.get("status") == "open" else ""
-        found = waiting(root, task, data) if data.get("status") == "open" and not aside else {"why": "", "since": ""}
-        waited = waited_since(data, found["since"]) if found["why"] else None
-        is_open = data.get("status") == "open"
-        is_held = is_open and held(root, data)
-        working = is_open and not aside and at_work(root, data, found["why"])
-        rows.append({
-            "task": task, "name": data.get("name") or task_ops.name_of(task), "title": str(data.get("title") or ""), "status": data.get("status", ""),
-            "kind": data.get("kind", ""), "reviews": data.get("reviews", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
-            "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"], "waiting_from": wait_clock(data, found["since"]) if found["why"] else "",
-            "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
-            "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
-            "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
-            "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "", "checks": checks_of(data),
-            "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),
-        })
-        if rows[-1]["state"] == "unheld":
-            left = seconds_since(data.get("updated_at", ""))
-            rows[-1]["unheld_s"] = round(left) if left is not None else None  # how long nobody has touched it
+        row = task_row(root, task, tasks.read(root, task), everything)
+        if row is not None:
+            rows.append(row)
     rows.sort(key=lambda row: row["updated_at"], reverse=True)
     rows.sort(key=lambda row: (STATES.index(row["state"]), -(row["waited_s"] or 0)))
     return {

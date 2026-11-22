@@ -4,7 +4,7 @@
 "use strict";
 
 const DATA = JSON.parse(document.getElementById("data").textContent);
-const TEXT = DATA.text || {};
+const TEXT = DATA.text || window.PAGE_TEXT || {};
 
 // Enter that ends a line. Not the Enter that picks a word in an input method: Chinese is typed with it.
 const isEnter = (event) => event.key === "Enter" && !event.isComposing && event.keyCode !== 229;
@@ -162,13 +162,15 @@ function copyCommand(button, command) {
 // Poll every `seconds`: tick() returns a promise (or null: nothing to do now). After 3 misses in a row (the board server gave no answer: error.offline) polling stops and a notice
 // says so, so a stopped server does not fill the console. One miss, or a refusal, changes nothing.
 // While the page is hidden nothing is asked, and the first look after it shows again is at once. A round is skipped while the last request has not come back.
+// A page in a frame that is not shown (a tab of the workbench that is not the open one, or the workbench closed) asks nothing either: there `document.hidden` stays false (1.8.25).
+const unseen = () => { try { const frame = window.frameElement; return Boolean(frame) && (frame.hidden || !frame.getClientRects().length); } catch (error) { return false; } };
 function pollEvery(seconds, tick) {
   let misses = 0;
   let waiting = false;
   const timer = setInterval(go, seconds * 1000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) go(); });
   function go() {
-    if (document.hidden || waiting) return;
+    if (document.hidden || waiting || unseen()) return;
     const run = tick();
     if (!run) return;
     waiting = true;
@@ -214,6 +216,7 @@ function actionButton(row, item, extra) {
   const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive" && !TALK.includes(item.action);
   const button = h("button", {class: "act" + (CHAT_ACTIONS.includes(item.action) ? " chat-act" : "") + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": shown}, shown);
   if (locked) button.disabled = true;
+  if (live) SERVE.running(row.name, item.action, button);  // an approval that goes on behind the page (serve.js): a button drawn again says "working" too
   if (chatGone(row) && CHAT_ACTIONS.includes(item.action) && item.action !== "send") {  // Send stays: its panel lets the person copy the message
     button.disabled = true;
     button.classList.remove("hot");  // it asks for nothing now, and the button beside it is the one to press

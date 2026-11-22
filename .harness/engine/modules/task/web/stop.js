@@ -131,9 +131,24 @@ const STOP = (function () {
     const root = document.documentElement;
     root.classList.add("has-hd");
     if (name) root.classList.add("hd-named");  // the Enter screen's own greeting steps back: it is in the pill
-    const place = () => { root.style.setProperty("--hd-right", (pill.hidden ? 16 : pill.offsetWidth + 16 + 8) + "px"); };
+    // 1.8.25: the gutter of shell.css is wide enough for the search pill alone; with this pill beside it the right end of the page header (the mode tabs, + New task, the task page's
+    // tools) ran under both. A header whose top is under the pills gets right padding up to the left edge of the leftmost pill, plus a gap; its own padding (the wall, a narrow
+    // window) is read with the inline one taken off, and wins when it is larger. Padding changes the height of a header, never its top: no loop.
+    const clear = () => {
+      const pills = [document.querySelector(".sh-pill"), pill].filter((node) => node && !node.hidden && node.offsetWidth).map((node) => node.getBoundingClientRect());
+      for (const head of document.querySelectorAll(".lb-top,.tk-head")) {
+        head.style.paddingRight = "";
+        const own = parseFloat(getComputedStyle(head).paddingRight) || 0, box = head.getBoundingClientRect();
+        const near = pills.filter((rect) => rect.bottom > box.top);
+        const need = near.length ? Math.ceil(box.right - Math.min(...near.map((rect) => rect.left)) + 10) : 0;
+        if (need > own) head.style.paddingRight = need + "px";
+      }
+    };
+    let queued = false;
+    const later = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; clear(); }); } };
+    const place = () => { root.style.setProperty("--hd-right", (pill.hidden ? 16 : pill.offsetWidth + 16 + 8) + "px"); later(); };
     place();
-    if (window.ResizeObserver) new ResizeObserver(place).observe(pill);
+    if (window.ResizeObserver) { const watch = new ResizeObserver(place); watch.observe(pill); watch.observe(document.body); }  // the body: a header drawn later, a window of another width
     SERVE.ready.then(() => SERVE.call("/api/status", {}, 8)).then((data) => {
       button.hidden = !data.paired;
       sepStop.hidden = !data.paired || !(name || toggle);

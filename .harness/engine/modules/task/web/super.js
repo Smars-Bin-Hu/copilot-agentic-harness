@@ -287,8 +287,6 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         return node;
       };
       const said = h("div", {class: "bad sa-matebad"});
-      const line = h("input", {type: "text", class: "sa-mateline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task}), "aria-label": t("super.mate.steer.ph", {task})});
-      const lineRow = h("div", {class: "sa-materow", hidden: ""}, line);
       let busy = false;
       const send = (call, line) => {
         if (busy) return;
@@ -296,13 +294,10 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         said.replaceChildren();
         call.then(() => { mateMenuClose(true); addSys(line); }, (error) => { busy = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
       };
-      const steer = item("super.mate.steer", () => { lineRow.hidden = false; line.focus(); });
+      const steerIn = steerBox(task, (words) => send(mateSteer(task, words), t("super.mate.steered", {task})), "sa-materow");
+      const lineRow = steerIn.row;
+      const steer = item("super.mate.steer", () => steerIn.open());
       const stop = item("super.mate.stop", () => send(mateStop(task), t("super.mate.stopped", {task})));
-      line.addEventListener("keydown", (event) => {
-        if (!isEnter(event) || event.shiftKey || !line.value.trim()) return;
-        event.preventDefault();
-        send(mateSteer(task, line.value.trim()), t("super.mate.steered", {task}));
-      });
       mateMenuNode = h("div", {class: "sa-skins sa-matemenu", role: "menu", "aria-label": t("super.mate.menu", {task})}, h("div", {class: "sa-skins-head"}, task), steer, lineRow, stop, said);
       mateMenuFrom = mate;
       sv.append(mateMenuNode);
@@ -595,27 +590,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         if (ctl.code === code) ctl.arm();
       }
     }
-    // The window View opens: the call as the server shows it (what the task page's View shows, without its layout): the words of its type, the system, the text it writes, the files it reads, the command as written.
-    function callWindow(call, onCode) {
-      const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
-      copy.addEventListener("click", () => { navigator.clipboard.writeText(call.command || "").then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
-      const close = h("button", {type: "button", class: "act"}, t("desk.window.close"));
-      const chip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, call.code);  // a click copies the code, puts it in the card's box and closes this window
-      const scripts = (call.layout && (call.layout.scripts || (call.layout.script ? [call.layout.script] : []))) || [];
-      const says = (call.says || []).filter(Boolean);
-      const body = call.body && call.body.text ? call.body : null;
-      const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), says.length ? h("p", null, says.join(" · ")) : null,
-        h("p", {class: "sub"}, h("b", null, call.system || "-"), call.env && call.env !== "none" ? " (" + call.env + ")" : "", call.target ? " · " + call.target : ""),
-        h("p", {class: "sub"}, t("desk.outbox.asked", {at: when(call.created_at, 0, 16)}), " ", chip),
-        h("div", {class: "win-body"},
-          body ? [h("p", {class: "sub"}, h("b", null, body.label || t("desk.outbox.body")), body.path ? " · " + body.path : ""), h("pre", {class: "cmd-script", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null] : null,
-          scripts.filter((script) => script && script.text).map((script) => [h("p", null, h("b", null, script.path)), h("pre", {class: "cmd-script", tabindex: "0"}, script.text), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null]),
-          h("p", {class: "sub"}, t("desk.outbox.as_written")), h("pre", {class: "cmd-script", tabindex: "0"}, call.command || "")),
-        call.draft ? h("p", {class: "sub"}, t("super.call.draft", {file: call.draft})) : null, h("div", {class: "row win-foot"}, copy, close)]);
-      view.box.classList.add("wide");
-      close.addEventListener("click", view.close);
-      chip.addEventListener("click", () => { navigator.clipboard.writeText(call.code).then(() => {}, () => {}); view.close(); if (onCode) onCode(call.code); });
-    }
+    // The window View opens is the task page's, whole (callview.js): the call as the server shows it (`/api/super/preview`, taskdesk.outbox_view). View marks it as seen; the code chip fills the card's box.
     function callRow(item, one) {
       const can = SERVE.runs("approve-action");
       const code = one.code;
@@ -648,10 +623,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         SERVE.post("/api/super/preview", {task: item.task, kind: "call", code}).then((result) => {
           view.disabled = false;
           if (!result || result.ok !== true || !result.call) { said.textContent = t("super.call.gone"); return; }
-          VIEWED.set(code, result.call.seen || {});
-          CHANGED.delete(code);
-          armAll(code);
-          callWindow(result.call, (typed) => { TYPED.set(code, typed); input.value = typed; armAll(code); yes.focus(); });
+          CALLVIEW.open(result.call, {
+            onOpen: (call) => { VIEWED.set(code, call.seen || {}); CHANGED.delete(code); armAll(code); },  // seen: Approve is held to the files as they are now
+            onCode: (typed) => { TYPED.set(code, typed); input.value = typed; armAll(code); yes.focus(); }});
         }, (error) => { view.disabled = false; said.replaceChildren(...actBad(error)); });
       });
       const send = () => {
@@ -675,6 +649,25 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       return node;
     }
 
+    // The one-line steer box (1.8.25), for the Stuck card and the avatar's menu: the input, a Send button (as the reply box has) and a small x. Enter or Send sends; Escape or x closes; the steer button
+    // opens it, and while it holds words a second press only focuses it, so typed words are not lost. After a send the caller closes it (the words go).
+    function steerBox(task, send, extra) {
+      const line = h("input", {type: "text", class: "sa-mateline sa-steerline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task}), "aria-label": t("super.mate.steer.ph", {task})});
+      const go = h("button", {type: "button", class: "act hot sa-reply-go sa-steergo"}, t("super.reply.send"));
+      const shut = h("button", {type: "button", class: "act sa-steershut", title: t("super.steer.close"), "aria-label": t("super.steer.close")}, "\u2715");
+      const row = h("div", {class: "sa-steerrow" + (extra ? " " + extra : ""), hidden: ""}, line, go, shut);
+      const text = () => line.value.trim();
+      const open = () => { row.hidden = false; line.focus(); };
+      const close = () => { row.hidden = true; line.value = ""; };
+      const push = () => { if (text()) send(text()); };
+      go.addEventListener("click", push);
+      shut.addEventListener("click", close);
+      line.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
+        if (isEnter(event) && !event.shiftKey) { event.preventDefault(); push(); }
+      });
+      return {row, line, open, close, toggle: () => { if (row.hidden) open(); else if (text()) line.focus(); else close(); }};  // a second press hides the box only when it is empty
+    }
     // ---------- an error and a stuck chat (1.8.4) ----------
     function errorButtons(item) {
       const retry = h("button", {type: "button", class: "act hot live", "data-act": "retry", title: t(item.resumable === false ? "super.retry.no" : "super.retry.tip")}, t("super.retry"));
@@ -688,19 +681,18 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
     function stuckButtons(item) {
       const said = h("div", {class: "bad sa-actbad"});
-      const line = h("input", {type: "text", class: "sa-mateline sa-steerline", maxlength: 2000, placeholder: t("super.mate.steer.ph", {task: item.task}), "aria-label": t("super.mate.steer.ph", {task: item.task}), hidden: ""});
       const steer = h("button", {type: "button", class: "act hot live", "data-act": "steer"}, t("super.mate.steer"));
       const stop = h("button", {type: "button", class: "act live", "data-act": "stop"}, t("super.mate.stop"));
       let busy = false;
       const send = (call, receipt, said_) => {  // the mate menu's own calls (mateSteer, mateStop)
         if (busy) return;
         busy = true; said.replaceChildren();
-        call.then(() => { busy = false; const entry = known.get(item.id); if (entry) entry.clicked = t(receipt); addSys(said_); poll(); emit(); }, (error) => { busy = false; said.replaceChildren(...actBad(error)); });
+        call.then(() => { busy = false; box.close(); const entry = known.get(item.id); if (entry) entry.clicked = t(receipt); addSys(said_); poll(); emit(); }, (error) => { busy = false; said.replaceChildren(...actBad(error)); });
       };
-      steer.addEventListener("click", () => { line.hidden = !line.hidden; if (!line.hidden) line.focus(); });
-      line.addEventListener("keydown", (event) => { if (isEnter(event) && !event.shiftKey && line.value.trim()) { event.preventDefault(); send(mateSteer(item.task, line.value.trim()), "super.done.steered", t("super.mate.steered", {task: item.task})); } });
+      const box = steerBox(item.task, (words) => send(mateSteer(item.task, words), "super.done.steered", t("super.mate.steered", {task: item.task})));
+      steer.addEventListener("click", box.toggle);
       stop.addEventListener("click", () => send(mateStop(item.task), "super.done.stopped", t("super.mate.stopped", {task: item.task})));
-      return [steer, stop, line, said];
+      return [steer, stop, box.row, said];
     }
 
     // ---------- Accept and close (1.8.4): 10 s in the page, then the accept is sent ----------
@@ -724,6 +716,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const row = rowFor(item.task);
       const wrap = h("span", {class: "sa-accept"});
       const button = h("button", {type: "button", class: "act hot live", "data-act": "accept", "data-label": t("board.action.accept")}, t("board.action.accept"));
+      SERVE.running(item.task, "accept", button);  // an accept that goes on behind the page (serve.js) shows "working" here too
       button.addEventListener("click", () => {
         button.disabled = true;
         COUNT_BAD.delete(item.id);
@@ -1530,7 +1523,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       sv.hidden = false;
       fit();
       if (!pet) {
-        pet = PET.create(sv);
+        pet = (options.makePet || PET.create)(sv);  // 1.8.25: the workbench gives a stand-in that does nothing (the bridge takes the pet's place)
         pet.node.title = t("super.pet.tip");
         pet.onClick(petClick); pet.onDouble(petDouble); pet.onDrop(petDrop);
         drawOrbit();
@@ -1557,7 +1550,45 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const status = (data && data.status) || {};
       return {items: (data && data.items) || [], done: doneLog.slice(), working: mates.filter((mate) => mate.state === "work" || mate.state === "start").length, making: making.slice(), closed: closedOnly(), watching: status.watching || 0, stuck: count(status.stuck), error: count(status.error), failed,
         mood: moodNow(), thinking: thinkingNow(), off: talkOff(), cost: costNow(),
-        messages: talk ? (talk.messages || []).filter((message) => message && message.role !== "you") : [], mates, loaded: data !== null};
+        quiet: quietCount(), mates, loaded: data !== null};
+    }
+    // The tasks that are neither at work nor waiting nor in error: the idle ones and the paused ones, each once (the grey count of the pop-out).
+    function quietCount() {
+      const names = new Set(mates.filter((mate) => mate.state === "idle").map((mate) => mate.task));
+      for (const row of rowsOf() || []) if (row.status === "open" && row.paused_since) names.add(row.name || row.task);
+      return names.size;
+    }
+    // The chat as the pop-out draws it: the messages of the talk (the person's and the agent's), what was typed and the server has not listed yet, and the asks to one task, in time order.
+    function chatOf() {
+      const out = [];
+      for (const message of (talk && talk.messages) || []) {
+        if (!message || !message.id) continue;
+        out.push({id: "m" + message.id, role: message.role === "you" ? "you" : "agent", text: message.role === "you" && message.kind === "summary" ? t("super.quick.summary") : String(message.text || ""), at: String(message.at || "")});
+      }
+      for (const one of (talk && talk.asks) || []) {
+        if (!one || !one.id) continue;
+        out.push({id: "a" + one.id, role: "ask", task: one.task, text: String(one.text || ""), answer: String(one.answer || ""), state: one.state, at: String(one.at || ""),
+          line: one.state === "sent" ? t("super.route.waiting") : one.state === "queued" ? t("super.route.queued") : one.state === "failed" ? t(routeKey(one.why || one.end)) : ""});
+      }
+      out.sort((a, b) => a.at.localeCompare(b.at));
+      pendingYou.forEach((text, at) => out.push({id: "p" + at + text, role: "you", text: text === SUMMARY_ASKED ? t("super.quick.summary") : text, at: "", pending: true}));
+      return out;
+    }
+    // What the person types in the pop-out goes the way the view's own input sends it: "@task words" is a direct message (directSend), any other words ask the super agent (ask). {ok, text}: the line to show.
+    async function popSend(text) {
+      const typed = String(text || "").trim();
+      if (!typed) return {ok: false, text: ""};
+      if (typed.startsWith("@")) {
+        const saved = filter;
+        filter = "";  // the words name their task: the avatar the view has picked is not the target here
+        const target = routeTarget(typed);
+        filter = saved;
+        if (!target) { const named = /^@([^\s,:;]+)/.exec(typed); return {ok: false, text: t("super.route.noname", {name: named ? named[1] : ""})}; }
+        const result = await directSend(target.task, target.text, SUPERDIRECT.valuesFor(target.task), false);
+        return {ok: result.ok, text: result.ok ? SUPERDIRECT.receipt(result.how, target.task, result) : SUPERDIRECT.refusal(target.task, result.why, result.error)};
+      }
+      ask(null, typed);
+      return {ok: true, text: ""};
     }
     function watch(on) {
       watchers = Math.max(0, watchers + (on ? 1 : -1));
@@ -1567,13 +1598,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     // The pop-out's calls (companion.js): the same pieces as the view, never a copy of them.
     const replyFor = (item) => { const entry = item && (item.why === "stopped" || SAYS(item)) ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };
     const previewFor = (item) => previewBox(item);
-    const asksOf = (task) => ((talk && talk.asks) || []).filter((one) => one && one.task === task).map((one) => ({...one, line: one.state === "sent" ? t("super.route.waiting") : one.state === "queued" ? t("super.route.queued") : one.state === "failed" ? t(routeKey(one.why || one.end)) : ""}));
-    async function askTask(task, text) {  // the pop-out's input: a direct message too, with the options of this browser
-      const result = await directSend(task, String(text || "").trim(), SUPERDIRECT.valuesFor(task), false);
-      return {ok: result.ok, why: result.ok ? "" : result.why, text: result.ok ? "" : SUPERDIRECT.refusal(task, result.why, result.error)};
-    }
-    const pop = {alertMarks: () => alertMarks((data && data.status) || {}), replyFor, previewFor, askTask, asksOf, mateWorks: mateMenuWorks, steer: mateSteer, stop: mateStop, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose, jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
-      taskLink, ask: (text) => ask(null, text), watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, openVS: () => SERVE.openVS()};
+    const pop = {replyFor, previewFor, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose, jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
+      taskLink, chat: chatOf, rich: (text) => rich(text), send: popSend, front: (task) => { if (options.front) options.front(task || ""); }, watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }};
     if (popUp) {
       const reason = COMPANION.unsupported();
       popUp.disabled = Boolean(reason);

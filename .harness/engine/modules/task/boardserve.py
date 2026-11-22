@@ -61,7 +61,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
-from core import launchenv, pace
+from core import filecache, launchenv, pace
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
@@ -115,8 +115,9 @@ DESK_REFRESH = 3  # seconds between two reads of a task page (10 until 1.7.26: a
 REFRESH = 3  # seconds between two boards in the browser when `board.refresh_seconds` of the task policy says nothing
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
-CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
-       "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+# 'self' framing: the board page shows a task page (`/task/<name>?embed=1`) inside itself. No other site can frame any page of this server (frame-ancestors 'self' is the same origin only).
+CSP = ("default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
+       "base-uri 'none'; form-action 'none'; frame-ancestors 'self'; frame-src 'self'")
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -497,6 +498,10 @@ class Board:
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
+        with filecache.one_pass():  # 1.8.25: a file is read once for all the rows, even one that changes every few seconds
+            return self._rows()
+
+    def _rows(self) -> Dict[str, Any]:
         self.close_promoted()
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served, rewrite=False)
         self.link.overlay(result["tasks"])
@@ -524,6 +529,23 @@ class Board:
                 item["error"] = say("host.copilot") if item["error"] == "copilot" else say("host.never") if item["error"] == "never" else say("host.other", error="AhpError") if item["error"] in ("other", "slow") else say("host.said", words=item["error"])
         return {"held_elsewhere": elsewhere, "rows": result["tasks"], "making": making, "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
+
+    def off_work_sets(self) -> Tuple[List[str], List[str]]:
+        """What the page counts for Off work (1.8.25), after the link to VS Code: (the tasks that wait for the person or are not at work, the tasks the board shows as working). A chat that asks "Allow this
+        command?" is a wait, and so is a plan to approve while the agent is mid-turn, whatever the hook log says; a task the board shows as working and that waits for nothing is left."""
+        waits, works = [], []
+        for row in self.rows()["rows"]:
+            if row.get("status") != "open" or row.get("paused_since"):
+                continue
+            name = str(row.get("task") or "")
+            if row.get("state") != "working" or (tasklife.waits_for_person(str(row.get("waiting_why") or "")) and not starting_now(row)):  # a task the board just told to go on is at work
+                waits.append(name)
+            else:
+                works.append(name)
+        return waits, works
+
+    def waiting_names(self) -> List[str]:
+        return self.off_work_sets()[0]
 
     def apply_checks(self, row: Dict[str, Any]) -> None:
         """Set the checks a reopened task was waiting for (`taskreview.apply_pending`, the code path of `review set`), then show them on the row. Never raises: a look at the board must not fail over it."""
@@ -611,7 +633,7 @@ class Board:
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "space": found["space"]}, self.refresh), hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "space": found["space"]}, self.refresh), hidden=found["hidden"], linked=True)
 
     def desk(self, name: str, trace_tree: bool = False) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served, trace_tree)  # the tree reads whole logs: only for a Trace tab that is open
@@ -694,7 +716,7 @@ class Board:
         return {"wall": self.set_wall_folder({"folder": text}), "cancelled": False} if text else {"wall": wallpaper.listing(self.root), "cancelled": True}
 
     def desk_page(self, name: str) -> str:
-        return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH))
+        return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH), linked=True)
 
     def report_info(self, name: str) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
         task = task_ops.resolve(self.root, name)
@@ -706,12 +728,12 @@ class Board:
     def perf_page(self, name: str) -> str:
         """The Agent Performance Review page of a task (1.7.41): the accounts per prompt, the facts, the review's findings, the notes of each prompt, the call timeline."""
         task = task_ops.resolve(self.root, name)
-        return taskhtml.perf_page(perfreview.page_data(self.root, task))
+        return taskhtml.perf_page(perfreview.page_data(self.root, task), linked=True)
 
     def report_page(self, name: str) -> str:
         """The time-and-usage page as the server sends it: the Gate verdicts have buttons, and the page can be saved."""
         _task, info, now = self.report_info(name)
-        return taskhtml.task_page(info, 0, now, serve={"actions": self.served})
+        return taskhtml.task_page(info, 0, now, serve={"actions": self.served}, linked=True)
 
     def saved_report(self, name: str) -> Tuple[str, str]:
         """The same page as one file to keep or send (file name, page): as of now, verdicts shown, no buttons, no calls."""
@@ -868,10 +890,14 @@ class Board:
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
                 raise CommandError(say("serve.action.off", action=action))
-            result = (tasklife.offwork if action == "offwork" else tasklife.onwork)(self.root, interactive=True)
+            if action == "offwork":
+                waits, works = self.off_work_sets()
+                result = tasklife.offwork(self.root, interactive=True, waiting=waits, working=works)
+            else:
+                result = tasklife.onwork(self.root, interactive=True)
             for name in result.get("paused") or result.get("resumed") or []:
                 noted(self.root, name, action)
-            return result
+            return dict(result, board=tasklife.board_said(action, result))  # 1.8.25: the board's answer has no command in it
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = False if action in SETTINGS else self.idle(action, task)
@@ -2009,7 +2035,7 @@ def handler_for(board: Board) -> type:
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
             if path == "/setup":
-                return self.send(200, taskhtml.setup_page(board.serve_info({}, 0)).encode("utf-8"), "text/html; charset=utf-8")
+                return self.send(200, taskhtml.setup_page(board.serve_info({}, 0), linked=True).encode("utf-8"), "text/html; charset=utf-8")
             if path in ("/", "/board.html") or path.startswith("/task/"):
                 if path in ("/", "/board.html"):
                     board.look_at_page(True)
@@ -2020,6 +2046,20 @@ def handler_for(board: Board) -> type:
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            if path.startswith("/asset/"):  # the style, the scripts and the texts of a served page (`taskhtml.asset_of`): shipped code and the UI's own words, nothing secret, so no pairing. The same Origin and Sec-Fetch-Site checks as /wall/
+                origin = self.headers.get("Origin", "")
+                if (origin and origin not in allowed_origins) or self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
+                    return self.send(403, b"", "text/plain")
+                name = path[len("/asset/"):]
+                found = taskhtml.asset_of(name)
+                if found is None:
+                    return self.send(404, b"", "text/plain")
+                body, kind = found
+                tag = f'"{name.split(".")[0]}"'
+                headers = {"ETag": tag, "Cache-Control": "private, max-age=31536000, immutable"}
+                if self.headers.get("If-None-Match", "") == tag:
+                    return self.send(304, b"", kind, headers)
+                return self.send(200, body, kind, headers)
             if path.startswith("/wall/"):  # one picture of the wallpaper folder: read only, by its bare name. Another site's page may not use it (Origin, Sec-Fetch-Site)
                 origin = self.headers.get("Origin", "")
                 if (origin and origin not in allowed_origins) or self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
@@ -2356,6 +2396,18 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     return self.answer(200, board.brain.summary() if data.get("kind") == "summary" else board.brain.ask(data.get("text")))
+                except Exception as error:  # noqa: BLE001 - the page shows the refusal
+                    return self.answer(500, {"error": str(error)})
+            if path == "/api/super/recharge":  # 1.8.25: more Credits for the super agent, today only ({amount: 25 | 50}; 200 a day at most). {ok: true, extra, base, limit} or {ok: false, why: amount | cap}. It lifts a spend limit: the paired browser only (an agent has no cookie, and the gate refuses its request to the port)
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.brain.recharge(data.get("amount"))
+                    if not result.get("ok"):
+                        result["reason"] = say("super.recharge.why.cap") if result.get("why") == "cap" else say("super.recharge.why.amount")  # the words the page shows for the refusal
+                    else:
+                        print(say("serve.did", action="super recharge " + str(data.get("amount")) + " at " + utc_now(), task="-"), flush=True)
+                    return self.answer(200, result)
                 except Exception as error:  # noqa: BLE001 - the page shows the refusal
                     return self.answer(500, {"error": str(error)})
             if path == "/api/super/send":  # 1.8.4: a direct message to one task's chat ({task, text, model?, thinking?, context?, new_chat?, busy?: queue | steer, lang?, files?}); not through the super agent. {ok: true, how: sent | queued | steered | said | new-chat, task, chat} or {ok: false, why}: see `superdirect`. The paired browser only
@@ -2754,6 +2806,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:
+        filecache.enable()  # 1.8.25: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
         while serving.is_alive():
             if board.stop_asked.wait(STOP_EVERY) or stop_wanted(root):  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too; the stop button and `--stop` end it here
                 break
@@ -2766,6 +2819,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         board.terminal.stop_all()
         link.stop()
         server.server_close()
+        filecache.enable(False)
         try:
             path.unlink()
         except OSError:

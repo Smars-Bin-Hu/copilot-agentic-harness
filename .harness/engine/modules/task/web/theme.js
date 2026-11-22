@@ -8,6 +8,7 @@
   const media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   let memory = "";
   let lite = false;
+  try { if (/[?&]embed=1(&|$)/.test(location.search)) root.classList.add("embed"); } catch (error) { /* no search: a normal page */ }  // a task page inside the board's workbench frame (desk.css `html.embed`)
   function chosen() {
     try { const value = localStorage.getItem("harness.theme"); return value === "light" || value === "dark" ? value : ""; } catch (error) { return memory; }
   }

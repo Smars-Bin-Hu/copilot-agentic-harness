@@ -811,7 +811,7 @@ const LIVE = (function () {
   const wanted = () => st.wants.size > 0 && Boolean(st.task) && !st.off;
   function loop() {
     st.timer = 0;
-    if (!wanted() || document.hidden || st.busy) return;
+    if (!wanted() || document.hidden || st.busy || unseen()) return;  // unseen (common.js): a frame of the workbench that is not shown; the workbench wakes it when it shows
     st.busy = true;
     const task = st.task;
     SERVE.post("/api/live", {task, rev: st.rev, have: st.have}).then((answer) => {

@@ -445,27 +445,32 @@
     pick.replaceChildren(h("span", {class: "sub"}, t("board.select.count", {count: selected.size}) + (frees ? " \u00b7 " + t("board.select.frees", {size: fileSize(frees)}) : "") + " "), go, none);
   }
 
-  // Off work and back to work (M38-2): every open task that is not at work is paused at once, and later only those are taken back.
-  // Served, the buttons act (no pairing, as for pause); a page on disk copies the command instead.
+  // Off work and back to work (M38-2, 1.8.25: one small pill, the words in the hover): every open task that waits for the person, or is not at work, is paused at once, and later only those are taken back.
+  // A task under autorun, and one really at work (the board shows it as working and it waits for nothing), is left. Served, the buttons act (no pairing, as for pause); a page on disk copies the command instead.
   const shift = h("div", {class: "shift"});
   const said = h("div", {class: "sub shift-said"});
   const canShift = typeof SERVE !== "undefined" && SERVE.runs("pause");
+  const realWait = (row) => !!row.waiting_why && !String(row.waiting_why).startsWith("go-") && !(row.starting && !row.starting.late);  // the rule of Python's `tasklife.waits_for_person`
   function drawShift() {
-    const off = rows.filter((row) => row.status === "open" && !row.paused_since && !row.autorun && stateOf(row, live) !== "working").length;
+    const off = rows.filter((row) => row.status === "open" && !row.paused_since && !row.autorun && (stateOf(row, live) !== "working" || realWait(row))).length;
     const on = rows.filter((row) => row.status === "open" && row.paused_by === "offwork").length;
-    const button = (action, count, label, hint) => {
-      const node = h("button", {type: "button", class: "act" + (count ? "" : " locked"), title: t(hint), "data-label": t(label, {count})}, t(label, {count}));
+    const button = (action, count, icon, label, hint) => {
+      const words = t(label, {count});
+      const node = h("button", {type: "button", class: "shift-btn" + (count ? "" : " zero"), title: words + "\n" + t(hint), "aria-label": words, "data-label": icon + " " + count}, h("span", {class: "ic", "aria-hidden": "true"}, icon), String(count));
       if (!count) node.disabled = true;
       node.addEventListener("click", () => {
         if (!canShift) { copyCommand(node, cli + " task " + action); return; }
         node.disabled = true;
-        SERVE.post("/api/act", {action, task: "", step: "act"}).then((data) => { said.textContent = data.result.next || ""; return refresh(); },
-          (error) => { said.textContent = error.message || String(error); node.disabled = false; });
+        SERVE.post("/api/act", {action, task: "", step: "act"}).then((data) => {
+          const board = data.result.board || {};
+          said.textContent = board.text || data.result.next || ""; said.title = board.tip || "";
+          return refresh();
+        }, (error) => { said.textContent = error.message || String(error); said.title = ""; node.disabled = false; });
       });
       return node;
     };
     // replaceChildren writes a null as the word "null": on a page on disk, with no server, "New task" and the VS Code pill are not there (N4, 1.6.11).
-    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint")]);
+    shift.replaceChildren(...[button("offwork", off, "\u263e", "board.offwork", "board.offwork.hint"), button("onwork", on, "\u2600", "board.onwork", "board.onwork.hint")]);
     newSlot.replaceChildren(...[rows.length ? newTask() : null].filter(Boolean));
     paintFound(DATA.serve && DATA.serve.kb_found);
     paintSpace(DATA.serve && DATA.serve.space);
@@ -583,7 +588,8 @@
   const controls = h("div", {class: "controls"}, chips, roundBox, kinds, search, clear);
   const modeButtons = {};
   // The super agent view (1.8.1, super.js): a served board only. It is one more way to look at the board, picked in the bar; the pick is not kept.
-  const superView = typeof SUPER !== "undefined" && DATA.serve ? SUPER.create({rows: () => rows}) : null;
+  const superView = typeof SUPER !== "undefined" && DATA.serve ? SUPER.create({rows: () => rows, front: (task) => { setMode("super"); if (task && workbench) workbench.openTask(task); }, makePet: typeof WORKBENCH !== "undefined" ? WORKBENCH.stillPet : undefined}) : null;
+  const workbench = superView && typeof WORKBENCH !== "undefined" ? WORKBENCH.create({superView, rows: () => rows, back: () => setMode(keep.get("mode", "lobby") === "list" ? "list" : "lobby"), open: () => setMode("super")}) : null;  // the full-screen layer that holds the super agent view
   const badge = h("span", {class: "sa-badge", hidden: ""});
   const modeNames = superView ? ["lobby", "list", "super"] : ["lobby", "list"];
   const seg = h("div", {class: "lb-seg", role: "group"}, modeNames.map((name) => {
@@ -599,6 +605,7 @@
     badge.hidden = !count;
     badge.textContent = count;
     badge.title = t("board.mode.super.badge", {n: count});
+    if (workbench) workbench.update();
   }
   function drawMode() {
     for (const name of Object.keys(modeButtons)) modeButtons[name].classList.toggle("on", name === mode);
@@ -607,7 +614,7 @@
     more.hidden = !asList || !hidden;
     lobby.node.hidden = mode !== "lobby";
     if (mode !== "lobby") lobby.hide();
-    if (superView) { if (mode === "super") superView.show(); else superView.hide(); }
+    if (superView) { const view = workbench || superView; if (mode === "super") view.show(); else view.hide(); }
   }
 
   app.replaceChildren(
@@ -618,7 +625,7 @@
   draw();
   drawMode();
   SHELL.vs(vscode);
-  if (superView) superView.setVscode(vscode);
+  if (superView) (workbench || superView).setVscode(vscode);
   // What Cmd+K can open on the board: its tasks, the two views and the filters (it only changes what is shown; it never acts on a task).
   SHELL.provide(() => ({tasks: rows,
     views: [{id: "list", label: t("board.shell.view.list"), kw: "list table", run: () => setMode("list")}, {id: "lobby", label: t("board.shell.view.lobby"), kw: "lobby robots floor", run: () => setMode("lobby")},
@@ -640,7 +647,7 @@
     archiveTo = data.archive_to || "";
     paintElsewhere(DATA.serve ? data.held_elsewhere || [] : []);
     SHELL.vs(data.vscode);
-    if (superView) superView.setVscode(data.vscode);
+    if (superView) (workbench || superView).setVscode(data.vscode);
     if (DATA.serve) { DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); }
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null, data.making || []]);
     if (text !== shown) { rows = data.rows; making = data.making || []; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else { paintStamp(); paintSpace(data.space); }

@@ -24,8 +24,9 @@ class OverrideError(ValueError):
 
 
 def read_json(path: Path) -> Any:
-    with path.open(encoding="utf-8-sig") as handle:
-        return json.load(handle)
+    from . import filecache  # 1.8.25: the board server keeps a policy it read while the file does not change
+
+    return json.loads(filecache.read_text(path, "utf-8-sig"))
 
 
 def is_append_key(key: str) -> bool:

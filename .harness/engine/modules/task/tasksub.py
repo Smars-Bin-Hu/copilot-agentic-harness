@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core import ahp
-from core.logs import session_log_path
+from core.logs import read_tail, session_log_path
 
 LINE_CHARS = 160  # the line under a name
 RECENT_CHARS = 600  # the reply shown when the person opens the "recent" bar
@@ -129,20 +129,8 @@ def from_hooklog(root: Path, data: Dict[str, Any]) -> Optional[Dict[str, str]]:
     if not session:
         return None
     path = session_log_path(root, str(data.get("surface") or "vscode"), session)
-    try:
-        with open(path, "rb") as handle:
-            handle.seek(0, 2)
-            size = handle.tell()
-            handle.seek(max(0, size - TAIL_BYTES))
-            tail = handle.read().decode("utf-8", "replace")
-    except OSError:
-        return None
-    for line in reversed(tail.splitlines()):
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(row, dict) and row.get("event") in ("PreToolUse", "PostToolUse", "PostToolUseFailure") and row.get("tool_name"):
+    for row in reversed(read_tail(path, TAIL_BYTES)):  # 1.8.25: the same cached tail the gate count reads
+        if row.get("event") in ("PreToolUse", "PostToolUse", "PostToolUseFailure") and row.get("tool_name"):
             return {"at": str(row.get("at") or ""), "what": str(row["tool_name"]), "text": str(row.get("skill") or ""), "kind": "hook"}
     return None
 

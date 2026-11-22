@@ -816,7 +816,7 @@ class ServedReadTests(ServeCase):
     def test_the_pages_carry_the_name_and_the_release_the_screen_shows(self) -> None:
         status, data, _ = self.request("GET", "/")
         self.assertEqual(status, 200)
-        page = data["text"]
+        page = self.whole(data["text"])  # the data is in the page, the scripts are the files it links
         self.assertIn('"user"', page)
         self.assertIn('"version"', page)
         self.assertIn("const SERVE = (function", page)

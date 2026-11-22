@@ -23,7 +23,7 @@ class LookTests(unittest.TestCase):
 
     def test_every_page_has_the_tokens_the_theme_script_and_ui_last(self) -> None:
         for name, page in self.pages().items():
-            self.assertIn('html[data-theme="dark"]{', page, name)
+            self.assertIn('html[data-theme="dark"],:where(.wb-root){', page, name)
             self.assertIn("harness.theme", page, name)
             self.assertLess(page.index("--hot-dot:#e08a00"), page.index("/* The look of the board and the task page"), name)
 

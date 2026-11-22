@@ -230,7 +230,7 @@ class UnknownKindTests(English, ListedCase):
         both_languages(self, "desk.outbox.verb.unknown", "desk.outbox.verb.unknown.tip", "gate.external.outbox.what", "gate.external.outbox.what.unknown", "gate.external.autorun.what", "gate.external.autorun.what.unknown")
 
     def test_the_page_says_the_unknown_kind_in_its_own_words(self) -> None:
-        text = (Path(boardserve.__file__).parent / "web" / "desk.js").read_text(encoding="utf-8")
+        text = (Path(boardserve.__file__).parent / "web" / "callview.js").read_text(encoding="utf-8")
         self.assertIn("desk.outbox.verb.unknown.tip", text)
 
 
@@ -518,9 +518,9 @@ class LineOnTwoSystemsTests(English, ListedCase):
         self.assertEqual(self.card()["holds"], [])
 
     def test_the_page_names_the_system_of_each_reason_and_says_why_no_open(self) -> None:
-        text = (Path(boardserve.__file__).parent / "web" / "desk.js").read_text(encoding="utf-8")
-        self.assertIn("holds.map((hold) => zoneFact(", text)
-        self.assertIn("desk.outbox.open.stuck", text)
+        web = Path(boardserve.__file__).parent / "web"
+        self.assertIn("holds.map((hold) => zoneFact(", (web / "callview.js").read_text(encoding="utf-8"))
+        self.assertIn("desk.outbox.open.stuck", (web / "desk.js").read_text(encoding="utf-8"))
         both_languages(self, "desk.outbox.open.stuck")
 
 
@@ -528,12 +528,12 @@ class CardWordsTests(unittest.TestCase):
     """M3 and M4: two scripts of one folder show the end of the path (the whole path on hover); the statement of a line on two systems is told `on <system> (<env>)`."""
 
     def test_the_page_shows_the_end_of_a_long_path_with_the_whole_path_on_hover(self) -> None:
-        text = (Path(boardserve.__file__).parent / "web" / "desk.js").read_text(encoding="utf-8")
+        text = (Path(boardserve.__file__).parent / "web" / "callview.js").read_text(encoding="utf-8")
         self.assertIn("const tailPath = (path, max)", text)
         self.assertIn('h("code", {class: "tk-path", title: script.path}, tailPath(script.path, window.innerWidth < 560 ? 24 : 44))', text)
 
     def test_the_head_of_a_statement_on_one_of_two_systems_says_on(self) -> None:
-        text = (Path(boardserve.__file__).parent / "web" / "desk.js").read_text(encoding="utf-8")
+        text = (Path(boardserve.__file__).parent / "web" / "callview.js").read_text(encoding="utf-8")
         self.assertIn('t("desk.outbox.body.on", {label:', text)
         self.assertEqual(messages.table("en")["desk.outbox.body.on"], "{label} on {where}")
         self.assertIn("{where}", messages.table("zh")["desk.outbox.body.on"])
@@ -832,8 +832,8 @@ class WordsOfTheBoardTests(unittest.TestCase):
         self.assertNotIn("自己新关联", zh)
 
     def test_the_view_window_closes_with_close_not_cancel(self) -> None:
-        text = (WEB / "desk.js").read_text(encoding="utf-8")
-        for name in ("function callWindow(item, onCode)", "function evidenceWindow(item)"):
+        for file, name in (("callview.js", "function open(item, options)"), ("desk.js", "function evidenceWindow(item)")):  # the window of a held call moved to callview.js (1.8.25)
+            text = (WEB / file).read_text(encoding="utf-8")
             start = text.index(name)
             part = text[start:text.index("\n  }\n", start)]
             self.assertNotIn("board.serve.cancel", part, name)

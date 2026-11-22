@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import quote
 
-from core import approval, messages, standards, targets, tasks
+from core import approval, filecache, messages, standards, targets, tasks
 from core.paths import board_serve_port, cli_command, utc_now
 from core.state import admin_on, atomic_write, move_aside, session, state_lock, state_path
 
@@ -547,7 +547,7 @@ _PLACEHOLDER = re.compile(r"^(?:[-*]\s+)?(?:\[[TRA]\d+\]\s+)?<[^<>\n]+>(?::\s*<[
 def _req_unfilled(root: Path, task: str) -> List[Tuple[str, int]]:
     """[(section heading, lines still the template's)] of REQ.md, in file order; only the sections that have some. Lines before the first heading count under the title."""
     try:
-        text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8-sig", errors="replace")
+        text = filecache.read_text(tasks.task_dir(root, task) / tasks.REQ_FILE, "utf-8-sig", "replace")
     except OSError:
         return []
     found: List[Tuple[str, int]] = []
@@ -620,7 +620,7 @@ def req_state(root: Path, task: str) -> str:
     if taskreview.req_changed(root, task):
         return "changed"
     try:
-        text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
+        text = filecache.read_text(tasks.task_dir(root, task) / tasks.REQ_FILE, "utf-8", "replace")
     except OSError:
         return "none"
     return "unwritten" if any(mark in text for mark in _REQ_UNWRITTEN) else "open"

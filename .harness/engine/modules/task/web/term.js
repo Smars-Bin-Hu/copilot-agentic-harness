@@ -41,6 +41,7 @@ const TERM = (() => {
     ui.toggle.title = memory.running ? t("term.count", {n: memory.running}) : t("term.open");
   }
   function watch() {
+    if (unseen()) { setTimeout(watch, WATCH); return; }  // a frame of the workbench that is not shown (common.js) asks nothing
     post({op: "running"}).then((found) => { memory.running = found.running.length; paintCount(); setTimeout(watch, WATCH); }, () => setTimeout(watch, WATCH * 4));
   }
   function paint() {

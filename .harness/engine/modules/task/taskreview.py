@@ -28,7 +28,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import approval, config, messages, tasks
+from core import approval, config, filecache, messages, tasks
 from core.paths import cli_command, utc_now
 
 from . import evidence, task as task_ops
@@ -93,7 +93,7 @@ def req_confirmed(root: Path, task: str) -> Optional[bool]:
     template starts with.
     """
     try:
-        text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
+        text = filecache.read_text(tasks.task_dir(root, task) / tasks.REQ_FILE, "utf-8", "replace")
     except OSError:
         return None
     filled = confirm_line_filled(text)

@@ -44,7 +44,7 @@ class VerbInChineseOnlyTests(HarnessTestCase):
             self.assertNotIn("write", text)
 
     def test_the_card_hover_has_the_protocol_word(self) -> None:
-        source = (WEB / "desk.js").read_text(encoding="utf-8")
+        source = (WEB / "callview.js").read_text(encoding="utf-8")
         self.assertIn("item.named === false ? null : item.verb", source)
 
 
@@ -165,7 +165,7 @@ class HeldCardTests(HarnessTestCase):
         self.assertEqual(cmdview.layout("", self.folder)["scripts"], [])
 
     def test_the_page_draws_every_script_of_the_line(self) -> None:
-        source = (WEB / "desk.js").read_text(encoding="utf-8")
+        source = (WEB / "callview.js").read_text(encoding="utf-8")
         self.assertIn("scriptsOf(item).map((script)", source)
         self.assertIn('files.map((script) => script.text).join("\\n")', source)
         self.assertIn("scripts.map((script) =>", source)

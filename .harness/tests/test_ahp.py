@@ -552,6 +552,40 @@ class PaceTests(unittest.TestCase):
         self.assertEqual(most[0], 1)
 
 
+class ChatSideTests(unittest.TestCase):
+    """B13-B16: what the chat does besides its turn: the host's activity, the work that runs in the background, a compaction of the context (counted in the usage)."""
+
+    def test_activity_and_background_work_are_kept_bounded_and_in_a_snapshot(self) -> None:
+        state: Dict[str, Any] = {"turns": [], "activeTurn": None}
+        ahp.reduce_chat(state, {"type": "chat/activityChanged", "activity": "Loading plugins " + "x" * 500})
+        self.assertEqual(len(state["activity"]), ahp.ACTIVITY_KEEP)
+        ahp.reduce_chat(state, {"type": "chat/activityChanged"})
+        self.assertIsNone(state["activity"])
+        for n in range(ahp.BACKGROUND_KEEP + 3):
+            ahp.reduce_chat(state, {"type": "chat/backgroundWorkSet", "work": {"kind": "shell", "id": f"shell:{n}", "command": "c" * 900, "terminal": {"big": "x"}}})
+        ahp.reduce_chat(state, {"type": "chat/backgroundWorkSet", "work": {"kind": "shell", "id": "shell:22", "label": "again"}})  # the same id: replaced, not added
+        self.assertEqual(len(state["backgroundWork"]), ahp.BACKGROUND_KEEP)
+        self.assertEqual(state["backgroundWork"][-1], {"id": "shell:22", "kind": "shell", "label": "again"})
+        self.assertEqual(len(state["backgroundWork"][0]["command"]), 400)
+        ahp.reduce_chat(state, {"type": "chat/backgroundWorkRemoved", "id": "shell:22"})
+        self.assertNotIn("shell:22", [item["id"] for item in state["backgroundWork"]])
+        ahp.reduce_chat(state, {"type": "chat/backgroundWorkSet", "work": {"id": 5}})  # no id of the right kind: nothing
+        trimmed = ahp.trimmed(dict(state, activity="Busy"))
+        self.assertEqual((trimmed["activity"], len(trimmed["backgroundWork"])), ("Busy", ahp.BACKGROUND_KEEP - 1))
+
+    def test_a_compaction_counted_in_the_usage_is_a_part_of_the_turn(self) -> None:
+        state: Dict[str, Any] = {"turns": [], "activeTurn": None}
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "t1", "startedAt": "2026-01-01T10:00:00Z", "message": {"text": "go"}})
+        usage = lambda total, count: {"inputTokens": total, "outputTokens": 1, "_meta": {"contextAttribution": {"totalTokens": total, "entries": [], "compactions": count}}}  # noqa: E731
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": usage(180000, 2)})  # the first usage of the turn: nothing to compare with
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": usage(181000, 2)})
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": usage(40000, 3)})
+        parts = state["activeTurn"]["responseParts"]
+        self.assertEqual(parts, [{"kind": "compaction", "id": "compact-3-0", "count": 3, "before": 181000, "after": 40000}])
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": {"inputTokens": 5, "outputTokens": 1}})  # no count: nothing
+        self.assertEqual(len(parts), 1)
+
+
 class InputRequestTests(unittest.TestCase):
     """B8: a question of the agent is a part of the turn (the host's reducer: inputRequested, inputAnswerChanged, inputCompleted), kept bounded."""
 

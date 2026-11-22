@@ -31,7 +31,7 @@ const LIVE = (function () {
     web: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"],
     create: ["M4 2h5l3 3v9H4zM9 2v3h3M8 8v4M6 10h4"], agent: ["M2 2h5v5H2zM9 9h5v5H9zM4.5 7v3.5A1.5 1.5 0 0 0 6 12h3"], ring: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM5.5 8h5"], other: ["M3 8h.01M8 8h.01M13 8h.01"], think: ["M8 2a4 4 0 0 0-2 7.5V11h4V9.5A4 4 0 0 0 8 2zM6.5 13.5h3"],
     tool: ["M10.5 2.5a3 3 0 0 0-3.8 3.8L2.5 10.5l3 3 4.2-4.2a3 3 0 0 0 3.8-3.8l-1.9 1.9-1.6-.4-.4-1.6z"], shield: ["M8 1.8l5.3 2v4.1c0 3-2.3 5.4-5.3 6.3-3-.9-5.3-3.3-5.3-6.3V3.8z"],
-    ask: ["M3 3h10v7H8l-3 3v-3H3zM7 5.3a1.2 1.2 0 1 1 1.6 1.1c-.4.2-.6.5-.6.9M8 8.6h.01"], reader: ["M2.5 3.5h11v9h-11zM9.5 3.5v9"], clock: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3l2 1.5"],
+    ask: ["M3 3h10v7H8l-3 3v-3H3zM7 5.3a1.2 1.2 0 1 1 1.6 1.1c-.4.2-.6.5-.6.9M8 8.6h.01"], reader: ["M2.5 3.5h11v9h-11zM9.5 3.5v9"], bell: ["M4 11V7a4 4 0 1 1 8 0v4l1 1.5H3zM6.5 13.5a1.6 1.6 0 0 0 3 0"], compact: ["M3 4h10M5 8h6M7 12h2M8 1.5v1.5M8 13v1.5"], clock: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3l2 1.5"],
   };
   // The word of a kind (the server's `kind` of a tool item), written out so each message key is found by a search. `other` has none: it keeps the tool's own name.
   const KIND_WORD = {read: "desk.live.kind.read", search: "desk.live.kind.search", edit: "desk.live.kind.edit", create: "desk.live.kind.create", agent: "desk.live.kind.agent", web: "desk.live.kind.web", run: "desk.live.kind.run"};
@@ -68,7 +68,11 @@ const LIVE = (function () {
   const calm = h("div", {class: "lv-empty", hidden: ""});
   const stale = h("p", {class: "sub lv-stale", hidden: ""}, t("desk.live.stale"));
   const lifeLabel = h("span", {class: "lt-l"}), lifeSep = h("span", {class: "lt-s"}, " \u00b7 "), lifeRun = h("b", {class: "lt-r"}, h("span", {class: "st-time"}));
-  const life = h("div", {class: "lv-life calm"}, robot(), h("span", {class: "eq", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")), h("span", {class: "lt"}, lifeLabel, lifeSep, lifeRun));
+  const lifeDoing = h("span", {class: "lt-doing", hidden: ""});  // B15: what it does now, in a few words
+  const lifeBack = h("button", {type: "button", class: "lt-back", hidden: "", "aria-expanded": "false"});  // B16: what runs on in the background; it opens to the list, a shell with Stop
+  const backList = h("ul", {class: "lt-blist", hidden: ""});
+  lifeBack.addEventListener("click", () => { backList.hidden = !backList.hidden; lifeBack.setAttribute("aria-expanded", String(!backList.hidden)); });
+  const life = h("div", {class: "lv-life calm"}, robot(), h("span", {class: "eq", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")), h("span", {class: "lt"}, lifeLabel, lifeSep, lifeRun), lifeDoing, lifeBack, backList);
   // B9: the title of the round stays at the top once its start is scrolled away: the first sentence of the person's words, the time, credits and calls as they go. A click goes back to the start.
   const barText = h("span", {class: "rb-t"});
   const barStats = h("span", {class: "rb-s"});
@@ -187,6 +191,10 @@ const LIVE = (function () {
         rec.open = !rec.open; paintAsk(rec, rec.item);
       });
       body.append(rec.line, rec.qa);
+    } else if (item.k === "note") {  // B13, B14: what Copilot itself tells the chat, and a compaction of the context: one grey line
+      rec.ico = h("span", {class: "ti"}, svg(item.kind === "compact" ? ICONS.compact : ICONS.bell, 14));
+      rec.tx = h("span", {class: "note-tx"});
+      body.append(h("div", {class: "note-line"}, rec.ico, rec.tx));
     } else if (item.k === "err") {  // 1.8.5: a turn that ended in an error: its words, in red
       rec.tx = h("div", {class: "tx err-tx"});
       body.append(h("b", {class: "err-h"}, t("waits.error")), rec.tx);
@@ -466,6 +474,9 @@ const LIVE = (function () {
       setText(rec.tx, item.text || t("waits.error.none"));
     } else if (item.k === "ask") {
       paintAsk(rec, item);
+    } else if (item.k === "note") {
+      const k = (n) => (n >= 1000 ? Math.round(n / 1000) + "k" : String(n));
+      setText(rec.tx, item.kind === "compact" ? (typeof item.before === "number" && typeof item.after === "number" ? t("desk.live.compact.sizes", {before: k(item.before), after: k(item.after)}) : t("desk.live.compact")) : item.text || "");
     } else {
       paintThought(rec, item);
     }
@@ -858,7 +869,7 @@ const LIVE = (function () {
   const GROUP_MIN = 2;
   const KEEP_OUT = ["is-fail", "is-wait", "is-held", "is-refused", "is-run"];
   const GROUP_ORDER = ["think", "read", "search", "edit", "create", "run", "web", "agent", "other"];
-  const stepOf = (rec) => (rec && rec.el ? (rec.kind === "tool" ? rec.kind2 || "other" : ["me", "text", "err", "ask"].includes(rec.kind) ? "" : "think") : "");
+  const stepOf = (rec) => (rec && rec.el ? (rec.kind === "tool" ? rec.kind2 || "other" : ["me", "text", "err", "ask", "note"].includes(rec.kind) ? "" : "think") : "");
   const keptOut = (rec) => rec.kind === "tool" && (KEEP_OUT.some((name) => rec.el.classList.contains(name)) || Boolean(rec.item && (rec.item.sub || rec.item.ok)));  // B8: a call the person let go is a record of their decision
   function groupLine(group) {
     const counts = new Map();
@@ -1166,6 +1177,37 @@ const LIVE = (function () {
     setText(lifeLabel, asked ? t("desk.live.approval") : state === "starting" ? t("waits.starting") : state === "busy" ? t("desk.live.working") : waits ? t("desk.live.input") : state === "error" ? t("waits.error") : t("desk.live.idle"));
     lifeSep.hidden = lifeRun.hidden = isNaN(when);
     if (!isNaN(when)) running(lifeRun, when); else stopped(lifeRun);
+    // B15: while it works, what it does now: the host's own words when it gives some (loading plugins, settings), else the step that runs, else that it waits for the model
+    const doing = state === "busy" && !asked ? (data.activity || doingNow()) : "";
+    lifeDoing.hidden = !doing;
+    setText(lifeDoing, doing ? "\u00b7 " + doing : "");
+    // B16: shells and subagents that run on after their call, after the round too
+    const back = bound && Array.isArray(data.background) ? data.background : [];
+    lifeBack.hidden = !back.length;
+    setText(lifeBack, back.length ? t("desk.live.background", {n: back.length}) : "");
+    if (!back.length) backList.hidden = true;
+    const sig = JSON.stringify(back);
+    if (backList.dataset.sig !== sig) {
+      backList.dataset.sig = sig;
+      backList.replaceChildren(...back.map((work) => {
+        const shell = work.kind === "shell";
+        const stop = shell ? h("button", {type: "button", class: "act lt-bstop"}, t("desk.live.background.stop")) : null;
+        const said = h("span", {class: "bad lt-bsaid"});
+        if (stop) stop.addEventListener("click", () => {
+          stop.disabled = true;
+          SERVE.post("/api/bgstop", {task: st.task.split("/").pop(), id: work.id}).then(() => { setText(said, ""); kick(); }, (error) => { stop.disabled = false; setText(said, (error && error.message) || String(error)); });
+        });
+        return h("li", null, h("span", {class: shell ? "lt-bcmd" : "lt-bname"}, shell ? "$ " + (work.command || work.label || "") : (work.label || work.kind || "")), stop, said);
+      }));
+    }
+  }
+  function doingNow() {  // the newest item of the round that runs: a call (its word and target), a thought; nothing running: the model has the turn
+    const items = order().map((id) => st.full.get(id)).filter(Boolean);
+    const last = items[items.length - 1];
+    if (last && last.k === "tool" && (last.st === "run")) return t("desk.live.doing.run", {what: [wordOf(last), last.target || ""].filter(Boolean).join(" ").slice(0, 80)});
+    if (last && last.k === "think" && last.run) return t("desk.live.doing.think");
+    if (last && last.k === "text" && last.live) return t("desk.live.doing.write");
+    return t("desk.live.doing.model");
   }
 
   // The calm states: no chat, a chat that has not said anything, a link that dropped. One line says what and why.
@@ -1216,7 +1258,7 @@ const LIVE = (function () {
     SERVE.post("/api/live", {task, rev: st.rev, have: st.have}).then((answer) => {
       if (task !== st.task) return;  // another task was opened meanwhile
       st.fails = 0;
-      onData(answer.live);
+      try { onData(answer.live); } catch (error) { console.error("live:", error); throw error; }  // a fault of the drawing is said, not taken for a lost answer
     }, () => { st.fails += 1; if (st.fails >= 2) stale.hidden = false; }).then(() => {
       st.busy = false;
       const hurry = st.hurry; st.hurry = false;

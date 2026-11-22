@@ -363,3 +363,16 @@ html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 /* the reply buttons float over the bottom of the window: the end of the Live tab can be scrolled above them (UX round 2) */
 section.lv:not(.sa-panel):not(.tr-lv){padding-bottom:64px}
 .lv-life,.fi-need{scroll-margin-bottom:96px}
+/* B13-B16: a note of Copilot's own (a background command ended, the context was compacted); what it does now and what runs on in the background, on the line at the bottom */
+.note-line{display:flex;align-items:center;gap:8px;min-height:24px;font-size:12.5px;color:var(--soft)}
+.note-line .ti{display:inline-flex;flex:none}
+.note-tx{min-width:0;overflow-wrap:anywhere}
+.fi-note .dot{background:var(--card);border-color:var(--line)}
+.lt-doing{margin-left:6px;color:var(--soft);font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46ch}
+.lt-back{margin-left:auto;padding:1px 9px;border:1px solid var(--line2);border-radius:999px;font-size:12px;color:var(--ink);cursor:help;white-space:nowrap}
+.lv-life{flex-wrap:wrap}
+button.lt-back{background:none;font:12px var(--sans);cursor:pointer}
+.lt-blist{flex:1 1 100%;margin:6px 0 0;padding:0;list-style:none;display:grid;gap:4px}
+.lt-blist li{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px}
+.lt-bcmd{font:12px var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto}
+.lt-bname{min-width:0;flex:1 1 auto}

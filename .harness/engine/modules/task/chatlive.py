@@ -646,7 +646,11 @@ def said_item(turn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """What the person said to start a turn: a small mark in the stream, with the words in its card. None for a turn no person started. A turn read from the stream file (`chatstream.read`) has
     no `message`: its `text` and `files` are the person's words, so it counts as the person's (a turn no person started has no text there)."""
     message = _message_of(turn)
-    if (message.get("origin") or {}).get("kind") != "user":
+    origin = (message.get("origin") or {}).get("kind")
+    if origin == "systemNotification":  # B13: a turn Copilot started itself (a background command ended): its words, as a grey line, not as the person's
+        text, _was_cut = cut(message.get("text"), SAY_CAP * 4)
+        return {"id": f"{turn.get('id')}.me", "k": "note", "text": text, "starts": True} if text.strip() else None
+    if origin != "user":
         return None
     text, was_cut = cut(message.get("text"), TEXT_CAP)
     if not text:
@@ -704,6 +708,17 @@ def part_item(part: Dict[str, Any], ident: str, running: bool, last: bool, mark:
         item = tool_item(call, ident, running, root)
     elif kind == "inputRequest" and isinstance(part.get("request"), dict):
         item = ask_item(part, ident)
+    elif kind == "systemNotification":  # B13: what Copilot itself tells the chat (a background command ended, a subagent is done): one grey line
+        content = part.get("content")
+        text, _was_cut = cut(content.get("markdown") if isinstance(content, dict) else content, SAY_CAP * 4)
+        if not text.strip():
+            return None  # the host's marks with no words (the end of a response round)
+        item = {"id": ident, "k": "note", "text": text}
+    elif kind == "compaction":  # B14: the context was compacted by Copilot itself
+        item = {"id": ident, "k": "note", "kind": "compact", "text": ""}
+        for key in ("before", "after", "count"):
+            if isinstance(part.get(key), int) and not isinstance(part.get(key), bool):
+                item[key] = part[key]
     elif kind == "error":  # 1.8.5: the turn ended in an error; the page draws it red, with its words
         text, _was_cut = cut(part.get("message"), ERROR_CAP)
         item = {"id": ident, "k": "err", "text": text, "resumable": part.get("resumable") is True}

@@ -1612,6 +1612,25 @@ class Board:
             task_ops.note(again, "chat-resume", "-")
         return {"resumed": True}
 
+    def bgstop(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """B16: stop one shell the chat of the task runs in the background (`id`, as the Live tab lists it)."""
+        task, _found = self.target(data)
+        ident = str(data.get("id", ""))[:200]
+        if not ident.startswith("shell:"):
+            raise CommandError(say("ask.refused.shown"))
+        try:
+            done = self.link.dispatch("bgstop", task, ident)
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        except Exception as error:  # noqa: BLE001
+            raise CommandError(ahp_scrub(error)) from None
+        try:
+            with task_ops.locked(self.root, task) as again:
+                task_ops.note(again, "stop", "background " + ident[6:66])
+        except Exception:  # noqa: BLE001
+            pass
+        return {"stopped": done.get("stopped", False)}
+
     def stop(self, data: Dict[str, Any]) -> Dict[str, Any]:
         task, found = self.target(data)
         try:
@@ -2211,7 +2230,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"ok": True, **result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                     return self.answer(409, {"ok": False, "error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/rewind", "/api/verdict", "/api/export", "/api/confirm", "/api/answer", "/api/title"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/rewind", "/api/verdict", "/api/export", "/api/confirm", "/api/answer", "/api/title", "/api/bgstop"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

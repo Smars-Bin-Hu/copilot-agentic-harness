@@ -172,7 +172,7 @@ class Job:
 
 
 # "": any state: a setting of the chat holds from its next turn; a Withdraw stops a running turn first (1.6.99); Try again and taking back a queued message are checked by the thread
-NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "say": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": "", "super": ""}  # relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
+NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "say": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": "", "super": "", "bgstop": ""}  # bgstop (B16): stop a shell that runs in the background; relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
 
 
 class VsLink:
@@ -347,7 +347,8 @@ class VsLink:
             chatlive.attach_subs(found["items"], [(sub, self.chats.get(sub["chat"])) for sub in subs], self.root, cached["state"])
             # `queued`: the messages that go after the running turn; `retry`: the last turn ended in an error that Try again can run again (1.6.99)
             return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"])),
-                    "round": chatlive.round_facts(cached["state"])}  # B9: the live numbers of the title of the round
+                    "round": chatlive.round_facts(cached["state"]),  # B9: the live numbers of the title of the round
+                    "activity": cached["state"].get("activity") or "", "background": list(cached["state"].get("backgroundWork") or [])}  # B15, B16
 
     def older(self, task: str, turn: str, before: int, count: int = 60) -> Dict[str, Any]:
         """The steps of the turn `turn` that came before part `before` (the `before` of `live`), from the task's stream file: `{items, before}`, the newest `count` of them, oldest first. `before`: where
@@ -1587,6 +1588,13 @@ class VsLink:
                 held = {"state": ahp.trimmed(link.subscribe(chat)), "tool_at": ""}
                 with self.lock:
                     self.chats[chat] = held
+            if job.kind == "bgstop":  # B16: a shell the chat runs in the background, stopped by the host's own request (only a shell can be)
+                known = {str(item.get("id")) for item in held["state"].get("backgroundWork") or [] if isinstance(item, dict)}
+                if job.text not in known:
+                    raise Refused("ask-gone")
+                answer = link.call("vscode/stopBackgroundWork", {"chat": chat, "id": job.text}, timeout=pace.scaled(30))
+                job.result = {"chat": chat, "stopped": bool((answer or {}).get("stopped")) if isinstance(answer, dict) else False}
+                return
             if job.kind == "config":
                 action = {"type": "chat/configChanged", "config": dict(job.plan or {})}
                 link.dispatch(chat, action)

@@ -1036,6 +1036,19 @@ class RoundFactsTests(unittest.TestCase):
         self.assertEqual(chatlive.round_facts({"turns": [], "activeTurn": None}), {"calls": 0, "credits": None})
 
 
+class NoteTests(unittest.TestCase):
+    """B13, B14: a note of Copilot's own, a turn it started itself, a compaction."""
+
+    def test_notes_are_grey_items_and_a_mark_with_no_words_is_nothing(self) -> None:
+        self.assertEqual(chatlive.part_item({"kind": "systemNotification", "content": "Background command done"}, "n1", False, False, None, None), {"id": "n1", "k": "note", "text": "Background command done"})
+        self.assertEqual(chatlive.part_item({"kind": "systemNotification", "content": {"markdown": "**Done**"}}, "n2", False, False, None, None)["text"], "**Done**")
+        self.assertIsNone(chatlive.part_item({"kind": "systemNotification", "content": "", "_meta": {"kind": "responseRoundEnded"}}, "n3", False, False, None, None))
+        self.assertEqual(chatlive.part_item({"kind": "compaction", "id": "c", "count": 2, "before": 9000, "after": 3000}, "c", False, False, None, None),
+                         {"id": "c", "k": "note", "kind": "compact", "text": "", "count": 2, "before": 9000, "after": 3000})
+        turn = {"id": "t9", "message": {"text": "Background agent 'x' completed", "origin": {"kind": "systemNotification"}}, "responseParts": []}
+        self.assertEqual(chatlive.said_item(turn), {"id": "t9.me", "k": "note", "text": "Background agent 'x' completed", "starts": True})
+
+
 class ReceiptTests(unittest.TestCase):
     """The receipt of a turn (B6): the calls, and the files the edit and create calls changed with their lines and the calls that changed them."""
 

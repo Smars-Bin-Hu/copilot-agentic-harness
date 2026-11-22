@@ -937,6 +937,11 @@ def trimmed(state: Dict[str, Any], keep: int = 2) -> Dict[str, Any]:
            "queuedMessages": [found for found in (pending(item) for item in state.get("queuedMessages") or []) if found]}
     if state.get("turnsNextCursor") is not None:
         out["turnsNextCursor"] = state["turnsNextCursor"]  # where the host goes on when older turns are asked for
+    if isinstance(state.get("activity"), str) and state["activity"].strip():
+        out["activity"] = state["activity"][:ACTIVITY_KEEP]
+    work = [background_kept(item) for item in state.get("backgroundWork") or [] if isinstance(item, dict) and isinstance(item.get("id"), str)]
+    if work:
+        out["backgroundWork"] = work[-BACKGROUND_KEEP:]
     return out
 
 
@@ -1090,6 +1095,17 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
     if kind == "chat/turnsLoaded":  # older turns were paged in: the board keeps only its last turns, so only the cursor is noted
         state["turnsNextCursor"] = action.get("turnsNextCursor")
         return
+    if kind == "chat/activityChanged":  # B15: what the host says it is doing (loading plugins, settings), or nothing
+        state["activity"] = action["activity"][:ACTIVITY_KEEP] if isinstance(action.get("activity"), str) and action["activity"].strip() else None
+        return
+    if kind == "chat/backgroundWorkSet" and isinstance(action.get("work"), dict) and isinstance(action["work"].get("id"), str):  # B16: a shell or subagent that runs on after its call
+        work = background_kept(action["work"])
+        listed = [item for item in state.get("backgroundWork") or [] if isinstance(item, dict) and item.get("id") != work["id"]]
+        state["backgroundWork"] = (listed + [work])[-BACKGROUND_KEEP:]
+        return
+    if kind == "chat/backgroundWorkRemoved":
+        state["backgroundWork"] = [item for item in state.get("backgroundWork") or [] if isinstance(item, dict) and item.get("id") != action.get("id")]
+        return
     if kind == "chat/turnStarted":
         state["activeTurn"] = {"id": action.get("turnId"), "startedAt": action.get("startedAt"), "message": action.get("message"), "responseParts": [], "usage": None}
         state["modifiedAt"] = action.get("startedAt") or state.get("modifiedAt")
@@ -1149,6 +1165,9 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
             if isinstance(call, dict) and call.get("toolCallId") == action.get("toolCallId"):
                 _tool_call_action(call, kind, action)
     elif kind == "chat/usage" and isinstance(action.get("usage"), dict):
+        before, after = _compactions(active.get("usage")), _compactions(action["usage"])
+        if before is not None and after is not None and after > before:  # B14: the context was compacted (the host counts it in the usage; it sends nothing else): a part of the turn says so
+            parts.append({"kind": "compaction", "id": f"compact-{after}-{len(parts)}", "count": after, "before": _context_total(active.get("usage")), "after": _context_total(action["usage"])})
         active["usage"] = action["usage"]
     elif kind in ("chat/turnComplete", "chat/turnCancelled", "chat/error"):
         if kind == "chat/error" and isinstance(action.get("part"), dict):
@@ -1161,6 +1180,42 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         active["dropped"] = int(active.get("dropped") or 0) + len(parts) - PARTS_KEEP
         active["droppedCalls"] = int(active.get("droppedCalls") or 0) + _calls_in(parts[:len(parts) - PARTS_KEEP])
         del parts[:len(parts) - PARTS_KEEP]
+
+
+# --- what the chat does besides its turn (B13-B16) ---------------------------------------------------------------------------
+ACTIVITY_KEEP = 200
+BACKGROUND_KEEP = 20
+
+
+def background_kept(work: Dict[str, Any]) -> Dict[str, Any]:
+    """A shell or subagent that runs in the background, as a page reads it: kind, id, label, command (cut), startedAt."""
+    kept: Dict[str, Any] = {"id": work["id"][:200], "kind": str(work.get("kind") or "")[:20]}
+    for key, cap in (("label", 200), ("command", 400), ("startedAt", 40)):
+        if isinstance(work.get(key), str):
+            kept[key] = work[key][:cap]
+    return kept
+
+
+def _attribution(usage: Any) -> Dict[str, Any]:
+    meta = usage.get("_meta") if isinstance(usage, dict) and isinstance(usage.get("_meta"), dict) else {}
+    return meta["contextAttribution"] if isinstance(meta.get("contextAttribution"), dict) else {}
+
+
+def _compactions(usage: Any) -> Optional[int]:
+    """How many times the session's context was compacted, as the host counts it in a usage; None: it does not say."""
+    found = _attribution(usage).get("compactions")
+    if isinstance(found, list):
+        return len(found)
+    return found if isinstance(found, int) and not isinstance(found, bool) else None
+
+
+def _context_total(usage: Any) -> Optional[int]:
+    found = _attribution(usage).get("totalTokens")
+    if isinstance(found, (int, float)) and not isinstance(found, bool):
+        return int(found)
+    if isinstance(usage, dict) and isinstance(usage.get("inputTokens"), (int, float)) and not isinstance(usage.get("inputTokens"), bool):
+        return int(usage["inputTokens"])
+    return None
 
 
 # --- the questions of the agent (B8): a part of the turn, bounded ---------------------------------------------------------

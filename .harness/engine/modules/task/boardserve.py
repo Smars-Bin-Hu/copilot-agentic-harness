@@ -1722,11 +1722,12 @@ class Board:
         plan = dict(self.ask_plan(data, "tool_call_id"), approved=decision == "allow")
         pre = self.before(task)
         done = self.respond("confirm", task, plan)
-        if decision == "allow":
-            self.begin(task, "allow", pre)
         view = done["view"]
+        if decision == "allow" or view.get("stage") == "result":  # a result kept from the model lets the agent go on too
+            self.begin(task, "allow", pre)
         command = chatask.one_line(view["command"], chatask.MAX_LINE)
-        self.asked(task, "confirm", f"{decision}: {view['tool'] or '-'} {command}".strip(), {"decision": decision, "tool": view["tool"], "tool_call_id": view["tool_call_id"], "command": view["command"], "chat": done["chat"]})
+        stage = " result" if view.get("stage") == "result" else ""  # B5: the result of a call that ran was sent to the model, or kept from it
+        self.asked(task, "confirm", f"{decision}{stage}: {view['tool'] or '-'} {command}".strip(), {"decision": decision, "tool": view["tool"], "tool_call_id": view["tool_call_id"], "command": view["command"], "chat": done["chat"], **({"stage": "result"} if stage else {})})
         return {"decided": decision, "chat": done["title"]}
 
     def answer(self, data: Dict[str, Any]) -> Dict[str, Any]:

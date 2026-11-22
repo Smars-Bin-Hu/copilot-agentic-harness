@@ -1105,6 +1105,7 @@
       item.options.length ? h("ul", null, item.options.map((option) => h("li", null, option.label))) : null, item.free ? h("p", {class: "sub"}, t("desk.ask.peek.free")) : null);
     return {sig: JSON.stringify(found), build: () => h("div", {class: "tk-peek"}, found.kind === "confirm"
       ? [found.agent ? h("p", {class: "sub"}, t("board.ask.agent", {agent: found.agent})) : null, found.title ? h("b", null, found.title) : null, found.intention ? h("p", {class: "sub"}, found.intention) : null, h("pre", {class: "send-preview"}, found.command || "-"), h("p", {class: "sub"}, t("board.ask.call", {tool: found.tool || "-", id: found.tool_call_id}))]
+      : found.kind === "auth" ? [h("b", null, t("board.ask.card.auth")), h("p", {class: "sub"}, [found.server, found.tool].filter(Boolean).join(" \u00b7 "))]
       : [h("b", null, found.message), (found.questions || []).map(asked)],
     found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null)};
   }
@@ -1112,6 +1113,15 @@
     if (!desk.ask || !served()) return null;
     if (!bubbleNode) bubbleNode = Status.card(h("span", {class: "tk-bubble", "data-card-up": "1"}, icon(BUBBLE, 15)), askCard, t("desk.ask.peek"));  // above it: the button to answer is below
     return bubbleNode;
+  }
+
+  // The card of what the chat waits for (B5): drawn by chat.js. The page gives the Stop button (a sign-in has no other way out from here) and the button that opens the dialog of a question
+  // that needs more than one box. Not on a page that cannot act, nor for a wait that is not the chat's.
+  function chatCard() {
+    if (!desk.ask || !served() || !canAct() || typeof CHAT === "undefined" || !CHAT.card || !["confirm", "question", "auth"].includes(desk.waiting_why)) return null;
+    const row = actionRow();
+    const find = (name) => desk.actions.find((entry) => entry.action === name);
+    return CHAT.card(row, {stop: find("stop") ? actionButton(row, find("stop")) : null, answer: find("question") ? actionButton(row, find("question")) : null, waited: waitedLine()});
   }
 
   function otherCard(items, notes) {
@@ -1186,11 +1196,13 @@
     const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
     const box = batchBox();  // two held calls or more, the ones the agent went on without too: one box over their cards (F3 AP)
     if (!needsCard()) return told.length || left.length ? [...told, ...(box ? [box] : []), ...left] : null;
-    const items = needItems().filter((item) => item.action !== "approve-action" && item.action !== "accept");  // the held calls and the delivered work have cards of their own
+    const asked = chatCard();  // B5: what the chat waits for has a card of its own, with its buttons
+    const items = needItems().filter((item) => item.action !== "approve-action" && item.action !== "accept" && !(asked && ["confirm", "question"].includes(item.action)));  // the held calls and the delivered work have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
     const cards = [...told];
+    if (asked) cards.push(asked);
     if (box) cards.push(box);
     cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told.length ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
     const finish = acceptCard();

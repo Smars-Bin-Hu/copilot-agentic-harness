@@ -1903,7 +1903,7 @@ class VsLink:
         with self.lock:
             for call in self._running_calls(cached["state"]):
                 if call.get("toolCallId") == view["tool_call_id"]:
-                    call["status"] = "running" if plan.get("approved") else "failed"  # the card goes at once; the host pushes the same
+                    call["status"] = ("completed" if plan.get("approved") else "cancelled") if view.get("stage") == "result" else "running" if plan.get("approved") else "failed"  # the card goes at once; the host pushes the same
             self.sub_seen.pop(item["id"], None)
             self.dirty = True
             known = self.sessions.get(binding["session"])

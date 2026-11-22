@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import taskboard
 
-BLOCKS = ("confirm", "question", "asking", "outbox", "autorun", "error", "stuck")
+BLOCKS = ("confirm", "question", "auth", "asking", "outbox", "autorun", "error", "stuck")
 DECISIONS = ("req", "plan", "promote", "review", "recover", "accept")
 ANSWERS = {name for names in taskboard.ACTIONS_BY_WAIT.values() for name in names} | {"confirm", "question", "send", "answer", "accept", "review dismiss"}  # the actions that answer a wait; pause, close, steer and the like stay on the task page
 

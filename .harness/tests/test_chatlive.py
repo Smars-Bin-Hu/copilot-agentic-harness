@@ -62,6 +62,10 @@ class ItemTests(unittest.TestCase):
         now = chatlive.build(state([tool("c1", "running"), tool("c2", "pending-confirmation")]), {})["items"]
         self.assertEqual([item["st"] for item in now], ["run", "wait"])
 
+    def test_a_result_to_check_and_a_sign_in_wait_for_the_person(self) -> None:  # B5: they were "running" before
+        now = chatlive.build(state([tool("c1", "pending-result-confirmation", success=False), tool("c2", "auth-required")]), {})["items"]
+        self.assertEqual([item["st"] for item in now], ["wait", "wait"])
+
     def test_the_words_come_from_the_intention_or_the_messages_and_a_message_may_be_an_object(self) -> None:
         call = tool("c1", "completed", displayName="Run command", invocationMessage={"markdown": "Running [`tests`](http://x/y)"}, pastTenseMessage="Ran **the tests**", intention="Check the load")
         item = chatlive.build(state([call]), {})["items"][0]

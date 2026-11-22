@@ -119,11 +119,11 @@ def target_of(call: Dict[str, Any], root: Optional[Path] = None) -> Tuple[str, b
 
 
 def state_of(call: Dict[str, Any], active: bool) -> str:
-    """`run`, `wait` (a person must allow it), `done` or `fail`. (`tool_item` adds `stop`: the turn ended with the call still open.)"""
+    """`run`, `wait` (a person must allow it, check its result or sign in: B5), `done` or `fail`. (`tool_item` adds `stop`: the turn ended with the call still open.)"""
     status = str(call.get("status") or "")
     if status in RUNNING:
         return "run"
-    if status == "pending-confirmation":
+    if status in ("pending-confirmation", "pending-result-confirmation", "auth-required"):  # before `fail`: a result that waits may be a failed one
         return "wait"
     if status in ("failed", "cancelled", "denied", "error") or call.get("success") is False:
         return "fail"

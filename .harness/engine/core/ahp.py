@@ -1033,7 +1033,7 @@ def _tool_call_step(call: Dict[str, Any], kind: str, action: Dict[str, Any]) -> 
             return False
         call["status"] = "auth-required"
         try:
-            call["auth"] = action.get("auth") if len(json.dumps(action.get("auth"))) <= AUTH_KEEP else {"cut": True}
+            call["auth"] = auth_kept(action.get("auth"))
         except (TypeError, ValueError):
             call["auth"] = {"cut": True}
     elif kind == "chat/toolCallAuthResolved":
@@ -1149,6 +1149,27 @@ def sub_chat(summary: Any) -> Optional[Dict[str, Any]]:
     return {"chat": str(summary["resource"]), "parent": str(origin["chat"]), "call": str(origin["toolCallId"]), "title": str(summary.get("title") or "")[:120], "status": summary.get("status")}
 
 
+def auth_kept(auth: Any) -> Any:
+    """The sign-in request of a tool call as the board keeps it: without `oauthClient` (an OAuth client id and maybe its secret: never in memory, a file or a page), and `{cut: true}` when it is too big. Raises TypeError or ValueError on what is not JSON."""
+    if isinstance(auth, dict):
+        auth = {key: value for key, value in auth.items() if key != "oauthClient"}
+    return auth if len(json.dumps(auth)) <= AUTH_KEEP else {"cut": True}
+
+
+def need_slim(item: Dict[str, Any]) -> Dict[str, Any]:
+    """An `inputNeeded` item with the result of its tool call cut as `slim_part` cuts it (a call that waits for its result to be confirmed carries the whole result), and its sign-in request as `auth_kept` keeps it (B5, 1.8.x)."""
+    call = item.get("toolCall")
+    if not isinstance(call, dict):
+        return item
+    call = slim_part({"toolCall": call})["toolCall"]
+    if "auth" in call:
+        try:
+            call = dict(call, auth=auth_kept(call["auth"]))
+        except (TypeError, ValueError):
+            call = dict(call, auth={"cut": True})
+    return dict(item, toolCall=call)
+
+
 def trimmed_session(state: Dict[str, Any]) -> Dict[str, Any]:
     """A session snapshot cut to what the board reads of it: `inputNeeded[]` (the questions and tool confirmations that wait for a person), of its settings the two a person may
     change from the board (`mode`, `autoApprove`): the value and the choices the host offers, and the chats of its subagents (`subchats`, 1.6.105)."""
@@ -1157,7 +1178,7 @@ def trimmed_session(state: Dict[str, Any]) -> Dict[str, Any]:
     schema = (config.get("schema") or {}).get("properties") or {}
     values = config_values(state)
     chats = state.get("chats") if isinstance(state.get("chats"), list) else []
-    return {"inputNeeded": [item for item in items if isinstance(item, dict)] if isinstance(items, list) else [],
+    return {"inputNeeded": [need_slim(item) for item in items if isinstance(item, dict)] if isinstance(items, list) else [],
             "config": {"values": {key: values.get(key) for key in CHAT_SETTINGS}, "choices": {key: named(schema.get(key)) for key in CHAT_SETTINGS}},
             "subchats": [found for found in (sub_chat(item) for item in chats) if found][-SUB_CHATS_KEPT:]}
 
@@ -1185,7 +1206,7 @@ def reduce_session(state: Dict[str, Any], action: Dict[str, Any]) -> None:
     if kind == "session/configChanged" and isinstance(state.get("config"), dict) and isinstance(action.get("config"), dict):
         state["config"]["values"].update({key: value for key, value in action["config"].items() if key in CHAT_SETTINGS})
     elif kind == "session/inputNeededSet" and isinstance(action.get("request"), dict) and action["request"].get("id"):
-        new = action["request"]
+        new = need_slim(action["request"])
         for at, item in enumerate(items):
             if item.get("id") == new["id"]:
                 items[at] = new

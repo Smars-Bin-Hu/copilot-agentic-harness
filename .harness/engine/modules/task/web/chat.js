@@ -419,11 +419,13 @@ const CHAT = (function () {
   function confirm(row) {
     const found = row.ask;
     if (!found || found.kind !== "confirm") return;
-    const allow = h("button", {type: "button", class: "act hot"}, t("board.ask.allow"));
-    const deny = h("button", {type: "button", class: "act"}, t("board.ask.deny"));
+    const result = found.stage === "result";  // B5: the call ran; its result waits for the person before the model reads it
+    const allow = h("button", {type: "button", class: "act hot"}, t(result ? "board.ask.result.send" : "board.ask.allow"));
+    const deny = h("button", {type: "button", class: "act"}, t(result ? "board.ask.result.keep" : "board.ask.deny"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const said = h("div", {class: "bad"});
-    const view = SERVE.dialog([h("h2", null, t("board.action.confirm") + " \u00b7 " + row.name), h("p", null, t("board.ask.confirm.hint")),
+    const view = SERVE.dialog([h("h2", null, t(result ? "board.ask.result.title" : "board.action.confirm") + " \u00b7 " + row.name), h("p", null, t(result ? "board.ask.result.hint" : "board.ask.confirm.hint")),
+      result ? h("pre", {class: "send-preview wc-out" + (found.failed ? " is-fail" : "")}, (found.result_cut ? t("board.ask.result.cut") + "\n" : "") + (found.result || t("board.ask.result.none"))) : null,
       found.agent ? h("p", {class: "sub"}, t("board.ask.agent", {agent: found.agent})) : null,  // a subagent's call (1.8)
       found.title ? h("p", {class: "sub"}, found.title) : null, found.intention ? h("p", null, found.intention) : null,
       h("pre", {class: "send-preview"}, found.command || "-"),
@@ -449,6 +451,14 @@ const CHAT = (function () {
       const part = one !== null && typeof one === "object" && !Array.isArray(one) ? [one.value === undefined ? "" : label(item, one.value), one.free].filter(Boolean).join(", ") : Array.isArray(one) ? one.map((id) => label(item, id)).join(", ") : item.kind === "single-select" || item.kind === "boolean" ? label(item, one) : String(one);
       return part.length > 60 ? part.slice(0, 59) + "\u2026" : part;
     }).filter(Boolean).join("; ");
+  }
+
+  // A question of a kind the board does not know (B5): a text box, and the question as it came, folded.
+  function otherNote(item) {
+    const body = h("pre", {class: "wc-raw", hidden: ""}, item.raw || "-");
+    const head = h("button", {type: "button", class: "wc-dt", "aria-expanded": "false"}, h("span", {class: "wc-chev", "aria-hidden": "true"}, "\u203a"), t("board.ask.other.details"));
+    head.addEventListener("click", () => { body.hidden = !body.hidden; head.setAttribute("aria-expanded", String(!body.hidden)); });
+    return h("div", {class: "wc-other"}, h("p", {class: "sub"}, t("board.ask.other", {kind: item.was || "?"})), head, body);
   }
 
   // "Answer..." (B75): the agent asked a question. One control for each question (options, a box, yes or no, a number); the answers go for the one request this dialog showed.
@@ -495,7 +505,7 @@ const CHAT = (function () {
       return input;
     };
     const fields = found.questions.map((item) => h("div", {class: "ask-field"}, h("div", {class: "sub label"}, item.title + (item.required ? " *" : "")),
-      item.message && item.message !== item.title ? h("div", {class: "sub ask-text"}, item.message) : null, control(item)));
+      item.message && item.message !== item.title ? h("div", {class: "sub ask-text"}, item.message) : null, control(item), item.kind === "other" ? otherNote(item) : null));
     const words = found.text || found.message;  // all the agent said, with its line breaks (1.6.102); `message` is the one line of a card
     const view = SERVE.dialog([h("h2", null, actionTitle("question") + " \u00b7 " + row.name), words ? h("div", {class: "ask-text ask-lead"}, words) : null, ...fields,
       found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null, h("div", {class: "row send-actions"}, send, no), said]);
@@ -511,5 +521,90 @@ const CHAT = (function () {
     no.addEventListener("click", view.close);
   }
 
-  return {panel, stop, withdraw, create, seen, confirm, question, fileTray, modelPick, decided: () => decided};
+  // The card of what the chat waits for (B5, prototype 3), in the Live stream where the agent stopped and above the tabs: an icon, two or three words, what it is about, the buttons that answer it
+  // here, and the rest folded under Details (nothing is left out, it is only one click down). Four kinds: a call to allow, a result to check, a sign-in, a question. `opts.stop`: the Stop button of
+  // the page, for a sign-in (the board does not sign in for the person). `opts.answer`: the button that opens the question's dialog, for a question that needs more than one text box.
+  const WC_ICONS = {
+    run: [["path", {d: "M3 4l4 4-4 4M8 12h5"}]],
+    check: [["path", {d: "M2.5 3h11v10h-11zM5 8l2 2 4-4"}]],
+    key: [["circle", {cx: 5.5, cy: 10.5, r: 3}], ["path", {d: "M7.6 8.4L13 3M11 5l1.5 1.5M9.5 6.5L11 8"}]],
+    ask: [["circle", {cx: 8, cy: 8, r: 6}], ["path", {d: "M6 6.3a2 2 0 1 1 3 1.7c-.7.4-1 .8-1 1.5M8 11.5v.5"}]],
+  };
+  function card(row, opts) {
+    const found = row.ask;
+    if (!found) return null;
+    opts = opts || {};
+    const one = (text, limit) => { const flat = String(text || "").split(/\s+/).join(" ").trim(); return flat.length > limit ? flat.slice(0, limit - 1) + "\u2026" : flat; };
+    const said = h("div", {class: "bad"});
+    const details = [];
+    let kind, title, target, body = [], acts = [];
+    const decide = (buttons, decision) => {
+      buttons.forEach((button) => { button.disabled = true; });
+      ask("/api/confirm", {task: row.name, id: found.id, tool_call_id: found.tool_call_id, digest: found.digest, decision}).then(() => { decided = {task: row.name, kind: decision, at: Date.now()}; SERVE.done(); },
+        (error) => { buttons.forEach((button) => { button.disabled = false; }); said.replaceChildren(...SERVE.reasons(shown(error))); });
+    };
+    if (found.kind === "confirm") {
+      const result = found.stage === "result";
+      kind = result ? "check" : "run";
+      title = t(result ? "board.ask.card.result" : "board.ask.card.confirm");
+      target = [found.tool, one(found.command, 120)].filter(Boolean).join(" \u00b7 ");
+      body.push(result ? h("pre", {class: "wc-out" + (found.failed ? " is-fail" : "")}, (found.result_cut ? t("board.ask.result.cut") + "\n" : "") + (found.result || t("board.ask.result.none")))
+        : h("pre", {class: "wc-out"}, found.command || "-"));
+      const yes = h("button", {type: "button", class: "act hot live"}, t(result ? "board.ask.result.send" : "board.ask.allow"));
+      const no = h("button", {type: "button", class: "act"}, t(result ? "board.ask.result.keep" : "board.ask.deny"));
+      yes.addEventListener("click", () => decide([yes, no], "allow"));
+      no.addEventListener("click", () => decide([yes, no], "deny"));
+      acts = [yes, no];
+      details.push(h("p", null, t(result ? "board.ask.result.hint" : "board.ask.confirm.hint")), found.title ? h("p", null, found.title) : null, found.intention ? h("p", null, found.intention) : null,
+        result ? h("p", {class: "sub"}, t("board.ask.result.command", {command: found.command || "-"})) : null);
+    } else if (found.kind === "auth") {
+      kind = "key";
+      title = t("board.ask.card.auth");
+      target = [found.server, found.tool].filter(Boolean).join(" \u00b7 ");
+      acts = [opts.stop || null];
+      details.push(h("p", null, t("board.ask.auth.hint", {tool: found.tool || "-", server: found.server || "-"})), h("p", null, t("board.ask.auth.reason." + (found.reason || "required"))),
+        found.scopes && found.scopes.length ? h("p", {class: "sub"}, t("board.ask.auth.scopes", {scopes: found.scopes.join(", ")})) : null,
+        found.url ? h("p", {class: "sub"}, t("board.ask.auth.url", {url: found.url})) : null, found.about ? h("p", {class: "sub"}, found.about) : null,
+        h("p", {class: "sub"}, t("board.ask.auth.how")));
+    } else if (found.kind === "question") {
+      kind = "ask";
+      title = t("board.ask.card.question");
+      const qs = found.questions || [];
+      const single = qs.length === 1 && ["text", "other"].includes(qs[0].kind) ? qs[0] : null;
+      const words = found.text || found.message;
+      if (words) body.push(h("div", {class: "wc-q"}, words));
+      if (single) {
+        if (single.title && single.title !== words) body.push(h("div", {class: "wc-q"}, single.title));
+        const box = h("textarea", {class: "send-body wc-ta", rows: 3, maxlength: 2000, placeholder: t("board.ask.card.box"), "aria-label": single.title || t("board.ask.card.question")});
+        const go = h("button", {type: "button", class: "act hot live", disabled: "disabled"}, t("board.ask.card.answer"));
+        box.addEventListener("input", () => { go.disabled = !box.value.trim(); });
+        go.addEventListener("click", () => {
+          go.disabled = true; go.textContent = t("board.serve.working");
+          ask("/api/answer", {task: row.name, id: found.id, request_id: found.request_id, digest: found.digest, answers: {[single.id]: box.value}}).then(() => { decided = {task: row.name, kind: "answer", text: one(box.value, 60), at: Date.now()}; SERVE.done(); },
+            (error) => { go.textContent = t("board.ask.card.answer"); go.disabled = !box.value.trim(); said.replaceChildren(...SERVE.reasons(shown(error))); });
+        });
+        body.push(box);
+        acts = [go];
+        if (single.kind === "other") details.push(otherNote(single));
+      } else {
+        body.push(h("ul", {class: "wc-qs"}, qs.map((item) => h("li", null, item.title))));
+        acts = [opts.answer || null];
+      }
+      details.push(h("p", null, t("desk.hint.question")));
+    } else {
+      return null;
+    }
+    if (found.agent) details.unshift(h("p", {class: "sub"}, t("board.ask.agent", {agent: found.agent})));
+    if (found.tool_call_id) details.push(h("p", {class: "sub"}, t("board.ask.call", {tool: found.tool || "-", id: found.tool_call_id})));
+    const more = found.count > 1 ? h("span", {class: "wc-more", title: t("board.ask.more", {count: found.count - 1})}, "+" + (found.count - 1)) : null;
+    const dtBody = h("div", {class: "wc-dt-b", hidden: ""}, ...details.filter(Boolean));
+    const dt = h("button", {type: "button", class: "wc-dt", "aria-expanded": "false"}, h("span", {class: "wc-chev", "aria-hidden": "true"}, "\u203a"), t("board.ask.card.details"));
+    dt.addEventListener("click", () => { dtBody.hidden = !dtBody.hidden; dt.setAttribute("aria-expanded", String(!dtBody.hidden)); });
+    const icon = h("span", {class: "wc-ico"}); icon.append(lineSvg(WC_ICONS[kind]));
+    return h("section", {class: "tk-need strong wc", "data-action": found.kind, "data-stage": found.stage || ""},
+      h("div", {class: "wc-h"}, icon, h("span", {class: "wc-t"}, title), target ? h("span", {class: "wc-nm", title: target}, target) : null, more, opts.waited || null),
+      ...body, acts.some(Boolean) ? h("div", {class: "wc-acts"}, ...acts.filter(Boolean)) : null, said, dt, dtBody);
+  }
+
+  return {panel, stop, withdraw, create, seen, confirm, question, card, fileTray, modelPick, decided: () => decided};
 })();

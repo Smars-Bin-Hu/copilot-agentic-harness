@@ -46,6 +46,7 @@ IDLE, ERROR, IN_PROGRESS, INPUT_NEEDED, IS_READ, ARCHIVED = 1, 2, 8, 24, 32, 64
 LOCAL_PROVIDER = "copilotcli"  # the chats of GitHub Copilot; other providers (claude, codex) are not ours
 FUSION_ID = "auto"  # Copilot Fusion: Copilot picks the model for each request
 FUSION_STANDARD = "balance"  # its lowest tier
+GITHUB_RESOURCE = "https://api.github.com"  # what `authenticate` signs in to: Copilot's `protectedResources` names it
 
 
 class AhpError(Exception):
@@ -348,7 +349,18 @@ class Pipe:
             pass
 
 
+class Tcp(Unix):
+    """The board's own standalone agent host (1.8.x, core.agenthost) listens on a local TCP port: `path` is `host:port`."""
+
+    def __init__(self, path: str) -> None:  # noqa: super().__init__ is not called: the socket is made here
+        host, _, port = path.rpartition(":")
+        self.sock = socket.create_connection((host.strip("[]") or "localhost", int(port)), timeout=call_timeout())
+        self.sock.settimeout(call_timeout())
+
+
 def open_transport(endpoint: Endpoint) -> Any:
+    if endpoint.kind == "tcp":
+        return Tcp(endpoint.path)
     return (Pipe if endpoint.path.startswith("\\\\") or endpoint.kind == "pipe" else Unix)(endpoint.path)
 
 
@@ -582,6 +594,14 @@ class Connection:
     def dispatch(self, channel: str, action: Dict[str, Any]) -> None:
         """A client action on a chat or session channel: a notification, no answer (the host pushes the state it made of it). Used for a message, a steer and a stop."""
         self.send({"jsonrpc": "2.0", "method": "dispatchAction", "params": {"channel": channel, "clientSeq": self.next_id(), "action": action}})
+
+    def authenticate(self, github_token: str, timeout: Optional[float] = -1.0) -> None:
+        """Sign the whole host in to Copilot with a GitHub token (1.8.x, the board's own host). The sign-in is the host's, not the connection's, and lives in its memory
+        only: after a host restart it is handed again. The token is taken out of any error."""
+        try:
+            self.call("authenticate", {"resource": GITHUB_RESOURCE, "token": github_token}, timeout)
+        except AhpError as error:
+            raise type(error)(scrub(str(error), github_token)) from None
 
     def sessions(self, timeout: Optional[float] = -1.0) -> List[Dict[str, Any]]:
         return list((self.call("listSessions", {}, timeout) or {}).get("items") or [])

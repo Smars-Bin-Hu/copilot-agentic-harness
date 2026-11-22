@@ -31,7 +31,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from core import ahp, config, launchenv, messages, pace, tasks
+from core import agenthost, ahp, config, ghauth, launchenv, messages, pace, tasks
 from core.paths import utc_now
 
 from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
@@ -67,6 +67,10 @@ GATE_WAIT = 10.0  # 1.8.7: seconds a job waits for another job on the same task 
 PERSON_POLL = 0.5  # 1.8.7: seconds the person's lane waits for a job before it looks whether the connection is still there
 FRESH_TURN = 30.0  # 1.8.7: seconds a turn the board itself started counts as running, whatever a slow list of sessions still says (a second send to that chat is refused)
 STAGE_SLOW = 180.0  # 1.8.7: seconds after which "being created" says VS Code has not answered for a while (it still waits)
+OPEN_WAIT = 3.0  # 1.8.x: seconds one try to open waits for the board's own agent host to be ready; it is tried again every HOST_POLL while it starts
+HOST_POLL = 1.0
+MODELS_QUICK = 2.0  # 1.8.x: seconds between two reads of the models for a while after a GitHub token was handed (they come a few seconds later)
+QUICK_FOR = 45.0
 KEEP_SHOWN = 120.0  # 1.7.45: seconds the rows keep the chat they showed after the connection went away, while it comes back and the chats are found again, so a task does not flash idle
 
 
@@ -228,6 +232,11 @@ class VsLink:
         self.super_chat: Optional[Dict[str, str]] = None  # 1.8.1: the super agent chat the board owns ({session, chat}); it is kept subscribed while set; memory only (`superbrain` keeps it in a file)
         self.follow: Dict[str, Dict[str, Any]] = {}  # 1.8.2: task -> the second message of a chat made for a skill only a person starts (`chatnew.follow_up`), sent when the first turn is over; memory only
         self.follow_at = 0.0
+        self.own: Optional[agenthost.Host] = None  # 1.8.x: the board's own agent host (made at the first open)
+        self.signin: Dict[str, Any] = {"state": "", "login": "", "at": 0.0}  # 1.8.x: the last hand-over of gh's token: handed, no-gh, not-signed-in, cannot-run, slow, refused
+        self.models_quick_until = 0.0
+        self.gh_login: Optional[ghauth.Login] = None  # 1.8.x: the sign-in the Enter page started (`gh auth login --web`)
+        self.gh_login_handed = False
 
     # --- the page side: reads only ------------------------------------------------------------------------------------------
 
@@ -613,14 +622,101 @@ class VsLink:
 
     # --- the thread ---------------------------------------------------------------------------------------------------------
 
+    def own_host(self) -> agenthost.Host:
+        """1.8.x: the board's own agent host, made once (`core.agenthost`); it gets the tool folders and the CA bundle of Local when it starts."""
+        with self.lock:
+            if self.own is None:
+                self.own = agenthost.Host(self.root, extra=lambda: launchenv.extra(self.root))
+            return self.own
+
+    def host_state(self) -> Dict[str, Any]:
+        """1.8.x: where the board's own agent host is (`agenthost.Host.status`: state, download, version), for the Enter page. `stopped` before the first open."""
+        with self.lock:
+            own = self.own
+        return own.status() if own is not None else {"state": "off" if not self.enabled or ahp.switched_off() else "stopped"}
+
     def _open(self) -> ahp.Connection:
-        code = ahp.find_code()
-        if not code:
-            raise ahp.NotReady("off" if ahp.switched_off() else "no-cli")
-        found = ahp.read_endpoints(code)
-        if not found:
-            raise ahp.NotReady("none")
-        return choose(found, self.root)
+        """1.8.x: start (or adopt) the board's own agent host, connect over its TCP port, and hand it gh's token. No VS Code window is needed."""
+        if ahp.switched_off():
+            raise ahp.NotReady("off")
+        host = self.own_host()
+        host.start()
+        try:
+            endpoint = host.wait_ready(OPEN_WAIT)
+        except ahp.NotReady as error:
+            raise ahp.NotReady("starting" if error.why == "cli-slow" else error.why, str(error)) from None
+        link = ahp.connect(endpoint)
+        self._hand_token(link)
+        return link
+
+    def _hand_token(self, link: Any) -> None:
+        """Sign the host in with gh's token (`core.ghauth`). The token is read here, handed over the connection and dropped; what happened is kept for the Enter page."""
+        extra = launchenv.extra(self.root)
+        gh = ghauth.find_gh(ghauth.folders_of(self.root))
+        state = "handed"
+        if not gh:
+            state = "no-gh"
+        else:
+            try:
+                link.authenticate(ghauth.token(gh, extra))
+            except ghauth.GhError as error:
+                state = error.why
+            except ahp.ConnectionClosed:
+                raise
+            except ahp.AhpError:
+                state = "refused"
+        with self.lock:
+            self.signin = {"state": state, "login": self.signin.get("login", ""), "at": time.monotonic()}
+            if state == "handed":
+                self.models_quick_until = time.monotonic() + QUICK_FOR
+
+    def signin_state(self) -> Dict[str, Any]:
+        """1.8.x: the last hand-over of gh's token (`state`), and seconds since (`ago`)."""
+        with self.lock:
+            out = dict(self.signin)
+        out["ago"] = round(time.monotonic() - out.pop("at"), 1) if out.get("at") else None
+        return out
+
+    def begin_login(self) -> Dict[str, Any]:
+        """1.8.x: start gh's web sign-in for the Enter page (one at a time). `{state: no-gh}` when there is no gh."""
+        with self.lock:
+            running = self.gh_login is not None and self.gh_login.status()["state"] in ("starting", "waiting")
+            if running:
+                return self.gh_login.status()  # type: ignore[union-attr]
+        gh = ghauth.find_gh(ghauth.folders_of(self.root))
+        if not gh:
+            return {"state": "no-gh", "download": ghauth.DOWNLOAD_PAGE}
+        login = ghauth.Login(gh, launchenv.extra(self.root)).start()
+        with self.lock:
+            self.gh_login, self.gh_login_handed = login, False
+        self.wake.set()
+        return login.status()
+
+    def login_state(self) -> Dict[str, Any]:
+        with self.lock:
+            login = self.gh_login
+        return login.status() if login is not None else {"state": "none"}
+
+    def cancel_login(self) -> None:
+        with self.lock:
+            login = self.gh_login
+        if login is not None:
+            login.cancel()
+
+    def sign_in_again(self) -> None:
+        """Hand gh's token to the host again (after gh signed in): done on the thread."""
+        self.jobs.put("auth")
+        self.wake.set()
+
+    def _login_done(self, link: Any) -> None:
+        """A sign-in the Enter page started has ended well: the host gets the new token now, not at the next start."""
+        with self.lock:
+            login = self.gh_login
+            due = login is not None and not self.gh_login_handed and login.status()["state"] == "done"
+            if due:
+                self.gh_login_handed = True
+        if due:
+            self._hand_token(link)
 
     def _set(self, ready: bool, why: str) -> None:
         with self.lock:
@@ -679,7 +775,7 @@ class VsLink:
                 link = self._opener()
             except ahp.NotReady as error:
                 self._set(False, error.why)
-                self._wait(NO_CLI_WAIT if error.why in ("no-cli", "off") else self.backoff.next())
+                self._wait(NO_CLI_WAIT if error.why in ("no-cli", "off") else HOST_POLL if error.why == "starting" else self.backoff.next())
                 continue
             except (ahp.AhpError, OSError, ValueError):
                 self._set(False, "error")
@@ -721,6 +817,10 @@ class VsLink:
                 job = self.jobs.get_nowait()
             except queue.Empty:
                 return
+            if job == "auth":
+                if link is not None:
+                    self._hand_token(link)
+                continue  # no connection: the next open hands the token anyway
             if isinstance(job, Job):
                 if link is None or job.cancelled:
                     made = (job.plan or {}).get("made") if job.kind == "create" else None
@@ -815,6 +915,8 @@ class VsLink:
                     threading.Thread(target=self._do_alone, args=(link, job), name="board-create", daemon=True).start()
                 elif isinstance(job, Job):
                     queues[self.lane_of(job.task)].put(job)
+                elif job == "auth":
+                    self._hand_token(link)
                 else:
                     self._open_code()
         finally:
@@ -890,9 +992,10 @@ class VsLink:
                 self._calm(lambda: self._list(link))
                 self._models(link)
                 read_models = now
-            elif now - read_models >= MODELS_EVERY:
+            elif now - read_models >= (MODELS_QUICK if now < self.models_quick_until else MODELS_EVERY):
                 read_models = now
                 self._models(link)
+            self._login_done(link)
             if self.dirty or now - last >= TASKS_EVERY:
                 last = now
                 self.dirty = False

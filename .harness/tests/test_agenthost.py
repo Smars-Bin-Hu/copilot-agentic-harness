@@ -282,5 +282,76 @@ class TcpTest(unittest.TestCase):
         server.close()
 
 
+class VsLinkHostTest(unittest.TestCase):
+    """`vslink` opens the board's own host and hands it gh's token (1.8.x, H3)."""
+
+    def setUp(self) -> None:
+        from unittest import mock
+
+        from modules.task import vslink
+
+        self.mock, self.vslink = mock, vslink
+        self.tmp = Path(tempfile.mkdtemp(prefix="vslink-host-"))
+        (self.tmp / ".harness").mkdir()
+        self.link = vslink.VsLink(self.tmp, enabled=True)
+
+    def tearDown(self) -> None:
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    class FakeLink:
+        def __init__(self, error: Exception = None) -> None:
+            self.handed: List[str] = []
+            self.error = error
+
+        def authenticate(self, token: str) -> None:
+            if self.error:
+                raise self.error
+            self.handed.append(token)
+
+    def hand(self, link: Any, gh: Any = "/fake/gh", token: Any = "gho_" + "Z" * 36) -> dict:
+        patch = self.mock.patch
+        with patch.object(self.vslink.ghauth, "find_gh", return_value=gh), patch.object(self.vslink.ghauth, "token", side_effect=token if isinstance(token, Exception) else None, return_value=token):
+            self.link._hand_token(link)
+        return self.link.signin_state()
+
+    def test_handed(self) -> None:
+        fake = self.FakeLink()
+        state = self.hand(fake)
+        self.assertEqual(state["state"], "handed")
+        self.assertEqual(len(fake.handed), 1)
+        self.assertNotIn("gho_", json.dumps(state))
+        self.assertGreater(self.link.models_quick_until, 0)
+
+    def test_no_gh(self) -> None:
+        fake = self.FakeLink()
+        self.assertEqual(self.hand(fake, gh=None)["state"], "no-gh")
+        self.assertEqual(fake.handed, [])
+
+    def test_gh_not_signed_in(self) -> None:
+        state = self.hand(self.FakeLink(), token=self.vslink.ghauth.GhError("not-signed-in"))
+        self.assertEqual(state["state"], "not-signed-in")
+
+    def test_the_host_refuses(self) -> None:
+        self.assertEqual(self.hand(self.FakeLink(ahp.AhpError("authenticate failed: nope")))["state"], "refused")
+
+    def test_a_closed_connection_is_not_a_refusal(self) -> None:
+        with self.assertRaises(ahp.ConnectionClosed):
+            self.hand(self.FakeLink(ahp.ConnectionClosed("gone")))
+
+    def test_switched_off_opens_nothing(self) -> None:
+        with self.assertRaises(ahp.NotReady) as caught:
+            self.link._open()
+        self.assertEqual(caught.exception.why, "off")
+        self.assertIsNone(self.link.own)
+        self.assertEqual(self.link.host_state()["state"], "off")
+
+    def test_login_without_gh(self) -> None:
+        found = self.link.begin_login()  # HARNESS_GH=off
+        self.assertEqual(found["state"], "no-gh")
+        self.assertEqual(self.link.login_state(), {"state": "none"})
+
+
 if __name__ == "__main__":
     unittest.main()

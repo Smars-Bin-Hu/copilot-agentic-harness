@@ -191,6 +191,8 @@
         ".harness/tests/test_speednet.py",
         ".harness/tests/test_boardbackground.py",
         ".harness/tests/test_ahp.py",
+        ".harness/tests/test_agenthost.py",
+        ".harness/tests/test_ghauth.py",
         ".harness/tests/test_chatnew.py",
         ".harness/tests/test_chatsend.py",
         ".harness/tests/test_chatask.py",

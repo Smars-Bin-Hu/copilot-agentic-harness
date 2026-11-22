@@ -39,7 +39,7 @@ const ROUNDS = (function () {
           h("p", {class: "sub"}, removed ? t("desk.rounds.compact", {n: removed}) : t("desk.rounds.compact.some")));
         return;
       }
-      const whole = Array.isArray(found.items) && found.items.some((item) => item.k !== "me") ? LIVE.draw(found.items) : null;  // the whole round as the Live feed draws it: every text, thought and call, in order
+      const whole = Array.isArray(found.items) && found.items.some((item) => item.k !== "me") ? LIVE.draw(found.items, found.turn) : null;  // the whole round as the Live feed draws it: every text, thought and call, in order
       body.replaceChildren(...[h("div", {class: "rd-who sub"}, t("desk.rounds.you")), h("div", {class: "rd-prompt"}, found.prompt),
         h("div", {class: "rd-who sub"}, t("desk.rounds.agent")),
         whole ? whole : found.texts.length ? h("div", {class: "rd-text"}, found.texts.map((blocks) => h("div", {class: "rd-part"}, st.draw ? st.draw(blocks) : null))) : h("p", {class: "sub"}, t("desk.rounds.none")),

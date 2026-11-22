@@ -159,12 +159,14 @@ class ReadTests(RoundCase):
         cookie = self.pair()
         found = self.request("POST", "/api/rounds", {"op": "one", "task": Path(TASK).name, "n": 0}, cookie)[1]["result"]
         items = found["items"]
+        self.assertEqual(found["turn"], "t1")  # the page opens a call of the round by its turn
         self.assertEqual([item["id"] for item in items[:3]], ["t1.me", "c0", "c1"])
         self.assertEqual((len(items), items[-1]["k"], items[-1].get("cut")), (82, "text", None))  # every call, the message and the whole text
         self.assertEqual((items[2]["t0"], items[2]["t1"]), (5001, 6001))
         self.assertEqual((found["prompt"], found["tools"], len(found["texts"])), ("fix the load\nsecond line", {"read_file": 2}, 2))  # what the page shows today stays
         later = self.request("POST", "/api/rounds", {"op": "one", "task": Path(TASK).name, "n": 1}, cookie)[1]["result"]
         self.assertNotIn("items", later)  # the turn of "thanks" is not in the stream
+        self.assertNotIn("turn", later)
         self.assertEqual(later["prompt"], "thanks")
         self.assertIsNone(chatrounds.stream_items(self.root, "no-such-task", found))
         self.assertIsNone(chatrounds.stream_items(self.root, self.task, {"at": None, "prompt": "x"}))

@@ -57,7 +57,37 @@
 @keyframes lvcaret{50%{opacity:0}}
 
 /* a tool call: icon, what it does, where, and its time */
-.fi-tool .fb{display:flex;flex-wrap:wrap;align-items:center;gap:9px;min-height:26px;padding:3px 0}
+.fi-tool .fb{display:flex;flex-wrap:wrap;align-items:center;gap:0 9px;min-width:0}
+/* the line is one button: chevron, icon, word, target, facts, time. One row; the target ellipsizes. */
+.tc-line{flex:1 1 100%;display:flex;align-items:center;gap:9px;min-width:0;min-height:26px;margin:0;padding:3px 0;border:0;border-radius:6px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.tc-line:hover .in,.tc-line:focus-visible .in{color:var(--ink)}
+.tc-line:focus-visible{outline:2px solid var(--line2);outline-offset:2px}
+.tc-line.tc-static{cursor:default}.tc-line.tc-static .tc-chev{visibility:hidden}
+.tc-chev{flex:none;display:inline-grid;place-items:center;width:12px;margin-left:-3px;color:var(--soft);font-size:13px;line-height:1;transition:transform .15s}
+.tc-line[aria-expanded="true"] .tc-chev{transform:rotate(90deg)}
+.fi-tool .in.mono{font-family:var(--mono);font-size:13px}
+.fx{flex:none;display:inline-flex;align-items:baseline;gap:6px;font:12px var(--mono);color:var(--soft);white-space:nowrap}.fx:empty{display:none}
+.fx-add{color:var(--good)}.fx-del{color:var(--bad)}.fx-ok{color:var(--good)}.fx-bad{color:var(--bad)}  /* the diff's own colours, and the state of a command: never a colour of a kind */
+.tc-body{flex:1 1 100%;min-width:0;margin:4px 0 4px 24px;border:1px solid var(--line);border-radius:10px;background:var(--card);overflow:hidden}
+.tc-body[hidden]{display:none}
+.tc-body>*{margin:0;padding:8px 12px;border-top:1px solid var(--line)}.tc-body>:first-child{border-top:0}
+.tc-body>.dv-view{padding:8px 12px}
+.tc-why,.tc-reason{font-size:12.5px;color:var(--soft);overflow-wrap:anywhere}
+.tc-reason{display:flex;align-items:flex-start;gap:6px}.tc-ring{flex:none;width:13px;height:13px;margin-top:2px}
+.tc-error{font-size:13px;overflow-wrap:anywhere;white-space:pre-wrap}
+.tc-cmd{font:12.5px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:30vh;overflow:auto}.tc-ps{color:var(--soft)}
+.tc-tabs{display:flex;align-items:center;gap:6px;border-top:0!important;padding-bottom:0!important}.tc-sp{flex:1}
+.tc-tab{border:0;border-radius:5px;background:none;color:var(--soft);font:11px var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;cursor:pointer}
+.tc-tab.on{background:var(--track);color:var(--ink)}.tc-tab:hover,.tc-tab:focus-visible{color:var(--ink)}
+.tc-exit{font:11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--soft)}.tc-exit.bad{color:var(--bad)}
+.tc-tabs+.tc-box{border-top:0}
+.tc-box{margin:0;box-sizing:border-box;max-height:60vh;overflow:auto;background:var(--bg);font:12px/18px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;border-radius:0}
+.tc-path{font:12px var(--mono);color:var(--soft);overflow-wrap:anywhere;padding-bottom:0!important;border-top:0!important}
+.tc-more{display:inline-flex;align-items:center;border:1px solid var(--line2);background:var(--card);color:var(--soft);border-radius:999px;padding:2px 12px;font:12px var(--sans);cursor:pointer}
+.tc-more:hover,.tc-more:focus-visible{color:var(--ink);border-color:var(--soft)}
+.tc-body>.tc-more{align-self:flex-start;border-top:0;margin:0 12px 8px;padding:2px 12px}
+.tc-err{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;overflow-wrap:anywhere}
+.tc-note,.tc-load{font-size:12px}
 .fi-subagent{flex-basis:100%;min-width:0;margin:2px 0 4px;padding:6px 10px;border-left:2px solid var(--line2);border-radius:0 8px 8px 0;background:var(--hover)}  /* the steps of a subagent, under its call (1.6.105) */
 .fi-subagent .sub-h{cursor:pointer;font-size:12.5px;color:var(--soft);overflow-wrap:anywhere}
 .fi-subagent .sub-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:12.5px;min-width:0}
@@ -198,6 +228,7 @@
 .rp-f .act{flex:none;margin:0}
 html.lite .rp{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--card)}
 @media (max-width:640px){.rp-pill span{display:none}.lv{padding:14px}.fi-tool .in{max-width:45%}}
+@media (max-width:480px){.tc-line{flex-wrap:wrap;row-gap:2px}.tc-line .el{order:1}.tc-line .tg{order:2;flex:1 1 100%;margin-left:36px}.tc-line .fx{order:3;margin-left:36px}.tc-body{margin-left:0}}  /* a phone: the target goes under the icon, on its own row; nothing scrolls sideways */
 
 /* motion: off for people who asked for less of it (Lite is off in shell.css) */
 @media (prefers-reduced-motion:reduce){.lv *,.lv *::before,.rp,.rp-pill{animation:none!important;transition:none!important}.fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}.caret{opacity:1}}

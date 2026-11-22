@@ -375,6 +375,40 @@ class VsLink:
         except Exception:  # a page's question must not break the link
             return nothing
 
+    def call(self, task: str, turn: str, ident: str) -> Dict[str, Any]:
+        """What an opened tool call shows (`chatlive.detail`): the call with tool call id `ident` in turn `turn` of the task's chat. The board's memory first (the part is copied out under the lock, the detail
+        is built after it), else the task's stream file (read after the lock is let go). A call of a subagent's chat is not looked for. Not found, not bound, any failure: `{}`. Never raises."""
+        try:
+            if not isinstance(turn, str) or not isinstance(ident, str) or not ident:
+                return {}
+            held: Optional[Dict[str, Any]] = None
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                chat = str(binding["chat"]) if binding else ""
+                state = (self.chats.get(chat) or {}).get("state") if chat else None
+                if isinstance(state, dict):
+                    turns = [one for one in state.get("turns") or [] if isinstance(one, dict)] if isinstance(state.get("turns"), list) else []
+                    if isinstance(state.get("activeTurn"), dict):
+                        turns.append(state["activeTurn"])
+                    for one in turns:
+                        if str(one.get("id") or "") == turn:
+                            part = next((part for part in one.get("responseParts") or [] if chatlive.part_id(part) == ident and isinstance(part, dict) and isinstance(part.get("toolCall"), dict)), None)
+                            if part is not None:
+                                held = dict(part["toolCall"])
+                                if isinstance(part.get("_meta"), dict) and not isinstance(held.get("_meta"), dict):
+                                    held["_meta"] = part["_meta"]
+            if held is not None:
+                return chatlive.detail(held, self.root)
+            if not chat:
+                return {}
+            found = next((item for item in chatstream.read(self.root, task, chat)["turns"] if item["id"] == turn and not item.get("sub")), None)
+            for part in (found["parts"] if found else []):
+                if chatlive.part_id(part) == ident and isinstance(part.get("toolCall"), dict):
+                    return chatlive.detail(part["toolCall"], self.root)
+            return {}
+        except Exception:  # a page's question must not break the link
+            return {}
+
     def _subs_of(self, binding: Dict[str, Any]) -> List[Dict[str, Any]]:
         """The chats of the subagents the bound chat started, the newest `SUB_FOLLOW`, as the session says. The caller holds the lock."""
         held = self.sess.get(binding["session"]) or {}

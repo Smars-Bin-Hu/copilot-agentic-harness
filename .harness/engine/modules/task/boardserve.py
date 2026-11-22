@@ -2098,6 +2098,11 @@ def handler_for(board: Board) -> type:
                     if isinstance(asked.get("turn"), str) and len(asked["turn"]) <= 200 and isinstance(where, int) and not isinstance(where, bool) and where >= 0:
                         return self.answer(200, {"older": board.link.older(task_name, asked["turn"], where)})
                     return self.answer(200, {"older": {"items": [], "before": None}})
+                asked_call = data.get("call")
+                if "call" in data:  # an opened tool call: its whole command, input, output and diff (from memory, else the stream file)
+                    if isinstance(asked_call, dict) and all(isinstance(asked_call.get(key), str) and len(asked_call[key]) <= 200 for key in ("turn", "id")):
+                        return self.answer(200, {"call": board.link.call(task_name, asked_call["turn"], asked_call["id"])})
+                    return self.answer(200, {"call": {}})
                 have = data.get("have")
                 return self.answer(200, {"live": board.link.live(task_name, str(data.get("rev", ""))[:300], have if isinstance(have, int) and not isinstance(have, bool) else -1)})
             if path == "/api/open":  # bring the VS Code window of this folder forward: the thread of the link runs `code <folder>`; this answers at once
@@ -2191,9 +2196,9 @@ def handler_for(board: Board) -> type:
                         found.update({str(item["n"]): {"seq": None, "why": "compact"} for item in listed if item.get("compact")})  # no restore point is taken for /compact: no hook runs (1.6.113)
                         return self.answer(200, {"result": {"rounds": [dict(item, rewind=found.get(str(item["n"]))) for item in listed]}})
                     found = chatrounds.one(board.root, row["task"], data.get("n"))
-                    items = chatrounds.stream_items(board.root, row["task"], found) if found else None  # the whole round as Live items, when the board's own stream holds its turn
-                    if found and items is not None:
-                        found = dict(found, items=items)
+                    whole = chatrounds.stream_round(board.root, row["task"], found) if found else None  # the whole round as Live items, when the board's own stream holds its turn; `turn` lets a call of it be opened
+                    if found and whole is not None:
+                        found = dict(found, items=whole["items"], turn=whole["turn"])
                     return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})

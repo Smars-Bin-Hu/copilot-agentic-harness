@@ -28,9 +28,12 @@ const LIVE = (function () {
   };
   const ICONS = {
     read: ["M4 2h5l3 3v9H4zM9 2v3h3"], edit: ["M3 13l1-3 7-7 2 2-7 7zM9.5 4.5l2 2"], run: ["M3 4l4 4-4 4M8 12h5"], search: ["M7 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 10l3 3"],
-    web: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"], other: ["M3 8h.01M8 8h.01M13 8h.01"], think: ["M8 2a4 4 0 0 0-2 7.5V11h4V9.5A4 4 0 0 0 8 2zM6.5 13.5h3"],
+    web: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"],
+    create: ["M4 2h5l3 3v9H4zM9 2v3h3M8 8v4M6 10h4"], agent: ["M2 2h5v5H2zM9 9h5v5H9zM4.5 7v3.5A1.5 1.5 0 0 0 6 12h3"], ring: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM5.5 8h5"], other: ["M3 8h.01M8 8h.01M13 8h.01"], think: ["M8 2a4 4 0 0 0-2 7.5V11h4V9.5A4 4 0 0 0 8 2zM6.5 13.5h3"],
   };
-  // The kind of a tool, from its name: only for the icon. A name this does not know gets the three dots.
+  // The word of a kind (the server's `kind` of a tool item), written out so each message key is found by a search. `other` has none: it keeps the tool's own name.
+  const KIND_WORD = {read: "desk.live.kind.read", search: "desk.live.kind.search", edit: "desk.live.kind.edit", create: "desk.live.kind.create", agent: "desk.live.kind.agent", web: "desk.live.kind.web", run: "desk.live.kind.run"};
+  // The kind of a tool, from its name: only for the icon, and for an old item that has no `kind`. A name this does not know gets the three dots.
   function kindOf(tool, name) {
     const text = (tool + " " + name).toLowerCase();
     if (/(bash|shell|terminal|command|powershell|\brun\b|exec)/.test(text)) return "run";
@@ -123,11 +126,11 @@ const LIVE = (function () {
   }
 
   // --- one item ---------------------------------------------------------------------------------------------------------
-  function make(item, fixed) {  // `fixed`: a round that is over (LIVE.draw): no entry animation, nothing that acts on the running chat
+  function make(item, fixed, turn) {  // `fixed`: a round that is over (LIVE.draw): no entry animation, nothing that acts on the running chat. `turn`: the id of the turn the item is of (an opened call is asked for by it)
     const li = h("li", {class: "fi fi-" + item.k + (fixed ? "" : " enter"), "data-id": item.id}, h("i", {class: "dot"}));
     const body = h("div", {class: "fb"});
     li.append(body);
-    const rec = {el: li, body, kind: item.k, sig: "", text: "", pieces: 0, fixed: Boolean(fixed), open: false};
+    const rec = {el: li, body, kind: item.k, sig: "", text: "", pieces: 0, fixed: Boolean(fixed), open: false, turn: String(turn || ""), detail: null, dsig: "", loading: false, again: false, err: "", tab: "out", all: false, fetched: ""};
     if (item.k === "me") {  // what the person said: a small mark; the words are in its card
       rec.tag = h("span", {class: "me-tag", role: "button"}, t("desk.live.you"));
       Status.card(rec.tag, () => saidCard(rec), t("desk.live.you"));
@@ -143,8 +146,12 @@ const LIVE = (function () {
       rec.ico = h("span", {class: "ti"});
       rec.say = h("span", {class: "in"});
       rec.tg = h("code", {class: "tg"});
+      rec.fx = h("span", {class: "fx"});
       rec.el2 = h("span", {class: "el"}, h("span", {class: "st-time"}));
-      body.append(rec.ico, rec.say, rec.tg, rec.el2);
+      rec.chev = h("span", {class: "tc-chev", "aria-hidden": "true"}, "\u203a");
+      rec.line = h("button", {type: "button", class: "tc-line", "aria-expanded": "false"}, rec.chev, rec.ico, rec.say, rec.tg, rec.fx, rec.el2);  // the whole line opens the call
+      rec.line.addEventListener("click", () => toggle(rec));
+      body.append(rec.line);
     } else if (item.k === "err") {  // 1.8.5: a turn that ended in an error: its words, in red
       rec.tx = h("div", {class: "tx err-tx"});
       body.append(h("b", {class: "err-h"}, t("waits.error")), rec.tx);
@@ -248,24 +255,37 @@ const LIVE = (function () {
       rec.el.classList.toggle("is-live", Boolean(item.live));
       watch(rec);
     } else if (item.k === "tool") {
-      const kind = kindOf(item.tool || "", item.name || "");
+      const kind = item.kind && ICONS[item.kind] ? item.kind : kindOf(item.tool || "", item.name || "");  // an old item (and an old round) has no `kind`: the name tells
       if (rec.kind2 !== kind) { rec.kind2 = kind; rec.ico.replaceChildren(svg(ICONS[kind], 15)); }
-      const label = held === "approved" ? t("desk.live.approved") : held === "past" ? t("desk.live.held.past") : held === "refused" ? t("desk.live.refused") : held ? t("desk.live.held") : item.say || item.name || item.tool || "";
+      const named = item.kind ? wordOf(item) : "";  // with a kind the line says the word, and the agent's sentence moves to the tip and the opened call
+      const label = named || (held === "approved" ? t("desk.live.approved") : held === "past" ? t("desk.live.held.past") : held === "refused" ? t("desk.live.refused") : held ? t("desk.live.held") : item.say || item.name || item.tool || "");
       setText(rec.say, label);
+      rec.say.classList.toggle("mono", item.kind === "run" && Boolean(item.word));
+      const gate = held === "approved" ? t("desk.live.approved") : held === "past" ? t("desk.live.held.past") : held === "refused" ? t("desk.live.refused") : held ? t("desk.live.held") : "";
       rec.say.title = why ? label + ": " + why : label;  // what the gate said, in the words it gave
+      if (named) rec.say.title = [gate && why ? gate + ": " + why : gate, item.say || ""].filter(Boolean).join(" \u00b7 ") || label;  // a word with a kind: the gate's words and the agent's sentence
       setText(rec.tg, item.target || "");
       rec.tg.hidden = !item.target;
       rec.tg.title = (item.target || "") + (item.cut ? " …" : "");
-      const shown = held === "past" ? "held" : held === "refused" ? "refused" : held ? "wait" : item.st === "stop" ? "done" : item.st || "done";
+      const refused = item.st === "fail" && !held && REFUSED.test(reasonOf(rec, item));  // a call the person refused is not a failure: grey, "stopped"
+      const shown = held === "past" ? "held" : held === "refused" || refused ? "refused" : held ? "wait" : item.st === "stop" ? "done" : item.st || "done";
       for (const name of ["run", "wait", "fail", "done", "held", "refused"]) rec.el.classList.toggle("is-" + name, shown === name);  // classList: the `enter` class is not lost
+      paintFacts(rec, item, refused);
       paintSub(rec, item.sub);
       const time = rec.el2;
       if (item.st === "run" && item.t0) { running(time, item.t0); }
       else {
         stopped(time);
         const label2 = time.querySelector(".st-time");
-        setText(label2, held === "approved" ? t("desk.live.wait.agent") : held === "past" ? t("desk.live.held.tag") : held === "refused" ? t("desk.live.refused.tag") : held || item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : item.st === "stop" ? t("desk.trace.stopped") : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
+        const took = item.t0 && item.t1 ? seconds(item.t1 - item.t0) : "";
+        const marked = item.kind === "run" && typeof item.exit === "number";  // the exit mark of a command is among its facts
+        const end = item.st === "run" ? "" : item.st === "stop" || refused ? t("desk.trace.stopped") : item.kind ? ((item.st === "fail" && !marked ? "\u2717 " : "") + took).trim() : (item.st === "fail" ? "\u2717" : "\u2713") + (took ? " " + took : "");
+        setText(label2, held === "approved" ? t("desk.live.wait.agent") : held === "past" ? t("desk.live.held.tag") : held === "refused" ? t("desk.live.refused.tag") : held || item.st === "wait" ? t("desk.live.wait") : end);
       }
+      const can = canOpen(rec);
+      rec.line.classList.toggle("tc-static", !can);
+      rec.line.tabIndex = can ? 0 : -1;
+      if (rec.open && can && rec.fetched !== JSON.stringify(item)) fetchCall(rec);  // the call changed while it is open (it ended, it failed): ask again; the page keeps what it shows meanwhile
     } else if (item.k === "err") {
       setText(rec.tx, item.text || t("waits.error.none"));
     } else {
@@ -279,6 +299,168 @@ const LIVE = (function () {
       rec.tx.hidden = !item.text;
       setText(rec.tx, item.text ? item.text + (item.cut ? " …" : "") : "");
     }
+  }
+
+  // --- an opened tool call (1.8.x board chat) -------------------------------------------------------------------------------
+  // The closed line is a button: its chevron, icon, word, target, small facts and time. Opening asks the server for the call (`/api/live {task, call: {turn, id}}`: the whole command, its output, the diff of an edit)
+  // and draws it under the line; the call is asked for again each time the line is opened and when the item changes while it is open (a running call grows). The opened state stays on the item's record: a repaint of the line
+  // does not close it. Only the item's turn is needed: items of the live feed and of `older` have it; an item of an opened round has it only when the round's answer gave it (`LIVE.draw(items, turn)`).
+  const OUT_TAIL = 40;  // lines of an output shown first
+  const TAIL_CHARS = 8000;  // and never more characters than this before the person asks for all
+  const REFUSED = /refus|denied|declin|cancel/i;  // the words of a call the person (or the gate) did not let through: not a failure
+  const canOpen = (rec) => Boolean(rec.turn && rec.item && rec.item.k === "tool" && rec.item.id);
+  const reasonOf = (rec, item) => String(item.reason || (rec.detail && rec.detail.reason) || "");
+  function wordOf(item) {  // the word on the line of a tool with a kind: a command's program, else the kind's word; a kind with no word (other) keeps the tool's own name
+    if (item.kind === "run") return item.word || t(KIND_WORD.run);
+    return KIND_WORD[item.kind] ? t(KIND_WORD[item.kind]) : item.name || item.tool || "";
+  }
+  // The small facts after the target: +added −removed and the number of files, the hits of a search, the exit mark of a command. Only numbers, never a colour of a kind: green and red are the diff's own.
+  function paintFacts(rec, item, refused) {
+    const out = [];
+    if ((item.kind === "edit" || item.kind === "create") && (typeof item.add === "number" || typeof item.del === "number")) {
+      out.push(h("span", {class: "fx-add"}, "+" + (item.add || 0)), h("span", {class: "fx-del"}, "−" + (item.del || 0)));
+      if (typeof item.files === "number" && item.files > 1) out.push(h("span", {class: "fx-n"}, "· " + t("desk.live.call.files", {n: item.files})));
+    }
+    if (item.kind === "search" && typeof item.hits === "number") out.push(h("span", {class: "fx-n"}, t("desk.live.call.hits", {n: item.hits})));
+    if (item.kind === "run" && typeof item.exit === "number" && !refused) {
+      const words = t("desk.live.call.exit", {code: item.exit});
+      out.push(h("span", {class: item.exit === 0 ? "fx-ok" : "fx-bad", title: words, "aria-label": words}, item.exit === 0 ? "✓" : "✗"));
+    }
+    const sig = out.map((node) => node.className + node.textContent).join("|");
+    if (sig !== rec.fxSig) { rec.fxSig = sig; rec.fx.replaceChildren(...out); }
+  }
+
+  function toggle(rec) {
+    if (!canOpen(rec)) return;
+    rec.open = !rec.open;
+    syncOpen(rec);
+    if (rec.open) fetchCall(rec);
+  }
+  function syncOpen(rec) {
+    rec.line.setAttribute("aria-expanded", String(rec.open));
+    rec.el.classList.toggle("tc-open", rec.open);
+    if (rec.open && !rec.tb) { rec.tb = h("div", {class: "tc-body"}); rec.line.after(rec.tb); }
+    if (rec.tb) rec.tb.hidden = !rec.open;
+    if (rec.open) drawBody(rec);
+  }
+  function fetchCall(rec) {
+    if (rec.loading) { rec.again = true; return; }  // one question at a time; the next goes when this one is back
+    const task = st.task, turn = rec.turn, id = rec.item.id;
+    rec.loading = true;
+    rec.fetched = JSON.stringify(rec.item);
+    rec.err = "";
+    if (!rec.detail) drawBody(rec);
+    SERVE.post("/api/live", {task, call: {turn, id}}).then((answer) => {
+      const found = answer && answer.call && typeof answer.call === "object" && !Array.isArray(answer.call) ? answer.call : {};
+      const sig = JSON.stringify(found);
+      return () => { const was = rec.detail; const redraw = sig !== rec.dsig || Boolean(rec.err) || !was; rec.err = ""; rec.detail = found; rec.dsig = sig; return {redraw, reason: (was && was.reason) !== found.reason}; };
+    }, (error) => () => { rec.err = (error && error.message) || String(error); return {redraw: true, reason: false}; }).then((apply) => {
+      rec.loading = false;
+      if (!rec.el.isConnected || task !== st.task) return;  // the task or the turn changed meanwhile: this node is gone
+      const done = apply();
+      if (rec.open && done.redraw) drawBody(rec);
+      if (done.reason && rec.item) { rec.sig = ""; paint(rec, rec.item); }  // a refused call says so only in its detail: the line is drawn again
+      if (rec.again) { rec.again = false; if (rec.open) fetchCall(rec); }
+    }).catch(() => { rec.loading = false; });
+  }
+
+  const note = (key) => h("p", {class: "sub tc-note"}, t(key));
+  const box = (text, cls) => h("pre", {class: "tc-box" + (cls ? " " + cls : ""), tabindex: "0"}, text);  // its own vertical scroll (about 60vh); a text goes in as one text node
+  function termNodes(rec, part) {
+    const text = String(part.text || "");
+    const tail = part.cut || part.truncated ? note("desk.live.call.cut") : null;
+    if (!text.trim()) return [h("p", {class: "sub tc-note"}, t("desk.live.call.noout")), tail];
+    const lines = text.split("\n");
+    let shown = rec.all ? text : lines.slice(-OUT_TAIL).join("\n");
+    let clipped = false;
+    if (!rec.all && shown.length > TAIL_CHARS) { shown = shown.slice(-TAIL_CHARS); clipped = true; }
+    const more = !rec.all && (lines.length > OUT_TAIL || clipped);
+    const all = more ? h("button", {type: "button", class: "tc-more"}, t("desk.live.call.all", {n: Math.max(Number(part.lines) || 0, lines.length)})) : null;
+    if (all) all.addEventListener("click", () => { rec.all = true; drawBody(rec); const out = rec.tb.querySelector(".tc-out"); if (out) out.focus(); });
+    return [box(shown, "tc-out"), all, tail];
+  }
+  // A file may be cut in the middle of a hunk (the server's cap on lines): the counts of its `@@` line are then not met, and the compare would take the next file's header for code. Pad it with blank context lines.
+  function balanced(lines) {
+    let old = 0, added = 0;
+    for (const line of lines) {
+      if (old > 0 || added > 0) { if (line.startsWith("\\")) continue; if (line.startsWith("-")) old -= 1; else if (line.startsWith("+")) added -= 1; else { old -= 1; added -= 1; } continue; }
+      const found = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(line);
+      if (found) { old = found[1] === undefined ? 1 : Number(found[1]); added = found[2] === undefined ? 1 : Number(found[2]); }
+    }
+    const out = lines.slice();
+    while (old > 0 && added > 0) { out.push(" …"); old -= 1; added -= 1; }
+    while (old > 0) { out.push("-…"); old -= 1; }
+    while (added > 0) { out.push("+…"); added -= 1; }
+    return out;
+  }
+  function diffNodes(part) {
+    const files = Array.isArray(part.files) ? part.files.filter((file) => file && typeof file === "object") : [];
+    const lines = [];
+    for (const file of files) {
+      const path = String(file.path || "");
+      lines.push("diff --git a/" + path + " b/" + path, file.new ? "--- /dev/null" : "--- a/" + path, file.gone ? "+++ /dev/null" : "+++ b/" + path);
+      for (const line of balanced((Array.isArray(file.lines) ? file.lines : []).map(String))) lines.push(line);
+    }
+    if (!lines.length) return [];
+    const raw = () => box(lines.join("\n"), "tc-raw");
+    if (typeof DiffView === "undefined") return [raw(), part.cut ? note("desk.live.call.cut") : null];
+    try { return [DiffView.create({lines, cut: Boolean(part.cut)}, raw, "live", true)]; } catch (error) { return [raw(), part.cut ? note("desk.live.call.cut") : null]; }
+  }
+  function partNodes(rec, part) {
+    if (!part || typeof part !== "object") return [];
+    const tail = part.cut ? note("desk.live.call.cut") : null;
+    if (part.k === "term") return termNodes(rec, part);
+    if (part.k === "diff") return diffNodes(part);
+    if (part.k === "file") return [part.path ? h("div", {class: "tc-path"}, h("code", null, String(part.path))) : null, box(String(part.text || "")), tail];
+    if (part.k === "text") return [box(String(part.text || "")), tail];
+    if (part.k === "other") return [h("p", {class: "sub tc-note"}, t("desk.live.call.other", {type: String(part.type || "")}))];
+    return [];
+  }
+  function detailNodes(rec, d) {
+    const run = (d.kind || (rec.item && rec.item.kind)) === "run";
+    const parts = Array.isArray(d.parts) ? d.parts : [];
+    const exitPart = parts.find((part) => part && part.k === "term" && typeof part.exit === "number");
+    const exit = exitPart ? exitPart.exit : rec.item && typeof rec.item.exit === "number" ? rec.item.exit : null;
+    const input = typeof d.input === "string" && d.input ? d.input : "";
+    const tab = input && rec.tab === "in" ? "in" : "out";
+    const out = [];
+    if (d.why) out.push(h("p", {class: "tc-why"}, String(d.why)));
+    if (run && d.command) out.push(h("div", {class: "tc-cmd"}, h("span", {class: "tc-ps", "aria-hidden": "true"}, "$ "), String(d.command)), d.command_cut ? note("desk.live.call.cut") : null);
+    if (input || (run && exit !== null)) {
+      const pick = (name, key) => {
+        const button = h("button", {type: "button", role: "tab", class: "tc-tab" + (tab === name ? " on" : ""), "aria-selected": String(tab === name), "data-tab": name}, t(key));
+        button.addEventListener("click", () => { rec.tab = name; drawBody(rec); const again = rec.tb.querySelector('.tc-tab[data-tab="' + name + '"]'); if (again) again.focus(); });
+        return button;
+      };
+      out.push(h("div", {class: "tc-tabs", role: "tablist"}, pick("out", run ? "desk.live.call.output" : "desk.live.call.result"), input ? pick("in", "desk.live.call.input") : null, h("span", {class: "tc-sp"}),
+        run && exit !== null ? h("span", {class: "tc-exit " + (exit === 0 ? "ok" : "bad")}, t("desk.live.call.exit", {code: exit})) : null));
+    }
+    if (tab === "in") out.push(box(input, "tc-in"), d.input_cut ? note("desk.live.call.cut") : null);
+    else for (const part of parts) out.push(...partNodes(rec, part));
+    if (d.error) out.push(h("p", {class: "tc-error bad", role: "alert"}, String(d.error)));
+    if (d.reason) out.push(h("p", {class: "tc-reason"}, svg(ICONS.ring, 13, "tc-ring"), String(d.reason)));  // a refused call: soft, with a ring
+    if (d.cut && !out.some((node) => node && node.nodeType === 1 && (node.classList.contains("tc-note") || node.querySelector(".tc-note")))) out.push(note("desk.live.call.cut"));  // once: a part that says it is cut already told
+    return out.filter(Boolean);
+  }
+  function drawBody(rec) {
+    const tb = rec.tb;
+    if (!tb) return;
+    const was = [...tb.querySelectorAll(".tc-box")].map((node) => node.scrollTop);
+    const d = rec.detail && typeof rec.detail === "object" ? rec.detail : null;
+    const kids = [];
+    if (rec.err) {
+      const again = h("button", {type: "button", class: "tc-more"}, t("desk.live.call.retry"));
+      again.addEventListener("click", () => fetchCall(rec));
+      kids.push(h("div", {class: "tc-err"}, h("span", {class: "bad", role: "alert"}, rec.err), again));
+    }
+    if (!d) { if (rec.loading) kids.push(h("p", {class: "sub tc-load"}, spinner(), " ", t("desk.live.call.loading"))); }
+    else {
+      const found = Object.keys(d).length ? detailNodes(rec, d) : [];
+      if (found.length) kids.push(...found); else if (!rec.err) kids.push(note("desk.live.call.none"));
+    }
+    tb.replaceChildren(...kids);
+    const now = [...tb.querySelectorAll(".tc-box")];
+    if (now.length === was.length) now.forEach((node, at) => { node.scrollTop = was[at]; });  // the same boxes: the reader's place in them stays
   }
 
   // --- scroll: follow the bottom only when the person is there; never move what they are reading --------------------------
@@ -363,7 +545,7 @@ const LIVE = (function () {
       let rec = st.nodes.get(item.id);
       if (!rec || rec.kind !== item.k) {
         if (rec) { unwatch(rec); rec.el.remove(); }
-        rec = make(item);
+        rec = make(item, false, st.turn);
         st.nodes.set(item.id, rec);
         paint(rec, item);
       } else if (all || (changed && changed.has(item.id))) paint(rec, item);  // a stub is never drawn again
@@ -532,12 +714,12 @@ const LIVE = (function () {
     },
     drawing(draw) { st.draw = draw; },
     // A static list of finished items (an opened round, rounds.js): drawn as the feed is, and nothing in it acts on the running chat. The person's own message is not in it (the round has its own prompt line).
-    draw(items) {
+    draw(items, turn) {
       const list = h("ol", {class: "lv-feed lv-static"});
       for (const item of items || []) {
         if (!item || item.k === "me" || !item.id) continue;
         const done = Object.assign({}, item, {live: false, run: false, st: item.st === "run" ? "done" : item.st});
-        const rec = make(done, true);
+        const rec = make(done, true, turn);
         paint(rec, done);
         list.append(rec.el);
       }

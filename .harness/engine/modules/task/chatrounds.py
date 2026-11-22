@@ -199,6 +199,15 @@ def one(root: Path, task: str, number: Any) -> Optional[Dict[str, Any]]:
             "compact": item.get("compact")}  # {removed}: the messages Copilot summed up; None for a message
 
 
+def stream_round(root: Path, task: str, found: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """`{items, turn}`: the round `found` as Live items and the id of its turn in the stream (the page asks for one call of the round by it), or None (`stream_items`). Never raises."""
+    try:
+        turn = chatstream.turn_of_round(chatstream.read(root, task)["turns"], found.get("at"), found.get("prompt"))
+        return {"items": chatlive.items_of(turn, False, {}, root), "turn": str(turn.get("id") or "")} if turn is not None else None
+    except Exception:  # noqa: BLE001 - an extra the page can do without
+        return None
+
+
 def stream_items(root: Path, task: str, found: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     """The round `found` (a result of `one`) as the items of the Live tab, all of them, from the turn of the task's stream file (`chatstream`) that is this round (matched by time and prompt:
     `chatstream.turn_of_round`). None when the stream holds no such turn or cannot be read: the page then shows the round as it always did. Never raises."""

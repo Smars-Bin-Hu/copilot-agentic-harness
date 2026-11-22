@@ -377,6 +377,37 @@ class LinkTests(LinkCase):
         self.assertEqual(every[0], "t2.me")  # the first part of the turn is among them: the person's words come with it
         self.assertEqual(every[1:], [f"k{n}" for n in range(before["i"])])  # all of them, once, in order
 
+    def test_call_gives_the_detail_of_a_call_from_memory_and_from_the_stream_for_one_that_fell_out(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.long_turn(120)
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 5})
+        self.assertTrue(until(lambda: "t2" in chatstream.known(self.root, TASK).get(self.chat, set())))
+        found = until(lambda: (lambda d: d if d.get("before") else None)(self.link.live(TASK)))
+        newest = found["items"][-2]["id"]  # the last call the memory holds
+        self.assertEqual(newest, "k119")
+        with mock.patch.object(chatstream, "read", side_effect=AssertionError("the file is read for a call the memory holds")):
+            held = self.link.call(TASK, "t2", newest)
+        self.assertEqual((held["id"], held["kind"], held["st"], held["name"]), ("k119", "read", "done", "View"))
+        self.assertEqual(held["parts"], [])
+        gone = self.link.call(TASK, "t2", "k0")  # fell out of memory: the stream file has it
+        self.assertEqual((gone["id"], gone["kind"], gone["st"]), ("k0", "read", "done"))
+        older = self.link.older(TASK, "t2", found["before"]["i"], 10)
+        self.assertEqual(self.link.call(TASK, "t2", older["items"][0]["id"])["id"], older["items"][0]["id"])  # an item of the earlier steps can be opened too
+
+    def test_call_of_something_not_there_is_nothing_and_never_raises(self) -> None:
+        self.assertEqual(self.link.call(TASK, "t1", "c1"), {})  # not connected: no binding
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat)))
+        self.assertEqual(self.link.call(TASK, "t1", "no-such-call"), {})
+        self.assertEqual(self.link.call(TASK, "no-such-turn", "c1"), {})
+        self.assertEqual(self.link.call("not-a-task", "t1", "c1"), {})
+        self.assertEqual(self.link.call(TASK, 7, "c1"), {})  # type: ignore[arg-type]
+        self.assertEqual(self.link.call(TASK, "t1", ""), {})
+        with mock.patch.object(chatstream, "read", side_effect=OSError("gone")):
+            self.assertEqual(self.link.call(TASK, "t1", "no-such-call"), {})
+
     def test_older_of_something_the_stream_does_not_hold_is_nothing_and_never_raises(self) -> None:
         nothing = {"items": [], "before": None}
         self.assertEqual(self.link.older(TASK, "t1", 5), nothing)  # not connected: no binding

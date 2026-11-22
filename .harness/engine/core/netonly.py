@@ -11,8 +11,9 @@ import ctypes
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import pace
 
@@ -35,9 +36,9 @@ def split_account(account: str) -> Tuple[str, Optional[str]]:
     return account, None
 
 
-def environment_block(extra: Dict[str, str]) -> str:
-    """The environment of the new process: this one's, with `extra` on top, as Windows wants it (`K=V\\0...\\0\\0`)."""
-    merged = dict(os.environ)
+def environment_block(extra: Dict[str, str], base: Optional[Dict[str, str]] = None) -> str:
+    """The environment of the new process: this one's (or `base`), with `extra` on top, as Windows wants it (`K=V\\0...\\0\\0`)."""
+    merged = dict(os.environ if base is None else base)
     merged.update(extra)
     return "".join(f"{key}={value}\0" for key, value in sorted(merged.items(), key=lambda item: item[0].upper())) + "\0"
 
@@ -54,13 +55,13 @@ class _ProcessInfo(ctypes.Structure):
     _fields_ = [("hProcess", ctypes.c_void_p), ("hThread", ctypes.c_void_p), ("dwProcessId", ctypes.c_ulong), ("dwThreadId", ctypes.c_ulong)]
 
 
-def _create(account: str, password: str, command_line: str, cwd: Path, extra_env: Dict[str, str], flags: int) -> _ProcessInfo:
+def _create(account: str, password: str, command_line: str, cwd: Path, extra_env: Dict[str, str], flags: int, base: Optional[Dict[str, str]] = None) -> _ProcessInfo:
     advapi = ctypes.WinDLL("advapi32", use_last_error=True)  # type: ignore[attr-defined]
     user, domain = split_account(account)
     startup = _StartupInfo()
     startup.cb = ctypes.sizeof(_StartupInfo)
     info = _ProcessInfo()
-    block = ctypes.create_unicode_buffer(environment_block(extra_env))
+    block = ctypes.create_unicode_buffer(environment_block(extra_env, base))
     line = ctypes.create_unicode_buffer(command_line)  # the call may write into it
     ok = advapi.CreateProcessWithLogonW(user, domain, password, LOGON_NETCREDENTIALS_ONLY, None, line, flags | CREATE_UNICODE_ENVIRONMENT,
                                         block, str(cwd), ctypes.byref(startup), ctypes.byref(info))
@@ -127,3 +128,87 @@ def start(account: str, password: str, argv: list, cwd: Path, extra_env: Optiona
     kernel.CloseHandle(ctypes.c_void_p(info.hProcess))
     kernel.CloseHandle(ctypes.c_void_p(info.hThread))
     return True
+
+
+class Output:
+    """The output file of a process started with network credentials, read like a pipe (H5b): `readline` waits for the next line and gives b"" once the process has ended and
+    everything it wrote was read. CreateProcessWithLogonW hands no pipe to the caller, so the shell writes to a file."""
+
+    def __init__(self, path: Path, ended: "Callable[[], bool]", poll: float = 0.2) -> None:
+        self.path, self.ended, self.poll = path, ended, poll
+        self.handle: Any = None
+        self.rest = b""
+
+    def readline(self) -> bytes:
+        while True:
+            if self.handle is None:
+                try:
+                    self.handle = open(self.path, "rb")  # noqa: SIM115 - kept open while the process writes
+                except OSError:
+                    if self.ended():
+                        return b""
+                    time.sleep(self.poll)
+                    continue
+            done = self.ended()  # looked at before the read: what was written before the end is read in full
+            self.rest += self.handle.read()
+            if b"\n" in self.rest:
+                line, self.rest = self.rest.split(b"\n", 1)
+                return line + b"\n"
+            if done:
+                line, self.rest = self.rest, b""
+                return line
+            time.sleep(self.poll)
+
+    def close(self) -> None:
+        if self.handle is not None:
+            self.handle.close()
+            self.handle = None
+        try:
+            self.path.unlink()
+        except OSError:
+            pass
+
+
+class Process:
+    """A program (the board's agent host) started with these network credentials, kept like a `subprocess.Popen` (H5b): `pid`, `stdout`, `poll`, `wait`, `kill`.
+    Every process it starts reaches other computers with the account, as VS Code opened with identities did. Windows only."""
+
+    def __init__(self, account: str, password: str, argv: List[str], cwd: Path, env: Dict[str, str]) -> None:
+        handle, name = tempfile.mkstemp(prefix="harness-host-", suffix=".txt")
+        os.close(handle)
+        out = Path(name)
+        line = f'cmd.exe /d /s /c "{subprocess.list2cmdline(argv)} > "{out}" 2>&1"'
+        info = _create(account, password, line, cwd, {}, CREATE_NO_WINDOW, env)
+        self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        self.kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+        self.kernel.WaitForSingleObject.restype = ctypes.c_ulong
+        self.kernel.CloseHandle(ctypes.c_void_p(info.hThread))
+        self.handle, self.pid, self.returncode = info.hProcess, int(info.dwProcessId), None
+        self.stdout = Output(out, lambda: self.poll() is not None)
+
+    def poll(self) -> Optional[int]:
+        if self.returncode is None and self.handle:
+            if self.kernel.WaitForSingleObject(ctypes.c_void_p(self.handle), 0) == 0:
+                code = ctypes.c_ulong(0)
+                self.kernel.GetExitCodeProcess(ctypes.c_void_p(self.handle), ctypes.byref(code))
+                self.kernel.CloseHandle(ctypes.c_void_p(self.handle))
+                self.handle, self.returncode = None, int(code.value)
+        return self.returncode
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        if self.returncode is None and self.handle:
+            waited = self.kernel.WaitForSingleObject(ctypes.c_void_p(self.handle), INFINITE if timeout is None else int(timeout * 1000))
+            if waited == WAIT_TIMEOUT:
+                raise subprocess.TimeoutExpired("agent host", timeout or 0)
+        code = self.poll()
+        return 1 if code is None else code
+
+    def kill(self) -> None:
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.pid)], capture_output=True, timeout=15, creationflags=CREATE_NO_WINDOW)
+
+
+def popen(account: str, password: str) -> "Callable[..., Any]":
+    """A `popen` for `agenthost.Host` that starts the host with these network credentials (the options of subprocess.Popen it is given are not used: the environment and the folder are)."""
+    def start(argv: List[str], **options: Any) -> Process:
+        return Process(account, password, list(argv), Path(options.get("cwd") or os.getcwd()), dict(options.get("env") or os.environ))
+    return start

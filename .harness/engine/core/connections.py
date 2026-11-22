@@ -1298,6 +1298,38 @@ def launch(root: Path, chosen: List[str], primary: str, code_argv: List[str]) ->
     return {**planned, "started": True}
 
 
+def choose(root: Path, chosen: List[str], primary: str = "") -> Dict[str, Any]:
+    """H5b: keep which identities the board's agent host holds (the same plan as `launch`): the host gets them at its next start (`host_identities`). An empty choice holds none."""
+    planned = plan(root, chosen, primary) if chosen else {"direct": [], "wrap": [], "missing": [], "primary": ""}
+    target = root / STATE_FILE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps({"at": utc_now(), "chosen": list(chosen), "direct": planned["direct"], "wrap": planned["wrap"], "primary": planned["primary"]}, indent=2), encoding="utf-8")
+    return planned
+
+
+def host_identities(root: Path) -> Dict[str, Any]:
+    """H5b: what the board's agent host is started with for the identities chosen last (`choose`): `env` (the variables of those it holds itself), `netonly` ((account, password)
+    of the Windows account it is started with, or None) and `mark` (which ones, never a secret: a change of the choice or of the account makes the running host stale).
+    Planned again from what is saved now: an identity forgotten since is not given."""
+    kept = state(root)
+    chosen = [str(alias) for alias in kept.get("chosen") or []]
+    if not chosen:
+        return {"env": {}, "netonly": None, "mark": ""}
+    planned = plan(root, chosen, str(kept.get("primary") or ""))
+    servers, known, env = listed(root), types(root), read_env(root)
+    variables_out: Dict[str, str] = {}
+    for alias in planned["direct"]:
+        kind, server = known[servers[alias]["type"]], servers[alias]
+        variables_out.update(variables(kind, server, identity_of(env, alias, kind, server)))
+    account: Optional[Tuple[str, str]] = None
+    if planned["primary"]:
+        identity = identity_of(env, planned["primary"], known[servers[planned["primary"]]["type"]])
+        if identity.get("account") and identity.get("password"):
+            account = (str(identity["account"]), str(identity["password"]))
+    mark = json.dumps({"direct": planned["direct"], "primary": planned["primary"], "account": account[0] if account else "", "names": sorted(variables_out)}, sort_keys=True)
+    return {"env": variables_out, "netonly": account, "mark": mark}
+
+
 # --- harness as <alias> -- <command> ----------------------------------------------------------------------------------------------------------------------
 
 def _swap(word: str, own: Dict[str, str]) -> str:

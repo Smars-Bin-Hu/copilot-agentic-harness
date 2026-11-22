@@ -156,10 +156,13 @@ class Host:
     Used by the board's link thread and read by page requests: the state is under a lock."""
 
     def __init__(self, root: Path, code: Optional[str] = None, extra: Optional[Callable[[], Dict[str, str]]] = None, popen: Callable[..., Any] = subprocess.Popen,
-                 clock: Callable[[], float] = time.monotonic, ready_wait: float = READY_WAIT) -> None:
+                 clock: Callable[[], float] = time.monotonic, ready_wait: float = READY_WAIT, identities: Optional[Callable[[], Dict[str, Any]]] = None,
+                 netonly_popen: Optional[Callable[[str, str], Callable[..., Any]]] = None) -> None:
         self.root = Path(root)
         self.code = code
         self.extra = extra or (lambda: {})
+        self.identities = identities or (lambda: {"env": {}, "netonly": None, "mark": ""})  # H5b: `connections.host_identities`: variables, a Windows account, and a mark with no secret
+        self.netonly_popen = netonly_popen  # H5b: how a host is started with a Windows account (`netonly.popen`); the tests pass their own
         self.popen = popen
         self.clock = clock
         self.ready_wait = ready_wait
@@ -272,6 +275,21 @@ class Host:
         env = {key: value for key, value in os.environ.items() if not key.startswith("VSCODE_IPC") and key != "ELECTRON_RUN_AS_NODE"}
         given = dict(self.extra() or {})
         env.update(given)
+        held = self._held()
+        env.update(held.get("env") or {})  # H5b: the variables of the identities the host holds; never in the record, never in the output kept
+        popen_now = self.popen
+        if held.get("netonly"):  # a Windows account: every program the host starts reaches other computers with it
+            account, password = held["netonly"]
+            if self.netonly_popen is None:
+                from . import netonly  # noqa: PLC0415 - Windows only
+
+                if not netonly.available():
+                    with self.lock:
+                        self.state, self.why = "failed", "a Windows account can be held on Windows only"
+                    return self.status()
+                popen_now = netonly.popen(account, password)
+            else:
+                popen_now = self.netonly_popen(account, password)
         arguments = [code, "agent", "host", "--new-instance", "--foreground", "--user-data-dir", str(home / "user"), "--server-data-dir", str(home / "server"),
                      "--connection-token-file", str(target), "--idle-timeout", str(IDLE_TIMEOUT)]
         popen: Dict[str, Any] = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL, "env": env}
@@ -280,14 +298,14 @@ class Host:
         else:
             popen["start_new_session"] = True
         try:
-            process = self.popen(arguments, **popen)
+            process = popen_now(arguments, **popen)
         except (OSError, subprocess.SubprocessError) as error:
             with self.lock:
                 self.state, self.why = "failed", f"cannot start `code`: {type(error).__name__}"
             return self.status()
         with self.lock:
             self.process, self.pid, self.port, self._token = process, process.pid, 0, token
-            self.given = env_mark(given)
+            self.given = self._mark(given, held)
             self.state, self.why, self.version, self.commit, self.adopted = "starting", "", "", "", False
             self.started_at, self.ready_at = self.clock(), 0.0
             self.starts += 1
@@ -383,13 +401,23 @@ class Host:
             except OSError:
                 pass
 
+    def _mark(self, given: Dict[str, str], held: Dict[str, Any]) -> str:
+        return env_mark(given) + (":" + hashlib.sha256(str(held.get("mark") or "").encode("utf-8")).hexdigest()[:16] if held.get("mark") else "")
+
     def stale(self) -> bool:
-        """H5: the host runs (or starts) with other variables than `extra` gives now: a tool folder, the CA bundle or the proxy changed in Local since. Only a restart gives it the new ones."""
+        """H5: the host runs (or starts) with other variables than `extra` gives now: a tool folder, the CA bundle or the proxy changed in Local since, or (H5b) the identities it holds.
+        Only a restart gives it the new ones."""
         with self.lock:
             if self.state not in ("starting", "preparing", "ready"):
                 return False
             given = self.given
-        return given != env_mark(dict(self.extra() or {}))
+        return given != self._mark(dict(self.extra() or {}), self._held())
+
+    def _held(self) -> Dict[str, Any]:
+        try:
+            return dict(self.identities() or {})
+        except Exception:  # noqa: BLE001 - identities that cannot be read are none: the host still starts
+            return {}
 
     def restart(self) -> Dict[str, Any]:
         with self.cycle:  # the link's start after the drop waits here, then finds the new host starting

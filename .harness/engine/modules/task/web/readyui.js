@@ -32,12 +32,10 @@ const READY = (function () {
   function vsAct(kind, hooks) {
     const given = hooks || {};
     if (kind === "open-identities" && typeof SERVERS !== "undefined") {
-      const plain = () => vsAct("open", given).catch((error) => { if (given.fail && !error.quiet) given.fail(error); });
-      return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, null, plain));
+      return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, null, () => {}));  // H5b: the same choice for the agent host
     }
     if (kind === "identities" && typeof SERVERS !== "undefined") {
-      const quit = (note) => SERVE.restartVS({open: false, onState: (view) => { if (given.onState) given.onState(view, false); if (note) note(view); }}).then(() => waitGone());
-      return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, quit));
+      return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, null, () => {}));  // H5b: the agent host restarts with the choice: VS Code is not quit first
     }
     return SERVE.restartVS({open: true, onState: (view) => { if (given.onState) given.onState(view, true); }}).then((view) => { if (given.opened) given.opened(); return view; });
   }

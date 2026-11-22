@@ -603,7 +603,7 @@ class ReadinessTests(TaskCase):
             button = check.vscode_button(vscode, identities)
             self.assertEqual((button["kind"], button["up"]), (kind, vscode["state"] in ("ok", "wait") or bool(running)), (status["why"], running, identities))
             self.assertEqual(button["label"], messages.text("ready.vs." + kind))
-        self.assertEqual([messages.table("en")["ready.vs." + kind] for kind in ("open", "open-identities", "restart", "identities")], ["Open VS Code", "Open VS Code with identities", "Restart VS Code", "Restart VS Code with identities"])
+        self.assertEqual([messages.table("en")["ready.vs." + kind] for kind in ("open", "open-identities", "restart", "identities")], ["Open VS Code", "Agent host identities", "Restart VS Code", "Agent host identities"])  # H5b: the identities are the agent host's
 
     def test_the_words_of_the_vscode_button_do_not_jump_while_the_answer_of_the_probe_does(self) -> None:
         """1.7.38: with VS Code closed the button went Open, Restart with identities, Open: a helper process came and went. A new answer counts after it stood BUTTON_HOLD seconds."""
@@ -940,16 +940,13 @@ class BlockPageTests(unittest.TestCase):
         self.assertNotIn("SERVE.openVS", screen)
         self.assertIn("SERVE.restartVS({open: true", ui)  # Open and Restart: quit, wait, open
         self.assertIn("SERVERS.choose(", ui)
-        # with identities the person chooses first: VS Code is closed by the picker's own button, after the choice (1.7.38, T1-14b), never before the picker is up
-        self.assertIn("const quit = (note) => SERVE.restartVS({open: false", ui)
-        self.assertRegex(ui, r"SERVERS\.choose\(\(\) => \{[^}]*\}, quit\)")
-        # with none running (1.7.42): the picker opens it with no quit first, and its other button is the plain Open
-        self.assertRegex(ui, r'kind === "open-identities"[^\n]*\n[^\n]*const plain = \(\) => vsAct\("open", given\)')
-        self.assertRegex(ui, r"SERVERS\.choose\(\(\) => \{[^}]*\}, null, plain\)")
+        # H5b: with identities the picker is up at once and VS Code is never quit: the board's agent host restarts with the choice; its other button restarts the host with none
+        self.assertNotIn("restartVS({open: false", ui)
+        self.assertEqual(len(re.findall(r"SERVERS\.choose\(\(\) => \{[^}]*\}, null, \(\) => \{\}\)", ui)), 2)
         picker = (WEB / "servers.js").read_text(encoding="utf-8")
         self.assertIn("function choose(opened, before, plain)", picker)
         self.assertIn('h("div", {class: "row win-foot"}, go, bare, close)', picker)
-        self.assertIn("view.close(); plain();", picker)
+        self.assertIn('ask("open", {chosen: [], primary: ""})', picker)
         self.assertIn("(before ? before(", picker)
         self.assertIn(": Promise.resolve()).then(() => ask(\"open\"", picker)  # quit, wait until it is gone, then open with the identities
         self.assertIn("error && error.quiet", picker)  # no to the question about a working agent: nothing was touched

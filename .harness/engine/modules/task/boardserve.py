@@ -1320,18 +1320,17 @@ class Board:
         primary = str(data.get("primary") or "")
         if step == "plan":
             return conn_core.plan(self.root, chosen, primary)
-        if step == "open":
-            if self.link.status().get("ready"):
-                raise ValueError(say("connections.open.running"))
-            code = ahp.find_code()
-            if not code:
-                raise ValueError(say("serve.open.no-cli"))
-            made = conn_core.launch(self.root, chosen, primary, [code, str(self.root)])
-            if made.get("started"):
-                launchenv.mark_started(self.root)  # VS Code is on its way: look for its host often, and check the connections now, not at the first chat
-                self.link.hurry()
-                self.checker.start()
-            return made
+        if step == "open":  # H5b: the board's agent host holds the identities: the choice is kept, and the host is restarted with it once no chat works (`apply_local`)
+            if chosen and os.name != "nt" and conn_core.plan(self.root, chosen, primary)["primary"]:
+                raise ValueError(say("connections.netonly.windows"))
+            made = conn_core.choose(self.root, chosen, primary)
+            host = self.apply_local()
+            if host["state"] == "restarted":
+                self.checker.start()  # the connections are checked again, in the host's new environment
+            out = {**made, "started": host["state"] != "waiting", "agent_host": host}
+            if host["state"] == "waiting":
+                out["why"] = say("machine.host.waiting", names=", ".join(host.get("busy") or []))
+            return out
         raise ValueError(say("serve.refused.request"))
 
     def note_reach(self, alias: str, found: Dict[str, Any], own: Optional[Dict[str, Any]] = None) -> None:

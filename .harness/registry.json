@@ -193,6 +193,7 @@
         ".harness/tests/test_ahp.py",
         ".harness/tests/test_agenthost.py",
         ".harness/tests/test_ghauth.py",
+        ".harness/tests/test_hostidentities.py",
         ".harness/tests/data/ahp_turn_1147.jsonl",
         ".harness/tests/test_chatnew.py",
         ".harness/tests/test_chatsend.py",

@@ -361,7 +361,7 @@ const SERVERS = (function () {
       rows: found.connections.filter((row) => row.via !== "mcp" && (!row.type || row.known)).map((row) => ({alias: row.alias, saved: Boolean(row.signed), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || "", failed: Boolean(row.saved) && (row.reach === "denied" || row.reach === "failed")}))}));
   }
 
-  // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.
+  // The identities of the board's agent host (H5b; before, "Open VS Code with identities"): tick the identities it holds; those that cannot share it are reached through `harness as`, marked so.
   // `before`: a function that closes the VS Code that runs (1.7.38, readyui.js `vsAct`); it runs after the person pressed the button, never before: a window that is cancelled changes nothing.
   // `plain` (1.7.42): with no VS Code running, the window is the first step of Open; its "Open without identities" closes the window and opens VS Code without any.
   function choose(opened, before, plain) {  // `opened`: what the page does once VS Code was started with the identities (the Enter screen waits for it, 1.7.19)
@@ -380,7 +380,7 @@ const SERVERS = (function () {
     const replan = () => {
       const chosen = rows.filter((row) => picked.includes(row.alias)).map((row) => row.alias);
       keep("chosen", picked); keep("primary", primary);
-      const blocked = found0.vscode_open && !before;  // with `before` an open VS Code is closed first: not a reason to wait
+      const blocked = false;  // H5b: the board's agent host takes the identities at its restart; a running one is never a reason to wait
       go.disabled = !chosen.length || blocked || Boolean(go.dataset.busy);
       go.title = blocked ? t("connections.open.running") : !chosen.length ? t("connections.open.none") : "";
       if (!chosen.length) { Object.values(marks).forEach((node) => node.replaceChildren()); said.replaceChildren(); return; }
@@ -411,8 +411,8 @@ const SERVERS = (function () {
           box, envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.account), star ? h("span", {class: "sv-primary"}, star, t("connections.primary")) : null, marks[row.alias]);
       }) : [h("p", {class: "sub"}, t("connections.open.nothing"))]));
       primaryNote.hidden = windowsAccounts.length < 2;
-      running.hidden = !found.vscode_open || Boolean(before);
-      closing.hidden = !found.vscode_open || !before;
+      running.hidden = true;
+      closing.hidden = !found.vscode_open;  // H5b: `vscode_open` is the board's link to its agent host: it runs, and restarts with the choice
       replan();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     go.addEventListener("click", () => {
@@ -426,7 +426,14 @@ const SERVERS = (function () {
       }, (error) => { said.replaceChildren(error && error.quiet ? "" : h("span", {class: "bad"}, (error && error.message) || String(error))); free(); });  // the person said no to the question about a working agent: VS Code was not touched
     });
     close.addEventListener("click", view.close);
-    if (bare) bare.addEventListener("click", () => { if (go.dataset.busy) return; view.close(); plain(); });
+    if (bare) bare.addEventListener("click", () => {  // H5b: no identities: the agent host restarts holding none
+      if (go.dataset.busy) return;
+      bare.disabled = true; go.disabled = true;
+      ask("open", {chosen: [], primary: ""}).then((done) => {
+        said.replaceChildren(done.started ? t("connections.open.started", {n: 0}) : h("span", {class: "bad"}, done.why || ""));
+        if (done.started) { if (opened) opened(); setTimeout(view.close, 2500); } else { bare.disabled = false; go.disabled = !picked.length; }
+      }, (error) => { said.replaceChildren(h("span", {class: "bad"}, (error && error.message) || String(error))); bare.disabled = false; go.disabled = !picked.length; });
+    });
   }
 
   return {open, connectionsPanel, choose, summary};

@@ -33,6 +33,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from core import agenthost, ahp, config, ghauth, launchenv, messages, pace, tasks
 from core.paths import utc_now
+from core import connections as conn_core
 
 from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, chatstream, rewind, task as task_ops, tasklife, tasksub
 
@@ -767,7 +768,7 @@ class VsLink:
         """1.8.x: the board's own agent host, made once (`core.agenthost`); it gets the tool folders and the CA bundle of Local when it starts."""
         with self.lock:
             if self.own is None:
-                self.own = agenthost.Host(self.root, extra=lambda: launchenv.extra(self.root))
+                self.own = agenthost.Host(self.root, extra=lambda: launchenv.extra(self.root), identities=lambda: conn_core.host_identities(self.root))  # H5b: and the identities chosen
             return self.own
 
     def host_stale(self) -> bool:

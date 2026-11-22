@@ -637,12 +637,12 @@ class WindowNotKnownTests(English, FindCase):
 
     def test_enter_says_not_known_and_not_lacks_when_there_is_no_record(self) -> None:
         none = readyitems.identity_problem(connections.identity_lacks(self.root), connections.window_known(self.root))
-        self.assertIn("Not known whether VS Code carries", none["short"])
+        self.assertIn("No identities chosen for the agent host yet", none["short"])  # H5b: the identities are the agent host's
         self.assertNotIn("lacks", none["short"])
         self.assertNotIn("lacks", none["text"])
         self.record([])
         known = readyitems.identity_problem(connections.identity_lacks(self.root), connections.window_known(self.root))
-        self.assertIn("VS Code lacks the identity", known["short"])
+        self.assertIn("The agent host lacks the identity", known["short"])
 
 
 class PlainWordsAboutHarnessAsTests(unittest.TestCase):

@@ -345,12 +345,16 @@ def waited_calls(root: Path, task: str) -> List[Dict[str, Any]]:
     return [item for item in held if str(item.get("code")) not in gone]
 
 
-LIVE_WAITS = ("confirm", "question")  # what the chat in VS Code waits for right now (1.6, B75): told by the board's link to the host, not by a file; `apply_ask` puts it on a row
+LIVE_WAITS = ("confirm", "question", "auth")  # what the chat in VS Code waits for right now (1.6, B75): told by the board's link to the host, not by a file; `apply_ask` puts it on a row
 WAIT_WHAT = 70  # characters of the command or the question in the state tag
 
 
 def ask_text(ask: Dict[str, Any]) -> str:
     """The words of the state tag for a waiting item of the chat (`chatask.shown`): the command, the question, or that only VS Code can take it."""
+    if ask.get("kind") == "auth":  # B5: a tool waits for a sign-in to its server
+        return messages.text("task.waiting.auth", what=" ".join(str(ask.get("server") or ask.get("tool") or "").split())[:WAIT_WHAT])
+    if ask.get("kind") == "confirm" and ask.get("stage") == "result":
+        return messages.text("task.waiting.result", what=" ".join(str(ask.get("command") or ask.get("tool") or "").split())[:WAIT_WHAT])
     if ask.get("kind") == "confirm":
         return messages.text("task.waiting.confirm", what=" ".join(str(ask.get("command") or ask.get("tool") or "").split())[:WAIT_WHAT])
     if not ask.get("supported"):
@@ -364,7 +368,7 @@ def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional
     if not ask or row.get("status") != "open" or row.get("paused_since"):
         return False
     waited = waited_since(data or {}, str(ask.get("since") or ""))
-    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_tip": " ".join(str(ask.get("message") or ask.get("command") or "").split())[:600], "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
+    row.update({"waiting": ask_text(ask), "waiting_why": ask["kind"] if ask.get("kind") in ("confirm", "auth") else "question", "waiting_tip": " ".join(str(ask.get("message") or ask.get("command") or ask.get("server") or "").split())[:600], "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
                 "waited_s": round(waited) if waited is not None else None, "state": "waiting", "active": False})
     return True
 

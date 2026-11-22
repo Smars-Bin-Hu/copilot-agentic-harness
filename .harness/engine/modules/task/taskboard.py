@@ -152,7 +152,9 @@ def with_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], served: Tuple[s
     row["ask"] = ask
     gone = {name for names in ACTIONS_BY_WAIT.values() for name in names} | {"send", "answer", "steer", "stop"}
     new = []
-    if ask["kind"] == "confirm" and "confirm" in served:
+    if ask["kind"] == "auth" and "stop" in served:
+        new = [{"action": "stop", "command": ""}]  # a sign-in has no answer from here: Stop is the one way out (B5)
+    elif ask["kind"] == "confirm" and "confirm" in served:
         new = [{"action": "confirm", "command": ""}]
     elif ask["kind"] == "question" and ask.get("supported") and "question" in served:
         new = [{"action": "question", "command": ""}]

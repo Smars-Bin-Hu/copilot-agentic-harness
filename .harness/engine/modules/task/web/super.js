@@ -28,7 +28,7 @@ const SUPER = (function () {
   const idleMin = (item) => Math.max(1, Math.floor((Number(item.idle_s) || 0) / 60));
   const whyText = (item) => (item.why === "stuck" ? t("super.why.stuck", {n: idleMin(item)}) : t(WHY[item.why] || "super.why.other"));  // "Stuck · N min" says how long
   const MATE = {you: "super.mate.you", work: "super.mate.work", idle: "super.mate.idle", stuck: "super.mate.stuck", error: "super.mate.error", start: "super.waits.start"};
-  const BLOCKS = new Set(["confirm", "question", "asking", "outbox", "autorun"]);  // superview.py: these stop running work; their dot on the pet is red
+  const BLOCKS = new Set(["confirm", "question", "auth", "asking", "outbox", "autorun"]);  // superview.py: these stop running work; their dot on the pet is red
   const OFF = {asleep: "super.off.asleep", limit: "super.off.limit", busy: "super.off.busy", off: "super.off.off", none: "super.off.none"};
   const query = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   const still = () => Boolean(query && query.matches) || document.documentElement.classList.contains("lite");

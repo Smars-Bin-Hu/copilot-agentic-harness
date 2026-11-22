@@ -16,7 +16,7 @@ from test_ahp import FakeHost, TOKEN
 from test_boardserve import ServeCase
 
 from core import ahp, tasks
-from modules.task import boardserve, chatlink, task as task_ops, tasklife, tasksub, vslink
+from modules.task import boardserve, chatlink, chatstream, task as task_ops, tasklife, tasksub, vslink
 
 
 def until(check: Callable[[], Any], seconds: float = 10.0) -> Any:
@@ -205,8 +205,10 @@ class LinkTests(LinkCase):
         self.assertEqual(self.data()["chat"]["session"], self.resource)  # kept in the task state
         asked = [message["method"] for message in self.host.seen if "method" in message]
         self.assertNotIn("disposeSession", asked)
+        want = {self.chat, self.resource, "ahp-root:/"}
+        until(lambda: want <= {message["params"]["channel"] for message in list(self.host.seen) if message.get("method") == "subscribe"})  # the session is subscribed a moment after the chat: under load the test was faster
         subscribed = [message["params"]["channel"] for message in self.host.seen if message.get("method") == "subscribe"]
-        self.assertEqual(set(subscribed), {self.chat, self.resource, "ahp-root:/"})  # only the chat of this folder and its session (for what waits for a person, B75), no other chat; the root once, for the model list (B72), and let go of at once
+        self.assertEqual(set(subscribed), want)  # only the chat of this folder and its session (for what waits for a person, B75), no other chat; the root once, for the model list (B72), and let go of at once
 
     def test_the_scan_for_an_unbound_task_leaves_a_chat_held_here_subscribed(self) -> None:
         """It read each chat of the folder and let go of it, a held one too: the Live tab of a chat the board had just made stopped at the person's message, with no word (found on a real chat, 1.6.37)."""
@@ -233,32 +235,161 @@ class LinkTests(LinkCase):
         self.assertTrue(until(lambda: self.data()["chat"]["session"] == self.resource), self.data()["chat"])  # the task's record is written just after the link counts it bound: a loaded machine read in between
         self.assertEqual((self.row()["chat"]["how"], self.data()["chat"]["session"]), ("sdk", self.resource))
 
-    def test_the_steps_of_a_subagent_show_under_the_tool_call_that_started_it(self) -> None:
-        """1.6.105: Live showed only the main chat; a subagent works in a chat of its own the host makes for the tool call (origin kind tool, read only)."""
-        sub_chat = self.chat + "/subagent/call-9"
+    def sub_setup(self, count: int = 1, parts: Optional[List[Dict[str, Any]]] = None, active: bool = True) -> List[str]:
+        """The main chat runs `count` subagent calls (`call-1` ..), each with a chat of its own that holds `parts` (a read of PLAN.md and a text by default). Returns the chats of the subagents."""
         main = chat_state(SESSION)
         main["activeTurn"] = {"id": "t2", "message": {"text": "review it", "origin": {"kind": "user"}}, "usage": main["turns"][0]["usage"],
-                              "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": "call-9", "toolName": "runSubagent", "displayName": "Run subagent", "status": "running"}}]}
+                              "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": f"call-{n}", "toolName": "runSubagent", "displayName": "Run subagent", "status": "running"}} for n in range(1, count + 1)]}
         self.states[self.chat] = main
-        self.states[sub_chat] = {"status": 8, "turns": [], "activeTurn": {"id": "s1", "message": {"text": "check", "origin": {"kind": "tool"}}, "responseParts": [
-            {"kind": "toolCall", "toolCall": {"toolCallId": "r1", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": "PLAN.md"})}},
-            {"kind": "markdown", "id": "m1", "content": "The plan " + "is fine. " * 100}]}}
-        self.states[self.resource] = {"chats": [{"resource": self.chat}, {"resource": sub_chat, "title": "reviewer", "interactivity": "read-only", "origin": {"kind": "tool", "chat": self.chat, "toolCallId": "call-9"}}]}
+        chats = [f"{self.chat}/subagent/call-{n}" for n in range(1, count + 1)]
+        body = parts if parts is not None else [{"kind": "toolCall", "toolCall": {"toolCallId": "r1", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": "PLAN.md"})}},
+                                                {"kind": "markdown", "id": "m1", "content": "The plan " + "is fine. " * 100}]
+        for chat in chats:
+            turn = {"id": "s1", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "check the plan", "origin": {"kind": "tool"}}, "responseParts": json.loads(json.dumps(body))}
+            self.states[chat] = {"status": 8, "turns": [] if active else [dict(turn, state="complete")], "activeTurn": turn if active else None}
+        self.states[self.resource] = {"chats": [{"resource": self.chat}] + [{"resource": chat, "title": f"reviewer {n}", "interactivity": "read-only", "origin": {"kind": "tool", "chat": self.chat, "toolCallId": f"call-{n}"}}
+                                                                                for n, chat in enumerate(chats, 1)]}
+        return chats
+
+    def bound(self) -> None:
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
-        found = until(lambda: next((item for item in self.link.live(TASK).get("items") or [] if item.get("id") == "call-9" and (item.get("sub") or {}).get("items")), None))
+
+    def push_to(self, chat: str, action: Dict[str, Any]) -> None:
+        self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": chat, "action": action}})
+
+    def test_the_summary_of_a_subagent_shows_on_the_tool_call_that_started_it(self) -> None:
+        """1.6.105: Live showed only the main chat; a subagent works in a chat of its own the host makes for the tool call (origin kind tool, read only). B4a: the call carries a small summary
+        (`{title, st, calls, now | said}`), not its steps (was: `sub.items`, the latest six, and `sub.more`); the whole chat is `VsLink.sub`."""
+        sub_chat = self.sub_setup()[0]
+        self.bound()
+        found = until(lambda: next((item for item in self.link.live(TASK).get("items") or [] if item.get("id") == "call-1" and (item.get("sub") or {}).get("calls")), None))
         self.assertTrue(found, self.link.live(TASK))
         sub = found["sub"]
-        self.assertEqual((sub["title"], sub["st"], [step["k"] for step in sub["items"]]), ("reviewer", "run", ["tool", "text"]))
-        self.assertEqual(sub["items"][0]["target"], "PLAN.md")
-        self.assertLessEqual(len(sub["items"][1]["text"]), 400)
-        self.assertNotIn("blocks", sub["items"][1])  # plain, small
+        self.assertEqual((sub["title"], sub["st"], sub["calls"]), ("reviewer 1", "run", 1))
+        self.assertEqual(sub["now"], {"kind": "read", "target": "PLAN.md", "name": "read_file"})
+        self.assertNotIn("items", sub)
+        self.assertNotIn("said", sub)
         self.assertIn(sub_chat, [message["params"]["channel"] for message in self.host.seen if message.get("method") == "subscribe"])
         before = self.link.live(TASK)["rev"]
-        self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": sub_chat, "action": {"type": "chat/turnComplete", "turnId": "s1", "duration": 5}}})
+        self.push_to(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 5})
         self.assertTrue(until(lambda: self.link.live(TASK)["rev"] != before))  # a step of the subagent changes the answer: the page asks again
-        done = next(item for item in self.link.live(TASK)["items"] if item["id"] == "call-9")
-        self.assertEqual(done["sub"]["items"][0]["target"], "PLAN.md")
+        self.push_to(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": "call-1", "result": {"success": True, "pastTenseMessage": "Ran subagent"}})
+        done = until(lambda: next((item for item in self.link.live(TASK)["items"] if item["id"] == "call-1" and item["sub"]["st"] == "done"), None))
+        self.assertTrue(done, self.link.live(TASK))
+        self.assertEqual(done["sub"]["calls"], 1)
+        self.assertNotIn("now", done["sub"])
+        self.assertTrue(done["sub"]["said"].startswith("The plan is fine. is fine."))
+        self.assertLessEqual(len(done["sub"]["said"]), 160)
+        self.assertNotIn("t0", done["sub"])  # the call came with the snapshot: the board did not see it begin, so its item has no times to copy (the unit test in test_chatlive has them)
+
+    def test_a_call_that_failed_and_a_subagent_that_waits_for_a_person(self) -> None:
+        chats = self.sub_setup(2, active=True)
+        self.states[chats[1]]["activeTurn"]["responseParts"].append({"kind": "toolCall", "toolCall": {"toolCallId": "w1", "toolName": "bash", "status": "pending-confirmation", "toolInput": json.dumps({"command": "git push origin main"})}})
+        self.bound()
+        self.assertTrue(until(lambda: all(chat in self.link.chats for chat in chats)))
+        self.push_to(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": "call-1", "result": {"success": False, "error": {"message": "boom"}}})
+        self.push_to(chats[0], {"type": "chat/turnComplete", "turnId": "s1", "duration": 5})
+        by_id = until(lambda: (lambda items: items if items["call-1"]["sub"]["st"] == "fail" else None)({item["id"]: item for item in self.link.live(TASK)["items"] if item["id"].startswith("call-")}))
+        self.assertTrue(by_id, self.link.live(TASK))
+        self.assertEqual(by_id["call-2"]["sub"]["st"], "wait")
+        self.assertEqual((by_id["call-2"]["sub"]["calls"], by_id["call-2"]["sub"]["now"]["word"]), (2, "git"))
+        self.assertEqual(self.link.sub(TASK, "call-1")["st"], "fail")
+        self.assertEqual(self.link.sub(TASK, "call-2")["st"], "wait")
+
+    def test_every_subagent_is_followed_up_to_the_safety_cap(self) -> None:
+        """B4a: only the newest 3 were followed (`SUB_FOLLOW = 3`); now 16 is a safety cap, and the call of each carries its summary."""
+        self.assertEqual(vslink.SUB_FOLLOW, 16)
+        chats = self.sub_setup(18, parts=[{"kind": "markdown", "id": "m1", "content": "hi"}])
+        self.bound()
+        self.assertTrue(until(lambda: sum(1 for chat in chats if chat in self.link.chats) == 16), sorted(self.link.chats))
+        shown = until(lambda: (lambda items: items if sum(1 for one in items if "sub" in one) == 16 and all((one.get("sub") or {}).get("title") for one in items if "sub" in one) else None)(self.link.live(TASK)["items"]))
+        self.assertTrue(shown)
+        self.assertEqual([item["id"] for item in shown if "sub" in item], [f"call-{n}" for n in range(3, 19)])  # the newest 16
+        self.assertNotIn("sub", next(item for item in shown if item["id"] == "call-1"))
+        self.assertEqual(self.link.sub(TASK, "call-18")["usage"], {"calls": 0})
+        self.assertEqual(self.link.sub(TASK, "call-1"), {})  # not followed, not in the file: nothing
+
+    def test_the_whole_chat_of_a_subagent_from_memory_with_stubs_for_what_the_page_holds(self) -> None:
+        sub_chat = self.sub_setup()[0]
+        self.bound()
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        found = self.link.sub(TASK, "call-1")
+        self.assertEqual((found["call"], found["title"], found["st"], found["turn"], found["usage"]), ("call-1", "reviewer 1", "run", "s1", {"calls": 1}))
+        self.assertEqual([(item["k"], item["id"]) for item in found["items"]], [("me", "s1.me"), ("tool", "r1"), ("text", "m1")])
+        self.assertEqual(found["items"][0]["text"], "check the plan")  # the prompt the subagent was given
+        self.assertEqual(found["items"][1]["target"], "PLAN.md")
+        self.assertIn("blocks", found["items"][2])  # drawn as the main chat is: whole text, Markdown tree
+        self.assertGreater(len(found["items"][2]["text"]), 400)
+        again = self.link.sub(TASK, "call-1", found["n"])
+        self.assertEqual([(item["id"], bool(item.get("same"))) for item in again["items"]], [("s1.me", True), ("r1", True), ("m1", True)])
+        self.push_to(sub_chat, {"type": "chat/delta", "turnId": "s1", "partId": "m1", "content": " more"})
+        grown = until(lambda: (lambda d: d if d["n"] != found["n"] else None)(self.link.sub(TASK, "call-1", found["n"])))
+        self.assertTrue(grown)
+        self.assertEqual([(item["id"], bool(item.get("same"))) for item in grown["items"]], [("s1.me", True), ("r1", True), ("m1", False)])
+        self.assertTrue(grown["items"][2]["text"].endswith("more"))
+        self.assertEqual(self.link.sub(TASK, "nope"), {})
+        self.assertEqual(self.link.sub("no/such", "call-1"), {})
+        for bad in (None, 5, ""):
+            self.assertEqual(self.link.sub(TASK, bad), {})  # type: ignore[arg-type]
+        self.assertFalse(any(item.get("same") for item in self.link.sub(TASK, "call-1", "x")["items"]))  # a `have` that is not a number is -1
+
+    def test_the_whole_chat_of_a_subagent_comes_from_the_stream_file_when_the_chat_is_gone(self) -> None:
+        """The board restarted or the task closed: no binding, no memory. The turns the stream holds with `sub.call` are the chat."""
+        sub_chat = self.sub_setup()[0]
+        self.bound()
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        self.push_to(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 5000})
+        self.assertTrue(until(lambda: "s1" in chatstream.known(self.root, TASK).get(sub_chat, set())), chatstream.read(self.root, TASK))
+        memory = self.link.sub(TASK, "call-1")
+        late = vslink.VsLink(self.root, enabled=False, persist=False)  # a board that never connected: nothing bound, nothing in memory
+        found = late.sub(TASK, "call-1")
+        self.assertEqual((found["call"], found["st"], found["turn"], found["n"], found["title"]), ("call-1", "done", "s1", -1, ""))
+        self.assertEqual([(item["k"], item["id"]) for item in found["items"]], [("me", "s1.me"), ("tool", "r1"), ("text", "m1")])
+        self.assertEqual(found["items"][1]["target"], "PLAN.md")
+        self.assertEqual(found["items"][2]["text"], memory["items"][2]["text"])
+        self.assertEqual(found["usage"], {"calls": 1, "ms": 5000})
+        self.assertEqual(late.sub(TASK, "call-9"), {})
+        self.assertEqual(late.sub("no/such", "call-1"), {})
+        again = late.sub(TASK, "call-1", 3)
+        self.assertFalse(any(item.get("same") for item in again["items"]))  # from the file: always whole
+        with mock.patch("pathlib.Path.read_text", side_effect=OSError("gone")), mock.patch("builtins.open", side_effect=OSError("gone")):
+            self.assertEqual(late.sub(TASK, "call-1"), {})  # an unreadable file is a miss, not an error
+
+    def test_a_subagent_whose_memory_dropped_parts_is_read_from_the_file_whole_and_a_failed_turn_says_fail(self) -> None:
+        body = [{"kind": "toolCall", "toolCall": {"toolCallId": f"r{n}", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": f"f{n}.md"})}} for n in range(30)]
+        sub_chat = self.sub_setup(parts=body)[0]
+        self.bound()
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        for n in range(30, 90):  # more than the memory keeps: the oldest parts fall out
+            self.push_to(sub_chat, {"type": "chat/responsePart", "turnId": "s1", "part": {"kind": "toolCall", "toolCall": {"toolCallId": f"r{n}", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": f"f{n}.md"})}}})
+        self.assertTrue(until(lambda: (self.link.chats[sub_chat]["state"]["activeTurn"].get("dropped") or 0) > 0 or len(self.link.chats[sub_chat]["state"]["activeTurn"]["responseParts"]) >= 90))
+        self.push_to(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 1})
+        self.assertTrue(until(lambda: "s1" in chatstream.known(self.root, TASK).get(sub_chat, set())))
+        found = until(lambda: (lambda d: d if len([item for item in d.get("items", []) if item["k"] == "tool"]) == 90 else None)(self.link.sub(TASK, "call-1")))
+        self.assertTrue(found, len(self.link.sub(TASK, "call-1").get("items", [])))
+        self.assertEqual(found["usage"]["calls"], 90)
+        self.assertEqual(found["items"][0]["k"], "me")
+        self.assertEqual(found["items"][1]["id"], "r0")  # the file has what the memory dropped
+
+    def test_a_call_inside_a_subagent_opens_from_memory_or_from_the_file(self) -> None:
+        sub_chat = self.sub_setup()[0]
+        self.bound()
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        found = self.link.call(TASK, "s1", "r1", sub="call-1")
+        self.assertEqual(found.get("kind"), "read")
+        self.assertEqual(self.link.call(TASK, "s1", "r1"), {})  # without `sub` a subagent's call is not looked for in the main chat
+        self.assertEqual(self.link.call(TASK, "s1", "nope", sub="call-1"), {})
+        self.assertEqual(self.link.call(TASK, "s1", "r1", sub="call-9"), {})
+        self.assertEqual(self.link.call(TASK, "t2", "call-1"), self.link.call(TASK, "t2", "call-1", sub=""))
+        self.push_to(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 5})
+        self.assertTrue(until(lambda: "s1" in chatstream.known(self.root, TASK).get(sub_chat, set())))
+        late = vslink.VsLink(self.root, enabled=False, persist=False)
+        self.assertEqual(late.call(TASK, "s1", "r1", sub="call-1").get("kind"), "read")  # from the file, no binding
+        self.assertEqual(late.call(TASK, "s1", "r1"), {})
+        self.assertEqual(late.call(TASK, "s1", "r1", sub="call-9"), {})
+        self.assertEqual(late.call(TASK, "s9", "r1", sub="call-1"), {})
+        self.assertEqual(late.call(TASK, "s1", "r1", sub=5), {})  # type: ignore[arg-type]
 
     def test_a_session_keeps_the_chats_of_its_subagents(self) -> None:
         state = ahp.trimmed_session({"chats": [{"resource": "c0"}, {"resource": "c1", "title": "mapper", "origin": {"kind": "tool", "chat": "c0", "toolCallId": "k1"}}]})
@@ -302,6 +433,177 @@ class LinkTests(LinkCase):
         self.assertTrue(row, self.row())
         self.assertEqual((row["chat"]["state"], row["sub"]["kind"]), ("idle", "reply"))
         self.assertNotIn("started_at", row["chat"])  # idle: no run time
+
+    def push_action(self, chat: str, action: Dict[str, Any]) -> None:
+        self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": chat, "action": action}})
+
+    def test_the_notices_of_the_chat_of_a_task_make_its_stream_file_and_the_turn_the_board_found_is_filled_in(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat)), "the finished turn of the snapshot is written")
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "go on"}})
+        self.push_action(self.chat, {"type": "chat/responsePart", "turnId": "t2", "part": {"kind": "markdown", "id": "m2", "content": "Working."}})
+        self.push_action(self.chat, {"type": "chat/toolCallStart", "turnId": "t2", "toolCallId": "c1", "toolName": "edit", "displayName": "Edit"})
+        self.push_action(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": "c1", "result": {"success": True, "content": [{"type": "text", "text": "done"}]}})
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 5})
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat) == {"t1", "t2"}), chatstream.read(self.root, TASK))
+        read = chatstream.read(self.root, TASK)
+        self.assertEqual([(turn["id"], turn["state"], turn["sub"]) for turn in read["turns"]], [("t1", "complete", None), ("t2", "complete", None)])
+        self.assertEqual((read["turns"][1]["text"], read["turns"][1]["duration"]), ("go on", 5))
+        self.assertEqual([part.get("content") or part["toolCall"]["toolName"] for part in read["turns"][1]["parts"]], ["Working.", "edit"])
+        self.assertEqual(len(read["turns"][0]["parts"]), 2)  # t1 came from the snapshot of the chat
+        self.assertEqual(self.link.stream_lost, 0)
+
+    def long_turn(self, calls: int = 120) -> None:
+        """A turn of `calls` tool calls and a text through the fake host: the memory keeps the last 60 parts, the stream file every one."""
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "check it all", "origin": {"kind": "user"}}})
+        for number in range(calls):
+            self.push_action(self.chat, {"type": "chat/toolCallStart", "turnId": "t2", "toolCallId": f"k{number}", "toolName": "view", "displayName": "View"})
+            self.push_action(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": f"k{number}", "result": {"success": True, "pastTenseMessage": f"Read file {number}"}})
+        self.push_action(self.chat, {"type": "chat/responsePart", "turnId": "t2", "part": {"kind": "markdown", "id": "mm", "content": "Nothing wrong."}})
+
+    def test_live_gives_n_and_before_and_a_page_that_has_it_gets_stubs(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.live(TASK).get("items")))
+        self.long_turn()
+        found = until(lambda: (lambda d: d if d.get("items") and d["items"][-1]["id"] == "mm" else None)(self.link.live(TASK)))
+        self.assertTrue(found, self.link.live(TASK))
+        self.assertIsInstance(found["n"], int)
+        self.assertEqual(found["before"]["turn"], "t2")
+        self.assertGreater(found["before"]["i"], 0)
+        self.assertTrue(found["more"])
+        self.assertEqual(found["items"][0]["id"], "t2.me")
+        self.assertEqual(len(found["items"]), 1 + 121 - found["before"]["i"])  # the person's words and every part the memory holds (121 parts: 120 calls and a text)
+        stale = found["rev"].rsplit(":", 1)[0] + ":earlier"  # a rev of this chat, not its newest: the answer is built again
+        again = self.link.live(TASK, stale, found["n"])  # a page that holds this state: the finished items are stubs
+        self.assertFalse(any(item.get("same") for item in self.link.live(TASK, "ahp-chat:/another:1:idle:", found["n"])["items"]))  # a page that last saw another chat holds no item of this one
+        self.assertEqual(sum(1 for item in again["items"] if item.get("same")), len(again["items"]))  # nothing changed since: all stubs (a text that did not change is one too)
+        self.assertEqual(self.link.live(TASK, found["rev"]), {"rev": found["rev"], "same": True})  # an unchanged poll is still tiny
+        self.assertEqual(self.link.live(TASK)["items"][0], found["items"][0])  # have=-1: whole
+
+    def test_older_gives_the_parts_that_fell_out_of_memory_from_the_stream_with_their_times_and_pages_back(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.long_turn(120)
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 5})
+        self.assertTrue(until(lambda: "t2" in chatstream.known(self.root, TASK).get(self.chat, set())))
+        found = until(lambda: (lambda d: d if d.get("before") else None)(self.link.live(TASK)))
+        before = found["before"]
+        self.assertEqual(before["turn"], "t2")
+        first = self.link.older(TASK, "t2", before["i"], 10)
+        self.assertEqual(len(first["items"]), 10)  # the newest ten of the older ones: more is left
+        self.assertEqual(first["before"], {"turn": "t2", "i": before["i"] - 10})
+        self.assertEqual(first["items"][-1]["id"], f"k{before['i'] - 1}")  # the part just before the first one the live feed has
+        self.assertEqual((first["items"][-1]["k"], first["items"][-1]["st"]), ("tool", "done"))
+        self.assertTrue(first["items"][-1].get("t0"))  # the board saw the call begin: the time survived the file
+        self.assertGreaterEqual(first["items"][-1]["t1"], first["items"][-1]["t0"])
+        self.assertTrue(first["before"] is None or first["before"]["i"] < before["i"])
+        ids = [item["id"] for item in first["items"]]
+        rest, point = [], first["before"]
+        while point:
+            more = self.link.older(TASK, point["turn"], point["i"], 10)
+            rest = more["items"] + rest
+            point = more["before"]
+        every = [item["id"] for item in rest] + ids
+        self.assertEqual(every[0], "t2.me")  # the first part of the turn is among them: the person's words come with it
+        self.assertEqual(every[1:], [f"k{n}" for n in range(before["i"])])  # all of them, once, in order
+
+    def test_call_gives_the_detail_of_a_call_from_memory_and_from_the_stream_for_one_that_fell_out(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.long_turn(120)
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 5})
+        self.assertTrue(until(lambda: "t2" in chatstream.known(self.root, TASK).get(self.chat, set())))
+        found = until(lambda: (lambda d: d if d.get("before") else None)(self.link.live(TASK)))
+        newest = found["items"][-2]["id"]  # the last call the memory holds
+        self.assertEqual(newest, "k119")
+        with mock.patch.object(chatstream, "read", side_effect=AssertionError("the file is read for a call the memory holds")):
+            held = self.link.call(TASK, "t2", newest)
+        self.assertEqual((held["id"], held["kind"], held["st"], held["name"]), ("k119", "read", "done", "View"))
+        self.assertEqual(held["parts"], [])
+        gone = self.link.call(TASK, "t2", "k0")  # fell out of memory: the stream file has it
+        self.assertEqual((gone["id"], gone["kind"], gone["st"]), ("k0", "read", "done"))
+        older = self.link.older(TASK, "t2", found["before"]["i"], 10)
+        self.assertEqual(self.link.call(TASK, "t2", older["items"][0]["id"])["id"], older["items"][0]["id"])  # an item of the earlier steps can be opened too
+
+    def test_call_of_something_not_there_is_nothing_and_never_raises(self) -> None:
+        self.assertEqual(self.link.call(TASK, "t1", "c1"), {})  # not connected: no binding
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat)))
+        self.assertEqual(self.link.call(TASK, "t1", "no-such-call"), {})
+        self.assertEqual(self.link.call(TASK, "no-such-turn", "c1"), {})
+        self.assertEqual(self.link.call("not-a-task", "t1", "c1"), {})
+        self.assertEqual(self.link.call(TASK, 7, "c1"), {})  # type: ignore[arg-type]
+        self.assertEqual(self.link.call(TASK, "t1", ""), {})
+        with mock.patch.object(chatstream, "read", side_effect=OSError("gone")):
+            self.assertEqual(self.link.call(TASK, "t1", "no-such-call"), {})
+
+    def test_older_of_something_the_stream_does_not_hold_is_nothing_and_never_raises(self) -> None:
+        nothing = {"items": [], "before": None}
+        self.assertEqual(self.link.older(TASK, "t1", 5), nothing)  # not connected: no binding
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat)))
+        self.assertEqual(self.link.older(TASK, "no-such-turn", 5), nothing)
+        self.assertEqual(self.link.older("not-a-task", "t1", 5), nothing)
+        self.assertEqual(self.link.older(TASK, "t1", 0), nothing)  # nothing before the first part
+        self.assertEqual(self.link.older(TASK, 7, "x"), nothing)  # type: ignore[arg-type]
+        with mock.patch.object(chatstream, "read", side_effect=OSError("gone")):
+            self.assertEqual(self.link.older(TASK, "t1", 5), nothing)
+
+    def test_the_notices_of_a_chat_of_no_task_write_nothing(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat)))
+        other = "ahp-chat:/not-a-task"
+        with self.link.lock:
+            self.link.chats[other] = {"state": {"turns": [], "activeTurn": None}, "tool_at": ""}
+        self.push_action(other, {"type": "chat/turnStarted", "turnId": "o1", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "not ours"}})
+        self.push_action(other, {"type": "chat/turnComplete", "turnId": "o1", "duration": 1})
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "ours"}})  # pushed after: when it is on disk the others were handled
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 1})
+        self.assertTrue(until(lambda: "t2" in chatstream.known(self.root, TASK).get(self.chat, set())))
+        self.assertEqual({turn["chat"] for turn in chatstream.read(self.root, TASK)["turns"]}, {self.chat})
+        self.assertNotIn("not ours", chatstream.stream_file(self.root, TASK).read_text(encoding="utf-8"))
+
+    def test_a_fault_in_the_stream_never_stops_the_chat(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        with mock.patch.object(chatstream, "take", side_effect=RuntimeError("broken")):
+            self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "go on"}})
+            self.assertTrue(until(lambda: (self.link.chats[self.chat]["state"].get("activeTurn") or {}).get("id") == "t2"), "the chat moved on")
+            self.assertTrue(until(lambda: self.link.stream_lost >= 1))
+
+    def test_a_board_that_does_not_persist_writes_no_stream(self) -> None:
+        self.link.persist = False
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "go"}})
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 1})
+        self.assertTrue(until(lambda: not self.row()["chat"].get("started_at") and self.row()["chat"].get("state") == "idle"))
+        time.sleep(0.2)
+        self.assertFalse(chatstream.stream_file(self.root, TASK).exists())
+
+    def test_a_turn_of_a_subagent_chat_lands_in_the_file_of_the_parent_task_with_its_origin(self) -> None:
+        sub_chat = self.chat + "/subagent/call-9"
+        main = chat_state(SESSION)
+        main["activeTurn"] = {"id": "t2", "message": {"text": "review it", "origin": {"kind": "user"}}, "usage": main["turns"][0]["usage"],
+                              "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": "call-9", "toolName": "runSubagent", "displayName": "Run subagent", "status": "running"}}]}
+        self.states[self.chat] = main
+        self.states[sub_chat] = {"status": 8, "turns": [], "activeTurn": {"id": "s1", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "check", "origin": {"kind": "tool"}}, "responseParts": [
+            {"kind": "toolCall", "toolCall": {"toolCallId": "r1", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": "PLAN.md"})}},
+            {"kind": "markdown", "id": "m1", "content": "The plan is fine."}]}}
+        self.states[self.resource] = {"chats": [{"resource": self.chat}, {"resource": sub_chat, "title": "reviewer", "interactivity": "read-only", "origin": {"kind": "tool", "chat": self.chat, "toolCallId": "call-9"}}]}
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        self.push_action(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 5})
+        self.assertTrue(until(lambda: "s1" in chatstream.known(self.root, TASK).get(sub_chat, set())), chatstream.read(self.root, TASK))
+        turn = chatstream.read(self.root, TASK, sub_chat)["turns"][0]
+        self.assertEqual((turn["id"], turn["text"], turn["state"], turn["sub"]), ("s1", "check", "complete", {"parent": self.chat, "call": "call-9"}))
+        self.assertEqual([part.get("content") or part["toolCall"]["toolName"] for part in turn["parts"]], ["read_file", "The plan is fine."])
+        self.assertEqual([item["id"] for item in chatstream.read(self.root, TASK, self.chat)["turns"] if item["sub"]], [])  # the main chat's turns carry no `sub`
 
     def test_every_chat_that_runs_or_waits_is_known_whatever_its_folder_provider_or_task(self) -> None:
         """Retest N2: VS Code asks "a chat is still running, quit anyway?" (`veto.chat`) for any chat of any window, not only the chat of a task. A restart names them first."""

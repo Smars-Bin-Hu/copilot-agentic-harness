@@ -1785,11 +1785,12 @@ class Board:
         plan = dict(self.ask_plan(data, "tool_call_id"), approved=decision == "allow")
         pre = self.before(task)
         done = self.respond("confirm", task, plan)
-        if decision == "allow":
-            self.begin(task, "allow", pre)
         view = done["view"]
+        if decision == "allow" or view.get("stage") == "result":  # a result kept from the model lets the agent go on too
+            self.begin(task, "allow", pre)
         command = chatask.one_line(view["command"], chatask.MAX_LINE)
-        self.asked(task, "confirm", f"{decision}: {view['tool'] or '-'} {command}".strip(), {"decision": decision, "tool": view["tool"], "tool_call_id": view["tool_call_id"], "command": view["command"], "chat": done["chat"]})
+        stage = " result" if view.get("stage") == "result" else ""  # B5: the result of a call that ran was sent to the model, or kept from it
+        self.asked(task, "confirm", f"{decision}{stage}: {view['tool'] or '-'} {command}".strip(), {"decision": decision, "tool": view["tool"], "tool_call_id": view["tool_call_id"], "command": view["command"], "chat": done["chat"], **({"stage": "result"} if stage else {})})
         return {"decided": decision, "chat": done["title"]}
 
     def answer(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -2168,7 +2169,27 @@ def handler_for(board: Board) -> type:
                 except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
                     return self.answer(500, {"error": f"{type(error).__name__}: {error}"[:300]})
             if path == "/api/live":  # the Live tab of an open task: the latest items of its chat, from the memory of the link (no file, no call to the host); `rev` makes an unchanged poll tiny
-                return self.answer(200, {"live": board.link.live(str(data.get("task", ""))[:200], str(data.get("rev", ""))[:300])})
+                task_name = str(data.get("task", ""))[:200]
+                asked = data.get("before")
+                if isinstance(asked, dict):  # the "earlier steps" control: the parts of a turn that fell out of the link's memory, from the task's stream file
+                    where = asked.get("i")
+                    if isinstance(asked.get("turn"), str) and len(asked["turn"]) <= 200 and isinstance(where, int) and not isinstance(where, bool) and where >= 0:
+                        return self.answer(200, {"older": board.link.older(task_name, asked["turn"], where)})
+                    return self.answer(200, {"older": {"items": [], "before": None}})
+                asked_sub = data.get("sub")
+                if "sub" in data:  # a subagent's whole chat for the side panel: from memory, else the stream file (B4a)
+                    if isinstance(asked_sub, dict) and isinstance(asked_sub.get("call"), str) and 0 < len(asked_sub["call"]) <= 200:
+                        had = asked_sub.get("have")
+                        return self.answer(200, {"sub": board.link.sub(task_name, asked_sub["call"], had if isinstance(had, int) and not isinstance(had, bool) else -1)})
+                    return self.answer(200, {"sub": {}})
+                asked_call = data.get("call")
+                if "call" in data:  # an opened tool call: its whole command, input, output and diff (from memory, else the stream file)
+                    if isinstance(asked_call, dict) and all(isinstance(asked_call.get(key), str) and len(asked_call[key]) <= 200 for key in ("turn", "id")):
+                        under = asked_call.get("sub")  # the call is in the chat of the subagent that this tool call of the main chat started
+                        return self.answer(200, {"call": board.link.call(task_name, asked_call["turn"], asked_call["id"], under if isinstance(under, str) and len(under) <= 200 else "")})
+                    return self.answer(200, {"call": {}})
+                have = data.get("have")
+                return self.answer(200, {"live": board.link.live(task_name, str(data.get("rev", ""))[:300], have if isinstance(have, int) and not isinstance(have, bool) else -1)})
             if path == "/api/open":  # bring the VS Code window of this folder forward: the thread of the link runs `code <folder>`; this answers at once
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -2260,6 +2281,9 @@ def handler_for(board: Board) -> type:
                         found.update({str(item["n"]): {"seq": None, "why": "compact"} for item in listed if item.get("compact")})  # no restore point is taken for /compact: no hook runs (1.6.113)
                         return self.answer(200, {"result": {"rounds": [dict(item, rewind=found.get(str(item["n"]))) for item in listed]}})
                     found = chatrounds.one(board.root, row["task"], data.get("n"))
+                    whole = chatrounds.stream_round(board.root, row["task"], found) if found else None  # the whole round as Live items, when the board's own stream holds its turn; `turn` lets a call of it be opened
+                    if found and whole is not None:
+                        found = dict(found, items=whole["items"], turn=whole["turn"])
                     return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})

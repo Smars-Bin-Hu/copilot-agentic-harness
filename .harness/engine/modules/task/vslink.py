@@ -12,8 +12,8 @@
   before its first turn; the model must be on that message, `createSession.model` is not honoured), and reads back who the host says made it. The task is made later by the agent: the
   thread remembers the chat (`created`) and, when the task with that name is open, binds it (`chatlink.adopt`) and keeps the model on the task. `disposeSession` is never called.
   A chat made to go on with a task that exists (1.6.97, "go on in a new chat") is bound the same way, at the next look: the board does not wait for its agent to answer.
-- 1.6.105: the chats of the subagents a bound chat started (`ahp.sub_chat`: a chat of the same session made by one of its tool calls) are subscribed too, the newest `SUB_FOLLOW`, and
-  the Live tab shows their latest steps under that tool call.
+- 1.6.105: the chats of the subagents a bound chat started (`ahp.sub_chat`: a chat of the same session made by one of its tool calls) are subscribed too, the newest `SUB_FOLLOW` (16), and
+  the Live tab shows a small summary of each on its tool call (`chatlive.attach_subs`); `sub` gives a subagent's whole chat for the side panel (from memory, else from the stream file).
 - B75: the session of each bound chat is subscribed too, for its `inputNeeded[]` (the host pushes `session/inputNeededSet` and `Removed`). `ask_of` gives a task's oldest tool confirmation or question
   (`chatask`; any other kind is ignored). A person's allow, deny or answer is a job (`respond`): the thread reads the session again, refuses when the item is gone or is not what the page showed, then
   dispatches the actions that `chatask` made.
@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from core import agenthost, ahp, config, ghauth, launchenv, messages, pace, tasks
 from core.paths import utc_now
 
-from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
+from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, chatstream, rewind, task as task_ops, tasklife, tasksub
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
@@ -56,7 +56,7 @@ HURRY_EVERY = 1.0
 OPEN_EVERY = 3.0  # 1.8.8: a VS Code window is open but its host is not reached yet (it comes about a minute after the window on a work computer): look this often, not after the grown wait
 WATCH_EVERY = 2.0  # 1.8.13: how often the watcher thread looks for a VS Code window while the host is not reached (the probe answers from a cache of RUNNING_KEEP s)
 WINDOW_EVERY = 5.0  # 1.8.8: a long wait looks this often whether a VS Code window was opened (by hand, not by the board), and then ends
-SUB_FOLLOW = 3  # chats of subagents followed for each bound chat, the newest (1.6.105)
+SUB_FOLLOW = 16  # chats of subagents followed for each bound chat, the newest: a safety cap, every subagent of a normal turn is followed (1.6.105: 3; B4a: 16)
 SLOW_LIMIT = 3  # 1.7.45: calls in a row the host did not answer in time before the connection is given up; one slow answer of a busy computer is not a lost VS Code
 SLOW_RETRY = 30.0  # seconds before a list the host did not answer in time is asked again
 RELAY_EVERY = 1.0  # 1.8: seconds between two looks at the bound chats of tasks in autorun (relay and pit stop)
@@ -185,6 +185,7 @@ class VsLink:
         self.running = running  # 1.8.8: is a VS Code window open on this computer (any folder)? Cheap and never waits (`ready.Running.get`); None: not known
         self.enabled = enabled
         self.persist = persist
+        self.stream_lost = 0  # records of the task streams (`chatstream`) a failed write left out; the chat goes on
         self.turn = turn
         self.backoff = backoff or ahp.Backoff()
         self._opener = opener or self._open
@@ -326,9 +327,11 @@ class VsLink:
                     out["recent"] = tasksub.recent_text(found["reply"])
             return out
 
-    def live(self, task: str, last: str = "") -> Dict[str, Any]:
-        """For the Live tab of an open task, from the cache only (no file, no call to the host): `{rev, bound, why | state, started, now, items, more}`. `last` is the `rev` the page already has:
-        when nothing changed the answer is only `{rev, same: true}`. `task` is the folder name of the task."""
+    def live(self, task: str, last: str = "", have: int = -1) -> Dict[str, Any]:
+        """For the Live tab of an open task, from the cache only (no file, no call to the host): `{rev, n, bound, why | state, started, now, items, more, before}`. `last` is the `rev` the page already has:
+        when nothing changed the answer is only `{rev, same: true}`. `task` is the folder name of the task. The items are those of the last turn, all of them (`chatlive.build`); `n` is the number of
+        the chat's last change, which the page sends back as `have`: an item that has not changed since is then a stub (`{id, k, same: true}`). `before`: where the steps that fell out of memory
+        begin (`older` gives them), else None."""
         with self.lock:
             binding = self.bound.get(task) if self.ready else None
             if not binding and last and task in self.shown and time.monotonic() - self.lost_at < KEEP_SHOWN:
@@ -345,11 +348,143 @@ class VsLink:
             if rev == last:
                 return {"rev": rev, "same": True}
             if cached is None:  # bound, the chat is being read
-                return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), "items": [], "more": False, "started": "", "loading": True}
-            found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root)
-            chatlive.attach_subs(found["items"], [(sub, self.chats.get(sub["chat"])) for sub in subs], self.root)
+                return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), "items": [], "more": False, "started": "", "before": None, "turn": "", "loading": True}
+            number = cached.get("rev", 0)
+            if not last.startswith(binding["chat"] + ":"):
+                have = -1  # the page last saw another chat (the task was bound again) or nothing: no item of this chat is on it
+            found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root, cached.setdefault("memo", {}), have, number, {sub["call"] for sub in subs})  # a call with a subagent is whole: `sub` goes on it
+            chatlive.attach_subs(found["items"], [(sub, self.chats.get(sub["chat"])) for sub in subs], self.root, cached["state"])
             # `queued`: the messages that go after the running turn; `retry`: the last turn ended in an error that Try again can run again (1.6.99)
-            return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"]))}
+            return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"]))}
+
+    def older(self, task: str, turn: str, before: int, count: int = 60) -> Dict[str, Any]:
+        """The steps of the turn `turn` that came before part `before` (the `before` of `live`), from the task's stream file: `{items, before}`, the newest `count` of them, oldest first. `before`: where
+        the next older ones end (`{turn, i}`), None when nothing older is left. The person's own message is among the items only when the first part of the turn is. A task that is not bound, a turn
+        the file does not hold, a file that cannot be read: `{items: [], before: None}`. Never raises; the file is read after the lock is let go."""
+        nothing: Dict[str, Any] = {"items": [], "before": None}
+        try:
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                chat = str(binding["chat"]) if binding else ""
+            if not chat or not isinstance(turn, str) or not isinstance(before, int) or isinstance(before, bool):
+                return nothing
+            found = next((item for item in chatstream.read(self.root, task, chat)["turns"] if item["id"] == turn and not item.get("sub")), None)
+            if found is None:
+                return nothing
+            parts = found["parts"]
+            earlier = [part for part in parts if part["i"] < before]
+            chosen = earlier[-max(1, int(count)):]
+            if not chosen:
+                return nothing
+            view: Dict[str, Any] = {"id": found["id"], "parts": chosen}
+            if chosen[0] is parts[0]:  # the start of the turn: what the person said goes with it
+                view.update(text=found["text"], files=found["files"])
+            marks = {}  # the times are in the parts themselves
+            more = len(earlier) > len(chosen)
+            return {"items": chatlive.items_of(view, False, marks, self.root), "before": {"turn": found["id"], "i": chosen[0]["i"]} if more else None}
+        except Exception:  # a page's question must not break the link
+            return nothing
+
+    def call(self, task: str, turn: str, ident: str, sub: str = "") -> Dict[str, Any]:
+        """What an opened tool call shows (`chatlive.detail`): the call with tool call id `ident` in turn `turn` of the task's chat. The board's memory first (the part is copied out under the lock, the detail
+        is built after it), else the task's stream file (read after the lock is let go). `sub`: the id of the tool call of the main chat that started a subagent: the call is then looked for in that
+        subagent's chat (memory when it is followed, else the turns of the stream file with that `sub.call`; works for a task that is closed or not bound). Without `sub` a call of a subagent's chat is not looked
+        for. Not found, any failure: `{}`. Never raises."""
+        try:
+            if not isinstance(turn, str) or not isinstance(ident, str) or not ident or not isinstance(sub, str):
+                return {}
+            held: Optional[Dict[str, Any]] = None
+            chat = ""
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                parent = str(binding["chat"]) if binding else ""
+                chat = parent
+                if sub:
+                    chat = next((str(item["chat"]) for item in self._all_subs(binding) if item.get("call") == sub), "") if binding else ""
+                state = (self.chats.get(chat) or {}).get("state") if chat else None
+                if isinstance(state, dict):
+                    for one in chatlive.all_turns(state):
+                        if str(one.get("id") or "") == turn:
+                            part = next((part for part in one.get("responseParts") or [] if chatlive.part_id(part) == ident and isinstance(part, dict) and isinstance(part.get("toolCall"), dict)), None)
+                            if part is not None:
+                                held = dict(part["toolCall"])
+                                if isinstance(part.get("_meta"), dict) and not isinstance(held.get("_meta"), dict):
+                                    held["_meta"] = part["_meta"]
+            if held is not None:
+                return chatlive.detail(held, self.root)
+            if sub:
+                found = next((item for item in self._sub_turns(task, sub, parent) if item["id"] == turn), None)
+            elif chat:
+                found = next((item for item in chatstream.read(self.root, task, chat)["turns"] if item["id"] == turn and not item.get("sub")), None)
+            else:
+                return {}
+            for part in (found["parts"] if found else []):
+                if chatlive.part_id(part) == ident and isinstance(part.get("toolCall"), dict):
+                    return chatlive.detail(part["toolCall"], self.root)
+            return {}
+        except Exception:  # a page's question must not break the link
+            return {}
+
+    def sub(self, task: str, call: str, have: int = -1) -> Dict[str, Any]:
+        """The whole chat of the subagent that tool call `call` of the task's chat started, for the side panel (B4a): `{call, title, st, items, turn, n, usage: {calls, ms?}}`. `items`: all the items of all the
+        turns of that chat in order (`chatlive.build_all`), the first of each turn is the prompt the subagent was given (kind `me`). `st`: `run`, `wait`, `done` or `fail` (as on the call's summary); `turn`: the id
+        of the last turn (the page opens a call with it: `call(..., sub=call)`); `n`: the number of the chat's last change, which the page sends back as `have`: from memory an item not changed since is
+        a stub `{id, k, same: true}` (as in `live`; the memo is kept on the subagent's own cache entry). From memory when the chat is followed and holds all of its parts; else from the task's stream file (turns with
+        that `sub.call`, the bound chat as `parent` when known, else any): then the items are whole and `n` is -1. A chat whose memory dropped parts (`dropped`) is read from the file whole, its
+        state still from memory. The task need not be bound or open. `usage.calls`: tool calls counted; `ms`: the turns' durations the host or the file knows. Unknown call or any failure: `{}`. Never raises; the file is
+        read after the lock is let go."""
+        try:
+            if not isinstance(task, str) or not isinstance(call, str) or not call:
+                return {}
+            have = have if isinstance(have, int) and not isinstance(have, bool) else -1
+            out: Optional[Dict[str, Any]] = None
+            parent, title, known = "", "", ""  # `known`: the state memory gives (run, wait, done, fail); empty: the chat is not in memory
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                if binding:
+                    parent = str(binding["chat"])
+                    entry = next((item for item in self._all_subs(binding) if item.get("call") == call), None)
+                    title = str((entry or {}).get("title") or "")
+                    held = self.chats.get(entry["chat"]) if entry else None
+                    if held is not None and isinstance(held.get("state"), dict):
+                        main = (self.chats.get(parent) or {}).get("state") or {}
+                        mine = next((one for turn in chatlive.all_turns(main) for ident, one in chatlive._calls_of(turn) if ident == call), None)
+                        known = chatlive.sub_status(held["state"], chatlive.state_of(mine, bool(main.get("activeTurn"))) if mine else "")
+                        number = held.get("rev", 0)
+                        built = chatlive.build_all(held["state"], held.get("marks") or {}, self.root, held.setdefault("memo", {}), have, number)
+                        if built["items"] and not built["dropped"]:
+                            out = {"call": call, "title": title, "st": known, "items": built["items"], "turn": built["turn"], "n": number, "usage": self._sub_usage(chatlive.all_turns(held["state"]))}
+            if out is not None:
+                return out
+            turns = self._sub_turns(task, call, parent)
+            if not turns:
+                return {}
+            st = known or ("fail" if turns[-1]["state"] == "error" else "done")  # no memory: nothing runs (a turn of the file that never ended was cut off with the board)
+            items: List[Dict[str, Any]] = []
+            for at, one in enumerate(turns):
+                items.extend(chatlive.items_of(one, known in ("run", "wait") and at == len(turns) - 1, {}, self.root))
+            return {"call": call, "title": title, "st": st, "items": items, "turn": turns[-1]["id"], "n": -1, "usage": self._sub_usage(turns)}
+        except Exception:  # a page's question must not break the link
+            return {}
+
+    @staticmethod
+    def _sub_usage(turns: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """`{calls, ms?}` of the turns of a subagent's chat, from memory (`responseParts`) or from the file (`parts`): the tool calls and the durations the host gave."""
+        calls = sum(1 for one in turns for part in (one.get("responseParts") if isinstance(one.get("responseParts"), list) else one.get("parts") or []) if isinstance(part, dict) and part.get("kind") == "toolCall")
+        took = sum(int(one["duration"]) for one in turns if isinstance(one.get("duration"), (int, float)) and not isinstance(one.get("duration"), bool))
+        return {"calls": calls, **({"ms": took} if took > 0 else {})}
+
+    def _sub_turns(self, task: str, call: str, parent: str = "") -> List[Dict[str, Any]]:
+        """The turns of the stream file that a subagent worked in, the one chat whose turns say `sub.call == call` (the turns of `parent`'s task chat first when it is known and has one, else any chat), oldest first.
+        Reads the file: not under the lock."""
+        found = [one for one in chatstream.read(self.root, task)["turns"] if isinstance(one.get("sub"), dict) and one["sub"].get("call") == call]
+        chats = [one["chat"] for one in found if parent and one["sub"].get("parent") == parent] or [one["chat"] for one in found]
+        return [one for one in found if one["chat"] == chats[0]] if chats else []
+
+    def _all_subs(self, binding: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Every chat of a subagent the session lists for the bound chat (followed or not). The caller holds the lock."""
+        held = self.sess.get(binding["session"]) or {}
+        return [item for item in (held.get("state") or {}).get("subchats") or [] if item.get("parent") == binding["chat"]]
 
     def _subs_of(self, binding: Dict[str, Any]) -> List[Dict[str, Any]]:
         """The chats of the subagents the bound chat started, the newest `SUB_FOLLOW`, as the session says. The caller holds the lock."""
@@ -1181,6 +1316,7 @@ class VsLink:
 
     def _notice(self, note: Dict[str, Any]) -> None:
         method, params = str(note.get("method") or ""), note.get("params") or {}
+        stream: Optional[Tuple[str, List[Dict[str, Any]]]] = None  # (task, records due): written after the lock, never under it
         with self.lock:
             if method == "root/sessionAdded":
                 item = params.get("summary") or {}
@@ -1212,7 +1348,14 @@ class VsLink:
                     self.just_sent.pop(channel, None)
                 if cached is not None and isinstance(action, dict):
                     ahp.reduce_chat(cached["state"], action)
-                    chatlive.stamp(cached, action, int(time.time() * 1000))
+                    chatlive.stamp(cached, action, int(time.time() * 1000))  # before the stream takes the action: it stores the part times
+                    if self.persist and chatstream.wants(action):  # 1.8.x: what the board sees of the chat is kept in the task's stream; collected here, written below once the lock is let go
+                        try:
+                            owner = self._stream_task(channel)
+                            if owner is not None:
+                                stream = (owner[0], chatstream.take(cached, channel, action, owner[1]))
+                        except Exception:  # the stream is a record beside the chat: a fault in it must never stop the chat
+                            self.stream_lost += 1
                     cached["rev"] = cached.get("rev", 0) + 1  # the Live tab asks only for what changed since this number
                     if action.get("type") in ("chat/toolCallStart", "chat/toolCallReady"):
                         cached["tool_at"] = utc_now()
@@ -1221,6 +1364,21 @@ class VsLink:
                     ahp.reduce_session(held["state"], action)
                     self._stamp(held)
                     self.dirty = True
+        if stream is not None and stream[1]:
+            self.stream_lost += chatstream.append(self.root, stream[0], stream[1])
+
+    def _stream_task(self, chat: str) -> Optional[Tuple[str, Optional[Dict[str, str]]]]:
+        """The task a chat belongs to and, for the chat of a subagent, where it was started (`{parent, call}`): the task whose binding names the chat, or whose session lists it among its
+        `subchats`. None for a chat of no task (the super agent's, one made for a task not yet bound). It walks the few bound tasks; the caller asks only for an action that can give a record.
+        The caller holds the lock."""
+        for task, binding in self.bound.items():
+            if binding.get("chat") == chat:
+                return task, None
+        for task, binding in self.bound.items():
+            for item in ((self.sess.get(binding.get("session")) or {}).get("state") or {}).get("subchats") or []:
+                if item.get("chat") == chat:
+                    return task, {"parent": item.get("parent"), "call": item.get("call")}
+        return None
 
     @staticmethod
     def _stamp(held: Dict[str, Any]) -> None:
@@ -1867,7 +2025,7 @@ class VsLink:
         with self.lock:
             for call in self._running_calls(cached["state"]):
                 if call.get("toolCallId") == view["tool_call_id"]:
-                    call["status"] = "running" if plan.get("approved") else "failed"  # the card goes at once; the host pushes the same
+                    call["status"] = ("completed" if plan.get("approved") else "cancelled") if view.get("stage") == "result" else "running" if plan.get("approved") else "failed"  # the card goes at once; the host pushes the same
             self.sub_seen.pop(item["id"], None)
             self.dirty = True
             known = self.sessions.get(binding["session"])
@@ -1895,7 +2053,8 @@ class VsLink:
                 self.sub_seen = {key: when for key, when in self.sub_seen.items() if key.split("|")[1:2] != [chat]}
         for chat in set(wanted) - have:
             try:
-                state = ahp.trimmed(link.subscribe(chat))
+                full = link.subscribe(chat)
+                state = ahp.trimmed(full)
             except ahp.ConnectionClosed:
                 raise
             except ahp.AhpError as error:
@@ -1904,6 +2063,12 @@ class VsLink:
             with self.lock:
                 self.chats[chat] = {"state": state, "tool_at": ""}
                 self.problem = ("", 0.0)  # a chat of Copilot was read: Copilot works
+                owner = self._stream_task(chat) if self.persist else None
+            if owner is not None:  # 1.8.x: the finished turns of this chat that the task's stream does not hold yet (the file work is done outside the lock)
+                try:
+                    self.stream_lost += chatstream.append(self.root, owner[0], chatstream.backfill(full, chat, chatstream.known(self.root, owner[0]).get(chat, set()), owner[1]))
+                except Exception:  # as in `_notice`: never in the way of the chat
+                    self.stream_lost += 1
         self._subscribe_sessions(link, set(wanted.values()))
         self._reread_waiting(link, set(wanted.values()))
 

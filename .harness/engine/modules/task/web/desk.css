@@ -257,6 +257,24 @@ li .tr-call>summary:hover .tr-cmdline{color:var(--ink)}li .tr-call[open] .tr-cmd
 .tr-full{margin:4px 0 2px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--hover);font:12px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto}
 .tr-sys{display:inline-flex;align-items:center;gap:5px;margin-left:6px;padding:0 8px;border:1px solid var(--line);border-radius:999px;font:11.5px/1.6 var(--mono);white-space:nowrap;cursor:help}
 .tr-sys i{flex:none;width:6px;height:6px;border-radius:50%;background:var(--good-dot)}.tr-sys.w{border-color:var(--hot);color:var(--hot)}.tr-sys.w i{background:var(--hot-dot)}
+/* The card of what the chat waits for (1.8.x B5, prototype 3): icon, two or three words, what it is about; the buttons; the rest under Details */
+.wc{display:grid;gap:8px;min-width:0}
+.wc-h{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0;font-size:12.5px;color:var(--hot)}
+.wc-ico{display:inline-flex;flex:none;color:var(--hot)}.wc-ico svg{width:15px;height:15px}
+.wc-t{font-weight:600;font-size:13px;flex:none}
+.wc-nm{font:12.5px var(--mono);color:var(--ink);flex:1 1 10em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wc-more{flex:none;font:12px var(--mono);color:var(--hot);border:1px solid var(--hot-line);border-radius:9px;padding:0 6px}
+.wc-h .tk-waited{flex:0 1 auto;min-width:0;margin-left:auto}
+.wc-out{margin:0;padding:8px 10px;border-radius:7px;background:var(--bg);font:12px/18px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:22em;overflow:auto}
+.wc-out.is-fail{border-left:3px solid var(--bad-dot,var(--bad))}
+.wc-q{font-size:14px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.wc-qs{margin:0;padding-left:20px;font-size:13px}
+.wc-ta{display:block;width:100%;box-sizing:border-box;min-height:62px;resize:vertical}
+.wc-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.wc-dt{display:inline-flex;align-items:center;gap:6px;justify-self:start;border:0;background:none;padding:0;font-size:12px;color:var(--soft);cursor:pointer}
+.wc-dt .wc-chev{display:inline-block;transition:transform .15s}.wc-dt[aria-expanded="true"] .wc-chev{transform:rotate(90deg)}
+.wc-dt-b{padding:8px 10px;border-radius:7px;background:var(--bg);font-size:12.5px;line-height:1.5;color:var(--soft);overflow-wrap:anywhere}.wc-dt-b p{margin:0 0 4px}
+.wc-other{display:grid;gap:4px;margin-top:4px}.wc-raw{margin:0;padding:6px 8px;border-radius:6px;background:var(--bg);font:11.5px/16px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:14em;overflow:auto}
 /* Embed mode (`?embed=1`, class `embed` on <html> from theme.js): the task page inside the board's workbench frame. The frame has its own tabs with the name; the fixed buttons, the wallpaper and the banner are the board's, not the frame's. */
 html.embed .sh-pill,html.embed .sh-gear,html.embed .setp,html.embed .dock-btn,html.embed .term-toggle,html.embed .hd-acct,html.embed #sp,html.embed .vs-banner,html.embed .tk-back,html.embed .tk-stage,html.embed .tk-checks,html.embed .tk-ctx,html.embed .tk-tools .vs-btn,html.embed .tk-tools .vs-pill{display:none!important}
 html.embed body{background:var(--bg)}

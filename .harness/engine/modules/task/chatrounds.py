@@ -14,12 +14,13 @@ from __future__ import annotations
 import json
 import os
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import copilot_events, tasks
 
-from . import mdtree
+from . import chatlive, chatstream, mdtree
 
 FILE_NAME = "transcript.jsonl"
 MAX_ROUNDS = 1000  # the newest
@@ -102,6 +103,44 @@ def of_session(session_id: str) -> List[Dict[str, Any]]:
     return rounds
 
 
+def _stamp(seconds: float) -> str:
+    return datetime.fromtimestamp(seconds, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (int(round(seconds * 1000)) % 1000)
+
+
+def of_stream(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The rounds of the task from the board's own stream (`chatstream`), in the shape `of_session` gives: one per turn of the main chat (a subagent's turn is not a round). The prompt is the turn's
+    text, the texts are its non-empty markdown parts, the tools are the names of its tool calls in order. `end` is the start plus the duration for a turn that ended, else the start (as for a round
+    that still runs). `aiu` is None: the stream does not know the credits. Never raises: a stream that cannot be read is no rounds. Not cached: the reader is bounded, and a stream that grows is read again."""
+    try:
+        turns = chatstream.read(root, task)["turns"]
+    except Exception:  # noqa: BLE001 - the file is untrusted, and the list must not fail for it
+        return []
+    rounds: List[Dict[str, Any]] = []
+    for turn in turns:
+        if not isinstance(turn, dict) or turn.get("sub"):
+            continue
+        at = str(turn.get("at") or "")
+        end = at
+        began, length = copilot_events.seconds(at), turn.get("duration")
+        if turn.get("state") and began is not None and isinstance(length, (int, float)) and not isinstance(length, bool) and length >= 0:
+            end = _stamp(began + length / 1000.0)
+        item: Dict[str, Any] = {"at": at, "prompt": str(turn.get("text") or ""), "texts": [], "tools": [], "cut": False, "end": end, "aiu": None}
+        for part in turn.get("parts") or []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("kind") == "toolCall":
+                call = part.get("toolCall")
+                item["tools"].append(str((call.get("toolName") if isinstance(call, dict) else None) or "?")[:80])
+            elif part.get("kind") == "markdown":
+                text = str(part.get("content") or "").strip()
+                room = MAX_CHARS - sum(len(each) for each in item["texts"])
+                if text and room > 0:
+                    item["texts"].append(text[:room])
+                item["cut"] = item["cut"] or len(text) > room
+        rounds.append(item)
+    return rounds[-MAX_ROUNDS:]
+
+
 def live(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The rounds of the task from Copilot's record: its sessions, from the round that opened the task. A session can hold other work before it and after it."""
     ids = list(dict.fromkeys([str(item.get("session_id") or "") for item in data.get("sessions") or [] if isinstance(item, dict)] + [str(data.get("session_id") or "")]))
@@ -125,7 +164,7 @@ def saved(root: Path, task: str) -> Optional[List[Dict[str, Any]]]:
 def rounds_of(root: Path, task: str) -> List[Dict[str, Any]]:
     data = tasks.read(root, task) or {}
     kept = saved(root, task) if data.get("status") == "closed" else None
-    return kept if kept is not None else live(data)
+    return kept or live(data) or of_stream(root, task)  # Copilot's record first; the board's own stream when it gives no round (no merging)
 
 
 def took(item: Dict[str, Any]) -> Optional[float]:
@@ -160,9 +199,28 @@ def one(root: Path, task: str, number: Any) -> Optional[Dict[str, Any]]:
             "compact": item.get("compact")}  # {removed}: the messages Copilot summed up; None for a message
 
 
+def stream_round(root: Path, task: str, found: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """`{items, turn}`: the round `found` as Live items and the id of its turn in the stream (the page asks for one call of the round by it), or None (`stream_items`). Never raises."""
+    try:
+        turn = chatstream.turn_of_round(chatstream.read(root, task)["turns"], found.get("at"), found.get("prompt"))
+        return {"items": chatlive.items_of(turn, False, {}, root), "turn": str(turn.get("id") or "")} if turn is not None else None
+    except Exception:  # noqa: BLE001 - an extra the page can do without
+        return None
+
+
+def stream_items(root: Path, task: str, found: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """The round `found` (a result of `one`) as the items of the Live tab, all of them, from the turn of the task's stream file (`chatstream`) that is this round (matched by time and prompt:
+    `chatstream.turn_of_round`). None when the stream holds no such turn or cannot be read: the page then shows the round as it always did. Never raises."""
+    try:
+        turn = chatstream.turn_of_round(chatstream.read(root, task)["turns"], found.get("at"), found.get("prompt"))
+        return chatlive.items_of(turn, False, {}, root) if turn is not None else None
+    except Exception:  # noqa: BLE001 - an extra the page can do without
+        return None
+
+
 def save(root: Path, task: str) -> int:
     """Written when the task closes. How many rounds: 0 writes nothing."""
-    found = live(tasks.read(root, task) or {})
+    found = live(tasks.read(root, task) or {}) or of_stream(root, task)
     if not found:
         return 0
     path = transcript(root, task)

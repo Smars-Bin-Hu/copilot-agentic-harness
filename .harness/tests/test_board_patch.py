@@ -615,7 +615,7 @@ class WalkThroughTests(unittest.TestCase):
         item = chatlive.tool_item({"toolName": "ask_user", "displayName": "Ask User", "intention": "Waiting for response", "status": "running"}, "i", True, None)
         self.assertEqual((item["say"], "target" in item), ("Waiting for response", False))
         shell = chatlive.tool_item({"toolName": "bash", "intention": "Sleep", "status": "running", "toolInput": json.dumps({"command": "sleep 5"})}, "j", True, None)
-        self.assertEqual((shell["say"], shell["target"]), ("Sleep", "sleep 5"))
+        self.assertEqual((shell["say"], shell["word"], shell["target"]), ("Sleep", "sleep", "5"))  # 1.8.x: the program is the word of the line, the target is what follows it
 
     def test_a_row_has_one_button_of_its_own_and_the_rest_are_in_the_menu(self) -> None:
         strip = between((WEB / "board.js").read_text(encoding="utf-8"), "function actionStrip(row, withReopen)", "function actionCell(row)")

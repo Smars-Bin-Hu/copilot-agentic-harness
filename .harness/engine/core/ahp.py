@@ -795,25 +795,152 @@ def limits_of(root_state: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
 
 
 PARTS_KEEP = 60  # parts of one turn kept in memory: the board shows the latest few; a turn of 500 tool calls must not grow without end
+TEXT_KEEP = 24000  # characters of one text result the board keeps (a whole file or megabytes of command output must not sit in memory)
+TEXT_HEAD = 8000  # of those, the characters from the start (the start of a file matters); the rest is the end (the end of an output matters)
+CONTENT_ITEMS = 40  # items of one result kept; the rest is counted in a last `more` item
+PARTIAL_KEEP = 4000  # characters of a tool call's input kept while the host still streams it
+URI_KEEP = 2000  # characters of one uri or path of a result item
+NOTE_KEEP = 500  # characters of one name or description of a subagent item
+ERROR_KEEP = 2000  # characters of the error message of a failed call
+AUTH_KEEP = 4000  # characters (as JSON) of the sign-in request of a call that waits for one
+ENDED = ("completed", "failed", "cancelled", "pending-result-confirmation")  # a tool call in one of these takes no second result
 
 
 CHAT_SETTINGS = ("mode", "autoApprove")  # both may change while a chat lives (`chatMutable`); a value set on the chat goes over the session's
 
 
+def _text_bound(text: str, carried: int = 0) -> Tuple[str, int]:
+    """`text` cut to its head and its tail, and how many characters are left out (`carried`: what an earlier cut already left out, so a second pass changes nothing)."""
+    if len(text) <= TEXT_KEEP:
+        return text, carried
+    return text[:TEXT_HEAD] + text[len(text) - (TEXT_KEEP - TEXT_HEAD):], carried + len(text) - TEXT_KEEP
+
+
+def _count(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def _short(value: Any, limit: int) -> Optional[str]:
+    """`value` when it is a string of at most `limit` characters, else None."""
+    return value if isinstance(value, str) and len(value) <= limit else None
+
+
+def _bounded_item(item: Any) -> Dict[str, Any]:
+    kind = item.get("type") if isinstance(item, dict) else None
+    kind = kind[:40] if isinstance(kind, str) and kind else "unknown"
+    try:
+        if not isinstance(item, dict):
+            return {"type": kind, "cut": True}
+        if kind == "text" and isinstance(item.get("text"), str):
+            text, cut = _text_bound(item["text"], _count(item.get("cut")))
+            return dict({"type": "text", "text": text}, **({"cut": cut} if cut else {}))
+        if kind == "terminal":
+            out: Dict[str, Any] = {"type": "terminal"}
+            for key in ("title", "resource", "outputFilePath"):
+                if isinstance(item.get(key), str):
+                    out[key] = item[key][:URI_KEEP]
+            if isinstance(item.get("isPty"), bool):
+                out["isPty"] = item["isPty"]
+            result = item.get("result")
+            if isinstance(result, dict):
+                preview, cut = _text_bound(result["preview"] if isinstance(result.get("preview"), str) else "", _count(result.get("cut")))
+                code = result.get("exitCode")
+                out["result"] = {"exitCode": code if isinstance(code, int) and not isinstance(code, bool) else None, "truncated": result.get("truncated") is True, "preview": preview}
+                if cut:
+                    out["result"]["cut"] = cut
+            return out
+        if kind == "fileEdit":
+            out = {"type": "fileEdit"}
+            for side in ("before", "after"):
+                found = item.get(side)
+                if isinstance(found, dict):
+                    uri = _short(found.get("uri"), URI_KEEP)
+                    inner = found.get("content")
+                    inner_uri = _short(inner.get("uri"), URI_KEEP) if isinstance(inner, dict) else None
+                    kept: Dict[str, Any] = {}
+                    if uri is not None:
+                        kept["uri"] = uri
+                    if inner_uri is not None:
+                        kept["content"] = {"uri": inner_uri}
+                    out[side] = kept
+            diff = item.get("diff")
+            if isinstance(diff, dict):
+                out["diff"] = {"added": _count(diff.get("added")), "removed": _count(diff.get("removed"))}
+            return out
+        if kind == "subagent":
+            out = {"type": "subagent"}
+            for key in ("resource", "title", "agentName", "description"):
+                if isinstance(item.get(key), str):
+                    out[key] = item[key][:NOTE_KEEP]
+            return out
+        if kind == "resource":
+            out = {"type": "resource"}
+            for key in ("uri", "contentType"):
+                if isinstance(item.get(key), str):
+                    out[key] = item[key][:URI_KEEP]
+            if isinstance(item.get("sizeHint"), (int, float, str)) and not isinstance(item.get("sizeHint"), bool):
+                out["sizeHint"] = item["sizeHint"] if not isinstance(item["sizeHint"], str) else item["sizeHint"][:NOTE_KEEP]
+            return out
+        if kind in ("embeddedResource", "image"):
+            out = {"type": kind}
+            if isinstance(item.get("contentType"), str):
+                out["contentType"] = item["contentType"][:URI_KEEP]
+            if isinstance(item.get("data"), str):
+                out["size"] = len(item["data"])
+            elif _count(item.get("size")):
+                out["size"] = item["size"]  # a second pass: the data is gone, its size stays
+            return out
+    except (AttributeError, KeyError, TypeError, ValueError):
+        pass
+    return {"type": kind, "cut": True}
+
+
+def bounded_content(content: Any) -> List[Any]:
+    """The result of a tool call (`content`: a list of items) cut to what the board keeps. It comes from outside and can be huge (a file, megabytes of output, base64 images), so: one linear pass, hard caps, never an exception. A text is cut to its head and tail (`cut`: the characters left out), a file edit keeps only the uris of its two sides
+    (the text is fetched later), an image never keeps its data, an item in a shape not expected is `{type, cut: true}`, and items past `CONTENT_ITEMS` are counted in a last `more` item. Idempotent: a result already cut comes out the same."""
+    if not isinstance(content, list):
+        return []
+    more = 0
+    if content and isinstance(content[-1], dict) and content[-1].get("type") == "more" and len(content) > 1:  # the mark of an earlier cut
+        more = _count(content[-1].get("count"))
+        content = content[:-1]
+    out = [_bounded_item(item) for item in content[:CONTENT_ITEMS]]
+    more += max(0, len(content) - CONTENT_ITEMS)
+    if more:
+        out.append({"type": "more", "count": more})
+    return out
+
+
 def slim(turn: Any) -> Any:
-    """A turn cut to what the board reads: the last `PARTS_KEEP` parts, and no result text of a tool call (its `content` can be big)."""
+    """A turn cut to what the board reads: the last `PARTS_KEEP` parts, and the result of each tool call (`content`, which can be big) cut by `bounded_content`."""
     if not isinstance(turn, dict):
         return turn
     parts = turn.get("responseParts")
     if not isinstance(parts, list):
         return turn
-    kept = []
-    for part in parts[-PARTS_KEEP:]:
-        call = part.get("toolCall") if isinstance(part, dict) else None
-        if isinstance(call, dict) and "content" in call:
-            part = dict(part, toolCall={key: value for key, value in call.items() if key != "content"})
-        kept.append(part)
+    kept = [slim_part(part) for part in parts[-PARTS_KEEP:]]
     return dict(turn, responseParts=kept, dropped=int(turn.get("dropped") or 0) + max(0, len(parts) - PARTS_KEEP))
+
+
+UNBOUNDED = ("structuredContent", "resultMetadata")  # of a tool call in a snapshot: no limit on their size, and no page reads them
+
+
+def slim_part(part: Any) -> Any:
+    """One part of a turn as the board keeps it: the result of a tool call cut by `bounded_content`, and without the fields of `UNBOUNDED` (`reduce_chat` never takes those either)."""
+    call = part.get("toolCall") if isinstance(part, dict) else None
+    if not isinstance(call, dict) or not ("content" in call or any(key in call for key in UNBOUNDED)):
+        return part
+    kept = {key: value for key, value in call.items() if key not in UNBOUNDED}
+    if "content" in kept:
+        kept["content"] = bounded_content(kept["content"])
+    return dict(part, toolCall=kept)
+
+
+def _contributor(value: Any) -> Optional[Dict[str, str]]:
+    """Who made a tool call (`{kind: mcp, ...}`), kept when it is a small dict of strings; the guard of a sign-in request reads its kind."""
+    if isinstance(value, dict) and len(value) <= 5 and all(isinstance(key, str) and isinstance(item, str) for key, item in value.items()):
+        return dict(value)
+    return None
 
 
 QUEUED_CHARS = 2000  # characters of a queued message the board keeps to show
@@ -829,9 +956,12 @@ def pending(item: Any) -> Optional[Dict[str, Any]]:
 
 def trimmed(state: Dict[str, Any], keep: int = 2) -> Dict[str, Any]:
     """A chat snapshot cut to what the board shows: the last turns and the one running, and the messages that wait. A long chat is big."""
-    return {"status": state.get("status"), "title": state.get("title"), "modifiedAt": state.get("modifiedAt"), "config": state.get("config"),
-            "turns": [slim(turn) for turn in list(state.get("turns") or [])[-keep:]], "activeTurn": slim(state.get("activeTurn")),
-            "queuedMessages": [found for found in (pending(item) for item in state.get("queuedMessages") or []) if found]}
+    out = {"status": state.get("status"), "title": state.get("title"), "modifiedAt": state.get("modifiedAt"), "config": state.get("config"),
+           "turns": [slim(turn) for turn in list(state.get("turns") or [])[-keep:]], "activeTurn": slim(state.get("activeTurn")),
+           "queuedMessages": [found for found in (pending(item) for item in state.get("queuedMessages") or []) if found]}
+    if state.get("turnsNextCursor") is not None:
+        out["turnsNextCursor"] = state["turnsNextCursor"]  # where the host goes on when older turns are asked for
+    return out
 
 
 def queued(state: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -865,8 +995,93 @@ def last_error(state: Dict[str, Any]) -> Dict[str, Any]:
         return {}
 
 
+def _tool_call_action(call: Dict[str, Any], kind: str, action: Dict[str, Any]) -> None:
+    """One action on one tool call of the running turn, with the guards of the host's reducer: an action that does not fit the call's status changes nothing (not even `_meta`)."""
+    if _tool_call_step(call, kind, action) and isinstance(action.get("_meta"), dict):
+        call["_meta"] = action["_meta"]
+
+
+def _tool_call_step(call: Dict[str, Any], kind: str, action: Dict[str, Any]) -> bool:
+    """True when the action fitted the status of the call and was applied."""
+    status = call.get("status")
+    if kind == "chat/toolCallDelta":
+        if status != "streaming":
+            return False
+        if action.get("content") is not None:
+            call["partialInput"] = (str(call.get("partialInput") or "") + str(action["content"]))[-PARTIAL_KEEP:]
+        if action.get("invocationMessage") is not None:
+            call["invocationMessage"] = action["invocationMessage"]
+    elif kind == "chat/toolCallReady":
+        call["status"] = "running" if action.get("confirmed") else "pending-confirmation"
+        call.pop("partialInput", None)  # the whole input is here now
+        for field in ("toolInput", "intention", "invocationMessage", "confirmationTitle", "options", "_meta", "confirmed"):
+            if action.get(field) is not None:
+                call[field] = action[field]
+        if _contributor(action.get("contributor")) is not None:
+            call["contributor"] = _contributor(action["contributor"])
+    elif kind == "chat/toolCallConfirmed":
+        if status != "pending-confirmation":
+            return False
+        if action.get("approved"):
+            call["status"] = "running"
+            call["confirmed"] = action.get("confirmed")
+            if action.get("editedToolInput") is not None and isinstance(call.get("toolInput"), str):
+                call["toolInput"] = action["editedToolInput"]
+        else:
+            call["status"] = "cancelled"
+            for field in ("reason", "reasonMessage", "userSuggestion"):
+                if action.get(field) is not None:
+                    call[field] = action[field]
+    elif kind == "chat/toolCallComplete":
+        result = action.get("result") if isinstance(action.get("result"), dict) else {}
+        if status in ENDED or (status == "auth-required" and result.get("success")):  # the host also wants a Ready first; an older host may not send one, and a call that ended must not stay "running" on the page
+            return False
+        call.pop("auth", None)
+        call["success"] = bool(result.get("success", True))
+        found = result.get("pastTenseMessage") if result.get("pastTenseMessage") is not None else action.get("pastTenseMessage")
+        if found is not None:
+            call["pastTenseMessage"] = found
+        if "content" in result:
+            call["content"] = bounded_content(result["content"])
+        if isinstance(result.get("error"), dict):
+            call["error"] = {"message": str(result["error"].get("message") or "")[:ERROR_KEEP]}
+        if action.get("requiresResultConfirmation") and status != "auth-required":
+            call["status"] = "pending-result-confirmation"
+        else:
+            call["status"] = "completed" if call["success"] else "failed"  # the host says `completed` with `success: false`; the page reads `failed`
+    elif kind == "chat/toolCallResultConfirmed":
+        if status != "pending-result-confirmation":
+            return False
+        if action.get("approved"):
+            call["status"] = "completed" if call.get("success", True) else "failed"
+        else:
+            call["status"] = "cancelled"
+            call["reason"] = "result-denied"
+            call.pop("content", None)
+    elif kind == "chat/toolCallContentChanged":
+        if status != "running":
+            return False
+        call["content"] = bounded_content(action.get("content"))
+    elif kind == "chat/toolCallAuthRequired":
+        contributor = call.get("contributor")
+        if status != "running" or not isinstance(contributor, dict) or contributor.get("kind") != "mcp":
+            return False
+        call["status"] = "auth-required"
+        try:
+            call["auth"] = auth_kept(action.get("auth"))
+        except (TypeError, ValueError):
+            call["auth"] = {"cut": True}
+    elif kind == "chat/toolCallAuthResolved":
+        if status != "auth-required":
+            return False
+        call["status"] = "running"
+        call.pop("auth", None)
+    return True
+
+
 def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) -> None:
-    """Apply one action of a subscribed chat to a trimmed state, as the host's own reducer does (read from its code): enough to know the tool that runs and the reply that grows."""
+    """Apply one action of a subscribed chat to a trimmed state, as the host's own reducer does (read from its code, with its status guards: an action that does not fit the status of a tool call changes nothing). Kept: the reply and the thinking (with its start and duration), each tool call with
+    its status, input, a bounded result (`bounded_content`), the error message, the sign-in request and who made it, and the cursor for older turns (`turnsLoaded` adds no turns: the board keeps only the last `keep`)."""
     kind = str(action.get("type") or "")
     if kind == "chat/configChanged":
         state["config"] = {"values": {**config_values(state), **(action.get("config") or {})}}
@@ -896,6 +1111,9 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         state["turns"] = turns[:ends[0] + 1] if ends else [] if action.get("turnId") is None else turns
         state["activeTurn"] = None
         return
+    if kind == "chat/turnsLoaded":  # older turns were paged in: the board keeps only its last turns, so only the cursor is noted
+        state["turnsNextCursor"] = action.get("turnsNextCursor")
+        return
     if kind == "chat/turnStarted":
         state["activeTurn"] = {"id": action.get("turnId"), "startedAt": action.get("startedAt"), "message": action.get("message"), "responseParts": [], "usage": None}
         state["modifiedAt"] = action.get("startedAt") or state.get("modifiedAt")
@@ -914,30 +1132,23 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         for part in parts:
             if part.get("kind") == "reasoning" and part.get("id") == action.get("partId"):
                 part["content"] = str(part.get("content") or "") + str(action.get("content") or "")
+                for field in ("startedAt", "duration"):
+                    if action.get(field) is not None:
+                        part[field] = action[field]
     elif kind == "chat/toolCallStart":
         call = {"toolCallId": action.get("toolCallId"), "toolName": action.get("toolName"), "displayName": action.get("displayName"), "intention": action.get("intention"), "status": "streaming"}
         if action.get("invocationMessage") is not None:
             call["invocationMessage"] = action["invocationMessage"]
         if isinstance(action.get("_meta"), dict):
             call["_meta"] = action["_meta"]  # a running `task` call names its subagent's chat here (1.8)
+        if _contributor(action.get("contributor")) is not None:
+            call["contributor"] = _contributor(action["contributor"])
         parts.append({"kind": "toolCall", "toolCall": call})
-    elif kind in ("chat/toolCallReady", "chat/toolCallComplete"):
+    elif kind.startswith("chat/toolCall"):
         for part in parts:
-            call = part.get("toolCall") if part.get("kind") == "toolCall" else None
-            if call and call.get("toolCallId") == action.get("toolCallId"):
-                if kind == "chat/toolCallComplete":
-                    result = action.get("result") if isinstance(action.get("result"), dict) else {}
-                    call["status"] = "completed" if result.get("success", True) else "failed"
-                    call["success"] = bool(result.get("success", True))
-                    for field in ("pastTenseMessage",):
-                        found = result.get(field) if result.get(field) is not None else action.get(field)
-                        if found is not None:
-                            call[field] = found
-                else:
-                    call["status"] = "running" if action.get("confirmed") else "pending-confirmation"
-                    for field in ("toolInput", "intention", "invocationMessage", "confirmationTitle", "options", "_meta"):
-                        if action.get(field) is not None:
-                            call[field] = action[field]
+            call = part.get("toolCall") if isinstance(part, dict) and part.get("kind") == "toolCall" else None
+            if isinstance(call, dict) and call.get("toolCallId") == action.get("toolCallId"):
+                _tool_call_action(call, kind, action)
     elif kind == "chat/usage" and isinstance(action.get("usage"), dict):
         active["usage"] = action["usage"]
     elif kind in ("chat/turnComplete", "chat/turnCancelled", "chat/error"):
@@ -973,6 +1184,27 @@ def sub_chat(summary: Any) -> Optional[Dict[str, Any]]:
     return {"chat": str(summary["resource"]), "parent": str(origin["chat"]), "call": str(origin["toolCallId"]), "title": str(summary.get("title") or "")[:120], "status": summary.get("status")}
 
 
+def auth_kept(auth: Any) -> Any:
+    """The sign-in request of a tool call as the board keeps it: without `oauthClient` (an OAuth client id and maybe its secret: never in memory, a file or a page), and `{cut: true}` when it is too big. Raises TypeError or ValueError on what is not JSON."""
+    if isinstance(auth, dict):
+        auth = {key: value for key, value in auth.items() if key != "oauthClient"}
+    return auth if len(json.dumps(auth)) <= AUTH_KEEP else {"cut": True}
+
+
+def need_slim(item: Dict[str, Any]) -> Dict[str, Any]:
+    """An `inputNeeded` item with the result of its tool call cut as `slim_part` cuts it (a call that waits for its result to be confirmed carries the whole result), and its sign-in request as `auth_kept` keeps it (B5, 1.8.x)."""
+    call = item.get("toolCall")
+    if not isinstance(call, dict):
+        return item
+    call = slim_part({"toolCall": call})["toolCall"]
+    if "auth" in call:
+        try:
+            call = dict(call, auth=auth_kept(call["auth"]))
+        except (TypeError, ValueError):
+            call = dict(call, auth={"cut": True})
+    return dict(item, toolCall=call)
+
+
 def trimmed_session(state: Dict[str, Any]) -> Dict[str, Any]:
     """A session snapshot cut to what the board reads of it: `inputNeeded[]` (the questions and tool confirmations that wait for a person), of its settings the two a person may
     change from the board (`mode`, `autoApprove`): the value and the choices the host offers, and the chats of its subagents (`subchats`, 1.6.105)."""
@@ -981,7 +1213,7 @@ def trimmed_session(state: Dict[str, Any]) -> Dict[str, Any]:
     schema = (config.get("schema") or {}).get("properties") or {}
     values = config_values(state)
     chats = state.get("chats") if isinstance(state.get("chats"), list) else []
-    return {"inputNeeded": [item for item in items if isinstance(item, dict)] if isinstance(items, list) else [],
+    return {"inputNeeded": [need_slim(item) for item in items if isinstance(item, dict)] if isinstance(items, list) else [],
             "config": {"values": {key: values.get(key) for key in CHAT_SETTINGS}, "choices": {key: named(schema.get(key)) for key in CHAT_SETTINGS}},
             "subchats": [found for found in (sub_chat(item) for item in chats) if found][-SUB_CHATS_KEPT:]}
 
@@ -1009,7 +1241,7 @@ def reduce_session(state: Dict[str, Any], action: Dict[str, Any]) -> None:
     if kind == "session/configChanged" and isinstance(state.get("config"), dict) and isinstance(action.get("config"), dict):
         state["config"]["values"].update({key: value for key, value in action["config"].items() if key in CHAT_SETTINGS})
     elif kind == "session/inputNeededSet" and isinstance(action.get("request"), dict) and action["request"].get("id"):
-        new = action["request"]
+        new = need_slim(action["request"])
         for at, item in enumerate(items):
             if item.get("id") == new["id"]:
                 items[at] = new

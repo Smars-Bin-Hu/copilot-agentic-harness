@@ -39,6 +39,83 @@ def question_item(request: str = "req-1", questions: Any = None, message: str = 
     return {"id": f"chatInput:{CHAT}:{request}", "kind": "chatInput", "chat": CHAT, "request": {"id": request, "message": message, "questions": questions, "_meta": {"purpose": "askUser"}}}
 
 
+def result_item(call: str = "call-r", output: str = "count\n-------\n 1204388\n(1 row)", success: bool = True, turn: str = "turn-9") -> Dict[str, Any]:
+    """A call that ran and whose result waits for the person before the model reads it (B5)."""
+    return {"id": f"toolConfirmation:{CHAT}:{turn}:{call}", "kind": "toolConfirmation", "chat": CHAT, "turnId": turn,
+            "toolCall": {"status": "pending-result-confirmation", "toolCallId": call, "toolName": "bash", "toolInput": json.dumps({"command": "sqlcmd -Q \"SELECT count(*) FROM stage\""}), "success": success,
+                         "content": [{"type": "terminal", "result": {"exitCode": 0 if success else 1, "preview": output}}]}}
+
+
+def auth_item(call: str = "call-a", turn: str = "turn-9", reason: str = "required") -> Dict[str, Any]:
+    """A tool of an MCP server that waits for the person to sign in to that server (B5); the host's request carries an OAuth client the board never keeps."""
+    return {"id": f"toolAuthentication:{CHAT}:{turn}:{call}", "kind": "toolAuthentication", "chat": CHAT, "turnId": turn,
+            "toolCall": {"status": "auth-required", "toolCallId": call, "toolName": "list_tickets", "displayName": "List tickets", "contributor": {"kind": "mcp", "customizationId": "tracker"},
+                         "auth": {"reason": reason, "oauthClient": {"clientId": "cid-123", "clientSecret": "secret-abcdefghijklmnop"}, "resource": {"resource": "https://tracker.example/mcp", "resource_name": "Tracker"},
+                                  "requiredScopes": ["tickets.read"], "description": "Read your tickets"}}}
+
+
+class WaitKindsTests(unittest.TestCase):
+    """B5: a result to check before the model reads it, a sign-in, and both in a subagent's chat."""
+
+    def test_a_result_to_check_shows_the_end_of_the_result_and_its_answer_is_the_result_action(self) -> None:
+        view = chatask.shown(result_item())
+        self.assertEqual((view["kind"], view["stage"], view["failed"], view["result_cut"]), ("confirm", "result", False, False))
+        self.assertIn("1204388", view["result"])
+        self.assertNotEqual(view["digest"], chatask.shown(dict(result_item(), toolCall=dict(result_item()["toolCall"], status="pending-confirmation")))["digest"])
+        self.assertEqual(chatask.confirm_action(result_item(), True), {"type": "chat/toolCallResultConfirmed", "turnId": "turn-9", "toolCallId": "call-r", "approved": True})
+        self.assertEqual(chatask.confirm_action(result_item(), False)["approved"], False)
+        long = chatask.shown(result_item(output="\n".join(f"row {n} token=abcdefghijklmnop" for n in range(500)), success=False))
+        self.assertTrue(long["result_cut"] and long["failed"])
+        self.assertLessEqual(len(long["result"]), chatask.MAX_RESULT)
+        self.assertIn("row 499", long["result"])  # the end of it
+        self.assertNotIn("row 400 ", long["result"])
+        self.assertNotIn("abcdefghijklmnop", long["result"])
+        errored = dict(result_item(), toolCall=dict(result_item()["toolCall"], content=[], error={"message": "timed out"}))
+        self.assertEqual(chatask.shown(errored)["result"], "timed out")
+
+    def test_a_sign_in_names_the_server_and_why_and_never_the_oauth_client(self) -> None:
+        view = chatask.shown(auth_item(reason="expired"))
+        self.assertEqual((view["kind"], view["tool"], view["server"], view["reason"], view["scopes"], view["url"]), ("auth", "List tickets", "Tracker", "expired", ["tickets.read"], "https://tracker.example/mcp"))
+        self.assertNotIn("cid-123", json.dumps(view))
+        self.assertNotIn("abcdefghijklmnop", json.dumps(view))
+        self.assertEqual(chatask.shown(auth_item(reason="odd"))["reason"], "required")
+        self.assertIsNone(chatask.shown(dict(auth_item(), toolCall=dict(auth_item()["toolCall"], status="running"))))
+        self.assertEqual(chatask.first_for([auth_item()], CHAT)[0]["kind"], "auth")
+        kept = ahp.need_slim(auth_item())
+        self.assertNotIn("oauthClient", kept["toolCall"]["auth"])
+        self.assertIn("oauthClient", auth_item()["toolCall"]["auth"])  # the item given is not changed
+        state = {"inputNeeded": []}
+        ahp.reduce_session(state, {"type": "session/inputNeededSet", "request": auth_item()})
+        self.assertNotIn("abcdefghijklmnop", json.dumps(state))
+        self.assertNotIn("abcdefghijklmnop", json.dumps(ahp.trimmed_session({"inputNeeded": [auth_item()]})))
+
+    def test_a_waiting_result_is_bounded_in_the_board_memory(self) -> None:
+        huge = result_item(output="x" * 300000)
+        kept = ahp.need_slim(huge)
+        self.assertLess(len(json.dumps(kept)), 60000)
+
+    def test_a_tool_wait_in_a_subagent_chat_is_an_item_of_its_kind(self) -> None:
+        def sub_state(status: str) -> Dict[str, Any]:
+            call = dict(result_item()["toolCall"] if status == "pending-result-confirmation" else auth_item()["toolCall"] if status == "auth-required" else confirm_item()["toolCall"], toolCallId="c1", status=status)
+            return {"activeTurn": {"id": "t1", "responseParts": [{"kind": "toolCall", "toolCall": call}]}}
+        found = chatask.sub_item("ahp-chat:/sub", "Reviewer", sub_state("pending-result-confirmation"))
+        self.assertEqual((found["kind"], chatask.shown(found)["stage"], chatask.shown(found)["agent"]), ("toolConfirmation", "result", "Reviewer"))
+        self.assertEqual(chatask.shown(chatask.sub_item("ahp-chat:/sub", "", sub_state("auth-required")))["kind"], "auth")
+        self.assertIsNone(chatask.sub_item("ahp-chat:/sub", "", sub_state("running")))
+
+    def test_the_state_tag_and_the_buttons_of_a_result_and_a_sign_in(self) -> None:
+        row = {"status": "open", "paused_since": "", "state": "working", "active": True}
+        self.assertTrue(tasklife.apply_ask(row, dict(chatask.shown(result_item()), since="x", count=1)))
+        self.assertEqual(row["waiting_why"], "confirm")
+        self.assertIn("sqlcmd", row["waiting"])
+        self.assertEqual(row["waiting"], messages.text("task.waiting.result", what='sqlcmd -Q "SELECT count(*) FROM stage"'))
+        signin = {"name": "t", "status": "open", "paused_since": "", "state": "waiting", "actions": [{"action": "answer", "command": ""}, {"action": "pause", "command": "p"}]}  # the chat waits: no Stop of its own
+        self.assertTrue(taskboard.with_ask(signin, dict(chatask.shown(auth_item()), since="x", count=1), ("send", "confirm", "question", "stop")))
+        self.assertEqual(signin["waiting_why"], "auth")
+        self.assertIn("Tracker", signin["waiting"])
+        self.assertEqual([item["action"] for item in signin["actions"]], ["stop", "pause"])  # no answer from here: Stop stays
+
+
 class ShownTests(unittest.TestCase):
     def test_only_the_two_kinds_are_shown_and_only_when_whole(self) -> None:
         self.assertEqual(chatask.shown(confirm_item())["kind"], "confirm")
@@ -65,16 +142,28 @@ class ShownTests(unittest.TestCase):
         self.assertNotEqual(chatask.shown(confirm_item())["digest"], chatask.shown(confirm_item(command="rm -rf /"))["digest"])
         self.assertNotEqual(chatask.shown(question_item())["digest"], chatask.shown(question_item(message="x", questions=[{"id": "q", "kind": "text"}]))["digest"])
 
-    def test_a_question_kind_the_form_cannot_take_means_answer_in_vscode(self) -> None:
-        odd = question_item(questions=[{"id": "d", "title": "Date", "kind": "date"}])
-        self.assertFalse(chatask.shown(odd)["supported"])
-        self.assertEqual(chatask.shown(odd)["questions"], [])
-        mixed = question_item(questions=[{"id": "a", "kind": "text"}, {"id": "b", "kind": "date"}])
-        self.assertFalse(chatask.shown(mixed)["supported"])  # one question the form cannot take: the whole question is answered in VS Code
-        self.assertFalse(chatask.shown(question_item(questions=[{"id": "s", "kind": "single-select", "options": []}]))["supported"])
-        self.assertFalse(chatask.shown(question_item(questions=[]))["supported"])
+    def test_a_question_kind_the_board_does_not_know_gets_a_box_and_goes_as_text(self) -> None:
+        odd = question_item(questions=[{"id": "d", "title": "Date", "kind": "date", "required": True, "hint": "token=abcdefghijklmnop"}])
+        view = chatask.shown(odd)
+        self.assertTrue(view["supported"])
+        one = view["questions"][0]
+        self.assertEqual((one["kind"], one["was"], one["title"], one["required"], one["options"]), ("other", "date", "Date", True, []))
+        self.assertIn('"kind": "date"', one["raw"])  # the question as it came, for the Details of the card
+        self.assertNotIn("abcdefghijklmnop", one["raw"])  # redacted
+        actions, line = chatask.answer_actions(odd, {"d": "next Monday"})
+        self.assertEqual(actions[0], {"type": "chat/inputAnswerChanged", "requestId": "req-1", "questionId": "d", "answer": {"state": "submitted", "value": {"kind": "text", "value": "next Monday"}}})
+        self.assertEqual(line, "Date: next Monday")
         with self.assertRaises(chatask.AnswerError) as caught:
-            chatask.answer_actions(odd, {"d": "x"})
+            chatask.answer_actions(odd, {})
+        self.assertEqual(caught.exception.code, "required")
+        mixed = question_item(questions=[{"id": "a", "kind": "text"}, {"id": "b", "kind": "date"}])
+        self.assertEqual([one["kind"] for one in chatask.shown(mixed)["questions"]], ["text", "other"])  # one odd question no longer sends the whole question away
+        self.assertEqual(chatask.shown(question_item(questions=[{"id": "s", "kind": "single-select", "options": []}]))["questions"][0]["kind"], "other")
+        self.assertFalse(chatask.shown(question_item(questions=[]))["supported"])  # nothing to answer
+        self.assertFalse(chatask.shown(question_item(questions=[{"title": "no id", "kind": "text"}]))["supported"])  # no answer can name it
+        self.assertFalse(chatask.shown(question_item(questions=[{"id": str(n), "kind": "text"} for n in range(chatask.MAX_QUESTIONS + 1)]))["supported"])
+        with self.assertRaises(chatask.AnswerError) as caught:
+            chatask.answer_actions(question_item(questions=[]), {})
         self.assertEqual(caught.exception.code, "unsupported")
         for kind in chatask.KINDS:
             options = [{"id": "o", "label": "O"}] if "select" in kind else []
@@ -179,7 +268,7 @@ class WaitTextTests(unittest.TestCase):
         self.assertGreater(row["waited_s"], 0)
         asked = dict(chatask.shown(question_item()), since="2026-10-01T10:00:00+00:00", count=1)
         self.assertEqual(tasklife.ask_text(asked), messages.text("task.waiting.asking"), "1.7.21: the same words as the asking mark; the question is in the hover (waiting_tip)")
-        vs = dict(chatask.shown(question_item(questions=[{"id": "d", "kind": "date"}])), since="x", count=1)
+        vs = dict(chatask.shown(question_item(questions=[])), since="x", count=1)
         self.assertEqual(tasklife.ask_text(vs), messages.text("task.waiting.question-vs"))
         rows = [{"state": "quiet", "waited_s": None}, {"state": "waiting", "waited_s": 5}, {"state": "waiting", "waited_s": 50}]
         tasklife.sort_rows(rows)
@@ -207,10 +296,10 @@ class WaitTextTests(unittest.TestCase):
         two = row()
         taskboard.with_ask(two, asked, served)
         self.assertEqual([item["action"] for item in two["actions"]][:1], ["question"])
-        odd = dict(chatask.shown(question_item(questions=[{"id": "d", "kind": "date"}])), since="2026-10-01T10:00:00+00:00", count=1)
+        odd = dict(chatask.shown(question_item(questions=[])), since="2026-10-01T10:00:00+00:00", count=1)
         three = row()
         taskboard.with_ask(three, odd, served)
-        self.assertEqual([item["action"] for item in three["actions"]], ["pause", "close"])  # no button: answered in VS Code
+        self.assertEqual([item["action"] for item in three["actions"]], ["pause", "close"])  # no button: nothing the board can answer
         four = row()
         taskboard.with_ask(four, ask, ())
         self.assertEqual([item["action"] for item in four["actions"]], ["pause", "close"])  # a page on disk cannot talk to the chat
@@ -260,7 +349,7 @@ class AskCase(SendCase):
     def asked(self, path: str, item: Dict[str, Any], **extra: Any) -> Any:
         """What the page sends: the item, the call or request, the digest it showed."""
         view = chatask.shown(item)
-        key = {"tool_call_id": view.get("tool_call_id")} if view["kind"] == "confirm" else {"request_id": view.get("request_id")}
+        key = {"tool_call_id": view.get("tool_call_id")} if view["kind"] in ("confirm", "auth") else {"request_id": view.get("request_id")}
         return self.post(path, {"id": item["id"], "digest": view["digest"], **key, **extra})
 
 
@@ -301,13 +390,22 @@ class RowTests(AskCase):
         self.assertEqual((row["waiting_why"], row["actions"][0]["action"]), ("question", "question"))
         self.assertEqual([option["id"] for option in row["ask"]["questions"][0]["options"]], ["red", "blue"])
 
-    def test_a_question_the_form_cannot_take_says_so_and_has_no_button(self) -> None:
+    def test_a_question_of_a_kind_the_board_does_not_know_is_answered_in_words(self) -> None:
         self.wait_for(question_item(questions=[{"id": "d", "title": "Date", "kind": "date"}]))
         row = self.shown_row()
         self.assertEqual(row["waiting_why"], "question")
+        self.assertIn("question", [item["action"] for item in row["actions"]])
+        status, data, _ = self.asked("/api/answer", self.session_state["inputNeeded"][0], answers={"d": "next Monday"})
+        self.assertEqual(status, 200, data)
+        self.assertTrue(until(lambda: len(self.dispatched()) == 2))
+        self.assertEqual(self.dispatched()[0]["action"]["answer"], {"state": "submitted", "value": {"kind": "text", "value": "next Monday"}})
+
+    def test_a_question_with_nothing_to_answer_says_so_and_has_no_button(self) -> None:
+        self.wait_for(question_item(questions=[]))
+        row = self.shown_row()
         self.assertEqual(row["waiting"], messages.text("task.waiting.question-vs"))
         self.assertNotIn("question", [item["action"] for item in row["actions"]])
-        status, data, _ = self.asked("/api/answer", self.session_state["inputNeeded"][0], answers={"d": "x"})
+        status, data, _ = self.asked("/api/answer", self.session_state["inputNeeded"][0], answers={})
         self.assertEqual(status, 409)
         self.assertEqual(self.dispatched(), [])
 
@@ -362,6 +460,27 @@ class ConfirmTests(AskCase):
         self.assertEqual((line["kind"], line["decision"], line["tool_call_id"]), ("confirm", "allow", "call-1"))
         self.assertNotIn("abcdefghijklmnop", json.dumps(line))
         self.assertIsNone(self.vs.ask_of(TASK))  # it does not come back on the next page
+
+    def test_a_result_is_sent_or_kept_with_the_result_action_and_the_history_says_which(self) -> None:
+        item = result_item()
+        self.wait_for(item)
+        self.assertEqual(self.shown_row()["ask"]["stage"], "result")
+        status, data, _ = self.asked("/api/confirm", item, decision="deny")
+        self.assertEqual((status, data["result"]["decided"]), (200, "deny"), data)
+        self.assertTrue(until(lambda: self.dispatched()))
+        self.assertEqual(self.dispatched()[0]["action"], {"type": "chat/toolCallResultConfirmed", "turnId": "turn-9", "toolCallId": "call-r", "approved": False})
+        events = [event for event in self.data()["events"] if event["what"] == "confirm"]
+        self.assertTrue(events[-1]["detail"].startswith("deny result: bash sqlcmd"), events[-1])
+
+    def test_a_sign_in_cannot_be_allowed_from_the_board(self) -> None:
+        item = auth_item()
+        self.wait_for(item)
+        row = self.shown_row()
+        self.assertEqual((row["waiting_why"], row["ask"]["kind"]), ("auth", "auth"))
+        self.assertNotIn("confirm", [entry["action"] for entry in row["actions"]])
+        status, _data, _ = self.asked("/api/confirm", dict(item, toolCall=dict(item["toolCall"])), decision="allow")
+        self.assertEqual(status, 409)
+        self.assertEqual(self.dispatched(), [])
 
     def test_deny_has_the_shape_the_host_took(self) -> None:
         item = confirm_item()

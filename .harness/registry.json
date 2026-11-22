@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.8.25",
+  "version": "1.8.26",
   "released": "2026-11-22",
   "copyright": "Smars Hu",
   "contributors": [
@@ -193,6 +193,7 @@
         ".harness/tests/test_ahp.py",
         ".harness/tests/test_agenthost.py",
         ".harness/tests/test_ghauth.py",
+        ".harness/tests/data/ahp_turn_1147.jsonl",
         ".harness/tests/test_chatnew.py",
         ".harness/tests/test_chatsend.py",
         ".harness/tests/test_chatask.py",
@@ -228,6 +229,7 @@
         ".harness/tests/test_fusion.py",
         ".harness/tests/test_skillsend.py",
         ".harness/tests/test_chatrounds.py",
+        ".harness/tests/test_chatstream.py",
         ".harness/tests/test_taskfiles.py",
         ".harness/tests/test_deskscripts.py",
         ".harness/tests/test_taskinbox.py",

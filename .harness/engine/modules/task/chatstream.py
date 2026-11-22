@@ -6,7 +6,8 @@ Copilot's own `events.jsonl` is not ours to rely on: when it is gone the history
 The file is one JSON object per line, and each line starts with the key `k` (so a reader can test the start of a line without parsing it):
 
   turn  {k, chat, turn, at, text, files?, sub?}      a turn began: the person's message (attachments by label only, never their bytes); `sub`: this chat is a subagent's
-  part  {k, chat, turn, i, open?, part}              one part of the reply; `i`: its index in the turn counting the parts the board's memory dropped; `open`: written before it ended
+  part  {k, chat, turn, i, open?, t?, part}          one part of the reply; `i`: its index in the turn counting the parts the board's memory dropped; `open`: written before it ended;
+                                                     `t`: [began, ended] in milliseconds when the board saw the part (`chatlive.stamp`; 0: not known); `read` gives them back as the part's `t0` and `t1`
   end   {k, chat, turn, state, duration, usage}      the turn ended (complete, cancelled, error)
   cut   {k, chat, turn}                              `chat/truncated` (an undo or a rewind): the turns after `turn` are gone; null: all of them
 
@@ -23,8 +24,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
-from core import ahp, redact, tasks
+from core import ahp, copilot_events, redact, tasks
 from core.state import state_lock
+
+from . import chatlive
 
 FILE_NAME = "stream.jsonl"
 RECORD_MAX = 120000  # characters of one record's JSON; a bigger one is reduced
@@ -151,10 +154,13 @@ def _turn_record(chat: str, turn: Dict[str, Any], sub: Optional[Dict[str, str]])
     return record
 
 
-def _part_record(chat: str, turn: str, i: int, part: Dict[str, Any], opened: bool) -> Dict[str, Any]:
+def _part_record(chat: str, turn: str, i: int, part: Dict[str, Any], opened: bool, marks: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     record: Dict[str, Any] = {"k": "part", "chat": chat, "turn": turn, "i": i}
     if opened:
         record["open"] = True
+    mark = marks.get(chatlive.part_id(part)) if isinstance(marks, dict) else None
+    if isinstance(mark, (list, tuple)) and len(mark) == 2 and all(isinstance(value, int) and not isinstance(value, bool) for value in mark):
+        record["t"] = [max(0, mark[0]), max(0, mark[1])]
     record["part"] = _clean(part)
     return _fit(record)
 
@@ -181,6 +187,7 @@ def take(cached: Dict[str, Any], chat: str, action: Dict[str, Any], sub: Optiona
         return []
     state = cached.get("state") if isinstance(cached.get("state"), dict) else {}
     memory = cached.setdefault("stream", {"turn": None, "w": {}, "end": None})
+    marks = cached.get("marks") if isinstance(cached.get("marks"), dict) else None  # when each part began and ended: `chatlive.stamp` runs before this
     if kind == "chat/truncated":
         memory.update(turn=None, w={}, o={}, end=None)
         found = action.get("turnId")
@@ -211,7 +218,7 @@ def take(cached: Dict[str, Any], chat: str, action: Dict[str, Any], sub: Optiona
         index, snapshot = held[asked]
         ahp.reduce_chat({"activeTurn": {"id": ident, "responseParts": [snapshot]}, "turns": []}, action)
         if snapshot.get("toolCall", {}).get("status") in FINAL:
-            out.append(_part_record(chat, ident, index, snapshot, False))
+            out.append(_part_record(chat, ident, index, snapshot, False, marks))
             memory["w"][index] = (False, 0)
             del held[asked]
     parts = turn.get("responseParts") if isinstance(turn.get("responseParts"), list) else []
@@ -233,13 +240,13 @@ def take(cached: Dict[str, Any], chat: str, action: Dict[str, Any], sub: Optiona
             ended = position < last or ending  # a text that is no longer the last is finished
         if ended:
             if before is None or before[0] or (ending and call is None and before[1] != _length(part)):
-                out.append(_part_record(chat, ident, i, part, False))
+                out.append(_part_record(chat, ident, i, part, False, marks))
                 written[i] = (False, _length(part))
         elif ending:  # a call that never ended
-            out.append(_part_record(chat, ident, i, part, True))
+            out.append(_part_record(chat, ident, i, part, True, marks))
             written[i] = (True, 0)
         elif before is None and position < horizon:  # not final, and the next cut of the memory takes it
-            out.append(_part_record(chat, ident, i, part, True))
+            out.append(_part_record(chat, ident, i, part, True, marks))
             written[i] = (True, _length(part))
             if call is not None and isinstance(call.get("toolCallId"), str):
                 held[call["toolCallId"]] = (i, copy.deepcopy(out[-1]["part"]))  # a copy: the record is written after the lock, this one changes with the next action
@@ -249,6 +256,36 @@ def take(cached: Dict[str, Any], chat: str, action: Dict[str, Any], sub: Optiona
         out.append(_end_record(chat, ident, state_name, action.get("duration") if action.get("duration") is not None else turn.get("duration"), turn.get("usage")))
         memory["w"] = {}
     return out
+
+
+ROUND_WITHIN = 5.0  # seconds between the time of a round (Copilot's record) and the start of its turn (the board's)
+
+
+def _starts_alike(one: str, other: str) -> bool:
+    """True when the shorter of two (already short) texts is the start of the other; an empty one is like nothing. The record of Copilot and the stream cut a prompt in different places."""
+    return bool(one and other) and (one.startswith(other) or other.startswith(one))
+
+
+def turn_of_round(turns: List[Dict[str, Any]], at: Any, prompt: Any) -> Optional[Dict[str, Any]]:
+    """The turn of the main chat (no `sub`) that is the round which began at `at` with `prompt` (Copilot's record, `chatrounds`): the turns whose start is within `ROUND_WITHIN` seconds of `at`;
+    when several fit, the one whose text starts like the prompt (else the nearest in time). None: no turn fits, or a time is not known. Pure."""
+    when = copilot_events.seconds(at)
+    if when is None:
+        return None
+    fits = []
+    for turn in turns if isinstance(turns, list) else []:
+        if not isinstance(turn, dict) or turn.get("sub"):
+            continue
+        began = copilot_events.seconds(turn.get("at"))
+        if began is not None and abs(began - when) <= ROUND_WITHIN:
+            fits.append((abs(began - when), turn))
+    if not fits:
+        return None
+    if len(fits) > 1:
+        head = " ".join(str(prompt or "").split())[:40]
+        same = [item for item in fits if _starts_alike(head, " ".join(str(item[1].get("text") or "").split())[:40])]
+        fits = same or fits
+    return min(fits, key=lambda item: item[0])[1]
 
 
 def backfill(full_state: Any, chat: str, have: Any, sub: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
@@ -387,7 +424,13 @@ def read(root: Path, task: str, chat: Optional[str] = None) -> Dict[str, Any]:
                 continue
             cut = cut or part.get("cut") is True
             found = hold((where, ident))
-            found["parts"][index] = dict(part, i=index, **({"open": True} if record.get("open") is True else {}))
+            extra: Dict[str, Any] = {"open": True} if record.get("open") is True else {}
+            stamps = record.get("t")
+            if isinstance(stamps, list) and len(stamps) == 2:
+                for name, value in zip(("t0", "t1"), stamps):
+                    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+                        extra[name] = value
+            found["parts"][index] = dict(part, i=index, **extra)
         else:
             found = hold((where, ident))
             found["state"] = record.get("state") if isinstance(record.get("state"), str) else ""

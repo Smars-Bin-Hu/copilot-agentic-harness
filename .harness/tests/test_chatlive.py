@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import time
 import unittest
 from pathlib import Path
@@ -39,10 +41,12 @@ def state(parts: List[Dict[str, Any]], active: bool = True, turns: int = 0) -> D
 
 
 class ItemTests(unittest.TestCase):
-    def test_the_latest_eight_come_oldest_first_and_say_there_is_more(self) -> None:
+    def test_a_turn_of_20_parts_comes_whole_oldest_first_and_nothing_is_older(self) -> None:
+        # was: the latest eight, `more` true. 1.8.x: the Live tab shows the whole last turn, so all 20 come and there is nothing before
         found = chatlive.build(state([text(f"m{n}", f"line {n}") for n in range(20)]), {})
-        self.assertEqual([item["id"] for item in found["items"]], [f"m{n}" for n in range(12, 20)])
-        self.assertTrue(found["more"])
+        self.assertEqual([item["id"] for item in found["items"]], [f"m{n}" for n in range(20)])
+        self.assertFalse(found["more"])
+        self.assertIsNone(found["before"])
         self.assertTrue(found["items"][-1]["live"])  # the last text of a turn that runs is still being written
         self.assertNotIn("live", found["items"][0])
 
@@ -85,11 +89,16 @@ class ItemTests(unittest.TestCase):
         self.assertIn("***", redact.path("a/" + "k" * 60 + "/b"))
         self.assertEqual(redact.path("has a space; token=abcdef123456"), redact.text("has a space; token=abcdef123456"))
 
-    def test_a_reply_of_20000_characters_is_cut_and_says_so_and_a_secret_in_it_is_masked(self) -> None:
+    def test_a_reply_of_20000_characters_is_whole_a_reply_over_the_guard_is_cut_and_says_so_and_a_secret_in_it_is_masked(self) -> None:
+        # was: a reply of 20,000 characters was cut at 4,000. 1.8.x: the cap is a guard (200,000), so 20,000 is whole; the cut still works over the guard
         reply = "你好 " + "word " * 4000 + " password=Hunter2xyz"
         item = chatlive.build(state([text("m", reply)]), {})["items"][0]
-        self.assertTrue(item["cut"])
-        self.assertLessEqual(len(item["text"]), chatlive.TEXT_CAP)
+        self.assertNotIn("cut", item)
+        self.assertNotIn("Hunter2xyz", item["text"])
+        self.assertGreater(len(item["text"]), 19000)
+        huge = chatlive.build(state([text("m", "word " * (chatlive.TEXT_CAP // 4))]), {})["items"][0]
+        self.assertTrue(huge["cut"])
+        self.assertLessEqual(len(huge["text"]), chatlive.TEXT_CAP)
         whole = chatlive.build(state([text("m", "短 ```sql\nselect 1;\n``` 后 password=Hunter2xyz")]), {})["items"][0]
         self.assertNotIn("Hunter2xyz", whole["text"])
         self.assertIn("```sql\nselect 1;\n```", whole["text"])  # Chinese and code are kept as written
@@ -110,9 +119,13 @@ class ItemTests(unittest.TestCase):
         self.assertEqual(len(one), 2)
         self.assertEqual(len({item["id"] for item in one}), 2)
 
-    def test_the_turn_before_fills_up_the_latest_and_no_turn_is_an_empty_list(self) -> None:
+    def test_only_the_last_turn_is_shown_and_no_turn_is_an_empty_list(self) -> None:
+        # was: the turn before filled up the latest eight (["m1", "m2"]). 1.8.x: the feed is the last turn only
         found = chatlive.build({"turns": [{"id": "a", "responseParts": [text("m1", "old")]}], "activeTurn": {"id": "b", "responseParts": [text("m2", "new")]}}, {})
-        self.assertEqual([item["id"] for item in found["items"]], ["m1", "m2"])
+        self.assertEqual([item["id"] for item in found["items"]], ["m2"])
+        self.assertFalse(found["more"])
+        finished = chatlive.build({"turns": [{"id": "a", "responseParts": [text("m1", "old")]}, {"id": "b", "responseParts": [text("m2", "new")]}], "activeTurn": None}, {})
+        self.assertEqual([item["id"] for item in finished["items"]], ["m2"])  # nothing runs: the last finished turn
         for empty in ({}, {"turns": [], "activeTurn": None}, {"turns": "x"}, {"turns": [None, 3]}):
             self.assertEqual(chatlive.build(empty, {})["items"], [], empty)
 
@@ -150,9 +163,11 @@ class ItemTests(unittest.TestCase):
         self.assertEqual(parts[-1]["toolCall"]["toolCallId"], "c499")
         self.assertEqual((parts[-1]["toolCall"]["status"], parts[-1]["toolCall"]["success"], parts[-1]["toolCall"]["pastTenseMessage"]), ("failed", False, "did 499"))
         found = chatlive.build(chat, {})
-        self.assertEqual(len(found["items"]), chatlive.LATEST)
+        self.assertEqual(len(found["items"]), len(parts))  # was: `LATEST` items. 1.8.x: all that the memory holds (this turn has no message of a person)
         self.assertEqual(found["items"][-1]["id"], "c499")
-        self.assertTrue(found["more"])
+        self.assertTrue(found["more"])  # 440 calls fell out of memory
+        self.assertEqual(found["before"], {"turn": "t", "i": chat["activeTurn"]["dropped"]})
+        self.assertEqual(len(chatlive.latest(chat, {})["items"]), chatlive.LATEST)  # the old newest-N feed is what the steps of a subagent use
         self.assertEqual(found["started"], "2026-10-01T00:00:00.000Z")  # the page counts the days
 
     def test_a_snapshot_is_slimmed_and_the_thinking_text_grows(self) -> None:
@@ -167,6 +182,119 @@ class ItemTests(unittest.TestCase):
         ahp.reduce_chat(chat, {"type": "chat/reasoning", "turnId": "t", "partId": "r", "content": "Look "})
         ahp.reduce_chat(chat, {"type": "chat/reasoning", "turnId": "t", "partId": "r", "content": "at it."})
         self.assertEqual(chatlive.build(chat, {})["items"][0]["text"], "Look at it.")
+
+
+def with_message(turn_state: Dict[str, Any], words: str = "please do it") -> Dict[str, Any]:
+    turn = turn_state["activeTurn"] or turn_state["turns"][-1]
+    turn["message"] = {"text": words, "origin": {"kind": "user"}}
+    return turn_state
+
+
+class WholeTurnTests(unittest.TestCase):
+    def test_a_path_read_back_from_the_stream_is_still_shown_from_the_folder_of_the_repository(self) -> None:
+        root = Path.home() / "Developer" / "some-lab"
+        whole = {"toolInput": json.dumps({"path": f"{root}/src/a.py"})}
+        stored = {"toolInput": json.dumps({"path": redact.text(f"{root}/src/a.py")})}  # the stream masks the home folder before it stores a part
+        self.assertNotEqual(whole, stored)
+        self.assertEqual((chatlive.target_of(whole, root)[0], chatlive.target_of(stored, root)[0]), ("src/a.py", "src/a.py"))
+        self.assertEqual(chatlive.target_of({"toolInput": json.dumps({"path": "/another/place/a.py"})}, root)[0], "/another/place/a.py")
+
+    def test_a_turn_of_70_parts_gives_70_items_in_order_with_the_message_first(self) -> None:
+        parts = [tool(f"c{n}") if n % 2 else text(f"m{n}", f"line {n}") for n in range(70)]
+        found = chatlive.build(with_message(state(parts)), {})
+        self.assertEqual([item["id"] for item in found["items"]], ["t.me"] + [part["id"] if part["kind"] == "markdown" else part["toolCall"]["toolCallId"] for part in parts])
+        self.assertEqual(found["items"][0]["k"], "me")
+        self.assertIsNone(found["before"])
+        self.assertFalse(found["more"])
+
+    def test_before_says_where_the_parts_that_fell_out_of_memory_began_and_a_short_turn_has_none(self) -> None:
+        chat = {"turns": [], "activeTurn": None}
+        ahp.reduce_chat(chat, {"type": "chat/turnStarted", "turnId": "t", "startedAt": "s", "message": {"text": "go", "origin": {"kind": "user"}}})
+        for n in range(500):
+            ahp.reduce_chat(chat, {"type": "chat/toolCallStart", "turnId": "t", "toolCallId": f"c{n}", "toolName": "x"})
+            ahp.reduce_chat(chat, {"type": "chat/toolCallComplete", "turnId": "t", "toolCallId": f"c{n}", "result": {"success": True}})
+        found = chatlive.build(chat, {})
+        dropped = chat["activeTurn"]["dropped"]
+        self.assertGreater(dropped, 0)
+        self.assertEqual(found["before"], {"turn": "t", "i": dropped})
+        self.assertTrue(found["more"])
+        self.assertEqual(found["items"][0]["id"], "t.me")  # the person's words stay first
+        self.assertEqual(found["items"][1]["id"], f"c{dropped}")  # the first part sent is the one at the absolute index `dropped`
+        self.assertIsNone(chatlive.build(state([text("m", "x")]), {})["before"])
+
+    def test_a_text_of_50000_characters_is_sent_whole(self) -> None:
+        item = chatlive.build(state([text("m", "word " * 10000)]), {})["items"][0]
+        self.assertNotIn("cut", item)
+        self.assertEqual(len(item["text"]), len("word " * 10000) - 1)
+
+    def test_with_a_memo_a_second_build_sends_stubs_for_what_ended_and_the_whole_of_a_running_call(self) -> None:
+        parts = [text("m1", "hello"), tool("c1", "completed"), {"kind": "reasoning", "id": "r1", "content": "hm"}, tool("c2", "failed"), tool("c3", "running")]
+        chat, memo = with_message(state(parts)), {}
+        first = chatlive.build(chat, {}, None, memo, -1, 5)
+        self.assertTrue(all("same" not in item for item in first["items"]))
+        second = chatlive.build(chat, {}, None, memo, 5, 5)
+        by_id = {item["id"]: item for item in second["items"]}
+        for ident, kind in (("t.me", "me"), ("m1", "text"), ("c1", "tool"), ("r1", "think"), ("c2", "tool")):
+            self.assertEqual(by_id[ident], {"id": ident, "k": kind, "same": True}, ident)
+        self.assertEqual(by_id["c3"]["st"], "run")
+        self.assertNotIn("same", by_id["c3"])
+        self.assertEqual([item["id"] for item in second["items"]], [item["id"] for item in first["items"]])  # the order and the number are the same
+        self.assertEqual(len(memo), 6)
+
+    def test_a_text_that_grew_is_sent_whole_again_and_an_item_is_built_once_per_change(self) -> None:
+        chat, memo = state([text("m1", "hello"), tool("c1", "completed"), text("m2", "wor")]), {}
+        chatlive.build(chat, {}, None, memo, -1, 5)
+        again = chatlive.build(chat, {}, None, memo, 5, 5)
+        with mock.patch.object(chatlive, "part_item", side_effect=AssertionError("built again")):
+            chatlive.build(chat, {}, None, memo, 5, 5)  # nothing changed: nothing is built
+        chat["activeTurn"]["responseParts"][2]["content"] = "world"
+        grown = chatlive.build(chat, {}, None, memo, 5, 6)
+        by_id = {item["id"]: item for item in grown["items"]}
+        self.assertEqual(by_id["m2"]["text"], "world")
+        self.assertNotIn("same", by_id["m2"])
+        self.assertTrue(by_id["m1"]["same"] and by_id["c1"]["same"])
+        self.assertEqual([item["id"] for item in again["items"] if item.get("same")], ["m1", "c1", "m2"])  # m2 is the last part of a running turn, still `live`, but it has not changed
+        chat["activeTurn"]["responseParts"].append(text("m3", "next"))  # m2 is no longer the last part: its `live` flag goes
+        after = {item["id"]: item for item in chatlive.build(chat, {}, None, memo, 6, 7)["items"]}
+        self.assertNotIn("same", after["m2"])  # its `live` flag went: it changed
+        self.assertNotIn("live", after["m2"])
+        self.assertNotIn("same", after["m3"])
+        self.assertEqual(set(memo), {"m1", "c1", "m2", "m3", "t.me"})  # forgets nothing that is still sent
+
+    def test_a_thought_whose_end_moved_is_sent_again_and_the_memo_forgets_what_is_no_longer_sent(self) -> None:
+        chat, memo = state([{"kind": "reasoning", "id": "r1", "content": "hm"}, text("m1", "x"), tool("c1")]), {}
+        chatlive.build(chat, {"r1": [100, 0]}, None, memo, -1, 3)
+        later = {item["id"]: item for item in chatlive.build(chat, {"r1": [100, 0], "m1": [250, 0]}, None, memo, 3, 4)["items"]}
+        self.assertEqual((later["r1"].get("t1"), "same" in later["r1"]), (250, False))
+        chat["activeTurn"]["responseParts"] = [text("m9", "other")]
+        chatlive.build(chat, {}, None, memo, 4, 5)
+        self.assertEqual(set(memo), {"m9", "t.me"})
+
+    def test_a_call_that_has_a_subagent_is_never_a_stub_and_attach_subs_gets_it_whole(self) -> None:
+        chat, memo = state([tool("c1", "completed"), tool("c2", "completed")]), {}
+        chatlive.build(chat, {}, None, memo, -1, 5)
+        found = chatlive.build(chat, {}, None, memo, 5, 5, {"c2"})
+        by_id = {item["id"]: item for item in found["items"]}
+        self.assertEqual(by_id["c1"], {"id": "c1", "k": "tool", "same": True})
+        self.assertEqual(by_id["c2"]["st"], "done")
+        chatlive.attach_subs(found["items"], [({"call": "c2", "chat": "x", "title": "reviewer"}, {"state": state([text("s1", "sub words")], active=False)})])
+        self.assertEqual(by_id["c2"]["sub"]["items"][0]["text"], "sub words")
+        self.assertNotIn("sub", memo["c2"][1])  # the memo's own item is not the one that was changed
+
+    def test_have_minus_one_sends_everything_and_a_page_ahead_of_the_chat_gets_everything(self) -> None:
+        chat, memo = state([text("m1", "a"), tool("c1")]), {}
+        chatlive.build(chat, {}, None, memo, -1, 5)
+        self.assertTrue(all("same" not in item for item in chatlive.build(chat, {}, None, memo, -1, 5)["items"]))
+        self.assertTrue(all("same" not in item for item in chatlive.build(chat, {}, None, memo, 99, 5)["items"]))  # the count began anew: nothing is a stub
+        self.assertTrue(all("same" not in item for item in chatlive.build(chat, {}, None, None, 4, 5)["items"]))  # no memo: every item is new at this rev, so one the page has not seen is whole
+
+    def test_items_of_a_turn_read_from_the_stream_uses_the_indexes_the_times_and_the_text_of_the_turn(self) -> None:
+        turn = {"id": "s", "text": "do it", "files": ["a.md"], "parts": [dict(tool("c1"), i=7, t0=1000, t1=2500), dict(text("", "hi"), i=8), {"kind": "markdown", "content": "no id", "i": 9}, {"kind": "reasoning", "content": "x", "i": 10, "t0": 3000}]}
+        items = chatlive.items_of(turn, False, {})
+        self.assertEqual([item["id"] for item in items], ["s.me", "c1", "s.8", "s.9", "s.10"])
+        self.assertEqual((items[0]["files"], items[1]["t0"], items[1]["t1"]), (["a.md"], 1000, 2500))
+        self.assertEqual(chatlive.items_of({"id": "s", "text": "", "parts": [text("m", "x")]}, False, {})[0]["id"], "m")  # no words, no message item
+        self.assertEqual(chatlive.items_of(dict(turn, parts=[dict(tool("c1", "running"), i=0)]), False, {})[1]["st"], "stop")  # not running: a call left open is `stop`
 
 
 class LiveLinkTests(base.LinkCase):
@@ -255,6 +383,31 @@ class ServeLiveTests(base.BoardCase):
         self.assertEqual(self.request("POST", "/api/live", {"task": 5, "rev": ["x"]})[0], 200)  # a wrong type is a miss, not an error
         self.assertNotIn(base.TOKEN, json.dumps(data))
 
+    def test_the_route_reads_have_and_answers_a_before_with_older(self) -> None:
+        self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
+        task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
+        live = self.request("POST", "/api/live", {"task": task, "rev": ""})[1]["live"]
+        self.assertIn("before", live)
+        self.assertIsInstance(live["n"], int)
+        stale = live["rev"].rsplit(":", 1)[0] + ":earlier"  # a rev of this chat that is not the one it has now: the answer is built again
+        whole = self.request("POST", "/api/live", {"task": task, "rev": stale, "have": live["n"]})[1]["live"]
+        self.assertTrue(all(item.get("same") for item in whole["items"]))  # a page that holds this state: stubs
+        other = self.request("POST", "/api/live", {"task": task, "rev": "", "have": live["n"]})[1]["live"]
+        self.assertFalse(any(item.get("same") for item in other["items"]))  # a page that last saw nothing of this chat holds none of its items, whatever number it sends
+        for have in ("x", True, 1.5, None, [3]):
+            again = self.request("POST", "/api/live", {"task": task, "rev": stale, "have": have})[1]["live"]
+            self.assertFalse(any(item.get("same") for item in again["items"]), have)  # not a whole number: -1
+        with mock.patch.object(self.vs, "older", return_value={"items": [], "before": None}) as older:
+            status, data, _ = self.request("POST", "/api/live", {"task": task, "rev": "", "before": {"turn": "t1", "i": 4}})
+            self.assertEqual((status, data["older"]), (200, {"items": [], "before": None}))
+            older.assert_called_once_with(task, "t1", 4)
+            for bad in ({"turn": "t1", "i": -1}, {"turn": "t1", "i": "4"}, {"turn": "t1", "i": True}, {"turn": 5, "i": 4}, {"turn": "x" * 201, "i": 4}, {"i": 4}):
+                older.reset_mock()
+                data = self.request("POST", "/api/live", {"task": task, "before": bad})[1]
+                self.assertEqual(data["older"], {"items": [], "before": None}, bad)
+                older.assert_not_called()
+        self.assertEqual(self.request("POST", "/api/live", {"task": task, "before": {"turn": "nope", "i": 3}}, header=False)[0], 403)  # the rules of the other reads hold for it too
+
     def test_a_steer_in_chinese_carries_the_mark_and_an_empty_one_is_refused(self) -> None:
         self.assertEqual(chatsend.steer_text(" 看一下 ", "zh"), ("[ZH] 看一下", ""))
         self.assertEqual(chatsend.steer_text("look", "en"), ("look", ""))
@@ -287,6 +440,62 @@ class PageFilesTests(unittest.TestCase):
         self.assertIn("classList.toggle", live)  # an item that exists is changed, its `enter` animation is not touched
         self.assertIn("if (sig === rec.sig) return;", live)
         self.assertIn('st.nodes.get(item.id)', live)
+
+    def test_the_poll_sends_have_and_a_stub_is_never_painted(self) -> None:
+        live = source("live.js")
+        self.assertIn('SERVE.post("/api/live", {task, rev: st.rev, have: st.have})', live)
+        self.assertIn('st.have = typeof data.n === "number" ? data.n : -1;', live)
+        self.assertIn("if (!item.same) { st.full.set(item.id, item); changed.add(item.id); }", live)  # only a whole item replaces the record
+        self.assertIn("} else if (all || (changed && changed.has(item.id))) paint(rec, item);  // a stub is never drawn again", live)
+        self.assertIn("if (answer.some((item) => item.same && !st.full.has(item.id))) { st.have = -1; st.rev = \"\"; st.hurry = true; return null; }", live)  # a stub of an unknown item: ask again for everything, at once
+        self.assertIn("if (changed === null) return;", live)
+        self.assertIn("if (turn !== st.turn) { forget(); st.turn = turn; }", live)
+
+    def test_an_item_that_left_the_servers_memory_stays_for_the_same_turn(self) -> None:
+        live = source("live.js")
+        self.assertIn("st.tail = merge(st.tail, mine);", live)
+        self.assertIn("if (inNow.has(id)) { last = id; continue; }", live)  # a held item the answer no longer has is kept in its place
+        self.assertIn("const order = () => [st.head, ...st.older, ...st.tail].filter((id) => id && st.full.has(id));", live)  # the person's message, the older steps, then the answers
+        if shutil.which("node"):
+            start, end = live.index("  function merge("), live.index("  // Takes an answer into the record.")
+            done = subprocess.run(["node", "-e", live[start:end] + 'console.log(JSON.stringify([merge(["a","b","c"],["c","d"]), merge(["a","b"],[]), merge([],["x"]), merge(["a","b","c"],["a","c","d"])]));'], capture_output=True, text=True, timeout=30)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(done.stdout.strip(), '[["a","b","c","d"],["a","b"],["x"],["a","b","c","d"]]')
+
+    def test_the_earlier_button_posts_before_and_puts_the_steps_after_the_message(self) -> None:
+        live, css = source("live.js"), source("live.css")
+        self.assertIn('const earlier = h("button", {type: "button", class: "lv-earlier-btn"}, t("desk.live.earlier"));', live)
+        self.assertIn('SERVE.post("/api/live", {task, before: {turn, i: at}})', live)
+        self.assertIn("st.reach = found.before ? found.before.i || 0 : 0;", live)
+        self.assertIn("item.k !== \"me\" && !st.full.has(item.id)", live)  # the returned message of the person is dropped: the page has it
+        self.assertIn("earlier.disabled = true;", live)
+        self.assertIn("earlierBad.textContent =", live)  # an error is shown, and the button can be clicked again
+        self.assertIn("view(() => show(st.data, null, true), (node) => node !== earlierLi && keep.has(node.dataset.id));", live)  # the reader's place is kept
+        self.assertIn("if (item.id === st.head) nodes.push(earlierLi);", live)
+        self.assertIn("st.reach > 0", live)
+        self.assertIn(".lv-earlier-btn", css)
+
+    def test_a_long_finished_reply_folds_and_the_choice_stays(self) -> None:
+        live, css = source("live.js"), source("live.css")
+        self.assertIn("const FOLD_AT = 320;", live)
+        self.assertIn("rec.foldable = Boolean(!item.live && natural > FOLD_AT);", live)  # never the item that is being written
+        self.assertIn('rec.pill = h("button", {type: "button", class: "lv-unfold", hidden: "", "aria-expanded": "false"});', live)
+        self.assertIn('rec.pill.setAttribute("aria-expanded", String(rec.open));', live)
+        self.assertIn("rec.open = !rec.open; applyFold(rec);", live)  # the choice is on the item's record: a repaint does not fold it again
+        self.assertIn("new ResizeObserver(", live)  # an item drawn while the tab is hidden is measured when it has a height
+        self.assertIn("max-height:230px", css)
+        self.assertIn("linear-gradient(transparent,var(--card))", css)  # the Live tab and an opened round sit on a card
+        for key in ("desk.live.fold.all", "desk.live.fold.less"):
+            for language in ("en", "zh"):
+                self.assertTrue(messages.table(language).get(key), (key, language))
+
+    def test_an_opened_round_draws_the_items_the_server_sent(self) -> None:
+        rounds, live = source("rounds.js"), source("live.js")
+        self.assertIn("LIVE.draw(found.items)", rounds)
+        self.assertIn("tools && !whole ?", rounds)  # the tool names are not said again when the calls are drawn
+        self.assertIn("draw(items) {", live)
+        self.assertIn("make(done, true)", live)  # a fixed list: no entry animation, no take-back
+        self.assertIn('const held = rec.fixed ? "" : isHeld(item);', live)
 
     def test_the_stream_lives_outside_the_part_that_is_drawn_again(self) -> None:
         desk = source("desk.js")

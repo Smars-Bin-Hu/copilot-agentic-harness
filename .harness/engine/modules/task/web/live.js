@@ -13,7 +13,11 @@ const LIVE = (function () {
   const SLOW = 3000;  // after a failed one
   const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "cli-slow", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
 
-  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], gates: [], marks: new Map(), listeners: [], needs: [], started: "", answer: false};
+  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], gates: [], marks: new Map(), listeners: [], needs: [], started: "", answer: false,
+    // What the page has seen of the turn it shows (2026-11): `full` holds the last FULL version of every item by id; the order on the page is `head` (the person's message), then `older` (loaded with the button), then `tail` (from the answers).
+    turn: "", have: -1, full: new Map(), head: "", older: [], tail: [], reach: 0, seen: false, epoch: 0, loadingOlder: false, hurry: false};
+  const FOLD_AT = 320;  // a finished reply drawn higher than this (px) is folded to FOLD_TO
+
 
   const svg = (paths, size, cls) => {
     const node = document.createElementNS(NS, "svg");
@@ -51,14 +55,16 @@ const LIVE = (function () {
   // --- the nodes made once ----------------------------------------------------------------------------------------------
   const link = h("button", {type: "button", class: "lv-link"}, t("desk.live.whole"));
   const head = h("div", {class: "lv-h"}, h("span", {class: "lv-t"}, t("desk.live.title")), h("span", {class: "sub lv-sub"}, t("desk.live.sub")), link);
-  const earlier = h("div", {class: "lv-earlier", hidden: ""}, h("span", null, t("desk.live.earlier")));
+  const earlier = h("button", {type: "button", class: "lv-earlier-btn"}, t("desk.live.earlier"));
+  const earlierBad = h("span", {class: "bad lv-earlier-bad", role: "alert", hidden: ""});
+  const earlierLi = h("li", {class: "lv-earlier", "data-id": "~earlier", hidden: ""}, earlier, earlierBad);  // right under the person's message: the older steps appear exactly there
   const needLi = h("li", {class: "fi fi-need", hidden: ""}, h("i", {class: "dot hot"}), h("div", {class: "lv-need"}));
   const feed = h("ol", {class: "lv-feed"}, needLi);
   const calm = h("div", {class: "lv-empty", hidden: ""});
   const stale = h("p", {class: "sub lv-stale", hidden: ""}, t("desk.live.stale"));
   const lifeLabel = h("span", {class: "lt-l"}), lifeSep = h("span", {class: "lt-s"}, " \u00b7 "), lifeRun = h("b", {class: "lt-r"}, h("span", {class: "st-time"}));
   const life = h("div", {class: "lv-life calm"}, robot(), h("span", {class: "eq", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")), h("span", {class: "lt"}, lifeLabel, lifeSep, lifeRun));
-  const root = h("section", {class: "lv", hidden: ""}, head, stale, earlier, feed, calm, life);
+  const root = h("section", {class: "lv", hidden: ""}, head, stale, feed, calm, life);
   const roundsHere = (box) => { if (box.parentNode !== root) root.insertBefore(box, stale); };
 
   link.addEventListener("click", () => {
@@ -86,12 +92,42 @@ const LIVE = (function () {
   const setText = (node, value) => { if (node.textContent !== value) node.textContent = value; };
   const setClass = (node, value) => { if (node.className !== value) node.className = value; };
 
+  // --- a long reply folds -----------------------------------------------------------------------------------------------
+  // A finished text drawn higher than FOLD_AT is folded (`lv-fold`: a fixed height with a fade) and has a pill under it. The height is the natural one (`scrollHeight`: the same folded or not), measured when the node is drawn;
+  // one that is drawn while the tab is hidden has no height yet: the one ResizeObserver measures it when it gets one. The person's choice (`rec.open`) stays with the item.
+  const ro = typeof ResizeObserver === "function" ? new ResizeObserver((entries) => { for (const entry of entries) { const rec = st.folds.get(entry.target); if (rec) measure(rec); } }) : null;
+  st.folds = new WeakMap();
+  function applyFold(rec) {
+    const on = rec.foldable && !rec.item.live;
+    rec.tx.classList.toggle("lv-fold", on && !rec.open);
+    rec.pill.hidden = !on;
+    setText(rec.pill, t(rec.open ? "desk.live.fold.less" : "desk.live.fold.all"));
+    rec.pill.setAttribute("aria-expanded", String(rec.open));
+  }
+  function measure(rec) {
+    const item = rec.item;
+    if (!item || item.k !== "text") return;
+    const natural = rec.tx.scrollHeight;
+    if (!natural && !item.live) return;  // not shown (yet): the observer comes back when it is
+    rec.foldable = Boolean(!item.live && natural > FOLD_AT);
+    applyFold(rec);
+  }
+  function watch(rec) {  // after each paint of a text
+    if (ro) { if (!st.folds.has(rec.tx)) { st.folds.set(rec.tx, rec); ro.observe(rec.tx); } measure(rec); }
+    else requestAnimationFrame(() => measure(rec));
+  }
+  function unwatch(rec) { if (ro && rec.tx) { ro.unobserve(rec.tx); st.folds.delete(rec.tx); } }
+  function keepPill(rec) {  // folded again from far below: the pill is where the reader was, do not leave it above the window
+    const box = rec.pill.getBoundingClientRect();
+    if (!rec.pill.hidden && (box.bottom < 0 || box.top > window.innerHeight)) rec.pill.scrollIntoView({block: "center"});
+  }
+
   // --- one item ---------------------------------------------------------------------------------------------------------
-  function make(item) {
-    const li = h("li", {class: "fi fi-" + item.k + " enter", "data-id": item.id}, h("i", {class: "dot"}));
+  function make(item, fixed) {  // `fixed`: a round that is over (LIVE.draw): no entry animation, nothing that acts on the running chat
+    const li = h("li", {class: "fi fi-" + item.k + (fixed ? "" : " enter"), "data-id": item.id}, h("i", {class: "dot"}));
     const body = h("div", {class: "fb"});
     li.append(body);
-    const rec = {el: li, body, kind: item.k, sig: "", text: "", pieces: 0};
+    const rec = {el: li, body, kind: item.k, sig: "", text: "", pieces: 0, fixed: Boolean(fixed), open: false};
     if (item.k === "me") {  // what the person said: a small mark; the words are in its card
       rec.tag = h("span", {class: "me-tag", role: "button"}, t("desk.live.you"));
       Status.card(rec.tag, () => saidCard(rec), t("desk.live.you"));
@@ -100,7 +136,9 @@ const LIVE = (function () {
       rec.tx = h("div", {class: "tx md"});
       rec.cutm = h("span", {class: "cutm", hidden: ""}, t("desk.live.cut"));
       rec.caret = h("span", {class: "caret", hidden: ""});
-      body.append(rec.tx, rec.cutm);
+      rec.pill = h("button", {type: "button", class: "lv-unfold", hidden: "", "aria-expanded": "false"});
+      rec.pill.addEventListener("click", () => { rec.open = !rec.open; applyFold(rec); if (!rec.open) keepPill(rec); });
+      body.append(rec.tx, rec.pill, rec.cutm);
     } else if (item.k === "tool") {
       rec.ico = h("span", {class: "ti"});
       rec.say = h("span", {class: "in"});
@@ -194,7 +232,7 @@ const LIVE = (function () {
     return marks;
   }
   function paint(rec, item) {
-    const held = isHeld(item);
+    const held = rec.fixed ? "" : isHeld(item);
     const why = held === "past" || held === "refused" ? (st.marks.get(item.id) || {}).reason || "" : "";
     const sig = JSON.stringify(item) + (held ? "|" + held + "|" + why : "");
     if (sig === rec.sig) return;
@@ -208,6 +246,7 @@ const LIVE = (function () {
       rec.caret.hidden = !item.live;
       if (item.live) (rec.tx.lastElementChild || rec.tx).append(rec.caret);  // the caret stays at the end of the growing text
       rec.el.classList.toggle("is-live", Boolean(item.live));
+      watch(rec);
     } else if (item.k === "tool") {
       const kind = kindOf(item.tool || "", item.name || "");
       if (rec.kind2 !== kind) { rec.kind2 = kind; rec.ico.replaceChildren(svg(ICONS[kind], 15)); }
@@ -264,31 +303,111 @@ const LIVE = (function () {
     }
   }
 
+  // --- what the page has of the turn -----------------------------------------------------------------------------------
+  // The server sends all the items its memory holds of the last turn; one that did not change since `have` comes as a stub (`same: true`): it is kept as it is and not drawn again. An item that fell out of the server's
+  // memory (a long turn loses its oldest parts) stays here: it is finished. Only the turn changing, or the task, starts anew.
+  const order = () => [st.head, ...st.older, ...st.tail].filter((id) => id && st.full.has(id));
+  function forget() {  // nothing of the turn is kept; the next question asks for everything
+    st.epoch += 1;
+    for (const rec of st.nodes.values()) { unwatch(rec); rec.el.remove(); }
+    st.nodes.clear(); st.full.clear();
+    st.head = ""; st.older = []; st.tail = []; st.reach = 0; st.seen = false; st.have = -1; st.loadingOlder = false;
+    earlier.disabled = false; earlierBad.hidden = true;
+  }
+  // The ids of the answer in the server's order, with the ones the page holds that the answer no longer has put back where they were (after the id that came before them).
+  function merge(held, now) {
+    const inNow = new Set(now), after = new Map(), lead = [];
+    let last = null;
+    for (const id of held) {
+      if (inNow.has(id)) { last = id; continue; }
+      if (last === null) lead.push(id); else { if (!after.has(last)) after.set(last, []); after.get(last).push(id); }
+    }
+    const out = [...lead];
+    for (const id of now) { out.push(id); if (after.has(id)) out.push(...after.get(id)); }
+    return out;
+  }
+  // Takes an answer into the record. Returns the ids to draw again, or null when the answer cannot be used (a stub of an item the page does not hold: it asks again for everything).
+  function absorb(data) {
+    if (!data.bound) { forget(); st.turn = ""; return new Set(); }
+    const turn = data.turn || "";
+    if (turn !== st.turn) { forget(); st.turn = turn; }
+    const answer = data.items || [];
+    if (answer.some((item) => item.same && !st.full.has(item.id))) { st.have = -1; st.rev = ""; st.hurry = true; return null; }
+    const mine = answer.filter((item) => item.k !== "me").map((item) => item.id);
+    if (st.tail.length && mine.length && !mine.some((id) => st.tail.includes(id))) {  // a gap: the steps between were lost from the server's memory before the page saw them
+      forget(); st.turn = turn;
+      if (answer.some((item) => item.same)) { st.rev = ""; st.hurry = true; return null; }  // a stub of what was just dropped: ask for everything again
+    }
+    const changed = new Set();
+    for (const item of answer) {
+      if (item.k === "me") st.head = item.id;
+      if (!item.same) { st.full.set(item.id, item); changed.add(item.id); }
+    }
+    st.tail = merge(st.tail, mine);
+    if (st.older.length) st.older = st.older.filter((id) => !mine.includes(id));
+    if (!st.seen) { st.seen = true; st.reach = data.before ? data.before.i || 0 : 0; }
+    st.have = typeof data.n === "number" ? data.n : -1;
+    return changed;
+  }
+
   // --- what the answer says ---------------------------------------------------------------------------------------------
-  function show(data) {
-    const items = data && data.bound ? data.items || [] : [];
-    const ids = new Set(items.map((item) => item.id));
-    for (const [id, rec] of st.nodes) if (!ids.has(id)) { rec.el.remove(); st.nodes.delete(id); }
-    st.lastSaid = (items.filter((item) => item.k === "me").pop() || {}).id || "";
+  function show(data, changed, all) {
+    const ids = data && data.bound ? order() : [];
+    const keep = new Set(ids);
+    for (const [id, rec] of st.nodes) if (!keep.has(id)) { unwatch(rec); rec.el.remove(); st.nodes.delete(id); }
+    const items = ids.map((id) => st.full.get(id));
+    st.lastSaid = st.head && keep.has(st.head) ? st.head : "";
     st.marks = markGates(items);
-    let previous = null;
+    const nodes = [];
     for (const item of items) {
       let rec = st.nodes.get(item.id);
       if (!rec || rec.kind !== item.k) {
-        if (rec) rec.el.remove();
+        if (rec) { unwatch(rec); rec.el.remove(); }
         rec = make(item);
         st.nodes.set(item.id, rec);
-      }
-      paint(rec, item);
-      const expected = previous ? previous.el.nextSibling : feed.firstChild;
-      if (rec.el !== expected) feed.insertBefore(rec.el, expected);
-      previous = rec;
+        paint(rec, item);
+      } else if (all || (changed && changed.has(item.id))) paint(rec, item);  // a stub is never drawn again
+      nodes.push(rec.el);
+      if (item.id === st.head) nodes.push(earlierLi);
     }
-    earlier.hidden = !(data && data.bound && data.more && items.length);
+    if (!nodes.includes(earlierLi)) nodes.unshift(earlierLi);
+    let expected = feed.firstChild;
+    for (const node of nodes) {
+      if (node !== expected) feed.insertBefore(node, expected); else expected = expected.nextSibling;
+    }
+    earlierLi.hidden = !(data && data.bound && ids.length && st.reach > 0);
     paintCalm(data, items);
     paintLife(data);
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
   }
+
+  // "Earlier steps of this round": up to 60 older steps of the turn, read from the file, go in after the person's message; the place of the reader stays.
+  function loadOlder() {
+    if (st.loadingOlder || !st.turn || st.reach <= 0) return;
+    const task = st.task, turn = st.turn, at = st.reach, epoch = st.epoch;
+    st.loadingOlder = true;
+    earlier.disabled = true;
+    earlierBad.hidden = true;
+    SERVE.post("/api/live", {task, before: {turn, i: at}}).then((answer) => {
+      if (epoch !== st.epoch || task !== st.task) return;  // another turn or task was opened meanwhile
+      const found = (answer && answer.older) || {items: [], before: null};
+      const fresh = (found.items || []).filter((item) => item.k !== "me" && !st.full.has(item.id));
+      for (const item of fresh) st.full.set(item.id, item);
+      st.older = [...new Set([...fresh.map((item) => item.id), ...st.older])];
+      st.reach = found.before ? found.before.i || 0 : 0;
+      st.loadingOlder = false;
+      earlier.disabled = false;
+      const keep = new Set(order());
+      view(() => show(st.data, null, true), (node) => node !== earlierLi && keep.has(node.dataset.id));
+    }, (error) => {
+      if (epoch !== st.epoch) return;
+      st.loadingOlder = false;
+      earlier.disabled = false;
+      earlierBad.textContent = (error && error.message) || String(error);
+      earlierBad.hidden = false;
+    });
+  }
+  earlier.addEventListener("click", loadOlder);
 
   function paintLife(data) {
     const bound = Boolean(data && data.bound);
@@ -331,11 +450,14 @@ const LIVE = (function () {
     if (!data) return;
     if (typeof data.now === "number") st.skew = data.now - Date.now();
     if (data.same) { st.fails = 0; stale.hidden = true; return; }
+    const changed = absorb(data);
+    if (changed === null) return;  // a stub of an item the page does not have: the next question is for everything, at once
     st.rev = data.rev || "";
     st.data = data;
     stale.hidden = true;
-    const keep = new Set(data.bound ? (data.items || []).map((item) => item.id) : []);
-    view(() => show(data), (node) => keep.has(node.dataset.id));
+    const keep = new Set(order());
+    const same = !changed.size && st.nodes.size === keep.size && [...keep].every((id) => st.nodes.has(id));
+    if (same) show(data, changed); else view(() => show(data, changed), (node) => node !== earlierLi && keep.has(node.dataset.id));
     for (const call of st.listeners) { try { call(data); } catch (error) { /* a listener must not stop the stream */ } }
   }
 
@@ -346,13 +468,14 @@ const LIVE = (function () {
     if (!wanted() || document.hidden || st.busy) return;
     st.busy = true;
     const task = st.task;
-    SERVE.post("/api/live", {task, rev: st.rev}).then((answer) => {
+    SERVE.post("/api/live", {task, rev: st.rev, have: st.have}).then((answer) => {
       if (task !== st.task) return;  // another task was opened meanwhile
       st.fails = 0;
       onData(answer.live);
     }, () => { st.fails += 1; if (st.fails >= 2) stale.hidden = false; }).then(() => {
       st.busy = false;
-      if (wanted() && !document.hidden && !st.timer) st.timer = setTimeout(loop, st.fails ? SLOW : EVERY);
+      const hurry = st.hurry; st.hurry = false;
+      if (wanted() && !document.hidden && !st.timer) st.timer = setTimeout(loop, hurry ? 0 : st.fails ? SLOW : EVERY);
     });
   }
   function kick() { if (wanted() && !document.hidden && !st.timer && !st.busy) st.timer = setTimeout(loop, 0); }
@@ -364,9 +487,8 @@ const LIVE = (function () {
     // `task`: the folder name of the task; `off`: why nothing is followed ("" when it is: a closed task or a task not started has no chat to follow); `chat`: desk.chat (its title for the copy button).
     config(info) {
       if (info.task !== st.task) {  // another task: nothing of the first one is kept
-        st.task = info.task; st.rev = ""; st.data = null; st.fails = 0;
-        for (const rec of st.nodes.values()) rec.el.remove();
-        st.nodes.clear();
+        st.task = info.task; st.rev = ""; st.data = null; st.fails = 0; st.turn = "";
+        forget();
         show(null);
       }
       if (typeof ROUNDS !== "undefined") { if (!info.off) roundsHere(ROUNDS.node); ROUNDS.follow(info.task); }
@@ -409,6 +531,18 @@ const LIVE = (function () {
       if (st.data) paintLife(st.data);
     },
     drawing(draw) { st.draw = draw; },
+    // A static list of finished items (an opened round, rounds.js): drawn as the feed is, and nothing in it acts on the running chat. The person's own message is not in it (the round has its own prompt line).
+    draw(items) {
+      const list = h("ol", {class: "lv-feed lv-static"});
+      for (const item of items || []) {
+        if (!item || item.k === "me" || !item.id) continue;
+        const done = Object.assign({}, item, {live: false, run: false, st: item.st === "run" ? "done" : item.st});
+        const rec = make(done, true);
+        paint(rec, done);
+        list.append(rec.el);
+      }
+      return list;
+    },
     visible(on) { root.hidden = !on; if (on) kick(); },
   };
 })();

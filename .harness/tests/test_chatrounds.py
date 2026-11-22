@@ -148,6 +148,27 @@ class ReadTests(RoundCase):
         self.assertEqual((status, len(data["result"]["rounds"])), (200, 2), data)
 
 
+    def test_a_round_whose_turn_is_in_the_stream_gets_all_its_steps_as_live_items_and_one_that_is_not_gets_none(self) -> None:
+        records = [{"k": "turn", "chat": "ahp-chat:/x", "turn": "t1", "at": "2026-10-02T10:00:01.500Z", "text": "fix the load\nsecond line"}]
+        for number in range(80):
+            records.append({"k": "part", "chat": "ahp-chat:/x", "turn": "t1", "i": number, "t": [5000 + number, 6000 + number],
+                            "part": {"kind": "toolCall", "toolCall": {"toolCallId": f"c{number}", "toolName": "view", "status": "completed", "pastTenseMessage": f"Read {number}"}}})
+        records.append({"k": "part", "chat": "ahp-chat:/x", "turn": "t1", "i": 80, "part": {"kind": "markdown", "id": "m", "content": "done: " + "word " * 2000}})
+        records.append({"k": "end", "chat": "ahp-chat:/x", "turn": "t1", "state": "complete", "duration": 4, "usage": {}})
+        self.assertEqual(chatstream.append(self.root, self.task, records), 0)
+        cookie = self.pair()
+        found = self.request("POST", "/api/rounds", {"op": "one", "task": Path(TASK).name, "n": 0}, cookie)[1]["result"]
+        items = found["items"]
+        self.assertEqual([item["id"] for item in items[:3]], ["t1.me", "c0", "c1"])
+        self.assertEqual((len(items), items[-1]["k"], items[-1].get("cut")), (82, "text", None))  # every call, the message and the whole text
+        self.assertEqual((items[2]["t0"], items[2]["t1"]), (5001, 6001))
+        self.assertEqual((found["prompt"], found["tools"], len(found["texts"])), ("fix the load\nsecond line", {"read_file": 2}, 2))  # what the page shows today stays
+        later = self.request("POST", "/api/rounds", {"op": "one", "task": Path(TASK).name, "n": 1}, cookie)[1]["result"]
+        self.assertNotIn("items", later)  # the turn of "thanks" is not in the stream
+        self.assertEqual(later["prompt"], "thanks")
+        self.assertIsNone(chatrounds.stream_items(self.root, "no-such-task", found))
+        self.assertIsNone(chatrounds.stream_items(self.root, self.task, {"at": None, "prompt": "x"}))
+
     def test_a_compact_of_the_person_is_a_round_with_its_time_and_credits_and_no_rewind(self) -> None:
         """1.6.113: Copilot writes no message for /compact, so Live showed nothing of it; a compaction Copilot makes inside a turn stays in that round."""
         record(Path(self.home.name), SESSION, [

@@ -11,7 +11,7 @@ from unittest import mock
 from taskcase import TASK, TaskCase
 
 from core import ahp, redact
-from modules.task import chatstream
+from modules.task import chatlive, chatstream
 
 DATA = Path(__file__).resolve().parent / "data" / "ahp_turn_1147.jsonl"
 CHAT = "ahp-chat:/c1"
@@ -354,6 +354,56 @@ class FileTests(StreamCase):
         with mock.patch.object(chatstream, "HARD_BYTES", len(line) * 3):
             read = self.read()
         self.assertEqual(([turn["id"] for turn in read["turns"]], read["cut"]), (["t1"], True))
+
+    def test_the_times_the_board_saw_are_written_with_the_part_and_read_back_as_t0_and_t1(self) -> None:
+        def stamped(action: Dict[str, Any], at: int) -> None:  # as `VsLink._notice` does: reduce, stamp, take
+            cached = self.cache()
+            ahp.reduce_chat(cached["state"], action)
+            chatlive.stamp(cached, action, at)
+            out = chatstream.take(cached, CHAT, action)
+            self.assertEqual(chatstream.append(self.root, TASK, out), 0)
+            self.records += out
+
+        stamped(started("t1"), 1000)
+        stamped(call_start("t1", "c1"), 2000)
+        stamped(says("t1", "m1", "text"), 2500)
+        stamped(call_done("t1", "c1"), 7000)
+        stamped(says("t1", "m2", "more"), 8000)
+        stamped(finished("t1"), 9000)
+        parts = [record for record in self.records if record["k"] == "part"]
+        self.assertEqual([record["t"] for record in parts], [[2000, 7000], [2500, 0], [8000, 0]])
+        self.assertEqual(list(parts[0]), ["k", "chat", "turn", "i", "t", "part"])  # `k` first, the part last
+        read = self.read()["turns"][0]["parts"]
+        self.assertEqual([(part["i"], part.get("t0"), part.get("t1")) for part in read], [(0, 2000, 7000), (1, 2500, None), (2, 8000, None)])
+        self.push(started("t2"), says("t2", "x", "no stamp"), finished("t2"))  # no marks for it: no `t`
+        self.assertNotIn("t", [record for record in self.records if record["k"] == "part"][-1])
+        self.assertNotIn("t0", self.read()["turns"][1]["parts"][0])
+        self.assertEqual(chatstream.backfill({"turns": [{"id": "b", "responseParts": [{"kind": "markdown", "id": "z", "content": "x"}]}]}, CHAT, set())[1].get("t"), None)
+
+    def test_a_time_that_is_not_two_whole_numbers_is_ignored_by_the_reader(self) -> None:
+        records = [{"k": "turn", "chat": CHAT, "turn": "a", "at": "x", "text": ""}] + [
+            {"k": "part", "chat": CHAT, "turn": "a", "i": n, "t": bad, "part": {"kind": "markdown", "id": f"m{n}", "content": "x"}} for n, bad in enumerate([[1, 2, 3], "no", [True, 5], [-4, 9], [0, 0], [100, 200]])]
+        chatstream.append(self.root, TASK, records)
+        got = [(part.get("t0"), part.get("t1")) for part in self.read()["turns"][0]["parts"]]
+        self.assertEqual(got, [(None, None), (None, None), (None, 5), (None, 9), (None, None), (100, 200)])
+
+    def test_a_round_is_matched_to_a_turn_of_the_main_chat_by_time_and_then_by_the_start_of_its_prompt(self) -> None:
+        def turn(ident: str, at: str, text: str, sub: Any = None) -> Dict[str, Any]:
+            return {"id": ident, "at": at, "text": text, "sub": sub, "parts": []}
+
+        turns = [turn("a", "2026-01-01T10:00:00.000Z", "first job"), turn("b", "2026-01-01T10:00:03.000Z", "second job please"), turn("c", "2026-01-01T10:00:02.000Z", "child", {"parent": "x", "call": "y"}),
+                 turn("d", "2026-01-01T11:00:00.000Z", "later")]
+        pick = lambda at, prompt: (chatstream.turn_of_round(turns, at, prompt) or {}).get("id")  # noqa: E731
+        self.assertEqual(pick("2026-01-01T11:00:01.000Z", "later on"), "d")
+        self.assertEqual(pick("2026-01-01T10:00:01.500Z", "second job please do it"), "b")  # two fit: the prompt tells
+        self.assertEqual(pick("2026-01-01T10:00:01.500Z", "first job"), "a")
+        self.assertEqual(pick("2026-01-01T10:00:02.000Z", "something else"), "b")  # none starts like it: the nearest in time (a subagent's turn never counts)
+        self.assertIsNone(pick("2026-01-01T10:30:00.000Z", "first job"))  # more than 5 seconds from any
+        self.assertIsNone(pick("2026-01-01T10:00:08.500Z", "second job please"))
+        self.assertIsNone(pick(None, "x"))
+        self.assertIsNone(pick("not a time", "x"))
+        self.assertIsNone(chatstream.turn_of_round([], "2026-01-01T10:00:00.000Z", "x"))
+        self.assertIsNone(chatstream.turn_of_round("nope", "2026-01-01T10:00:00.000Z", "x"))  # type: ignore[arg-type]
 
     def test_the_file_name_is_the_stream_of_the_task(self) -> None:
         self.assertEqual(chatstream.stream_file(self.root, TASK), self.root / TASK / ".task" / "stream.jsonl")

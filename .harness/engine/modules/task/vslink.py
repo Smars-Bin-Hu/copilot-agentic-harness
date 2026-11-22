@@ -317,9 +317,11 @@ class VsLink:
                     out["recent"] = tasksub.recent_text(found["reply"])
             return out
 
-    def live(self, task: str, last: str = "") -> Dict[str, Any]:
-        """For the Live tab of an open task, from the cache only (no file, no call to the host): `{rev, bound, why | state, started, now, items, more}`. `last` is the `rev` the page already has:
-        when nothing changed the answer is only `{rev, same: true}`. `task` is the folder name of the task."""
+    def live(self, task: str, last: str = "", have: int = -1) -> Dict[str, Any]:
+        """For the Live tab of an open task, from the cache only (no file, no call to the host): `{rev, n, bound, why | state, started, now, items, more, before}`. `last` is the `rev` the page already has:
+        when nothing changed the answer is only `{rev, same: true}`. `task` is the folder name of the task. The items are those of the last turn, all of them (`chatlive.build`); `n` is the number of
+        the chat's last change, which the page sends back as `have`: an item that has not changed since is then a stub (`{id, k, same: true}`). `before`: where the steps that fell out of memory
+        begin (`older` gives them), else None."""
         with self.lock:
             binding = self.bound.get(task) if self.ready else None
             if not binding and last and task in self.shown and time.monotonic() - self.lost_at < KEEP_SHOWN:
@@ -336,11 +338,42 @@ class VsLink:
             if rev == last:
                 return {"rev": rev, "same": True}
             if cached is None:  # bound, the chat is being read
-                return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), "items": [], "more": False, "started": "", "loading": True}
-            found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root)
+                return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), "items": [], "more": False, "started": "", "before": None, "turn": "", "loading": True}
+            number = cached.get("rev", 0)
+            if not last.startswith(binding["chat"] + ":"):
+                have = -1  # the page last saw another chat (the task was bound again) or nothing: no item of this chat is on it
+            found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root, cached.setdefault("memo", {}), have, number, {sub["call"] for sub in subs})  # a call with a subagent is whole: `sub` goes on it
             chatlive.attach_subs(found["items"], [(sub, self.chats.get(sub["chat"])) for sub in subs], self.root)
             # `queued`: the messages that go after the running turn; `retry`: the last turn ended in an error that Try again can run again (1.6.99)
-            return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"]))}
+            return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"]))}
+
+    def older(self, task: str, turn: str, before: int, count: int = 60) -> Dict[str, Any]:
+        """The steps of the turn `turn` that came before part `before` (the `before` of `live`), from the task's stream file: `{items, before}`, the newest `count` of them, oldest first. `before`: where
+        the next older ones end (`{turn, i}`), None when nothing older is left. The person's own message is among the items only when the first part of the turn is. A task that is not bound, a turn
+        the file does not hold, a file that cannot be read: `{items: [], before: None}`. Never raises; the file is read after the lock is let go."""
+        nothing: Dict[str, Any] = {"items": [], "before": None}
+        try:
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                chat = str(binding["chat"]) if binding else ""
+            if not chat or not isinstance(turn, str) or not isinstance(before, int) or isinstance(before, bool):
+                return nothing
+            found = next((item for item in chatstream.read(self.root, task, chat)["turns"] if item["id"] == turn and not item.get("sub")), None)
+            if found is None:
+                return nothing
+            parts = found["parts"]
+            earlier = [part for part in parts if part["i"] < before]
+            chosen = earlier[-max(1, int(count)):]
+            if not chosen:
+                return nothing
+            view: Dict[str, Any] = {"id": found["id"], "parts": chosen}
+            if chosen[0] is parts[0]:  # the start of the turn: what the person said goes with it
+                view.update(text=found["text"], files=found["files"])
+            marks = {}  # the times are in the parts themselves
+            more = len(earlier) > len(chosen)
+            return {"items": chatlive.items_of(view, False, marks, self.root), "before": {"turn": found["id"], "i": chosen[0]["i"]} if more else None}
+        except Exception:  # a page's question must not break the link
+            return nothing
 
     def _subs_of(self, binding: Dict[str, Any]) -> List[Dict[str, Any]]:
         """The chats of the subagents the bound chat started, the newest `SUB_FOLLOW`, as the session says. The caller holds the lock."""
@@ -1092,6 +1125,7 @@ class VsLink:
                     self.just_sent.pop(channel, None)
                 if cached is not None and isinstance(action, dict):
                     ahp.reduce_chat(cached["state"], action)
+                    chatlive.stamp(cached, action, int(time.time() * 1000))  # before the stream takes the action: it stores the part times
                     if self.persist and chatstream.wants(action):  # 1.8.x: what the board sees of the chat is kept in the task's stream; collected here, written below once the lock is let go
                         try:
                             owner = self._stream_task(channel)
@@ -1099,7 +1133,6 @@ class VsLink:
                                 stream = (owner[0], chatstream.take(cached, channel, action, owner[1]))
                         except Exception:  # the stream is a record beside the chat: a fault in it must never stop the chat
                             self.stream_lost += 1
-                    chatlive.stamp(cached, action, int(time.time() * 1000))
                     cached["rev"] = cached.get("rev", 0) + 1  # the Live tab asks only for what changed since this number
                     if action.get("type") in ("chat/toolCallStart", "chat/toolCallReady"):
                         cached["tool_at"] = utc_now()

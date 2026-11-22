@@ -129,10 +129,11 @@ class LiveItemTests(unittest.TestCase):
         turn["message"]["origin"] = {"kind": "tool"}
         self.assertEqual([item["k"] for item in chatlive.build({"turns": [turn]}, {})["items"]], ["text"])
 
-    def test_a_turn_cut_short_by_the_limit_has_no_mark(self) -> None:
+    def test_a_long_turn_keeps_its_mark_and_all_its_parts(self) -> None:
+        # was: a turn of 12 parts was cut at the latest eight and so had no mark. 1.8.x: the whole last turn is shown, the person's message first
         turn = self.turn()
         turn["responseParts"] = [{"kind": "markdown", "id": f"p{at}", "content": "x"} for at in range(12)]
-        self.assertNotIn("me", [item["k"] for item in chatlive.build({"turns": [turn]}, {})["items"]])
+        self.assertEqual([item["k"] for item in chatlive.build({"turns": [turn]}, {})["items"]], ["me"] + ["text"] * 12)
 
     def test_a_secret_in_a_message_is_covered(self) -> None:
         turn = self.turn()

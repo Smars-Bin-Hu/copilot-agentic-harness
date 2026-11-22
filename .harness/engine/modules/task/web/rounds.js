@@ -39,10 +39,11 @@ const ROUNDS = (function () {
           h("p", {class: "sub"}, removed ? t("desk.rounds.compact", {n: removed}) : t("desk.rounds.compact.some")));
         return;
       }
+      const whole = Array.isArray(found.items) && found.items.some((item) => item.k !== "me") ? LIVE.draw(found.items) : null;  // the whole round as the Live feed draws it: every text, thought and call, in order
       body.replaceChildren(...[h("div", {class: "rd-who sub"}, t("desk.rounds.you")), h("div", {class: "rd-prompt"}, found.prompt),
         h("div", {class: "rd-who sub"}, t("desk.rounds.agent")),
-        found.texts.length ? h("div", {class: "rd-text"}, found.texts.map((blocks) => h("div", {class: "rd-part"}, st.draw ? st.draw(blocks) : null))) : h("p", {class: "sub"}, t("desk.rounds.none")),
-        tools ? h("p", {class: "sub rd-tools"}, t("desk.rounds.tools", {tools})) : null, found.cut ? h("p", {class: "sub"}, t("desk.rounds.cut")) : null].filter(Boolean));
+        whole ? whole : found.texts.length ? h("div", {class: "rd-text"}, found.texts.map((blocks) => h("div", {class: "rd-part"}, st.draw ? st.draw(blocks) : null))) : h("p", {class: "sub"}, t("desk.rounds.none")),
+        tools && !whole ? h("p", {class: "sub rd-tools"}, t("desk.rounds.tools", {tools})) : null, found.cut ? h("p", {class: "sub"}, t("desk.rounds.cut")) : null].filter(Boolean));
     } catch (error) {
       body.replaceChildren(h("p", {class: "bad"}, (error && error.message) || String(error)));
     }

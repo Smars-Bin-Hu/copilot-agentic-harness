@@ -323,6 +323,73 @@ class LinkTests(LinkCase):
         self.assertEqual(len(read["turns"][0]["parts"]), 2)  # t1 came from the snapshot of the chat
         self.assertEqual(self.link.stream_lost, 0)
 
+    def long_turn(self, calls: int = 120) -> None:
+        """A turn of `calls` tool calls and a text through the fake host: the memory keeps the last 60 parts, the stream file every one."""
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "check it all", "origin": {"kind": "user"}}})
+        for number in range(calls):
+            self.push_action(self.chat, {"type": "chat/toolCallStart", "turnId": "t2", "toolCallId": f"k{number}", "toolName": "view", "displayName": "View"})
+            self.push_action(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": f"k{number}", "result": {"success": True, "pastTenseMessage": f"Read file {number}"}})
+        self.push_action(self.chat, {"type": "chat/responsePart", "turnId": "t2", "part": {"kind": "markdown", "id": "mm", "content": "Nothing wrong."}})
+
+    def test_live_gives_n_and_before_and_a_page_that_has_it_gets_stubs(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.live(TASK).get("items")))
+        self.long_turn()
+        found = until(lambda: (lambda d: d if d.get("items") and d["items"][-1]["id"] == "mm" else None)(self.link.live(TASK)))
+        self.assertTrue(found, self.link.live(TASK))
+        self.assertIsInstance(found["n"], int)
+        self.assertEqual(found["before"]["turn"], "t2")
+        self.assertGreater(found["before"]["i"], 0)
+        self.assertTrue(found["more"])
+        self.assertEqual(found["items"][0]["id"], "t2.me")
+        self.assertEqual(len(found["items"]), 1 + 121 - found["before"]["i"])  # the person's words and every part the memory holds (121 parts: 120 calls and a text)
+        stale = found["rev"].rsplit(":", 1)[0] + ":earlier"  # a rev of this chat, not its newest: the answer is built again
+        again = self.link.live(TASK, stale, found["n"])  # a page that holds this state: the finished items are stubs
+        self.assertFalse(any(item.get("same") for item in self.link.live(TASK, "ahp-chat:/another:1:idle:", found["n"])["items"]))  # a page that last saw another chat holds no item of this one
+        self.assertEqual(sum(1 for item in again["items"] if item.get("same")), len(again["items"]))  # nothing changed since: all stubs (a text that did not change is one too)
+        self.assertEqual(self.link.live(TASK, found["rev"]), {"rev": found["rev"], "same": True})  # an unchanged poll is still tiny
+        self.assertEqual(self.link.live(TASK)["items"][0], found["items"][0])  # have=-1: whole
+
+    def test_older_gives_the_parts_that_fell_out_of_memory_from_the_stream_with_their_times_and_pages_back(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.long_turn(120)
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 5})
+        self.assertTrue(until(lambda: "t2" in chatstream.known(self.root, TASK).get(self.chat, set())))
+        found = until(lambda: (lambda d: d if d.get("before") else None)(self.link.live(TASK)))
+        before = found["before"]
+        self.assertEqual(before["turn"], "t2")
+        first = self.link.older(TASK, "t2", before["i"], 10)
+        self.assertEqual(len(first["items"]), 10)  # the newest ten of the older ones: more is left
+        self.assertEqual(first["before"], {"turn": "t2", "i": before["i"] - 10})
+        self.assertEqual(first["items"][-1]["id"], f"k{before['i'] - 1}")  # the part just before the first one the live feed has
+        self.assertEqual((first["items"][-1]["k"], first["items"][-1]["st"]), ("tool", "done"))
+        self.assertTrue(first["items"][-1].get("t0"))  # the board saw the call begin: the time survived the file
+        self.assertGreaterEqual(first["items"][-1]["t1"], first["items"][-1]["t0"])
+        self.assertTrue(first["before"] is None or first["before"]["i"] < before["i"])
+        ids = [item["id"] for item in first["items"]]
+        rest, point = [], first["before"]
+        while point:
+            more = self.link.older(TASK, point["turn"], point["i"], 10)
+            rest = more["items"] + rest
+            point = more["before"]
+        every = [item["id"] for item in rest] + ids
+        self.assertEqual(every[0], "t2.me")  # the first part of the turn is among them: the person's words come with it
+        self.assertEqual(every[1:], [f"k{n}" for n in range(before["i"])])  # all of them, once, in order
+
+    def test_older_of_something_the_stream_does_not_hold_is_nothing_and_never_raises(self) -> None:
+        nothing = {"items": [], "before": None}
+        self.assertEqual(self.link.older(TASK, "t1", 5), nothing)  # not connected: no binding
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat)))
+        self.assertEqual(self.link.older(TASK, "no-such-turn", 5), nothing)
+        self.assertEqual(self.link.older("not-a-task", "t1", 5), nothing)
+        self.assertEqual(self.link.older(TASK, "t1", 0), nothing)  # nothing before the first part
+        self.assertEqual(self.link.older(TASK, 7, "x"), nothing)  # type: ignore[arg-type]
+        with mock.patch.object(chatstream, "read", side_effect=OSError("gone")):
+            self.assertEqual(self.link.older(TASK, "t1", 5), nothing)
+
     def test_the_notices_of_a_chat_of_no_task_write_nothing(self) -> None:
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())

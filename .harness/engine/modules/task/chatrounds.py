@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core import copilot_events, tasks
 
-from . import mdtree
+from . import chatlive, chatstream, mdtree
 
 FILE_NAME = "transcript.jsonl"
 MAX_ROUNDS = 1000  # the newest
@@ -158,6 +158,16 @@ def one(root: Path, task: str, number: Any) -> Optional[Dict[str, Any]]:
         tools[name] = tools.get(name, 0) + 1
     return {"n": number, "at": item["at"], "prompt": item["prompt"], "texts": [mdtree.parse(text)["blocks"] for text in item["texts"]], "tools": tools, "cut": bool(item.get("cut")),
             "compact": item.get("compact")}  # {removed}: the messages Copilot summed up; None for a message
+
+
+def stream_items(root: Path, task: str, found: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """The round `found` (a result of `one`) as the items of the Live tab, all of them, from the turn of the task's stream file (`chatstream`) that is this round (matched by time and prompt:
+    `chatstream.turn_of_round`). None when the stream holds no such turn or cannot be read: the page then shows the round as it always did. Never raises."""
+    try:
+        turn = chatstream.turn_of_round(chatstream.read(root, task)["turns"], found.get("at"), found.get("prompt"))
+        return chatlive.items_of(turn, False, {}, root) if turn is not None else None
+    except Exception:  # noqa: BLE001 - an extra the page can do without
+        return None
 
 
 def save(root: Path, task: str) -> int:

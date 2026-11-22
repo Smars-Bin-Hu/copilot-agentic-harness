@@ -1,8 +1,9 @@
-"""What the Live tab shows of a chat (1.6, B88): the latest few items of the cached state, small, redacted and cut. Nothing here reads a file or the whole conversation.
+"""What the Live tab shows of a chat (1.6, B88): the whole last turn that the cached state holds, redacted. Nothing here reads a file or the whole conversation (`items_of` can be given a turn the
+caller read from the stream file: the older steps and the earlier rounds).
 
-`build(state, marks, root, now)` gives the items, oldest first: agent text (`text`), tool calls (`tool`) and thinking (`think`). Every field of a tool call may be missing (the host does not always send
+`build(state, marks, root, memo, have, rev)` gives the items of the last turn (see its docstring for `before`, the memo and the stubs); `latest` the newest few of the last turns (the steps of a subagent). Items, oldest first: agent text (`text`), tool calls (`tool`) and thinking (`think`). Every field of a tool call may be missing (the host does not always send
 `displayName`, `invocationMessage`, `pastTenseMessage`, `intention`, `toolInput` or `success`); a missing one is left out, never made up. The text of a `think` item is there only when the host sent some
-(it often sends none). Every shown text goes through `core/redact.py` first and is cut after; a cut is marked (`cut: true`), so the page can say the rest is in VS Code.
+(it often sends none). Every shown text goes through `core/redact.py` first and is cut after, at a guard far above any real text; a cut is marked (`cut: true`), so the page can say so.
 
 `stamp` notes when each part was first seen, from the actions of the host (the host sends no times): a tool's run time and the length of a thought are counted from that. A part that was already there
 when the board subscribed has no time, and the page shows none.
@@ -19,9 +20,9 @@ from core import redact
 
 from . import mdtree
 
-LATEST = 8  # items sent
-TEXT_CAP = 4000  # characters of agent text (a reply of 20,000 is cut here; the rest is in VS Code)
-THINK_CAP = 1200
+LATEST = 8  # items of `latest`: the newest few steps of a subagent
+TEXT_CAP = 200000  # characters of agent text: a guard, not a design limit (a text longer than this is cut and says so)
+THINK_CAP = 200000  # the same for thinking
 ERROR_CAP = 300  # 1.8.5: the words of an error part, as `ahp.last_error` keeps them
 SAY_CAP = 200
 TARGET_CAP = 500
@@ -94,9 +95,15 @@ def target_of(call: Dict[str, Any], root: Optional[Path] = None) -> Tuple[str, b
                     value = value[0]
                 if isinstance(value, str) and value.strip():
                     if is_path and root is not None:
-                        folder = str(root).replace("\\", "/").rstrip("/") + "/"
                         flat = value.strip().replace("\\", "/")
-                        value = flat[len(folder):] if flat.startswith(folder) else value.strip()
+                        plain = str(root).replace("\\", "/").rstrip("/") + "/"
+                        for folder in (plain, redact.path(plain.rstrip("/")) + "/"):  # the second: a path read back from the task's stream has its home folder masked already
+                            if flat.startswith(folder):
+                                flat = flat[len(folder):]
+                                break
+                        else:
+                            flat = value.strip()
+                        value = flat
                     return cut(value, TARGET_CAP, is_path)
     return cut(words(call.get("intention")), TARGET_CAP)
 
@@ -134,8 +141,9 @@ def tool_item(call: Dict[str, Any], ident: str, active: bool, root: Optional[Pat
 
 
 def said_item(turn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """What the person said to start a turn: a small mark in the stream, with the words in its card. None for a turn no person started."""
-    message = turn.get("message") if isinstance(turn.get("message"), dict) else {}
+    """What the person said to start a turn: a small mark in the stream, with the words in its card. None for a turn no person started. A turn read from the stream file (`chatstream.read`) has
+    no `message`: its `text` and `files` are the person's words, so it counts as the person's (a turn no person started has no text there)."""
+    message = _message_of(turn)
     if (message.get("origin") or {}).get("kind") != "user":
         return None
     text, was_cut = cut(message.get("text"), TEXT_CAP)
@@ -150,8 +158,157 @@ def said_item(turn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return item
 
 
-def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Path] = None, latest: int = LATEST) -> Dict[str, Any]:
-    """`{items, more, started}` from a trimmed chat state: the newest `latest` items of the last turns, oldest first. `more`: there is something older (here or in VS Code)."""
+def _message_of(turn: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(turn.get("message"), dict):
+        return turn["message"]
+    if "text" in turn:  # a turn of the stream file
+        files = turn.get("files") if isinstance(turn.get("files"), list) else []
+        return {"origin": {"kind": "user"}, "text": turn.get("text"), "attachments": [{"label": name} for name in files if isinstance(name, str)]}
+    return {}
+
+
+def _own_mark(part: Dict[str, Any]) -> List[int]:
+    """The times a part carries itself (a part read from the stream file: `t0`, `t1`); 0: unknown."""
+    return [value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0 for value in (part.get("t0"), part.get("t1"))]
+
+
+def part_item(part: Dict[str, Any], ident: str, running: bool, last: bool, mark: Optional[List[int]], root: Optional[Path]) -> Optional[Dict[str, Any]]:
+    """The item of one part of a turn, or None (an empty text, a part of a kind not shown). `running`: the turn runs; `last`: this is its last part and it runs; `mark`: when it began and ended."""
+    kind = part.get("kind")
+    if kind == "markdown":
+        text, was_cut = cut(part.get("content"), TEXT_CAP)
+        if not text:
+            return None
+        item: Dict[str, Any] = {"id": ident, "k": "text", "text": text, "blocks": mdtree.parse(text)["blocks"]}  # the page draws it as it draws the documents of a task
+        if was_cut or part.get("cut") is True:
+            item["cut"] = True
+        if last:
+            item["live"] = True
+    elif kind == "reasoning":
+        text, was_cut = cut(part.get("content"), THINK_CAP)
+        item = {"id": ident, "k": "think", "run": last}
+        if text:
+            item["text"] = text
+        if was_cut or part.get("cut") is True:
+            item["cut"] = True
+    elif kind == "toolCall" and isinstance(part.get("toolCall"), dict):
+        item = tool_item(part["toolCall"], ident, running, root)
+    elif kind == "error":  # 1.8.5: the turn ended in an error; the page draws it red, with its words
+        text, _was_cut = cut(part.get("message"), ERROR_CAP)
+        item = {"id": ident, "k": "err", "text": text, "resumable": part.get("resumable") is True}
+    else:
+        return None
+    if mark and mark[0]:
+        item["t0"] = mark[0]
+        if mark[1] and item["k"] == "tool":
+            item["t1"] = mark[1]
+    return item
+
+
+def _thought_ends(items: List[Dict[str, Any]]) -> None:
+    """A thought ends where the next item began."""
+    for at, item in enumerate(items):
+        if item["k"] == "think" and not item.get("run") and item.get("t0") and at + 1 < len(items) and items[at + 1].get("t0"):
+            item["t1"] = items[at + 1]["t0"]
+
+
+def _signature(part: Dict[str, Any], last: bool, running: bool, mark: List[int]) -> Tuple[Any, ...]:
+    """What tells that a part is not the one an item was built from: cheap (no redaction, no parse). A text grows, so its length is in; a call changes by its status and the words it says of itself."""
+    kind = part.get("kind")
+    if kind in ("markdown", "reasoning"):
+        return (kind, len(part["content"]) if isinstance(part.get("content"), str) else 0, last, tuple(mark))
+    call = part.get("toolCall")
+    if kind == "toolCall" and isinstance(call, dict):
+        return (kind, running, call.get("status"), call.get("success"), tuple(len(str(call.get(key) or "")) for key in ("pastTenseMessage", "intention", "invocationMessage", "displayName", "toolInput")), tuple(mark))
+    if kind == "error":
+        return (kind, len(str(part.get("message") or "")), part.get("resumable") is True)
+    return ("skip", kind if isinstance(kind, str) else "")
+
+
+def last_turn(state: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], bool]:
+    """The turn the Live tab shows: the one that runs, else the last that finished. (turn, it runs)"""
+    active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
+    if active:
+        return active, True
+    turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)] if isinstance(state.get("turns"), list) else []
+    return (turns[-1], False) if turns else (None, False)
+
+
+def _walk(turn: Dict[str, Any], running: bool, marks: Dict[str, List[int]], root: Optional[Path], old: Dict[str, Tuple[Any, Optional[Dict[str, Any]], int]], rev: int) -> List[Tuple[str, Optional[Dict[str, Any]], int, Any]]:
+    """Every part of a turn as `(id, item, v, signature)` in order, the person's message first. `old`: the entries of the last walk (id -> (signature, item, v)); one whose signature is the same is
+    taken as it is, so an item is built once per change (its `v` is the `rev` it last changed at). The item may be None (a part that shows nothing); it is kept, so it is not built again."""
+    parts = [part for part in (turn.get("responseParts") if isinstance(turn.get("responseParts"), list) else turn.get("parts") if isinstance(turn.get("parts"), list) else []) if isinstance(part, dict)]
+    base = int(turn.get("dropped") or 0) if isinstance(turn.get("dropped"), int) else 0
+    out: List[Tuple[str, Optional[Dict[str, Any]], int, Any]] = []
+    message = _message_of(turn)
+    ident = f"{turn.get('id')}.me"
+    sig: Any = ("me", len(str(message.get("text") or "")), len(message.get("attachments") or []), (message.get("origin") or {}).get("kind"))
+    held = old.get(ident)
+    out.append((ident, held[1], held[2], sig) if held and held[0] == sig else (ident, said_item(turn), rev, sig))
+    for at, part in enumerate(parts):
+        index = part["i"] if isinstance(part.get("i"), int) and not isinstance(part.get("i"), bool) else base + at
+        ident = part_id(part) or f"{turn.get('id')}.{index}"
+        last = running and at == len(parts) - 1
+        mark = marks.get(ident)
+        if not (mark and mark[0]):
+            mark = _own_mark(part)
+        sig = _signature(part, last, running, mark)
+        held = old.get(ident)
+        if held and held[0] == sig:
+            out.append((ident, held[1], held[2], sig))
+        else:
+            out.append((ident, part_item(part, ident, running, last, mark, root), rev, sig))
+    shown = [at for at, entry in enumerate(out) if entry[1] is not None]
+    for place, at in enumerate(shown[:-1]):  # a thought ends where the next item began; in the stored item itself, and a thought whose end moved has changed
+        item, after = out[at][1], out[shown[place + 1]][1]
+        if item["k"] == "think" and not item.get("run") and item.get("t0") and after.get("t0") and item.get("t1") != after["t0"]:
+            item["t1"] = after["t0"]
+            out[at] = (out[at][0], item, rev, out[at][3])
+    return out
+
+
+def items_of(turn: Dict[str, Any], running: bool, marks: Dict[str, List[int]], root: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """ALL the items of one turn, oldest first, the person's message first. `turn`: a turn of the board's memory, or one read from the stream file (`chatstream.read`; its parts carry `i`, and `t0` / `t1`
+    when the board saw them). A part with no id gets `<turn id>.<absolute index>`."""
+    return [item for _ident, item, _v, _sig in _walk(turn, running, marks, root, {}, 0) if item is not None]
+
+
+def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Path] = None, memo: Optional[Dict[str, Any]] = None, have: int = -1, rev: int = 0,
+          whole: Any = ()) -> Dict[str, Any]:
+    """`{items, more, started, before, turn}`: the last turn only (the one that runs, else the last that finished) with all the items the board's memory holds of it, oldest first.
+    `before`: `{turn, i}` (the absolute index of the first part sent) when parts of the turn fell out of memory (`dropped`), else None; `more` is `before is not None` (the older steps are in the
+    stream file: `VsLink.older`). `turn`: the id of that turn: the page keeps the items it has seen of a turn (the memory drops the oldest as the turn grows) and starts anew when the id changes.
+
+    `memo`: a dict the caller keeps for the chat; each item is built once per change (see `_walk`) and entries of parts no longer sent are forgotten. `rev`: the number of the chat's last change.
+    `have`: the `v` the page already holds; an item that has not changed since (`v <= have`) is sent as the stub `{id, k, same: true}`, but only a text, thought, error, message or a tool call that
+    ended (`done`, `fail`, `stop`): a call that runs or waits is always whole, and so is a call in `whole` (the caller puts a subagent's steps on it). A stub never carries `sub`. -1: everything whole.
+    The dicts returned are new: the caller adds to them."""
+    turn, running = last_turn(state)
+    if turn is None:
+        return {"items": [], "more": False, "started": "", "before": None, "turn": ""}
+    if have > rev:
+        have = -1  # the page is ahead of this chat (it was read again, the count began anew): it holds nothing we can name
+    kept: Dict[str, Tuple[Any, Optional[Dict[str, Any]], int]] = memo if memo is not None else {}
+    walked = _walk(turn, running, marks, root, kept, rev)
+    items: List[Dict[str, Any]] = []
+    fresh = {}
+    for ident, item, v, sig in walked:
+        fresh[ident] = (sig, item, v)
+        if item is None:
+            continue
+        stub = v <= have and ident not in whole and (item["k"] in ("text", "think", "err", "me") or (item["k"] == "tool" and item.get("st") in ("done", "fail", "stop")))
+        items.append({"id": item["id"], "k": item["k"], "same": True} if stub else dict(item))
+    if memo is not None:
+        memo.clear()
+        memo.update(fresh)
+    base = int(turn.get("dropped") or 0) if isinstance(turn.get("dropped"), int) else 0
+    pointer = {"turn": str(turn.get("id") or ""), "i": base} if base > 0 else None
+    return {"items": items, "more": pointer is not None, "started": str(turn.get("startedAt") or "") if running else "", "before": pointer, "turn": str(turn.get("id") or "")}
+
+
+def latest(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Path] = None, count: int = LATEST) -> Dict[str, Any]:
+    """`{items, more, started}`: the newest `count` items of the last turns, oldest first; `more`: there is something older. (What `build` was before the Live tab showed a whole turn; the steps of a subagent
+    under its tool call (`attach_subs`) are still the newest few.)"""
     active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
     turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)] + ([active] if active else [])
     items: List[Dict[str, Any]] = []
@@ -164,56 +321,28 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
             more = True
         whole = True
         for at in range(len(parts) - 1, -1, -1):
-            if len(items) >= latest:
+            if len(items) >= count:
                 more, whole = True, False
                 break
-            part, kind = parts[at], parts[at].get("kind")
+            part = parts[at]
             ident = part_id(part) or f"{turn.get('id')}.{base + at}"
-            last = running and at == len(parts) - 1
-            if kind == "markdown":
-                text, was_cut = cut(part.get("content"), TEXT_CAP)
-                if not text:
-                    continue
-                item = {"id": ident, "k": "text", "text": text, "blocks": mdtree.parse(text)["blocks"]}  # the page draws it as it draws the documents of a task
-                if was_cut:
-                    item["cut"] = True
-                if last:
-                    item["live"] = True
-            elif kind == "reasoning":
-                text, was_cut = cut(part.get("content"), THINK_CAP)
-                item = {"id": ident, "k": "think", "run": last}
-                if text:
-                    item["text"] = text
-                if was_cut:
-                    item["cut"] = True
-            elif kind == "toolCall" and isinstance(part.get("toolCall"), dict):
-                item = tool_item(part["toolCall"], ident, running, root)
-            elif kind == "error":  # 1.8.5: the turn ended in an error; the page draws it red, with its words
-                text, _was_cut = cut(part.get("message"), ERROR_CAP)
-                item = {"id": ident, "k": "err", "text": text, "resumable": part.get("resumable") is True}
-            else:
-                continue
-            mark = marks.get(ident)
-            if mark and mark[0]:
-                item["t0"] = mark[0]
-                if mark[1] and item["k"] == "tool":
-                    item["t1"] = mark[1]
-            items.append(item)
+            item = part_item(part, ident, running, running and at == len(parts) - 1, marks.get(ident), root)
+            if item is not None:
+                items.append(item)
         said = said_item(turn) if whole else None
         if said:
             items.append(said)
-        if len(items) >= latest:
+        if len(items) >= count:
             more = more or len(turns) > 1
             break
     items.reverse()
-    for at, item in enumerate(items):  # a thought ends where the next item began
-        if item["k"] == "think" and not item.get("run") and item.get("t0") and at + 1 < len(items) and items[at + 1].get("t0"):
-            item["t1"] = items[at + 1]["t0"]
+    _thought_ends(items)
     return {"items": items, "more": more, "started": str(active.get("startedAt") or "") if active else ""}
 
 
 SUB_LATEST = 6  # steps of a subagent shown under its tool call
 SUB_TEXT = 400  # characters of a subagent's text there
+SUB_THINK = 1200  # and of its thinking
 
 
 def attach_subs(items: List[Dict[str, Any]], subs: List[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]], root: Optional[Path] = None) -> None:
@@ -225,7 +354,10 @@ def attach_subs(items: List[Dict[str, Any]], subs: List[Tuple[Dict[str, Any], Op
         if item is None:
             continue
         state = (held or {}).get("state") or {}
-        built = build(state, (held or {}).get("marks") or {}, root, SUB_LATEST) if held else {"items": [], "more": False}
+        built = latest(state, (held or {}).get("marks") or {}, root, SUB_LATEST) if held else {"items": [], "more": False}
         steps = [dict({key: value for key, value in step.items() if key != "blocks"}, text=cut(step["text"], SUB_TEXT)[0]) if step["k"] == "text" else step for step in built["items"] if step["k"] != "me"]
+        for step in steps:
+            if step["k"] == "think" and step.get("text"):
+                step["text"] = cut(step["text"], SUB_THINK)[0]  # a thought was cut at 1,200 before the caps were lifted; a subagent's steps stay small
         running = bool(state.get("activeTurn")) or item.get("st") == "run"
         item["sub"] = {"title": sub.get("title") or "", "st": "run" if running else "done", "items": steps, "more": bool(built["more"])}

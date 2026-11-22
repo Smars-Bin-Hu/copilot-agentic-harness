@@ -74,7 +74,13 @@ const LIVE = (function () {
   const barStats = h("span", {class: "rb-s"});
   const bar = h("button", {type: "button", class: "lv-roundbar", hidden: "", title: t("desk.live.bar.top")}, h("span", {class: "rb-n"}, t("desk.live.receipt.title")), barText, barStats);
   const barWrap = h("div", {class: "lv-rbwrap"}, bar);  // sticky and of no height: the title floats over the feed and moves nothing when it shows
-  const root = h("section", {class: "lv", hidden: ""}, head, stale, barWrap, feed, calm, life);
+  // B10: at the bottom, while what waits for the person is out of sight: how many wait and what, one click to their card; and Latest, back to the newest step
+  const waitGo = h("button", {type: "button", class: "wb-go"});
+  const waitList = h("span", {class: "wb-l"});
+  const latestBtn = h("button", {type: "button", class: "wb-latest"}, h("span", {"aria-hidden": "true"}, "\u2193 "), t("desk.live.latest"));
+  const waitBar = h("div", {class: "lv-waitbar", hidden: ""}, waitGo, waitList, latestBtn);
+  const waitWrap = h("div", {class: "lv-wbwrap"}, waitBar);
+  const root = h("section", {class: "lv", hidden: ""}, head, stale, barWrap, feed, waitWrap, calm, life);
   const roundsHere = (box) => { if (box.parentNode !== root) root.insertBefore(box, stale); };
 
   link.addEventListener("click", () => {
@@ -804,6 +810,7 @@ const LIVE = (function () {
     paintLife(data);
     rcFollow(data);
     paintBar(data);
+    queueWaits();
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
   }
 
@@ -888,6 +895,54 @@ const LIVE = (function () {
     for (const [key, group] of store) if (!used.has(group)) store.delete(key);
     return out;
   }
+
+  // --- what waits, at the bottom (B10) -------------------------------------------------------------------------------------------
+  // Counted: each line of the round that waits for the person (a call to allow, a question) and each other card of the task (a plan to approve, a requirement to confirm). The chat's own
+  // waits share one card (it says "+N"), so a click goes to the cards, where the buttons are, and puts the focus on the first of them.
+  function waitsNow() {
+    const lines = [...feed.querySelectorAll(":scope > li.fi-tool.is-wait, :scope > li.fi-ask.is-wait")];  // never folded, so never hidden
+    const words = lines.map((node) => { const rec = st.nodes.get(node.dataset.id); const item = rec && rec.item ? rec.item : {}; return item.k === "ask" ? t("desk.live.ask.wait") + " · " + (item.text || "") : [item.word || item.name || "", item.target || ""].filter(Boolean).join(" "); });
+    const chatCard = st.needs.some((node) => node.classList && node.classList.contains("wc"));
+    const others = st.needs.filter((node) => !(node.classList && node.classList.contains("wc")));
+    for (const node of others) {  // a card's own words: its head without how long it has waited
+      const head = node.querySelector(".tk-need-h") || node;
+      const title = [...head.childNodes].filter((one) => !(one.classList && one.classList.contains("tk-waited"))).map((one) => one.textContent).join(" ").replace(/\s+/g, " ").trim();
+      words.push(title.slice(0, 80));
+    }
+    const count = Math.max(lines.length, chatCard ? 1 : 0) + others.length;
+    return {count, words};
+  }
+  let waitFrame = 0;
+  function placeWaits() {
+    waitFrame = 0;
+    if (root.hidden || !st.data || !st.data.bound) { waitBar.hidden = true; return; }
+    const view = window.innerHeight;
+    const {count, words} = waitsNow();
+    const card = needLi.hidden ? null : needLi.getBoundingClientRect();
+    const cardSeen = Boolean(card && card.top < view - 90 && card.bottom > 120);
+    const end = life.getBoundingClientRect();
+    const far = end.top > view + 160;  // the newest step is well below the window
+    const showWaits = count > 0 && !cardSeen && Boolean(card);
+    waitGo.hidden = waitList.hidden = !showWaits;
+    latestBtn.hidden = !far;
+    waitBar.hidden = !(showWaits || far);
+    if (showWaits) {
+      const label = t("desk.live.waits", {n: count});
+      setText(waitGo, (card.top > view ? "↓ " : "↑ ") + label);
+      setText(waitList, words.filter(Boolean).join(" · "));
+      waitList.title = words.filter(Boolean).join("\n");
+    }
+  }
+  const queueWaits = () => { if (!waitFrame) waitFrame = requestAnimationFrame(placeWaits); };
+  window.addEventListener("scroll", queueWaits, {passive: true});
+  window.addEventListener("resize", queueWaits, {passive: true});
+  waitGo.addEventListener("click", () => {
+    if (needLi.hidden) return;
+    needLi.scrollIntoView({block: "center", behavior: "smooth"});
+    const first = needLi.querySelector("button:not([disabled]), textarea");
+    if (first) setTimeout(() => first.focus({preventScroll: true}), 350);
+  });
+  latestBtn.addEventListener("click", () => { life.scrollIntoView({block: "end", behavior: "smooth"}); });
 
   // --- the title of the round at the top (B9) ---------------------------------------------------------------------------------
   const RB_ICONS = {time: [["circle", {cx: 8, cy: 8, r: 6}], ["path", {d: "M8 4.8V8l2.2 1.4"}]], credits: [["ellipse", {cx: 8, cy: 4.6, rx: 5, ry: 2}], ["path", {d: "M3 4.6v6.8c0 1.1 2.2 2 5 2s5-.9 5-2V4.6M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"}]],
@@ -1182,6 +1237,7 @@ const LIVE = (function () {
       const same = list.length === st.needs.length && list.every((node, at) => node === st.needs[at]);
       if (same) return;
       st.needs = list;
+      queueWaits();
       view(() => { box.replaceChildren(...list); needLi.hidden = list.length === 0; });
       if (st.data) paintLife(st.data);
     },

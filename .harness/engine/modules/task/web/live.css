@@ -347,3 +347,10 @@ html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 .lv-roundbar .rb-t{flex:1 1 12em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
 .lv-roundbar .rb-s{display:inline-flex;gap:12px;flex:none}
 .rb-st{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.rb-st svg{width:14px;height:14px}.rb-st b{font-weight:550;color:var(--ink);font-variant-numeric:tabular-nums}
+/* B10: at the bottom of the window, above the reply buttons: how many wait for you and what, and Latest */
+.lv-wbwrap{position:sticky;bottom:78px;z-index:16;height:0}
+.lv-waitbar{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:10px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 22px rgba(0,0,0,.3)}
+.wb-go{flex:none;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border:1px solid var(--hot-line);border-radius:999px;background:var(--hot-bg);color:var(--hot);font:600 13px var(--sans);cursor:pointer}
+.wb-l{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--soft)}
+.wb-latest{flex:none;margin-left:auto;padding:4px 12px;border:1px solid var(--line2);border-radius:999px;background:none;color:var(--ink);font:12.5px var(--sans);cursor:pointer}
+.wb-go[hidden],.wb-l[hidden],.wb-latest[hidden]{display:none}

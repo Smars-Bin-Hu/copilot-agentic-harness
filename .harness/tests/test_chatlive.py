@@ -674,6 +674,20 @@ class ServeLiveTests(base.BoardCase):
         self.assertEqual(self.request("POST", "/api/live", {"task": 5, "rev": ["x"]})[0], 200)  # a wrong type is a miss, not an error
         self.assertNotIn(base.TOKEN, json.dumps(data))
 
+    def test_the_route_answers_a_receipt_from_the_link_and_a_bad_turn_with_nothing(self) -> None:
+        self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
+        task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
+        made = {"turn": "t1", "calls": 2, "files": [], "add": 0, "del": 0, "more": 0, "at": "", "ms": 5, "ctx": None, "credits": None}
+        with mock.patch.object(self.vs, "receipt", return_value=made) as receipt:
+            status, data, _ = self.request("POST", "/api/live", {"task": task, "receipt": "t1"})
+            self.assertEqual((status, data["receipt"]), (200, made))
+            receipt.assert_called_once_with(task, "t1")
+            for bad in (5, "", "x" * 201, None, ["t1"]):
+                receipt.reset_mock()
+                self.assertEqual(self.request("POST", "/api/live", {"task": task, "receipt": bad})[1]["receipt"], {}, bad)
+                receipt.assert_not_called()
+        self.assertEqual(self.request("POST", "/api/live", {"task": task, "receipt": "t1"}, header=False)[0], 403)
+
     def test_the_route_reads_have_and_answers_a_before_with_older(self) -> None:
         self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
         task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
@@ -961,6 +975,61 @@ class Quick(unittest.TestCase):
         for _ in range(1000):
             json.dumps({"live": {"rev": "ahp-chat:/abc:1524:busy", "same": True}, "language": "en"})
         self.assertLess(time.perf_counter() - started, 1.0)
+
+
+class ReceiptTests(unittest.TestCase):
+    """The receipt of a turn (B6): the calls, and the files the edit and create calls changed with their lines and the calls that changed them."""
+
+    ROOT = Path("/r")
+
+    @staticmethod
+    def part(ident: str, tool: str, content: Any = None, status: str = "completed", success: bool = True) -> Dict[str, Any]:
+        call: Dict[str, Any] = {"toolCallId": ident, "toolName": tool, "displayName": tool.title(), "status": status, "success": success}
+        if content is not None:
+            call["content"] = content
+        return {"kind": "toolCall", "toolCall": call}
+
+    @staticmethod
+    def edit(path: str, added: int, removed: int, new: bool = False) -> Dict[str, Any]:
+        item: Dict[str, Any] = {"type": "fileEdit", "after": {"uri": "file:///r/" + path}, "diff": {"added": added, "removed": removed}}
+        if not new:
+            item["before"] = {"uri": "file:///r/" + path}
+        return item
+
+    def test_files_are_summed_over_calls_in_the_order_first_changed_with_the_calls_that_changed_them(self) -> None:
+        patch = "diff --git a/r/src/b.py b/r/src/b.py\n--- a/r/src/b.py\n+++ b/r/src/b.py\n@@ -1,3 +1,4 @@\n-old\n+new\n+more\n same\n"
+        parts = [
+            {"kind": "markdown", "id": "m1", "content": "Working."},
+            self.part("c1", "edit", [self.edit("src/a.py", 3, 1)]),
+            self.part("c2", "bash", [{"type": "text", "text": "ok"}]),
+            self.part("c3", "apply_patch", [{"type": "text", "text": patch}]),
+            self.part("c4", "edit", [self.edit("src/a.py", 2, 2)]),
+            self.part("c5", "create", [self.edit("tests/test_new.py", 40, 0, new=True)]),
+            self.part("c6", "edit", [self.edit("src/c.py", 9, 9)], status="running"),  # not completed: its lines are not known yet
+            {"kind": "toolCall"},  # no call in it: not counted
+        ]
+        found = chatlive.receipt(parts, self.ROOT)
+        self.assertEqual(found["calls"], 6)
+        self.assertEqual([(one["path"], one["add"], one["del"], one["new"], one["calls"]) for one in found["files"]],
+                         [("src/a.py", 5, 3, False, ["c1", "c4"]), ("src/b.py", 2, 1, False, ["c3"]), ("tests/test_new.py", 40, 0, True, ["c5"])])
+        self.assertEqual((found["add"], found["del"], found["more"]), (47, 4, 0))
+
+    def test_a_command_reading_or_a_failed_odd_result_changes_no_file(self) -> None:
+        parts = [self.part("r1", "view", [{"type": "text", "text": "diff --git a/x b/x"}]), self.part("r2", "bash", [self.edit("x.py", 1, 1)]),
+                 self.part("r3", "edit", "not a list"), self.part("r4", "edit", [{"type": "fileEdit", "after": {"uri": "https://elsewhere/x"}}]), self.part("r5", "edit", [{"type": "fileEdit"}])]
+        found = chatlive.receipt(parts, self.ROOT)
+        self.assertEqual((found["calls"], found["files"], found["add"], found["del"]), (5, [], 0, 0))
+        self.assertEqual(chatlive.receipt([], self.ROOT), {"calls": 0, "files": [], "add": 0, "del": 0, "more": 0})
+
+    def test_files_past_the_cap_are_counted_not_listed_and_a_file_keeps_at_most_the_cap_of_calls(self) -> None:
+        many = [self.part(f"e{n}", "edit", [self.edit(f"f{n}.py", 1, 0)]) for n in range(chatlive.RECEIPT_FILES + 5)]
+        same = [self.part(f"s{n}", "edit", [self.edit("one.py", 1, 1)]) for n in range(chatlive.RECEIPT_CALLS + 3)]
+        found = chatlive.receipt(many + same, self.ROOT)
+        self.assertEqual(len(found["files"]), chatlive.RECEIPT_FILES)
+        self.assertEqual(found["more"], 6)  # the five past the cap and one.py, which came last
+        self.assertEqual(found["add"], chatlive.RECEIPT_FILES + 5 + chatlive.RECEIPT_CALLS + 3)
+        alone = chatlive.receipt(same, self.ROOT)["files"][0]
+        self.assertEqual((alone["add"], alone["del"], len(alone["calls"])), (chatlive.RECEIPT_CALLS + 3, chatlive.RECEIPT_CALLS + 3, chatlive.RECEIPT_CALLS))
 
 
 if __name__ == "__main__":

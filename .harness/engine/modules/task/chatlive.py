@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import redact
+from core import ahp, redact
 
 from . import mdtree
 
@@ -866,6 +866,61 @@ def latest(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pa
     items.reverse()
     _thought_ends(items)
     return {"items": items, "more": more, "started": str(active.get("startedAt") or "") if active else ""}
+
+
+RECEIPT_FILES = 200  # files a receipt lists (the rest are counted in `more`)
+RECEIPT_CALLS = 20  # tool call ids kept for one file: what the page opens to show its diff
+
+
+def call_files(call: Dict[str, Any], root: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """The files an edit or create call that completed changed: `[{path, add, del, new}]`, as its closed line counts them (`_facts`): from the git-style diff of its result, else from the host's
+    `fileEdit` items (their `after` uri, else `before`, and their counts). Any other call, one that did not complete, or a result with neither: []."""
+    given = _given(call)
+    if state_of(call, False) not in ("done", "fail") or kind_of(call, given) not in ("edit", "create"):
+        return []
+    items = _items(call)
+    files = parse_diff("\n".join(_diff_texts(items)), root)[0]
+    if files:
+        return [{"path": one["path"], "add": one["add"], "del": one["del"], "new": bool(one["new"])} for one in files if one.get("path")]
+    out: List[Dict[str, Any]] = []
+    for item in items:
+        if item.get("type") != "fileEdit":
+            continue
+        side = item.get("after") if isinstance(item.get("after"), dict) else item.get("before") if isinstance(item.get("before"), dict) else {}
+        path = ahp.uri_path(str(side.get("uri") or "")) if isinstance(side.get("uri"), str) else ""
+        if not path:
+            continue
+        diff = item.get("diff") if isinstance(item.get("diff"), dict) else {}
+        out.append({"path": _relative(path, root), "add": _count(diff.get("added")), "del": _count(diff.get("removed")), "new": not isinstance(item.get("before"), dict)})
+    return out
+
+
+def receipt(parts: List[Any], root: Optional[Path] = None) -> Dict[str, Any]:
+    """What a turn did, for its receipt (B6): `{calls, files: [{path, add, del, new, calls}], add, del, more}`. `calls`: the tool calls among `parts` (a subagent is one call: its own steps are in
+    its chat); `files`: each file the edit and create calls changed, in the order first changed, with the lines added and removed summed over the calls and the ids of those calls (at most
+    `RECEIPT_CALLS`: the page opens them for the diff); `add`, `del`: over all the files; `more`: files past `RECEIPT_FILES`, which are counted in `add` and `del` but not listed. Only what the calls'
+    results say: a file a command changed (`sed -i`, a script) is not in it. `parts` are the parts of one turn, from memory or from the stream file."""
+    calls = 0
+    files: Dict[str, Dict[str, Any]] = {}
+    add = gone = 0
+    for part in parts:
+        call = part.get("toolCall") if isinstance(part, dict) and part.get("kind") == "toolCall" else None
+        if not isinstance(call, dict):
+            continue
+        calls += 1
+        ident = str(call.get("toolCallId") or part_id(part) or "")
+        for one in call_files(call, root):
+            add += one["add"]
+            gone += one["del"]
+            held = files.get(one["path"])
+            if held is None:
+                held = files[one["path"]] = {"path": one["path"], "add": 0, "del": 0, "new": one["new"], "calls": []}
+            held["add"] += one["add"]
+            held["del"] += one["del"]
+            if ident and ident not in held["calls"] and len(held["calls"]) < RECEIPT_CALLS:
+                held["calls"].append(ident)
+    listed = list(files.values())
+    return {"calls": calls, "files": listed[:RECEIPT_FILES], "add": add, "del": gone, "more": max(0, len(listed) - RECEIPT_FILES)}
 
 
 SUB_SAID = 160  # characters of what a finished subagent said last, on its row

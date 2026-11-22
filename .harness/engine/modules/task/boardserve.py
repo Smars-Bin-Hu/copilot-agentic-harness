@@ -2145,6 +2145,9 @@ def handler_for(board: Board) -> type:
                         had = asked_sub.get("have")
                         return self.answer(200, {"sub": board.link.sub(task_name, asked_sub["call"], had if isinstance(had, int) and not isinstance(had, bool) else -1)})
                     return self.answer(200, {"sub": {}})
+                if "receipt" in data:  # the receipt of a turn that ended (B6): calls, files and their lines, time, context, credits
+                    asked_turn = data.get("receipt")
+                    return self.answer(200, {"receipt": board.link.receipt(task_name, asked_turn) if isinstance(asked_turn, str) and 0 < len(asked_turn) <= 200 else {}})
                 asked_call = data.get("call")
                 if "call" in data:  # an opened tool call: its whole command, input, output and diff (from memory, else the stream file)
                     if isinstance(asked_call, dict) and all(isinstance(asked_call.get(key), str) and len(asked_call[key]) <= 200 for key in ("turn", "id")):

@@ -526,6 +526,51 @@ class LinkTests(LinkCase):
         older = self.link.older(TASK, "t2", found["before"]["i"], 10)
         self.assertEqual(self.link.call(TASK, "t2", older["items"][0]["id"])["id"], older["items"][0]["id"])  # an item of the earlier steps can be opened too
 
+    def usage(self, tokens: int, total: Optional[float]) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {"vscode.modelCall": {"sdkSessionId": SESSION}}
+        if total is not None:
+            meta["copilotUsage"] = {"sessionTotalNanoAiu": int(total * 1e9)}
+        return {"model": "gpt-6-luna", "inputTokens": tokens - 1000, "outputTokens": 1000, "_meta": meta}
+
+    def test_receipt_of_a_turn_in_memory_counts_its_calls_files_time_context_and_credits(self) -> None:
+        self.states[self.chat]["turns"][0]["usage"] = self.usage(40000, 2.0)  # the turn before: 40 % full, 2 credits so far
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.link.limits = {"gpt-6-luna": {"window": 100000}}
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "fix it"}})
+        self.push_action(self.chat, {"type": "chat/toolCallStart", "turnId": "t2", "toolCallId": "e1", "toolName": "edit", "displayName": "Edit"})
+        edit = {"type": "fileEdit", "before": {"uri": "file://" + self.folder + "/src/a.py"}, "after": {"uri": "file://" + self.folder + "/src/a.py"}, "diff": {"added": 4, "removed": 1}}
+        self.push_action(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": "e1", "result": {"success": True, "content": [edit]}})
+        self.assertEqual(self.link.receipt(TASK, "t2"), {})  # it still runs: no receipt yet
+        self.push_action(self.chat, {"type": "chat/toolCallStart", "turnId": "t2", "toolCallId": "b1", "toolName": "bash", "displayName": "Bash"})
+        self.push_action(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": "b1", "result": {"success": True, "content": [{"type": "text", "text": "ok"}]}})
+        self.push_action(self.chat, {"type": "chat/usage", "turnId": "t2", "usage": self.usage(63000, 3.85)})
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 192000})
+        self.assertTrue(until(lambda: self.link.receipt(TASK, "t2")))
+        found = self.link.receipt(TASK, "t2")
+        self.assertEqual((found["turn"], found["at"], found["ms"], found["calls"]), ("t2", "2026-10-31T11:00:00.000Z", 192000, 2))
+        self.assertEqual([(one["path"], one["add"], one["del"], one["calls"]) for one in found["files"]], [("src/a.py", 4, 1, ["e1"])])
+        self.assertEqual(found["ctx"], {"from": 40.0, "to": 63.0})
+        self.assertEqual(found["credits"], 1.85)
+        with mock.patch.object(chatstream, "read", side_effect=AssertionError("a turn whole in memory is not read from the file")):
+            self.assertEqual(self.link.receipt(TASK, "t2"), found)
+        self.link.limits = {}
+        self.assertEqual(self.link.receipt(TASK, "t2")["ctx"], {"from": 40.0, "to": 63.0})  # a turn that ended does not change: kept
+        self.assertEqual(self.link.receipt(TASK, "no-such-turn"), {})
+        self.assertEqual(self.link.receipt(TASK, 5), {})  # type: ignore[arg-type]
+        self.assertEqual(self.link.receipt("other/task", "t2"), {})
+
+    def test_receipt_of_a_turn_longer_than_the_memory_reads_every_call_from_the_stream(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.long_turn(120)
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 5000})
+        self.assertTrue(until(lambda: "t2" in chatstream.known(self.root, TASK).get(self.chat, set())))
+        found = until(lambda: self.link.receipt(TASK, "t2"))
+        self.assertEqual((found["calls"], found["ms"], found["files"]), (120, 5000, []))  # all 120, though the memory holds the last 60 parts
+        self.assertIsNone(found["credits"])  # no session total before and after
+        self.assertIsNone(found["ctx"])  # no usage
+
     def test_call_of_something_not_there_is_nothing_and_never_raises(self) -> None:
         self.assertEqual(self.link.call(TASK, "t1", "c1"), {})  # not connected: no binding
         self.link.start()

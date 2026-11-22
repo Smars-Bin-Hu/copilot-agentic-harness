@@ -724,7 +724,106 @@ const LIVE = (function () {
     earlierLi.hidden = !(data && data.bound && ids.length && st.reach > 0);
     paintCalm(data, items);
     paintLife(data);
+    rcFollow(data);
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
+  }
+
+  // --- the receipt of a round that ended (B6): what it took and what it changed, as icons with numbers; each file opens to its diff ------------------------------------------------
+  // The server counts the calls and the files the edit calls changed (`/api/live {receipt: turn}`); the gate's holds and refusals are the rows of its record (`st.gates`) inside the round's time.
+  // A number nobody knows is "-", with a tip that says why: never left out.
+  const RC_ICONS = {
+    time: [["circle", {cx: 8, cy: 8, r: 6}], ["path", {d: "M8 4.8V8l2.2 1.4"}]],  // clock
+    credits: [["ellipse", {cx: 8, cy: 4.6, rx: 5, ry: 2}], ["path", {d: "M3 4.6v6.8c0 1.1 2.2 2 5 2s5-.9 5-2V4.6M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"}]],  // coins
+    tools: [["path", {d: "M9.8 2.4a3.3 3.3 0 0 0-3.9 4.3L2.4 10.2a1.3 1.3 0 0 0 1.8 1.8l3.5-3.5a3.3 3.3 0 0 0 4.3-3.9l-2 2-1.6-.4-.4-1.6z"}]],  // wrench
+    ctx: [["path", {d: "M2.5 11a5.5 5.5 0 1 1 11 0"}], ["path", {d: "M8 11l2.6-3.4"}]],  // a gauge
+    files: [["path", {d: "M10 2H5.3A1.3 1.3 0 0 0 4 3.3v7.4A1.3 1.3 0 0 0 5.3 12h6.4a1.3 1.3 0 0 0 1.3-1.3V5z"}], ["path", {d: "M10 2v3h3M2 5v8.7A1.3 1.3 0 0 0 3.3 15H10"}]],  // two sheets
+    gate: [["path", {d: "M8 1.8l5.3 2v4.1c0 3-2.3 5.4-5.3 6.3-3-.9-5.3-3.3-5.3-6.3V3.8z"}], ["path", {d: "M6.6 6v4M9.4 6v4"}]],  // a shield, paused
+  };
+  const rcLi = h("li", {class: "rcpt", hidden: "", "aria-label": t("desk.live.receipt.title")});
+  const rc = {turn: "", data: null, busy: false, failedAt: 0, tries: 0, sig: ""};  // tries: questions that found nothing (3 at most, 5 s apart)
+  const rcTip = (node, key, tip) => { node._tip = () => tip; node.setAttribute("data-tip", "rc-" + key); node.setAttribute("tabindex", "0"); node.setAttribute("aria-label", tip); return node; };
+  const rcStat = (kind, value, tip, cls) => rcTip(h("span", {class: "rc-st" + (cls ? " " + cls : "")}, lineSvg(RC_ICONS[kind]), h("b", null, value)), kind, tip);
+  const rcCredits = (value) => (value < 1 ? value.toFixed(2) : amount(value));
+  const rcPercent = (value) => (typeof value === "number" ? (value >= 10 ? Math.round(value) : value.toFixed(1).replace(/\.0$/, "")) + "%" : "?");
+  function rcGates(data) {  // the gate's record inside the round: from its start to its end, and a few seconds after (the hook writes after the call)
+    const start = Date.parse(data.at || ""), length = typeof data.ms === "number" ? data.ms : NaN;
+    if (isNaN(start) || isNaN(length)) return null;
+    const rows = st.gates.filter((row) => row.ms && row.ms >= start - 2000 && row.ms <= start + length + 5000);
+    return {held: rows.filter((row) => row.how === "held").length, refused: rows.filter((row) => row.how !== "held").length};
+  }
+  function rcFile(file) {
+    const row = h("button", {type: "button", class: "rc-row", "aria-expanded": "false"}, h("span", {class: "rc-chev", "aria-hidden": "true"}, "›"), h("code", {title: file.path}, file.path),
+      file.new ? h("span", {class: "rc-new"}, t("desk.live.receipt.new")) : null, h("span", {class: "add"}, "+" + file.add), h("span", {class: "del"}, "−" + file.del));
+    const body = h("div", {class: "rc-diff", hidden: ""});
+    let loaded = false;
+    row.addEventListener("click", () => {
+      const open = body.hidden;
+      body.hidden = !open;
+      row.setAttribute("aria-expanded", String(open));
+      if (!open || loaded) return;
+      loaded = true;
+      body.replaceChildren(h("p", {class: "sub"}, spinner()));
+      const task = st.task, turn = rc.turn;
+      Promise.all((file.calls || []).map((id) => SERVE.post("/api/live", {task, call: {turn, id}}).then((answer) => (answer && answer.call) || {}, () => ({}))))
+        .then((details) => {
+          if (task !== st.task || turn !== rc.turn) return;
+          const files = [];
+          let cut = false;
+          for (const d of details) for (const part of Array.isArray(d.parts) ? d.parts : []) {
+            if (!part || part.k !== "diff") continue;
+            cut = cut || Boolean(part.cut);
+            for (const one of Array.isArray(part.files) ? part.files : []) if (one && one.path === file.path) files.push(one);
+          }
+          const nodes = files.length ? diffNodes({files, cut}) : [];
+          body.replaceChildren(...(nodes.length ? nodes : [h("p", {class: "sub tc-note"}, t("desk.live.receipt.nodiff"))]));
+        });
+    });
+    return [row, body];
+  }
+  function rcPaint() {
+    const data = rc.data;
+    const gates = data ? rcGates(data) : null;
+    const sig = JSON.stringify([data, gates]);
+    if (sig === rc.sig) return;
+    rc.sig = sig;
+    if (!data) { rcLi.hidden = true; rcLi.replaceChildren(); return; }
+    const seconds = typeof data.ms === "number" ? data.ms / 1000 : null;
+    const ctx = data.ctx;
+    const files = Array.isArray(data.files) ? data.files : [];
+    const changed = files.length + (data.more || 0);
+    const stops = gates ? gates.held + gates.refused : null;
+    const line = h("div", {class: "rc1"},
+      h("span", {class: "rc-n"}, t("desk.live.receipt.title")),
+      rcStat("time", seconds === null ? "-" : clock(seconds), seconds === null ? t("desk.live.receipt.time.none") : t("desk.live.receipt.time", {time: clock(seconds)})),
+      rcStat("credits", typeof data.credits === "number" ? rcCredits(data.credits) : "-", typeof data.credits === "number" ? t("desk.live.receipt.credits", {n: rcCredits(data.credits)}) : t("desk.live.receipt.credits.none")),
+      rcStat("tools", String(data.calls || 0), t("desk.live.receipt.calls", {n: data.calls || 0})),
+      rcStat("ctx", ctx ? rcPercent(ctx.from) + " → " + rcPercent(ctx.to) : "-", ctx ? t("desk.live.receipt.ctx", {from: rcPercent(ctx.from), to: rcPercent(ctx.to)}) : t("desk.live.receipt.ctx.none")),
+      h("span", {class: "rc-sp"}),
+      rcStat("files", String(changed), t("desk.live.receipt.files", {n: changed, add: data.add || 0, del: data.del || 0})),
+      h("span", {class: "rc-pm"}, h("span", {class: "add"}, "+" + (data.add || 0)), h("span", {class: "del"}, "−" + (data.del || 0))),
+      rcStat("gate", stops === null ? "-" : String(stops), stops === null ? t("desk.live.receipt.gate.none") : t("desk.live.receipt.gate", {held: gates.held, refused: gates.refused}), stops ? "hold" : ""));
+    const list = files.length ? h("div", {class: "rc-f"}, ...files.flatMap(rcFile), data.more ? h("p", {class: "sub rc-more"}, t("desk.live.receipt.more", {n: data.more})) : null) : null;
+    rcLi.replaceChildren(h("div", {class: "rc-card"}, line, list));
+    rcLi.hidden = false;
+  }
+  function rcFollow(data) {  // after each drawing: a round that ended gets its receipt once; a new round takes it away
+    if (rc.turn !== st.turn) { rc.turn = st.turn; rc.data = null; rc.failedAt = 0; rc.tries = 0; rcPaint(); }
+    const ended = Boolean(data && data.bound && !data.loading && st.turn && !data.started && data.state !== "busy" && st.nodes.size);
+    if (!ended) { rcLi.hidden = true; return; }
+    const after = needLi.parentNode === feed ? needLi : null;  // the receipt closes the round: right after its last step, above a card of what waits for you
+    if (rcLi.nextSibling !== after || rcLi.parentNode !== feed) feed.insertBefore(rcLi, after);
+    if (rc.data || rc.busy || rc.tries >= 3 || Date.now() - rc.failedAt < 5000) { rcPaint(); return; }
+    rc.busy = true;
+    const task = st.task, turn = st.turn;
+    SERVE.post("/api/live", {task, receipt: turn}).then((answer) => {
+      rc.busy = false;
+      if (task !== st.task || turn !== st.turn) return;
+      const found = answer && answer.receipt && typeof answer.receipt === "object" && answer.receipt.turn === turn ? answer.receipt : null;
+      rc.turn = turn; rc.data = found;
+      if (!found) again();
+      rcPaint();
+    }, () => { rc.busy = false; again(); });
+    function again() { rc.failedAt = Date.now(); rc.tries += 1; if (rc.tries < 3) setTimeout(() => { if (turn === st.turn) rcFollow(st.data); }, 5200); }
   }
 
   // "Earlier steps of this round": up to 60 older steps of the turn, read from the file, go in after the person's message; the place of the reader stays.
@@ -848,6 +947,7 @@ const LIVE = (function () {
         st.held = heldNow; st.approved = approvedNow; st.gates = gatesNow; st.gatesKey = gatesKey;
         st.marks = markGates([...st.nodes.values()].map((rec) => rec.item).filter(Boolean));
         for (const rec of st.nodes.values()) if (rec.item) paint(rec, rec.item);  // a card that arrives later changes how its call reads
+        if (rc.data) rcPaint();  // the receipt counts the gate's record too
       }
       st.off = info.off || "";
       const answer = Boolean(info.answer);  // the agent sits in `harness wait --approval`: the chat is busy, but the agent waits for the person (1.7.38, C12 TB-15)

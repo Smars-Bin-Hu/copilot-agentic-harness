@@ -415,6 +415,65 @@ class VsLink:
         except Exception:  # a page's question must not break the link
             return {}
 
+    def receipt(self, task: str, turn: str) -> Dict[str, Any]:
+        """The receipt of turn `turn` of the task's chat, once it ended (B6): `chatlive.receipt` (calls, files with their lines and call ids) and `{turn, at, ms, ctx, credits}`. `at`: when it began;
+        `ms`: how long it took (the host's duration); `ctx`: `{from, to}`, the percent of the context window after the turn before and after this one (`from` is 0 for the chat's first turn,
+        None when not known); `credits`: what the session's total grew by in this turn, None when the host did not say for both. From memory when the turn is there whole; when its parts fell out
+        of memory (`dropped`) or it is gone, from the task's stream file (read after the lock is let go: there `credits` is None and `ctx` only when the window is known). A turn that runs, one
+        not found, any failure: `{}`. Kept per chat and turn: a turn that ended does not change. Never raises."""
+        try:
+            if not isinstance(turn, str) or not turn:
+                return {}
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                chat = str(binding["chat"]) if binding else ""
+                cached = self.chats.get(chat) if chat else None
+                if cached is None:
+                    return {}
+                kept = cached.setdefault("receipts", {})
+                if turn in kept:
+                    return dict(kept[turn])
+                state = cached["state"]
+                active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
+                if active and str(active.get("id") or "") == turn:
+                    return {}
+                turns = [one for one in state.get("turns") or [] if isinstance(one, dict)]
+                at = next((n for n, one in enumerate(turns) if str(one.get("id") or "") == turn), -1)
+                held = turns[at] if at >= 0 else None
+                before = turns[at - 1] if at > 0 else None
+                first = at == 0 and len(turns) == 1  # the memory keeps the last two turns: one alone is the chat's first
+                parts = [dict(part) for part in held.get("responseParts") or [] if isinstance(part, dict)] if held and not held.get("dropped") else None
+                limits = dict(self.limits)
+                state_copy = {"turns": [dict(one) for one in turns], "activeTurn": active}
+            usage = held.get("usage") if held else None
+            started, length = (held.get("startedAt"), held.get("duration")) if held else ("", None)
+            if parts is None:  # not whole in memory: the file has every part
+                found = next((one for one in chatstream.read(self.root, task, chat)["turns"] if one["id"] == turn and not one.get("sub")), None)
+                if found is None or not found.get("state"):
+                    return {}
+                parts = found["parts"]
+                usage = usage or found.get("usage")
+                started = started or found.get("at")
+                length = length if length is not None else found.get("duration")
+            out = chatlive.receipt(parts, self.root)
+            after = chatctx.percent_of(usage, state_copy, limits)
+            prior = chatctx.percent_of(before.get("usage"), state_copy, limits) if before else (0.0 if first else None)
+            spent_now = chatctx.session_total(usage)
+            spent_then = chatctx.session_total(before.get("usage")) if before else (0.0 if first else None)
+            out.update(turn=turn, at=str(started or ""), ms=length if isinstance(length, (int, float)) and not isinstance(length, bool) and length >= 0 else None,
+                       ctx={"from": prior, "to": after} if after is not None else None,
+                       credits=round(max(0.0, spent_now - spent_then), 2) if spent_now is not None and spent_then is not None else None)
+            with self.lock:
+                again = self.chats.get(chat)
+                if again is not None:
+                    store = again.setdefault("receipts", {})
+                    store[turn] = out
+                    while len(store) > 8:
+                        store.pop(next(iter(store)))
+            return dict(out)
+        except Exception:  # a page's question must not break the link
+            return {}
+
     def sub(self, task: str, call: str, have: int = -1) -> Dict[str, Any]:
         """The whole chat of the subagent that tool call `call` of the task's chat started, for the side panel (B4a): `{call, title, st, items, turn, n, usage: {calls, ms?}}`. `items`: all the items of all the
         turns of that chat in order (`chatlive.build_all`), the first of each turn is the prompt the subagent was given (kind `me`). `st`: `run`, `wait`, `done` or `fail` (as on the call's summary); `turn`: the id

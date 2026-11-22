@@ -3421,6 +3421,8 @@
   "desk.live.sub": "agent 的 chat 的这一轮",
   "desk.live.whole": "在 VS Code 里看完整 chat",
   "desk.live.earlier": "这一轮更早的步骤",
+  "desk.live.read": "阅读视图",
+  "desk.live.read.title": "agent 的回复",
   "desk.live.latest": "最新",
   "desk.live.waits": "{n} 个在等你",
   "desk.live.bar.top": "回到这一轮的开头",

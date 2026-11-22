@@ -31,7 +31,7 @@ const LIVE = (function () {
     web: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"],
     create: ["M4 2h5l3 3v9H4zM9 2v3h3M8 8v4M6 10h4"], agent: ["M2 2h5v5H2zM9 9h5v5H9zM4.5 7v3.5A1.5 1.5 0 0 0 6 12h3"], ring: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM5.5 8h5"], other: ["M3 8h.01M8 8h.01M13 8h.01"], think: ["M8 2a4 4 0 0 0-2 7.5V11h4V9.5A4 4 0 0 0 8 2zM6.5 13.5h3"],
     tool: ["M10.5 2.5a3 3 0 0 0-3.8 3.8L2.5 10.5l3 3 4.2-4.2a3 3 0 0 0 3.8-3.8l-1.9 1.9-1.6-.4-.4-1.6z"], shield: ["M8 1.8l5.3 2v4.1c0 3-2.3 5.4-5.3 6.3-3-.9-5.3-3.3-5.3-6.3V3.8z"],
-    ask: ["M3 3h10v7H8l-3 3v-3H3zM7 5.3a1.2 1.2 0 1 1 1.6 1.1c-.4.2-.6.5-.6.9M8 8.6h.01"], clock: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3l2 1.5"],
+    ask: ["M3 3h10v7H8l-3 3v-3H3zM7 5.3a1.2 1.2 0 1 1 1.6 1.1c-.4.2-.6.5-.6.9M8 8.6h.01"], reader: ["M2.5 3.5h11v9h-11zM9.5 3.5v9"], clock: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3l2 1.5"],
   };
   // The word of a kind (the server's `kind` of a tool item), written out so each message key is found by a search. `other` has none: it keeps the tool's own name.
   const KIND_WORD = {read: "desk.live.kind.read", search: "desk.live.kind.search", edit: "desk.live.kind.edit", create: "desk.live.kind.create", agent: "desk.live.kind.agent", web: "desk.live.kind.web", run: "desk.live.kind.run"};
@@ -117,6 +117,7 @@ const LIVE = (function () {
     const on = rec.foldable && !rec.item.live;
     rec.tx.classList.toggle("lv-fold", on && !rec.open);
     rec.pill.hidden = !on;
+    if (rec.read) rec.read.hidden = !on;  // a reply long enough to fold can be read in the side panel
     setText(rec.pill, t(rec.open ? "desk.live.fold.less" : "desk.live.fold.all"));
     rec.pill.setAttribute("aria-expanded", String(rec.open));
   }
@@ -159,7 +160,9 @@ const LIVE = (function () {
       rec.caret = h("span", {class: "caret", hidden: ""});
       rec.pill = h("button", {type: "button", class: "lv-unfold", hidden: "", "aria-expanded": "false"});
       rec.pill.addEventListener("click", () => { rec.open = !rec.open; applyFold(rec); if (!rec.open) keepPill(rec); });
-      body.append(rec.tx, rec.pill, rec.cutm);
+      rec.read = h("button", {type: "button", class: "lv-unfold lv-read", hidden: ""}, svg(ICONS.reader, 13), t("desk.live.read"));  // B11: the whole reply in the side panel; the feed stays where it is
+      rec.read.addEventListener("click", () => { if (rec.item) READER.open(rec.item, rec.read); });
+      body.append(rec.tx, h("div", {class: "lv-folds"}, rec.pill, rec.read), rec.cutm);
     } else if (item.k === "tool") {
       rec.ico = h("span", {class: "ti"});
       rec.say = h("span", {class: "in"});
@@ -274,6 +277,7 @@ const LIVE = (function () {
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !box.hidden) p.shut(); });
     p.open = function (item, list, turn) {
       if (!box.isConnected) document.body.append(box);
+      READER.reset();
       p.list = (list || []).filter((one) => one && one.sub);
       if (!p.list.some((one) => one.id === item.id)) p.list.unshift(item);
       p.mainTurn = turn || "";
@@ -813,6 +817,32 @@ const LIVE = (function () {
     queueWaits();
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
   }
+
+  // --- the reading view of a long reply (B11): the side panel of the subagents, with the reply drawn whole; the feed does not move -------------------------------------
+  const READER = (function () {
+    const title = h("b", {class: "sa-title"}, t("desk.live.read.title"));
+    const close = h("button", {type: "button", class: "sa-close", "aria-label": t("desk.live.sa.close"), title: t("desk.live.sa.close")}, "×");
+    const body = h("div", {class: "tx md rd-body"});
+    const scroll = h("div", {class: "sa-scroll rd-scroll"}, body);
+    const box = h("aside", {class: "sa-panel lv rd-panel", role: "dialog", "aria-modal": "false", "aria-label": t("desk.live.read.title"), hidden: ""}, h("div", {class: "sa-head"}, title, h("span", {class: "sa-what"}), close), scroll);
+    let back = null;
+    const shut = () => { if (box.hidden) return; box.hidden = true; document.body.classList.remove("sa-on"); if (back && back.isConnected) back.focus({preventScroll: true}); };
+    close.addEventListener("click", shut);
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !box.hidden) shut(); });
+    return {
+      open(item, from) {
+        if (!box.isConnected) document.body.append(box);
+        PANEL.reset();
+        body.replaceChildren(...[st.draw && item.blocks ? st.draw(item.blocks) : item.text, item.cut ? h("p", {class: "thk-cut"}, t("desk.live.cut")) : null].flat(Infinity).filter(Boolean));
+        back = from || document.activeElement;
+        box.hidden = false;
+        document.body.classList.add("sa-on");
+        scroll.scrollTop = 0;
+        close.focus({preventScroll: true});
+      },
+      reset: shut,
+    };
+  })();
 
   // --- the steps between two things said, folded to one line (B7, prototype 5 pin 3) ---------------------------------------------------------------------------------------------
   // What the person and the agent say is the thread; the finished steps between two of them (tool calls, thoughts) are one line: how many, how many of each kind, the lines an edit added and

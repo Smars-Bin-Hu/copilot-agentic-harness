@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.25 (1.8.0 – 1.8.25, 2026-11-17 – 2026-11-22)
+## 1.8.26 (1.8.0 – 1.8.26, 2026-11-17 – 2026-11-22)
 
 ### Added
 
@@ -35,6 +35,8 @@ To see which version you have: `harness --version`.
 - **Green stamps on the Requirement, Changes and Scripts tabs** (1.8.16): the Requirement tab says when you confirmed it and with which code, amber when it changed since, as the Plan tab does; Changes says when the work was written back, to which branch, with the promote's code; a script of `DEV/_server/` that the gate let through shows **ran on DEV ×N**, each run in the hover (it says the call ran, not how it ended).
 - **Checks of a closed task** (1.8.18): a task closed without independent checks can be checked afterwards. Write `[review]=n` with its name in a chat, or set **Checks after the close** on its page; the agent runs `harness task review after <task>` and the reviewer. The task stays closed, `DEV/` is not moved, nothing is promoted. The page and the report show these checks in a block of their own; a FAIL is only recorded (fix it in a new task with `task fork`).
 - **The top right in one row, and a calmer stop** (1.8.19): the search pill and, next to it, one pill with your name, the Terminal toggle and the stop button. Stopping asks in a card (Cancel has the focus), shows that it is stopping or why it did not stop, and ends on a page with the robot asleep and how to start again.
+- **The board's chat shows the whole round** (1.8.26): the Live tab of a task holds every text, thought and tool call of the round, not the newest few. A tool call is one short line (what it did, the target, its numbers) that opens to all of it: the command and its output, the file read, the diff of an edit. A thought is one line that opens to its words. A subagent is one row that opens a side panel with its whole chat. The board keeps what it sees of a task's chats in `.task/stream.jsonl`, so earlier rounds open whole even when Copilot's own record of the session is gone.
+- **A card for each thing the chat waits for** (1.8.26): an Allow, a tool's result to check before the agent reads it (**Send to agent** or **Don't send**), a sign-in a tool asks for (the server, why and the scopes; **Stop**), and a question of a kind the board does not know (answered in a text box), each with its buttons on the card and the rest under Details. Before, a result to check showed as still running, and an unknown question sent you to VS Code.
 - **Where the time of the agents goes: `harness speed`** (1.8.24): from Copilot's own records of the last 7 days, the time of a model call, its first word, a hook and a tool call, grouped by how many agents were working at once; what starting a hook's process costs; what the CPU, the memory, the busiest programs and the network to the Copilot server (through the proxy, handshake only) do now; how long VS Code took to connect. One verdict line from fixed rules. Run it once when the computer is quiet and once while several agents work: the second run shows the first one's numbers next to its own.
 
 ### Fixed

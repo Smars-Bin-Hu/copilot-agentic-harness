@@ -313,6 +313,171 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual([turn["id"] for turn in state["turns"]], ["4", "x"])
         self.assertEqual(state["turns"][-1]["state"], "complete")
 
+    def running_call(self, **extra: Any) -> Dict[str, Any]:
+        state = ahp.trimmed({"turns": [], "activeTurn": None})
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "x", "startedAt": "t1", "message": {"text": "go"}})
+        ahp.reduce_chat(state, dict({"type": "chat/toolCallStart", "turnId": "x", "toolCallId": "c1", "toolName": "bash", "displayName": "Run", "intention": "go"}, **extra))
+        return state
+
+    def act(self, state: Dict[str, Any], kind: str, **fields: Any) -> Dict[str, Any]:
+        ahp.reduce_chat(state, dict({"type": "chat/" + kind, "turnId": "x", "toolCallId": "c1"}, **fields))
+        return state["activeTurn"]["responseParts"][0]["toolCall"]
+
+    def test_a_completed_call_keeps_its_text_result_and_a_huge_one_is_cut_to_head_and_tail(self) -> None:
+        state = self.running_call()
+        self.act(state, "toolCallReady", confirmed="not-needed", toolInput="{}")
+        call = self.act(state, "toolCallComplete", result={"success": True, "pastTenseMessage": "Ran", "content": [{"type": "text", "text": "hello"}], "structuredContent": {"big": 1}, "resultMetadata": {"a": 1}})
+        self.assertEqual((call["status"], call["pastTenseMessage"], call["content"]), ("completed", "Ran", [{"type": "text", "text": "hello"}]))
+        self.assertNotIn("structuredContent", call)
+        self.assertNotIn("resultMetadata", call)
+        text = "a" * 8000 + "m" * 84000 + "z" * 8000
+        once = ahp.bounded_content([{"type": "text", "text": text}])
+        self.assertEqual(len(once[0]["text"]), ahp.TEXT_KEEP)
+        self.assertEqual((once[0]["text"][:8000], once[0]["text"][-16000:]), ("a" * 8000, text[-16000:]))
+        self.assertEqual(once[0]["cut"], 100000 - ahp.TEXT_KEEP)
+        self.assertEqual(ahp.bounded_content(once), once)
+        turn = {"responseParts": [{"kind": "toolCall", "toolCall": {"content": [{"type": "text", "text": text}, {"type": "image", "data": "x" * 50, "contentType": "image/png"}] + [{"type": "text", "text": "t"}] * 50}}]}
+        slimmed = ahp.slim(turn)
+        self.assertEqual(ahp.slim(slimmed), slimmed)
+        self.assertEqual(ahp.slim(ahp.slim(slimmed)), slimmed)
+
+    def test_a_result_is_untrusted_and_every_odd_shape_is_cut_not_raised(self) -> None:
+        kept = ahp.bounded_content([{"type": "embeddedResource", "data": "x" * 1000, "contentType": "image/png"}, "not a dict", {"type": "mystery", "text": "x"}, {"type": "text", "text": 5}, {}, {"type": "resource", "uri": "file:///a", "contentType": "text/plain", "sizeHint": 12, "junk": 1}])
+        self.assertEqual(kept[0], {"type": "embeddedResource", "contentType": "image/png", "size": 1000})
+        self.assertEqual(kept[1], {"type": "unknown", "cut": True})
+        self.assertEqual(kept[2], {"type": "mystery", "cut": True})
+        self.assertEqual(kept[3], {"type": "text", "cut": True})
+        self.assertEqual(kept[4], {"type": "unknown", "cut": True})
+        self.assertEqual(kept[5], {"type": "resource", "uri": "file:///a", "contentType": "text/plain", "sizeHint": 12})
+        for odd in (None, "text", {"type": "text"}, 5):
+            self.assertEqual(ahp.bounded_content(odd), [])
+        many = ahp.bounded_content([{"type": "text", "text": str(n)} for n in range(50)])
+        self.assertEqual((len(many), many[-1]), (41, {"type": "more", "count": 10}))
+        self.assertEqual(ahp.bounded_content(many), many)
+
+    def test_a_file_edit_keeps_its_uris_and_a_terminal_its_exit_code_and_a_bounded_preview(self) -> None:
+        edit = {"type": "fileEdit", "before": {"uri": "file:///b", "content": {"uri": "content://b", "text": "BIG"}}, "after": {"uri": "file:///a", "content": {"uri": "x" * 3000}}, "diff": {"added": 3, "removed": "x"}, "text": "BIG"}
+        terminal = {"type": "terminal", "title": "ls", "isPty": True, "resource": "term://1", "result": {"exitCode": 2, "truncated": True, "preview": "o" * 50000}, "other": 1}
+        kept = ahp.bounded_content([edit, terminal])
+        self.assertEqual(kept[0], {"type": "fileEdit", "before": {"uri": "file:///b", "content": {"uri": "content://b"}}, "after": {"uri": "file:///a"}, "diff": {"added": 3, "removed": 0}})
+        self.assertEqual((kept[1]["title"], kept[1]["isPty"], kept[1]["resource"], kept[1]["result"]["exitCode"], kept[1]["result"]["truncated"]), ("ls", True, "term://1", 2, True))
+        self.assertEqual((len(kept[1]["result"]["preview"]), kept[1]["result"]["cut"]), (ahp.TEXT_KEEP, 50000 - ahp.TEXT_KEEP))
+        self.assertNotIn("other", kept[1])
+        self.assertEqual(ahp.bounded_content(kept), kept)
+
+    def test_content_changes_only_while_the_call_runs(self) -> None:
+        state = self.running_call()
+        self.assertNotIn("content", self.act(state, "toolCallContentChanged", content=[{"type": "text", "text": "early"}]))  # still streaming
+        self.act(state, "toolCallReady", confirmed="not-needed")
+        call = self.act(state, "toolCallContentChanged", content=[{"type": "text", "text": "so far"}], _meta={"k": 1})
+        self.assertEqual((call["content"], call["_meta"]), ([{"type": "text", "text": "so far"}], {"k": 1}))
+        self.act(state, "toolCallComplete", result={"success": True})
+        call = self.act(state, "toolCallContentChanged", content=[{"type": "text", "text": "late"}])
+        self.assertEqual((call["status"], call["content"]), ("completed", [{"type": "text", "text": "so far"}]))
+
+    def test_the_input_of_a_streaming_call_grows_bounded_and_not_after_it_is_ready(self) -> None:
+        state = self.running_call()
+        call = self.act(state, "toolCallDelta", content="{\"a\"", invocationMessage="Running", _meta={"m": 1})
+        self.assertEqual((call["partialInput"], call["invocationMessage"], call["_meta"]), ("{\"a\"", "Running", {"m": 1}))
+        call = self.act(state, "toolCallDelta", content="y" * 10000)
+        self.assertEqual((len(call["partialInput"]), call["partialInput"][-1]), (ahp.PARTIAL_KEEP, "y"))
+        self.act(state, "toolCallReady", confirmed="not-needed")
+        self.assertNotIn("partialInput", self.act(state, "toolCallDelta", content="more"))  # ready: the whole input is in `toolInput`, the partial one is dropped and grows no more
+
+    def test_a_confirmation_runs_the_call_or_cancels_it_with_its_reason(self) -> None:
+        state = self.running_call()
+        self.assertEqual(self.act(state, "toolCallConfirmed", approved=True, confirmed="user-action")["status"], "streaming")  # not asked yet: ignored
+        self.act(state, "toolCallReady", toolInput="{\"c\": 1}")
+        call = self.act(state, "toolCallConfirmed", approved=True, confirmed="user-action", editedToolInput="{\"c\": 2}")
+        self.assertEqual((call["status"], call["confirmed"], call["toolInput"]), ("running", "user-action", "{\"c\": 2}"))
+        self.assertEqual(self.act(state, "toolCallConfirmed", approved=False, reason="user-denied")["status"], "running")  # no longer waiting
+        other = self.running_call()
+        self.act(other, "toolCallReady", toolInput="{}")
+        call = self.act(other, "toolCallConfirmed", approved=False, reason="denied", reasonMessage="no", userSuggestion="try x")
+        self.assertEqual((call["status"], call["reason"], call["reasonMessage"], call["userSuggestion"]), ("cancelled", "denied", "no", "try x"))
+
+    def test_a_result_that_asks_for_confirmation_waits_and_then_completes_or_is_cancelled_without_content(self) -> None:
+        state = self.running_call()
+        self.act(state, "toolCallReady", confirmed="not-needed")
+        call = self.act(state, "toolCallComplete", requiresResultConfirmation=True, result={"success": True, "content": [{"type": "text", "text": "r"}]})
+        self.assertEqual((call["status"], call["content"]), ("pending-result-confirmation", [{"type": "text", "text": "r"}]))
+        self.assertEqual(self.act(state, "toolCallResultConfirmed", approved=True)["status"], "completed")
+        other = self.running_call()
+        self.act(other, "toolCallReady", confirmed="not-needed")
+        self.act(other, "toolCallComplete", requiresResultConfirmation=True, result={"success": True, "content": [{"type": "text", "text": "r"}]})
+        call = self.act(other, "toolCallResultConfirmed", approved=False)
+        self.assertEqual((call["status"], call["reason"]), ("cancelled", "result-denied"))
+        self.assertNotIn("content", call)
+
+    def test_a_call_that_needs_sign_in_waits_for_it_and_runs_on_when_it_is_resolved(self) -> None:
+        state = self.running_call(contributor={"kind": "mcp", "name": "srv"})
+        self.act(state, "toolCallReady", confirmed="not-needed")
+        self.assertEqual(self.act(state, "toolCallAuthResolved")["status"], "running")  # nothing waits
+        call = self.act(state, "toolCallAuthRequired", auth={"url": "https://x"})
+        self.assertEqual((call["status"], call["auth"], call["contributor"]), ("auth-required", {"url": "https://x"}, {"kind": "mcp", "name": "srv"}))
+        self.assertEqual(self.act(state, "toolCallComplete", result={"success": True})["status"], "auth-required")  # a success does not end it
+        call = self.act(state, "toolCallAuthResolved")
+        self.assertEqual(call["status"], "running")
+        self.assertNotIn("auth", call)
+        big = self.act(state, "toolCallAuthRequired", auth={"url": "u" * 5000})
+        self.assertEqual(big["auth"], {"cut": True})
+        plain = self.running_call()
+        self.act(plain, "toolCallReady", confirmed="not-needed")
+        self.assertEqual(self.act(plain, "toolCallAuthRequired", auth={"url": "https://x"})["status"], "running")
+        odd = self.running_call(contributor={"kind": "mcp", "n": 1})  # not strings: not kept
+        self.assertNotIn("contributor", odd["activeTurn"]["responseParts"][0]["toolCall"])
+
+    def test_a_failed_call_is_failed_and_keeps_its_error_message(self) -> None:
+        state = self.running_call()
+        self.act(state, "toolCallReady", confirmed="not-needed")
+        call = self.act(state, "toolCallComplete", result={"success": False, "error": {"message": "boom" * 1000, "code": 5}})
+        self.assertEqual((call["status"], call["success"]), ("failed", False))
+        self.assertEqual(call["error"], {"message": ("boom" * 1000)[:2000]})
+
+    def test_the_thinking_takes_its_start_and_duration(self) -> None:
+        state = ahp.trimmed({"turns": [], "activeTurn": None})
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "x", "startedAt": "t1", "message": {"text": "go"}})
+        ahp.reduce_chat(state, {"type": "chat/responsePart", "turnId": "x", "part": {"kind": "reasoning", "id": "r1", "content": ""}})
+        ahp.reduce_chat(state, {"type": "chat/reasoning", "turnId": "x", "partId": "r1", "content": "hm", "startedAt": 5})
+        ahp.reduce_chat(state, {"type": "chat/reasoning", "turnId": "x", "partId": "r1", "content": "m", "duration": 7})
+        part = state["activeTurn"]["responseParts"][0]
+        self.assertEqual((part["content"], part["startedAt"], part["duration"]), ("hmm", 5, 7))
+
+    def test_a_real_turn_replayed_action_by_action_ends_as_the_host_itself_held_it(self) -> None:
+        """`data/ahp_turn_1147.jsonl`: a turn recorded from a real host (reads, searches, an edit of two files, three commands, thinking). Nothing the host kept is lost here but what `slim` cuts on purpose."""
+        records = [json.loads(line) for line in (Path(__file__).parent / "data" / "ahp_turn_1147.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+        state: Dict[str, Any] = {"turns": [], "activeTurn": None}
+        for record in records:
+            if record["rec"] == "action":
+                ahp.reduce_chat(state, record["action"])
+        self.assertIsNone(state["activeTurn"])
+        mine, host = state["turns"][-1], ahp.slim([record["turn"] for record in records if record["rec"] == "turn"][0])
+        self.assertEqual((mine["state"], mine["duration"], mine["usage"]), (host["state"], host["duration"], host["usage"]))
+        self.assertEqual(len(mine["responseParts"]), len(host["responseParts"]))
+        def said(part: Dict[str, Any]) -> Dict[str, Any]:  # a field the host leaves out is None here: the same thing
+            call = part.get("toolCall")
+            return dict(part, toolCall={key: value for key, value in call.items() if value is not None}) if isinstance(call, dict) else part
+        for got, want in zip(mine["responseParts"], host["responseParts"]):
+            self.assertEqual(said(got), said(want))
+        calls = [part["toolCall"] for part in mine["responseParts"] if part["kind"] == "toolCall"]
+        edit = [call for call in calls if call["toolName"] == "apply_patch"][0]
+        self.assertEqual([item["type"] for item in edit["content"]], ["text", "fileEdit", "fileEdit"])
+        self.assertIn("+RETRIES = 2", edit["content"][0]["text"])  # the diff is in the result itself
+        self.assertTrue(edit["content"][1]["after"]["content"]["uri"].startswith("session-db:"))
+        shell = [call for call in calls if call["toolName"] == "bash"][0]
+        self.assertEqual((shell["content"][0]["type"], shell["content"][0]["result"]["exitCode"]), ("terminal", 0))
+        self.assertIn("OK", shell["content"][0]["result"]["preview"])
+        thought = [part for part in mine["responseParts"] if part["kind"] == "reasoning"][0]
+        self.assertTrue(thought["content"] and thought["startedAt"] and thought["duration"] > 0)
+
+    def test_older_turns_paged_in_move_only_the_cursor(self) -> None:
+        state = ahp.trimmed({"turns": [{"id": "1"}], "activeTurn": None})
+        self.assertNotIn("turnsNextCursor", state)
+        ahp.reduce_chat(state, {"type": "chat/turnsLoaded", "turns": [{"id": "0"}], "turnsNextCursor": "c9"})
+        self.assertEqual(([turn["id"] for turn in state["turns"]], state["turnsNextCursor"]), (["1"], "c9"))
+        self.assertEqual(ahp.trimmed(state)["turnsNextCursor"], "c9")
+        self.assertNotIn("turnsNextCursor", ahp.trimmed({"turns": [], "turnsNextCursor": None}))
+
 
 class SlowCodeCommandTests(unittest.TestCase):
     """1.7.41: a `code` command that does not answer in time is a busy computer or a VS Code still starting. The link tries again and the screen waits; it is not "start the board again"."""

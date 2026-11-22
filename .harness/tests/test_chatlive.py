@@ -156,11 +156,11 @@ class ItemTests(unittest.TestCase):
         self.assertEqual(found["started"], "2026-10-01T00:00:00.000Z")  # the page counts the days
 
     def test_a_snapshot_is_slimmed_and_the_thinking_text_grows(self) -> None:
-        big = {"turns": [{"id": "a", "responseParts": [tool(f"c{n}", content=[{"text": "x" * 1000}]) for n in range(200)]}], "activeTurn": None}
+        big = {"turns": [{"id": "a", "responseParts": [tool(f"c{n}", content=[{"type": "text", "text": "x" * 100000}]) for n in range(200)]}], "activeTurn": None}
         slim = ahp.trimmed(big)["turns"][0]
         self.assertEqual(len(slim["responseParts"]), ahp.PARTS_KEEP)
         self.assertEqual(slim["dropped"], 140)
-        self.assertTrue(all("content" not in part["toolCall"] for part in slim["responseParts"]))
+        self.assertTrue(all(len(part["toolCall"]["content"][0]["text"]) == ahp.TEXT_KEEP and part["toolCall"]["content"][0]["cut"] == 100000 - ahp.TEXT_KEEP for part in slim["responseParts"]))  # 1.8.x: the result is kept, cut
         chat = {"turns": [], "activeTurn": None}
         ahp.reduce_chat(chat, {"type": "chat/turnStarted", "turnId": "t", "startedAt": "s", "message": {}})
         ahp.reduce_chat(chat, {"type": "chat/responsePart", "turnId": "t", "part": {"kind": "reasoning", "id": "r", "content": ""}})

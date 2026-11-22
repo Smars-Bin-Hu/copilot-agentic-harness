@@ -127,13 +127,67 @@ class ItemTests(unittest.TestCase):
         later = {item["id"]: item for item in chatlive.build(chat, {}, None, memo, 3, 4)["items"]}
         self.assertEqual((later["r1"].get("ms"), "same" in later["r1"]), (900, False))
 
-    def test_a_subagents_thought_has_no_markdown_tree_and_the_memo_keeps_its_own(self) -> None:
-        sub_state = state([{"kind": "reasoning", "id": "s0", "content": "**x** " + "y" * 3000}, text("s1", "sub words")], active=False)
-        items = chatlive.build(state([tool("c2", "completed")]), {})["items"]
+    def test_a_subagents_summary_is_small_and_plain_whatever_it_thought_or_said(self) -> None:
+        """B4a: `sub` on a call is `{title, st, calls, ...}` only; no steps (was: `items` with the latest six, a thought capped at SUB_THINK)."""
+        sub_state = state([{"kind": "reasoning", "id": "s0", "content": "**x** " + "y" * 3000}, tool("r1", "completed"), text("s1", "**Done**\n" + "word " * 100 + "password=Hunter2xyz")], active=False)
+        items = chatlive.build(state([tool("c2", "completed", _meta={"subagentChatUri": "x"})]), {})["items"]
         chatlive.attach_subs(items, [({"call": "c2", "chat": "x", "title": "reviewer"}, {"state": sub_state})])
-        step = items[0]["sub"]["items"][0]
-        self.assertNotIn("blocks", step)
-        self.assertLessEqual(len(step["text"]), chatlive.SUB_THINK)
+        found = items[0]["sub"]
+        self.assertEqual((found["title"], found["st"], found["calls"]), ("reviewer", "done", 1))
+        self.assertNotIn("items", found)
+        self.assertNotIn("more", found)
+        self.assertNotIn("now", found)  # it is over
+        self.assertNotIn("\n", found["said"])
+        self.assertLessEqual(len(found["said"]), chatlive.SUB_SAID)
+        self.assertTrue(found["said"].startswith("Done word"))  # the Markdown marks are on the page's side of the line: plain text
+        self.assertNotIn("Hunter2xyz", json.dumps(found))
+        self.assertLess(len(json.dumps(found)), 400)
+
+    def test_the_summary_says_wait_run_done_or_fail_and_what_a_running_subagent_does_now(self) -> None:
+        pending = tool("r2", "pending-confirmation", toolInput=json.dumps({"command": "git push origin main"}))
+        running = state([tool("r1", "completed"), tool("r2", "running", toolInput=json.dumps({"command": "pytest -q tests"}))])
+        found = chatlive.sub_summary("rev", {"state": running}, "run")
+        self.assertEqual((found["st"], found["calls"]), ("run", 2))
+        self.assertEqual(found["now"], {"kind": "run", "word": "pytest", "target": "-q tests", "name": "bash"})  # what a tool item says of itself, no more
+        self.assertNotIn("said", found)
+        waiting = chatlive.sub_summary("rev", {"state": state([tool("r1", "completed"), pending])}, "run")
+        self.assertEqual((waiting["st"], waiting["now"]["word"]), ("wait", "git"))  # a person must allow it: wait wins over run
+        self.assertEqual(chatlive.sub_summary("rev", {"state": state([tool("r1")], active=False)}, "fail")["st"], "fail")  # the call that started it failed
+        self.assertEqual(chatlive.sub_summary("rev", {"state": state([tool("r1")], active=False)}, "stop")["st"], "done")
+        self.assertEqual(chatlive.sub_summary("rev", {"state": state([tool("r1")], active=False)}, "run")["st"], "run")  # the main call still runs: so does it
+        self.assertEqual(chatlive.sub_summary("rev", None, "run"), {"title": "rev", "st": "run", "calls": 0})  # its chat is being read
+        self.assertNotIn("said", chatlive.sub_summary("rev", {"state": state([tool("r1")], active=False)}, "done"))  # it said nothing
+
+    def test_a_summary_counts_the_calls_of_every_turn_in_memory_and_the_call_item_keeps_its_times(self) -> None:
+        two = {"turns": [{"id": "a", "responseParts": [tool("x1"), tool("x2")]}], "activeTurn": {"id": "b", "responseParts": [tool("x3"), text("m", "t")]}}
+        self.assertEqual(chatlive.sub_summary("", {"state": two}, "run")["calls"], 3)
+        items = [{"id": "c2", "k": "tool", "st": "done", "t0": 100, "t1": 900}]
+        chatlive.attach_subs(items, [({"call": "c2", "chat": "x", "title": "r"}, {"state": two}), ({"call": "gone", "chat": "y"}, None)])
+        self.assertEqual((items[0]["sub"]["t0"], items[0]["sub"]["t1"]), (100, 900))
+        bare = [{"id": "c2", "k": "tool", "st": "run"}]
+        chatlive.attach_subs(bare, [({"call": "c2", "chat": "x"}, None)])
+        self.assertNotIn("t0", bare[0]["sub"])
+
+    def test_build_all_gives_every_turn_with_its_prompt_first_and_stubs_what_the_page_holds(self) -> None:
+        chat = {"turns": [{"id": "a", "message": {"text": "map it", "origin": {"kind": "tool"}}, "responseParts": [tool("x1"), text("m1", "one")], "duration": 5}],
+                "activeTurn": {"id": "b", "message": {"text": "again", "origin": {"kind": "tool"}}, "responseParts": [tool("x2", "running")]}}
+        memo: Dict[str, Any] = {}
+        found = chatlive.build_all(chat, {}, None, memo, -1, 4)
+        self.assertEqual([(item["id"], item["k"]) for item in found["items"]], [("a.me", "me"), ("x1", "tool"), ("m1", "text"), ("b.me", "me"), ("x2", "tool")])
+        self.assertEqual((found["turn"], found["dropped"]), ("b", False))
+        later = chatlive.build_all(chat, {}, None, memo, 4, 4)["items"]
+        self.assertEqual([(item["id"], bool(item.get("same"))) for item in later], [("a.me", True), ("x1", True), ("m1", True), ("b.me", True), ("x2", False)])  # a call that runs is whole
+        chat["turns"][0]["dropped"] = 3
+        self.assertTrue(chatlive.build_all(chat, {}, None, None, -1, 4)["dropped"])
+        self.assertEqual(chatlive.build_all({}, {}, None, None, -1, 0), {"items": [], "turn": "", "dropped": False})
+
+    def test_a_subagent_that_failed_before_it_said_anything_shows_the_error_of_its_call(self) -> None:
+        main = state([dict(tool("c2", "failed"), toolCall=dict(tool("c2", "failed")["toolCall"], error={"message": "the lineage tool\ntimed out token=abcdef123456"}))], active=False)
+        items = chatlive.build(main, {})["items"]
+        chatlive.attach_subs(items, [({"call": "c2", "chat": "x", "title": "lineage"}, {"state": state([], active=False)})], None, main)
+        said = items[0]["sub"]["said"]
+        self.assertTrue(said.startswith("the lineage tool timed out"))
+        self.assertNotIn("abcdef123456", said)
 
     def test_a_part_with_no_id_gets_one_that_is_the_same_next_time_and_an_unknown_kind_is_skipped(self) -> None:
         parts = [{"kind": "markdown", "content": "a"}, {"kind": "resource", "uri": "x"}, {"kind": "toolCall", "toolCall": {"toolName": "x"}}]
@@ -511,7 +565,7 @@ class WholeTurnTests(unittest.TestCase):
         self.assertEqual(by_id["c1"], {"id": "c1", "k": "tool", "same": True})
         self.assertEqual(by_id["c2"]["st"], "done")
         chatlive.attach_subs(found["items"], [({"call": "c2", "chat": "x", "title": "reviewer"}, {"state": state([text("s1", "sub words")], active=False)})])
-        self.assertEqual(by_id["c2"]["sub"]["items"][0]["text"], "sub words")
+        self.assertEqual(by_id["c2"]["sub"]["said"], "sub words")
         self.assertNotIn("sub", memo["c2"][1])  # the memo's own item is not the one that was changed
 
     def test_have_minus_one_sends_everything_and_a_page_ahead_of_the_chat_gets_everything(self) -> None:
@@ -647,13 +701,36 @@ class ServeLiveTests(base.BoardCase):
         with mock.patch.object(self.vs, "call", return_value={"id": "c1", "kind": "run"}) as call:
             status, data, _ = self.request("POST", "/api/live", {"task": task, "call": {"turn": "t1", "id": "c1"}})
             self.assertEqual((status, data["call"]), (200, {"id": "c1", "kind": "run"}))
-            call.assert_called_once_with(task, "t1", "c1")
+            call.assert_called_once_with(task, "t1", "c1", "")  # B4a: the fourth argument is the subagent the call is in, empty for the main chat
             for bad in ({"turn": "t1"}, {"id": "c1"}, {"turn": 5, "id": "c1"}, {"turn": "t1", "id": ["c1"]}, {"turn": "x" * 201, "id": "c1"}, {"turn": "t1", "id": "x" * 201}, "c1", None, 7):
                 call.reset_mock()
                 self.assertEqual(self.request("POST", "/api/live", {"task": task, "call": bad})[1]["call"], {}, bad)
                 call.assert_not_called()
         self.assertEqual(self.request("POST", "/api/live", {"task": task, "call": {"turn": "nope", "id": "nope"}})[1]["call"], {})  # nothing found: nothing
         self.assertEqual(self.request("POST", "/api/live", {"task": task, "call": {"turn": "t1", "id": "c1"}}, header=False)[0], 403)
+
+    def test_the_route_passes_the_subagent_of_a_call_and_answers_sub(self) -> None:
+        self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
+        task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
+        with mock.patch.object(self.vs, "call", return_value={"id": "c1"}) as call:
+            self.assertEqual(self.request("POST", "/api/live", {"task": task, "call": {"turn": "s1", "id": "c1", "sub": "k9"}})[1]["call"], {"id": "c1"})
+            call.assert_called_once_with(task, "s1", "c1", "k9")
+            call.reset_mock()
+            self.request("POST", "/api/live", {"task": task, "call": {"turn": "s1", "id": "c1", "sub": ["k9"]}})
+            call.assert_called_once_with(task, "s1", "c1", "")  # not a string: the main chat
+        with mock.patch.object(self.vs, "sub", return_value={"call": "k9", "items": []}) as sub:
+            status, data, _ = self.request("POST", "/api/live", {"task": task, "sub": {"call": "k9", "have": 4}})
+            self.assertEqual((status, data["sub"]), (200, {"call": "k9", "items": []}))
+            sub.assert_called_once_with(task, "k9", 4)
+            sub.reset_mock()
+            self.request("POST", "/api/live", {"task": task, "sub": {"call": "k9", "have": "x"}})
+            sub.assert_called_once_with(task, "k9", -1)
+            sub.reset_mock()
+            for bad in ({}, {"call": ""}, {"call": 5}, {"call": "x" * 201}, "k9", None, 7):
+                self.assertEqual(self.request("POST", "/api/live", {"task": task, "sub": bad})[1]["sub"], {}, bad)
+            sub.assert_not_called()
+        self.assertEqual(self.request("POST", "/api/live", {"task": task, "sub": {"call": "nope"}})[1]["sub"], {})  # not a subagent of this task
+        self.assertEqual(self.request("POST", "/api/live", {"task": task, "sub": {"call": "k9"}}, header=False)[0], 403)
 
     def test_a_steer_in_chinese_carries_the_mark_and_an_empty_one_is_refused(self) -> None:
         self.assertEqual(chatsend.steer_text(" 看一下 ", "zh"), ("[ZH] 看一下", ""))
@@ -764,7 +841,7 @@ class PageFilesTests(unittest.TestCase):
 
     def test_opening_a_call_posts_its_turn_and_id_and_keeps_the_state_across_repaints(self) -> None:
         live = source("live.js")
-        self.assertIn('SERVE.post("/api/live", {task, call: {turn, id}})', live)
+        self.assertIn('SERVE.post("/api/live", {task, call: rec.subCall ? {turn, id, sub: rec.subCall} : {turn, id}})', live)  # a call in a subagent's panel names that subagent
         self.assertIn("make(item, false, st.turn)", live)  # the feed's items carry the turn the answer named
         self.assertIn("make(done, true, turn)", live)  # an opened round: only when the round's answer gave its turn
         self.assertIn("LIVE.draw(found.items, found.turn)", source("rounds.js"))

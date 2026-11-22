@@ -30,6 +30,7 @@ const LIVE = (function () {
     read: ["M4 2h5l3 3v9H4zM9 2v3h3"], edit: ["M3 13l1-3 7-7 2 2-7 7zM9.5 4.5l2 2"], run: ["M3 4l4 4-4 4M8 12h5"], search: ["M7 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 10l3 3"],
     web: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"],
     create: ["M4 2h5l3 3v9H4zM9 2v3h3M8 8v4M6 10h4"], agent: ["M2 2h5v5H2zM9 9h5v5H9zM4.5 7v3.5A1.5 1.5 0 0 0 6 12h3"], ring: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM5.5 8h5"], other: ["M3 8h.01M8 8h.01M13 8h.01"], think: ["M8 2a4 4 0 0 0-2 7.5V11h4V9.5A4 4 0 0 0 8 2zM6.5 13.5h3"],
+    tool: ["M10.5 2.5a3 3 0 0 0-3.8 3.8L2.5 10.5l3 3 4.2-4.2a3 3 0 0 0 3.8-3.8l-1.9 1.9-1.6-.4-.4-1.6z"], clock: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3l2 1.5"],
   };
   // The word of a kind (the server's `kind` of a tool item), written out so each message key is found by a search. `other` has none: it keeps the tool's own name.
   const KIND_WORD = {read: "desk.live.kind.read", search: "desk.live.kind.search", edit: "desk.live.kind.edit", create: "desk.live.kind.create", agent: "desk.live.kind.agent", web: "desk.live.kind.web", run: "desk.live.kind.run"};
@@ -126,11 +127,11 @@ const LIVE = (function () {
   }
 
   // --- one item ---------------------------------------------------------------------------------------------------------
-  function make(item, fixed, turn) {  // `fixed`: a round that is over (LIVE.draw): no entry animation, nothing that acts on the running chat. `turn`: the id of the turn the item is of (an opened call is asked for by it)
+  function make(item, fixed, turn, subCall) {  // `subCall`: drawn in the panel of the subagent that call started  // `fixed`: a round that is over (LIVE.draw): no entry animation, nothing that acts on the running chat. `turn`: the id of the turn the item is of (an opened call is asked for by it)
     const li = h("li", {class: "fi fi-" + item.k + (fixed ? "" : " enter"), "data-id": item.id}, h("i", {class: "dot"}));
     const body = h("div", {class: "fb"});
     li.append(body);
-    const rec = {el: li, body, kind: item.k, sig: "", text: "", pieces: 0, fixed: Boolean(fixed), open: false, turn: String(turn || ""), detail: null, dsig: "", loading: false, again: false, err: "", tab: "out", all: false, fetched: ""};
+    const rec = {el: li, body, kind: item.k, sig: "", text: "", pieces: 0, fixed: Boolean(fixed), open: false, turn: String(turn || ""), subCall: String(subCall || ""), detail: null, dsig: "", loading: false, again: false, err: "", tab: "out", all: false, fetched: ""};
     if (item.k === "me") {  // what the person said: a small mark; the words are in its card
       rec.tag = h("span", {class: "me-tag", role: "button"}, t("desk.live.you"));
       Status.card(rec.tag, () => saidCard(rec), t("desk.live.you"));
@@ -196,30 +197,158 @@ const LIVE = (function () {
     }};
   }
 
-  // A subagent the tool call started (1.6.105): its latest steps under the call, open while it works and folded when it is done. Once the person opens or folds it, that stays.
-  function subLine(step) {
-    if (step.k === "tool") {
-      const mark = step.st === "run" ? "\u2026" : step.st === "fail" ? "\u2717" : step.st === "wait" ? "?" : "\u2713";
-      return h("li", {class: "sub-tool is-" + (step.st || "done")}, h("span", {class: "sub-mark", "aria-hidden": "true"}, mark), h("span", {class: "sub-say"}, step.say || step.name || step.tool || ""),
-        step.target ? h("code", {class: "tg", title: step.target}, step.target) : null);
-    }
-    if (step.k === "text") return h("li", {class: "sub-text"}, step.text);
-    if (step.k === "think") return h("li", {class: "sub-think"}, step.run ? t("desk.live.thinking") : t("desk.live.thought"));
-    return null;
+  // --- a subagent (1.8.x board chat, B4) ------------------------------------------------------------------------------------
+  // The call that started a subagent is drawn as its row: a status dot, its name, what it does now (the icon, word and target of its newest call) or how it ended (a line of its last
+  // reply), its tool calls and its time. Rows of subagents side by side join into one card. The row opens the side panel: the subagent's whole chat, drawn as the main chat is.
+  const SA_WAIT = 1000;  // ms between two questions of the panel while the subagent works
+  function paintSub(rec, item) {
+    const sub = item.sub;
+    rec.el.classList.toggle("fi-sa", Boolean(sub));
+    if (!sub) { if (rec.saNow) { rec.saNow.remove(); rec.saNow = null; } return; }
+    if (!rec.saNow) { rec.saNow = h("span", {class: "sa-now"}); rec.tg.after(rec.saNow); }
+    setText(rec.say, sub.title || t("desk.live.subagent.untitled"));
+    rec.say.classList.add("sa-name");
+    rec.say.title = item.say || sub.title || "";
+    rec.tg.hidden = true;
+    const now = sub.now || {};
+    const parts = [];
+    if (sub.st === "wait") parts.push(h("span", {class: "sa-wait"}, t("desk.live.sa.wait")), now.word || now.target ? h("span", {class: "sa-wait"}, "\u00b7 " + [now.word, now.target].filter(Boolean).join(" ")) : null);
+    else if (sub.st === "run" && (now.kind || now.word || now.name)) parts.push(svg(ICONS[now.kind] || ICONS.other, 13, "sa-ico"), h("span", {class: "sa-word"}, now.kind && now.kind !== "run" && KIND_WORD[now.kind] ? t(KIND_WORD[now.kind]) : now.word || now.name || ""), now.target ? h("code", {class: "tg"}, now.target) : null);
+    else if (sub.st === "fail") parts.push(h("span", {class: "sa-fail"}, t("desk.live.sa.fail") + (sub.said ? " \u00b7 " + sub.said : "")));
+    else if (sub.st === "done") parts.push(h("span", {class: "sa-ok", "aria-hidden": "true"}, "\u2713"), h("span", {class: "sa-said"}, sub.said || t("desk.live.subagent.done")));
+    rec.saNow.replaceChildren(...parts.filter(Boolean));
+    rec.saNow.title = sub.said || "";
+    const calls = typeof sub.calls === "number" ? h("span", {class: "fx-n sa-calls", title: t("desk.live.sa.calls", {n: sub.calls})}, svg(ICONS.tool, 12), String(sub.calls)) : null;
+    rec.fx.replaceChildren(...[calls].filter(Boolean));
+    rec.fxSig = "sa";
+    for (const name of ["run", "wait", "fail", "done"]) rec.el.classList.toggle("sa-" + name, sub.st === name);
+    if (sub.st === "wait") { for (const name of ["run", "fail", "done", "held", "refused"]) rec.el.classList.remove("is-" + name); rec.el.classList.add("is-wait"); }
+    rec.line.setAttribute("aria-haspopup", "dialog");
+    if (PANEL.call === item.id) PANEL.tab(rec);  // the open panel follows the row
   }
-  function paintSub(rec, sub) {
-    if (!sub) { if (rec.sub) { rec.sub.remove(); rec.sub = null; } return; }
-    if (!rec.sub) {
-      rec.subHead = h("summary", {class: "sub-h"});
-      rec.subList = h("ol", {class: "sub-list"});
-      rec.sub = h("details", {class: "fi-subagent"}, rec.subHead, rec.subList);
-      rec.subHead.addEventListener("click", () => { rec.subChosen = true; });
-      rec.body.append(rec.sub);
-    }
-    if (!rec.subChosen) rec.sub.open = sub.st === "run";
-    setText(rec.subHead, t("desk.live.subagent", {title: sub.title || t("desk.live.subagent.untitled")}) + " \u00b7 " + t(sub.st === "run" ? "desk.live.subagent.run" : "desk.live.subagent.done"));
-    rec.subList.replaceChildren(...[...sub.items.map(subLine), sub.more ? h("li", {class: "sub-think"}, t("desk.live.subagent.more")) : null, !sub.items.length ? h("li", {class: "sub-think"}, t("desk.live.subagent.none")) : null].filter(Boolean));
-  }
+
+  // The side panel. One for the page; it shows one subagent at a time, with a tab for each subagent of the list it was opened from.
+  const PANEL = (function () {
+    const p = {call: "", task: "", turn: "", list: [], nodes: new Map(), full: new Map(), have: -1, timer: 0, busy: false, epoch: 0, st: "", data: null, back: null};
+    const title = h("b", {class: "sa-title"});
+    const what = h("span", {class: "sa-what"});
+    const dot = h("i", {class: "sa-dot"});
+    const close = h("button", {type: "button", class: "sa-close", "aria-label": t("desk.live.sa.close"), title: t("desk.live.sa.close")}, "\u00d7");
+    const tabs = h("div", {class: "sa-tabs", role: "tablist"});
+    const feed = h("ol", {class: "lv-feed sa-feed"});
+    const empty = h("p", {class: "sa-empty", hidden: ""});
+    const foot = h("div", {class: "sa-foot"});
+    const box = h("aside", {class: "sa-panel lv", role: "dialog", "aria-modal": "false", hidden: ""}, h("div", {class: "sa-head"}, dot, title, what, close), tabs, h("div", {class: "sa-scroll"}, feed, empty), foot);
+    close.addEventListener("click", () => p.shut());
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !box.hidden) p.shut(); });
+    p.open = function (item, list, turn) {
+      if (!box.isConnected) document.body.append(box);
+      p.list = (list || []).filter((one) => one && one.sub);
+      if (!p.list.some((one) => one.id === item.id)) p.list.unshift(item);
+      p.mainTurn = turn || "";
+      p.back = document.activeElement;
+      p.show(item.id);
+      box.hidden = false;
+      document.body.classList.add("sa-on");
+      close.focus({preventScroll: true});
+    };
+    p.show = function (call) {
+      p.epoch += 1;
+      clearTimeout(p.timer); p.timer = 0; p.busy = false;
+      p.call = call; p.task = st.task; p.have = -1; p.data = null; p.st = "";
+      for (const rec of p.nodes.values()) unwatch(rec);
+      p.nodes.clear(); p.full.clear(); feed.replaceChildren();
+      empty.hidden = false; setText(empty, t("desk.live.reading"));
+      p.head(); p.drawTabs(); p.ask();
+    };
+    p.head = function () {
+      const item = p.list.find((one) => one.id === p.call) || {};
+      const sub = item.sub || {};
+      setText(title, sub.title || t("desk.live.subagent.untitled"));
+      setText(what, item.say && item.say !== sub.title ? item.say : "");
+      what.title = what.textContent;
+      dot.className = "sa-dot sa-" + (sub.st || "done");
+      const calls = typeof sub.calls === "number" ? sub.calls : p.data && p.data.usage && typeof p.data.usage.calls === "number" ? p.data.usage.calls : null;
+      const time = h("span", {class: "sa-f"}, svg(ICONS.clock, 13), h("span", {class: "st-time"}));
+      const parts = [time, calls === null ? null : h("span", {class: "sa-f", title: t("desk.live.sa.calls", {n: calls})}, svg(ICONS.tool, 13), String(calls))];
+      foot.replaceChildren(...parts.filter(Boolean));
+      if (sub.st === "run" || sub.st === "wait") { if (item.t0) running(time, item.t0); }
+      else setText(time.lastChild, item.t0 && item.t1 ? seconds(item.t1 - item.t0) : p.data && p.data.usage && p.data.usage.ms ? seconds(p.data.usage.ms) : "\u2013");
+      if (feed.querySelector(".st-run[data-since]") || foot.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
+    };
+    p.drawTabs = function () {
+      tabs.hidden = p.list.length < 2;
+      tabs.replaceChildren(...p.list.map((one) => {
+        const sub = one.sub || {};
+        const tab = h("button", {type: "button", role: "tab", class: "sa-tab" + (one.id === p.call ? " is-on" : ""), "aria-selected": String(one.id === p.call)}, h("i", {class: "sa-dot sa-" + (sub.st || "done")}), h("span", null, sub.title || t("desk.live.subagent.untitled")));
+        tab.addEventListener("click", () => { if (one.id !== p.call) p.show(one.id); });
+        return tab;
+      }));
+    };
+    p.tab = function (rec) {  // a row of the main feed changed: its item is the newest word on the subagent's state
+      const at = p.list.findIndex((one) => one.id === rec.item.id);
+      if (at >= 0) p.list[at] = rec.item; else p.list.push(rec.item);
+      if (!box.hidden) { p.head(); p.drawTabs(); if ((rec.item.sub || {}).st !== p.st && !p.timer && !p.busy) p.ask(); }
+    };
+    p.ask = function () {
+      if (box.hidden && p.data) return;
+      if (p.busy) return;
+      p.busy = true;
+      const epoch = p.epoch, call = p.call;
+      SERVE.post("/api/live", {task: p.task, sub: {call, have: p.have}}).then((answer) => {
+        if (epoch !== p.epoch) return;
+        p.take(answer && answer.sub);
+      }, (error) => {
+        if (epoch !== p.epoch) return;
+        if (!p.nodes.size) { empty.hidden = false; setText(empty, (error && error.message) || String(error)); }
+      }).then(() => {
+        if (epoch !== p.epoch) return;
+        p.busy = false;
+        const item = p.list.find((one) => one.id === p.call) || {};
+        const going = ["run", "wait"].includes((item.sub || {}).st) || ["run", "wait"].includes(p.st);
+        if (!box.hidden && going) p.timer = setTimeout(() => { p.timer = 0; p.ask(); }, SA_WAIT);
+      });
+    };
+    p.take = function (data) {
+      if (!data || typeof data !== "object" || !Array.isArray(data.items)) {
+        if (!p.nodes.size) { empty.hidden = false; setText(empty, t("desk.live.sa.gone")); }
+        return;
+      }
+      p.data = data; p.st = data.st || "";
+      p.turn = data.turn || "";
+      if (data.items.some((item) => item.same && !p.full.has(item.id))) { p.have = -1; return; }  // a stub of an item the panel does not have: ask for all next time
+      for (const item of data.items) if (!item.same) p.full.set(item.id, item);
+      p.have = typeof data.n === "number" ? data.n : -1;
+      const ids = data.items.map((item) => item.id).filter((id) => p.full.has(id));
+      const keep = new Set(ids);
+      for (const [id, rec] of p.nodes) if (!keep.has(id)) { unwatch(rec); rec.el.remove(); p.nodes.delete(id); }
+      let expected = feed.firstChild;
+      for (const id of ids) {
+        const item = p.full.get(id);
+        if (item.k === "me") { if (!p.nodes.has(id)) { const rec = {el: h("li", {class: "fi fi-text sa-task", "data-id": id}, h("i", {class: "dot"}), h("div", {class: "fb"}, h("div", {class: "tx"}, item.text || ""))), item}; p.nodes.set(id, rec); } }
+        let rec = p.nodes.get(id);
+        if (!rec || rec.kind !== item.k && item.k !== "me") {
+          if (rec) { unwatch(rec); rec.el.remove(); }
+          rec = make(item, true, p.turn, p.call);
+          p.nodes.set(id, rec);
+          paint(rec, item);
+        } else if (item.k !== "me" && rec.item !== item) { rec.turn = p.turn; paint(rec, item); }
+        if (rec.el !== expected) feed.insertBefore(rec.el, expected); else expected = expected.nextSibling;
+      }
+      empty.hidden = ids.length > 0;
+      if (!ids.length) setText(empty, t("desk.live.sa.none"));
+      p.head();
+    };
+    p.shut = function () {
+      p.epoch += 1;
+      clearTimeout(p.timer); p.timer = 0; p.busy = false; p.call = "";
+      box.hidden = true;
+      document.body.classList.remove("sa-on");
+      if (p.back && p.back.isConnected) p.back.focus({preventScroll: true});
+    };
+    p.reset = function () { if (!box.hidden) p.shut(); };
+    return p;
+  })();
 
   // A call the gate stopped fails in the chat ("Run Shell Command failed"), and none of the three things it can be is a failure of the call itself (1.7.22, 1.7.24; F3 U7):
   // held, and its card waits in the outbox ("held": amber); approved, and the agent has not run it again ("approved"); or stopped by the gate before: held and not approved (`past`), or refused (`refused`: a call the gate never lets through).
@@ -279,7 +408,7 @@ const LIVE = (function () {
       const shown = held === "past" ? "held" : held === "refused" || refused ? "refused" : held ? "wait" : item.st === "stop" ? "done" : item.st || "done";
       for (const name of ["run", "wait", "fail", "done", "held", "refused"]) rec.el.classList.toggle("is-" + name, shown === name);  // classList: the `enter` class is not lost
       paintFacts(rec, item, refused);
-      paintSub(rec, item.sub);
+      paintSub(rec, item);
       const time = rec.el2;
       if (item.st === "run" && item.t0) { running(time, item.t0); }
       else {
@@ -365,6 +494,7 @@ const LIVE = (function () {
   }
 
   function toggle(rec) {
+    if (rec.item && rec.item.sub && rec.item.id) { PANEL.open(rec.item, rec.list ? rec.list() : [...st.nodes.values()].map((one) => one.item), rec.turn); return; }  // a subagent opens its panel
     if (!canOpen(rec)) return;
     rec.open = !rec.open;
     syncOpen(rec);
@@ -384,7 +514,7 @@ const LIVE = (function () {
     rec.fetched = JSON.stringify(rec.item);
     rec.err = "";
     if (!rec.detail) drawBody(rec);
-    SERVE.post("/api/live", {task, call: {turn, id}}).then((answer) => {
+    SERVE.post("/api/live", {task, call: rec.subCall ? {turn, id, sub: rec.subCall} : {turn, id}}).then((answer) => {  // a call in a subagent's panel is looked for in its chat
       const found = answer && answer.call && typeof answer.call === "object" && !Array.isArray(answer.call) ? answer.call : {};
       const sig = JSON.stringify(found);
       return () => { const was = rec.detail; const redraw = sig !== rec.dsig || Boolean(rec.err) || !was; rec.err = ""; rec.detail = found; rec.dsig = sig; return {redraw, reason: (was && was.reason) !== found.reason}; };
@@ -705,6 +835,7 @@ const LIVE = (function () {
       if (info.task !== st.task) {  // another task: nothing of the first one is kept
         st.task = info.task; st.rev = ""; st.data = null; st.fails = 0; st.turn = "";
         forget();
+        PANEL.reset();
         show(null);
       }
       if (typeof ROUNDS !== "undefined") { if (!info.off) roundsHere(ROUNDS.node); ROUNDS.follow(info.task); }
@@ -750,10 +881,14 @@ const LIVE = (function () {
     // A static list of finished items (an opened round, rounds.js): drawn as the feed is, and nothing in it acts on the running chat. The person's own message is not in it (the round has its own prompt line).
     draw(items, turn) {
       const list = h("ol", {class: "lv-feed lv-static"});
+      const shown = [];
       for (const item of items || []) {
         if (!item || item.k === "me" || !item.id) continue;
         const done = Object.assign({}, item, {live: false, run: false, st: item.st === "run" ? "done" : item.st});
+        if (done.sub) done.sub = Object.assign({}, done.sub, {st: done.sub.st === "run" || done.sub.st === "wait" ? "done" : done.sub.st});
+        shown.push(done);
         const rec = make(done, true, turn);
+        rec.list = () => shown;  // the panel's tabs: the subagents of this round
         paint(rec, done);
         list.append(rec.el);
       }

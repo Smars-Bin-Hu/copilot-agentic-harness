@@ -235,32 +235,161 @@ class LinkTests(LinkCase):
         self.assertTrue(until(lambda: self.data()["chat"]["session"] == self.resource), self.data()["chat"])  # the task's record is written just after the link counts it bound: a loaded machine read in between
         self.assertEqual((self.row()["chat"]["how"], self.data()["chat"]["session"]), ("sdk", self.resource))
 
-    def test_the_steps_of_a_subagent_show_under_the_tool_call_that_started_it(self) -> None:
-        """1.6.105: Live showed only the main chat; a subagent works in a chat of its own the host makes for the tool call (origin kind tool, read only)."""
-        sub_chat = self.chat + "/subagent/call-9"
+    def sub_setup(self, count: int = 1, parts: Optional[List[Dict[str, Any]]] = None, active: bool = True) -> List[str]:
+        """The main chat runs `count` subagent calls (`call-1` ..), each with a chat of its own that holds `parts` (a read of PLAN.md and a text by default). Returns the chats of the subagents."""
         main = chat_state(SESSION)
         main["activeTurn"] = {"id": "t2", "message": {"text": "review it", "origin": {"kind": "user"}}, "usage": main["turns"][0]["usage"],
-                              "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": "call-9", "toolName": "runSubagent", "displayName": "Run subagent", "status": "running"}}]}
+                              "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": f"call-{n}", "toolName": "runSubagent", "displayName": "Run subagent", "status": "running"}} for n in range(1, count + 1)]}
         self.states[self.chat] = main
-        self.states[sub_chat] = {"status": 8, "turns": [], "activeTurn": {"id": "s1", "message": {"text": "check", "origin": {"kind": "tool"}}, "responseParts": [
-            {"kind": "toolCall", "toolCall": {"toolCallId": "r1", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": "PLAN.md"})}},
-            {"kind": "markdown", "id": "m1", "content": "The plan " + "is fine. " * 100}]}}
-        self.states[self.resource] = {"chats": [{"resource": self.chat}, {"resource": sub_chat, "title": "reviewer", "interactivity": "read-only", "origin": {"kind": "tool", "chat": self.chat, "toolCallId": "call-9"}}]}
+        chats = [f"{self.chat}/subagent/call-{n}" for n in range(1, count + 1)]
+        body = parts if parts is not None else [{"kind": "toolCall", "toolCall": {"toolCallId": "r1", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": "PLAN.md"})}},
+                                                {"kind": "markdown", "id": "m1", "content": "The plan " + "is fine. " * 100}]
+        for chat in chats:
+            turn = {"id": "s1", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "check the plan", "origin": {"kind": "tool"}}, "responseParts": json.loads(json.dumps(body))}
+            self.states[chat] = {"status": 8, "turns": [] if active else [dict(turn, state="complete")], "activeTurn": turn if active else None}
+        self.states[self.resource] = {"chats": [{"resource": self.chat}] + [{"resource": chat, "title": f"reviewer {n}", "interactivity": "read-only", "origin": {"kind": "tool", "chat": self.chat, "toolCallId": f"call-{n}"}}
+                                                                                for n, chat in enumerate(chats, 1)]}
+        return chats
+
+    def bound(self) -> None:
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
-        found = until(lambda: next((item for item in self.link.live(TASK).get("items") or [] if item.get("id") == "call-9" and (item.get("sub") or {}).get("items")), None))
+
+    def push_to(self, chat: str, action: Dict[str, Any]) -> None:
+        self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": chat, "action": action}})
+
+    def test_the_summary_of_a_subagent_shows_on_the_tool_call_that_started_it(self) -> None:
+        """1.6.105: Live showed only the main chat; a subagent works in a chat of its own the host makes for the tool call (origin kind tool, read only). B4a: the call carries a small summary
+        (`{title, st, calls, now | said}`), not its steps (was: `sub.items`, the latest six, and `sub.more`); the whole chat is `VsLink.sub`."""
+        sub_chat = self.sub_setup()[0]
+        self.bound()
+        found = until(lambda: next((item for item in self.link.live(TASK).get("items") or [] if item.get("id") == "call-1" and (item.get("sub") or {}).get("calls")), None))
         self.assertTrue(found, self.link.live(TASK))
         sub = found["sub"]
-        self.assertEqual((sub["title"], sub["st"], [step["k"] for step in sub["items"]]), ("reviewer", "run", ["tool", "text"]))
-        self.assertEqual(sub["items"][0]["target"], "PLAN.md")
-        self.assertLessEqual(len(sub["items"][1]["text"]), 400)
-        self.assertNotIn("blocks", sub["items"][1])  # plain, small
+        self.assertEqual((sub["title"], sub["st"], sub["calls"]), ("reviewer 1", "run", 1))
+        self.assertEqual(sub["now"], {"kind": "read", "target": "PLAN.md", "name": "read_file"})
+        self.assertNotIn("items", sub)
+        self.assertNotIn("said", sub)
         self.assertIn(sub_chat, [message["params"]["channel"] for message in self.host.seen if message.get("method") == "subscribe"])
         before = self.link.live(TASK)["rev"]
-        self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": sub_chat, "action": {"type": "chat/turnComplete", "turnId": "s1", "duration": 5}}})
+        self.push_to(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 5})
         self.assertTrue(until(lambda: self.link.live(TASK)["rev"] != before))  # a step of the subagent changes the answer: the page asks again
-        done = next(item for item in self.link.live(TASK)["items"] if item["id"] == "call-9")
-        self.assertEqual(done["sub"]["items"][0]["target"], "PLAN.md")
+        self.push_to(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": "call-1", "result": {"success": True, "pastTenseMessage": "Ran subagent"}})
+        done = until(lambda: next((item for item in self.link.live(TASK)["items"] if item["id"] == "call-1" and item["sub"]["st"] == "done"), None))
+        self.assertTrue(done, self.link.live(TASK))
+        self.assertEqual(done["sub"]["calls"], 1)
+        self.assertNotIn("now", done["sub"])
+        self.assertTrue(done["sub"]["said"].startswith("The plan is fine. is fine."))
+        self.assertLessEqual(len(done["sub"]["said"]), 160)
+        self.assertNotIn("t0", done["sub"])  # the call came with the snapshot: the board did not see it begin, so its item has no times to copy (the unit test in test_chatlive has them)
+
+    def test_a_call_that_failed_and_a_subagent_that_waits_for_a_person(self) -> None:
+        chats = self.sub_setup(2, active=True)
+        self.states[chats[1]]["activeTurn"]["responseParts"].append({"kind": "toolCall", "toolCall": {"toolCallId": "w1", "toolName": "bash", "status": "pending-confirmation", "toolInput": json.dumps({"command": "git push origin main"})}})
+        self.bound()
+        self.assertTrue(until(lambda: all(chat in self.link.chats for chat in chats)))
+        self.push_to(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": "call-1", "result": {"success": False, "error": {"message": "boom"}}})
+        self.push_to(chats[0], {"type": "chat/turnComplete", "turnId": "s1", "duration": 5})
+        by_id = until(lambda: (lambda items: items if items["call-1"]["sub"]["st"] == "fail" else None)({item["id"]: item for item in self.link.live(TASK)["items"] if item["id"].startswith("call-")}))
+        self.assertTrue(by_id, self.link.live(TASK))
+        self.assertEqual(by_id["call-2"]["sub"]["st"], "wait")
+        self.assertEqual((by_id["call-2"]["sub"]["calls"], by_id["call-2"]["sub"]["now"]["word"]), (2, "git"))
+        self.assertEqual(self.link.sub(TASK, "call-1")["st"], "fail")
+        self.assertEqual(self.link.sub(TASK, "call-2")["st"], "wait")
+
+    def test_every_subagent_is_followed_up_to_the_safety_cap(self) -> None:
+        """B4a: only the newest 3 were followed (`SUB_FOLLOW = 3`); now 16 is a safety cap, and the call of each carries its summary."""
+        self.assertEqual(vslink.SUB_FOLLOW, 16)
+        chats = self.sub_setup(18, parts=[{"kind": "markdown", "id": "m1", "content": "hi"}])
+        self.bound()
+        self.assertTrue(until(lambda: sum(1 for chat in chats if chat in self.link.chats) == 16), sorted(self.link.chats))
+        shown = until(lambda: (lambda items: items if sum(1 for one in items if "sub" in one) == 16 and all((one.get("sub") or {}).get("title") for one in items if "sub" in one) else None)(self.link.live(TASK)["items"]))
+        self.assertTrue(shown)
+        self.assertEqual([item["id"] for item in shown if "sub" in item], [f"call-{n}" for n in range(3, 19)])  # the newest 16
+        self.assertNotIn("sub", next(item for item in shown if item["id"] == "call-1"))
+        self.assertEqual(self.link.sub(TASK, "call-18")["usage"], {"calls": 0})
+        self.assertEqual(self.link.sub(TASK, "call-1"), {})  # not followed, not in the file: nothing
+
+    def test_the_whole_chat_of_a_subagent_from_memory_with_stubs_for_what_the_page_holds(self) -> None:
+        sub_chat = self.sub_setup()[0]
+        self.bound()
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        found = self.link.sub(TASK, "call-1")
+        self.assertEqual((found["call"], found["title"], found["st"], found["turn"], found["usage"]), ("call-1", "reviewer 1", "run", "s1", {"calls": 1}))
+        self.assertEqual([(item["k"], item["id"]) for item in found["items"]], [("me", "s1.me"), ("tool", "r1"), ("text", "m1")])
+        self.assertEqual(found["items"][0]["text"], "check the plan")  # the prompt the subagent was given
+        self.assertEqual(found["items"][1]["target"], "PLAN.md")
+        self.assertIn("blocks", found["items"][2])  # drawn as the main chat is: whole text, Markdown tree
+        self.assertGreater(len(found["items"][2]["text"]), 400)
+        again = self.link.sub(TASK, "call-1", found["n"])
+        self.assertEqual([(item["id"], bool(item.get("same"))) for item in again["items"]], [("s1.me", True), ("r1", True), ("m1", True)])
+        self.push_to(sub_chat, {"type": "chat/delta", "turnId": "s1", "partId": "m1", "content": " more"})
+        grown = until(lambda: (lambda d: d if d["n"] != found["n"] else None)(self.link.sub(TASK, "call-1", found["n"])))
+        self.assertTrue(grown)
+        self.assertEqual([(item["id"], bool(item.get("same"))) for item in grown["items"]], [("s1.me", True), ("r1", True), ("m1", False)])
+        self.assertTrue(grown["items"][2]["text"].endswith("more"))
+        self.assertEqual(self.link.sub(TASK, "nope"), {})
+        self.assertEqual(self.link.sub("no/such", "call-1"), {})
+        for bad in (None, 5, ""):
+            self.assertEqual(self.link.sub(TASK, bad), {})  # type: ignore[arg-type]
+        self.assertFalse(any(item.get("same") for item in self.link.sub(TASK, "call-1", "x")["items"]))  # a `have` that is not a number is -1
+
+    def test_the_whole_chat_of_a_subagent_comes_from_the_stream_file_when_the_chat_is_gone(self) -> None:
+        """The board restarted or the task closed: no binding, no memory. The turns the stream holds with `sub.call` are the chat."""
+        sub_chat = self.sub_setup()[0]
+        self.bound()
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        self.push_to(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 5000})
+        self.assertTrue(until(lambda: "s1" in chatstream.known(self.root, TASK).get(sub_chat, set())), chatstream.read(self.root, TASK))
+        memory = self.link.sub(TASK, "call-1")
+        late = vslink.VsLink(self.root, enabled=False, persist=False)  # a board that never connected: nothing bound, nothing in memory
+        found = late.sub(TASK, "call-1")
+        self.assertEqual((found["call"], found["st"], found["turn"], found["n"], found["title"]), ("call-1", "done", "s1", -1, ""))
+        self.assertEqual([(item["k"], item["id"]) for item in found["items"]], [("me", "s1.me"), ("tool", "r1"), ("text", "m1")])
+        self.assertEqual(found["items"][1]["target"], "PLAN.md")
+        self.assertEqual(found["items"][2]["text"], memory["items"][2]["text"])
+        self.assertEqual(found["usage"], {"calls": 1, "ms": 5000})
+        self.assertEqual(late.sub(TASK, "call-9"), {})
+        self.assertEqual(late.sub("no/such", "call-1"), {})
+        again = late.sub(TASK, "call-1", 3)
+        self.assertFalse(any(item.get("same") for item in again["items"]))  # from the file: always whole
+        with mock.patch("pathlib.Path.read_text", side_effect=OSError("gone")), mock.patch("builtins.open", side_effect=OSError("gone")):
+            self.assertEqual(late.sub(TASK, "call-1"), {})  # an unreadable file is a miss, not an error
+
+    def test_a_subagent_whose_memory_dropped_parts_is_read_from_the_file_whole_and_a_failed_turn_says_fail(self) -> None:
+        body = [{"kind": "toolCall", "toolCall": {"toolCallId": f"r{n}", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": f"f{n}.md"})}} for n in range(30)]
+        sub_chat = self.sub_setup(parts=body)[0]
+        self.bound()
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        for n in range(30, 90):  # more than the memory keeps: the oldest parts fall out
+            self.push_to(sub_chat, {"type": "chat/responsePart", "turnId": "s1", "part": {"kind": "toolCall", "toolCall": {"toolCallId": f"r{n}", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": f"f{n}.md"})}}})
+        self.assertTrue(until(lambda: (self.link.chats[sub_chat]["state"]["activeTurn"].get("dropped") or 0) > 0 or len(self.link.chats[sub_chat]["state"]["activeTurn"]["responseParts"]) >= 90))
+        self.push_to(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 1})
+        self.assertTrue(until(lambda: "s1" in chatstream.known(self.root, TASK).get(sub_chat, set())))
+        found = until(lambda: (lambda d: d if len([item for item in d.get("items", []) if item["k"] == "tool"]) == 90 else None)(self.link.sub(TASK, "call-1")))
+        self.assertTrue(found, len(self.link.sub(TASK, "call-1").get("items", [])))
+        self.assertEqual(found["usage"]["calls"], 90)
+        self.assertEqual(found["items"][0]["k"], "me")
+        self.assertEqual(found["items"][1]["id"], "r0")  # the file has what the memory dropped
+
+    def test_a_call_inside_a_subagent_opens_from_memory_or_from_the_file(self) -> None:
+        sub_chat = self.sub_setup()[0]
+        self.bound()
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        found = self.link.call(TASK, "s1", "r1", sub="call-1")
+        self.assertEqual(found.get("kind"), "read")
+        self.assertEqual(self.link.call(TASK, "s1", "r1"), {})  # without `sub` a subagent's call is not looked for in the main chat
+        self.assertEqual(self.link.call(TASK, "s1", "nope", sub="call-1"), {})
+        self.assertEqual(self.link.call(TASK, "s1", "r1", sub="call-9"), {})
+        self.assertEqual(self.link.call(TASK, "t2", "call-1"), self.link.call(TASK, "t2", "call-1", sub=""))
+        self.push_to(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 5})
+        self.assertTrue(until(lambda: "s1" in chatstream.known(self.root, TASK).get(sub_chat, set())))
+        late = vslink.VsLink(self.root, enabled=False, persist=False)
+        self.assertEqual(late.call(TASK, "s1", "r1", sub="call-1").get("kind"), "read")  # from the file, no binding
+        self.assertEqual(late.call(TASK, "s1", "r1"), {})
+        self.assertEqual(late.call(TASK, "s1", "r1", sub="call-9"), {})
+        self.assertEqual(late.call(TASK, "s9", "r1", sub="call-1"), {})
+        self.assertEqual(late.call(TASK, "s1", "r1", sub=5), {})  # type: ignore[arg-type]
 
     def test_a_session_keeps_the_chats_of_its_subagents(self) -> None:
         state = ahp.trimmed_session({"chats": [{"resource": "c0"}, {"resource": "c1", "title": "mapper", "origin": {"kind": "tool", "chat": "c0", "toolCallId": "k1"}}]})

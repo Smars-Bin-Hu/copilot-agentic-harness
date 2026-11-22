@@ -20,7 +20,7 @@ from core import redact
 
 from . import mdtree
 
-LATEST = 8  # items of `latest`: the newest few steps of a subagent
+LATEST = 8  # items of `latest`: the newest few steps of a chat (no longer used for a subagent: its row is `sub_summary`, its whole chat `build_all`)
 TEXT_CAP = 200000  # characters of agent text: a guard, not a design limit (a text longer than this is cut and says so)
 THINK_CAP = 200000  # the same for thinking
 ERROR_CAP = 300  # 1.8.5: the words of an error part, as `ahp.last_error` keeps them
@@ -767,6 +767,18 @@ def items_of(turn: Dict[str, Any], running: bool, marks: Dict[str, List[int]], r
     return [item for _ident, item, _v, _sig in _walk(turn, running, marks, root, {}, 0) if item is not None]
 
 
+def _collect(walked: List[Tuple[str, Optional[Dict[str, Any]], int, Any]], have: int, whole: Any, fresh: Dict[str, Tuple[Any, Optional[Dict[str, Any]], int]]) -> List[Dict[str, Any]]:
+    """The items of a walk as the page gets them: new dicts, an unchanged one (`v <= have`) that may be a stub (see `build`) as `{id, k, same: true}`. `fresh` gets the entries for the memo."""
+    items: List[Dict[str, Any]] = []
+    for ident, item, v, sig in walked:
+        fresh[ident] = (sig, item, v)
+        if item is None:
+            continue
+        stub = v <= have and ident not in whole and (item["k"] in ("text", "think", "err", "me") or (item["k"] == "tool" and item.get("st") in ("done", "fail", "stop")))
+        items.append({"id": item["id"], "k": item["k"], "same": True} if stub else dict(item))
+    return items
+
+
 def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Path] = None, memo: Optional[Dict[str, Any]] = None, have: int = -1, rev: int = 0,
           whole: Any = ()) -> Dict[str, Any]:
     """`{items, more, started, before, turn}`: the last turn only (the one that runs, else the last that finished) with all the items the board's memory holds of it, oldest first.
@@ -783,15 +795,8 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
     if have > rev:
         have = -1  # the page is ahead of this chat (it was read again, the count began anew): it holds nothing we can name
     kept: Dict[str, Tuple[Any, Optional[Dict[str, Any]], int]] = memo if memo is not None else {}
-    walked = _walk(turn, running, marks, root, kept, rev)
-    items: List[Dict[str, Any]] = []
-    fresh = {}
-    for ident, item, v, sig in walked:
-        fresh[ident] = (sig, item, v)
-        if item is None:
-            continue
-        stub = v <= have and ident not in whole and (item["k"] in ("text", "think", "err", "me") or (item["k"] == "tool" and item.get("st") in ("done", "fail", "stop")))
-        items.append({"id": item["id"], "k": item["k"], "same": True} if stub else dict(item))
+    fresh: Dict[str, Tuple[Any, Optional[Dict[str, Any]], int]] = {}
+    items = _collect(_walk(turn, running, marks, root, kept, rev), have, whole, fresh)
     if memo is not None:
         memo.clear()
         memo.update(fresh)
@@ -800,9 +805,38 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
     return {"items": items, "more": pointer is not None, "started": str(turn.get("startedAt") or "") if running else "", "before": pointer, "turn": str(turn.get("id") or "")}
 
 
+def all_turns(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Every turn of a chat state in memory, oldest first, the one that runs last."""
+    turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)] if isinstance(state.get("turns"), list) else []
+    if isinstance(state.get("activeTurn"), dict):
+        turns.append(state["activeTurn"])
+    return turns
+
+
+def build_all(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Path] = None, memo: Optional[Dict[str, Any]] = None, have: int = -1, rev: int = 0) -> Dict[str, Any]:
+    """`{items, turn, dropped}`: the items of ALL the turns the memory holds, in order (the side panel of a subagent: usually one turn), memoised and stubbed as `build` does (`memo`, `have`, `rev`).
+    The first item of each turn is what started it, as the person's own words: a subagent's turn was started by a tool call (its prompt), the page shows it as the task the subagent was given.
+    `turn`: the id of the last turn; `dropped`: parts fell out of memory in some turn (the file has them: the caller may read it)."""
+    turns = all_turns(state)
+    active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
+    if have > rev:
+        have = -1
+    kept: Dict[str, Tuple[Any, Optional[Dict[str, Any]], int]] = memo if memo is not None else {}
+    fresh: Dict[str, Tuple[Any, Optional[Dict[str, Any]], int]] = {}
+    items: List[Dict[str, Any]] = []
+    for turn in turns:
+        message = turn.get("message") if isinstance(turn.get("message"), dict) else {}
+        asked = dict(turn, message=dict(message, origin={"kind": "user"})) if message.get("text") else turn
+        items.extend(_collect(_walk(asked, turn is active, marks, root, kept, rev), have, (), fresh))
+    if memo is not None:
+        memo.clear()
+        memo.update(fresh)
+    return {"items": items, "turn": str(turns[-1].get("id") or "") if turns else "", "dropped": any(isinstance(turn.get("dropped"), int) and turn["dropped"] > 0 for turn in turns)}
+
+
 def latest(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Path] = None, count: int = LATEST) -> Dict[str, Any]:
     """`{items, more, started}`: the newest `count` items of the last turns, oldest first; `more`: there is something older. (What `build` was before the Live tab showed a whole turn; the steps of a subagent
-    under its tool call (`attach_subs`) are still the newest few.)"""
+    under its tool call were the newest few until B4a.)"""
     active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
     turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)] + ([active] if active else [])
     items: List[Dict[str, Any]] = []
@@ -834,26 +868,86 @@ def latest(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pa
     return {"items": items, "more": more, "started": str(active.get("startedAt") or "") if active else ""}
 
 
-SUB_LATEST = 6  # steps of a subagent shown under its tool call
-SUB_TEXT = 400  # characters of a subagent's text there
-SUB_THINK = 1200  # and of its thinking
+SUB_SAID = 160  # characters of what a finished subagent said last, on its row
+SUB_NOW = ("kind", "word", "target", "name")  # what of a tool item the row of a running subagent keeps
 
 
-def attach_subs(items: List[Dict[str, Any]], subs: List[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]], root: Optional[Path] = None) -> None:
-    """Put the work of each subagent on the tool call that started it (1.6.105): `sub: {title, st, items, more}`, its latest steps, small; a text is plain and cut. `subs`: the chat of
-    each subagent (`ahp.sub_chat`) with its cached state, or None while it is being read. A tool call not among the items shown gets nothing."""
+def _calls_of(turn: Any) -> List[Tuple[str, Dict[str, Any]]]:
+    """The tool calls of a turn of the memory, `(id, call)`, oldest first (a call without an id gets `<turn id>.<index>`)."""
+    parts = turn.get("responseParts") if isinstance(turn, dict) and isinstance(turn.get("responseParts"), list) else []
+    base = int(turn.get("dropped") or 0) if isinstance(turn, dict) and isinstance(turn.get("dropped"), int) else 0
+    out = []
+    for at, part in enumerate(parts):
+        if isinstance(part, dict) and part.get("kind") == "toolCall" and isinstance(part.get("toolCall"), dict):
+            call = part["toolCall"]
+            if isinstance(part.get("_meta"), dict) and not isinstance(call.get("_meta"), dict):
+                call = dict(call, _meta=part["_meta"])
+            out.append((part_id(part) or f"{turn.get('id')}.{base + at}", call))
+    return out
+
+
+def sub_status(state: Dict[str, Any], main_st: str) -> str:
+    """`wait` while a tool call in the subagent's chat waits for a person, `fail` when the call that started it failed, `run` while its turn runs (or the call that started it does), else `done`."""
+    active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
+    if active and any(state_of(call, True) == "wait" for _ident, call in _calls_of(active)):
+        return "wait"
+    if main_st == "fail":
+        return "fail"
+    return "run" if active or main_st == "run" else "done"
+
+
+def sub_summary(title: str, held: Optional[Dict[str, Any]], main_st: str, root: Optional[Path] = None) -> Dict[str, Any]:
+    """What the page shows of a subagent on one row (1.8.x): `{title, st, calls, now?, said?}`. `calls`: the tool calls of its chat that the memory holds (a lower bound when `dropped` parts fell out);
+    `now`: while it runs or waits, its newest tool call (`SUB_NOW` of its item); `said`: when it ended, its last text as one line of `SUB_SAID` characters. `held`: its cached chat, None while it is being read."""
+    state = (held or {}).get("state") or {}
+    st = sub_status(state, main_st)
+    turns = all_turns(state)
+    calls = [pair for turn in turns for pair in _calls_of(turn)]
+    out: Dict[str, Any] = {"title": title, "st": st, "calls": len(calls)}
+    if st in ("run", "wait"):
+        if calls:
+            item = tool_item(calls[-1][1], calls[-1][0], bool(state.get("activeTurn")), root)
+            out["now"] = {key: item[key] for key in SUB_NOW if key in item}
+    else:
+        for turn in reversed(turns):
+            texts = [part for part in turn.get("responseParts") or [] if isinstance(part, dict) and part.get("kind") == "markdown" and isinstance(part.get("content"), str) and part["content"].strip()]
+            if texts:
+                said = cut(words(texts[-1]["content"][:SUB_SAID * 4]), SUB_SAID)[0]  # plain: no marks or links, one line
+                if said:
+                    out["said"] = said
+                break
+    return out
+
+
+def _call_error(state: Optional[Dict[str, Any]], ident: str) -> str:
+    """The error message of tool call `ident` in the last turns of a chat state, as one plain line; "" when none."""
+    if not isinstance(state, dict):
+        return ""
+    for turn in reversed(all_turns(state)):
+        for part in turn.get("responseParts") or []:
+            call = part.get("toolCall") if isinstance(part, dict) else None
+            if isinstance(call, dict) and str(call.get("toolCallId") or "") == ident:
+                error = call.get("error")
+                message = error.get("message") if isinstance(error, dict) else error
+                return cut(words(str(message))[:SUB_SAID * 4], SUB_SAID)[0] if isinstance(message, str) and message.strip() else ""
+    return ""
+
+
+def attach_subs(items: List[Dict[str, Any]], subs: List[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]], root: Optional[Path] = None, state: Optional[Dict[str, Any]] = None) -> None:
+    """Put a small summary of each subagent on the tool call that started it (1.6.105, small since B4a): `sub: {title, st, calls, t0?, t1?, now?, said?}` (`sub_summary`; `t0` / `t1` are the call's own
+    times). The whole chat of a subagent is `VsLink.sub`. `subs`: the chat of each subagent (`ahp.sub_chat`) with its cached state, or None while it is being read. A tool call not among the items shown gets nothing.
+    The items are the new dicts `build` made: the memo's own are not changed."""
     calls = {item["id"]: item for item in items if item.get("k") == "tool"}
     for sub, held in subs:
         item = calls.get(sub["call"])
         if item is None:
             continue
-        state = (held or {}).get("state") or {}
-        built = latest(state, (held or {}).get("marks") or {}, root, SUB_LATEST) if held else {"items": [], "more": False}
-        steps = [dict({key: value for key, value in step.items() if key != "blocks"}, text=cut(step["text"], SUB_TEXT)[0]) if step["k"] == "text" else step for step in built["items"] if step["k"] != "me"]
-        for at, step in enumerate(steps):
-            if step["k"] == "think":  # a thought was cut at 1,200 before the caps were lifted; a subagent's steps stay small (and plain: no Markdown tree)
-                steps[at] = step = {key: value for key, value in step.items() if key != "blocks"}
-                if step.get("text"):
-                    step["text"] = cut(step["text"], SUB_THINK)[0]
-        running = bool(state.get("activeTurn")) or item.get("st") == "run"
-        item["sub"] = {"title": sub.get("title") or "", "st": "run" if running else "done", "items": steps, "more": bool(built["more"])}
+        found = sub_summary(sub.get("title") or "", held, str(item.get("st") or ""), root)
+        for key in ("t0", "t1"):
+            if item.get(key):
+                found[key] = item[key]
+        if found["st"] == "fail" and not found.get("said"):  # a subagent that failed before it said anything: the error of the call that started it (`state`: the main chat)
+            why = _call_error(state, sub["call"])
+            if why:
+                found["said"] = why
+        item["sub"] = found

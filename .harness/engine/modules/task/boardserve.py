@@ -2098,10 +2098,17 @@ def handler_for(board: Board) -> type:
                     if isinstance(asked.get("turn"), str) and len(asked["turn"]) <= 200 and isinstance(where, int) and not isinstance(where, bool) and where >= 0:
                         return self.answer(200, {"older": board.link.older(task_name, asked["turn"], where)})
                     return self.answer(200, {"older": {"items": [], "before": None}})
+                asked_sub = data.get("sub")
+                if "sub" in data:  # a subagent's whole chat for the side panel: from memory, else the stream file (B4a)
+                    if isinstance(asked_sub, dict) and isinstance(asked_sub.get("call"), str) and 0 < len(asked_sub["call"]) <= 200:
+                        had = asked_sub.get("have")
+                        return self.answer(200, {"sub": board.link.sub(task_name, asked_sub["call"], had if isinstance(had, int) and not isinstance(had, bool) else -1)})
+                    return self.answer(200, {"sub": {}})
                 asked_call = data.get("call")
                 if "call" in data:  # an opened tool call: its whole command, input, output and diff (from memory, else the stream file)
                     if isinstance(asked_call, dict) and all(isinstance(asked_call.get(key), str) and len(asked_call[key]) <= 200 for key in ("turn", "id")):
-                        return self.answer(200, {"call": board.link.call(task_name, asked_call["turn"], asked_call["id"])})
+                        under = asked_call.get("sub")  # the call is in the chat of the subagent that this tool call of the main chat started
+                        return self.answer(200, {"call": board.link.call(task_name, asked_call["turn"], asked_call["id"], under if isinstance(under, str) and len(under) <= 200 else "")})
                     return self.answer(200, {"call": {}})
                 have = data.get("have")
                 return self.answer(200, {"live": board.link.live(task_name, str(data.get("rev", ""))[:300], have if isinstance(have, int) and not isinstance(have, bool) else -1)})

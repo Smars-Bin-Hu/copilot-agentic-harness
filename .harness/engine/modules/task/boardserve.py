@@ -583,6 +583,23 @@ class Board:
                 self.close_promoted()
             except Exception:  # noqa: BLE001 - a look at the tasks must not end the thread
                 continue
+            try:
+                self.apply_local()  # H5: Local settings changed while a chat worked: the host is restarted once none works
+            except Exception:  # noqa: BLE001 - a helper: the next look tries again
+                continue
+
+    def apply_local(self) -> Dict[str, Any]:
+        """H5: the board's agent host gets Local's tool folders, CA bundle and proxy only when it starts. After a change, restart it, but only while no chat works (a restart stops a running
+        turn and a question that waits for the person): else say which work, and the sweep restarts it once they are done. `{state: same | restarted | waiting, busy}`."""
+        if not self.link.host_stale():
+            return {"state": "same"}
+        names = self.working_tasks()
+        busy = names + self.other_chats(names)
+        if busy:
+            return {"state": "waiting", "busy": busy}
+        self.link.restart_host()
+        print(say("serve.did", action="agent host restart (Local settings)", task="-"), flush=True)
+        return {"state": "restarted"}
 
     def start_sweeper(self) -> None:
         threading.Thread(target=self.sweep_loop, daemon=True, name="board-sweep").start()
@@ -1340,7 +1357,7 @@ class Board:
             launchenv.save_paths(self.root, [str(item) for item in (data.get("paths") or []) if isinstance(item, str)])
         elif step == "bundle":
             made = launchenv.make(self.root, str(data.get("host") or ""), str(data.get("proxy") or ""))
-            return dict(launchenv.state(self.root), made=made, vscode_open=bool(self.link.status().get("ready", False)))
+            return dict(launchenv.state(self.root), made=made, vscode_open=bool(self.link.status().get("ready", False)), agent_host=self.apply_local())
         elif step == "drop":
             launchenv.drop_bundle(self.root)
         elif step == "mcp":  # the person says whether MCP may be used here (1.7.17); the tool packs' MCP servers follow
@@ -1362,7 +1379,7 @@ class Board:
                 row = next((item for item in toolpacks.check(self.root, done["installed"])["toolpacks"] if item["name"] == done["installed"]), {})
             except toolpacks.ToolpackError as error:
                 raise ValueError(str(error)) from None
-            return {"added": done, "missing": [name for name, ok in (row.get("programs") or {}).items() if not ok]}
+            return {"added": done, "missing": [name for name, ok in (row.get("programs") or {}).items() if not ok], "agent_host": self.apply_local()}
         elif step == "toolpack-use":  # a factory pack on or off: its name in `use` of the knowledge base's packs.json, and the skills follow at once (1.7.34)
             from core import toolpacks
 
@@ -1390,6 +1407,8 @@ class Board:
 
             found = toolpacks.check(self.root)
             found.pop("exit_code", None)
+            if str(data.get("step", "")) != "toolpacks":  # a pack turned on, updated or removed may bring or take a bin folder or a trust variable (H5)
+                found["agent_host"] = self.apply_local()
             known, env = conn_core.types(self.root), conn_core.read_env(self.root)
             for row in found["toolpacks"]:
                 row["connections"] = [{"alias": alias, "saved": bool(conn_core.identity_of(env, alias, known.get(str(server.get("type"))) or {}, server))}
@@ -1397,7 +1416,8 @@ class Board:
             return found
         if step not in ("state", "paths", "drop"):
             raise ValueError(say("serve.refused.request"))
-        return dict(launchenv.state(self.root), vscode_open=bool(self.link.status().get("ready", False)))
+        changed = str(data.get("step", "")) != "state"
+        return dict(launchenv.state(self.root), vscode_open=bool(self.link.status().get("ready", False)), **({"agent_host": self.apply_local()} if changed else {}))
 
     def setup(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears while VS Code is open, the agent's terminals do not have it yet:

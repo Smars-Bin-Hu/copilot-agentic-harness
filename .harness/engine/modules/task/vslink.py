@@ -635,6 +635,19 @@ class VsLink:
                 self.own = agenthost.Host(self.root, extra=lambda: launchenv.extra(self.root))
             return self.own
 
+    def host_stale(self) -> bool:
+        """H5: the board's own agent host runs with older Local settings (tool folders, CA bundle, proxy) than `launchenv.extra` gives now."""
+        with self.lock:
+            own = self.own
+        return own is not None and own.stale()
+
+    def restart_host(self) -> Dict[str, Any]:
+        """H5: stop the board's own agent host and start it again with the Local settings of now. The connection drops and the link opens it again (and hands gh's token).
+        A chat with a running turn stops: the caller asks only when none runs."""
+        with self.lock:
+            own = self.own
+        return own.restart() if own is not None else {"state": "stopped"}
+
     def host_state(self) -> Dict[str, Any]:
         """1.8.x: where the board's own agent host is (`agenthost.Host.status`: state, download, version), for the Enter page. `stopped` before the first open."""
         with self.lock:

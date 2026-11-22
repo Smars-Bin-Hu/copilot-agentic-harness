@@ -1,4 +1,4 @@
-// Local (1.7.11) and Tool packs (1.7.13), two of the three windows of tools.js (the third is Connections & sign-ins, servers.js). Local: what VS Code is started with when the board opens it, so that the agent's
+// Local (1.7.11) and Tool packs (1.7.13), two of the three windows of tools.js (the third is Connections & sign-ins, servers.js). Local: what the board's agent host is started with (H5: also the proxy), so that the agent's
 // commands reach the tools here: the programs, tool folders put before PATH, a CA bundle made for a proxy that inspects TLS, and the MCP switch. Tool packs: the packs the harness ships and which the company
 // uses, the company's own, and those added on this computer from a folder. Needs common.js (h, t), serve.js (SERVE).
 const MACHINE = (function () {
@@ -9,6 +9,13 @@ const MACHINE = (function () {
   const link = (text, tip, go) => { const b = h("button", {type: "button", class: "tl-textlink", title: tip || ""}, text); b.addEventListener("click", go); return b; };
   const info = (key) => h("span", {class: "sv-info", tabindex: "0", title: t(key)}, "ⓘ");
   const button = (text, go) => { const b = h("button", {type: "button", class: "act kb-mini"}, text); b.addEventListener("click", go); return b; };
+
+  // H5: after a change the board restarts its agent host when no chat works (`agent_host` of the answer); else it says which work and does it later. Nothing to say: null.
+  function hostNote(found) {
+    const host = found && found.agent_host;
+    if (!host || host.state === "same") return null;
+    return host.state === "restarted" ? h("span", {class: "sub"}, " " + t("machine.host.restarted")) : h("span", {class: "sub"}, " " + t("machine.host.waiting", {names: (host.busy || []).join(", ")}));
+  }
 
   // --- Local -------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -53,7 +60,7 @@ const MACHINE = (function () {
       x.addEventListener("click", () => { ask("paths", {paths: state.paths.filter((one) => one.path !== item.path).map((one) => one.path)}).then(repaint, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
       return h("span", {class: "mc-dir " + (item.found ? "ok" : "bad"), title: item.found ? (item.programs.join("\n") || "-") : t("machine.paths.gone")}, (item.found ? "" : "✗ ") + item.path, " ", x);
     });
-    // Any other program (1.7.39, Windows: `az` before a connection asks for it): the folder it is in, added to the folders VS Code is started with
+    // Any other program (1.7.39, Windows: `az` before a connection asks for it): the folder it is in, added to the folders the agent host is started with
     const more = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", "aria-label": t("machine.paths.add.ph"), placeholder: t("machine.paths.add.ph"), title: t("machine.paths.add.tip")});
     const addBtn = h("button", {type: "button", class: "act", title: t("machine.paths.add.tip")}, t("machine.paths.add"));
     const addGo = () => {
@@ -88,6 +95,8 @@ const MACHINE = (function () {
       part("mcp", ["MCP ", info("machine.mcp.tip")], mcp, h("p", {class: "tl-gsub"}, t("machine.mcp.when")))];
     const paint = (state) => {
       progs.replaceChildren(...programsBlock(state, (next) => { paint(next); }, said));
+      const note = hostNote(state);
+      if (note) said.replaceChildren(note);
       if (ctx.arrived) ctx.arrived();
       host.placeholder = state.default_host;
       const rec = state.recipe || {host: "", proxy: "", tool_folders: [], error: ""};  // the company's recipe fills only what the person has not set: a made bundle's own values come first
@@ -112,10 +121,10 @@ const MACHINE = (function () {
     ask("state").then(paint, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); });
     make.addEventListener("click", () => {
       make.disabled = true; caSaid.replaceChildren(h("span", {class: "sub"}, t("machine.ca.making")));
-      ask("bundle", {host: host.value.trim(), proxy: proxy.value.trim()}).then((state) => { paint(state); caSaid.replaceChildren(made(state.made)); },
+      ask("bundle", {host: host.value.trim(), proxy: proxy.value.trim()}).then((state) => { paint(state); said.replaceChildren(); caSaid.replaceChildren(...[made(state.made), hostNote(state)].filter(Boolean)); },
         (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { make.disabled = false; });
     });
-    drop.addEventListener("click", () => { drop.disabled = true; ask("drop").then((state) => { host.value = ""; proxy.value = ""; paint(state); caSaid.replaceChildren(); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { drop.disabled = false; }); });
+    drop.addEventListener("click", () => { drop.disabled = true; ask("drop").then((state) => { host.value = ""; proxy.value = ""; paint(state); said.replaceChildren(); caSaid.replaceChildren(...[hostNote(state)].filter(Boolean)); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { drop.disabled = false; }); });
     return {title: t("tools.local.title"), tip: t("tools.local.tip"), sub: t("tools.local.lead"), body, foot: []};
   }
 

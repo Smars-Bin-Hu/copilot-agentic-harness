@@ -394,3 +394,43 @@ class SettingsCarriedByVSCode(LaunchEnvCase):
         launchenv.note_seen(self.root, {"PATH": str(self.tools)})
         good = launchenv.carried(self.root, 4711, none, lambda _pid: at - 60)
         self.assertEqual((good["state"], good["by"]), (launchenv.CARRIED, "hook"))
+
+
+class ProxyForTheHost(LaunchEnvCase):
+    """H5: the board's agent host gets the proxy Local knows when the board's own environment names none."""
+
+    def test_a_proxy_in_the_environment_is_inherited_and_nothing_is_added(self) -> None:
+        connections.write_env(self.root, {launchenv.PROXY_KEY: "10.0.0.1:8080"})
+        found = launchenv.extra(self.root, {"PATH": "", "https_proxy": "http://proxy.example:3128"})
+        self.assertFalse({"HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy"} & set(found))
+
+    def test_the_proxy_the_bundle_was_made_with_goes_to_the_host(self) -> None:
+        connections.write_env(self.root, {launchenv.PROXY_KEY: "10.0.0.1:8080"})
+        found = launchenv.extra(self.root, {"PATH": ""})
+        self.assertEqual((found["HTTPS_PROXY"], found["HTTP_PROXY"]), ("http://10.0.0.1:8080", "http://10.0.0.1:8080"))
+        self.assertEqual(found["NO_PROXY"].split(","), ["localhost", "127.0.0.1", "::1"], "the board reaches its host on localhost; no system look with a given environment")
+        if os.name != "nt":
+            self.assertEqual((found["https_proxy"], found["no_proxy"]), (found["HTTPS_PROXY"], found["NO_PROXY"]))
+
+    def test_the_company_recipe_proxy_when_none_was_kept(self) -> None:
+        (self.root / launchenv.RECIPE).parent.mkdir(parents=True, exist_ok=True)
+        (self.root / launchenv.RECIPE).write_text('{"ca_bundle": {"proxy": "proxy.corp.example:9000"}}', encoding="utf-8")
+        self.assertEqual(launchenv.extra(self.root, {"PATH": ""})["HTTPS_PROXY"], "http://proxy.corp.example:9000")
+
+    def test_a_no_proxy_of_the_environment_is_kept(self) -> None:
+        connections.write_env(self.root, {launchenv.PROXY_KEY: "10.0.0.1:8080"})
+        found = launchenv.extra(self.root, {"PATH": "", "NO_PROXY": "internal.example"})
+        self.assertNotIn("NO_PROXY", found)
+        self.assertIn("HTTPS_PROXY", found)
+
+    def test_no_proxy_anywhere_adds_nothing(self) -> None:
+        self.assertEqual(launchenv.extra(self.root, {"PATH": ""}), {})
+
+    def test_the_system_setting_when_looked_at(self) -> None:
+        with mock.patch.object(launchenv, "detect_proxy", return_value="sys.example:8080"), mock.patch.object(launchenv, "system_bypass", return_value=["*.local", "localhost"]):
+            found = launchenv.proxy_extra(self.root, {}, look=True)
+        self.assertEqual(found["HTTPS_PROXY"], "http://sys.example:8080")
+        self.assertEqual(found["NO_PROXY"].split(","), ["localhost", "127.0.0.1", "::1", "*.local"])
+
+    def test_a_bypass_list_that_cannot_be_read_is_empty(self) -> None:
+        self.assertEqual(launchenv.system_bypass("plan9"), [])

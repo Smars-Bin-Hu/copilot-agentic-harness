@@ -26,6 +26,7 @@ import subprocess
 import sys
 import threading
 import time
+import hashlib
 from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Deque, Dict, List, Optional
@@ -44,6 +45,11 @@ READY = re.compile(r"ws://([A-Za-z0-9.\-]+|\[[0-9A-Fa-f:]+\]):(\d+)")
 DOWNLOADING = re.compile(r"Downloading server ([0-9a-f]{7,40})")
 VERSION = re.compile(r"Agent Host\s+v(\d+\.\d+\.\d+)")
 TOKEN_IN = re.compile(r"(tkn=)[^\s&\"']+")
+
+
+def env_mark(extra: Dict[str, str]) -> str:
+    """A short mark of the variables a host was started with (H5): a host whose mark differs from what `extra` gives now runs with old Local settings."""
+    return hashlib.sha256(json.dumps(sorted((extra or {}).items())).encode("utf-8")).hexdigest()[:16]
 
 
 def folder(root: Path) -> Path:
@@ -158,6 +164,7 @@ class Host:
         self.clock = clock
         self.ready_wait = ready_wait
         self.lock = threading.Lock()
+        self.cycle = threading.RLock()  # H5: one start, stop or restart at a time. A restart from a page and the link's own start after the drop must not each start a host (one would be left running)
         self.ready_event = threading.Event()
         self.process: Any = None
         self.pid = 0
@@ -171,6 +178,7 @@ class Host:
         self.ready_at = 0.0
         self.starts = 0
         self.adopted = False
+        self.given = ""  # env_mark of what the running host was started with ("" before a start, or a host adopted from an older record)
         self.lines: Deque[str] = deque(maxlen=LINES_KEPT)
         self._size = (0.0, 0)  # (when looked, bytes)
 
@@ -208,7 +216,7 @@ class Host:
 
     def _write_record(self) -> None:
         try:
-            record_file(self.root).write_text(json.dumps({"pid": self.pid, "port": self.port, "version": self.version, "started": paths.utc_now()}), encoding="utf-8")
+            record_file(self.root).write_text(json.dumps({"pid": self.pid, "port": self.port, "version": self.version, "env": self.given, "started": paths.utc_now()}), encoding="utf-8")
         except OSError:
             pass
 
@@ -224,6 +232,7 @@ class Host:
             return False
         with self.lock:
             self.pid, self.port, self._token, self.version = pid, port, token, str(record.get("version") or "")
+            self.given = str(record.get("env") or "")
             self.process, self.adopted, self.state, self.why = None, True, "ready", ""
             self.started_at = self.ready_at = self.clock()
             self.ready_event.set()
@@ -231,6 +240,10 @@ class Host:
 
     def start(self) -> Dict[str, Any]:
         """Start the host unless one runs or starts. Returns `status()` at once; a thread reads the host's output."""
+        with self.cycle:
+            return self._start()
+
+    def _start(self) -> Dict[str, Any]:
         with self.lock:
             if self.state in ("starting", "preparing", "ready"):
                 return self._status_unlocked()
@@ -257,7 +270,8 @@ class Host:
                 self.state, self.why = "failed", f"cannot write {home}: {type(error).__name__}"
             return self.status()
         env = {key: value for key, value in os.environ.items() if not key.startswith("VSCODE_IPC") and key != "ELECTRON_RUN_AS_NODE"}
-        env.update(self.extra() or {})
+        given = dict(self.extra() or {})
+        env.update(given)
         arguments = [code, "agent", "host", "--new-instance", "--foreground", "--user-data-dir", str(home / "user"), "--server-data-dir", str(home / "server"),
                      "--connection-token-file", str(target), "--idle-timeout", str(IDLE_TIMEOUT)]
         popen: Dict[str, Any] = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL, "env": env}
@@ -273,6 +287,7 @@ class Host:
             return self.status()
         with self.lock:
             self.process, self.pid, self.port, self._token = process, process.pid, 0, token
+            self.given = env_mark(given)
             self.state, self.why, self.version, self.commit, self.adopted = "starting", "", "", "", False
             self.started_at, self.ready_at = self.clock(), 0.0
             self.starts += 1
@@ -347,6 +362,10 @@ class Host:
 
     def stop(self) -> None:
         """End the host and everything it started. Never raises."""
+        with self.cycle:
+            self._stop()
+
+    def _stop(self) -> None:
         with self.lock:
             process, pid = self.process, self.pid
             self.state, self.why, self.port, self.process = "stopped", "", 0, None
@@ -364,8 +383,15 @@ class Host:
             except OSError:
                 pass
 
-    def restart(self) -> Dict[str, Any]:
-        self.stop()
+    def stale(self) -> bool:
+        """H5: the host runs (or starts) with other variables than `extra` gives now: a tool folder, the CA bundle or the proxy changed in Local since. Only a restart gives it the new ones."""
         with self.lock:
-            self.state = "stopped"
-        return self.start()
+            if self.state not in ("starting", "preparing", "ready"):
+                return False
+            given = self.given
+        return given != env_mark(dict(self.extra() or {}))
+
+    def restart(self) -> Dict[str, Any]:
+        with self.cycle:  # the link's start after the drop waits here, then finds the new host starting
+            self._stop()
+            return self._start()

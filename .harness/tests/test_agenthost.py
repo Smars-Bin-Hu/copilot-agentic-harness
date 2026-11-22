@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import textwrap
 import time
 import unittest
@@ -217,6 +218,92 @@ class StopAndAdoptTest(Base):
         after = host.wait_ready(10)
         self.assertNotEqual(before.token(), after.token())
         self.assertEqual(host.status()["starts"], 2)
+
+
+class StaleTest(Base):
+    """H5: a host started with other Local settings than `extra` gives now is stale until a restart."""
+
+    def test_a_change_of_the_variables_makes_it_stale_and_a_restart_clears_it(self) -> None:
+        given = {"PATH": "/tools:/usr/bin"}
+        host = self.host(extra=lambda: dict(given))
+        self.assertFalse(host.stale(), "not started: nothing to restart")
+        host.start()
+        host.wait_ready(10)
+        self.assertFalse(host.stale())
+        given["HTTPS_PROXY"] = "http://10.0.0.1:8080"
+        self.assertTrue(host.stale())
+        host.restart()
+        host.wait_ready(10)
+        self.assertFalse(host.stale())
+        host.stop()
+        given["PATH"] = "/other"
+        self.assertFalse(host.stale(), "a stopped host gets the new ones at its next start")
+
+    def test_an_adopted_host_keeps_the_mark_of_its_start(self) -> None:
+        given = {"PATH": "/tools"}
+        host = self.host(extra=lambda: dict(given))
+        host.start()
+        host.wait_ready(10)
+        self.assertIn(agenthost.env_mark(given), agenthost.record_file(self.root).read_text(encoding="utf-8"))
+        again = agenthost.Host(self.root, code="/fake/code", extra=lambda: dict(given))
+        self.assertTrue(again.adopt())
+        self.assertFalse(again.stale())
+        given["PATH"] = "/other"
+        self.assertTrue(again.stale())
+
+
+    def test_a_start_from_the_link_during_a_restart_starts_no_second_host(self) -> None:
+        """H5 real run: the link saw the drop and started a host while the restart was still stopping the old one; the restart then started another, and one was left running."""
+        from unittest import mock
+
+        host = self.host()
+        host.start()
+        host.wait_ready(10)
+        racer: List[threading.Thread] = []
+        real_end = agenthost.end_group
+
+        def end_group(pid: int, grace: float = agenthost.STOP_GRACE) -> None:
+            racer.append(threading.Thread(target=host.start))  # the link thread, in the middle of the stop
+            racer[0].start()
+            racer[0].join(0.3)
+            real_end(pid, grace)
+
+        with mock.patch.object(agenthost, "end_group", side_effect=end_group):
+            host.restart()
+        racer[0].join(10)
+        host.wait_ready(10)
+        self.assertEqual(host.status()["starts"], 2, "one new host, not two")
+
+
+class ApplyLocalTest(unittest.TestCase):
+    """H5: after a Local change the board restarts its host only while no chat works (`Board.apply_local`)."""
+
+    def board(self, stale: bool, working: List[str], chats: List[str]) -> Any:
+        from modules.task import boardserve
+
+        restarted: List[bool] = []
+        link = type("L", (), {"host_stale": lambda self: stale, "restart_host": lambda self: restarted.append(True) or {}})()
+        fake = type("B", (), {"link": link, "working_tasks": lambda self: list(working), "other_chats": lambda self, names: list(chats)})()
+        return boardserve.Board.apply_local(fake), restarted
+
+    def test_same_settings_do_nothing(self) -> None:
+        self.assertEqual(self.board(False, ["t1"], []), ({"state": "same"}, []))
+
+    def test_idle_restarts(self) -> None:
+        self.assertEqual(self.board(True, [], []), ({"state": "restarted"}, [True]))
+
+    def test_a_working_chat_waits(self) -> None:
+        self.assertEqual(self.board(True, ["task-a"], ["a chat"]), ({"state": "waiting", "busy": ["task-a", "a chat"]}, []))
+
+
+class VsLinkStaleTest(unittest.TestCase):
+    def test_no_own_host_is_not_stale_and_a_restart_does_nothing(self) -> None:
+        from modules.task import vslink
+
+        tmp = Path(tempfile.mkdtemp(prefix="vslink-stale-"))
+        link = vslink.VsLink(tmp, enabled=True)
+        self.assertFalse(link.host_stale())
+        self.assertEqual(link.restart_host(), {"state": "stopped"})
 
 
 class HelpersTest(unittest.TestCase):

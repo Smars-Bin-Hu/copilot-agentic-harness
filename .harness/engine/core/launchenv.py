@@ -235,7 +235,8 @@ def tool_folders(root: Path) -> List[str]:
 
 
 def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Optional[Tuple[str, ...]] = None) -> Dict[str, str]:
-    """The variables the board adds when it starts VS Code: PATH with the tool folders first, and each trust variable naming the bundle (when it is there)."""
+    """The variables the board adds when it starts its agent host (and VS Code, until H6): PATH with the tool folders first, each trust variable naming the bundle (when it is there),
+    and the proxy when the board's own environment names none (`proxy_extra`)."""
     base = dict(os.environ if environ is None else environ)
     kept = settings(root)
     out: Dict[str, str] = {}
@@ -250,7 +251,47 @@ def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Opti
     if bundle:
         for name in (trust_vars if trust_vars is not None else trusted_by(root)):
             out[name] = str(bundle)
+    out.update(proxy_extra(root, base, look=environ is None))
     return out
+
+
+PROXY_NAMES = ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy")
+LOCAL_NAMES = ("localhost", "127.0.0.1", "::1")  # the board talks to its agent host on localhost: never through the proxy
+
+
+def proxy_extra(root: Path, base: Dict[str, str], look: bool = True) -> Dict[str, str]:
+    """H5: the proxy variables the agent host (and gh) need when the board's own environment has none, so the host reaches GitHub behind a proxy.
+    A proxy in the environment is inherited as it is: nothing is added. Else the first of: the proxy the CA bundle was made with (Local, Network), the company's
+    recipe, the system's own setting (`look`; the tests pass an environment and look at no system). The lower-case names too off Windows, where tools read either."""
+    if any(base.get(name) for name in PROXY_NAMES):
+        return {}
+    found = settings(root)["proxy"] or proxy_address(recipe(root)["proxy"]) or (detect_proxy() if look else "")
+    if not found:
+        return {}
+    url = "http://" + found
+    out = {"HTTPS_PROXY": url, "HTTP_PROXY": url}
+    if not (base.get("NO_PROXY") or base.get("no_proxy")):
+        out["NO_PROXY"] = ",".join(dict.fromkeys(list(LOCAL_NAMES) + (system_bypass() if look else [])))
+    if os.name != "nt":
+        out.update({name.lower(): value for name, value in out.items()})
+    return out
+
+
+def system_bypass(platform: str = sys.platform) -> List[str]:
+    """The addresses the system's proxy setting leaves out (Windows `ProxyOverride`, macOS exceptions), for NO_PROXY. [] when they cannot be read: a helper, never an error."""
+    found: List[str] = []
+    try:
+        if platform == "win32":
+            import winreg  # noqa: PLC0415 - Windows only
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Internet Settings") as key:
+                found = str(winreg.QueryValueEx(key, "ProxyOverride")[0] or "").split(";")
+        elif platform == "darwin":
+            read = getattr(urllib.request, "_get_proxy_settings", None)  # macOS only: what urllib itself reads
+            found = [str(item) for item in ((read() if read else {}).get("exceptions") or ())]
+    except Exception:  # noqa: BLE001 - no bypass list is no bypass list
+        return []
+    return [item.strip() for item in found if item.strip() and item.strip() != "<local>" and re.match(r"^[A-Za-z0-9.*\-\[\]:/]+$", item.strip())][:50]
 
 
 # --- what VS Code really got (1.7.21) ----------------------------------------------------------------------------------------------------------------------------

@@ -977,6 +977,38 @@ class Quick(unittest.TestCase):
         self.assertLess(time.perf_counter() - started, 1.0)
 
 
+class AskItemTests(unittest.TestCase):
+    """B8: a question of the agent as an item, and a call the person let go."""
+
+    def test_a_question_is_an_item_with_its_answers_as_words(self) -> None:
+        part = {"kind": "inputRequest", "response": "accept", "request": {"id": "r1", "message": "Which columns?", "questions": [
+            {"id": "cols", "title": "Columns", "options": [{"id": "day", "label": "Day"}, {"id": "amount", "label": "Amount"}]},
+            {"id": "days", "title": "Days back"}, {"id": "ok", "title": "Sure?"}, {"id": "left", "title": "Not answered"}],
+            "answers": {"cols": {"state": "submitted", "value": {"kind": "selected", "value": ["day", "amount"]}}, "days": {"state": "submitted", "value": {"kind": "text", "value": "7"}}, "ok": True}}}
+        self.assertEqual(chatlive.part_id(part), "q:r1")
+        item = chatlive.part_item(part, "q:r1", False, False, [1000, 2000], None)
+        self.assertEqual((item["k"], item["st"], item["text"], item["t0"], item["t1"]), ("ask", "done", "Which columns?", 1000, 2000))
+        self.assertEqual(item["qs"], [{"title": "Columns", "answer": "Day, Amount"}, {"title": "Days back", "answer": "7"}, {"title": "Sure?", "answer": "yes"}, {"title": "Not answered", "answer": ""}])
+        waiting = chatlive.part_item(dict(part, response=None), "q:r1", True, False, None, None)
+        self.assertEqual(waiting["st"], "wait")
+        del part["response"]
+        self.assertEqual(chatlive.part_item(part, "q:r1", True, False, None, None)["st"], "wait")
+        self.assertEqual(chatlive.part_item(dict(part, response="decline"), "q:r1", True, False, None, None)["st"], "skip")
+
+    def test_the_times_of_a_question_and_of_a_yes_are_noted(self) -> None:
+        cached: Dict[str, Any] = {}
+        chatlive.stamp(cached, {"type": "chat/inputRequested", "request": {"id": "r1"}}, 100)
+        chatlive.stamp(cached, {"type": "chat/inputCompleted", "requestId": "r1"}, 250)
+        chatlive.stamp(cached, {"type": "chat/toolCallStart", "toolCallId": "c1"}, 300)
+        chatlive.stamp(cached, {"type": "chat/toolCallConfirmed", "toolCallId": "c1", "approved": True}, 900)
+        chatlive.stamp(cached, {"type": "chat/toolCallComplete", "toolCallId": "c1"}, 1000)
+        self.assertEqual(cached["marks"], {"q:r1": [100, 250], "c1": [900, 1000, 900]})
+        call = {"toolCallId": "c1", "toolName": "bash", "status": "completed", "success": True, "confirmed": "user-action", "toolInput": "{\"command\": \"ls\"}"}
+        item = chatlive.part_item({"kind": "toolCall", "toolCall": call}, "c1", False, False, cached["marks"]["c1"], None)
+        self.assertEqual((item["ok"], item["okAt"], item["t0"], item["t1"]), ("you", 900, 900, 1000))
+        self.assertNotIn("ok", chatlive.part_item({"kind": "toolCall", "toolCall": dict(call, confirmed="not-needed")}, "c1", False, False, None, None))
+
+
 class ReceiptTests(unittest.TestCase):
     """The receipt of a turn (B6): the calls, and the files the edit and create calls changed with their lines and the calls that changed them."""
 

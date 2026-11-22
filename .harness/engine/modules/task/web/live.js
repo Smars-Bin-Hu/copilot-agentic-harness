@@ -30,7 +30,8 @@ const LIVE = (function () {
     read: ["M4 2h5l3 3v9H4zM9 2v3h3"], edit: ["M3 13l1-3 7-7 2 2-7 7zM9.5 4.5l2 2"], run: ["M3 4l4 4-4 4M8 12h5"], search: ["M7 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM10 10l3 3"],
     web: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"],
     create: ["M4 2h5l3 3v9H4zM9 2v3h3M8 8v4M6 10h4"], agent: ["M2 2h5v5H2zM9 9h5v5H9zM4.5 7v3.5A1.5 1.5 0 0 0 6 12h3"], ring: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM5.5 8h5"], other: ["M3 8h.01M8 8h.01M13 8h.01"], think: ["M8 2a4 4 0 0 0-2 7.5V11h4V9.5A4 4 0 0 0 8 2zM6.5 13.5h3"],
-    tool: ["M10.5 2.5a3 3 0 0 0-3.8 3.8L2.5 10.5l3 3 4.2-4.2a3 3 0 0 0 3.8-3.8l-1.9 1.9-1.6-.4-.4-1.6z"], clock: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3l2 1.5"],
+    tool: ["M10.5 2.5a3 3 0 0 0-3.8 3.8L2.5 10.5l3 3 4.2-4.2a3 3 0 0 0 3.8-3.8l-1.9 1.9-1.6-.4-.4-1.6z"], shield: ["M8 1.8l5.3 2v4.1c0 3-2.3 5.4-5.3 6.3-3-.9-5.3-3.3-5.3-6.3V3.8z"],
+    ask: ["M3 3h10v7H8l-3 3v-3H3zM7 5.3a1.2 1.2 0 1 1 1.6 1.1c-.4.2-.6.5-.6.9M8 8.6h.01"], clock: ["M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 5v3l2 1.5"],
   };
   // The word of a kind (the server's `kind` of a tool item), written out so each message key is found by a search. `other` has none: it keeps the tool's own name.
   const KIND_WORD = {read: "desk.live.kind.read", search: "desk.live.kind.search", edit: "desk.live.kind.edit", create: "desk.live.kind.create", agent: "desk.live.kind.agent", web: "desk.live.kind.web", run: "desk.live.kind.run"};
@@ -153,6 +154,20 @@ const LIVE = (function () {
       rec.line = h("button", {type: "button", class: "tc-line", "aria-expanded": "false"}, rec.chev, rec.ico, rec.say, rec.tg, rec.fx, rec.el2);  // the whole line opens the call
       rec.line.addEventListener("click", () => toggle(rec));
       body.append(rec.line);
+    } else if (item.k === "ask") {  // B8: a question of the agent. Waiting: one amber line that points at its card; answered: one record line that opens to every question and its answer
+      rec.ico = h("span", {class: "ti"}, svg(ICONS.ask, 15));
+      rec.say = h("span", {class: "in"});
+      rec.tg = h("span", {class: "tg ask-q"});
+      rec.fx = h("span", {class: "fx"});
+      rec.el2 = h("span", {class: "el"});
+      rec.chev = h("span", {class: "tc-chev", "aria-hidden": "true"}, "\u203a");
+      rec.line = h("button", {type: "button", class: "tc-line ask-line", "aria-expanded": "false"}, rec.chev, rec.ico, rec.say, rec.tg, rec.fx, rec.el2);
+      rec.qa = h("div", {class: "ask-qa", hidden: ""});
+      rec.line.addEventListener("click", () => {
+        if (rec.item && rec.item.st === "wait") { const card = needLi.hidden ? null : needLi; if (card) { card.scrollIntoView({block: "center", behavior: "smooth"}); const first = card.querySelector("button, textarea"); if (first) first.focus({preventScroll: true}); } return; }
+        rec.open = !rec.open; paintAsk(rec, rec.item);
+      });
+      body.append(rec.line, rec.qa);
     } else if (item.k === "err") {  // 1.8.5: a turn that ended in an error: its words, in red
       rec.tx = h("div", {class: "tx err-tx"});
       body.append(h("b", {class: "err-h"}, t("waits.error")), rec.tx);
@@ -407,7 +422,7 @@ const LIVE = (function () {
       const refused = item.st === "fail" && !held && REFUSED.test(reasonOf(rec, item));  // a call the person refused is not a failure: grey, "stopped"
       const shown = held === "past" ? "held" : held === "refused" || refused ? "refused" : held ? "wait" : item.st === "stop" ? "done" : item.st || "done";
       for (const name of ["run", "wait", "fail", "done", "held", "refused"]) rec.el.classList.toggle("is-" + name, shown === name);  // classList: the `enter` class is not lost
-      paintFacts(rec, item, refused);
+      paintFacts(rec, item, refused || held === "refused" || held === "past");  // a call the gate stopped has no exit of its own to show
       paintSub(rec, item);
       const time = rec.el2;
       if (item.st === "run" && item.t0) { running(time, item.t0); }
@@ -425,9 +440,32 @@ const LIVE = (function () {
       if (rec.open && can && rec.fetched !== JSON.stringify(item)) fetchCall(rec);  // the call changed while it is open (it ended, it failed): ask again; the page keeps what it shows meanwhile
     } else if (item.k === "err") {
       setText(rec.tx, item.text || t("waits.error.none"));
+    } else if (item.k === "ask") {
+      paintAsk(rec, item);
     } else {
       paintThought(rec, item);
     }
+  }
+
+  function paintAsk(rec, item) {
+    const qs = Array.isArray(item.qs) ? item.qs : [];
+    const wait = item.st === "wait";
+    for (const name of ["wait", "done", "skip"]) rec.el.classList.toggle("is-" + name, item.st === name);
+    setText(rec.say, wait ? t("desk.live.ask.wait") : item.st === "skip" ? t("desk.live.ask.skip") : t("desk.live.ask.done"));
+    setText(rec.tg, item.text || (qs[0] && qs[0].title) || "");
+    rec.tg.title = item.text || "";
+    const answers = qs.map((one) => one.answer).filter(Boolean);
+    const line = wait ? [h("span", {class: "ask-go"}, t("desk.live.ask.go"))] : answers.length ? [h("span", {class: "ask-a"}, "\u2192 " + answers.join(" \u00b7 "))] : [];
+    rec.fx.replaceChildren(...line);
+    const at = item.t1 ? new Date(item.t1).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "";
+    setText(rec.el2, wait ? "" : at);
+    const can = !wait && qs.length > 0;
+    rec.line.classList.toggle("tc-static", !can && !wait);
+    const open = can && Boolean(rec.open);
+    rec.line.setAttribute("aria-expanded", String(open));
+    rec.el.classList.toggle("is-open", open);
+    rec.qa.hidden = !open;
+    if (open) rec.qa.replaceChildren(h("dl", {class: "ask-dl"}, ...qs.flatMap((one) => [h("dt", null, one.title || "-"), h("dd", null, one.answer || t("desk.live.ask.none"))])));
   }
 
   function paintThought(rec, item) {
@@ -488,6 +526,11 @@ const LIVE = (function () {
     if (item.kind === "run" && typeof item.exit === "number" && !refused) {
       const words = t("desk.live.call.exit", {code: item.exit});
       out.push(h("span", {class: item.exit === 0 ? "fx-ok" : "fx-bad", title: words, "aria-label": words}, item.exit === 0 ? "✓" : "✗"));
+    }
+    if (item.ok === "you") {  // B8: it waited for the person, who let it go: a record of the decision on its line
+      const at = item.okAt ? new Date(item.okAt).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "";
+      const words = at ? t("desk.live.ok.at", {time: at}) : t("desk.live.ok");
+      out.push(h("span", {class: "fx-okby", title: words}, svg(ICONS.shield, 12), "\u2713 " + words));
     }
     const sig = out.map((node) => node.className + node.textContent).join("|");
     if (sig !== rec.fxSig) { rec.fxSig = sig; rec.fx.replaceChildren(...out); }
@@ -741,8 +784,8 @@ const LIVE = (function () {
   const GROUP_MIN = 2;
   const KEEP_OUT = ["is-fail", "is-wait", "is-held", "is-refused", "is-run"];
   const GROUP_ORDER = ["think", "read", "search", "edit", "create", "run", "web", "agent", "other"];
-  const stepOf = (rec) => (rec && rec.el ? (rec.kind === "tool" ? rec.kind2 || "other" : ["me", "text", "err"].includes(rec.kind) ? "" : "think") : "");
-  const keptOut = (rec) => rec.kind === "tool" && (KEEP_OUT.some((name) => rec.el.classList.contains(name)) || Boolean(rec.item && rec.item.sub));
+  const stepOf = (rec) => (rec && rec.el ? (rec.kind === "tool" ? rec.kind2 || "other" : ["me", "text", "err", "ask"].includes(rec.kind) ? "" : "think") : "");
+  const keptOut = (rec) => rec.kind === "tool" && (KEEP_OUT.some((name) => rec.el.classList.contains(name)) || Boolean(rec.item && (rec.item.sub || rec.item.ok)));  // B8: a call the person let go is a record of their decision
   function groupLine(group) {
     const counts = new Map();
     let add = 0, del = 0, first = Infinity, last = 0, took = 0;
@@ -787,7 +830,7 @@ const LIVE = (function () {
   // `nodes`: records and plain nodes (the "earlier steps" control) in order; `store`: the groups of this list. The answer: the nodes in order, with a group's line before its steps.
   function fold(nodes, running, store) {
     let lastSaid = -1;
-    nodes.forEach((node, at) => { if (node && node.el && !stepOf(node)) lastSaid = at; });
+    nodes.forEach((node, at) => { if (node && node.el && ["me", "text", "err"].includes(node.kind)) lastSaid = at; });
     const out = [], used = new Set();
     let run = [];
     const close = () => {

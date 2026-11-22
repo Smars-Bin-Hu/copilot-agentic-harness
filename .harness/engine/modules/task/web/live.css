@@ -320,3 +320,15 @@ html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 .gp-pm{display:inline-flex;gap:6px;margin-left:4px;font:12px var(--mono)}
 .fi-group.is-open .tc-chev{transform:rotate(90deg)}
 .fi-group .fb{display:flex;flex-wrap:wrap;align-items:center;flex:1;min-width:0}
+/* B8: a decision of the person as a record on the line: a call they let go, a question they answered (one line that opens to every question and answer) */
+.fx-okby{display:inline-flex;align-items:center;gap:4px;font:12px var(--sans);color:var(--good)}
+.fx-okby svg{width:12px;height:12px;flex:none}
+.fi-ask .ask-q{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.fi-ask .ask-a{color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40ch}
+.fi-ask.is-wait .dot{background:var(--hot-dot);border-color:var(--hot-dot)}
+.fi-ask.is-wait .in,.fi-ask.is-wait .ask-go{color:var(--hot)}
+.fi-ask .fb{display:flex;flex-wrap:wrap;align-items:center;min-width:0}
+.ask-qa{flex:1 1 100%;margin:4px 0 2px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--hover)}
+.ask-dl{margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:2px}
+.ask-dl dt{font-size:12.5px;color:var(--soft)}
+.ask-dl dd{margin:0 0 6px;font-size:13.5px;color:var(--ink);overflow-wrap:anywhere}

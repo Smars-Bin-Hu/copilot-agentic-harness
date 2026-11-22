@@ -50,6 +50,9 @@ def part_id(part: Any) -> str:
         return ""
     if part.get("kind") == "toolCall":
         return str((part.get("toolCall") or {}).get("toolCallId") or "") if isinstance(part.get("toolCall"), dict) else ""
+    if part.get("kind") == "inputRequest":  # B8: a question of the agent, by its request id
+        request = part.get("request") if isinstance(part.get("request"), dict) else {}
+        return "q:" + str(request["id"]) if isinstance(request.get("id"), str) and request["id"] else ""
     return str(part.get("id") or "")
 
 
@@ -61,10 +64,20 @@ def stamp(cached: Dict[str, Any], action: Dict[str, Any], now: int) -> None:
         marks.clear()
         return
     ident = str(action.get("toolCallId") or "") if kind.startswith("chat/toolCall") else part_id(action.get("part")) if kind == "chat/responsePart" else ""
+    if kind == "chat/inputRequested" and isinstance(action.get("request"), dict) and isinstance(action["request"].get("id"), str):
+        ident = "q:" + action["request"]["id"]
+    elif kind == "chat/inputCompleted" and isinstance(action.get("requestId"), str):
+        ident = "q:" + action["requestId"]
     if not ident:
         return
-    if kind in ("chat/responsePart", "chat/toolCallStart"):
+    if kind in ("chat/responsePart", "chat/toolCallStart", "chat/inputRequested"):
         marks.setdefault(ident, [now, 0])
+    elif kind == "chat/inputCompleted":
+        mark = marks.setdefault(ident, [0, 0])
+        mark[1] = now
+    elif kind == "chat/toolCallConfirmed" and action.get("approved"):
+        mark = marks.setdefault(ident, [now, 0])
+        mark[:] = [now, 0, now]  # B8: it runs from now, and this is when it was let go
     elif kind == "chat/toolCallReady" and action.get("confirmed"):
         marks[ident] = [now, 0]  # it runs from now: the wait for a person's yes is not run time
     elif kind == "chat/toolCallComplete":
@@ -619,6 +632,8 @@ def tool_item(call: Dict[str, Any], ident: str, active: bool, root: Optional[Pat
     reason = call.get("reason") if str(call.get("status") or "") == "cancelled" else None
     if isinstance(reason, str) and reason:
         item["reason"] = reason[:40]  # why a call was cancelled (`denied`, `result-denied`, ...): a call the person refused is drawn as stopped, not failed, before it is opened
+    if call.get("confirmed") == "user-action":
+        item["ok"] = "you"  # B8: it waited for a person, who let it go
     if target and target != say:  # words of Copilot, not a place: once is enough
         item["target"] = target
     item.update(facts)
@@ -687,6 +702,8 @@ def part_item(part: Dict[str, Any], ident: str, running: bool, last: bool, mark:
         if isinstance(part.get("_meta"), dict) and not isinstance(call.get("_meta"), dict):  # `sub_calls` reads the meta from the part too
             call = dict(call, _meta=part["_meta"])
         item = tool_item(call, ident, running, root)
+    elif kind == "inputRequest" and isinstance(part.get("request"), dict):
+        item = ask_item(part, ident)
     elif kind == "error":  # 1.8.5: the turn ended in an error; the page draws it red, with its words
         text, _was_cut = cut(part.get("message"), ERROR_CAP)
         item = {"id": ident, "k": "err", "text": text, "resumable": part.get("resumable") is True}
@@ -694,9 +711,51 @@ def part_item(part: Dict[str, Any], ident: str, running: bool, last: bool, mark:
         return None
     if mark and mark[0]:
         item["t0"] = mark[0]
-        if mark[1] and item["k"] == "tool":
+        if mark[1] and item["k"] in ("tool", "ask"):
             item["t1"] = mark[1]
+    if item["k"] == "tool" and mark and len(mark) > 2 and mark[2]:
+        item["okAt"] = mark[2]  # B8: when the person let it go
     return item
+
+
+ASK_LINE = 300  # characters of an answer on the closed line of a question
+
+
+def answer_words(value: Any, options: Optional[List[Dict[str, Any]]] = None) -> str:
+    """An answer as words: the host's `{state, value: {kind, value}}` unwrapped, an option id turned into its label, a list joined. Empty: no answer."""
+    labels = {str(item.get("id")): str(item.get("label") or "") for item in options or [] if isinstance(item, dict)}
+    for _ in range(4):
+        if isinstance(value, dict) and "value" in value:
+            value = value["value"]
+        else:
+            break
+    if isinstance(value, dict):
+        value = value.get("selectedValues") or value.get("selected") or value.get("text") or value.get("label") or ""
+    if isinstance(value, list):
+        return ", ".join(answer_words(one, options) for one in value[:20] if answer_words(one, options))
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value or "")
+    return labels.get(text) or text
+
+
+def ask_item(part: Dict[str, Any], ident: str) -> Dict[str, Any]:
+    """A question of the agent (B8): `{id, k: ask, text, qs: [{title, answer}], st}`. `st`: `wait` (not answered yet), `done` (answered), `skip` (declined or cancelled). `text`: the message, else
+    the first question's title. The answers are words (`answer_words`), each cut to `ASK_LINE`."""
+    request = part["request"]
+    answers = request.get("answers") if isinstance(request.get("answers"), dict) else {}
+    qs = []
+    for question in request.get("questions") or [] if isinstance(request.get("questions"), list) else []:
+        if not isinstance(question, dict):
+            continue
+        title = words(question.get("title") or question.get("message") or "")
+        qs.append({"title": cut(title, SAY_CAP)[0], "answer": cut(answer_words(answers.get(str(question.get("id"))), question.get("options")), ASK_LINE)[0]})
+    text = cut(words(request.get("message") or request.get("title") or (qs[0]["title"] if qs else "")), SAY_CAP)[0]
+    response = part.get("response")
+    st = "wait" if response is None else "done" if response == "accept" else "skip"
+    return {"id": ident, "k": "ask", "text": text, "qs": qs[:20], "st": st}
 
 
 def _thought_ends(items: List[Dict[str, Any]]) -> None:
@@ -713,7 +772,9 @@ def _signature(part: Dict[str, Any], last: bool, running: bool, mark: List[int])
         return (kind, len(part["content"]) if isinstance(part.get("content"), str) else 0, last, tuple(mark), part.get("duration") if kind == "reasoning" else None)
     call = part.get("toolCall")
     if kind == "toolCall" and isinstance(call, dict):
-        return (kind, running, call.get("status"), call.get("success"), tuple(len(str(call.get(key) or "")) for key in ("pastTenseMessage", "intention", "invocationMessage", "displayName", "toolInput")), _content_sig(call), tuple(mark))
+        return (kind, running, call.get("status"), call.get("success"), tuple(len(str(call.get(key) or "")) for key in ("pastTenseMessage", "intention", "invocationMessage", "displayName", "toolInput")), _content_sig(call), tuple(mark), call.get("confirmed"))
+    if kind == "inputRequest" and isinstance(part.get("request"), dict):
+        return (kind, part.get("response"), json.dumps(part["request"].get("answers"), sort_keys=True, default=str)[:2000], len(json.dumps(part["request"], default=str)), tuple(mark))
     if kind == "error":
         return (kind, len(str(part.get("message") or "")), part.get("resumable") is True)
     return ("skip", kind if isinstance(kind, str) else "")

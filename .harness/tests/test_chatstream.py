@@ -67,6 +67,19 @@ class StreamCase(TaskCase):
 
 
 class TakeTests(StreamCase):
+    def test_a_question_is_written_once_it_was_answered_and_read_back_as_an_item(self) -> None:
+        self.push(started("t1"), says("t1", "m1", "Let me ask."))
+        asked = {"type": "chat/inputRequested", "turnId": "t1", "request": {"id": "r1", "message": "Which?", "questions": [{"id": "q1", "title": "Pick"}]}}
+        self.assertFalse([record for record in self.push(asked) if record["k"] == "part" and record["part"].get("kind") == "inputRequest"])  # not answered: not final
+        done = self.push({"type": "chat/inputCompleted", "turnId": "t1", "requestId": "r1", "response": "accept", "answers": {"q1": "yes"}})
+        written = [record for record in done if record["k"] == "part" and record["part"].get("kind") == "inputRequest"]
+        self.assertEqual(len(written), 1)
+        self.push(finished("t1"))
+        turn = self.read()["turns"][0]
+        items = chatlive.items_of(turn, False, {})
+        ask = next(item for item in items if item["k"] == "ask")
+        self.assertEqual((ask["id"], ask["st"], ask["qs"]), ("q:r1", "done", [{"title": "Pick", "answer": "yes"}]))
+
     def test_every_record_starts_with_its_k_and_the_file_has_one_object_per_line(self) -> None:
         self.push(started("t1", "hello"), says("t1", "m1", "text"), call_start("t1", "c1"), call_done("t1", "c1"), finished("t1"))
         lines = self.lines()

@@ -552,5 +552,54 @@ class PaceTests(unittest.TestCase):
         self.assertEqual(most[0], 1)
 
 
+class InputRequestTests(unittest.TestCase):
+    """B8: a question of the agent is a part of the turn (the host's reducer: inputRequested, inputAnswerChanged, inputCompleted), kept bounded."""
+
+    def state(self) -> Dict[str, Any]:
+        state: Dict[str, Any] = {"turns": [], "activeTurn": None}
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "t1", "startedAt": "2026-01-01T10:00:00Z", "message": {"text": "go"}})
+        return state
+
+    def test_a_question_is_asked_answered_and_completed_as_one_part(self) -> None:
+        state = self.state()
+        request = {"id": "r1", "message": "Which?", "questions": [{"id": "q1", "title": "Pick", "kind": "single-select", "options": [{"id": "a", "label": "A", "extra": "x"}]}], "_meta": {"purpose": "askUser"}}
+        ahp.reduce_chat(state, {"type": "chat/inputRequested", "turnId": "t1", "request": request})
+        ahp.reduce_chat(state, {"type": "chat/inputAnswerChanged", "turnId": "t1", "requestId": "r1", "questionId": "q1", "answer": {"state": "draft", "value": "a"}})
+        parts = state["activeTurn"]["responseParts"]
+        self.assertEqual(len(parts), 1)
+        self.assertEqual(parts[0]["request"]["answers"], {"q1": {"state": "draft", "value": "a"}})
+        self.assertNotIn("_meta", parts[0]["request"])
+        self.assertEqual(parts[0]["request"]["questions"][0]["options"], [{"id": "a", "label": "A"}])
+        ahp.reduce_chat(state, {"type": "chat/inputCompleted", "turnId": "t1", "requestId": "r1", "response": "accept", "answers": {"q1": {"state": "submitted", "value": "a"}}})
+        self.assertEqual((parts[0]["response"], parts[0]["request"]["answers"]["q1"]["state"]), ("accept", "submitted"))
+        ahp.reduce_chat(state, {"type": "chat/inputCompleted", "turnId": "t1", "requestId": "r1", "response": "cancel"})  # answered already: nothing changes
+        self.assertEqual(parts[0]["response"], "accept")
+        ahp.reduce_chat(state, {"type": "chat/inputRequested", "turnId": "t1", "request": dict(request, message="Again?")})  # the same id once answered: a new part
+        self.assertEqual(len(parts), 2)
+
+    def test_a_question_is_kept_bounded_and_odd_shapes_change_nothing(self) -> None:
+        state = self.state()
+        huge = {"id": "r2", "message": "m" * 10000, "questions": [{"id": f"q{n}", "title": "t" * 900, "options": [{"id": str(k), "label": "l"} for k in range(80)]} for n in range(30)]}
+        ahp.reduce_chat(state, {"type": "chat/inputRequested", "turnId": "t1", "request": huge})
+        kept = state["activeTurn"]["responseParts"][0]["request"]
+        self.assertEqual(len(kept["message"]), ahp.INPUT_TEXT)
+        self.assertEqual(len(kept["questions"]), ahp.INPUT_QUESTIONS)
+        self.assertEqual(len(kept["questions"][0]["options"]), ahp.INPUT_OPTIONS)
+        self.assertEqual(len(kept["questions"][0]["title"]), 400)
+        for odd in ({"type": "chat/inputRequested", "turnId": "t1", "request": "x"}, {"type": "chat/inputRequested", "turnId": "t1", "request": {"id": 5}},
+                    {"type": "chat/inputAnswerChanged", "turnId": "t1", "requestId": "nope", "questionId": "q", "answer": 1}, {"type": "chat/inputCompleted", "turnId": "t1", "requestId": None}):
+            ahp.reduce_chat(state, odd)
+        self.assertEqual(len(state["activeTurn"]["responseParts"]), 1)
+        slim = ahp.slim_part({"kind": "inputRequest", "request": huge, "response": "accept"})
+        self.assertEqual((len(slim["request"]["questions"]), slim["response"]), (ahp.INPUT_QUESTIONS, "accept"))
+
+    def test_a_call_let_go_without_a_reason_was_let_go_by_a_person(self) -> None:
+        state = self.state()
+        ahp.reduce_chat(state, {"type": "chat/toolCallStart", "turnId": "t1", "toolCallId": "c1", "toolName": "bash", "displayName": "Bash"})
+        ahp.reduce_chat(state, {"type": "chat/toolCallReady", "turnId": "t1", "toolCallId": "c1", "toolInput": "{}"})
+        ahp.reduce_chat(state, {"type": "chat/toolCallConfirmed", "turnId": "t1", "toolCallId": "c1", "approved": True})
+        self.assertEqual(state["activeTurn"]["responseParts"][0]["toolCall"]["confirmed"], "user-action")
+
+
 if __name__ == "__main__":
     unittest.main()

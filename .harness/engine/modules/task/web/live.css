@@ -40,7 +40,6 @@
 /* what the agent wrote: plain text, whole words, nothing an agent wrote is markup */
 .fi-text .dot{background:var(--ink);border-color:var(--ink)}
 .fi .tx{margin:0;max-width:78ch;font-size:14.5px;line-height:1.6;overflow-wrap:anywhere}
-.fi .tx.thk{white-space:pre-wrap}
 .fi .tx.md>:first-child{margin-top:0}.fi .tx.md>:last-child{margin-bottom:0}
 .fi .tx.md p{margin:.55em 0}.fi .tx.md ul,.fi .tx.md ol{margin:.5em 0;padding-left:1.4em}
 .fi .tx.md .md-h{font-size:14.5px;margin:.9em 0 .35em}
@@ -119,12 +118,25 @@
 @keyframes lvblink{0%,100%{opacity:1}50%{opacity:.35}}
 
 /* thinking: only the words the host sent, else "Thinking" and a time */
-.fi-think .thk-row{display:flex;align-items:center;gap:8px;min-height:26px;padding:3px 0}
+/* 1.8.x: a finished thought is one line that opens (the chevron of a tool call); one with no words says "no content" and does not open */
+.fi-think .thk-row{display:flex;align-items:center;gap:8px;width:100%;min-height:26px;margin:0;padding:3px 0;border:0;border-radius:6px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.fi-think .thk-row:hover .in,.fi-think .thk-row:focus-visible .in{color:var(--ink)}
+.fi-think .thk-row:focus-visible{outline:2px solid var(--line2);outline-offset:2px}
+.fi-think .thk-row.tc-static{cursor:default}.fi-think .thk-row.tc-static .tc-chev{visibility:hidden}
+.fi-think .thk-row[aria-expanded="true"] .tc-chev{transform:rotate(90deg)}
 .fi-think .in{font-size:13.5px;font-style:italic}
 .fi-think.is-done .in{color:var(--soft);font-style:normal;font-size:12.5px}
+.fi-think .el{margin-left:0;padding:0}
+.fi-think .thk-none{padding:0 6px;border:1px dashed var(--line2);border-radius:999px;color:var(--soft);font-size:11px;line-height:17px;white-space:nowrap}
+.fi-think .thk-none[hidden]{display:none}
 .fi-think.is-run .dot{border-color:var(--soft);animation:lvblink 1.2s ease-in-out infinite}
-.fi-think .thk{margin:2px 0 0;color:var(--soft);font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.fi-think .thk{margin:4px 0 2px 21px;color:var(--soft);font-size:13px;line-height:1.55}
+.fi-think .thk.thk-live{margin-top:2px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+.fi-think .thk>:first-child{margin-top:0}.fi-think .thk>:last-child{margin-bottom:0}
+.fi-think .thk strong{color:var(--ink);font-weight:600}
+.fi-think .thk-cut{font-size:12px;font-style:italic}
 .fi-think .thk[hidden]{display:none}
+.fi-think .thk-unfold{margin-left:21px}
 .wv{display:inline-flex;gap:3px;margin-left:2px}
 .wv[hidden]{display:none}
 .wv i{width:4px;height:4px;border-radius:50%;background:var(--soft);animation:lvwave 1.1s ease-in-out infinite}

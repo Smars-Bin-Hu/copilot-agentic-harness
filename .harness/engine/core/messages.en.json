@@ -3294,6 +3294,8 @@
   "desk.live.approved": "Approved: the command runs when the agent runs it again",
   "desk.live.thought": "Thought",
   "desk.live.thinking": "Thinking",
+  "desk.live.think.none": "no content",
+  "desk.live.think.none.tip": "Copilot sent no words for this step, only that it thought",
   "desk.live.working": "Working",
   "desk.live.input": "Waits for you",
   "desk.live.idle": "Idle",

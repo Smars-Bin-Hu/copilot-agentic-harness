@@ -3294,6 +3294,8 @@
   "desk.live.approved": "已批准：agent 再跑这条命令时就会执行",
   "desk.live.thought": "想了",
   "desk.live.thinking": "思考中",
+  "desk.live.think.none": "无内容",
+  "desk.live.think.none.tip": "Copilot 这一步没有发来文字，只告诉了它在思考",
   "desk.live.working": "工作中",
   "desk.live.input": "等你",
   "desk.live.idle": "空闲",

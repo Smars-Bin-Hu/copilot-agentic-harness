@@ -112,6 +112,29 @@ class ItemTests(unittest.TestCase):
         self.assertNotIn("abcdef123456", said[0]["text"])
         self.assertEqual(chatlive.build(state([{"kind": "reasoning", "id": "r"}], active=False), {})["items"][0]["run"], False)
 
+    def test_a_thought_carries_its_markdown_and_the_hosts_own_duration(self) -> None:
+        said = chatlive.build(state([{"kind": "reasoning", "id": "r", "content": "**Plan** first", "duration": 4200}, text("m", "x")]), {})["items"][0]
+        self.assertEqual(said["ms"], 4200)
+        self.assertEqual(said["blocks"][0]["spans"][0]["t"], "b")  # the page draws **bold** as bold, not as stars
+        for odd in (0, -5, True, "4200", None):
+            self.assertNotIn("ms", chatlive.build(state([{"kind": "reasoning", "id": "r", "content": "x", "duration": odd}, text("m", "x")]), {})["items"][0])
+        self.assertNotIn("blocks", chatlive.build(state([{"kind": "reasoning", "id": "r", "content": ""}, text("m", "x")]), {})["items"][0])
+
+    def test_a_thought_whose_duration_came_later_is_sent_again(self) -> None:
+        chat, memo = state([{"kind": "reasoning", "id": "r1", "content": "hm"}, text("m1", "x")]), {}
+        chatlive.build(chat, {}, None, memo, -1, 3)
+        chat["activeTurn"]["responseParts"][0]["duration"] = 900  # the host's last `chat/reasoning` brings only the duration
+        later = {item["id"]: item for item in chatlive.build(chat, {}, None, memo, 3, 4)["items"]}
+        self.assertEqual((later["r1"].get("ms"), "same" in later["r1"]), (900, False))
+
+    def test_a_subagents_thought_has_no_markdown_tree_and_the_memo_keeps_its_own(self) -> None:
+        sub_state = state([{"kind": "reasoning", "id": "s0", "content": "**x** " + "y" * 3000}, text("s1", "sub words")], active=False)
+        items = chatlive.build(state([tool("c2", "completed")]), {})["items"]
+        chatlive.attach_subs(items, [({"call": "c2", "chat": "x", "title": "reviewer"}, {"state": sub_state})])
+        step = items[0]["sub"]["items"][0]
+        self.assertNotIn("blocks", step)
+        self.assertLessEqual(len(step["text"]), chatlive.SUB_THINK)
+
     def test_a_part_with_no_id_gets_one_that_is_the_same_next_time_and_an_unknown_kind_is_skipped(self) -> None:
         parts = [{"kind": "markdown", "content": "a"}, {"kind": "resource", "uri": "x"}, {"kind": "toolCall", "toolCall": {"toolName": "x"}}]
         one, two = chatlive.build(state(parts), {})["items"], chatlive.build(state(parts), {})["items"]
@@ -702,7 +725,7 @@ class PageFilesTests(unittest.TestCase):
     def test_a_long_finished_reply_folds_and_the_choice_stays(self) -> None:
         live, css = source("live.js"), source("live.css")
         self.assertIn("const FOLD_AT = 320;", live)
-        self.assertIn("rec.foldable = Boolean(!item.live && natural > FOLD_AT);", live)  # never the item that is being written
+        self.assertIn("rec.foldable = Boolean(!item.live && !item.run && natural > FOLD_AT);", live)  # never the item that is being written
         self.assertIn('rec.pill = h("button", {type: "button", class: "lv-unfold", hidden: "", "aria-expanded": "false"});', live)
         self.assertIn('rec.pill.setAttribute("aria-expanded", String(rec.open));', live)
         self.assertIn("rec.open = !rec.open; applyFold(rec);", live)  # the choice is on the item's record: a repaint does not fold it again

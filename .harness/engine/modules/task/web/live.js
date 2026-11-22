@@ -109,10 +109,10 @@ const LIVE = (function () {
   }
   function measure(rec) {
     const item = rec.item;
-    if (!item || item.k !== "text") return;
+    if (!item || (item.k !== "text" && item.k !== "think")) return;  // a reply, or an opened thought (its fold record: `rec.fold`)
     const natural = rec.tx.scrollHeight;
     if (!natural && !item.live) return;  // not shown (yet): the observer comes back when it is
-    rec.foldable = Boolean(!item.live && natural > FOLD_AT);
+    rec.foldable = Boolean(!item.live && !item.run && natural > FOLD_AT);
     applyFold(rec);
   }
   function watch(rec) {  // after each paint of a text
@@ -156,12 +156,20 @@ const LIVE = (function () {
       rec.tx = h("div", {class: "tx err-tx"});
       body.append(h("b", {class: "err-h"}, t("waits.error")), rec.tx);
     } else {
+      // 1.8.x board chat: a finished thought is one line (chevron, icon, "Thought", how long) that opens to its words, drawn as Markdown; one with no words says so and does not open.
+      // While it runs, its newest words show under the line, a few lines at most.
       rec.ico = h("span", {class: "ti"}, svg(ICONS.think, 15));
       rec.say = h("span", {class: "in"});
       rec.wave = h("b", {class: "wv", "aria-hidden": "true"}, h("i"), h("i"), h("i"));
+      rec.none = h("span", {class: "thk-none", hidden: "", title: t("desk.live.think.none.tip")}, t("desk.live.think.none"));
       rec.el2 = h("span", {class: "el"}, h("span", {class: "st-time"}));
-      rec.tx = h("p", {class: "tx thk", hidden: ""});
-      body.append(h("div", {class: "thk-row"}, rec.ico, rec.say, rec.wave, rec.el2), rec.tx);
+      rec.chev = h("span", {class: "tc-chev", "aria-hidden": "true"}, "\u203a");
+      rec.line = h("button", {type: "button", class: "thk-row", "aria-expanded": "false"}, rec.chev, rec.ico, rec.say, rec.wave, rec.none, rec.el2);
+      rec.line.addEventListener("click", () => { if (rec.line.classList.contains("tc-static")) return; rec.open = !rec.open; paintThought(rec, rec.item); });
+      rec.tx = h("div", {class: "tx thk", hidden: ""});
+      rec.fold = {tx: rec.tx, item: null, open: false, foldable: false, pill: h("button", {type: "button", class: "lv-unfold thk-unfold", hidden: "", "aria-expanded": "false"})};  // a long thought folds as a long reply does
+      rec.fold.pill.addEventListener("click", () => { rec.fold.open = !rec.fold.open; applyFold(rec.fold); if (!rec.fold.open) keepPill(rec.fold); });
+      body.append(rec.line, rec.tx, rec.fold.pill);
     }
     li.addEventListener("animationend", (event) => { if (event.target === li) li.classList.remove("enter"); });
     return rec;
@@ -289,16 +297,42 @@ const LIVE = (function () {
     } else if (item.k === "err") {
       setText(rec.tx, item.text || t("waits.error.none"));
     } else {
-      const done = !item.run;
-      rec.el.classList.toggle("is-done", done);
-      rec.el.classList.toggle("is-run", !done);
-      const gone = done && item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : "";
-      setText(rec.say, done ? t("desk.live.thought") + gone : t("desk.live.thinking"));
-      rec.wave.hidden = done;
-      if (!done && item.t0) running(rec.el2, item.t0); else { stopped(rec.el2); setText(rec.el2.querySelector(".st-time"), ""); }
-      rec.tx.hidden = !item.text;
-      setText(rec.tx, item.text ? item.text + (item.cut ? " …" : "") : "");
+      paintThought(rec, item);
     }
+  }
+
+  function paintThought(rec, item) {
+    const done = !item.run;
+    const words = Boolean(item.text);
+    rec.el.classList.toggle("is-done", done);
+    rec.el.classList.toggle("is-run", !done);
+    setText(rec.say, done ? t("desk.live.thought") : t("desk.live.thinking"));
+    rec.wave.hidden = done;
+    rec.none.hidden = !done || words;  // the host sent no words: a mark, not an empty line
+    const can = done && words;
+    rec.line.classList.toggle("tc-static", !can);
+    rec.line.tabIndex = can ? 0 : -1;
+    const open = can && Boolean(rec.open);
+    rec.line.setAttribute("aria-expanded", open ? "true" : "false");
+    rec.el.classList.toggle("is-open", open);
+    if (!done && item.t0) running(rec.el2, item.t0);
+    else {
+      stopped(rec.el2);
+      const took = typeof item.ms === "number" && item.ms > 0 ? item.ms : item.t0 && item.t1 ? item.t1 - item.t0 : 0;  // the host's own duration first, else until the next step began
+      setText(rec.el2.querySelector(".st-time"), done && took ? seconds(took) : "");
+    }
+    rec.tx.classList.toggle("thk-live", !done);
+    rec.tx.hidden = !(words && (!done || open));
+    rec.fold.item = item;
+    if (rec.tx.hidden || !done) { rec.fold.foldable = false; applyFold(rec.fold); }
+    if (rec.tx.hidden) return;
+    const key = (done ? "md:" : "tx:") + item.text.length + (item.cut ? "+" : "");
+    if (rec.drawn !== key) {  // drawn only when it changed: an open thought keeps the person's selection
+      rec.drawn = key;
+      if (done && st.draw && item.blocks) rec.tx.replaceChildren(...[st.draw(item.blocks), item.cut ? h("p", {class: "thk-cut"}, t("desk.live.cut")) : null].flat(Infinity).filter(Boolean));
+      else setText(rec.tx, item.text + (item.cut ? " \u2026" : ""));
+    }
+    if (done) watch(rec.fold);  // measured again each time it is shown: closed, it has no height
   }
 
   // --- an opened tool call (1.8.x board chat) -------------------------------------------------------------------------------

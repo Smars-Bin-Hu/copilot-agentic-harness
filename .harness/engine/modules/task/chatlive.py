@@ -676,6 +676,10 @@ def part_item(part: Dict[str, Any], ident: str, running: bool, last: bool, mark:
         item = {"id": ident, "k": "think", "run": last}
         if text:
             item["text"] = text
+            item["blocks"] = mdtree.parse(text)["blocks"]  # drawn as Markdown when opened (a thought often has **bold** headings)
+        took = part.get("duration")
+        if isinstance(took, (int, float)) and not isinstance(took, bool) and took > 0:
+            item["ms"] = int(took)  # how long the host says it thought; the page prefers it to the gap to the next item
         if was_cut or part.get("cut") is True:
             item["cut"] = True
     elif kind == "toolCall" and isinstance(part.get("toolCall"), dict):
@@ -706,7 +710,7 @@ def _signature(part: Dict[str, Any], last: bool, running: bool, mark: List[int])
     """What tells that a part is not the one an item was built from: cheap (no redaction, no parse). A text grows, so its length is in; a call changes by its status and the words it says of itself."""
     kind = part.get("kind")
     if kind in ("markdown", "reasoning"):
-        return (kind, len(part["content"]) if isinstance(part.get("content"), str) else 0, last, tuple(mark))
+        return (kind, len(part["content"]) if isinstance(part.get("content"), str) else 0, last, tuple(mark), part.get("duration") if kind == "reasoning" else None)
     call = part.get("toolCall")
     if kind == "toolCall" and isinstance(call, dict):
         return (kind, running, call.get("status"), call.get("success"), tuple(len(str(call.get(key) or "")) for key in ("pastTenseMessage", "intention", "invocationMessage", "displayName", "toolInput")), _content_sig(call), tuple(mark))
@@ -846,8 +850,10 @@ def attach_subs(items: List[Dict[str, Any]], subs: List[Tuple[Dict[str, Any], Op
         state = (held or {}).get("state") or {}
         built = latest(state, (held or {}).get("marks") or {}, root, SUB_LATEST) if held else {"items": [], "more": False}
         steps = [dict({key: value for key, value in step.items() if key != "blocks"}, text=cut(step["text"], SUB_TEXT)[0]) if step["k"] == "text" else step for step in built["items"] if step["k"] != "me"]
-        for step in steps:
-            if step["k"] == "think" and step.get("text"):
-                step["text"] = cut(step["text"], SUB_THINK)[0]  # a thought was cut at 1,200 before the caps were lifted; a subagent's steps stay small
+        for at, step in enumerate(steps):
+            if step["k"] == "think":  # a thought was cut at 1,200 before the caps were lifted; a subagent's steps stay small (and plain: no Markdown tree)
+                steps[at] = step = {key: value for key, value in step.items() if key != "blocks"}
+                if step.get("text"):
+                    step["text"] = cut(step["text"], SUB_THINK)[0]
         running = bool(state.get("activeTurn")) or item.get("st") == "run"
         item["sub"] = {"title": sub.get("title") or "", "st": "run" if running else "done", "items": steps, "more": bool(built["more"])}

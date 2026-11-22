@@ -205,8 +205,10 @@ class LinkTests(LinkCase):
         self.assertEqual(self.data()["chat"]["session"], self.resource)  # kept in the task state
         asked = [message["method"] for message in self.host.seen if "method" in message]
         self.assertNotIn("disposeSession", asked)
+        want = {self.chat, self.resource, "ahp-root:/"}
+        until(lambda: want <= {message["params"]["channel"] for message in list(self.host.seen) if message.get("method") == "subscribe"})  # the session is subscribed a moment after the chat: under load the test was faster
         subscribed = [message["params"]["channel"] for message in self.host.seen if message.get("method") == "subscribe"]
-        self.assertEqual(set(subscribed), {self.chat, self.resource, "ahp-root:/"})  # only the chat of this folder and its session (for what waits for a person, B75), no other chat; the root once, for the model list (B72), and let go of at once
+        self.assertEqual(set(subscribed), want)  # only the chat of this folder and its session (for what waits for a person, B75), no other chat; the root once, for the model list (B72), and let go of at once
 
     def test_the_scan_for_an_unbound_task_leaves_a_chat_held_here_subscribed(self) -> None:
         """It read each chat of the folder and let go of it, a held one too: the Live tab of a chat the board had just made stopped at the person's message, with no word (found on a real chat, 1.6.37)."""

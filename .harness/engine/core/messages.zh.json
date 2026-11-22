@@ -3421,6 +3421,7 @@
   "desk.live.sub": "agent 的 chat 的这一轮",
   "desk.live.whole": "在 VS Code 里看完整 chat",
   "desk.live.earlier": "这一轮更早的步骤",
+  "desk.live.group.steps": "{n} 步",
   "desk.live.receipt.title": "本轮",
   "desk.live.receipt.time": "用时：{time}",
   "desk.live.receipt.time.none": "用时：不知道（host 没有给出这一轮的时长）",

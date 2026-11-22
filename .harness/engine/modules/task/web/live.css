@@ -312,3 +312,11 @@ html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 .rc-diff{padding:6px 14px 10px;min-width:0;overflow:auto}
 .rc-more{margin:0;padding:6px 14px;border-top:1px solid var(--line)}
 @media (max-width:480px){.lv-feed>.rcpt{margin-left:0}.rc1{gap:6px 12px}}
+/* A group of finished steps between two things said (B7): one line like a call's, its kinds with their counts; open, its steps follow it */
+.fi-group .dot{background:var(--card);border-color:var(--line2)}
+.gp-line .gp-n{font-weight:550;color:var(--ink)}
+.gp-k{display:inline-flex;align-items:center;gap:3px;font:12px var(--mono);color:var(--soft)}
+.gp-k svg{flex:none;width:13px;height:13px}
+.gp-pm{display:inline-flex;gap:6px;margin-left:4px;font:12px var(--mono)}
+.fi-group.is-open .tc-chev{transform:rotate(90deg)}
+.fi-group .fb{display:flex;flex-wrap:wrap;align-items:center;flex:1;min-width:0}

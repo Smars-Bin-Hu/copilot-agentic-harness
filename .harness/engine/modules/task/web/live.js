@@ -13,7 +13,7 @@ const LIVE = (function () {
   const SLOW = 3000;  // after a failed one
   const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "cli-slow", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
 
-  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], gates: [], marks: new Map(), listeners: [], needs: [], started: "", answer: false,
+  const st = {task: "", rev: "", nodes: new Map(), groups: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], gates: [], marks: new Map(), listeners: [], needs: [], started: "", answer: false,
     // What the page has seen of the turn it shows (2026-11): `full` holds the last FULL version of every item by id; the order on the page is `head` (the person's message), then `older` (loaded with the button), then `tail` (from the answers).
     turn: "", have: -1, full: new Map(), head: "", older: [], tail: [], reach: 0, seen: false, epoch: 0, loadingOlder: false, hurry: false};
   const FOLD_AT = 320;  // a finished reply drawn higher than this (px) is folded to FOLD_TO
@@ -657,6 +657,8 @@ const LIVE = (function () {
     st.epoch += 1;
     for (const rec of st.nodes.values()) { unwatch(rec); rec.el.remove(); }
     st.nodes.clear(); st.full.clear();
+    for (const group of st.groups.values()) group.li.remove();
+    st.groups.clear();
     st.head = ""; st.older = []; st.tail = []; st.reach = 0; st.seen = false; st.have = -1; st.loadingOlder = false;
     earlier.disabled = false; earlierBad.hidden = true;
   }
@@ -713,10 +715,14 @@ const LIVE = (function () {
         st.nodes.set(item.id, rec);
         paint(rec, item);
       } else if (all || (changed && changed.has(item.id))) paint(rec, item);  // a stub is never drawn again
-      nodes.push(rec.el);
+      nodes.push(rec);
       if (item.id === st.head) nodes.push(earlierLi);
     }
     if (!nodes.includes(earlierLi)) nodes.unshift(earlierLi);
+    const running = Boolean(data && data.bound && (data.started || data.state === "busy"));
+    const folded = fold(nodes, running, st.groups);
+    for (const node of [...feed.children]) if (node.classList.contains("fi-group") && !folded.includes(node)) node.remove();
+    nodes.length = 0; nodes.push(...folded);
     let expected = feed.firstChild;
     for (const node of nodes) {
       if (node !== expected) feed.insertBefore(node, expected); else expected = expected.nextSibling;
@@ -726,6 +732,84 @@ const LIVE = (function () {
     paintLife(data);
     rcFollow(data);
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
+  }
+
+  // --- the steps between two things said, folded to one line (B7, prototype 5 pin 3) ---------------------------------------------------------------------------------------------
+  // What the person and the agent say is the thread; the finished steps between two of them (tool calls, thoughts) are one line: how many, how many of each kind, the lines an edit added and
+  // removed, how long. It opens to the steps themselves, all of them. Never folded: a call that failed, waits for the person, was held or refused by the gate, a subagent's row, and the
+  // steps after the last thing said while the round runs. One step alone is not folded. A group is known by its first step: it stays open or closed across the polls.
+  const GROUP_MIN = 2;
+  const KEEP_OUT = ["is-fail", "is-wait", "is-held", "is-refused", "is-run"];
+  const GROUP_ORDER = ["think", "read", "search", "edit", "create", "run", "web", "agent", "other"];
+  const stepOf = (rec) => (rec && rec.el ? (rec.kind === "tool" ? rec.kind2 || "other" : ["me", "text", "err"].includes(rec.kind) ? "" : "think") : "");
+  const keptOut = (rec) => rec.kind === "tool" && (KEEP_OUT.some((name) => rec.el.classList.contains(name)) || Boolean(rec.item && rec.item.sub));
+  function groupLine(group) {
+    const counts = new Map();
+    let add = 0, del = 0, first = Infinity, last = 0, took = 0;
+    for (const rec of group.members) {
+      const kind = stepOf(rec);
+      counts.set(kind, (counts.get(kind) || 0) + 1);
+      const item = rec.item || {};
+      add += Number(item.add) || 0; del += Number(item.del) || 0;
+      if (item.t0) first = Math.min(first, item.t0);
+      const end = item.t1 || (item.t0 && typeof item.ms === "number" ? item.t0 + item.ms : 0);
+      if (end) last = Math.max(last, end);
+      if (!item.t0 && typeof item.ms === "number") took += item.ms;
+    }
+    const span = (last && first !== Infinity ? last - first : 0) + took;
+    const kinds = GROUP_ORDER.filter((kind) => counts.has(kind)).map((kind) => {
+      const word = kind === "think" ? t("desk.live.thought") : KIND_WORD[kind] ? t(KIND_WORD[kind]) : kind;
+      return h("span", {class: "gp-k", title: word + " × " + counts.get(kind)}, svg(ICONS[kind] || ICONS.other, 13), String(counts.get(kind)));
+    });
+    return [h("span", {class: "tc-chev", "aria-hidden": "true"}, "›"), h("span", {class: "gp-n"}, t("desk.live.group.steps", {n: group.members.length})), ...kinds,
+      add || del ? h("span", {class: "fx gp-pm"}, h("span", {class: "fx-add"}, "+" + add), h("span", {class: "fx-del"}, "−" + del)) : null,
+      h("span", {class: "el"}, span ? seconds(span) : "")].filter(Boolean);
+  }
+  function groupLi(store, key) {
+    let found = store.get(key);
+    if (!found) {
+      const line = h("button", {type: "button", class: "tc-line gp-line", "aria-expanded": "false"});
+      const li = h("li", {class: "fi fi-group", "data-id": "~g:" + key}, h("i", {class: "dot"}), h("div", {class: "fb"}, line));
+      found = {li, line, open: false, sig: "", members: []};
+      line.addEventListener("click", () => { found.open = !found.open; paintGroup(found, true); });
+      store.set(key, found);
+    }
+    return found;
+  }
+  function paintGroup(group, toggled) {
+    group.line.setAttribute("aria-expanded", String(group.open));
+    group.li.classList.toggle("is-open", group.open);
+    for (const rec of group.members) rec.el.hidden = !group.open;
+    const sig = group.members.map((rec) => { const item = rec.item || {}; return [item.id, item.st, item.kind, item.t0, item.t1, item.ms, item.add, item.del].join("|"); }).join("\u0001");
+    if (sig !== group.sig) { group.sig = sig; group.line.replaceChildren(...groupLine(group)); group.line.setAttribute("aria-label", t("desk.live.group.steps", {n: group.members.length})); }
+    if (toggled && group.open && group.members[0]) group.members[0].el.scrollIntoView({block: "nearest"});
+  }
+  // `nodes`: records and plain nodes (the "earlier steps" control) in order; `store`: the groups of this list. The answer: the nodes in order, with a group's line before its steps.
+  function fold(nodes, running, store) {
+    let lastSaid = -1;
+    nodes.forEach((node, at) => { if (node && node.el && !stepOf(node)) lastSaid = at; });
+    const out = [], used = new Set();
+    let run = [];
+    const close = () => {
+      if (run.length >= GROUP_MIN) {
+        const group = groupLi(store, run[0].item ? run[0].item.id : run[0].el.dataset.id);
+        group.members = run;
+        used.add(group);
+        out.push(group.li, ...run.map((rec) => rec.el));
+        paintGroup(group, false);
+      } else for (const rec of run) { rec.el.hidden = false; out.push(rec.el); }
+      run = [];
+    };
+    nodes.forEach((node, at) => {
+      const rec = node && node.el ? node : null;
+      if (rec && stepOf(rec) && !keptOut(rec) && !(running && at > lastSaid)) { run.push(rec); return; }
+      close();
+      if (rec) rec.el.hidden = false;
+      out.push(rec ? rec.el : node);
+    });
+    close();
+    for (const [key, group] of store) if (!used.has(group)) store.delete(key);
+    return out;
   }
 
   // --- the receipt of a round that ended (B6): what it took and what it changed, as icons with numbers; each file opens to its diff ------------------------------------------------
@@ -981,7 +1065,7 @@ const LIVE = (function () {
     // A static list of finished items (an opened round, rounds.js): drawn as the feed is, and nothing in it acts on the running chat. The person's own message is not in it (the round has its own prompt line).
     draw(items, turn) {
       const list = h("ol", {class: "lv-feed lv-static"});
-      const shown = [];
+      const shown = [], recs = [];
       for (const item of items || []) {
         if (!item || item.k === "me" || !item.id) continue;
         const done = Object.assign({}, item, {live: false, run: false, st: item.st === "run" ? "done" : item.st});
@@ -990,8 +1074,9 @@ const LIVE = (function () {
         const rec = make(done, true, turn);
         rec.list = () => shown;  // the panel's tabs: the subagents of this round
         paint(rec, done);
-        list.append(rec.el);
+        recs.push(rec);
       }
+      list.append(...fold(recs, false, new Map()));
       return list;
     },
     visible(on) { root.hidden = !on; if (on) kick(); },

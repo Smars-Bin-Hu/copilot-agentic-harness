@@ -3421,6 +3421,7 @@
   "desk.live.sub": "this round of the agent's chat",
   "desk.live.whole": "Whole chat in VS Code",
   "desk.live.earlier": "Earlier steps of this round",
+  "desk.live.group.steps": "{n} steps",
   "desk.live.receipt.title": "This round",
   "desk.live.receipt.time": "Time: {time}",
   "desk.live.receipt.time.none": "Time: not known (the host did not say how long the round took)",

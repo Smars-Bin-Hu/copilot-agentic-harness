@@ -56,6 +56,7 @@ HURRY_EVERY = 1.0
 OPEN_EVERY = 3.0  # 1.8.8: a VS Code window is open but its host is not reached yet (it comes about a minute after the window on a work computer): look this often, not after the grown wait
 WATCH_EVERY = 2.0  # 1.8.13: how often the watcher thread looks for a VS Code window while the host is not reached (the probe answers from a cache of RUNNING_KEEP s)
 WINDOW_EVERY = 5.0  # 1.8.8: a long wait looks this often whether a VS Code window was opened (by hand, not by the board), and then ends
+ASK_REST = 3  # what the chat waits for past the first, each with a card of its own
 SUB_FOLLOW = 16  # chats of subagents followed for each bound chat, the newest: a safety cap, every subagent of a normal turn is followed (1.6.105: 3; B4a: 16)
 SLOW_LIMIT = 3  # 1.7.45: calls in a row the host did not answer in time before the connection is given up; one slow answer of a busy computer is not a lost VS Code
 SLOW_RETRY = 30.0  # seconds before a list the host did not answer in time is asked again
@@ -804,11 +805,13 @@ class VsLink:
                 return None
             subs = self._sub_targets(binding)
             items = list((held["state"].get("inputNeeded") if held else None) or []) + self._sub_items(binding)  # 1.8: a confirmation in a running subagent's chat is the task's too
-            view, count = chatask.first_for(items, [binding["chat"]] + [item["chat"] for item in subs])
-            if view is None:
+            mine = chatask.all_for(items, [binding["chat"]] + [item["chat"] for item in subs])
+            if not mine:
                 return None
-            since = (held["seen"].get(view["id"]) if held else None) or self.sub_seen.setdefault(view["id"], utc_now())
-            return dict(view, count=count, since=since)
+            seen = lambda one: (held["seen"].get(one["id"]) if held else None) or self.sub_seen.setdefault(one["id"], utc_now())  # noqa: E731
+            view = mine[0]
+            # `rest`: the next ones (ASK_REST at most), each with its own buttons on the page: a call to allow must not wait behind a question (UX round 2 of the board chat)
+            return dict(view, count=len(mine), since=seen(view), rest=[dict(one, count=1, since=seen(one)) for one in mine[1:1 + ASK_REST]])
 
     def respond(self, kind: str, task: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Allow or deny a tool call (`confirm`), or answer a question (`answer`), on the thread. `payload`: {id, digest, tool_call_id | request_id, approved | answers}. Raises Refused

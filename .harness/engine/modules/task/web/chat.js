@@ -597,7 +597,8 @@ const CHAT = (function () {
     }
     if (found.agent) details.unshift(h("p", {class: "sub"}, t("board.ask.agent", {agent: found.agent})));
     if (found.tool_call_id) details.push(h("p", {class: "sub"}, t("board.ask.call", {tool: found.tool || "-", id: found.tool_call_id})));
-    const more = found.count > 1 ? h("span", {class: "wc-more", title: t("board.ask.more", {count: found.count - 1})}, "+" + (found.count - 1)) : null;
+    const beyond = (found.count || 1) - 1 - (Array.isArray(found.rest) ? found.rest.length : 0);  // the next ones have cards of their own: the chip counts only those past them
+    const more = beyond > 0 ? h("span", {class: "wc-more", title: t("board.ask.more", {count: beyond})}, "+" + beyond) : null;
     const dtBody = h("div", {class: "wc-dt-b", hidden: ""}, ...details.filter(Boolean));
     const dt = h("button", {type: "button", class: "wc-dt", "aria-expanded": "false"}, h("span", {class: "wc-chev", "aria-hidden": "true"}, "\u203a"), t("board.ask.card.details"));
     dt.addEventListener("click", () => { dtBody.hidden = !dtBody.hidden; dt.setAttribute("aria-expanded", String(!dtBody.hidden)); });

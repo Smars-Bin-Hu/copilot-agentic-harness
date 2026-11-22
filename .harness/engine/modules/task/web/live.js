@@ -571,6 +571,13 @@ const LIVE = (function () {
   }
 
   function toggle(rec) {
+    if (!rec.fixed && rec.item && rec.item.k === "tool" && rec.el.classList.contains("is-wait") && !needLi.hidden) {  // a call that waits for the person: its card has the buttons and the whole command
+      const card = [...needLi.querySelectorAll("section.wc")].find((node) => node.textContent.includes(rec.item.target || "\u0000")) || needLi;
+      card.scrollIntoView({block: "center", behavior: "smooth"});
+      const first = card.querySelector("button:not([disabled]), textarea");
+      if (first) setTimeout(() => first.focus({preventScroll: true}), 350);
+      return;
+    }
     if (rec.item && rec.item.sub && rec.item.id) { PANEL.open(rec.item, rec.list ? rec.list() : [...st.nodes.values()].map((one) => one.item), rec.turn); return; }  // a subagent opens its panel
     if (!canOpen(rec)) return;
     rec.open = !rec.open;

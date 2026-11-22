@@ -1128,7 +1128,10 @@
     if (!desk.ask || !served() || !canAct() || typeof CHAT === "undefined" || !CHAT.card || !["confirm", "question", "auth"].includes(desk.waiting_why)) return null;
     const row = actionRow();
     const find = (name) => desk.actions.find((entry) => entry.action === name);
-    return CHAT.card(row, {stop: find("stop") ? actionButton(row, find("stop")) : null, answer: find("question") ? actionButton(row, find("question")) : null, waited: waitedLine()});
+    const first = CHAT.card(row, {stop: find("stop") ? actionButton(row, find("stop")) : null, answer: find("question") ? actionButton(row, find("question")) : null, waited: waitedLine()});
+    // what waits past the first: a card each with its own buttons (a question of more than one part is answered once the first card is done: its dialog is for the first)
+    const rest = (desk.ask.rest || []).map((one) => CHAT.card(Object.assign({}, row, {ask: one}), {stop: one.kind === "auth" && find("stop") ? actionButton(row, find("stop")) : null})).filter(Boolean);
+    return rest.length ? [first, ...rest].filter(Boolean) : first;
   }
 
   function otherCard(items, notes) {
@@ -1209,7 +1212,7 @@
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
     const cards = [...told];
-    if (asked) cards.push(asked);
+    if (asked) cards.push(...[].concat(asked));
     if (box) cards.push(box);
     cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told.length ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
     const finish = acceptCard();

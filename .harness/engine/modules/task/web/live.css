@@ -360,3 +360,6 @@ html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 .lv-read svg{width:13px;height:13px;flex:none}
 .rd-scroll{padding:16px 22px 40px}
 .rd-body{font-size:15px;line-height:1.65;max-width:68ch}
+/* the reply buttons float over the bottom of the window: the end of the Live tab can be scrolled above them (UX round 2) */
+section.lv:not(.sa-panel):not(.tr-lv){padding-bottom:64px}
+.lv-life,.fi-need{scroll-margin-bottom:96px}

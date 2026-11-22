@@ -405,10 +405,8 @@ class VsLink:
                 return chatlive.detail(held, self.root)
             if sub:
                 found = next((item for item in self._sub_turns(task, sub, parent) if item["id"] == turn), None)
-            elif chat:
-                found = next((item for item in chatstream.read(self.root, task, chat)["turns"] if item["id"] == turn and not item.get("sub")), None)
-            else:
-                return {}
+            else:  # the bound chat's turns; a task that is not bound (closed, C1): a turn of any of its chats
+                found = next((item for item in chatstream.read(self.root, task, chat or None)["turns"] if item["id"] == turn and not item.get("sub")), None)
             for part in (found["parts"] if found else []):
                 if chatlive.part_id(part) == ident and isinstance(part.get("toolCall"), dict):
                     return chatlive.detail(part["toolCall"], self.root)
@@ -474,6 +472,29 @@ class VsLink:
             return dict(out)
         except Exception:  # a page's question must not break the link
             return {}
+
+    def turn_items(self, task: str, turn: str) -> Dict[str, Any]:
+        """(C1) The whole of one turn of the task's chats as Live items, for the Agent actions tab: `{items, turn}`. From the board's memory when the turn is there whole, else from the task's
+        stream file (any of its chats: the task need not be bound or open). Not found, any failure: `{items: [], turn}`. Never raises; the file is read after the lock is let go."""
+        nothing: Dict[str, Any] = {"items": [], "turn": turn if isinstance(turn, str) else ""}
+        try:
+            if not isinstance(turn, str) or not turn:
+                return nothing
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                state = (self.chats.get(str(binding["chat"])) or {}).get("state") if binding else None
+                held = None
+                if isinstance(state, dict):
+                    held = next((dict(one) for one in chatlive.all_turns(state) if str(one.get("id") or "") == turn and not one.get("dropped") and one is not state.get("activeTurn")), None)
+                    marks = dict((self.chats.get(str(binding["chat"])) or {}).get("marks") or {})
+            if held is not None:
+                return {"items": chatlive.items_of(held, False, marks, self.root), "turn": turn}
+            found = next((one for one in chatstream.read(self.root, task)["turns"] if one["id"] == turn and not one.get("sub")), None)
+            if found is None:
+                return nothing
+            return {"items": chatlive.items_of(found, False, {}, self.root), "turn": turn}
+        except Exception:  # a page's question must not break the link
+            return nothing
 
     def sub(self, task: str, call: str, have: int = -1) -> Dict[str, Any]:
         """The whole chat of the subagent that tool call `call` of the task's chat started, for the side panel (B4a): `{call, title, st, items, turn, n, usage: {calls, ms?}}`. `items`: all the items of all the

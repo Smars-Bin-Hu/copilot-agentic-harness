@@ -2145,6 +2145,9 @@ def handler_for(board: Board) -> type:
                         had = asked_sub.get("have")
                         return self.answer(200, {"sub": board.link.sub(task_name, asked_sub["call"], had if isinstance(had, int) and not isinstance(had, bool) else -1)})
                     return self.answer(200, {"sub": {}})
+                if "turn_items" in data:  # (C1) one whole turn as Live items, for the Agent actions tab: memory, else the stream file; the task need not be bound
+                    asked_turn = data.get("turn_items")
+                    return self.answer(200, {"turn_items": board.link.turn_items(task_name, asked_turn) if isinstance(asked_turn, str) and 0 < len(asked_turn) <= 200 else {"items": [], "turn": ""}})
                 if "receipt" in data:  # the receipt of a turn that ended (B6): calls, files and their lines, time, context, credits
                     asked_turn = data.get("receipt")
                     return self.answer(200, {"receipt": board.link.receipt(task_name, asked_turn) if isinstance(asked_turn, str) and 0 < len(asked_turn) <= 200 else {}})

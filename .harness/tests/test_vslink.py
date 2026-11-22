@@ -617,7 +617,7 @@ class LinkTests(LinkCase):
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
         with mock.patch.object(chatstream, "take", side_effect=RuntimeError("broken")):
             self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "go on"}})
-            self.assertTrue(until(lambda: (self.link.chats[self.chat]["state"].get("activeTurn") or {}).get("id") == "t2"), "the chat moved on")
+            self.assertTrue(until(lambda: (((self.link.chats.get(self.chat) or {}).get("state") or {}).get("activeTurn") or {}).get("id") == "t2"), "the chat moved on")
             self.assertTrue(until(lambda: self.link.stream_lost >= 1))
 
     def test_a_board_that_does_not_persist_writes_no_stream(self) -> None:

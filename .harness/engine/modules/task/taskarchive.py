@@ -25,7 +25,7 @@ from core import config, copilot_events, messages, render, state, tasks
 from core.paths import long_path, utc_now
 from core.registry import harness_version
 
-from . import chatrounds, common, task as task_ops
+from . import chatrounds, chatstream, common, task as task_ops
 from .common import CommandError
 
 INDEX_MD = "ARCHIVE.md"
@@ -155,7 +155,7 @@ def archive(root: Path, names: List[str], everything: bool = False, to: str = ""
 
 
 def prune_transcripts(root: Path, folder: str, now: Optional[float] = None) -> List[str]:
-    """Delete the saved chat of the tasks archived in `folder` more than `transcript.keep_days` ago (0: never). The audit files stay. Never raises: it must not stop an archive or the board."""
+    """Delete the saved chat (`transcript.jsonl`) and the stream the board kept (`stream.jsonl`) of the tasks archived in `folder` more than `transcript.keep_days` ago (0: never). The audit files stay. Never raises: it must not stop an archive or the board."""
     removed: List[str] = []
     try:
         days = float((config.policy_or_empty(root, "task").get("transcript") or {}).get("keep_days", KEEP_DAYS))
@@ -166,9 +166,15 @@ def prune_transcripts(root: Path, folder: str, now: Optional[float] = None) -> L
         for entry in read_index(place):
             at = copilot_events.seconds(entry.get("archived_at"))
             name = str(entry.get("name") or "")
-            path = place / name / tasks.STATE_DIR / chatrounds.FILE_NAME
-            if at and at < limit and name and "/" not in name and "\\" not in name and name != ".." and path.is_file():
-                path.unlink()
+            if not (at and at < limit and name and "/" not in name and "\\" not in name and name != ".."):
+                continue
+            gone = False
+            for file_name in (chatrounds.FILE_NAME, chatstream.FILE_NAME):  # the closing transcript, and the stream the board kept while the chats ran
+                path = place / name / tasks.STATE_DIR / file_name
+                if path.is_file():
+                    path.unlink()
+                    gone = True
+            if gone:
                 removed.append(name)
     except (OSError, ValueError, TypeError, CommandError):
         pass

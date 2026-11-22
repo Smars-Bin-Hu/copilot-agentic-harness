@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from core import ahp, config, launchenv, messages, pace, tasks
 from core.paths import utc_now
 
-from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
+from . import autorun, autorun_relay, autorun_start, chatask, chatctx, chatlink, chatlive, chatnew, chatsend, chatstream, rewind, task as task_ops, tasklife, tasksub
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
@@ -181,6 +181,7 @@ class VsLink:
         self.running = running  # 1.8.8: is a VS Code window open on this computer (any folder)? Cheap and never waits (`ready.Running.get`); None: not known
         self.enabled = enabled
         self.persist = persist
+        self.stream_lost = 0  # records of the task streams (`chatstream`) a failed write left out; the chat goes on
         self.turn = turn
         self.backoff = backoff or ahp.Backoff()
         self._opener = opener or self._open
@@ -1059,6 +1060,7 @@ class VsLink:
 
     def _notice(self, note: Dict[str, Any]) -> None:
         method, params = str(note.get("method") or ""), note.get("params") or {}
+        stream: Optional[Tuple[str, List[Dict[str, Any]]]] = None  # (task, records due): written after the lock, never under it
         with self.lock:
             if method == "root/sessionAdded":
                 item = params.get("summary") or {}
@@ -1090,6 +1092,13 @@ class VsLink:
                     self.just_sent.pop(channel, None)
                 if cached is not None and isinstance(action, dict):
                     ahp.reduce_chat(cached["state"], action)
+                    if self.persist and chatstream.wants(action):  # 1.8.x: what the board sees of the chat is kept in the task's stream; collected here, written below once the lock is let go
+                        try:
+                            owner = self._stream_task(channel)
+                            if owner is not None:
+                                stream = (owner[0], chatstream.take(cached, channel, action, owner[1]))
+                        except Exception:  # the stream is a record beside the chat: a fault in it must never stop the chat
+                            self.stream_lost += 1
                     chatlive.stamp(cached, action, int(time.time() * 1000))
                     cached["rev"] = cached.get("rev", 0) + 1  # the Live tab asks only for what changed since this number
                     if action.get("type") in ("chat/toolCallStart", "chat/toolCallReady"):
@@ -1099,6 +1108,21 @@ class VsLink:
                     ahp.reduce_session(held["state"], action)
                     self._stamp(held)
                     self.dirty = True
+        if stream is not None and stream[1]:
+            self.stream_lost += chatstream.append(self.root, stream[0], stream[1])
+
+    def _stream_task(self, chat: str) -> Optional[Tuple[str, Optional[Dict[str, str]]]]:
+        """The task a chat belongs to and, for the chat of a subagent, where it was started (`{parent, call}`): the task whose binding names the chat, or whose session lists it among its
+        `subchats`. None for a chat of no task (the super agent's, one made for a task not yet bound). It walks the few bound tasks; the caller asks only for an action that can give a record.
+        The caller holds the lock."""
+        for task, binding in self.bound.items():
+            if binding.get("chat") == chat:
+                return task, None
+        for task, binding in self.bound.items():
+            for item in ((self.sess.get(binding.get("session")) or {}).get("state") or {}).get("subchats") or []:
+                if item.get("chat") == chat:
+                    return task, {"parent": item.get("parent"), "call": item.get("call")}
+        return None
 
     @staticmethod
     def _stamp(held: Dict[str, Any]) -> None:
@@ -1773,7 +1797,8 @@ class VsLink:
                 self.sub_seen = {key: when for key, when in self.sub_seen.items() if key.split("|")[1:2] != [chat]}
         for chat in set(wanted) - have:
             try:
-                state = ahp.trimmed(link.subscribe(chat))
+                full = link.subscribe(chat)
+                state = ahp.trimmed(full)
             except ahp.ConnectionClosed:
                 raise
             except ahp.AhpError as error:
@@ -1782,6 +1807,12 @@ class VsLink:
             with self.lock:
                 self.chats[chat] = {"state": state, "tool_at": ""}
                 self.problem = ("", 0.0)  # a chat of Copilot was read: Copilot works
+                owner = self._stream_task(chat) if self.persist else None
+            if owner is not None:  # 1.8.x: the finished turns of this chat that the task's stream does not hold yet (the file work is done outside the lock)
+                try:
+                    self.stream_lost += chatstream.append(self.root, owner[0], chatstream.backfill(full, chat, chatstream.known(self.root, owner[0]).get(chat, set()), owner[1]))
+                except Exception:  # as in `_notice`: never in the way of the chat
+                    self.stream_lost += 1
         self._subscribe_sessions(link, set(wanted.values()))
         self._reread_waiting(link, set(wanted.values()))
 

@@ -470,6 +470,14 @@ class ReaderTests(unittest.TestCase):
         thought = [part for part in mine["responseParts"] if part["kind"] == "reasoning"][0]
         self.assertTrue(thought["content"] and thought["startedAt"] and thought["duration"] > 0)
 
+    def test_a_snapshot_loses_the_fields_of_a_call_that_have_no_limit(self) -> None:
+        turn = {"id": "a", "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": "c", "status": "completed", "content": [{"type": "text", "text": "r"}], "structuredContent": {"x": 1}, "resultMetadata": {"y": 2}}},
+                                             {"kind": "markdown", "id": "m", "content": "said"}]}
+        slim = ahp.slim(turn)
+        self.assertEqual(slim["responseParts"][0]["toolCall"], {"toolCallId": "c", "status": "completed", "content": [{"type": "text", "text": "r"}]})
+        self.assertIs(slim["responseParts"][1], turn["responseParts"][1])  # a part with nothing to cut is the same object
+        self.assertEqual(ahp.slim(slim)["responseParts"], slim["responseParts"])
+
     def test_older_turns_paged_in_move_only_the_cursor(self) -> None:
         state = ahp.trimmed({"turns": [{"id": "1"}], "activeTurn": None})
         self.assertNotIn("turnsNextCursor", state)

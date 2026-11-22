@@ -16,7 +16,7 @@ from test_ahp import FakeHost, TOKEN
 from test_boardserve import ServeCase
 
 from core import ahp, tasks
-from modules.task import boardserve, chatlink, task as task_ops, tasklife, tasksub, vslink
+from modules.task import boardserve, chatlink, chatstream, task as task_ops, tasklife, tasksub, vslink
 
 
 def until(check: Callable[[], Any], seconds: float = 10.0) -> Any:
@@ -302,6 +302,79 @@ class LinkTests(LinkCase):
         self.assertTrue(row, self.row())
         self.assertEqual((row["chat"]["state"], row["sub"]["kind"]), ("idle", "reply"))
         self.assertNotIn("started_at", row["chat"])  # idle: no run time
+
+    def push_action(self, chat: str, action: Dict[str, Any]) -> None:
+        self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": chat, "action": action}})
+
+    def test_the_notices_of_the_chat_of_a_task_make_its_stream_file_and_the_turn_the_board_found_is_filled_in(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat)), "the finished turn of the snapshot is written")
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "go on"}})
+        self.push_action(self.chat, {"type": "chat/responsePart", "turnId": "t2", "part": {"kind": "markdown", "id": "m2", "content": "Working."}})
+        self.push_action(self.chat, {"type": "chat/toolCallStart", "turnId": "t2", "toolCallId": "c1", "toolName": "edit", "displayName": "Edit"})
+        self.push_action(self.chat, {"type": "chat/toolCallComplete", "turnId": "t2", "toolCallId": "c1", "result": {"success": True, "content": [{"type": "text", "text": "done"}]}})
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 5})
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat) == {"t1", "t2"}), chatstream.read(self.root, TASK))
+        read = chatstream.read(self.root, TASK)
+        self.assertEqual([(turn["id"], turn["state"], turn["sub"]) for turn in read["turns"]], [("t1", "complete", None), ("t2", "complete", None)])
+        self.assertEqual((read["turns"][1]["text"], read["turns"][1]["duration"]), ("go on", 5))
+        self.assertEqual([part.get("content") or part["toolCall"]["toolName"] for part in read["turns"][1]["parts"]], ["Working.", "edit"])
+        self.assertEqual(len(read["turns"][0]["parts"]), 2)  # t1 came from the snapshot of the chat
+        self.assertEqual(self.link.stream_lost, 0)
+
+    def test_the_notices_of_a_chat_of_no_task_write_nothing(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: chatstream.known(self.root, TASK).get(self.chat)))
+        other = "ahp-chat:/not-a-task"
+        with self.link.lock:
+            self.link.chats[other] = {"state": {"turns": [], "activeTurn": None}, "tool_at": ""}
+        self.push_action(other, {"type": "chat/turnStarted", "turnId": "o1", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "not ours"}})
+        self.push_action(other, {"type": "chat/turnComplete", "turnId": "o1", "duration": 1})
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "ours"}})  # pushed after: when it is on disk the others were handled
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 1})
+        self.assertTrue(until(lambda: "t2" in chatstream.known(self.root, TASK).get(self.chat, set())))
+        self.assertEqual({turn["chat"] for turn in chatstream.read(self.root, TASK)["turns"]}, {self.chat})
+        self.assertNotIn("not ours", chatstream.stream_file(self.root, TASK).read_text(encoding="utf-8"))
+
+    def test_a_fault_in_the_stream_never_stops_the_chat(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        with mock.patch.object(chatstream, "take", side_effect=RuntimeError("broken")):
+            self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "go on"}})
+            self.assertTrue(until(lambda: (self.link.chats[self.chat]["state"].get("activeTurn") or {}).get("id") == "t2"), "the chat moved on")
+            self.assertTrue(until(lambda: self.link.stream_lost >= 1))
+
+    def test_a_board_that_does_not_persist_writes_no_stream(self) -> None:
+        self.link.persist = False
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.push_action(self.chat, {"type": "chat/turnStarted", "turnId": "t2", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "go"}})
+        self.push_action(self.chat, {"type": "chat/turnComplete", "turnId": "t2", "duration": 1})
+        self.assertTrue(until(lambda: not self.row()["chat"].get("started_at") and self.row()["chat"].get("state") == "idle"))
+        time.sleep(0.2)
+        self.assertFalse(chatstream.stream_file(self.root, TASK).exists())
+
+    def test_a_turn_of_a_subagent_chat_lands_in_the_file_of_the_parent_task_with_its_origin(self) -> None:
+        sub_chat = self.chat + "/subagent/call-9"
+        main = chat_state(SESSION)
+        main["activeTurn"] = {"id": "t2", "message": {"text": "review it", "origin": {"kind": "user"}}, "usage": main["turns"][0]["usage"],
+                              "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": "call-9", "toolName": "runSubagent", "displayName": "Run subagent", "status": "running"}}]}
+        self.states[self.chat] = main
+        self.states[sub_chat] = {"status": 8, "turns": [], "activeTurn": {"id": "s1", "startedAt": "2026-10-31T11:00:00.000Z", "message": {"text": "check", "origin": {"kind": "tool"}}, "responseParts": [
+            {"kind": "toolCall", "toolCall": {"toolCallId": "r1", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": "PLAN.md"})}},
+            {"kind": "markdown", "id": "m1", "content": "The plan is fine."}]}}
+        self.states[self.resource] = {"chats": [{"resource": self.chat}, {"resource": sub_chat, "title": "reviewer", "interactivity": "read-only", "origin": {"kind": "tool", "chat": self.chat, "toolCallId": "call-9"}}]}
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: sub_chat in self.link.chats))
+        self.push_action(sub_chat, {"type": "chat/turnComplete", "turnId": "s1", "duration": 5})
+        self.assertTrue(until(lambda: "s1" in chatstream.known(self.root, TASK).get(sub_chat, set())), chatstream.read(self.root, TASK))
+        turn = chatstream.read(self.root, TASK, sub_chat)["turns"][0]
+        self.assertEqual((turn["id"], turn["text"], turn["state"], turn["sub"]), ("s1", "check", "complete", {"parent": self.chat, "call": "call-9"}))
+        self.assertEqual([part.get("content") or part["toolCall"]["toolName"] for part in turn["parts"]], ["read_file", "The plan is fine."])
+        self.assertEqual([item["id"] for item in chatstream.read(self.root, TASK, self.chat)["turns"] if item["sub"]], [])  # the main chat's turns carry no `sub`
 
     def test_every_chat_that_runs_or_waits_is_known_whatever_its_folder_provider_or_task(self) -> None:
         """Retest N2: VS Code asks "a chat is still running, quit anyway?" (`veto.chat`) for any chat of any window, not only the chat of a task. A restart names them first."""

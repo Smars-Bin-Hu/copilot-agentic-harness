@@ -883,13 +883,22 @@ def slim(turn: Any) -> Any:
     parts = turn.get("responseParts")
     if not isinstance(parts, list):
         return turn
-    kept = []
-    for part in parts[-PARTS_KEEP:]:
-        call = part.get("toolCall") if isinstance(part, dict) else None
-        if isinstance(call, dict) and "content" in call:
-            part = dict(part, toolCall=dict(call, content=bounded_content(call["content"])))
-        kept.append(part)
+    kept = [slim_part(part) for part in parts[-PARTS_KEEP:]]
     return dict(turn, responseParts=kept, dropped=int(turn.get("dropped") or 0) + max(0, len(parts) - PARTS_KEEP))
+
+
+UNBOUNDED = ("structuredContent", "resultMetadata")  # of a tool call in a snapshot: no limit on their size, and no page reads them
+
+
+def slim_part(part: Any) -> Any:
+    """One part of a turn as the board keeps it: the result of a tool call cut by `bounded_content`, and without the fields of `UNBOUNDED` (`reduce_chat` never takes those either)."""
+    call = part.get("toolCall") if isinstance(part, dict) else None
+    if not isinstance(call, dict) or not ("content" in call or any(key in call for key in UNBOUNDED)):
+        return part
+    kept = {key: value for key, value in call.items() if key not in UNBOUNDED}
+    if "content" in kept:
+        kept["content"] = bounded_content(kept["content"])
+    return dict(part, toolCall=kept)
 
 
 def _contributor(value: Any) -> Optional[Dict[str, str]]:

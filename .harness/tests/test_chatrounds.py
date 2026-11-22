@@ -12,7 +12,7 @@ from unittest import mock
 from test_boardserve import ServeCase, TASK
 
 from core import copilot_events, tasks
-from modules.task import chatrounds, taskarchive
+from modules.task import chatrounds, chatstream, taskarchive
 
 SESSION = "s-rounds"
 
@@ -200,6 +200,7 @@ class PruneTests(unittest.TestCase):
         folder.mkdir(parents=True)
         (folder / "task.json").write_text("{}", encoding="utf-8")
         (folder / chatrounds.FILE_NAME).write_text("{}\n", encoding="utf-8")
+        (folder / chatstream.FILE_NAME).write_text("{}\n", encoding="utf-8")
         at = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(time.time() - days_ago * 86400))
         path = self.shelf / taskarchive.INDEX_JSON
         known = json.loads(path.read_text(encoding="utf-8"))["tasks"] if path.exists() else []
@@ -210,8 +211,20 @@ class PruneTests(unittest.TestCase):
         old, new = self.task("old", 31), self.task("new", 29)
         self.assertEqual(taskarchive.prune_transcripts(self.root, str(self.shelf)), ["old"])
         self.assertFalse((old / chatrounds.FILE_NAME).exists())
+        self.assertFalse((old / chatstream.FILE_NAME).exists())  # the stream the board kept goes by the same rule
+        self.assertTrue((new / chatstream.FILE_NAME).exists())
         self.assertTrue((old / "task.json").exists())
         self.assertTrue((new / chatrounds.FILE_NAME).exists())
+
+    def test_a_task_with_only_a_stream_file_is_pruned_too_and_zero_days_keeps_it(self) -> None:
+        old = self.task("old", 40)
+        (old / chatrounds.FILE_NAME).unlink()
+        self.assertEqual(taskarchive.prune_transcripts(self.root, str(self.shelf)), ["old"])
+        self.assertFalse((old / chatstream.FILE_NAME).exists())
+        kept = self.task("kept", 400)
+        with mock.patch("core.config.policy_or_empty", return_value={"transcript": {"keep_days": 0}}):
+            self.assertEqual(taskarchive.prune_transcripts(self.root, str(self.shelf)), [])
+        self.assertTrue((kept / chatstream.FILE_NAME).exists())
 
     def test_zero_days_keeps_all_and_a_broken_index_stops_nothing(self) -> None:
         old = self.task("old", 400)

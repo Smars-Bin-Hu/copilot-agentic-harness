@@ -78,6 +78,17 @@ class PageAssetTests(unittest.TestCase):
         self.assertIn(taskhtml.asset_of(names[0])[0].decode("utf-8"), inline)
         self.assertIn(taskhtml.asset_of(names[2])[0].decode("utf-8"), inline)
 
+    def test_the_robot_is_one_drawing_loaded_before_enter_and_the_wizard(self) -> None:  # 1.8.31
+        web = Path(taskhtml.__file__).resolve().parent / "web"
+        info = {"name": "a", "task": "t"}
+        for page in (taskhtml.desk_page(DESK, SERVE), taskhtml.setup_page(SERVE), taskhtml.board_page([], "now", 0, SERVE), taskhtml.task_page(info, 0, None, SERVE)):
+            self.assertIn("const ROBOT = (function", page)
+            self.assertLess(page.index("const ROBOT = (function"), page.index("const WIZARD = (function"))
+            self.assertIn(".robot .r-visor", page)
+        self.assertIn("ROBOT.svg()", (web / "enter.js").read_text(encoding="utf-8"))
+        for name in ("wizard.js", "wizard.css"):
+            self.assertNotIn("wz-bot", (web / name).read_text(encoding="utf-8"))
+
     def test_a_web_file_is_read_again_only_when_it_changed(self) -> None:
         taskhtml.read("tokens.css")
         before = taskhtml._READ["tokens.css"]

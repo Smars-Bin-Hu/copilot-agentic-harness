@@ -111,15 +111,7 @@
   const pose = {nx: 0, ny: 0, sleep: 1, arm: 0};
   let solid = null;
   function buildBot() {
-    const r = el("svg", {viewBox: "0 0 100 106"});
-    const armL = el("g", {"class": "r-arm r-l"}, r), armR = el("g", {"class": "r-arm r-r"}, r);
-    el("rect", {x: 17, y: 62, width: 10, height: 26, rx: 5}, armL); el("rect", {x: 73, y: 62, width: 10, height: 26, rx: 5}, armR);
-    el("rect", {"class": "r-body", x: 30, y: 56, width: 40, height: 42, rx: 13}, r); el("circle", {"class": "r-core", cx: 50, cy: 77, r: 6}, r);
-    const headG = el("g", {"class": "r-headg"}, r);
-    el("line", {"class": "r-ant", x1: 50, y1: 16, x2: 50, y2: 7}, headG); el("circle", {"class": "r-bulb", cx: 50, cy: 6, r: 3.2}, headG);
-    el("rect", {"class": "r-head", x: 24, y: 16, width: 52, height: 42, rx: 15}, headG); el("rect", {"class": "r-visor", x: 31, y: 26, width: 38, height: 22, rx: 9}, headG);
-    const eyes = el("g", {"class": "r-eyes"}, headG);
-    el("circle", {"class": "r-eye", cx: 42, cy: 37, r: 4.2}, eyes); el("circle", {"class": "r-eye", cx: 58, cy: 37, r: 4.2}, eyes);
+    const r = ROBOT.svg();  // the one drawing, robot.js (1.8.31)
     bot.append(r);
     if (still() || typeof BOT3D === "undefined") return;
     solid = BOT3D.make(bot);

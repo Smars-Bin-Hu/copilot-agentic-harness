@@ -242,7 +242,7 @@ const WIZARD = (function () {
     ];
     const good = cells.filter((cell) => cell.querySelector(".wz-dot.ok")).length;
     const need = cells.length - good;
-    const bot = el("div", "wz-bot");
+    const bot = ROBOT.svg({glow: true});
     put(box, bot, h("h1", null, t("wizard.w.title")), el("p", "wz-sub", t("wizard.w.sub")), el("div", "wz-look", cells),
       el("p", "wz-look-sum", h("b", null, t("wizard.w.done", {a: good})), " \u00b7 ", t("wizard.w.rest", {b: need, c: need > 1 ? 4 : 1})));
     return {stop() {}, foot: () => ({back: false, later: null, why: "", main: {label: t("wizard.start"), go: opts.next, wide: true}})};
@@ -682,7 +682,7 @@ const WIZARD = (function () {
     shell = {job, footRow};
     const count = el("div", "wz-count", M.page && !alone ? t("wizard.step", {n: M.page, m: 6}) : "");
     root.className = "wz" + (name === "welcome" ? " wz-hello" : "");
-    put(root, el("div", "wz-top", el("div", "wz-brand", el("span", "wz-bot"), "HARNESS"), count), M.page && !alone ? bar() : "", el("div", "wz-body", el("div", "wz-page", content, el("div", "wz-foot", footRow))), job);
+    put(root, el("div", "wz-top", el("div", "wz-brand", "HARNESS"), count), M.page && !alone ? bar() : "", el("div", "wz-body", el("div", "wz-page", content, el("div", "wz-foot", footRow))), job);
     const opts = {
       changed: drawFoot, rerender: render, next: forward, back: backward,
       jump: (page) => go(page),
@@ -724,7 +724,7 @@ const WIZARD = (function () {
   // This browser is not paired: no data was read, so the page says only that (the bar of serve.js is hidden on this page, it would cover the progress bar), and goes on by itself once the browser is paired.
   function unpairedPage(root) {
     root.className = "wz";
-    put(root, el("div", "wz-top", el("div", "wz-brand", el("span", "wz-bot"), "HARNESS"), el("div", "wz-count", "")),
+    put(root, el("div", "wz-top", el("div", "wz-brand", "HARNESS"), el("div", "wz-count", "")),
       el("div", "wz-body", el("div", "wz-page", h("h1", null, t("wizard.unpaired.title")), el("p", "wz-sub", t("wizard.unpaired.sub")), el("p", "wz-unpaired", t("board.serve.notpaired"), " ", SERVE.pairControl()))));
     const look = () => SERVE.call("/api/status", {}, 6).then((data) => { if (data && data.paired) location.reload(); }, () => null);
     setInterval(look, 4000);

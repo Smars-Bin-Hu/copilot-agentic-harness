@@ -42,7 +42,8 @@ const SETTINGS = (function () {
     const x = h("button", {type: "button", class: "st-x", "aria-label": t("board.new.close"), title: t("board.new.close")}, "✕");
     const body = h("div", {class: "st-body wz"});
     const pane = h("div", {class: "st-pane"}, h("div", {class: "st-head"}, heading, x), body);
-    const view = SERVE.dialog([h("div", {class: "st-side"}, h("h2", {class: "st-h"}, t("dock.setup")), nav), pane]);
+    const side = h("div", {class: "st-side"}, h("h2", {class: "st-h"}, t("dock.setup")), nav);
+    const view = SERVE.dialog([side, pane]);
     view.box.classList.add("st-win");
     const items = SECTIONS.map((id) => {
       const mark = h("i", {class: "st-dot", hidden: ""});
@@ -51,6 +52,10 @@ const SETTINGS = (function () {
       return {id, node, mark};
     });
     put(nav, items.map((item) => [item.id === "adv" ? h("div", {class: "st-sep"}) : null, item.node]));
+    // (1.8.33) the whole setup guide again, step by step: /setup draws it for a copy that is set up too, and a copy that is set up stays so (wizard.mark), so leaving it halfway changes nothing
+    const walk = h("button", {type: "button", class: "st-walk"}, h("span", {class: "st-walk-i", "aria-hidden": "true"}, "\u21bb"), h("span", null, t("settings.walk")));
+    walk.addEventListener("click", () => { left = true; clearInterval(watch); stopPart(); if (win && win.view === view) win = null; location.assign("/setup"); });  // no reload first: what Settings saved is on disk, the wizard reads it
+    side.append(walk);
     const refreshDots = () => {
       dots = dotsOf(typeof READY !== "undefined" ? READY.current() : [], hold);
       items.forEach((item) => { const on = dots.has(item.id); item.mark.hidden = !on; item.node.classList.toggle("hot", on); });

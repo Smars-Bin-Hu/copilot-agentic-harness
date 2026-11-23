@@ -5128,6 +5128,7 @@
   "settings.s.repos": "代码仓库",
   "settings.s.connections": "连接",
   "settings.s.adv": "高级",
+  "settings.walk": "重新走一遍设置引导",
   "settings.loading": "正在读取…",
   "settings.save": "保存",
   "settings.saved": "已保存",

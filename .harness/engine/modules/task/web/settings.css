@@ -11,6 +11,8 @@
 .st-win .st-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .st-win .st-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--hot-dot)}.st-win .st-dot[hidden]{display:none}
 .st-win .st-sep{height:1px;margin:10px 12px;background:var(--line)}
+.st-win .st-walk{display:flex;align-items:center;gap:8px;margin-top:auto;padding:14px 12px 0;border:0;border-top:1px solid var(--line);background:transparent;color:var(--soft);font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.st-win .st-walk:hover{color:var(--ink)}.st-win .st-walk-i{font-size:14px}
 .st-win .st-pane{flex:1 1 0;display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain}
 .st-win .st-head{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:22px 28px 10px;background:var(--card)}
 .st-win .st-title{margin:0;color:var(--ink);font-size:22px;font-weight:650;letter-spacing:-.01em;overflow-wrap:anywhere}
@@ -48,6 +50,7 @@
   .st-win .st-i{width:auto;min-height:34px;padding:0 14px;border:1px solid var(--line2);border-radius:999px;font-size:13.5px}
   .st-win .st-i.on{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
   .st-win .st-sep{display:none}
+  .st-win .st-walk{margin-top:10px;padding:8px 0 0;border-top:0}
   .st-win .st-head{padding:16px 18px 8px}.st-win .st-body{padding:4px 18px 24px}
 }
 /* The pieces of the old setup form that the panels still draw: the folder picker (dock.js), the Programs and Network panels (machine.js), the Connections panel (servers.js), the Settings window.

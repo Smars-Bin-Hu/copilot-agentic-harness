@@ -104,6 +104,15 @@ class SetupDoneTests(unittest.TestCase):
         self.assertEqual(read_user(self.root)["setup_wizard"], "open")
         self.assertFalse(ready.setup_done(self.root))
 
+    def test_walking_the_guide_again_from_settings_keeps_a_copy_set_up(self) -> None:  # (1.8.33) Settings' "Walk the setup guide again"
+        write_user(self.root, name="Alex", setup_done=True)
+        wizard.mark(self.root)
+        wizard.save_you(self.root, {"name": "Alex", "language": "en"})
+        self.assertNotIn("setup_wizard", read_user(self.root))  # left halfway, the copy still goes to Enter, not back to the wizard
+        self.assertTrue(ready.setup_done(self.root))
+        wizard.finish(self.root)
+        self.assertTrue(ready.setup_done(self.root))
+
     def test_an_older_copy_with_tasks_only(self) -> None:
         with mock.patch.object(ready.tasks, "folders", return_value=["tasks/a"]):
             self.assertTrue(ready.setup_done(self.root))
@@ -364,6 +373,15 @@ class PageScriptsTests(unittest.TestCase):
             self.assertIn(".st-win{", page, name)  # settings.css
             self.assertNotIn("const SETUP =", page, name)  # the old form is not loaded any more: nothing opens it
         self.assertNotIn("const SETTINGS =", taskhtml.setup_page({"actions": [], "refresh": 3}))  # the wizard page has no gear
+
+    def test_settings_has_a_way_back_to_the_whole_setup_guide(self) -> None:  # (1.8.33)
+        from modules.task import taskhtml
+        page = taskhtml.board_page([], "now", 3, serve={"actions": [], "refresh": 3})
+        for needle in ('class: "st-walk"', 't("settings.walk")', 'location.assign("/setup")', ".st-win .st-walk{"):
+            self.assertIn(needle, page, needle)
+        core = Path(__file__).resolve().parents[1] / "engine" / "core"
+        for lang in ("en", "zh"):
+            self.assertTrue(json.loads((core / ("messages.%s.json" % lang)).read_text(encoding="utf-8")).get("settings.walk"), lang)
 
     def test_the_knowledge_base_page_in_settings_has_the_send_window_and_its_texts_exist_in_both_languages(self) -> None:
         from modules.task import taskhtml

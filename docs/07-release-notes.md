@@ -8,9 +8,11 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.32 (1.8.0 – 1.8.32, 2026-11-17 – 2026-11-23)
+## 1.8.33 (1.8.0 – 1.8.33, 2026-11-17 – 2026-11-23)
 
 ### Added
+
+- **Walk the setup guide again** (1.8.33): the last line of Settings opens the whole setup guide (`/setup`) once more, page by page. The copy stays set up: leaving the guide halfway changes nothing.
 
 - **A tool pack can be a sample** (1.8.32): `"sample": true` in its `toolpack.json`. Settings lists a sample only once a knowledge base turns it on, so a newcomer does not take it for a real tool. The factory `demotracker` is one.
 

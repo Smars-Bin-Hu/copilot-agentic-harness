@@ -226,6 +226,7 @@
         ".harness/tests/test_taskrun.py",
         ".harness/tests/test_setup.py",
         ".harness/tests/test_wizard_api.py",
+        ".harness/tests/test_wizard_polish.py",
         ".harness/tests/test_computer_recipe.py",
         ".harness/tests/test_skillboard.py",
         ".harness/tests/test_fusion.py",

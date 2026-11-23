@@ -229,3 +229,16 @@ textarea.su-in{resize:vertical}
 .su-chg li.add b{color:var(--good)}
 .su-chg li.remove b{color:var(--bad)}
 .su-chg code{font:12px/1.5 var(--mono);min-width:0}
+/* "Send to the folder" (Knowledge base): the note with the commits the folder lacks, and the window that asks first */
+.wz-send{margin-top:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:0}
+.wz-send .wz-sub{margin:0;overflow-wrap:anywhere}
+.wz-send .su-chg{padding-left:2px;color:var(--soft)}
+.wz .wz-sent{margin:12px 0 0;color:var(--good);font-size:13px;overflow-wrap:anywhere}
+.su-send-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;margin:12px 0 16px;font-size:13px}
+.su-send-facts dt{color:var(--soft)}
+.su-send-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.su-send-facts code{font:12px/1.5 var(--mono)}
+@media (max-width:600px){
+.su-send-facts{grid-template-columns:minmax(0,1fr)}
+.su-send-facts dd{margin-bottom:4px}
+}

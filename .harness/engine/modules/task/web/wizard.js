@@ -112,7 +112,7 @@ const WIZARD = (function () {
       folder: (body) => (!String(body.path || "").trim() || /bad$/.test(body.path) ? fail("No " + body.program + " in that folder.") : (F.ghFound = true, programs())),
       short: () => { F.ranHarness = true; return {done: true}; },
       scan: () => ({places: ["~/Developer", "~/source/repos"].slice(0, count ? 2 : 0), rows: F.repos, more: false}),
-      probe: (body) => (/bad$/.test(body.path) ? {ok: false, why: "Nothing in it looks like a knowledge base."} : kbHere() && body.kind === "folder" ? {ok: false, full: true, why: "A knowledge base is in place already, and this folder has no history in common with it."} : {ok: true, why: "", version: "3.2.0"}),
+      probe: (body) => (/ahead$/.test(body.path) ? {ok: false, why: "The knowledge base here has 4 commits that this folder does not have (listed below). They stay, and nothing was changed. Send them to the folder first, then update again.", update: {state: "ahead", ahead: 4, branch: "main", subjects: ["Add the glossary page", "Fix a link in the checks", "Rename the sample domain"], pull: "git -C ./kb push ./folder main", send: {folder: body.path, branch: "main", ahead: 4, subjects: ["Add the glossary page", "Fix a link in the checks", "Rename the sample domain"]}}} : /bad$/.test(body.path) ? {ok: false, why: "Nothing in it looks like a knowledge base."} : kbHere() && body.kind === "folder" ? {ok: false, full: true, why: "A knowledge base is in place already, and this folder has no history in common with it."} : {ok: true, why: "", version: "3.2.0"}),
       repo: (body) => ({kind: "repo", name: String(body.path).split(/[\\/]/).pop() || "extra", path: body.path}),
       save: (body) => {
         if (body.part === "kb") { F.kb = "copy"; F.copyAt = Date.now(); F.copyStatic = false; }
@@ -391,8 +391,42 @@ const WIZARD = (function () {
 
     const k = M.kb, drop = {over: false};
     const zone = el("div");
+    // Settings only (`opts.bare`): a folder that lacks commits made in this copy's knowledge base can take them. The probe answers `update.state == "ahead"` with `pull` (the engine's line) and `send` (what the window shows).
+    const canSend = (probe) => Boolean(opts.bare && typeof TERM !== "undefined" && probe && probe.update && probe.update.state === "ahead" && probe.update.pull);
+    // "Send to the folder" first asks: the folder that takes the commits, its branch, the title of each commit. "Send" runs the engine's line in the Terminal window (the line itself is never shown);
+    // when it ended well the page probes the folder again and shows the new state.
+    function sendWindow(u, path, mode) {
+      const info = u.send || {}, titles = info.subjects || [], n = info.ahead || u.ahead || titles.length;
+      const go = h("button", {type: "button", class: "act hot"}, t("settings.kb.send.go"));
+      const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+      const view = SERVE.dialog([h("h2", null, t("settings.kb.send")), h("p", {class: "sub"}, t("settings.kb.send.about")),
+        h("dl", {class: "su-send-facts"}, h("dt", null, t("settings.kb.send.folder")), h("dd", null, h("code", null, info.folder || "-")), h("dt", null, t("settings.kb.send.branch")), h("dd", null, h("code", null, info.branch || u.branch || "-")),
+          h("dt", null, t(n === 1 ? "settings.kb.send.commits.one" : "settings.kb.send.commits", {n})), h("dd", null, h("ul", {class: "su-chg"}, titles.map((line) => h("li", null, line)), n > titles.length ? h("li", {class: "su-soft"}, t("settings.kb.send.more", {n: n - titles.length})) : null))),
+        h("div", {class: "row"}, go, no)]);
+      no.addEventListener("click", view.close);
+      go.addEventListener("click", () => { view.close(); TERM.run(u.pull, () => recheck(path, mode)); });
+      go.focus();
+    }
+    function recheck(path, mode) {
+      api.setup("probe", {kind: mode === "package" ? "package" : "folder", path}).then((probe) => {
+        if (stopped) return;
+        k.send = canSend(probe) ? {path, mode, update: probe.update} : null;
+        const inStep = Boolean(probe.ok && probe.update && probe.update.state === "same");
+        k.sent = inStep;
+        k.err = inStep ? "" : probe.why || "";
+        if (inStep && (M.st && M.st.kb && M.st.kb.here)) k.step = "done";
+        paint(); opts.changed();
+      }, (error) => { if (stopped) return; k.err = errorText(error); paint(); opts.changed(); });
+    }
+    function sendBlock() {
+      if (!k.send) return null;
+      const u = k.send.update, titles = u.subjects || [], more = (u.ahead || titles.length) - titles.length;
+      const go = h("button", {type: "button", class: "wz-btn sm", title: t("settings.kb.send.tip")}, t("settings.kb.send"));
+      go.addEventListener("click", () => sendWindow(u, k.send.path, k.send.mode));
+      return el("div", "wz-send", el("p", "wz-sub", k.err), el("ul", "su-chg", titles.map((line) => h("li", null, line)), more > 0 ? h("li", {class: "su-soft"}, t("settings.kb.send.more", {n: more})) : null), go);
+    }
     function startJob(path, mode, replace) {
-      k.err = ""; k.step = "copy"; k.a = 0; k.b = 0; k.file = String(path).split(/[\\/]/).pop() || path;
+      k.err = ""; k.send = null; k.sent = false; k.step = "copy"; k.a = 0; k.b = 0; k.file = String(path).split(/[\\/]/).pop() || path;
       paint(); opts.changed();
       api.setup("probe", {kind: mode === "package" ? "package" : "folder", path}).then((probe) => {
         if (probe.full && !replace) {  // a knowledge base is in place already: replacing (or updating) it is the person's choice, said first
@@ -400,7 +434,7 @@ const WIZARD = (function () {
           paint(); opts.changed();
           return null;
         }
-        if (!probe.ok && !(probe.full && replace)) throw new Error(probe.why || "?");
+        if (!probe.ok && !(probe.full && replace)) { if (canSend(probe)) k.send = {path, mode, update: probe.update}; throw new Error(probe.why || "?"); }
         return api.setup("save", {part: "kb", kb_mode: mode, kb_path: path, kb_replace: Boolean(replace)}).then(follow);
       }).catch((error) => { k.step = "empty"; k.err = errorText(error); paint(); opts.changed(); });
     }
@@ -424,7 +458,7 @@ const WIZARD = (function () {
         dropBox.addEventListener("dragover", (event) => { event.preventDefault(); dropBox.classList.add("over"); });
         dropBox.addEventListener("dragleave", () => dropBox.classList.remove("over"));
         dropBox.addEventListener("drop", (event) => { event.preventDefault(); dropBox.classList.remove("over"); k.err = t("wizard.k.nodrop"); paint(); });  // a browser gives no path of a dropped file
-        put(zone, dropBox, el("div", "wz-under", t("wizard.k.skipnote")), k.err ? el("p", "wz-err", k.err) : null);
+        put(zone, dropBox, el("div", "wz-under", t("wizard.k.skipnote")), k.sent ? el("p", "wz-sub wz-sent", "\u2713 " + t("settings.kb.send.done")) : null, k.send ? sendBlock() : k.err ? el("p", "wz-err", k.err) : null);
       } else if (k.step === "replace") {
         const kb = (M.st && M.st.kb) || {}, ask = k.pending || {};
         const update = Boolean(ask.update && ask.update.state === "behind");  // a folder that is ahead of this copy updates it (what was changed here stays); any other replaces it (the old one is moved to a backup)
@@ -442,7 +476,7 @@ const WIZARD = (function () {
         const title = (kb.prefix || t("wizard.k.name")) + (kb.version ? " \u00b7 " + kb.version : "");
         const again = link(t("wizard.k.other"), () => { k.step = "empty"; k.err = ""; paint(); opts.changed(); });
         put(zone, el("div", "wz-kbcard", el("div", "wz-kbhead", h("span", {class: "wz-big-ok", style: "width:36px;height:36px;font-size:17px"}, "\u2713"), h("div", {style: "flex:1;min-width:0"}, el("div", "ttl", title), el("div", "meta", kb.path || "")), again),
-          el("div", "wz-eyebrow", t("wizard.k.brought")), el("div", "wz-stats", stat(kb.domains || 0, t("wizard.k.dom")), stat(kb.domain_skills || 0, t("wizard.k.sk")), stat((company.packs || []).length, t("wizard.k.tp")), stat((company.connections || []).length, t("wizard.k.cn")), stat((company.recipe || {}).present ? "\u2713" : "\u2013", t("wizard.k.px")))));
+          el("div", "wz-eyebrow", t("wizard.k.brought")), el("div", "wz-stats", stat(kb.domains || 0, t("wizard.k.dom")), stat(kb.domain_skills || 0, t("wizard.k.sk")), stat((company.packs || []).length, t("wizard.k.tp")), stat((company.connections || []).length, t("wizard.k.cn")), stat((company.recipe || {}).present ? "\u2713" : "\u2013", t("wizard.k.px")))), k.sent ? el("p", "wz-sub wz-sent", "\u2713 " + t("settings.kb.send.done")) : null);
       }
     }
     k.step = M.kb.step === "empty" && M.st && M.st.kb && M.st.kb.here ? "done" : M.kb.step;
@@ -692,7 +726,7 @@ const WIZARD = (function () {
   // {main: {label, off, go}}; `hooks.changed()` says when it may have changed, `hooks.saved()` when the page saved and wanted to go on. The kb page stays on its first small page (the import).
   function prepare() {
     if (!api) api = FAKE ? fakeApi() : realApi();
-    M.picks = null; M.extras = null; M.kbsub = 0; M.fromReview = false;
+    M.picks = null; M.extras = null; M.kbsub = 0; M.fromReview = false; M.kb.send = null; M.kb.sent = false;
     return load().then(() => pollReady()).then(() => {
       // a repository kept that the scan did not find (outside the usual places) is shown too, or saving the page would drop it
       const have = new Set(M.scan.rows.map((row) => row.path));

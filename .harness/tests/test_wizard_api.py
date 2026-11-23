@@ -232,6 +232,18 @@ class PageScriptsTests(unittest.TestCase):
             self.assertNotIn("const SETUP =", page, name)  # the old form is not loaded any more: nothing opens it
         self.assertNotIn("const SETTINGS =", taskhtml.setup_page({"actions": [], "refresh": 3}))  # the wizard page has no gear
 
+    def test_the_knowledge_base_page_in_settings_has_the_send_window_and_its_texts_exist_in_both_languages(self) -> None:
+        from modules.task import taskhtml
+        page = taskhtml.board_page([], "now", 3, serve={"actions": [], "refresh": 3})
+        for needle in ("function sendWindow(", "probe.update.state === \"ahead\"", "probe.update.pull", "u.send", "TERM.run(u.pull", "opts.bare", "typeof TERM"):
+            self.assertIn(needle, page, needle)
+        core = Path(__file__).resolve().parents[1] / "engine" / "core"
+        keys = ("settings.kb.send", "settings.kb.send.tip", "settings.kb.send.about", "settings.kb.send.folder", "settings.kb.send.branch", "settings.kb.send.commits", "settings.kb.send.commits.one", "settings.kb.send.go", "settings.kb.send.more", "settings.kb.send.done")
+        for lang in ("en", "zh"):
+            table = json.loads((core / ("messages.%s.json" % lang)).read_text(encoding="utf-8"))
+            for key in keys:
+                self.assertTrue(table.get(key), (lang, key))
+
 
 class ScanTests(HarnessTestCase):
     def setUp(self) -> None:

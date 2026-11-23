@@ -58,7 +58,7 @@ from core.paths import cli_command
 
 WEB = Path(__file__).resolve().parent / "web"
 MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--ICON-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*THEME*/", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
-TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.", "setup.", "dock.", "term.", "connections.", "machine.", "tools.", "super.", "waits.", "send.refused.", "serve.refused.request")  # waits. (1.8.5): starting, error, being created, display name, on every page
+TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.", "setup.", "wizard.", "dock.", "term.", "connections.", "machine.", "tools.", "super.", "waits.", "send.refused.", "serve.refused.request")  # waits. (1.8.5): starting, error, being created, display name, on every page
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -219,8 +219,9 @@ SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsaf
 
 
 def setup_page(serve: Dict[str, Any], linked: bool = False) -> str:
-    """Get ready, as the board server sends it. It has no Enter screen: it is where a new copy goes from there."""
-    return build("setup.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js"], say("setup.title"), {"serve": serve, "getReady": True}, 0, ["page.css"], linked)
+    """The first-run setup wizard (O2), as the board server sends it. It has no Enter screen: it is where a new copy goes from there.
+    setup.css stays for the pieces of the old form that the picker and the connections window still draw (dock.js, servers.js)."""
+    return build("setup.html", ["common.js", "serve.js", "dock.js", "servers.js", "wizard.js"], say("setup.title"), {"serve": serve, "wizard": True}, 0, ["page.css", "setup.css", "wizard.css"], linked)
 
 
 def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None, linked: bool = False) -> str:

@@ -1,0 +1,185 @@
+/* The first-run setup wizard (wizard.js): one page, one question. Colours are tokens only (tokens.css, dark and light).
+   Every class starts with wz-, and the big ones sit under .wz: this sheet comes before ui.css, which would win over a bare class on an input. */
+main.wz{position:fixed;inset:0;max-width:none;margin:0;padding:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(ellipse 70% 50% at 50% 0%,var(--hover),transparent 70%),var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}
+.wz{--faint:color-mix(in srgb,var(--soft) 58%,var(--bg))}
+.wz *{box-sizing:border-box}
+.wz::after{content:"";position:absolute;left:0;right:0;bottom:0;height:220px;pointer-events:none;background:linear-gradient(to top,var(--bg),transparent 90%),repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 64px);-webkit-mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent);mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent)}
+.wz button{font:inherit;color:inherit;cursor:pointer}
+.wz [hidden]{display:none!important}
+
+body.wz-doc .dock-btn,body.wz-doc .dock-panel,body.wz-doc .dock-ask{display:none}
+
+/* shared pieces */
+.wz .wz-dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.wz .wz-dot.ok{background:var(--good-dot)}.wz .wz-dot.hot{background:var(--hot-dot)}.wz .wz-dot.bad{background:var(--bad)}.wz .wz-dot.none{background:transparent;border:1.5px solid var(--line2)}
+.wz .wz-btn{height:44px;padding:0 24px;border-radius:22px;border:1px solid var(--line2);background:transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:14.5px;white-space:nowrap}
+.wz .wz-btn:hover{background:var(--hover)}
+.wz .wz-btn.primary{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.wz .wz-btn.primary:hover{background:var(--btn-hover)}
+.wz .wz-btn.off,.wz .wz-btn:disabled{opacity:.38;pointer-events:none}
+.wz .wz-btn.sm{height:32px;padding:0 14px;font-size:13px;border-radius:16px}
+.wz .wz-link{background:none;border:0;padding:0;color:var(--soft);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line2);font-size:13.5px}
+.wz .wz-link:hover{color:var(--ink)}
+.wz .wz-spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--hot-dot);border-right-color:transparent;display:inline-block;animation:wzspin .9s linear infinite;flex:none}
+@keyframes wzspin{to{transform:rotate(360deg)}}
+html.lite .wz .wz-spin,html.lite .wz .wz-btn.is-waiting::before{animation:none}@media (prefers-reduced-motion:reduce){.wz .wz-spin{animation:none}}
+.wz .wz-mono{font-family:var(--mono)}
+.wz .wz-tick{color:var(--good);font-weight:700}
+.wz .wz-in{display:block;height:42px;width:100%;border-radius:10px;border:1px solid var(--line2);background:var(--bg);color:var(--ink);padding:0 14px;outline:none;font:inherit}
+.wz .wz-in:focus{border-color:var(--ink)}
+.wz .wz-in.mono{font:13px var(--mono)}
+.wz .wz-err{margin:12px 0 0;color:var(--bad);font-size:13px;overflow-wrap:anywhere}
+
+/* frame: top line, progress, body, background strip */
+.wz-top{display:flex;align-items:center;justify-content:space-between;padding:22px 32px 0;position:relative;z-index:2;flex:none}
+.wz-brand{display:flex;align-items:center;gap:10px;font:800 13px/1 "Avenir Next","Futura",var(--sans);letter-spacing:.32em;color:var(--soft)}
+.wz-bot{width:22px;height:18px;border-radius:6px;background:var(--robot-head);border:1px solid var(--line2);position:relative;flex:none}
+.wz-bot::before,.wz-bot::after{content:"";position:absolute;top:6px;width:5px;height:5px;border-radius:50%;background:var(--good-dot);box-shadow:0 0 6px var(--good-dot)}
+.wz-bot::before{left:4px}.wz-bot::after{right:4px}
+.wz-count{font:12px var(--mono);color:var(--faint);letter-spacing:.04em}
+.wz-prog{position:relative;z-index:2;width:min(720px,calc(100% - 64px));margin:26px auto 0;flex:none}
+.wz-bars{display:flex;gap:6px}
+.wz-bars i{flex:1;height:3px;border-radius:2px;background:var(--track);position:relative;overflow:hidden}
+.wz-bars i.done{background:var(--soft)}
+.wz-bars i.cur::after{content:"";position:absolute;inset:0;width:var(--part,50%);background:var(--ink)}
+.wz-names{display:flex;gap:6px;margin-top:9px}
+.wz-names>span{flex:1;min-width:0;font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wz-names>span.done{color:var(--soft)}
+.wz-names>span.cur{color:var(--ink);font-weight:600}
+.wz-names .wz-tick{font-size:11px;margin-right:3px}
+.wz-body{position:relative;z-index:2;flex:1;min-height:0;overflow:auto;display:flex;justify-content:center;padding:58px 32px 24px}
+.wz-page{width:min(600px,100%);min-width:0;margin:0 auto}
+.wz-eyebrow{font:600 11px var(--mono);letter-spacing:.14em;color:var(--faint);text-transform:uppercase;margin-bottom:12px}
+.wz-page h1{font-size:30px;line-height:1.2;letter-spacing:-.01em;margin:0 0 10px;font-weight:650;overflow-wrap:anywhere}
+.wz-page .wz-sub{font-size:15px;color:var(--soft);margin:0 0 30px;max-width:540px}
+.wz-foot{margin-top:34px;padding-bottom:30px}
+.wz-foot .wz-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.wz-grow{flex:1}
+.wz-why{font-size:12.5px;color:var(--faint);text-align:right}
+.wz-job{position:relative;z-index:3;flex:none;align-self:center;max-width:calc(100% - 32px);margin:0 0 14px;display:flex;align-items:center;gap:10px;padding:6px 14px 6px 10px;border-radius:16px;background:var(--raise);border:1px solid var(--line);font-size:12px;color:var(--soft);white-space:nowrap}
+.wz-job .mini{width:90px;height:3px;border-radius:2px;background:var(--track);overflow:hidden;flex:none}
+.wz-job .mini i{display:block;height:100%;background:var(--hot-dot)}
+.wz-loading .wz-body{visibility:hidden}
+
+/* welcome */
+.wz-hello{text-align:center}
+.wz-hello .wz-page{width:min(640px,100%)}
+.wz-hello h1{font-size:40px}
+.wz-hello .wz-sub{margin:0 auto 34px}
+.wz-hello .wz-page .wz-bot{width:54px;height:42px;border-radius:14px;margin:0 auto 26px}
+.wz-look{display:grid;grid-template-columns:1fr 1fr;gap:2px 28px;text-align:left;padding:18px 22px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.wz-it{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13.5px;min-width:0}
+.wz-it .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wz-it .v{line-height:20px;color:var(--faint);font-size:12.5px;white-space:nowrap;max-width:50%;overflow:hidden;text-overflow:ellipsis}
+.wz-it .v.hot{color:var(--hot)}
+.wz-look-sum{margin:20px 0 0;font-size:13.5px;color:var(--soft)}
+.wz-look-sum b{color:var(--ink)}
+
+/* you */
+.wz-field{margin-bottom:26px}
+.wz-field .cap{display:block;font-size:13px;color:var(--soft);margin-bottom:8px;font-weight:500}
+.wz-field .hint{font-size:12.5px;color:var(--faint);margin-top:8px}
+.wz .wz-in.big{height:56px;font-size:20px;border-radius:12px;padding:0 18px}
+.wz-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.wz .wz-tile{height:64px;border-radius:12px;border:1px solid var(--line2);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:16px;font-weight:600;text-align:left}
+.wz .wz-tile.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink) inset}
+.wz-tile .ring{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line2);flex:none}
+.wz-tile.on .ring{border:5px solid var(--ink)}
+
+/* lists: programs, repositories, connections */
+.wz-list{border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
+.wz-li{display:flex;align-items:center;gap:14px;padding:14px 18px;border-top:1px solid var(--line);min-height:62px}
+.wz-li:first-child{border-top:0}
+.wz-ic{width:32px;height:32px;border-radius:9px;background:var(--raise);border:1px solid var(--line);display:grid;place-items:center;font:700 12px var(--mono);color:var(--soft);flex:none}
+.wz-main{flex:1;min-width:0}
+.wz-name{font-weight:600;display:flex;align-items:baseline;gap:8px;min-width:0}
+.wz-name b{font-weight:600;white-space:nowrap}
+.wz-name small{font-weight:400;color:var(--faint);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wz-where{font:12px var(--mono);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+.wz-where bdi{direction:ltr;unicode-bidi:plaintext}
+.wz-where.plain{direction:ltr;font-family:var(--sans)}
+.wz-state{font-size:12.5px;color:var(--faint);white-space:nowrap;display:flex;align-items:center;gap:7px;flex:none}
+.wz-state.ok{color:var(--good)}.wz-state.hot{color:var(--hot)}
+.wz-li.miss{background:var(--hot-bg);flex-wrap:wrap}
+.wz-fix{flex-basis:100%;margin:6px 0 2px 46px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.wz-fix .line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--soft)}
+.wz .wz-fix .wz-in{height:34px;flex:1;min-width:200px;width:auto}
+.wz-fix .watch{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--faint)}
+.wz-under{margin-top:14px;font-size:12.5px;color:var(--faint);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* copilot */
+.wz-cp{display:flex;flex-direction:column;align-items:flex-start;gap:14px}
+.wz .wz-btn.gh-btn{height:52px;padding:0 26px;font-size:15.5px;border-radius:26px}
+.wz-gh{width:20px;height:20px}
+.wz-codebox{width:100%;border:1px solid var(--line);border-radius:16px;background:var(--card);padding:26px 26px 22px}
+.wz-codebox .cap{font-size:12px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.wz-code{display:flex;align-items:center;gap:16px;margin:12px 0 20px;flex-wrap:wrap}
+.wz-code .digits{font:700 40px/1 var(--mono);letter-spacing:.12em}
+.wz-codebox .acts{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.wz-codebox .waiting{margin-top:18px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--soft)}
+.wz-signed{display:flex;align-items:center;gap:16px;padding:22px 24px;border:1px solid var(--line);border-radius:16px;background:var(--card);width:100%}
+.wz-big-ok{width:44px;height:44px;border-radius:50%;background:var(--good-bg);color:var(--good);display:grid;place-items:center;font-size:22px;font-weight:700;flex:none}
+.wz-signed .t1{font-weight:650;font-size:17px;overflow-wrap:anywhere}.wz-signed .t2{color:var(--faint);font-size:13px;margin-top:2px}
+
+/* knowledge base */
+.wz-drop{height:210px;border:1.5px dashed var(--line2);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:var(--card);text-align:center;padding:0 16px}
+.wz-drop.over{border-color:var(--ink)}
+.wz-zip{width:46px;height:54px;border-radius:8px;border:1.5px solid var(--line2);position:relative;margin-bottom:6px}
+.wz-zip::after{content:"ZIP";position:absolute;bottom:7px;left:0;right:0;text-align:center;font:700 10px var(--mono);color:var(--faint)}
+.wz-zip::before{content:"";position:absolute;top:-1px;right:-1px;width:14px;height:14px;background:var(--bg);border-left:1.5px solid var(--line2);border-bottom:1.5px solid var(--line2);border-radius:0 7px 0 4px}
+.wz-drop b{font-size:16px}
+.wz-drop .or{font-size:13px;color:var(--faint)}
+.wz-kbcard{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:20px 22px}
+.wz-kbhead{display:flex;align-items:center;gap:14px}
+.wz-kbhead>div{min-width:0}
+.wz-kbhead .ttl{font-weight:650;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wz-kbhead .meta{font:12px var(--mono);color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wz-kbcard .wz-eyebrow{margin:20px 0 0}
+.wz-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:18px}
+.wz-stat{border:1px solid var(--line);border-radius:12px;padding:12px 10px;text-align:center;background:var(--bg);min-width:0}
+.wz-stat .n{font-size:22px;font-weight:700;line-height:1.1}
+.wz-stat .l{font-size:11.5px;color:var(--faint);margin-top:3px;overflow-wrap:anywhere}
+.wz-meter{height:4px;border-radius:2px;background:var(--track);overflow:hidden;margin-top:14px}
+.wz-meter i{display:block;height:100%;background:var(--ink)}
+
+/* repositories */
+.wz-tools{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.wz .wz-tools .wz-in{height:36px;max-width:260px;width:auto;flex:1 1 160px}
+.wz-tools .cnt{font-size:12.5px;color:var(--faint)}
+.wz-scroll{max-height:318px;overflow:auto}
+.wz-repo{min-height:52px;padding:10px 18px;cursor:pointer}
+.wz-box{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--line2);flex:none;display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--btn-ink)}
+.wz-box.on{background:var(--ink);border-color:var(--ink)}
+.wz-repo .wz-name{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wz-empty{padding:26px 18px;text-align:center;color:var(--soft);font-size:13.5px}
+
+/* review */
+.wz-grp{margin-bottom:22px}
+.wz-grp h4{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 10px;font-weight:600}
+.wz-rv{align-items:flex-start;gap:12px;padding:12px 18px;min-height:0}
+.wz-rv .wz-dot{margin-top:7px}
+.wz-donegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;padding:6px 18px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.wz-d{display:flex;align-items:baseline;gap:10px;padding:8px 0;font-size:13.5px;min-width:0}
+.wz-d b{font-weight:600;white-space:nowrap}.wz-d .wz-dot{align-self:center}
+.wz-d .s{color:var(--faint);font-size:12.5px;min-width:0;overflow-wrap:anywhere}
+.wz-rv .t{font-weight:600;overflow-wrap:anywhere}
+.wz-rv .eff{font-size:13px;color:var(--soft);margin-top:2px}
+.wz-later{font-size:13px;color:var(--faint);display:flex;gap:8px;align-items:center}
+.wz-gear{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--line2);font-size:11px;position:relative;flex:none}
+.wz-gear::after{content:"";position:absolute;top:-1px;right:-1px;width:6px;height:6px;border-radius:50%;background:var(--hot-dot)}
+
+/* narrow: the names under the bar go, the pieces stack */
+@media (max-width:1000px){
+  .wz-names{display:none}
+  .wz-body{padding:40px 24px 20px}
+  .wz-page h1{font-size:26px}
+  .wz-hello h1{font-size:32px}
+  .wz-look{grid-template-columns:1fr}
+  .wz-stats{grid-template-columns:repeat(3,1fr)}
+  .wz-donegrid{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .wz-code .digits{font-size:30px}
+  .wz-top{padding:18px 20px 0}
+  .wz-foot .wz-why{flex-basis:100%;order:-1;text-align:left}
+}

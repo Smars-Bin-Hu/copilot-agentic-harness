@@ -602,9 +602,10 @@ const WIZARD = (function () {
   function bar() {
     const idx = M.page - 1;
     const part = M.page === 4 ? ((subs().indexOf(M.kbsub) + 1) / subs().length) * 100 : 55;
-    const done = (i) => i < idx || (i !== idx && fine(i + 1));
-    const bars = SEGMENTS.map((key, i) => h("i", {class: done(i) ? "done" : i === idx ? "cur" : null, style: "--part:" + part + "%"}));
-    const names = SEGMENTS.map((key, i) => h("span", {class: done(i) ? "done" : i === idx ? "cur" : null}, done(i) ? [tick(), ""] : "", t(key)));
+    // a part is done when the computer says it is fine ("You" cannot be skipped, so behind us it is done); a part behind us that is not fine was skipped with Later: a yellow dot, never a tick
+    const state = (i) => (i === idx ? "cur" : fine(i + 1) || (i === 0 && i < idx) ? "done" : i < idx ? "skip" : null);
+    const bars = SEGMENTS.map((key, i) => h("i", {class: state(i), style: "--part:" + part + "%"}));
+    const names = SEGMENTS.map((key, i) => h("span", {class: state(i)}, state(i) === "done" ? [tick(), ""] : state(i) === "skip" ? [dot("hot wz-skip"), ""] : "", t(key)));
     return el("div", "wz-prog", el("div", "wz-bars", bars), el("div", "wz-names", names));
   }
 

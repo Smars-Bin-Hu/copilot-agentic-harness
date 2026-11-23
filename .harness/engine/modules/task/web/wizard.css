@@ -47,6 +47,9 @@ html.lite .wz .wz-spin,html.lite .wz .wz-btn.is-waiting::before{animation:none}@
 .wz-names>span.done{color:var(--soft)}
 .wz-names>span.cur{color:var(--ink);font-weight:600}
 .wz-names .wz-tick{font-size:11px;margin-right:3px}
+.wz-bars i.skip{background:var(--hot-dot)}
+.wz-names>span.skip{color:var(--soft)}
+.wz .wz-names .wz-dot.wz-skip{width:6px;height:6px;margin:0 5px 1px 0;vertical-align:middle}
 .wz-body{position:relative;z-index:2;flex:1;min-height:0;overflow:auto;display:flex;justify-content:center;padding:58px 32px 24px}
 .wz-page{width:min(600px,100%);min-width:0;margin:0 auto}
 .wz-eyebrow{font:600 11px var(--mono);letter-spacing:.14em;color:var(--faint);text-transform:uppercase;margin-bottom:12px}

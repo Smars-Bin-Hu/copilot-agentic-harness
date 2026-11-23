@@ -32,6 +32,9 @@ class FakeLink:
     def hurry(self) -> None:
         return None
 
+    def making(self) -> List[Dict[str, Any]]:
+        return []
+
     def dispatch(self, *arguments: Any, **keywords: Any) -> Dict[str, Any]:
         self.sent.append(arguments)
         return {"chat": "c1", "title": "t", "turn": "x"}

@@ -46,6 +46,7 @@ import json
 import os
 import hashlib
 import secrets
+import signal
 import socket
 import http.client
 import subprocess
@@ -2801,6 +2802,30 @@ class Server(http.server.ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+def stop_on_signal(board: Board) -> Callable[[], None]:
+    """1.8.30: SIGTERM (a process manager, `kill <pid>`) and, on Windows, CTRL_BREAK / console close (SIGBREAK) take the path of a stop on purpose: the wait loop in `serve` ends and
+    the host is stopped unless a chat works. Only the main thread can set a handler; elsewhere nothing changes. Returns the call that puts the old handlers back. Never raises."""
+    names = ["SIGTERM"] + (["SIGBREAK"] if os.name == "nt" else [])
+    old: Dict[Any, Any] = {}
+    try:
+        if threading.current_thread() is not threading.main_thread():
+            return lambda: None
+        for name in names:
+            number = getattr(signal, name, None)
+            if number is not None:
+                old[number] = signal.signal(number, lambda _number, _frame: board.stop_asked.set())
+    except (ValueError, OSError):
+        pass
+
+    def restore() -> None:
+        for number, handler in old.items():
+            try:
+                signal.signal(number, handler)
+            except (ValueError, OSError, TypeError):
+                pass
+    return restore
+
+
 def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,
           link: Optional[vslink.VsLink] = None) -> Dict[str, Any]:
     """Run until Ctrl+C. `opener`, `ready` and `link` exist for the tests: `ready` gets the server once it listens; `link`, a link made by hand (a fake host, or none)."""
@@ -2860,6 +2885,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     reason = ""
+    restore_signals = stop_on_signal(board)
     try:
         filecache.enable()  # 1.8.25: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
         while serving.is_alive():
@@ -2880,6 +2906,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
             board.end_host(busy, out)
         server.server_close()
         filecache.enable(False)
+        restore_signals()
         try:
             path.unlink()
         except OSError:

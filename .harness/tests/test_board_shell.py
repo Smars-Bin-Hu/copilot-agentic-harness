@@ -187,5 +187,60 @@ class LanguageTests(ServeCase):
         self.assertFalse(self.override.exists())
 
 
+class MotionRulesTests(unittest.TestCase):
+    """1.8.33, the motion of the Settings window and the Appearance panel (goal 1.8.x-first-run-polish, S1-S4): the code holds the rules; the moving is the walkthrough's."""
+
+    def test_settings_grows_out_of_the_gear_and_leaves_the_same_way(self) -> None:
+        code = source("settings.js")
+        self.assertIn("scale(.96)", code)
+        self.assertIn("MOTION.MS.window", code)  # in: 280 ms, the shade 200 ms
+        self.assertIn("transformOrigin", code)
+        self.assertIn('".dock-setup"', code)  # the origin is the gear; opened from elsewhere, the centre
+        self.assertIn("new MutationObserver", code)  # every way of closing ends in the one move out
+        self.assertIn("shade.inert = true", code)
+        self.assertIn("MOTION.OUT", code)
+
+    def test_a_section_switch_fades_out_then_rises_in_and_the_selection_glides(self) -> None:
+        code = source("settings.js")
+        self.assertIn("MOTION.MS.micro", code)  # out: 120 ms
+        self.assertIn("MOTION.appear(body, {y: 8})", code)  # in: 8 px up, 200 ms
+        self.assertIn("MOTION.glide(sel, select, MOTION.MS.show)", code)
+        self.assertIn("if (fading) return fading;", code)  # a burst of clicks shares one fade out ...
+        self.assertIn("if (mine !== token) return;", code)  # ... and only the last click lands
+        css = source("settings.css")
+        self.assertRegex(css, r"@media \(min-width:901px\)\{\.st-win \.st-i\.on,\.st-win \.st-i\.on:hover\{background:transparent\}\}")
+        self.assertIn(".st-sel{display:none}", css.replace(" ", ""))  # the narrow window's chips draw their own selection
+
+    def test_a_loading_section_shows_grey_bars_not_only_a_spinner_and_keeps_its_error_text(self) -> None:
+        code = source("settings.js")
+        self.assertIn("const skeleton = (id)", code)
+        self.assertNotIn('"st-wait"', code)
+        self.assertIn('t("settings.loading")', code)  # the bars are announced as the same status
+        self.assertIn('h("p", {class: "bad"}, errorText(error))', code)  # the error text, as it was
+        for section in ("you", "programs", "copilot", "kb", "packs", "repos", "connections", "network", "adv"):
+            self.assertRegex(code, r"\b" + section + r": \[")
+        css = source("settings.css")
+        self.assertIn("html.lite .st-win .st-sk{animation:none}", css)
+        self.assertIn("prefers-reduced-motion:reduce", css)
+
+    def test_the_appearance_panel_opens_and_closes_from_its_button(self) -> None:
+        code = source("shell.js")
+        self.assertIn("MOTION.play(panel, [{opacity: 0, transform: PANEL_SHRINK}", code)
+        self.assertIn("MOTION.play(panel, [{opacity: 1, transform: \"none\"}, {opacity: 0, transform: PANEL_SHRINK}]", code)
+        self.assertIn("const settingsOpen = () => Boolean(panel) && !panel.hidden && !leaving;", code)  # closed at once, hidden when the move ends
+        self.assertIn('const PANEL_SHRINK = "scale(.96)"', code)
+        self.assertRegex(source("shell.css"), r"\.setp\{transform-origin:calc\(100% - 22px\) calc\(100% \+ 32px\)\}")
+
+    def test_only_transform_and_opacity_move_and_nothing_is_over_300_ms(self) -> None:
+        for name in ("settings.js", "shell.js"):
+            code = source(name)
+            for frames in re.findall(r"\[\{[^\]]*\}(?:, \{[^\]]*\})*\]", code):
+                if "opacity" not in frames:
+                    continue
+                keys = set(re.findall(r"\b([a-zA-Z]+):", frames)) - {"offset"}
+                self.assertTrue(keys <= {"transform", "opacity"}, (name, frames))
+            self.assertNotRegex(code, r"\bms: ([4-9]\d\d|\d{4,})\b")
+
+
 if __name__ == "__main__":
     unittest.main()

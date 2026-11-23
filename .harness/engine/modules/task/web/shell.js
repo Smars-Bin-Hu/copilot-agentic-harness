@@ -251,12 +251,18 @@ const SHELL = (function () {
       button.setAttribute("aria-pressed", on ? "true" : "false");
     }
   }
-  const settingsOpen = () => Boolean(panel) && !panel.hidden;
+  let leaving = false;  // the panel is on its way out (S4): it counts as closed at once, and is hidden when the move ends
+  const settingsOpen = () => Boolean(panel) && !panel.hidden && !leaving;
+  const PANEL_SHRINK = "scale(.96)";  // the panel grows out of its button and goes back into it, 200 ms (1.8.33, motion.js; nothing but a fade under Lite and the system's reduced motion)
   function openSettings() {
     if (open()) closePalette(true);
     if (!panel) buildSettings();
     syncSettings();
+    if (typeof MOTION !== "undefined") for (const running of panel.getAnimations ? panel.getAnimations() : []) running.cancel();
+    leaving = false;
+    panel.inert = false;
     panel.hidden = false;
+    if (typeof MOTION !== "undefined") MOTION.play(panel, [{opacity: 0, transform: PANEL_SHRINK}, {opacity: 1, transform: "none"}], {ms: MOTION.MS.show});
     gear.setAttribute("aria-expanded", "true");
     if (typeof WALL !== "undefined") WALL.opened();
     const first = panel.querySelector("button.on") || panel.querySelector("button");
@@ -264,9 +270,18 @@ const SHELL = (function () {
   }
   function closeSettings(focusGear) {
     if (!settingsOpen()) return;
-    panel.hidden = true;
     gear.setAttribute("aria-expanded", "false");
     if (focusGear) gear.focus();
+    if (typeof MOTION === "undefined") { panel.hidden = true; return; }
+    leaving = true;
+    panel.inert = true;
+    for (const running of panel.getAnimations ? panel.getAnimations() : []) running.cancel();
+    MOTION.play(panel, [{opacity: 1, transform: "none"}, {opacity: 0, transform: PANEL_SHRINK}], {ms: MOTION.MS.show, ease: MOTION.OUT, fill: "forwards"}).then(() => {
+      if (!leaving) return;  // opened again meanwhile
+      leaving = false;
+      panel.hidden = true;
+      panel.inert = false;
+    });
   }
 
   // ---------- the two fixed buttons ----------

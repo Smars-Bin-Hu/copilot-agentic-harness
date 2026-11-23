@@ -736,7 +736,7 @@ class FirstRunPolishTests(unittest.TestCase):
     def test_a_page_loaded_again_has_no_opening(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")
         self.assertIn('nav.type === "reload"', code)
-        self.assertIn("if (play && !still() && !reloaded)", code)
+        self.assertIn("if (play && !reloaded)", code)  # (1.8.33) the guard of the opening: a reload has none (the opening itself is still under MOTION)
 
     def test_the_label_of_a_kept_answer_is_made_again_in_the_language_of_now(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -842,6 +842,68 @@ class PaceInCallTests(unittest.TestCase):
         self.assertIn("DATA.pace", serve)
         self.assertIn("(base || 8) * PACE", body)
         self.assertIn("seconds * 1000", body)
+
+
+class EnterMotionTests(unittest.TestCase):
+    """1.8.33 (E1-E6, W10): the opening, the robot's place, the button's label, the way to the board, the entrance from the wizard. Everything goes through MOTION and ROBOT.act."""
+
+    def setUp(self) -> None:
+        self.code = (WEB / "enter.js").read_text(encoding="utf-8")
+        self.css = (WEB / "enter.css").read_text(encoding="utf-8")
+
+    def test_the_wordmark_appears_whole_not_letter_by_letter(self) -> None:
+        self.assertNotIn("enrise", self.css)  # (E1) the letters no longer rise one by one as SVG on the main thread
+        self.assertNotIn("calc(var(--i)*70ms", self.css)
+        self.assertNotIn("#enter.intro", self.css)
+        body = self.code[self.code.index("function begin()"):self.code.index("function finish(")]
+        self.assertIn("MOTION.play(pair[0]", body)  # one move for the wordmark's whole picture and its reflection
+        self.assertIn("ms: 300", body)
+        self.assertNotIn("wm.gs", body)  # no letter of its own
+        self.assertIn("delay: fromWizard ? 450 : 300", body)  # the button last
+
+    def test_the_robot_rests_eight_pixels_over_the_letters_and_the_opening_does_not_move_it(self) -> None:
+        self.assertIn("CLEAR = 8", self.code)
+        self.assertIn("new DOMMatrixReadOnly(tr).m42", self.code)  # placed for where the wordmark rests, not where the opening has lifted it
+        self.assertIn("FEET_3D", self.code)
+        self.assertNotIn("FLOAT", self.code)
+
+    def test_the_label_is_swapped_when_the_kind_changes_and_written_in_place_inside_a_kind(self) -> None:
+        body = self.code[self.code.index("function paintLabel("):self.code.index("function render()")]
+        self.assertIn("MOTION.swap(label", body)
+        self.assertIn("kind !== before", body)  # a new percent of `preparing` is no swap
+        self.assertIn("opening", body)  # the first label comes with the opening
+        self.assertIn("MOTION.play(go, [{width:", body)  # glides only when it is longer than the minimum width
+        self.assertIn("min + 1", body)
+        self.assertIn('kind === "enter" && before !== "check"', body)
+        self.assertIn('ROBOT.act(bot, "glow")', self.code)
+        self.assertIn(".en-bot.glowing .r-eye{animation:none}", self.css)  # no blink in that second
+
+    def test_the_way_to_the_board_is_two_moves_in_turn(self) -> None:
+        body = self.code[self.code.index("function finish("):self.code.index("// What the button does")]
+        self.assertIn("scale(1.02)", body)
+        self.assertIn("ms: 120", body)
+        self.assertLess(body.index("MOTION.play(enter"), body.index("MOTION.play(app"))
+        self.assertIn("done.then(() => { gone(); MOTION.play(app", body)  # the board comes in only when Enter is gone
+        self.assertIn("html.en-open main{visibility:hidden}", self.css)  # the board stays held back while Enter leaves
+        self.assertNotIn("transition:opacity .38s", self.css)
+
+    def test_a_page_loaded_again_fades_in_and_the_wizard_hand_over_plays_the_entrance(self) -> None:
+        self.assertIn('MOTION.taken("from-wizard")', self.code)
+        self.assertIn("!reloaded && typeof MOTION", self.code)
+        self.assertIn("MOTION.play(enter, [{opacity: 0}, {opacity: 1}], {ms: 160})", self.code)  # E6
+        body = self.code[self.code.index("function begin()"):self.code.index("function finish(")]
+        self.assertIn("ms: 500", body)  # the robot flies in from the top centre
+        self.assertIn("scale: .25", body)
+        self.assertIn("m-veil enter-bg", body)  # the background is the Enter background first
+        self.assertIn("delay: at", body)  # the wordmark when the robot is halfway
+
+    def test_no_move_is_longer_than_300_ms_but_the_robots_and_nothing_per_frame(self) -> None:
+        body = self.code[self.code.index("function begin()"):self.code.index("function finish(")]
+        for ms in re.findall(r"ms: (\d+)", body):
+            if ms != "500":  # the robot's flight (W10) is the one longer move, allowed for the robot
+                self.assertLessEqual(int(ms), 300)
+        self.assertNotIn("requestAnimationFrame", body)
+
 
 if __name__ == "__main__":
     unittest.main()

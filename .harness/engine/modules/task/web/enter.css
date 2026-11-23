@@ -2,10 +2,10 @@
    Colours are tokens (--en-* in tokens.css, light and dark). It sits under the fixed search and gear of shell.css (z-index 160 and up), so those stay the global ones.
    Motion: transform and opacity (the charge is drawn on a canvas). `html.lite` and `prefers-reduced-motion` turn all of it off; the screen still works. */
 
-#enter{position:fixed;inset:0;z-index:100;overflow:hidden;color:var(--en-ink);background:transparent;font-family:var(--sans);transition:opacity .38s ease,transform .38s ease,visibility 0s .38s}
+#enter{position:fixed;inset:0;z-index:100;overflow:hidden;color:var(--en-ink);background:transparent;font-family:var(--sans)}
 #enter[hidden]{display:none}
 #enter.pending{opacity:0;visibility:hidden;pointer-events:none;transition:none}
-#enter.out{opacity:0;transform:scale(1.025);visibility:hidden;pointer-events:none}
+#enter.out{pointer-events:none}  /* (1.8.33, E5) it leaves by MOTION (120 ms) */
 html.en-open{overflow:hidden}
 html.en-open main{visibility:hidden}
 html.en-open body{height:100vh;overflow:hidden}  /* the page under the screen is not a page to scroll: no scroll height of its own (1.7.28) */
@@ -50,6 +50,7 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 .en-bot .r-arm{transform-box:fill-box;transform-origin:50% 8%}
 .en-bot.awake{--c:var(--good-dot)}
 .en-bot.awake .r-eye{transform:none;animation:enblink 5s infinite}
+.en-bot.glowing .r-eye{animation:none}  /* (1.8.33, E4) no blink while it lights up */
 .en-bot.awake .r-bulb{opacity:1}
 .en-bot.awake .r-headg{transform:rotate(var(--tilt));transition:transform .15s}
 .en-bot.you .r-arm.r-r{transform:rotate(-150deg);animation:enwave .8s ease-in-out infinite alternate}
@@ -64,13 +65,7 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
  box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;margin-top:-6px}
 .en-say.on{opacity:1}
 
-/* the intro, under 1.5 s: the letters rise one by one, the light comes in, the list lights up */
-#enter.intro .en-word .lg{animation:enrise .75s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i)*70ms + 60ms)}
-#enter.intro .en-top,#enter.intro .en-foot,#enter.intro .en-bot{animation:enfade .55s ease both;animation-delay:.45s}
-#enter.intro .en-ref{animation:enrefl .9s ease both;animation-delay:.3s}
-@keyframes enrise{from{opacity:0;transform:translate(var(--x),22px)}to{opacity:1;transform:translate(var(--x),0)}}
-@keyframes enfade{from{opacity:0}to{opacity:1}}
-@keyframes enrefl{from{opacity:0}to{opacity:.16}}
+/* the opening (1.8.33, E1 and W10) is played by enter.js through MOTION: the wordmark whole, the robot, the button; nothing is animated letter by letter */
 @keyframes enspin{to{transform:rotate(360deg)}}
 @keyframes enbeat{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes enpulse{0%{box-shadow:0 0 0 0 var(--good-line)}70%,100%{box-shadow:0 0 0 7px transparent}}

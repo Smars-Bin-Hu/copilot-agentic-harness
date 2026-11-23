@@ -281,7 +281,7 @@ const DOCK = (function () {
     // No knowledge base in this copy (1.7.38): every tab says so once, and leads to the setup where one is imported. The steps of a build, the map and the company tab have nothing to show yet.
     function emptyState() {
       const go = h("button", {type: "button", class: "act hot"}, t("dock.kb.empty.go"));
-      go.addEventListener("click", () => { if (typeof READY !== "undefined") READY.go({to: "setup", sec: "company"}); else location.assign("/setup?sec=company"); });
+      go.addEventListener("click", () => { setupWindow("kb"); });
       stage.classList.remove("ka-stage", "co-stage");
       view.box.classList.remove("ka-open");
       stage.replaceChildren(h("div", {class: "kb-empty"}, h("p", null, t("dock.kb.empty")), go));
@@ -312,7 +312,7 @@ const DOCK = (function () {
     const nextButton = (stageName) => {  // the first two steps are done in the setup, not in a chat
       const inSetup = ["targets", "kb_repo"].includes(stageName);
       const go = h("button", {type: "button", class: "act hot"}, t(inSetup ? "dock.setup" : "dock.kb.next"));
-      go.addEventListener("click", leave(inSetup ? setupWindow : () => start("harness-rookie-new-knowledgebase", t("dock.kb.next.words", {step: stageName}), () => kbWindow(current))));
+      go.addEventListener("click", leave(inSetup ? () => setupWindow(stageName === "targets" ? "repos" : "kb") : () => start("harness-rookie-new-knowledgebase", t("dock.kb.next.words", {step: stageName}), () => kbWindow(current))));
       return go;
     };
     // Why a step is not done, when the status knows: a broken toolkit, facts the map does not find, repositories it does not cover.
@@ -477,27 +477,10 @@ const DOCK = (function () {
     show(tab || "overview");
   }
 
-  // The form of Get ready in a window over the page. When it is done the page reads the new settings.
-  // Saved: the page reads the new settings when the person has seen what was done. Changes not saved are not lost by one click.
-  function setupWindow() {
-    if (document.querySelector(".su-window")) return;
-    const box = h("div");
-    const note = h("span", {class: "su-note"});
-    const close = h("button", {type: "button", class: "act"}, t("board.new.close"));
-    const view = SERVE.dialog([h("div", {class: "su-winbar"}, note, close), box]);
-    view.box.classList.add("su-window");
-    let saved = false, warned = false;
-    const form = SETUP.mount(box, () => { saved = true; note.textContent = ""; close.classList.add("hot"); }, (busy) => {  // no Close while the work runs (1.7.19)
-      close.hidden = busy;
-      note.textContent = busy ? t("setup.run.working") : note.textContent === t("setup.run.working") ? "" : note.textContent;
-    });
-    view.holds = () => saved || form.busy() || form.dirty();
-    close.addEventListener("click", () => {
-      if (saved) location.reload();
-      else if (form.busy()) note.textContent = t("setup.close.busy");
-      else if (form.dirty() && !warned) { warned = true; note.textContent = t("setup.close.sure"); close.textContent = t("setup.close.discard"); }
-      else view.close();
-    });
+  // The gear: the Settings window (settings.js), at a section. Without it (a page that does not load it) the wizard page is the way.
+  function setupWindow(section) {
+    if (typeof SETTINGS !== "undefined") SETTINGS.open(typeof section === "string" ? section : "you");
+    else location.assign("/setup");
   }
   function enterScreen() {
     try { sessionStorage.removeItem(ENTERED); } catch (error) { /* then nothing was kept, and the screen comes anyway */ }
@@ -540,7 +523,7 @@ const DOCK = (function () {
       return node;
     };
     const kb = icon("dock-book", t("dock.kb"), ["M12 6.5C10.2 5 7.5 4.5 3.5 4.5v14c4 0 6.7.5 8.5 2 1.8-1.5 4.5-2 8.5-2v-14c-4 0-6.7.5-8.5 2z", "M12 6.5v14"], kbWindow);
-    const setup = icon("dock-setup", t("dock.setup"), ["M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6z", "M12 2.4l1.5 2.55 3-0.6 0.9 3 2.85 1.2-1.05 2.85 1.95 2.4-2.4 1.95 0.15 3-3 0.45-1.5 2.7L12 20.4l-2.4 1.5-1.5-2.7-3-0.45 0.15-3L3 13.35l1.95-2.4-1.05-2.85 2.85-1.2 0.9-3 3 0.6z"], setupWindow);  // the gear: Get ready / Change the setup (1.7.35; the board's own panel below it has the sliders)
+    const setup = icon("dock-setup", t("dock.setup"), ["M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6z", "M12 2.4l1.5 2.55 3-0.6 0.9 3 2.85 1.2-1.05 2.85 1.95 2.4-2.4 1.95 0.15 3-3 0.45-1.5 2.7L12 20.4l-2.4 1.5-1.5-2.7-3-0.45 0.15-3L3 13.35l1.95-2.4-1.05-2.85 2.85-1.2 0.9-3 3 0.6z"], () => setupWindow());  // the gear: Settings (1.7.35; the board's own panel below it has the sliders)
     const home = icon("dock-home", t("dock.home"), ["M3.5 11.5 12 4.5l8.5 7M6 9.5V20h12V9.5M10 20v-5.5h4V20"], enterScreen);
     kb.append(h("span", {class: "dock-count", title: t("dock.kb.badge"), hidden: ""}));
     document.body.append(panel, button, kb, setup, home);
@@ -560,6 +543,7 @@ const DOCK = (function () {
     const hide = () => { tip.hidden = true; };
     gear.addEventListener("mouseenter", show); gear.addEventListener("focus", show); gear.addEventListener("mouseleave", hide); gear.addEventListener("blur", hide);
     document.addEventListener("keydown", (event) => { if (event.key === "Escape") hide(); });
+    if (typeof READY === "undefined") return;  // a page that does not load readyui.js has no dot
     READY.onNotes((list) => {
       dot.hidden = !list.length;
       gear.title = list.length ? "" : t("dock.setup");  // the hover below says it; a second bubble beside it would cover it
@@ -574,8 +558,5 @@ const DOCK = (function () {
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();
-  try {  // the page loaded again after the language was chosen in the form of Get ready: its window comes back with what was typed (setup.js)
-    if (sessionStorage.getItem("harness.reopen") === "setup") { sessionStorage.removeItem("harness.reopen"); setTimeout(setupWindow, 0); }
-  } catch (error) { /* then the window stays shut */ }
   return {start, allSkills, kbWindow, setupWindow, enterScreen, chooseOnPage, syncCompany};
 })();

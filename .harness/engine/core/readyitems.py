@@ -374,7 +374,7 @@ def connections_counted(root: Path) -> Dict[str, Any]:
 # --- code repositories -------------------------------------------------------------------------------------------------------------------------------------------
 
 def repos_item(root: Path) -> Dict[str, Any]:
-    fix = fix_setup("company", say("ready.fix.add"))
+    fix = fix_setup("repos", say("ready.fix.add"))
     try:
         found = targets.load(root)
         kb = {name for name, _path in targets.knowledge_bases(root)}
@@ -434,7 +434,7 @@ def home(key: str) -> Dict[str, Any]:
     if key == "connections":
         return fix_tools("connections", say("board.enter.t.connections"))
     if key == "repos":
-        return fix_setup("company", say("board.enter.t.repos"))
+        return fix_setup("repos", say("board.enter.t.repos"))
     return fix_kb("overview" if key == "kb" else "company", say(f"board.enter.t.{key}"))
 
 

@@ -349,7 +349,7 @@ const SERVERS = (function () {
   }
 
   function open(done) {
-    if (typeof TOOLS !== "undefined") TOOLS.open("connections", done);
+    if (typeof SETTINGS !== "undefined") SETTINGS.open("connections", {done});
   }
 
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.

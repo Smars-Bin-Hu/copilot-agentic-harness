@@ -1,7 +1,7 @@
 // Shared by the Enter screen (enter.js) and the block of the board after Enter (readybar.js) (1.7.38, block B): where a fix of the readiness answer leads.
 // A fix is what `core/readyitems.py` and `modules/task/ready.py` give each problem: {to, label, ...}.
-//   setup   the Get ready form at a card:          /setup?sec=company|computer|you
-//   tools   a window of Tools:                     TOOLS.open(tab, done, part), tab packs | connections | local (the three windows of block C; the old window knows packs and connections)
+//   setup   the Settings window at a section:      SETTINGS.open(sec), sec you | programs | copilot | kb (company) | packs | repos | connections | network | adv; `you` on a copy not set up yet is the wizard page (/setup)
+//   tools   the Settings window at its section:    TOOLS.open(tab, done, part) -> SETTINGS.open: tab packs | connections | local (part network, mcp or programs)
 //   kb      the knowledge base window:             DOCK.kbWindow(tab)
 //   term    a command the Terminal window runs:    TERM.run(line)
 //   sync    the company's copies: `company sync`, or with op prefix the company's word first (DOCK.syncCompany); the answer is a promise
@@ -14,8 +14,8 @@ const READY = (function () {
   function go(fix, hooks) {
     if (!fix || !fix.to) return;
     const given = hooks || {};
-    if (fix.to === "setup") location.assign("/setup?sec=" + encodeURIComponent(fix.sec || "company"));
-    else if (fix.to === "tools" && typeof TOOLS !== "undefined") TOOLS.open(fix.tab, given.done, fix.part || undefined);  // block C rebuilds the window: the tab names are packs, connections and local
+    if (fix.to === "setup") { if (typeof SETTINGS !== "undefined" && fix.sec !== "you") SETTINGS.open(fix.sec || "kb", {done: given.done}); else location.assign("/setup"); }  // `you`: a copy that is not set up goes to the wizard
+    else if (fix.to === "tools" && typeof TOOLS !== "undefined") TOOLS.open(fix.tab, given.done, fix.part || undefined);  // the tab names are packs, connections and local; tools.js leads to Settings
     else if (fix.to === "kb" && typeof DOCK !== "undefined") DOCK.kbWindow(fix.tab);
     else if (fix.to === "term" && typeof TERM !== "undefined") TERM.run(fix.run);
     else if (fix.to === "sync" && typeof DOCK !== "undefined") return DOCK.syncCompany(fix.op).then(() => { if (given.done) given.done(); });  // an error goes to the caller: the button says it
@@ -88,5 +88,5 @@ const READY = (function () {
   }
   function onNotes(fn) { listeners.push(fn); fn(current); }
 
-  return {go, button, link, acceptFiles, acceptButton, notes, onNotes};
+  return {go, button, link, acceptFiles, acceptButton, notes, onNotes, current: () => current};
 })();

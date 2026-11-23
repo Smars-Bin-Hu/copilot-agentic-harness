@@ -176,7 +176,9 @@ def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> Di
     add("programs", bool(programs.get("all_found")), say("setup.w.programs.detail", n=len(have), total=total), say("setup.w.programs.effect"))
     ok = copilot.get("state") == "ok"
     add("copilot", ok, str(copilot.get("login") or "") if ok else "", say("setup.w.copilot.effect"))
-    add("kb", bool(kb.get("found")), str(kb.get("detail") or "") if kb.get("found") else "", say("ready.effect.kb"))
+    held = setup.kb_state(root)  # the same name and version as the knowledge base card of the wizard page (`prefix` and `version`)
+    kb_detail = (str(held.get("prefix") or "") or say("wizard.k.name")) + (f" · {held['version']}" if held.get("version") else "") if held.get("here") else ""
+    add("kb", bool(kb.get("found")), kb_detail if kb.get("found") else "", say("ready.effect.kb"))
     if kb.get("found") and (items.get("packs") or {}).get("names"):
         add("packs", items["packs"]["state"] == "ok", str(items["packs"].get("detail") or ""), say("ready.effect.packs"))
     if kb.get("found") and (items.get("connections") or {}).get("names"):

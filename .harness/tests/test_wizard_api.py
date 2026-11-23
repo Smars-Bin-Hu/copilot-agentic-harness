@@ -20,7 +20,7 @@ from support import HarnessTestCase
 from test_board_enter import StubLink, clean, item, settled
 from test_boardserve import ServeCase
 
-from core import ahp, config, launchenv, messages, programs, setup, wizard
+from core import ahp, config, launchenv, messages, programs, setup, targets, wizard
 from core import connections as conn_core
 from modules.task import boardserve, ready, setupjob, vslink
 
@@ -221,6 +221,17 @@ class PageScriptsTests(unittest.TestCase):
             self.assertIn("const READY =", page, name)
             self.assertLess(page.index("const READY ="), page.index("function notesDot"), name)
 
+    def test_the_pages_with_the_gear_load_settings_after_the_wizard_parts_and_the_panels_it_draws(self) -> None:
+        from modules.task import taskhtml
+        pages = {"task": taskhtml.task_page({"name": "a", "title": "a"}, 3, serve={"actions": [], "refresh": 3}), "board": taskhtml.board_page([], "now", 3, serve={"actions": [], "refresh": 3})}
+        for name, page in pages.items():
+            for const in ("const WIZARD =", "const MACHINE =", "const SERVERS =", "const SETTINGS ="):
+                self.assertIn(const, page, name)
+            self.assertLess(page.index("const WIZARD ="), page.index("const SETTINGS ="), name)
+            self.assertIn(".st-win{", page, name)  # settings.css
+            self.assertNotIn("const SETUP =", page, name)  # the old form is not loaded any more: nothing opens it
+        self.assertNotIn("const SETTINGS =", taskhtml.setup_page({"actions": [], "refresh": 3}))  # the wizard page has no gear
+
 
 class ScanTests(HarnessTestCase):
     def setUp(self) -> None:
@@ -413,7 +424,11 @@ class SummaryTests(HarnessTestCase):
         found = wizard.summary(self.root, self.PROGRAMS, {"state": "ok", "login": "a"})
         rows = self.rows(found)
         self.assertEqual((rows["kb"]["done"], rows["kb"]["effect"]), (True, ""))
-        self.assertIn("1 domain", rows["kb"]["detail"])
+        self.assertEqual(rows["kb"]["detail"], "Knowledge base")  # the name of the card of the wizard page: no prefix, no version yet
+        (kb / targets.COMPANY_DIR).mkdir(parents=True, exist_ok=True)
+        (kb / targets.COMPANY_DIR / "company.json").write_text('{"skill_prefix": "sample"}', encoding="utf-8")
+        (kb / targets.COMPANY_DIR / "manifest.json").write_text('{"version": "3.2.0"}', encoding="utf-8")
+        self.assertEqual(self.rows(wizard.summary(self.root, self.PROGRAMS, {"state": "ok", "login": "a"}))["kb"]["detail"], "sample \u00b7 3.2.0")  # the same name and version as the card
         self.assertNotIn("packs", rows)
         self.assertNotIn("connections", rows)
         packs = {"key": "packs", "state": "yellow", "detail": "1 tool pack", "names": [{"name": "alpha", "state": "need"}], "problems": []}

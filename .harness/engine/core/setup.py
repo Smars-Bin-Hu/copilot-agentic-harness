@@ -340,7 +340,7 @@ def status(root: Path, short: Optional[Dict[str, Any]] = None) -> Dict[str, Any]
         problem = str(error)
     singles = [str(entry["path"]) for entry in (target.get("repos") or {}).values() if is_single(entry)]
     forced = forced_language()
-    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": forced or str(user.get("language") or messages.language()), "language_forced": bool(forced), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": singles, "broken": [path for path in singles if not has_git(Path(path))], "skill_prefix": str(user.get("skill_prefix") or ""),
+    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "name_git": not str(user.get("name") or "") and bool(git_name()), "language": forced or str(user.get("language") or messages.language()), "language_forced": bool(forced), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": singles, "broken": [path for path in singles if not has_git(Path(path))], "skill_prefix": str(user.get("skill_prefix") or ""),
             "install_command": str((tools.get("python") or {}).get("install_command") or ""), "rules": rules_of(target), "kb": kb_state(root), "company": company_facts(root), "stamp": stamp(root),
             "short": short_state(root) if short is None else short, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 

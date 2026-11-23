@@ -1,0 +1,52 @@
+/* The Settings window (settings.js): sections on the left, a row of chips when the window is narrow; the section on the right. Colours are tokens only (tokens.css, dark and light).
+   The right side is `.wz` too, so the wizard's pages (wizard.css) look the same drawn here. */
+.dialog.st-win{max-width:1000px;width:calc(100% - 64px);height:min(680px,calc(100vh - 64px));padding:0;display:flex;flex-direction:row;overflow:hidden;border-radius:18px}
+.st-win>*{flex:1 1 auto;min-width:0;min-height:0}
+.st-win .st-side{flex:0 0 232px;box-sizing:border-box;padding:26px 14px 20px;border-right:1px solid var(--line);overflow:auto;display:flex;flex-direction:column}
+.st-win .st-h{margin:0 0 18px 12px;font-size:19px;font-weight:650;letter-spacing:-.005em}
+.st-win .st-nav{display:flex;flex-direction:column;gap:2px}
+.st-win .st-i{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;min-height:36px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:var(--soft);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.st-win .st-i:hover{background:var(--hover);color:var(--ink)}
+.st-win .st-i.on{background:var(--track);color:var(--ink);font-weight:600}
+.st-win .st-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-win .st-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--hot-dot)}.st-win .st-dot[hidden]{display:none}
+.st-win .st-sep{height:1px;margin:10px 12px;background:var(--line)}
+.st-win .st-pane{flex:1 1 0;display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain}
+.st-win .st-head{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:22px 28px 10px;background:var(--card)}
+.st-win .st-title{margin:0;color:var(--ink);font-size:22px;font-weight:650;letter-spacing:-.01em;overflow-wrap:anywhere}
+.st-win .st-x{flex:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--line2);background:transparent;color:var(--soft);font:inherit;font-size:14px;cursor:pointer}
+.st-win .st-x:hover{background:var(--hover);color:var(--ink)}
+.st-win .st-body{padding:4px 28px 30px;min-width:0;font:14px/1.5 var(--sans);color:var(--ink)}
+.st-win .st-body.wz::after{display:none}
+.st-win .st-sub{margin:0 0 18px;color:var(--soft);font-size:14px}
+.st-win .st-note{margin:0 0 16px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;color:var(--soft);font-size:13.5px}
+.st-win .st-wait{color:var(--soft);display:flex;align-items:center;gap:8px}
+.st-win .st-foot,.st-win .st-line{display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-top:18px}
+.st-win .st-saved{color:var(--good);font-size:13.5px;font-weight:600}
+.st-win .st-rule{height:1px;margin:22px 0;background:var(--line)}
+.st-win .st-add{display:flex;gap:8px;align-items:center}.st-win .st-add .wz-in{flex:1;min-width:0}
+.st-win .st-short{max-width:200px}
+.st-win .st-under{margin:-4px 0 14px}
+.st-win .st-chips{display:flex;flex-wrap:wrap;gap:6px}
+.st-win .st-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 4px 3px 10px;border:1px solid var(--line2);border-radius:999px;font-size:12.5px}.st-win .st-chip code{overflow-wrap:anywhere;font:12px var(--mono)}
+.st-win .st-cx{border:0;background:transparent;color:var(--soft);cursor:pointer;font-size:16px;line-height:1;padding:0 6px}.st-win .st-cx:hover{color:var(--ink)}
+.st-win .wz-field{margin:0 0 22px}.st-win .wz-field .cap{display:block;margin:0 0 8px;color:var(--soft);font-size:14px}.st-win .wz-field .hint{margin-top:6px;color:var(--faint);font-size:12.5px;overflow-wrap:anywhere}
+/* with no knowledge base: the factory packs, grey */
+.st-win .st-packlist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden;opacity:.55}
+.st-win .st-pack{display:flex;align-items:center;gap:10px;min-width:0;padding:11px 14px;border-top:1px solid var(--line)}.st-win .st-pack:first-child{border-top:0}
+.st-win .st-pdot{flex:none;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--line2)}
+.st-win .st-pdesc{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--soft);font-size:13px}
+.st-older-row{margin:4px 0;overflow-wrap:anywhere}.st-older-list{margin:8px 0}
+/* the panels of machine.js and servers.js, drawn in the window: no dialog of their own around them */
+.st-win .tl-part{margin-top:0}
+/* narrow: the sections become a row of chips that wraps */
+@media (max-width:900px){
+  .dialog.st-win{flex-direction:column;width:calc(100% - 24px);height:calc(100vh - 24px);max-height:none}
+  .st-win .st-side{flex:0 0 auto;border-right:0;border-bottom:1px solid var(--line);padding:18px 18px 12px}
+  .st-win .st-h{margin:0 0 12px}
+  .st-win .st-nav{flex-direction:row;flex-wrap:wrap;gap:8px}
+  .st-win .st-i{width:auto;min-height:34px;padding:0 14px;border:1px solid var(--line2);border-radius:999px;font-size:13.5px}
+  .st-win .st-i.on{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+  .st-win .st-sep{display:none}
+  .st-win .st-head{padding:16px 18px 8px}.st-win .st-body{padding:4px 18px 24px}
+}

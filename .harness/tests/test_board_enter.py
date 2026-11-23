@@ -717,7 +717,7 @@ class BlockPageTests(unittest.TestCase):
         ui = (WEB / "readyui.js").read_text(encoding="utf-8")
         for fix in [item for item in fixes if item]:
             self.assertIn(f'fix.to === "{fix["to"]}"', ui, fix)
-            self.assertIn(fix["tab"] if fix["to"] in ("tools", "kb") else fix["sec"], ("packs", "connections", "local", "company"), fix)
+            self.assertIn(fix["tab"] if fix["to"] in ("tools", "kb") else fix["sec"], ("packs", "connections", "local", "company", "repos"), fix)
         self.assertIn('fix.to === "identities"', ui)  # H6: the main Windows account of the agent host
         self.assertIn("TOOLS.open(fix.tab, given.done, fix.part || undefined)", ui)
 

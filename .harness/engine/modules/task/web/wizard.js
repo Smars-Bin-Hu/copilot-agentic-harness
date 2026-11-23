@@ -89,7 +89,7 @@ const WIZARD = (function () {
     ];
     const programs = () => { const list = rows(); return {rows: list, all_found: list.filter((row) => row.required).every((row) => row.found && !row.blocked)}; };
     const kbHere = () => F.kb === "done";
-    const state = () => ({name: F.name, language: F.lang, kb: kbHere() ? {here: true, domains: 3, domain_skills: 12, version: "3.2.0", path: "~/harness/knowledge-base", prefix: "sample"} : {here: false, domains: 0, domain_skills: 0, version: "", path: "", prefix: ""},
+    const state = () => ({name: F.name, name_git: q("gitname", "1") === "1" && !F.nameSaved, language: F.lang, kb: kbHere() ? {here: true, domains: 3, domain_skills: 12, version: "3.2.0", path: "~/harness/knowledge-base", prefix: "sample"} : {here: false, domains: 0, domain_skills: 0, version: "", path: "", prefix: ""},
       company: kbHere() ? {packs: ["ado", "sqlserver"], connections: [{}, {}, {}], recipe: {present: true}} : {packs: [], connections: [], recipe: {present: false}}});
     const packRows = () => [
       {program: "az", found: true, path: "/opt/homebrew/bin/az", blocked: "", needed_by: [{pack: "ado"}]},
@@ -117,7 +117,7 @@ const WIZARD = (function () {
       save: (body) => {
         if (body.part === "kb") { F.kb = "copy"; F.copyAt = Date.now(); F.copyStatic = false; }
         if (body.part === "repos") F.savedRepos = body.paths;
-        if (body.part === "you") { F.name = body.name; F.lang = body.language; }
+        if (body.part === "you") { F.name = body.name; F.lang = body.language; F.nameSaved = true; }
         return {saved: true};
       },
       job: () => {
@@ -253,7 +253,7 @@ const WIZARD = (function () {
     const tiles = el("div", "wz-tiles", tile("en"), tile("zh"));
     name.addEventListener("input", () => { M.name = name.value; opts.changed(); });
     put(box, ...head(opts, "wizard.s.you", t("wizard.y.title"), t("wizard.y.sub")),
-      el("div", "wz-field", el("span", "cap", t("wizard.y.name")), name, el("div", "hint", t("wizard.y.hint"))),
+      el("div", "wz-field", el("span", "cap", t("wizard.y.name")), name, M.st && M.st.name_git && M.name ? el("div", "hint", t("wizard.y.hint")) : null),  // "Taken from your Git settings" only when Git gave the name
       el("div", "wz-field", el("span", "cap", t("wizard.y.lang")), tiles, el("div", "hint", t("wizard.y.lang.hint"))), said);
     const commit = () => {
       said.hidden = true;
@@ -261,7 +261,10 @@ const WIZARD = (function () {
         M.saved.you = true;
         if (M.st) { M.st.name = M.name.trim(); M.st.language = M.lang; }
         if (!FAKE && M.lang !== document.documentElement.lang) {  // the texts are in the old language: the page loads again, and comes back here
-          try { sessionStorage.setItem(KEEP, JSON.stringify({page: nextFrom(M.page, 1)})); } catch (error) { /* starts at the welcome */ }
+          try {
+            if (opts.bare) sessionStorage.setItem("harness.reopen", "settings:you");  // Settings: the window comes back at this section
+            else sessionStorage.setItem(KEEP, JSON.stringify({page: nextFrom(M.page, 1)}));
+          } catch (error) { /* starts at the welcome */ }
           location.reload();
           return;
         }
@@ -644,6 +647,20 @@ const WIZARD = (function () {
   }
 
   // ------------------------------------------------------------------------------------------------ start
+  // What the pages know, read from the back end: the state, the programs, the readiness and the repositories found. Settings asks for it each time it opens a section (`opts.fresh` keeps what was read).
+  function load() {
+    const first = (promise) => promise.catch(() => null);
+    return Promise.all([first(api.setup("state")), first(api.setup("programs")), first(api.ready()), first(api.setup("scan"))]).then(([st, progs, ready, scan]) => {
+      M.st = st || {name: "", language: document.documentElement.lang || "en", kb: {here: false}, company: {packs: [], connections: [], recipe: {}}};
+      M.progs = progs;
+      M.ready = ready;
+      M.scan = scan || {places: [], rows: [], more: false};
+      M.name = M.st.name || "";
+      M.lang = FAKE ? q("lang", M.st.language || "en") : (M.st.language || document.documentElement.lang || "en");
+      M.kb.step = M.st.kb && M.st.kb.here ? "done" : q("kb", "") === "copy" && FAKE ? "copy" : "empty";
+    });
+  }
+
   function start() {
     const root = document.getElementById("app");
     document.body.classList.add("wz-doc");  // the page has no gear and no help beside it (wizard.css)
@@ -652,15 +669,7 @@ const WIZARD = (function () {
     const theme = q("theme", "");
     if (FAKE && (theme === "light" || theme === "dark")) document.documentElement.setAttribute("data-theme", theme);
     api = FAKE ? fakeApi() : realApi();
-    const first = (promise) => promise.catch(() => null);
-    Promise.all([first(api.setup("state")), first(api.setup("programs")), first(api.ready()), first(api.setup("scan"))]).then(([st, progs, ready, scan]) => {
-      M.st = st || {name: "", language: document.documentElement.lang || "en", kb: {here: false}, company: {packs: [], connections: [], recipe: {}}};
-      M.progs = progs;
-      M.ready = ready;
-      M.scan = scan || {places: [], rows: [], more: false};
-      M.name = M.st.name || "";
-      M.lang = FAKE ? q("lang", M.st.language || "en") : (M.st.language || document.documentElement.lang || "en");
-      M.kb.step = M.st.kb && M.st.kb.here ? "done" : q("kb", "") === "copy" && FAKE ? "copy" : "empty";
+    load().then(() => {
       let page = Number(q("page", "")) ;
       if (ONLY) page = ONLY === "programs" ? 2 : 3;
       else if (!Number.isFinite(page) || !q("page", "")) {
@@ -678,6 +687,24 @@ const WIZARD = (function () {
     });
   }
 
+  // ------------------------------------------------------------------------------------------------ for the Settings window (settings.js)
+  // `prepare()` reads what the pages know (again each time). `mount(name, box, hooks)` draws one page bare: no title, no bar, no Back or Later. The page's own button is made by the caller from `foot()`:
+  // {main: {label, off, go}}; `hooks.changed()` says when it may have changed, `hooks.saved()` when the page saved and wanted to go on. The kb page stays on its first small page (the import).
+  function prepare() {
+    if (!api) api = FAKE ? fakeApi() : realApi();
+    M.picks = null; M.extras = null; M.kbsub = 0; M.fromReview = false;
+    return load().then(() => pollReady()).then(() => {
+      // a repository kept that the scan did not find (outside the usual places) is shown too, or saving the page would drop it
+      const have = new Set(M.scan.rows.map((row) => row.path));
+      ((M.st && M.st.singles) || []).forEach((path) => { if (!have.has(path)) { M.scan.rows.unshift({path, shown: path, name: String(path).split(/[\\/]/).pop() || path, branch: "", picked: true}); have.add(path); } });
+    });
+  }
+  function mount(name, box, hooks) {
+    const opts = {bare: true, changed: hooks.changed || (() => {}), rerender: hooks.rerender || (() => {}), next: hooks.saved || (() => {}), back: () => {}, jump: hooks.jump || (() => {})};
+    M.kbsub = 0;
+    return parts[name](box, opts);
+  }
+
   if (typeof DATA !== "undefined" && DATA.wizard) start();
-  return {parts, M, start, go};
+  return {parts, M, start, go, prepare, mount};
 })();

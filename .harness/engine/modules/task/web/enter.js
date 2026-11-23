@@ -27,6 +27,8 @@
   // (1.8.32) A page loaded again (a language change, F5) has no opening: the wordmark and the button are there at once. The letters rise as SVG on the main thread, and on a slow one that took seconds.
   const reloaded = (() => { try { const nav = performance.getEntriesByType("navigation")[0]; return Boolean(nav && nav.type === "reload"); } catch (error) { return false; } })();
   // (1.8.32) The hint is not for the first visit of this browser (the one right after the wizard); after that it shows when the pointer has rested on the wordmark for HINT_AFTER ms.
+  // (1.8.33) Coming from the wizard (it marked "from-wizard" and left through the dark veil): the entrance of W10 plays once; a reload has none.
+  const fromWizard = !reloaded && typeof MOTION !== "undefined" && MOTION.taken("from-wizard");
   const HINT_KEY = "harness.enter.visited", HINT_AFTER = 3000;
   const visited = (() => { try { return localStorage.getItem(HINT_KEY) === "1"; } catch (error) { return true; } })();  // no storage: the hint waits for the pointer, never shown unasked
 
@@ -74,6 +76,7 @@
     h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, legal, cta, hint));
   document.body.append(enter);
   const stage = enter.querySelector(".en-stage");
+  let opening = false;  // (1.8.33) the opening is playing: the label is written, not swapped
   let open = true;  // (1.8.32) `fresh` (a copy that is not set up) shows only the wordmark until it goes to the wizard
   let shown = !isTask;  // the screen is on view (a task page opened from a link keeps it hidden until it is known that it is needed)
 
@@ -112,8 +115,8 @@
   }
 
   // ---------- the robot: it floats over the N, the middle of the screen. No legs, no shadow ----------
-  const MIDDLE = 3, FLOAT = 16;  // the letter, and how far over it
-  const pose = {nx: 0, ny: 0, sleep: 1, arm: 0};
+  const MIDDLE = 3, CLEAR = 8, TOP_PAD = 12, FEET = .0145, FEET_3D = -.09;  // (1.8.33, E3) the letter; the clear space between the robot's feet and the top of the letters; half the stroke above a letter's box; where the feet sit under the anchor, of the height: the flat drawing's and the 3D one's (it has more room under its feet)
+  const pose = {nx: 0, ny: 0, sleep: 1, arm: 0, flash: 0, calm: 0};  // flash: the light of E4 (3D); calm: no blink until then
   let solid = null;
   function buildBot() {
     const r = ROBOT.svg();  // the one drawing, robot.js (1.8.32)
@@ -124,17 +127,19 @@
   }
   function placeBot() {
     if (!open || !wm.gs.length) return;
-    const r = wm.gs[MIDDLE].getBoundingClientRect();
-    if (!r.width) return;
+    const r = wm.gs[MIDDLE].getBoundingClientRect(), m = svg.getScreenCTM();
+    if (!r.width || !m) return;
     const was = parseFloat(stage.style.top) || 0;
-    const w = Math.max(96, Math.min(250, r.width * 1.55, (r.top - was - FLOAT - 62) / .965));
+    const rise = (() => { try { const tr = getComputedStyle(svg).transform; return tr && tr !== "none" ? new DOMMatrixReadOnly(tr).m42 : 0; } catch (error) { return 0; } })();  // the opening lifts the wordmark: the robot is placed for where it rests
+    const lt = r.top - rise - TOP_PAD * m.a;  // the top of the letters as seen: the box of a letter leaves out the half stroke above it
+    const w = Math.max(96, Math.min(250, r.width * 1.55, (lt - was - CLEAR - 62) / .98));
     // The robot must not run up under the search pill or the greeting: when the window is short, the whole wordmark moves down until the antenna is clear (the list below scrolls instead).
-    const drop = Math.max(0, 62 - (r.top - was + 3 - FLOAT - .965 * w));
+    const drop = Math.max(0, 62 - (lt - was - CLEAR - .98 * w));
     if (Math.abs(drop - was) > .5) { stage.style.top = drop.toFixed(1) + "px"; stage.style.bottom = (-drop).toFixed(1) + "px"; }
-    const top = r.top - was + drop;
+    const top = lt - was + drop;
     bot.style.width = w + "px";
-    bot.style.left = (r.left + r.width * .5) + "px"; bot.style.top = (top + 3 - FLOAT) + "px";
-    say.style.left = Math.min(innerWidth - 90, r.left + r.width * .5 + w * .3) + "px"; say.style.top = (top - FLOAT - w * .95) + "px";
+    bot.style.left = (r.left + r.width * .5) + "px"; bot.style.top = (top - CLEAR - (solid && !bot.classList.contains("flat") ? FEET_3D : FEET) * 1.06 * w) + "px";  // its feet CLEAR px clear of the letters when it rests (the float lifts it, never lowers it)
+    say.style.left = Math.min(innerWidth - 90, r.left + r.width * .5 + w * .3) + "px"; say.style.top = (top - CLEAR - w * .95) + "px";
   }
   function lookBot() {
     const b = bot.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height * .35;
@@ -148,9 +153,10 @@
     const turning = typeof SPACE !== "undefined" && SPACE.on(), angle = (degrees) => degrees * Math.PI / 180;
     pose.sleep += ((bot.classList.contains("awake") ? 0 : 1) - pose.sleep) * .08;
     pose.arm += ((bot.classList.contains("you") ? 2.6 + Math.sin(now / 130) * .3 : 0) - pose.arm) * .14;
-    const shut = now % 5000 > 4780 ? .12 : 1;
+    const shut = now % 5000 > 4780 && now > pose.calm ? .12 : 1;
+    const lit = pose.flash > now ? 1 + .9 * Math.sin((1 - (pose.flash - now) / 300) * Math.PI) : 1;  // E4: the eyes light up once (300 ms)
     solid.draw({yaw: angle((turning ? SPACE.ay * 3.2 : 0) + Math.sin(now / 2100) * 2.5), pitch: angle((turning ? -SPACE.ax * 2 : 0) + 2), headYaw: pose.nx * .22, headPitch: pose.ny * .14 + pose.sleep * .16, roll: -pose.nx * .1 - pose.sleep * .07,
-      arm: pose.arm, eyeX: pose.nx * 2.6, eyeY: -pose.ny * 2, blink: (1 - pose.sleep) * shut + pose.sleep * .1, glow: 1 - pose.sleep});
+      arm: pose.arm, eyeX: pose.nx * 2.6, eyeY: -pose.ny * 2, blink: (1 - pose.sleep) * shut + pose.sleep * .1, glow: Math.max(0, 1 - pose.sleep + lit - 1)});
   }
   let sayTimer = 0, clicks = 0;
   const wake = () => { if (bot.classList.contains("awake")) return; bot.classList.add("awake"); if (solid) solid.colours(); };
@@ -394,6 +400,34 @@
     if (kind === "code") paintCode(b); else paintDoctor();
     card.hidden = false;
   }
+  // (1.8.33, E4) The label of the button changes with MOTION.swap when the kind of the button changes (the old out in 100 ms, the new in over 160 ms, never both); a new percent or time inside one kind
+  // is written in place. The width glides (260 ms) only when a label is longer than the minimum width. When it becomes Enter after a fix, the robot's eyes and bulb light up once and do not blink that second.
+  const label0 = {kind: "", text: null, moving: false, look: null};
+  function becomeEnter() {
+    wake();
+    if (typeof ROBOT !== "undefined") ROBOT.act(bot, "glow");
+    if (!still()) {
+      pose.flash = performance.now() + 300; pose.calm = performance.now() + 1000;
+      bot.classList.add("glowing"); setTimeout(() => bot.classList.remove("glowing"), 1000);
+    }
+  }
+  function paintLabel(b) {
+    const text = b.label || "", kind = b.kind;
+    if (label0.text === text) return;
+    const first = label0.text === null, before = label0.kind, change = kind !== before;
+    label0.text = text; label0.kind = kind;
+    const write = () => setText(label, label0.text);
+    if (first || !change || !shown || opening || still() || typeof MOTION === "undefined") { write(); return; }
+    const was = go.offsetWidth, min = parseFloat(getComputedStyle(go).minWidth) || 0;
+    label0.moving = true;
+    const settle = () => { if (label0.moving) { label0.moving = false; label0.look(); } };
+    MOTION.swap(label, () => {
+      write(); settle();
+      const now = go.offsetWidth;
+      if (kind === "enter" && before !== "check" && before !== "") becomeEnter();
+      if ((was > min + 1 || now > min + 1) && Math.abs(was - now) > 1) MOTION.play(go, [{width: was + "px"}, {width: now + "px"}], {ms: 260, ease: MOTION.IN, fill: "none"});
+    }).then(settle);
+  }
   function render() {  // in place: the nodes are made once; only their class and text change, so nothing blinks
     const data = chk0.last, b = view();
     const down = Boolean(chk0.error) && (chk0.misses || 0) >= 2;  // 1.8.13: one late answer is not a board that is down
@@ -408,13 +442,17 @@
     root.classList.toggle("en-notready", b.kind !== "enter" && b.kind !== "check");  // the reflection of the wordmark goes when the button has something to say (1.7.29)
     const off = Boolean(b.off) || chk0.acting || (down && !slowOnly && b.kind === "enter");
     go.disabled = off;
-    setClass(go, "en-go k-" + b.kind + (b.kind === "enter" ? "" : " plain") + (off ? " off" : ""));
-    setText(label, b.label || "");
     const percent = b.kind === "preparing" ? clamp(Number(b.percent) || 0, 0, 100) : 0;
     const width = b.kind === "preparing" ? Math.max(3, percent) + "%" : "0";
-    if (fill.style.width !== width) fill.style.width = width;
-    goSpin.hidden = !(b.kind === "signing" || b.kind === "wait" || b.kind === "check");
-    kbd.hidden = b.kind !== "enter";
+    // (E4) the look of the kind (colour, key, spinner, fill) changes with the label: when the label is swapped it changes at the moment the old one is gone
+    label0.look = () => {
+      setClass(go, "en-go k-" + b.kind + (b.kind === "enter" ? "" : " plain") + (off ? " off" : ""));
+      if (fill.style.width !== width) fill.style.width = width;
+      goSpin.hidden = !(b.kind === "signing" || b.kind === "wait" || b.kind === "check");
+      kbd.hidden = b.kind !== "enter";
+    };
+    paintLabel(b);
+    if (!label0.moving) label0.look();
     go.title = b.kind === "check" || b.kind === "wait" ? "" : go.title;
     paintCard(b); paintSub(b);
     roomForCard();
@@ -463,21 +501,48 @@
     palette(); fxSize(); app.inert = true; root.classList.add("en-open");
     roomForHi();
     if (typeof SPACE !== "undefined") { SPACE.hosted = () => Boolean(wm.raf); SPACE.onTilt = stageApply; }
-    if (play && !still() && !reloaded) { void enter.offsetWidth; enter.classList.add("intro"); }
+    placeBot();
+    if (play && !reloaded) { opening = true; begin().then(() => { opening = false; }); }
+    else if (play && reloaded && typeof MOTION !== "undefined") MOTION.play(enter, [{opacity: 0}, {opacity: 1}], {ms: 160});  // (E6) a page loaded again (a language change) comes in from the colour the old one went to, not from a flash
     if (!visited) { try { localStorage.setItem(HINT_KEY, "1"); } catch (error) { /* seen again as the first time: no harm */ } }
     placeBot(); render(); loop();
     setTimeout(placeBot, 60); setTimeout(() => { if (open && shown) wake(); }, 1500);
     try { enter.focus({preventScroll: true}); } catch (error) { /* no focus */ }
   }
+  // (1.8.33) E1 and W10. The wordmark is one picture that appears whole (opacity and rise of its own group, 300 ms, no letter apart from the others), the robot lands with it, the button is last. Nothing
+  // here runs per frame on the main thread, so a slow computer plays the same opening. From the wizard (W10): the robot flies in from the top centre, small, to its place (500 ms) and grows; the
+  // wordmark comes whole when it is halfway (300 ms), the button last (200 ms); the background first stays the Enter background (the veil the wizard left through) and gives way to the real one.
+  function begin() {
+    if (typeof MOTION === "undefined") return Promise.resolve();
+    const word = [[svg, {opacity: 1}], [ref, {opacity: .16}]], at = fromWizard ? 250 : 0;
+    const moves = word.map((pair) => MOTION.play(pair[0], [{opacity: 0, transform: "translateY(10px)"}, {opacity: pair[1].opacity, transform: "none"}], {ms: 300, delay: at}));
+    if (name) moves.push(MOTION.play(hi, [{opacity: 0}, {opacity: 1}], {ms: 300, delay: at}));
+    if (fromWizard) {
+      const b = bot.getBoundingClientRect(), dx = innerWidth / 2 - (b.left + b.width / 2), dy = 30 - (b.top + b.height / 2);
+      moves.push(MOTION.play(bot, [{opacity: 0, translate: dx + "px " + dy + "px", scale: .25}, {opacity: 1, offset: .25}, {opacity: 1, translate: "0 0", scale: 1}], {ms: 500}));
+      const cover = h("div", {class: "m-veil enter-bg", "aria-hidden": "true"});
+      Object.assign(cover.style, {position: "absolute", zIndex: "0"});
+      enter.prepend(cover);
+      moves.push(MOTION.play(cover, [{opacity: 1}, {opacity: 0}], {ms: 300, fill: "forwards"}).then(() => cover.remove()));
+    } else {
+      moves.push(MOTION.play(bot, [{opacity: 0, translate: "0 -16px"}, {opacity: 1, translate: "0 0"}], {ms: 300}));
+    }
+    moves.push(MOTION.play(enter.querySelector(".en-foot"), [{opacity: 0}, {opacity: 1}], {ms: 200, delay: fromWizard ? 450 : 300}));
+    return Promise.all(moves).then(() => undefined);
+  }
   function finish(quick) {  // the screen goes; the page under it was never held back
     if (!open) return;
     open = false; remember();
     clearInterval(chk0.timer); clearInterval(chk0.tick); clearTimeout(chk0.soon); cancelAnimationFrame(wm.raf); wm.raf = 0; FX.down = false; FX.rel = null; fxClear(); tremble(0, 0);
-    app.inert = false; root.classList.remove("en-open");
+    app.inert = false;
     if (typeof SPACE !== "undefined") { SPACE.hosted = null; SPACE.onTilt = null; SPACE.set(SPACE.tx / 2, SPACE.ty / 2); }
     stage.style.transform = "";
-    if (quick || still()) { enter.remove(); return; }
-    enter.classList.add("out"); setTimeout(() => enter.remove(), 450);
+    // (1.8.33, E5) Two moves, never at once: Enter fades out and grows to 1.02 in 120 ms, then the board comes in over 120 ms (the page under it stays hidden until then).
+    const gone = () => { enter.remove(); root.classList.remove("en-open"); };
+    if (quick || typeof MOTION === "undefined") { gone(); return; }
+    enter.classList.add("out");
+    const done = new Promise((resolve) => { const safe = setTimeout(resolve, 3000); MOTION.play(enter, [{opacity: 1, transform: "none"}, {opacity: 0, transform: "scale(1.02)"}], {ms: 120, ease: MOTION.OUT, fill: "forwards"}).then(() => { clearTimeout(safe); resolve(); }); });
+    done.then(() => { gone(); MOTION.play(app, [{opacity: 0}, {opacity: 1}], {ms: 120}); });
   }
   // What the button does, by the kind the server gave it. A kind that is `off` does nothing.
   function press() {

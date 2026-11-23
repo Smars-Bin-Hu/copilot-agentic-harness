@@ -1,10 +1,10 @@
-// The controls fixed to the browser window of the board and the task page: the search pill (top right) and the Cmd+K / Ctrl+K palette, the gear (bottom right) with the settings panel,
+// The controls fixed to the browser window of the board and the task page: the search pill (top right) and the Cmd+K / Ctrl+K palette, the sliders button (bottom right) with the Appearance panel (1.8.31; the gear's Settings window is dock.js and settings.js),
 // and the one place that knows whether VS Code is linked (the banner under the header, the pill, the buttons).
 // They are built once and appended to <body>, outside #app: the redraw of a page (the 3 s poll) never touches them, so an open panel stays open.
 //
 // The palette only navigates. It opens a task, a view, a filter, a tab, the settings; it flips the theme or Lite of this browser. It never calls approve, promote, send, steer or any
-// call that changes a task. The only calls this file makes are: `/api/board` (a read, to list the tasks on the task page) and `/api/language` (the settings panel).
-// A page on disk (no server) has the search, the theme, Lite and the view, filter and tab items; it has no language and no jump to a task page (unless the task has a report file beside it).
+// call that changes a task. The only calls this file makes are: `/api/board` (a read, to list the tasks on the task page) and `/api/reboard` (restart board; settings.js asks for it).
+// A page on disk (no server) has the search, the theme, Lite and the view, filter and tab items; it has no jump to a task page (unless the task has a report file beside it).
 // Common helpers (h, t, stateTag) come from common.js; board.js and desk.js hand over what they can open with SHELL.provide().
 "use strict";
 
@@ -129,7 +129,7 @@ const SHELL = (function () {
     if (typeof DOCK !== "undefined") out.push({g: "settings", key: "home", label: t("dock.home"), icon: "lobby", kw: "enter home start screen", run: DOCK.enterScreen});
     if (typeof DOCK !== "undefined") out.push({g: "settings", key: "kb", label: t("dock.kb"), icon: "task", kw: "knowledge base domains cards", run: () => setTimeout(DOCK.kbWindow, 30)});
     if (typeof DOCK !== "undefined") out.push({g: "settings", key: "skills", label: t("dock.skills"), icon: "task", kw: "skills ask can do", run: () => setTimeout(() => DOCK.allSkills(""), 30)});
-    out.push({g: "settings", key: "settings", label: t("board.shell.open"), icon: "sliders", kw: "settings language preferences", run: () => setTimeout(openSettings, 30)});
+    out.push({g: "settings", key: "settings", label: t("board.shell.open"), icon: "sliders", kw: "appearance theme background wallpaper lite glass", run: () => setTimeout(openSettings, 30)});
     return out;
   }
 
@@ -203,8 +203,7 @@ const SHELL = (function () {
   }
 
   // ---------- settings ----------
-  let panel = null, gear = null, said = null;
-  const langNow = () => (root.lang === "zh" ? "zh" : "en");
+  let panel = null, gear = null;
   function segment(key, options) {
     const seg = h("div", {class: "seg2", role: "group", "data-key": key});
     for (const [value, label] of options) seg.append(h("button", {type: "button", "data-v": value, "aria-pressed": "false"}, label));
@@ -225,21 +224,14 @@ const SHELL = (function () {
     go.textContent = t("board.shell.restarting");
     SERVE.post("/api/reboard", {}).then((data) => setTimeout(() => back(data.result.code, Date.now() + WAIT_BACK), 800), (error) => { fail(error.message || String(error)); go.disabled = false; go.textContent = label; });
   }
-  function restartRow() {
-    const go = h("button", {type: "button", class: "act"}, t("board.shell.restart"));
-    go.addEventListener("click", () => restartBoard(go, (words) => { said.textContent = words; said.hidden = false; }));
-    return h("div", null, h("div", {class: "sp-row"}, h("span", null, t("board.shell.restart.label")), go), h("p", {class: "sp-note"}, t("board.shell.restart.hint")));
-  }
   function buildSettings() {
-    said = h("div", {class: "sp-bad", role: "alert", hidden: "hidden"});
-    panel = h("div", {class: "setp", role: "dialog", "aria-label": t("board.shell.gear"), hidden: "hidden"},
-      h("h4", null, t("board.shell.gear")),
+    panel = h("div", {class: "setp", role: "dialog", "aria-label": t("board.shell.look"), hidden: "hidden"},  // Appearance (1.8.31): not the gear's Settings
+      h("h4", null, t("board.shell.look")),
       h("div", {class: "sp-row"}, h("span", null, t("board.shell.theme")), segment("theme", [["light", t("board.shell.light")], ["dark", t("board.shell.dark")]])),
       h("div", {class: "sp-row"}, h("span", null, t("board.shell.render")), segment("lite", [["false", t("board.shell.glass")], ["true", t("board.shell.lite")]])),
       h("p", {class: "sp-note"}, t("board.shell.lite.hint")),
       typeof WALL !== "undefined" ? WALL.section() : null,  // the Background part (wall.js): the picture, its folder, rotation, motion
-      served ? h("div", {class: "sp-row"}, h("span", null, t("board.shell.lang")), segment("lang", [["en", t("desk.send.lang.name.en")], ["zh", t("desk.send.lang.name.zh")]])) : null,
-      served ? h("p", {class: "sp-note"}, t("board.shell.lang.hint")) : null, served ? restartRow() : null, said);
+    );
     document.body.append(panel);
     panel.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-v]");
@@ -247,27 +239,12 @@ const SHELL = (function () {
       const key = button.parentNode.dataset.key, value = button.dataset.v;
       if (key === "theme") harnessTheme.set(value);
       else if (key === "lite") { harnessTheme.setLite(value === "true"); if (typeof WALL !== "undefined") WALL.mark(); }
-      else if (key === "lang" && value !== langNow()) setLanguage(value, button.parentNode);
       syncSettings();
-    });
-  }
-  // The language is the real `language` setting of the harness: the server writes user.override.json (a paired browser only). The page then loads its texts again (serve.js: post()).
-  function setLanguage(value, seg) {
-    said.hidden = true;
-    for (const button of seg.querySelectorAll("button")) button.disabled = true;
-    tabKeep.set("harness.reopen", "settings");
-    SERVE.post("/api/language", {language: value}, true).then(() => {
-      for (const button of seg.querySelectorAll("button")) button.disabled = false;  // the page is reloading when the language changed; if not, the buttons come back
-    }, (error) => {
-      tabKeep.set("harness.reopen", null);
-      for (const button of seg.querySelectorAll("button")) button.disabled = false;
-      said.textContent = t("board.shell.lang.failed", {error: error && error.message ? error.message : ""});
-      said.hidden = false;
     });
   }
   function syncSettings() {
     if (!panel) return;
-    const state = {theme: root.getAttribute("data-theme"), lite: String(root.classList.contains("lite")), lang: langNow()};
+    const state = {theme: root.getAttribute("data-theme"), lite: String(root.classList.contains("lite"))};
     for (const button of panel.querySelectorAll("button[data-v]")) {
       const on = state[button.parentNode.dataset.key] === button.dataset.v;
       button.classList.toggle("on", on);
@@ -296,7 +273,7 @@ const SHELL = (function () {
   function buildFixed() {
     const pill = h("button", {type: "button", class: "sh-pill", "aria-label": t("board.shell.search") + " " + mod + " K", title: t("board.shell.search") + " (" + mod + " K)"}, icon("search"), h("span", null, t("board.shell.search")), h("kbd", null, mod + " K"));
     pill.addEventListener("click", () => (open() ? closePalette() : openPalette()));
-    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.gear"), title: t("board.shell.gear"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("sliders"));  // the sliders: theme, wallpaper, language (1.7.35; the dock's Settings gear is above it)
+    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.look"), title: t("board.shell.look"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("sliders"));  // the sliders: Appearance, i.e. theme, rendering, wallpaper (1.8.31; the language is in Settings, You; the dock's Settings gear is above it)
     gear.addEventListener("click", () => (settingsOpen() ? closeSettings() : openSettings()));
     document.body.append(pill, gear);
   }
@@ -358,7 +335,6 @@ const SHELL = (function () {
   }
 
   buildFixed();
-  if (tabKeep.get("harness.reopen") === "settings") { tabKeep.set("harness.reopen", null); openSettings(); }  // the page loaded again after a language change: the panel comes back
 
   return {provide, visit, vs, restartBoard, banner: bannerNode, vsPill, openPalette, closePalette, openSettings, closeSettings, isOpen: () => open() || settingsOpen()};
 })();

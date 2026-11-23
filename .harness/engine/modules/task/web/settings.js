@@ -145,7 +145,7 @@ const SETTINGS = (function () {
     }
 
     function networkSection(id, env) {
-      const made = MACHINE.localPanel(ctx);
+      const made = MACHINE.localPanel(ctx, {bare: true});  // the window already says Network: the part does not say it again (1.8.31)
       env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body.filter((node) => node.dataset && node.dataset.part === "network")]);
     }
 
@@ -191,6 +191,7 @@ const SETTINGS = (function () {
           field(t("setup.prefix"), prefix, t("setup.prefix.hint")),
           h("div", {class: "st-line"}, save, done),
           h("div", {class: "st-rule"}), made.body.find((node) => node.dataset && node.dataset.part === "mcp"),
+          h("div", {class: "st-rule"}), restartRow(),
           h("div", {class: "st-rule"}), field(t("setup.older.title"), h("div", null, older), t("setup.older.hint")),
         ]);
       });
@@ -201,6 +202,14 @@ const SETTINGS = (function () {
     refreshDots();
     // the notes may not be known yet (a page that has no block of the board asks slowly): ask once now
     SERVE.call("/api/ready", {}, 8).then((data) => { if (typeof READY !== "undefined" && Array.isArray(data.checks)) READY.notes(data.notes); }, () => {});
+  }
+
+  // Restart board (1.8.31: it was in the sliders panel, now Appearance): the same button and texts; SHELL.restartBoard waits for the new process and pairs again
+  function restartRow() {
+    const said = h("div", {class: "sp-bad", role: "alert", hidden: "hidden"});
+    const go = h("button", {type: "button", class: "wz-btn sm"}, t("board.shell.restart"));
+    go.addEventListener("click", () => SHELL.restartBoard(go, (words) => { said.textContent = words; said.hidden = false; }));
+    return h("div", {class: "wz-field st-restart"}, h("span", {class: "cap"}, t("board.shell.restart.label")), h("div", null, go), h("div", {class: "hint"}, t("board.shell.restart.hint")), said);
   }
 
   // Coming from an older copy: look at what would come over, then bring it (the step `older` of the old form)
@@ -245,5 +254,5 @@ const SETTINGS = (function () {
     if (kept.startsWith("settings") && typeof DATA !== "undefined" && DATA.serve) { sessionStorage.removeItem("harness.reopen"); setTimeout(() => open(kept.split(":")[1] || "you"), 0); }
   } catch (error) { /* then the window stays shut */ }
 
-  return {open, sections: SECTIONS};
+  return {open, sections: SECTIONS, isOpen: () => Boolean(win)};  // isOpen: space.js keeps its slow-motion note away while the window is open (1.8.31)
 })();

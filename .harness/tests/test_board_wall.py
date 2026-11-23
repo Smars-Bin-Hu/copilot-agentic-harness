@@ -409,7 +409,7 @@ class PageTests(unittest.TestCase):
 
     def test_the_shell_still_makes_only_its_own_three_calls_and_hands_the_background_to_wall(self) -> None:
         shell = source("shell.js")
-        self.assertEqual(sorted(set(re.findall(r'SERVE\.post\("(/api/[a-z]+)"', shell))), ["/api/board", "/api/language", "/api/reboard"])
+        self.assertEqual(sorted(set(re.findall(r'SERVE\.post\("(/api/[a-z]+)"', shell))), ["/api/board", "/api/reboard"])
         self.assertIn("WALL.section()", shell)
         self.assertNotIn("fetch(", shell)
 
@@ -536,6 +536,34 @@ class PageTests(unittest.TestCase):
         page = self.pages()["board"]
         self.assertIn("const served = typeof SERVE !== \"undefined\" && Boolean(DATA.serve)", page)
         self.assertNotIn("const SERVE", page)
+
+    def test_the_slow_motion_note_keeps_away_from_the_wizard_and_settings_and_is_snoozed_30_days(self) -> None:
+        """1.8.31 (A3): the note about slow motion is never offered while the setup wizard runs or the Settings window is open; "Not now" is kept 30 days; its words are about motion."""
+        space = source("space.js")
+        offer = space.split("function offer()")[1].split("// ---------- the switch")[0]
+        self.assertIn("busy()", offer)
+        self.assertIn("snoozed()", offer)
+        self.assertIn("SETTINGS.isOpen()", space)
+        self.assertIn('"wz-doc"', space)
+        self.assertIn("30 * 24 * 3600 * 1000", space)
+        self.assertIn("keep.set(ASKED, String(Date.now()))", offer)  # on "Not now", not when the note is shown
+        self.assertNotIn('keep.set(ASKED, "1")', space)
+        self.assertIn("isOpen: () => Boolean(win)", source("settings.js"))
+        self.assertEqual(messages.table("en")["board.space.slow"], "Motion looks slow here. Lite turns it off.")
+        self.assertNotIn("computer", messages.table("en")["board.space.slow"])
+        self.assertNotIn("电脑", messages.table("zh")["board.space.slow"])
+
+    def test_settings_texts_of_1_8_31(self) -> None:
+        """#15: without a knowledge base the packs page does not claim the knowledge base turned them on; #30: the button says Make a bundle, MCP is a two-way choice like the theme."""
+        en, zh = messages.table("en"), messages.table("zh")
+        self.assertNotIn("Turned on by", en["settings.packs.nokb"])
+        self.assertIn("once a knowledge base is brought in", en["settings.packs.nokb"])
+        self.assertEqual(en["machine.ca.make"], "Make a bundle")
+        self.assertIn("bundle", zh["machine.ca.make"])
+        machine = source("machine.js")
+        self.assertIn('h("span", {class: "seg2", role: "group"}, ...chips)', machine)
+        self.assertIn("bare", machine)
+        self.assertIn("localPanel(ctx, {bare: true})", source("settings.js"))
 
 
 if __name__ == "__main__":

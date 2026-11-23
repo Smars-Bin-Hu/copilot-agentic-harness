@@ -82,9 +82,9 @@ class PageTests(unittest.TestCase):
         self.assertIn("SHELL.vsPill(", source("desk.js"))
 
     def test_the_palette_only_navigates(self) -> None:
-        """No call that changes a task: the file reads `/api/board`, writes `/api/language`, restarts the board with `/api/restart`, and never reaches the functions that act."""
+        """No call that changes a task: the file reads `/api/board`, restarts the board with `/api/reboard` (1.8.31: the language is only set in Settings, You), and never reaches the functions that act."""
         shell = source("shell.js")
-        self.assertEqual(sorted(set(re.findall(r'SERVE\.post\("(/api/[a-z]+)"', shell))), ["/api/board", "/api/language", "/api/reboard"])
+        self.assertEqual(sorted(set(re.findall(r'SERVE\.post\("(/api/[a-z]+)"', shell))), ["/api/board", "/api/reboard"])  # 1.8.31: no language call any more; restart board is drawn by settings.js, the function stays here
         for word in ("SERVE.act", "approve", "promote", "/api/act", "/api/send", "/api/steer", "/api/stop", "/api/close", "/api/archive", "/api/confirm", "/api/answer", "/api/create", "/api/compact", "fetch("):
             self.assertNotIn(word, shell.replace("never calls approve, promote, send, steer", ""), word)
         self.assertIn('event.key === "k"', shell)
@@ -97,6 +97,25 @@ class PageTests(unittest.TestCase):
             index = shell.index(call)
             self.assertIn("try {", shell[max(0, index - 200):index], call)
         self.assertIn('"harness.recent"', shell)
+
+    def test_the_sliders_panel_is_appearance_and_has_neither_language_nor_restart(self) -> None:
+        """1.8.31 (A1): the sliders button opens Appearance (theme, rendering, background); the language is only in Settings, You; Restart board is in Settings, Advanced."""
+        shell = source("shell.js")
+        panel = shell.split("function buildSettings()")[1].split("function syncSettings()")[0]
+        self.assertIn('t("board.shell.look")', panel)
+        self.assertNotIn("board.shell.gear", panel)
+        for word in ("lang", "restart", "/api/language"):
+            self.assertNotIn(word, panel, word)
+        self.assertIn('"aria-label": t("board.shell.look"), title: t("board.shell.look")', shell)  # the button itself
+        for language, word in (("en", "Appearance"), ("zh", "外观")):
+            table = messages.table(language)
+            self.assertEqual(table["board.shell.look"], word)
+            self.assertNotIn("board.shell.lang", table)
+        settings = source("settings.js")
+        advanced = settings.split("function advancedSection")[1].split("win = {view, show}")[0]
+        self.assertIn("restartRow()", advanced)
+        self.assertIn("SHELL.restartBoard(", settings)
+        self.assertIn('t("board.shell.restart")', settings)
 
     def test_every_text_the_shell_shows_is_in_both_languages(self) -> None:
         keys = set(re.findall(r'"(board\.shell\.[a-z.]+)"', source("shell.js"))) | set(re.findall(r'"(board\.shell\.[a-z.]+)"', source("board.js")))

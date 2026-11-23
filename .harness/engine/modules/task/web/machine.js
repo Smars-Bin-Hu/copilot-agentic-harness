@@ -77,7 +77,7 @@ const MACHINE = (function () {
       added.length ? h("div", {class: "mc-added"}, h("span", {class: "sub"}, t("machine.paths.added"), " "), ...added) : null].filter(Boolean);
   }
 
-  function localPanel(ctx) {
+  function localPanel(ctx, opts) {
     const said = h("span", {class: "sv-said"});
     const progs = h("div", {class: "tl-progs"});
     const host = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false"});
@@ -91,7 +91,7 @@ const MACHINE = (function () {
     const proxyMark = h("span", {class: "sv-own", hidden: ""}, t("machine.recipe.mark"));
     const part = (key, title, ...nodes) => h("section", {class: "tl-part", "data-part": key}, h("h3", {class: "mc-h"}, title), ...nodes);
     const body = [part("programs", [t("machine.prog.title"), " ", info("machine.prog.tip")], progs, said),
-      part("network", [t("machine.net.title"), " ", info("machine.ca.lead.short"), " ", caState], h("p", {class: "tl-gsub"}, t("machine.net.lead")), h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("div", {class: "sv-acts"}, make, drop, caSaid)),
+      part("network", [(opts && opts.bare) ? null : [t("machine.net.title"), " "], info("machine.ca.lead.short"), " ", caState], h("p", {class: "tl-gsub"}, t("machine.net.lead")), h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("div", {class: "sv-acts"}, make, drop, caSaid)),
       part("mcp", ["MCP ", info("machine.mcp.tip")], mcp, h("p", {class: "tl-gsub"}, t("machine.mcp.when")))];
     const paint = (state) => {
       progs.replaceChildren(...programsBlock(state, (next) => { paint(next); }, said));
@@ -112,11 +112,11 @@ const MACHINE = (function () {
       drop.hidden = !state.bundle.path;
       const on = state.mcp.allowed;
       const chips = [["allowed", true], ["blocked", false]].map(([word, value]) => {
-        const toggle = h("button", {type: "button", class: "chip" + (on === value ? " on" : ""), "aria-pressed": String(on === value)}, t(value ? "machine.mcp.allowed" : "machine.mcp.blocked"));
+        const toggle = h("button", {type: "button", class: on === value ? "on" : "", "aria-pressed": String(on === value)}, t(value ? "machine.mcp.allowed" : "machine.mcp.blocked"));
         toggle.addEventListener("click", () => { if (on !== value) ask("mcp", {allowed: value}).then((next) => { paint(next); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
         return toggle;
       });
-      mcp.replaceChildren(...[h("span", {class: "chips"}, ...chips), state.mcp.detected === "blocked" ? h("span", {class: "sub"}, " " + t("machine.mcp.detected")) : null].filter(Boolean));
+      mcp.replaceChildren(...[h("span", {class: "seg2", role: "group"}, ...chips)  /* the two-way look of the theme choice (1.8.31) */, state.mcp.detected === "blocked" ? h("span", {class: "sub"}, " " + t("machine.mcp.detected")) : null].filter(Boolean));
     };
     ask("state").then(paint, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); });
     make.addEventListener("click", () => {

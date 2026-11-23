@@ -1506,6 +1506,8 @@ class Board:
             line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})
             return core_wizard.summary(self.root, self.programs(), line)
         if step == "finish":
+            line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})  # the board's last answer: gh is not run again in this request
+            core_wizard.refuse_finish(self.root, self.programs(), line)  # ValueError: what is still missing (409)
             core_wizard.finish(self.root)
             self.ready.doctor_again()  # the first doctor of a set-up copy; the page does not wait for it
             print(say("serve.did", action="setup finish", task="-"), flush=True)
@@ -2377,8 +2379,6 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     result = board.setup(data)
-                    if str(data.get("step", "")) == "act":
-                        print(say("serve.did", action="setup", task="-"), flush=True)
                     return self.answer(200, {"result": result})
                 except ValueError as error:  # a field not right: told on the page, nothing written
                     return self.answer(409, {"error": str(error)})

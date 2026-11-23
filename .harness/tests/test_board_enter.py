@@ -494,6 +494,39 @@ class ReadinessTests(TaskCase):
         self.assertIn("the cache is gone", line(found, "vscode")["detail"])
         self.assertFalse(found["ready"])
 
+    def test_a_vscode_check_that_errors_gives_the_doctor_button_and_a_real_text_never_a_dead_checking(self) -> None:
+        class Broken(StubLink):
+            def installed(self) -> Dict[str, Any]:
+                raise OSError("the cache is gone")
+
+        found = settled(ready.Ready(self.root, Broken({}), clean))
+        self.assertEqual(found["button"]["kind"], "doctor")
+        self.assertEqual(found["button"]["label"], messages.text("ready.btn.doctor.one"))
+        problem = next(entry for entry in found["problems"]["required"] if entry["key"] == "vscode")
+        self.assertEqual(problem["text"], messages.text("ready.r.error", what="VS Code"))
+        self.assertIn("the cache is gone", problem["why"])
+        self.assertEqual(problem["fix"]["to"], "doctor")
+
+    def test_a_copilot_check_that_errors_gives_the_doctor_button_and_a_generic_text(self) -> None:
+        with mock.patch.object(ready.Ready, "copilot", side_effect=RuntimeError("the host table broke")):
+            found = settled(ready.Ready(self.root, StubLink(UP), clean))
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "error"))
+        self.assertEqual(found["button"]["kind"], "doctor")
+        problem = next(entry for entry in found["problems"]["required"] if entry["key"] == "copilot")
+        self.assertEqual(problem["text"], messages.text("ready.r.error", what="Copilot"))
+        self.assertIn("the host table broke", problem["why"])
+        self.assertNotIn("ready.r.copilot.error", problem["text"] + problem["why"])
+
+    def test_optional_items_that_cannot_be_read_are_one_note_not_a_gear_with_no_dot(self) -> None:
+        check = ready.Ready(self.root, StubLink(UP), clean)
+        with mock.patch.object(ready.Ready, "optional_made", side_effect=OSError("the folder is locked")):
+            found = settled(check)
+        self.assertEqual(found["optional"]["items"], [])
+        self.assertEqual([(note["key"], note["text"]) for note in found["notes"]], [("read", messages.text("ready.note.read"))])
+        self.assertIn("the folder is locked", found["notes"][0]["effect"])
+        self.assertEqual([(entry["key"], entry["kind"]) for entry in found["optional"]["problems"]], [("read", "note")])
+        self.assertTrue(found["ready"], "a note never blocks")
+
     def test_the_hover_table_goes_by_kind_then_environment_then_name_like_the_connections_window(self) -> None:
         check = ready.Ready(self.root, StubLink(UP), clean)
         systems = {"z-sql": {"toolpack": "sqlserver"}, "a-sql": {"toolpack": "sqlserver"}, "ado": {"toolpack": "ado"}, "b-sql": {"toolpack": "sqlserver"}}

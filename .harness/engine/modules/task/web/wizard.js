@@ -127,9 +127,9 @@ const WIZARD = (function () {
       },
       summary: () => {
         const list = programs();
-        const out = [{id: "you", done: true, label: t("wizard.v.you"), detail: F.name + " \u00b7 " + langName(F.lang), effect: ""},
-          {id: "programs", done: list.all_found, label: t("wizard.v.prog"), detail: t("wizard.v.prog.s", {n: 5}), effect: ""},
-          {id: "copilot", done: F.cop === "done", label: t("wizard.v.cop"), detail: "alex", effect: ""}];
+        const out = [{id: "you", required: true, done: true, label: t("wizard.v.you"), detail: F.name + " \u00b7 " + langName(F.lang), effect: ""},
+          {id: "programs", required: true, done: list.all_found, label: t("wizard.v.prog"), detail: t("wizard.v.prog.s", {n: 5}), effect: ""},
+          {id: "copilot", required: true, done: F.cop === "done", label: t("wizard.v.cop"), detail: "alex", effect: ""}];
         out.push({id: "kb", done: kbHere(), label: t("wizard.v.kb"), detail: kbHere() ? "sample 3.2.0" : "", effect: kbHere() ? "" : "No tool packs and no connections: the agent has only what the harness brings. You can bring one in later in Settings."});
         if (kbHere()) {
           out.push({id: "packs", done: F.sqlcmd, label: t("wizard.v.sq"), detail: "", effect: t("wizard.v.sq.e")});
@@ -252,7 +252,8 @@ const WIZARD = (function () {
     };
     const tiles = el("div", "wz-tiles", tile("en"), tile("zh"));
     name.addEventListener("input", () => { M.name = name.value; opts.changed(); });
-    put(box, ...head(opts, "wizard.s.you", t("wizard.y.title"), t("wizard.y.sub")),
+    const prefilled = Boolean(M.st && (M.st.name || M.st.name_git));  // "both are filled in" only when a name came with the page (saved, or from Git); the language always has one
+    put(box, ...head(opts, "wizard.s.you", t("wizard.y.title"), t(prefilled ? "wizard.y.sub" : "wizard.y.sub.noname")),
       el("div", "wz-field", el("span", "cap", t("wizard.y.name")), name, M.st && M.st.name_git && M.name ? el("div", "hint", t("wizard.y.hint")) : null),  // "Taken from your Git settings" only when Git gave the name
       el("div", "wz-field", el("span", "cap", t("wizard.y.lang")), tiles, el("div", "hint", t("wizard.y.lang.hint"))), said);
     const commit = () => {
@@ -604,7 +605,7 @@ const WIZARD = (function () {
     });
     put(box, ...head(opts, "wizard.s.repo", t("wizard.r.title"), t("wizard.r.sub")), el("div", "wz-tools", filter, count, el("span", "wz-grow"), all), listBox, el("div", "wz-under", add), said);
     paint();
-    const commit = () => api.setup("save", {part: "repos", paths: [...M.picks]}).then(() => { M.saved.repos = true; opts.next(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
+    const commit = () => api.setup("save", {part: "repos", paths: [...M.picks], shown: rows.map((row) => row.path)}).then(() => { M.saved.repos = true; opts.next(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
     return {stop() {}, foot: () => {
       const n = M.picks.size;
       return {back: true, later: {note: t("wizard.v.repo.e")}, why: "", main: {label: n ? t("wizard.r.cont", {n}) : t("wizard.cont"), off: !n, go: commit}};
@@ -632,7 +633,8 @@ const WIZARD = (function () {
     put(box, ...head(opts, "wizard.s.rev", t("wizard.v.title"), t("wizard.v.sub")), holder, said);
     api.setup("summary").then((found) => { summary = found; paint(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
     const confirm = () => { finishing = true; opts.changed(); said.hidden = true; return api.setup("finish").then(() => { try { sessionStorage.removeItem(KEEP); } catch (error) { /* nothing kept */ } leave(); }, (error) => { finishing = false; said.textContent = errorText(error); said.hidden = false; opts.changed(); }); };
-    return {stop() {}, foot: () => ({back: true, later: null, why: "", main: {label: t("wizard.v.go"), off: !summary || finishing, go: confirm}})};
+    const lacking = () => (summary ? summary.rows.filter((row) => row.required && !row.done).map((row) => row.label) : []);  // what Confirm needs: the server refuses too (409)
+    return {stop() {}, foot: () => { const need = lacking(); return {back: true, later: null, why: need.length ? t("wizard.v.need", {what: need.join(", ")}) : "", main: {label: t("wizard.v.go"), off: !summary || finishing || need.length > 0, go: confirm}}; }};
   };
 
   // ------------------------------------------------------------------------------------------------ the shell: top line, bar, page, foot, strip
@@ -682,8 +684,10 @@ const WIZARD = (function () {
 
   // ------------------------------------------------------------------------------------------------ start
   // What the pages know, read from the back end: the state, the programs, the readiness and the repositories found. Settings asks for it each time it opens a section (`opts.fresh` keeps what was read).
+  const isUnpaired = (error) => Boolean(error && error.data && error.data.unpaired);
   function load() {
-    const first = (promise) => promise.catch(() => null);
+    M.unpaired = false;
+    const first = (promise) => promise.catch((error) => { if (isUnpaired(error)) M.unpaired = true; return null; });  // an unknown is never drawn as "not found": an unpaired browser gets only the pairing line
     return Promise.all([first(api.setup("state")), first(api.setup("programs")), first(api.ready()), first(api.setup("scan"))]).then(([st, progs, ready, scan]) => {
       M.st = st || {name: "", language: document.documentElement.lang || "en", kb: {here: false}, company: {packs: [], connections: [], recipe: {}}};
       M.progs = progs;
@@ -695,6 +699,15 @@ const WIZARD = (function () {
     });
   }
 
+  // This browser is not paired: no data was read, so the page says only that (the bar of serve.js is hidden on this page, it would cover the progress bar), and goes on by itself once the browser is paired.
+  function unpairedPage(root) {
+    root.className = "wz";
+    put(root, el("div", "wz-top", el("div", "wz-brand", el("span", "wz-bot"), "HARNESS"), el("div", "wz-count", "")),
+      el("div", "wz-body", el("div", "wz-page", h("h1", null, t("wizard.unpaired.title")), el("p", "wz-sub", t("wizard.unpaired.sub")), el("p", "wz-unpaired", t("board.serve.notpaired"), " ", SERVE.pairControl()))));
+    const look = () => SERVE.call("/api/status", {}, 6).then((data) => { if (data && data.paired) location.reload(); }, () => null);
+    setInterval(look, 4000);
+  }
+
   function start() {
     const root = document.getElementById("app");
     document.body.classList.add("wz-doc");  // the page has no gear and no help beside it (wizard.css)
@@ -704,6 +717,7 @@ const WIZARD = (function () {
     if (FAKE && (theme === "light" || theme === "dark")) document.documentElement.setAttribute("data-theme", theme);
     api = FAKE ? fakeApi() : realApi();
     load().then(() => {
+      if (M.unpaired) { unpairedPage(root); return null; }
       let page = Number(q("page", "")) ;
       if (ONLY) page = ONLY === "programs" ? 2 : 3;
       else if (!Number.isFinite(page) || !q("page", "")) {

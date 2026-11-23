@@ -16,6 +16,7 @@ MAX_ROWS = 300
 MAX_PICKS = 300
 ORDER = ("you", "programs", "copilot", "kb", "packs", "connections", "repos")
 LABELS = {"you": "setup.w.label.you", "programs": "setup.w.label.programs", "copilot": "setup.w.label.copilot", "kb": "setup.w.label.kb", "packs": "setup.w.label.packs", "connections": "setup.w.label.connections", "repos": "setup.w.label.repos"}
+REQUIRED = ("you", "programs", "copilot")  # what Confirm needs: name and language, the programs (Python, Git, VS Code, GitHub CLI), the Copilot sign-in
 LANGUAGE_NAMES = {"en": "desk.send.lang.en", "zh": "desk.send.lang.name.zh"}  # each language in its own words: the same messages as the language tiles of the wizard page
 
 
@@ -26,8 +27,9 @@ def say(key: str, /, **values: Any) -> str:
 # --- which copy goes to the wizard -------------------------------------------------------------------------------------
 
 def mark(root: Path) -> None:
-    """The first page that saves something: the wizard is under way (`setup_wizard`), and until Confirm this copy is not set up."""
-    if not setup.kept(root, "user").get(MARK):
+    """The first page that saves something: the wizard is under way (`setup_wizard`), and until Confirm this copy is not set up. A copy that is set up already (an older one with a repository
+    setting or tasks, or one that was confirmed) is not marked: a save in Settings must not send it back to the wizard."""
+    if not setup.set_up(root) and not setup.kept(root, "user").get(MARK):
         setup.write(root, "user", {MARK: "open"})
 
 
@@ -74,15 +76,39 @@ def save_you(root: Path, data: Dict[str, Any]) -> None:
     setup.write(root, "user", {"name": name, **({} if forced else {"language": language})})
 
 
+def configured_singles(root: Path) -> List[str]:
+    """The single repositories of the target file, as their paths (a broken file: none, `setup.kept` says it when a save reads it)."""
+    try:
+        held = setup.kept(root, "target")
+    except ValueError:
+        return []
+    return [setup.clean_path(entry["path"]) for entry in (held.get("repos") or {}).values() if setup.is_single(entry)]
+
+
+def same_path(left: str, right: str) -> bool:
+    try:
+        return left == right or Path(left).resolve() == Path(right).resolve()
+    except (OSError, ValueError):
+        return False
+
+
 def save_repos(root: Path, data: Dict[str, Any]) -> int:
-    """The repositories picked, as singles of the target file (`setup.steps`' own writing); the folder of repositories (`repos_root`) stays as it is. Returns how many."""
+    """The repositories picked, as singles of the target file (`setup.steps`' own writing); the folder of repositories (`repos_root`) stays as it is. Returns how many.
+    `shown` (the paths the page listed): a single of the file that the page did not list is never dropped; one that was listed and not ticked goes. Without `shown` every single counts as listed."""
     stamp_ok(root, data)
     paths = data.get("paths")
+    shown = data.get("shown")
     if not isinstance(paths, list) or len(paths) > MAX_PICKS or not all(isinstance(item, str) for item in paths):
         raise ValueError(say("serve.refused.request"))
-    held: List[str] = []
+    if shown is not None and (not isinstance(shown, list) or len(shown) > MAX_ROWS * 2 or not all(isinstance(item, str) for item in shown)):
+        raise ValueError(say("serve.refused.request"))
+    listed = [setup.clean_path(one) for one in shown] if shown is not None else None
+    keep = [one for one in configured_singles(root) if listed is not None and not any(same_path(one, seen) for seen in listed)]
+    held: List[str] = list(keep)
     wrong: List[str] = []
     for item in [setup.clean_path(one) for one in paths]:
+        if any(same_path(item, one) for one in keep):
+            continue
         try:
             if setup.add_repo(item, "", held, root)["kind"] != "repo":
                 wrong.append(f"{item}: {say('setup.repos.none')}")
@@ -186,6 +212,15 @@ def scan(root: Path, home: Optional[Path] = None) -> Dict[str, Any]:
                 continue
         if more:
             break
+    for one in configured_singles(root):  # a repository kept outside the places is listed too (picked), or a save of the page would drop it
+        try:
+            full = Path(one).resolve()
+            if full in seen or full in own or not Path(one).is_dir():
+                continue
+            seen.add(full)
+            rows.append({"path": one, "shown": setup.shown_path(root, Path(one)), "name": Path(one).name, "branch": setup.head_branch(Path(one)), "picked": True, "outside": True})
+        except OSError:
+            continue
     return {"places": [setup.shown_path(root, place) for place in places], "rows": rows, "more": more}
 
 
@@ -193,6 +228,21 @@ def scan(root: Path, home: Optional[Path] = None) -> Dict[str, Any]:
 
 def language_name(code: str) -> str:
     return say(LANGUAGE_NAMES[code]) if code in LANGUAGE_NAMES else code
+
+
+def has_language(root: Path) -> bool:
+    try:
+        return bool(str(setup.kept(root, "user").get("language") or "").strip() or setup.forced_language())
+    except ValueError:
+        return False
+
+
+def refuse_finish(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> None:
+    """Confirm needs every required row done (`REQUIRED`): ValueError, saying which are not, when one is not. `copilot` is the Copilot line of the board's last `/api/ready` answer: nothing is run here."""
+    rows = summary(root, programs, copilot)["rows"]
+    lacking = [row["label"] for row in rows if row.get("required") and not row["done"]]
+    if lacking:
+        raise ValueError(say("setup.w.finish.need", what=", ".join(lacking)))
 
 
 def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> Dict[str, Any]:
@@ -209,9 +259,9 @@ def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> Di
     out: List[Dict[str, Any]] = []
 
     def add(key: str, done: bool, detail: str, effect: str = "") -> None:
-        out.append({"id": key, "done": done, "label": say(LABELS[key]), "detail": detail if detail != readyitems.DASH else "", "effect": "" if done else effect})
+        out.append({"id": key, "required": key in REQUIRED, "done": done, "label": say(LABELS[key]), "detail": detail if detail != readyitems.DASH else "", "effect": "" if done else effect})
 
-    add("you", bool(name), f"{name} · {language_name(language)}" if name else "", say("setup.w.you.effect"))
+    add("you", bool(name) and has_language(root), f"{name} · {language_name(language)}" if name else "", say("setup.w.you.effect"))
     add("programs", bool(programs.get("all_found")), say("setup.w.programs.detail", n=len(have), total=total), say("setup.w.programs.effect"))
     ok = copilot.get("state") == "ok"
     add("copilot", ok, str(copilot.get("login") or "") if ok else "", say("setup.w.copilot.effect"))

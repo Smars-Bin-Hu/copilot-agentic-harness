@@ -429,7 +429,8 @@
   function poll() {
     if (!open || chk0.inflight || document.hidden) return;
     chk0.inflight = true;
-    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.at = Date.now(); chk0.error = ""; chk0.misses = 0; READY.notes(data.notes); } else { chk0.error = "bad answer"; chk0.misses = (chk0.misses || 0) + 1; } },
+    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks) && data.button && data.button.kind === "setup") { open = false; location.replace("/setup"); return; }  // a copy that is not set up (the browser is paired: kind `pair` comes first) goes to the wizard by itself, no click; /setup never sends back to / before Confirm
+      if (Array.isArray(data.checks)) { chk0.last = data; chk0.at = Date.now(); chk0.error = ""; chk0.misses = 0; READY.notes(data.notes); } else { chk0.error = "bad answer"; chk0.misses = (chk0.misses || 0) + 1; } },
       (error) => { chk0.error = String(error.message || error).slice(0, 200); chk0.misses = (chk0.misses || 0) + 1; })
       .then(() => {
         chk0.inflight = false; settle();
@@ -491,7 +492,7 @@
     chk0.acting = true; chk0.said = ""; render();
     call().then(() => {}, (error) => { chk0.said = plainWords(error && error.message ? error.message : String(error)).slice(0, 200); }).then(() => { chk0.acting = false; render(); poll(); });
   }
-  const tryEnter = () => press();
+  const tryEnter = () => (view().kind === "enter" ? press() : false);  // a key only enters; every other kind of the button (a fix, a program to get, the setup) needs a click
 
   go.addEventListener("click", () => { press(); });
 
@@ -504,7 +505,7 @@
     if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],.en-card,.en-link")) return;
     if (document.querySelector(".dock-panel:not([hidden])")) return;  // the ? panel is open: its words are read, its text is typed in (1.7.34)
     if (target && target.closest && target.closest(".dock-btn") && (event.key === "Enter" || event.key === " ")) return;  // a dock button keeps its own Enter and Space; after its window closed, any other key goes in
-    if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready
+    if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready (the kind `enter`)
   });
 
   // ---------- start ----------

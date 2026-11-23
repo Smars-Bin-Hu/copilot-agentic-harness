@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import company, config, messages, shortcmd, skillcheck, standards, state as files, targets
+from core import company, config, messages, shortcmd, skillcheck, standards, state as files, targets, tasks
 from core import connections as conn_core, launchenv, toolpacks
 
 MAX_NAME = 100
@@ -213,6 +213,21 @@ def has_ref(path: Path, name: str) -> bool:
     except OSError:
         return False
     return any(ref in packed for ref in wanted)
+
+
+def set_up(root: Path) -> bool:
+    """Is this copy set up? `setup_done` in the person's file: yes. `setup_wizard` set and no `setup_done`: the wizard is under way, not yet. Neither, but a repository setting or tasks: an older copy, its owner is not asked
+    again. Nothing at all: a new copy, which goes to the wizard (O1). One rule for the board's answer (`ready.setup_done`) and for the wizard's mark (`wizard.mark`)."""
+    try:
+        held = json.loads(config.override_path(root, "user").read_text(encoding="utf-8-sig"))
+        if isinstance(held, dict):
+            if held.get("setup_done"):
+                return True
+            if held.get("setup_wizard"):
+                return False
+    except (OSError, ValueError):
+        pass
+    return config.override_path(root, "target").exists() or bool(tasks.folders(root))
 
 
 def is_single(entry: Any) -> bool:

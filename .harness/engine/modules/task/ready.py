@@ -32,7 +32,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from core import config, ghauth, launchenv, messages, pace, readyitems, shortcmd, targets, tasks
 from core import connections as conn_core
-from core import reach, systems as outside
+from core import reach, setup as setup_core, systems as outside
 
 from . import reachcheck
 from core import procrun
@@ -59,6 +59,7 @@ NOTES = {"kb": "ready.note.kb", "instructions": "ready.note.instructions", "skil
 BUTTONS = {"pair": "ready.btn.pair", "setup": "ready.btn.setup", "program": "ready.btn.program", "doctor": "ready.btn.doctor", "signin": "ready.btn.signin", "signing": "ready.btn.signing", "preparing": "ready.btn.preparing", "restart-host": "ready.btn.restart-host",
            "wait": "ready.btn.wait", "check": "ready.btn.check", "enter": "ready.btn.enter"}  # the label of each kind of the middle button
 RED_FIX = {"signin": "signin", "refused": "signin", "no-gh": "get-gh"}  # the board's red block (readybar.js): the fix button of a Copilot line, by its reason
+KNOWN_FAIL = {"setup": ("new",), "paired": ("unpaired",), "doctor": ("failed", "errors", "stale"), "vscode": ("no-code", "off"), "copilot": ("no-gh", "gh-broken", "signin", "refused", "host-failed")}  # the reasons a failed required line can have that the button and the red block know; any other (`error`: the check itself broke) is shown, never left as "Checking…"
 PROGRAM_PAGES = {"vscode": "https://code.visualstudio.com/download", "gh": ghauth.DOWNLOAD_PAGE}
 
 
@@ -84,18 +85,8 @@ def plain(text: Any) -> str:
 
 
 def setup_done(root: Path) -> bool:
-    """Is this copy set up? `setup_done` in the person's file: yes. `setup_wizard` set and no `setup_done`: the wizard is under way, not yet. Neither, but a repository setting or tasks: an older copy, its owner is not asked
-    again. Nothing at all: a new copy, which goes to the wizard (O1)."""
-    try:
-        kept = json.loads(config.override_path(root, "user").read_text(encoding="utf-8-sig"))
-        if isinstance(kept, dict):
-            if kept.get("setup_done"):
-                return True
-            if kept.get("setup_wizard"):
-                return False
-    except (OSError, ValueError):
-        pass
-    return config.override_path(root, "target").exists() or bool(tasks.folders(root))
+    """Is this copy set up? The rule is `core.setup.set_up` (the wizard's mark uses it too)."""
+    return setup_core.set_up(root)
 
 
 def doctor_seconds(root: Path) -> float:
@@ -565,7 +556,12 @@ class Ready:
                     entry["problems"] = [*entry["problems"], readyitems.identity_problem(lacks, len((conn_core.state(self.root).get("accounts") or [])) > 1)]
                     entry["state"] = "yellow" if entry.get("state") != "red" else "red"
         problems = readyitems.problems(listed)
-        return {"items": listed, "problems": problems, "count": len(problems), "kb": any(entry["key"] == "kb" and entry.get("found") for entry in listed), "notes": self.notes(gaps, listed)}
+        notes_out = self.notes(gaps, listed)
+        if base.get("error"):  # the items could not be read: that is a note of its own, never a gear with no dot as if everything were set up
+            said = messages.text("ready.note.read")
+            problems = [*problems, {"key": "read", "kind": "note", "text": said, "why": base["error"], "short": said, "fix": {}}]
+            notes_out = [*notes_out, {"key": "read", "text": said, "effect": base["error"]}]
+        return {"items": listed, "problems": problems, "count": len(problems), "kb": any(entry["key"] == "kb" and entry.get("found") for entry in listed), "notes": notes_out}
 
     def notes(self, gaps: List[Dict[str, Any]], listed: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         """The dot on the gear (O1): `{key, text, effect}` for each thing of the company that is not set up, and for each reminder of kind `note`."""
@@ -588,7 +584,7 @@ class Ready:
         kind = "check"
         if paired.get("state") == "fail":
             kind = "pair"
-        elif setup.get("state") == "fail":
+        elif setup.get("state") == "fail" and setup.get("why") == "new":
             kind = "setup"
         elif vscode.get("why") in ("no-code", "off") and vscode.get("state") == "fail":
             kind, out["program"], out["download"] = "program", "VS Code", PROGRAM_PAGES["vscode"]
@@ -596,6 +592,8 @@ class Ready:
             kind, out["program"], out["download"], out["detail"] = "program", "GitHub CLI", str(copilot.get("download") or PROGRAM_PAGES["gh"]), str(copilot.get("detail") or "")
         elif doctor.get("state") == "fail":
             kind, out["n"] = "doctor", int(doctor.get("n") or 1)
+        elif any(self.unknown_fail(entry) for entry in checks):  # a check that broke: the card lists it, with its reason, and Check again
+            kind, out["n"] = "doctor", len([entry for entry in checks if self.unknown_fail(entry)])
         elif copilot.get("state") == "fail" and why in ("signin", "refused"):
             kind = "signin"
         elif copilot.get("state") == "wait" and why == "signing-in":
@@ -619,6 +617,11 @@ class Ready:
 
     # --- the answer -----------------------------------------------------------------------------------------------
 
+    @staticmethod
+    def unknown_fail(line: Dict[str, Any]) -> bool:
+        """A required line that failed for a reason nobody has words for (`why: error`: the check itself raised)."""
+        return line.get("state") == "fail" and line.get("why", "") not in KNOWN_FAIL.get(str(line.get("id")), ())
+
     def level(self, line: Dict[str, Any]) -> str:
         """The dot of a required line: ok (green), grey (not known yet), yellow (it comes by itself), red (needs the person)."""
         if line.get("level"):
@@ -634,7 +637,10 @@ class Ready:
             if state in ("ok", "check"):
                 continue
             text, reason, fix = "", "", {}
-            if key == "setup":
+            if self.unknown_fail(line):
+                text, reason = say("ready.r.error", what=say(f"ready.what.{key}")), say("ready.r.error.why", detail=line.get("detail") or why)
+                fix = {"to": "doctor", "label": say("board.enter.doctor.again")}
+            elif key == "setup":
                 text, reason, fix = say("ready.r.setup.new"), say("ready.r.setup.new.why"), {"to": "setup", "sec": "you", "label": say("ready.btn.setup")}
             elif key == "paired":
                 text, reason = say("ready.r.paired"), say("ready.r.paired.why")

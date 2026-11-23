@@ -432,7 +432,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(missing.returncode, 1)
         self.assertIn("[ERROR] PATH 里找不到短命令 `harness`", missing.stdout)
         self.assertIn(str(self.root / ".harness" / "bin"), missing.stdout)  # the folder to add
-        self.assertIn("看板的配置教程页", missing.stdout)
+        self.assertIn("看板上的齿轮", missing.stdout)
 
     @unittest.skipIf(os.name == "nt", "a shell script as a stand-in launcher")
     def test_a_launcher_of_another_copy_is_a_warning(self) -> None:

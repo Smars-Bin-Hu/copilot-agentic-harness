@@ -8,6 +8,8 @@ main.wz{position:fixed;inset:0;max-width:none;margin:0;padding:0;display:flex;fl
 .wz [hidden]{display:none!important}
 
 body.wz-doc .dock-btn,body.wz-doc .dock-panel,body.wz-doc .dock-ask{display:none}
+body.wz-doc .unpaired-note{display:none}  /* an unpaired browser: the page says it itself (wizard.js unpairedPage), the bar would cover the progress bar */
+.wz .wz-unpaired{margin:0;font-size:14px;color:var(--hot);overflow-wrap:anywhere}
 
 /* shared pieces */
 .wz .wz-dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}

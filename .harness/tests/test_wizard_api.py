@@ -82,6 +82,26 @@ class SetupDoneTests(unittest.TestCase):
         (self.root / ".harness" / "policies" / "target.override.json").write_text("{}", encoding="utf-8")
         self.assertTrue(ready.setup_done(self.root))
 
+    def test_a_save_in_settings_does_not_send_an_older_copy_back_to_the_wizard(self) -> None:
+        (self.root / ".harness" / "policies" / "target.override.json").write_text("{}", encoding="utf-8")  # set up before the wizard: a repository setting and no `setup_done`
+        self.assertTrue(ready.setup_done(self.root))
+        wizard.save_you(self.root, {"name": "Alex", "language": "en"})
+        self.assertNotIn("setup_wizard", read_user(self.root))
+        self.assertTrue(ready.setup_done(self.root))
+        wizard.mark(self.root)
+        self.assertNotIn("setup_wizard", read_user(self.root))
+        with mock.patch.object(ready.tasks, "folders", return_value=["tasks/a"]):  # and the same for a copy that has tasks only
+            (self.root / ".harness" / "policies" / "target.override.json").unlink()
+            write_user(self.root, name="Alex")
+            wizard.mark(self.root)
+            self.assertNotIn("setup_wizard", read_user(self.root))
+            self.assertTrue(ready.setup_done(self.root))
+
+    def test_a_new_copy_is_still_marked_by_its_first_save(self) -> None:
+        wizard.save_you(self.root, {"name": "Alex", "language": "en"})
+        self.assertEqual(read_user(self.root)["setup_wizard"], "open")
+        self.assertFalse(ready.setup_done(self.root))
+
     def test_an_older_copy_with_tasks_only(self) -> None:
         with mock.patch.object(ready.tasks, "folders", return_value=["tasks/a"]):
             self.assertTrue(ready.setup_done(self.root))
@@ -295,6 +315,17 @@ class ScanTests(HarnessTestCase):
         self.assertTrue(rows["orders"]["picked"])
         self.assertIn(setup.shown_path(self.root, base), found["places"])
 
+    def test_a_single_repository_outside_the_usual_places_is_listed_picked_and_marked(self) -> None:
+        self.repo("Developer/orders")
+        far = self.root / "unrelated" / "ledger"
+        (far / ".git").mkdir(parents=True)
+        setup.write(self.root, "target", {"repos": {"ledger": {"path": str(far)}}})
+        found = wizard.scan(self.root, self.home)
+        rows = {row["name"]: row for row in found["rows"]}
+        self.assertEqual(sorted(rows), ["ledger", "orders"])
+        self.assertEqual((rows["ledger"]["picked"], rows["ledger"]["path"], rows["ledger"].get("outside")), (True, str(far), True))
+        self.assertFalse(rows["orders"].get("outside"))
+
     def test_it_stops_at_the_cap_and_says_there_is_more(self) -> None:
         for number in range(7):
             self.repo(f"Developer/r{number:02d}")
@@ -342,9 +373,21 @@ class SaveTests(HarnessTestCase):
         found = setup.kept(self.root, "target")
         self.assertEqual(found["repos_root"], str(self.root / "code"))
         self.assertEqual({name: entry["path"] for name, entry in found["repos"].items()}, {"orders": one, "billing": two})
-        self.assertEqual(read_user(self.root)["setup_wizard"], "open")
+        self.assertFalse(config.override_path(self.root, "user").exists())  # the target file was there first: a copy set up before the wizard is not marked
         wizard.save_repos(self.root, {"paths": [two]})
         self.assertEqual(list(setup.kept(self.root, "target")["repos"]), ["billing"])
+
+    def test_a_single_the_page_did_not_show_survives_a_save_and_one_that_was_shown_and_unticked_goes(self) -> None:
+        one, two = self.make_repos("orders", "billing")
+        far = self.root / "unrelated" / "ledger"
+        (far / ".git").mkdir(parents=True)
+        setup.write(self.root, "target", {"repos": {"ledger": {"path": str(far)}, "orders": {"path": one}}})
+        wizard.save_repos(self.root, {"paths": [two], "shown": [one, two]})  # the page showed orders and billing, not ledger; orders was unticked
+        found = setup.kept(self.root, "target")["repos"]
+        self.assertEqual(sorted(found), ["billing", "ledger"])
+        self.assertEqual(found["ledger"]["path"], str(far))
+        wizard.save_repos(self.root, {"paths": [], "shown": [two, str(far)]})  # now it was shown and unticked too
+        self.assertEqual(sorted(setup.kept(self.root, "target").get("repos") or {}), [])
 
     def test_repos_refuses_a_path_that_is_no_repository_the_harness_itself_or_a_repeat_and_writes_nothing(self) -> None:
         (one,) = self.make_repos("orders")
@@ -359,7 +402,7 @@ class SaveTests(HarnessTestCase):
     def test_advanced_writes_the_prefix_the_install_command_and_the_paths_not_to_touch_and_nothing_else(self) -> None:
         (one,) = self.make_repos("orders")
         far = self.make_repos("billing")[0]
-        write_user(self.root, name="Alex", language="en", skill_prefix="old")
+        write_user(self.root, name="Alex", language="en", skill_prefix="old", setup_wizard="open")  # the wizard is under way: Advanced leaves the mark as it is
         setup.write(self.root, "target", {"repos_root": str(self.root / "code")})
         wizard.save_repos(self.root, {"paths": [far]})
         user_before = dict(read_user(self.root))
@@ -433,7 +476,24 @@ class SummaryTests(HarnessTestCase):
         self.assertTrue(rows["programs"]["effect"])
         self.assertEqual((rows["copilot"]["done"], rows["repos"]["done"], rows["repos"]["effect"]), (False, False, "New tasks have no repository to work in."))
         for row in found["rows"]:
-            self.assertEqual(set(row), {"id", "done", "label", "detail", "effect"})
+            self.assertEqual(set(row), {"id", "required", "done", "label", "detail", "effect"})
+        self.assertEqual([row["id"] for row in found["rows"] if row["required"]], ["you", "programs", "copilot"])
+
+    def test_confirm_needs_the_name_the_language_the_programs_and_the_copilot_sign_in(self) -> None:
+        every = {"rows": [{"id": "python", "required": True, "found": True, "blocked": ""}], "all_found": True}
+        signed = {"state": "ok", "login": "a"}
+        with self.assertRaises(ValueError) as caught:  # nothing saved yet
+            wizard.refuse_finish(self.root, every, signed)
+        self.assertIn(messages.text("setup.w.label.you"), str(caught.exception))
+        write_user(self.root, name="Alex")  # a name and no language
+        with self.assertRaises(ValueError):
+            wizard.refuse_finish(self.root, every, signed)
+        write_user(self.root, name="Alex", language="en")
+        wizard.refuse_finish(self.root, every, signed)  # all three done: no error (the knowledge base and the repositories are optional)
+        for programs_, copilot, label in ((self.PROGRAMS, signed, "setup.w.label.programs"), (every, {"state": "fail", "why": "signin"}, "setup.w.label.copilot"), (every, {}, "setup.w.label.copilot"), (every, {"state": "check"}, "setup.w.label.copilot")):
+            with self.assertRaises(ValueError, msg=label) as caught:
+                wizard.refuse_finish(self.root, programs_, copilot)
+            self.assertIn(messages.text(label), str(caught.exception))
 
     def test_everything_done_has_no_effects_and_the_language_is_in_its_own_words(self) -> None:
         write_user(self.root, name="Wei", language="zh")
@@ -528,7 +588,13 @@ class BoardSteps(ServeCase):
         status, data, _ = self.post("summary")
         rows = {row["id"]: row for row in data["result"]["rows"]}
         self.assertEqual((status, rows["you"]["done"], rows["repos"]["done"], rows["kb"]["done"]), (200, True, True, False))
-        with mock.patch.object(ready.Ready, "doctor_again", return_value=True) as again:
+        status, data, _ = self.post("finish")  # the programs are not all found here, and Copilot is not known: Confirm is refused, with the reason
+        self.assertEqual(status, 409)
+        self.assertIn(messages.text("setup.w.label.programs"), data["error"])
+        self.assertNotIn("setup_done", read_user(self.root))
+        every = {"rows": [{"id": "python", "required": True, "found": True, "blocked": ""}], "all_found": True}
+        with mock.patch.object(boardserve.Board, "programs", return_value=every), mock.patch.object(ready.Ready, "latest", return_value={"checks": [{"id": "copilot", "state": "ok", "login": "a"}]}), \
+                mock.patch.object(ready.Ready, "doctor_again", return_value=True) as again:
             status, data, _ = self.post("finish")
         self.assertEqual((status, data["result"]), (200, {"ok": True}))
         again.assert_called_once()
@@ -536,7 +602,9 @@ class BoardSteps(ServeCase):
         self.assertEqual((found["setup_done"], "setup_wizard" in found), (True, False))
 
     def test_the_knowledge_base_save_starts_the_job_and_the_job_step_reads_it(self) -> None:
-        with mock.patch.object(setupjob, "steps", return_value=[("kb", lambda: "copied"), ("git", lambda: "g"), ("sync", lambda: "s"), ("doctor", lambda: "NO")]), mock.patch.object(setupjob, "ahead"):
+        config.override_path(self.root, "target").unlink()  # the case's copy has a target file and tasks: it would count as set up before the wizard, and the wizard would not mark it
+        with mock.patch.object(setupjob, "steps", return_value=[("kb", lambda: "copied"), ("git", lambda: "g"), ("sync", lambda: "s"), ("doctor", lambda: "NO")]), mock.patch.object(setupjob, "ahead"), \
+                mock.patch.object(setup.tasks, "folders", return_value=[]):  # the case's copy has tasks: it would count as set up before the wizard
             status, data, _ = self.post("save", {"part": "kb", "kb_mode": "folder", "kb_path": str(self.root / "somewhere"), "kb_replace": False})
             self.assertEqual((status, data["result"]["saved"], data["result"]["total"]), (200, True, 3))
             for _ in range(200):

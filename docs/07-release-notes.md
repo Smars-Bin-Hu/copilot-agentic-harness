@@ -77,7 +77,7 @@ To see which version you have: `harness --version`.
 
 ### Retired
 
-- **The Get ready form** (`/setup` before; 1.8.30): the page with four cards is the wizard now, and the sliders button is the gear's Settings. **Coming from an older copy?** moved to Settings, Advanced.
+- **The Get ready form** (`/setup` before; 1.8.30): the page with four cards is the wizard now, and the gear opens Settings. **Coming from an older copy?** moved to Settings, Advanced.
 - **The lists of the Enter screen** (1.8.30): its two blocks (*Harness & Local*, *From the company*), their yellow notes and the folded one-line view are gone. The screen has one button.
 - **The board's yellow block** (*Not fully ready for your company's tasks*, with **Hide**; 1.8.30): the dot on the gear replaces it. The red block, *The agent cannot work right now*, stays.
 - **The Tool packs, Connections & sign-ins and Local windows as separate windows** (1.8.30): they are pages of Settings (Tool packs, Connections, Programs and Network).

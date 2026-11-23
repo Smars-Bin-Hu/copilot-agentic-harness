@@ -2,7 +2,7 @@
 // The world turns with the pointer: +-4 deg on the board and the task page, +-8 deg on the Enter screen. Two smoothing steps make it glide, never overshoot, never jitter (about 1.4 s to follow, about 4 s
 // to come back to the centre once the pointer has left). One requestAnimationFrame, and only the transform of #sp-world changes. The loop stops when the angles have settled, when the page is hidden, in Lite,
 // under reduced motion and when the "Background motion" switch is off. Panels, rows and text are not in the stage: they never move.
-// While it moves the frame time is measured. When it stays poor for a few seconds, a small note offers Lite once. It never switches by itself.
+// While it moves the frame time is measured. When it stays poor for a few seconds, a small note offers Lite once per page (not while the wizard or Settings is open; "Not now" keeps it away 30 days). It never switches by itself.
 // The Enter screen (enter.js) has its own loop while it is open: it calls SPACE.step() each frame instead, so there is still one frame callback, and tilts its wordmark with SPACE.ax / SPACE.ay.
 "use strict";
 
@@ -15,7 +15,8 @@ const SPACE = (function () {
     set(name, value) { memory[name] = value; try { localStorage.setItem(name, value); } catch (error) { /* kept in memory only */ } },
   };
   const MOTION = "harness.motion";  // "0": off. Anything else: on (the default).
-  const ASKED = "harness.slow.asked";  // "1": the note about a slow page was shown once and is not shown again
+  const ASKED = "harness.slow.asked";  // the time (ms) "Not now" was pressed on the note about slow motion: not offered again for 30 days (1.8.31; before, a "1" for good)
+  const SNOOZE = 30 * 24 * 3600 * 1000;
 
   // ---------- the stage ----------
   const div = (id, cls) => { const node = document.createElement("div"); if (id) node.id = id; if (cls) node.className = cls; return node; };
@@ -120,17 +121,20 @@ const SPACE = (function () {
     }
     F.last = now;
   }
-  let note = null, asked = keep.get(ASKED) === "1";
+  let note = null, asked = false;
+  const snoozed = () => { const at = Number(keep.get(ASKED)); return at > 1 && Date.now() - at < SNOOZE && at <= Date.now() + 60000; };
+  // Not while the setup wizard runs or the Settings window is open (1.8.31): the note would sit on top of what the person is doing. The check goes on, so it may come later.
+  const busy = () => document.body.classList.contains("wz-doc") || Boolean(document.querySelector(".wz-top")) || (typeof SETTINGS !== "undefined" && SETTINGS.isOpen());
   function offer() {
-    if (asked || note || lite() || !on() || typeof harnessTheme === "undefined" || typeof t !== "function") return;
-    asked = true; keep.set(ASKED, "1");
+    if (asked || note || lite() || !on() || snoozed() || busy() || typeof harnessTheme === "undefined" || typeof t !== "function") return;
+    asked = true;
     const go = h("button", {type: "button", class: "go"}, t("board.space.slow.lite"));
     const no = h("button", {type: "button"}, t("board.space.slow.keep"));
     note = h("div", {class: "sp-slow", role: "status"}, h("p", null, t("board.space.slow")), h("div", {class: "row"}, no, go));
     document.body.append(note);
     const close = () => { note.remove(); };
     go.addEventListener("click", () => { harnessTheme.setLite(true); close(); });
-    no.addEventListener("click", close);
+    no.addEventListener("click", () => { keep.set(ASKED, String(Date.now())); close(); });
   }
 
   // ---------- the switch ----------

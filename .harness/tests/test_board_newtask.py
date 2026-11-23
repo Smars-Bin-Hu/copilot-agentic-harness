@@ -156,7 +156,7 @@ class KeyAndLanguageTests(unittest.TestCase):
         for path in sorted(WEB.iterdir()):
             if path.is_file() and path.suffix != ".png":
                 self.assertFalse(HAN.search(path.read_text(encoding="utf-8")), path.name)
-        self.assertIn('t("desk.send.lang.name.zh")', source("shell.js"))
+        self.assertIn('t(code === "zh" ? "desk.send.lang.name.zh"', source("wizard.js"))  # 1.8.31: the language is picked in Settings, You (the wizard's page), no longer in the sliders panel
 
     def test_the_words_that_were_english_in_the_chinese_table_are_chinese_now(self) -> None:
         zh = messages.table("zh")

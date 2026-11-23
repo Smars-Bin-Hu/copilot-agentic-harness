@@ -61,7 +61,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
-from core import filecache, launchenv, pace
+from core import agenthost, filecache, launchenv, pace
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
@@ -630,6 +630,25 @@ class Board:
         self.ready.forget_gh()
         print(say("serve.did", action="gh " + step, task="-"), flush=True)
         return {key: value for key, value in found.items() if key != "token"}
+
+    def host_busy(self) -> List[str]:
+        """The tasks and chats that work now (a stop of the agent host would stop them). Never raises: a board that stops must stop."""
+        try:
+            names = self.working_tasks()
+            return names + self.other_chats(names)
+        except Exception:  # noqa: BLE001
+            return []
+
+    def end_host(self, busy: List[str], out: Any) -> None:
+        """The board stops on purpose (its stop button, `--stop`, Ctrl+C): its agent host stops too, so nothing of this copy is left running (a reinstall found its files held).
+        A chat that works keeps it: the host ends itself once it is idle (`agenthost.IDLE_TIMEOUT`). Never raises."""
+        try:
+            if busy:
+                print(say("serve.host.left", names=", ".join(busy), minutes=agenthost.IDLE_TIMEOUT // 60), file=out, flush=True)
+            elif self.link.stop_host():
+                print(say("serve.host.stopped"), file=out, flush=True)
+        except Exception as error:  # noqa: BLE001
+            print(say("serve.host.left", names=type(error).__name__, minutes=agenthost.IDLE_TIMEOUT // 60), file=out, flush=True)
 
     def working_tasks(self) -> List[str]:
         """The names of the open tasks whose agent is at work now: the hook log says so and VS Code does not say its chat runs no turn (`idle`), or VS Code says the chat is busy. A restart of the agent host would stop them."""
@@ -2732,16 +2751,17 @@ def stop_file(root: Path) -> Optional[Path]:
     return home / ("stop-" + hashlib.sha256(str(Path(root).resolve()).encode("utf-8")).hexdigest()[:16]) if home else None
 
 
-def stop_wanted(root: Path) -> bool:
-    """Is the stop file there? It is taken away, so it asks once."""
+def stop_wanted(root: Path) -> str:
+    """Is the stop file there? Its word (`stop`, or `update` when a start found a newer release in the folder), "" when there is none. It is taken away, so it asks once."""
     path = stop_file(root)
     try:
         if path is not None and path.is_file():
+            word = path.read_text(encoding="utf-8").strip() or "stop"
             path.unlink()
-            return True
+            return word
     except OSError:
         pass
-    return False
+    return ""
 
 
 def already_running(root: Path, port: int, out: Any, opener: Callable[[str], Any]) -> Dict[str, Any]:
@@ -2839,10 +2859,12 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     else:
         print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
+    reason = ""
     try:
         filecache.enable()  # 1.8.25: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
         while serving.is_alive():
-            if board.stop_asked.wait(STOP_EVERY) or stop_wanted(root):  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too; the stop button and `--stop` end it here
+            reason = stop_wanted(root)
+            if board.stop_asked.wait(STOP_EVERY) or reason:  # a wait with a limit: Ctrl+C reaches this thread within half a second, on Windows too; the stop button and `--stop` end it here
                 break
     except KeyboardInterrupt:
         pass
@@ -2851,7 +2873,11 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         board.sweeping.set()
         board.runner.stop_all()
         board.terminal.stop_all()
+        keep_host = bool(board.next_code) or reason == "update"  # Restart board, or a start that found a newer release: the next board takes the host over and its chats go on
+        busy = [] if keep_host else board.host_busy()
         link.stop()
+        if not keep_host:
+            board.end_host(busy, out)
         server.server_close()
         filecache.enable(False)
         try:

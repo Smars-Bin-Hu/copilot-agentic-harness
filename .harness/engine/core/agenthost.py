@@ -225,6 +225,14 @@ class Host:
         except OSError:
             pass
 
+    def stop_left(self) -> bool:
+        """`task board --stop` with no board running: stop the host this copy started before, when it still runs and answers (a reinstall must not find its files held). False when there is none."""
+        with self.cycle:
+            if not self.adopt():
+                return False
+            self._stop()
+            return True
+
     def adopt(self) -> bool:
         """Take over a host this copy started before (the board was restarted) when it still runs and still answers: no new start, chats keep running. False otherwise."""
         try:

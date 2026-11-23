@@ -51,5 +51,5 @@ board-order: 6
 | "is this copy, or holds it, or is inside it" | The path points at this repository. Ask for the old one |
 | "newer than this one" | The old copy has a higher version. Update this copy first; copying back is not supported |
 | "only a person at a terminal" | The user ran it in a pipe or the agent ran `--apply`. The user runs it in a plain terminal window |
-| `failed` is not empty | A file was locked (the old copy's board or agent host still running, an open VS Code window, an open editor). Close it and run the same command again: what went over is skipped |
+| `failed` is not empty | A file was locked (the old copy's board still running, an open VS Code window, an open editor; `harness task board --stop` in the old copy also stops an agent host its board left). Close it and run the same command again: what went over is skipped |
 | `tasks_unreadable` lists a task | The task's `.task/task.json` did not come over whole. Check the old folder, delete the new task folder and run the command again |

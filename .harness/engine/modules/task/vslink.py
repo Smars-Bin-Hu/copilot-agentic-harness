@@ -828,6 +828,15 @@ class VsLink:
             own = self.own
         return own is not None and own.stale()
 
+    def stop_host(self) -> bool:
+        """The board stops on purpose: its agent host stops too (the next start takes a few seconds; only a VS Code update makes it download again). False when there was none."""
+        with self.lock:
+            own = self.own
+        if own is None or own.status().get("state") not in ("starting", "preparing", "ready"):
+            return False
+        own.stop()
+        return True
+
     def host_outdate(self) -> None:
         """H6: the short command was just put on PATH: the running host does not have it until it starts again (the board restarts it once no chat works)."""
         with self.lock:

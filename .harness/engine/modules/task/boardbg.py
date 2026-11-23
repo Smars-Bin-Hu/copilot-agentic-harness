@@ -209,7 +209,7 @@ def retire_stale(root: Path, port: int, ui: Any, *, sleep: Callable[[float], Any
         return False
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("stop\n", encoding="utf-8")
+        path.write_text("update\n", encoding="utf-8")  # the board keeps its agent host: the new board takes it over
     except OSError:
         return False
     began = clock()
@@ -291,7 +291,10 @@ def stop(root: Path, out: Any = None, interactive: Optional[bool] = None, *, sle
     wait = pace.scaled(STOP_WAIT) if wait is None else wait  # 1.8.15
     out = out or sys.stdout
     if not boardserve.running_board(root):
-        print(say("serve.stop.none"), file=out, flush=True)
+        from core import agenthost
+
+        left = agenthost.Host(root).stop_left()  # a host whose board is gone (it ends itself when idle; a reinstall must not wait for that)
+        print(say("serve.stop.host" if left else "serve.stop.none"), file=out, flush=True)
         return ok()
     path = boardserve.stop_file(root)
     if path is None:

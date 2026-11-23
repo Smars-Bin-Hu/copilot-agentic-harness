@@ -47,7 +47,7 @@ All pictures are from a made-up team's tasks, on the real board.
 <table>
 <tr>
 <td width="50%"><a href="docs/images/enter.png"><img alt="The Enter screen: the robot over the word HARNESS, one Enter button, and a dot on the gear whose hover says what is not set up yet" src="docs/images/enter.png"></a><br><sub><b>Start.</b> Double-click Start Harness. The screen has one button: Enter, or the fix when something blocks the work. A dot on the gear lists what you skipped.</sub></td>
-<td width="50%"><a href="docs/images/setup.png"><img alt="The setup wizard on its Programs page: a progress bar of six parts, Python, Git and VS Code found, the GitHub CLI not found with a download link and a box for its folder" src="docs/images/setup.png"></a><br><sub><b>Set up.</b> A wizard in the browser: one thing on each page. No agent runs.</sub></td>
+<td width="50%"><a href="docs/images/setup.png"><img alt="The setup wizard on its Programs page, with the board logo top left and a terminal button top right: a progress bar of six parts, Python, Git and VS Code found, the GitHub CLI not found with a download link and a box for its folder" src="docs/images/setup.png"></a><br><sub><b>Set up.</b> A wizard in the browser: one thing on each page. No agent runs.</sub></td>
 </tr>
 <tr>
 <td width="50%"><a href="docs/images/how-can-i-help.png"><img alt="The question mark panel on the board: ask, the course, the first lesson, everything you can ask for" src="docs/images/how-can-i-help.png"></a><br><sub><b>How can I help?</b> Ask, start a lesson, or see every skill.</sub></td>
@@ -66,7 +66,7 @@ All pictures are from a made-up team's tasks, on the real board.
 <td width="50%"><a href="docs/images/report.png"><img alt="The task analysis: working time, waiting time, prompts, Credits, key points and the Agent Performance Review" src="docs/images/report.png"></a><br><sub><b>Where the time went.</b> Working and waiting, every prompt, Credits, the checks.</sub></td>
 </tr>
 <tr>
-<td width="50%"><a href="docs/images/tools.png"><img alt="Settings on Tool packs: ado and sqlserver used by the company, demotracker not used, each with its connection type, skills and the programs it needs" src="docs/images/tools.png"></a><br><sub><b>Settings: Tool packs.</b> The outside systems the agent can work with, and what each brings.</sub></td>
+<td width="50%"><a href="docs/images/tools.png"><img alt="Settings on Tool packs: ado and sqlserver, both used by the company, each with its connection type, skills and the program it needs; the sample pack is not listed" src="docs/images/tools.png"></a><br><sub><b>Settings: Tool packs.</b> The outside systems the agent can work with, and what each brings.</sub></td>
 <td width="50%"><a href="docs/images/held-write.png"><img alt="A task page with an outside call waiting for approval: a write to orders-dev on DEV, the statement that will run, a code to type, Approve and Do not approve" src="docs/images/held-write.png"></a><br><sub><b>A write waits for you.</b> The system, the environment and the exact statement. The agent waits for your answer.</sub></td>
 </tr>
 <tr>

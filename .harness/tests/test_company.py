@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 import time
@@ -56,7 +57,14 @@ class ManifestWordsTests(CompanyCase):
         return str(target)
 
     def test_a_manifest_without_files_says_which_part_is_missing(self) -> None:
-        """Round 3 A2: the page showed `is not a good package: 'files'`."""
+        """Round 3 A2: the page showed `is not a good package: 'files'`. The words are checked in English, whatever language an earlier test left."""
+        from core import messages
+
+        patcher = mock.patch.dict(os.environ, {messages.ENVIRONMENT: "en"})
+        patcher.start()
+        messages.reset()
+        self.addCleanup(messages.reset)
+        self.addCleanup(patcher.stop)
         with self.assertRaises(company.CompanyError) as caught:
             company.load(self.zip_with({"version": "1"}))
         text = str(caught.exception)

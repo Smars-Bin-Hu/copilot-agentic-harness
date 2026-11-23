@@ -338,7 +338,7 @@ class ProbeCacheTests(HarnessTestCase):
         slow = self.root / "slow"
         slow.write_text("#!/bin/sh\necho $$ > '%s'\nsleep 30\n" % (self.root / "pid"), encoding="utf-8")
         slow.chmod(0o755)
-        with mock.patch.object(programs, "PROBE_WAIT", 0.5):
+        with mock.patch.object(programs, "PROBE_WAIT", 4.0):  # long enough for a busy machine to start the script and write its pid (0.5 s was not, under a parallel run on 3.9)
             self.assertEqual(programs.probe(str(slow)), "")
         pid = int((self.root / "pid").read_text().strip())
         time.sleep(0.3)

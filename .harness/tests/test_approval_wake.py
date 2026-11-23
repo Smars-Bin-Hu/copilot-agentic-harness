@@ -111,12 +111,30 @@ class ApproveTests(WakeCase):
         self.assertNotIn("remember the other table", self.link.sent[0]["text"])
         self.assertEqual(len(chatsend.drafts(self.root, TASK)), 1)
 
-    def test_an_agent_that_went_on_is_left_to_the_button_of_the_card(self) -> None:
+    def test_an_agent_that_went_on_and_still_works_is_left_to_the_button_of_the_card(self) -> None:
+        """1.8.31: it did not wait and is at work: the approval goes through (no "the agent is at work"), nothing is sent; it picks the approval up when it runs the command again."""
+        code = self.held()
+        approvals.wait_mark(self.root, code, "gone", 10, file=approvals.ACTIONS)
+        self.assertTrue(tasklife.at_work(self.root, self.data()))
+        self.act("approve-action", code)
+        self.assertEqual(self.entry(code)["state"], "approved")
+        self.assertEqual(self.link.sent, [])
+        self.assertEqual(self.entry(code).get("told", ""), "")
+
+    def test_an_agent_that_went_on_and_stopped_since_is_woken(self) -> None:
+        """1.8.31: the card's button is a fallback only: an agent whose turn ended is woken, whether it ever waited or not."""
         code = self.held()
         self.stand(code, "gone")
         self.act("approve-action", code)
+        self.assertEqual(len(self.link.sent), 1)
+        self.assertEqual(self.entry(code)["told"], "message")
+
+    def test_a_call_left_when_the_work_was_delivered_is_not_woken_for(self) -> None:
+        code = self.held()
+        self.assertEqual(outbox.agent_left(self.root, TASK), 1)
+        self.stopped()
+        self.act("approve-action", code)
         self.assertEqual(self.link.sent, [])
-        self.assertEqual(self.entry(code).get("told", ""), "")
 
     def test_a_wake_that_cannot_go_leaves_the_card_to_tell_the_agent(self) -> None:
         code = self.held()
@@ -175,11 +193,18 @@ class DismissTests(WakeCase):
         line = [event for event in self.data()["events"] if event["what"] == "outbox-dismiss"][-1]
         self.assertIn(code, line["detail"])
 
-    def test_an_agent_that_went_on_is_not_woken_either(self) -> None:
+    def test_an_agent_that_went_on_and_still_works_is_not_woken_either(self) -> None:
+        code = self.held()
+        approvals.wait_mark(self.root, code, "gone", 10, file=approvals.ACTIONS)
+        done = self.act("dismiss action", code, reason="later")  # 1.8.31: not refused while the agent works
+        self.assertEqual((done["told"], self.link.sent), ("logged", []))
+
+    def test_an_agent_that_went_on_and_stopped_since_is_woken_with_the_reason(self) -> None:
         code = self.held()
         self.stand(code, "gone")
         done = self.act("dismiss action", code, reason="later")
-        self.assertEqual((done["told"], self.link.sent), ("logged", []))
+        self.assertEqual(done["told"], "message")
+        self.assertEqual(len(self.link.sent), 1)
 
     def test_a_wake_that_cannot_go_is_written_in_the_task(self) -> None:
         code = self.held()
@@ -205,6 +230,13 @@ class WaitingIsNotWorkingTests(WakeCase):
         row = next(row for row in tasklife.list_tasks(self.root)["tasks"] if row["name"] == NAME)
         self.assertEqual((row["state"], row["waiting_why"]), ("waiting", "outbox"))
         self.board.act("approve-action", NAME, "act", code=code)  # not refused as "the agent is at work"
+        self.assertEqual(self.entry(code)["state"], "approved")
+
+    def test_a_call_held_a_moment_ago_can_be_approved_before_the_wait_starts(self) -> None:
+        """1.8.31: the agent tells the person what the command does before it starts its wait; the page said "the agent is at work" for that while."""
+        code = self.held()
+        self.assertTrue(tasklife.at_work(self.root, self.data()))
+        self.board.act("approve-action", NAME, "act", code=code)
         self.assertEqual(self.entry(code)["state"], "approved")
 
     def test_a_stopped_terminal_is_at_work_again_until_the_agent_stops(self) -> None:

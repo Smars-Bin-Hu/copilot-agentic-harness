@@ -229,8 +229,10 @@ class ServeTests(ServeCase):
         done["cwd"] = str(self.root)
         self.hook(done)
         self.assertFalse(self.data().get("waiting"), "answered: at work again")
-        busy = self.request("POST", "/api/act", {"action": "dismiss action", "task": TASK, "code": "ZZZZZZ"}, cookie=cookie)[1]
-        self.assertIn(messages.text("serve.busy"), json.dumps(busy, ensure_ascii=False))
+        still = self.request("POST", "/api/act", {"action": "dismiss action", "task": TASK, "code": "ZZZZZZ"}, cookie=cookie)[1]
+        self.assertNotIn(messages.text("serve.busy"), json.dumps(still, ensure_ascii=False))  # 1.8.31: a decision on a held call goes through while the agent works too
+        paused = self.request("POST", "/api/act", {"action": "pause", "task": TASK})[1]
+        self.assertIn(messages.text("serve.busy"), json.dumps(paused, ensure_ascii=False))  # what changes the course of the task still waits
 
     def test_a_chat_that_waits_for_input_is_not_at_work_by_the_word_of_vs_code(self) -> None:
         self.assertIn("input", boardserve.CHAT_STILL)

@@ -1290,7 +1290,7 @@
     const viaWait = codes.every((code) => heardBy.get(code) === "wait");
     const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: a message from here would answer the wrong thing (1.7.20)
     const can = served() && canAct() && !asking;
-    const tell = h("button", {type: "button", class: "act" + (all ? "" : " hot") + " big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"));
+    const tell = h("button", {type: "button", class: "act" + (all ? "" : " hot big"), disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"));  // 1.8.31: a fallback; once the agent was told (or woken by the board), only a small "again"
     const said = h("div", {class: "bad"});
     tell.addEventListener("click", () => {
       tell.disabled = true; tell.textContent = t("board.serve.working");

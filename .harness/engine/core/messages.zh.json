@@ -2302,7 +2302,7 @@
   "desk.outbox.tell": "告诉 agent 去跑",
   "desk.outbox.approved.close": "关掉这张卡片。批准还在，直到 agent 跑了这条命令或批准过期。",
   "desk.outbox.tell.body": "已批准：{codes}。现在在这个 chat 里原样运行该命令。已经运行过的命令不要再运行。",
-  "desk.outbox.tell.hint": "agent 要被告知后才会跑已批准的命令。点一下就发到它的 chat；批准 {minutes} 分钟内有效。",
+  "desk.outbox.tell.hint": "board 没能把结果送到 agent：它没等就继续干了、还在工作，或者它的 chat 现在收不了消息。agent 再跑这条命令时就会用上这个批准；点一下就发到它的 chat。批准 {minutes} 分钟内有效。",
   "desk.outbox.approve": "批准",
   "desk.outbox.view": "查看",
   "desk.outbox.lines": "（{n} 行）",

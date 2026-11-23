@@ -4,7 +4,7 @@ Before, only the hook of a chat's first step probed (`core.reach`): the screen s
 message. Now the board runs each connection's test, in the environment VS Code is started with (`core.launchenv`) and with the identity kept here
 (`core.connections.probe_all`), and writes the answers where the hook writes them. It starts
 
-- at once after the board opens VS Code (the Open VS Code button, or Open with identities): `start(force=True)`;
+- at once after the agent host restarts with new settings or identities: `start(force=True)`;
 - when the Enter screen asks and some connection has no answer younger than FRESH_SECONDS: `maybe()`;
 - when the person presses Check: `start(force=True)`.
 

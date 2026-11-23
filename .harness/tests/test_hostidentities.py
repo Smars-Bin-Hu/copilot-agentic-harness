@@ -60,6 +60,16 @@ class ChooseTests(ConnectionsCase):
         self.assertEqual((now["primary"], now["wrap"]), ("db-win2", ["db-win"]))
         self.assertIn("harness as db-win --", next(one["call"] for one in connections.calls(self.root, every=True) if one["alias"] == "db-win"))
 
+    def test_a_password_saved_again_changes_the_mark_with_no_secret_in_it(self) -> None:
+        """Follow-up of H6: the same account with a new password makes the running host stale (the mark carries when `.env` changed, never the password)."""
+        before = connections.host_identities(self.root)["mark"]
+        time.sleep(0.01)
+        connections.save(self.root, "db-dev", {"account": "me", "password": "new-Pw-9911"})
+        after = connections.host_identities(self.root)["mark"]
+        self.assertNotEqual(before, after)
+        self.assertNotIn("new-Pw-9911", after)
+        self.assertNotIn(PASSWORD, after)
+
     def test_an_identity_forgotten_since_is_not_given(self) -> None:
         connections.forget(self.root, "db-dev")
         connections.forget(self.root, "db-win")

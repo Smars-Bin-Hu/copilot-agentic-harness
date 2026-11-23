@@ -14,10 +14,11 @@ import time
 import unittest
 from pathlib import Path
 from typing import Any, List
+from unittest import mock
 
 import support  # noqa: F401 - HARNESS_VSCODE_CLI=off, HARNESS_GH=off
 
-from core import agenthost, ahp
+from core import agenthost, ahp, messages
 
 FAKE = textwrap.dedent('''
     import os, socket, sys, time
@@ -210,6 +211,18 @@ class StopAndAdoptTest(Base):
         agenthost.token_file(self.root).write_text(endpoint.token(), encoding="utf-8")
         self.assertFalse(agenthost.Host(self.root, code="/fake/code").adopt())
 
+    def test_stop_left_ends_a_host_whose_board_is_gone_and_finds_none_after(self) -> None:
+        """Follow-up of H6: `task board --stop` with no board running stops the host it left (a reinstall found its files held)."""
+        first = self.host()
+        first.start()
+        port = int(first.wait_ready(10).path.split(":")[1])
+        left = agenthost.Host(self.root, code="/fake/code")
+        self.hosts.append(left)
+        self.assertTrue(left.stop_left())
+        self.assertFalse(agenthost._answers(port, 1.0))
+        self.assertFalse(agenthost.record_file(self.root).exists())
+        self.assertFalse(agenthost.Host(self.root, code="/fake/code").stop_left(), "nothing left: nothing to stop")
+
     def test_a_restart_starts_a_new_process_with_a_new_token(self) -> None:
         host = self.host()
         host.start()
@@ -294,6 +307,47 @@ class ApplyLocalTest(unittest.TestCase):
 
     def test_a_working_chat_waits(self) -> None:
         self.assertEqual(self.board(True, ["task-a"], ["a chat"]), ({"state": "waiting", "busy": ["task-a", "a chat"]}, []))
+
+
+class EndHostTest(unittest.TestCase):
+    """Follow-up of H6: a board that stops on purpose stops its agent host, unless a chat works (`Board.end_host`); Restart board and an update keep it."""
+
+    def run_end(self, busy: List[str], running: bool = True) -> Any:
+        import io
+        from modules.task import boardserve
+
+        stopped: List[bool] = []
+        link = type("L", (), {"stop_host": lambda self: stopped.append(True) or running})()
+        fake = type("B", (), {"link": link})()
+        out = io.StringIO()
+        boardserve.Board.end_host(fake, busy, out)
+        return stopped, out.getvalue()
+
+    def test_idle_stops_the_host(self) -> None:
+        stopped, said = self.run_end([])
+        self.assertEqual(stopped, [True])
+        self.assertIn(messages.text("serve.host.stopped"), said)
+
+    def test_a_working_chat_keeps_it_and_says_who(self) -> None:
+        stopped, said = self.run_end(["task-a", "a chat"])
+        self.assertEqual(stopped, [])
+        self.assertIn("task-a, a chat", said)
+
+    def test_no_host_says_nothing(self) -> None:
+        self.assertEqual(self.run_end([], running=False), ([True], ""))
+
+    def test_the_stop_file_says_why_and_an_update_keeps_the_host(self) -> None:
+        from modules.task import boardserve
+
+        tmp = Path(tempfile.mkdtemp(prefix="stopword-"))
+        target = tmp / "stop-file"
+        with mock.patch.object(boardserve, "stop_file", return_value=target):
+            self.assertEqual(boardserve.stop_wanted(tmp), "")
+            target.write_text("update\n", encoding="utf-8")
+            self.assertEqual(boardserve.stop_wanted(tmp), "update")
+            self.assertFalse(target.exists(), "it asks once")
+            target.write_text("", encoding="utf-8")
+            self.assertEqual(boardserve.stop_wanted(tmp), "stop")
 
 
 class VsLinkStaleTest(unittest.TestCase):

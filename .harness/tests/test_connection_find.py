@@ -137,12 +137,14 @@ class LayerZeroTests(FindCase):
         self.assertEqual(self.line(self.start()), "")
 
     def test_a_connection_reached_through_the_prefix_is_named_in_its_own_line(self) -> None:
-        (self.root / connections.STATE_FILE).parent.mkdir(parents=True, exist_ok=True)
-        (self.root / connections.STATE_FILE).write_text(json.dumps({"direct": ["orders-ist"], "wrap": ["orders-dev"]}), encoding="utf-8")
+        # H6: the agent host holds every saved identity; a second value of the same variables goes through the prefix
+        connections.save(self.root, "orders-dev", {"account": "first", "password": "one-Pw-1"})
+        connections.save(self.root, "orders-ist", {"account": "second", "password": "two-Pw-2"})
+        wrapped = connections.state(self.root)["wrap"]
+        self.assertEqual(len(wrapped), 1, connections.state(self.root))
         told = self.start()
-        self.assertIn("harness as orders-dev --", told)
+        self.assertIn(f"harness as {wrapped[0]} --", told)
         self.assertEqual(self.line(told), messages.text("connections.kinds.context", kinds="3 SQL Server, 1 Azure DevOps"), "every connection is counted (1.7.38, C12 FB-3)")
-        self.assertIn(messages.text("connections.away.context", n=2), told, "the two the window was opened without (hr-dev and the ticket board) are said as a count")
         self.assertNotIn("hr-dev", told, "layer 0 names no connection that is not wrapped")
 
 

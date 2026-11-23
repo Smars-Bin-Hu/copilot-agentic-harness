@@ -681,7 +681,7 @@ class SystemReachTests(unittest.TestCase):
 
         import doctor
 
-        systems = {"board": {"needs": {"probes": {"dev": "board whoami"}, "launch": "Open VS Code."}}, "down": {"needs": {"probes": {"dev": "down whoami"}}}, "mine": {"needs": {"probes": {"none": "mine ping"}}}}
+        systems = {"board": {"needs": {"probes": {"dev": "board whoami"}, "launch": "Save the sign-in."}}, "down": {"needs": {"probes": {"dev": "down whoami"}}}, "mine": {"needs": {"probes": {"none": "mine ping"}}}}
         asked: list = []
 
         def run(command: str, _root: Path = None) -> tuple:

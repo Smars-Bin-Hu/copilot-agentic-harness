@@ -371,7 +371,7 @@ class BoardChecksItself(ConnectionsCase):
         reach._write(self.root, data)
         self.assertTrue(checker.maybe())  # old: asked again
         checker.last.join(10)
-        self.assertTrue(checker.start())  # Check and Open VS Code ask whatever the age
+        self.assertTrue(checker.start())  # Check and a host restart ask whatever the age
         checker.last.join(10)
 
     def test_one_connection_that_does_not_answer_is_told_in_the_singular(self) -> None:

@@ -532,7 +532,7 @@ class StalledCommandTests(TaskCase):
     def test_a_link_whose_code_command_never_answers_does_not_make_the_readiness_hang(self) -> None:
         release = threading.Event()
 
-        def stalled() -> ahp.Connection:  # `code agent endpoints` that never returns
+        def stalled() -> ahp.Connection:  # an agent host that never answers
             release.wait(30)
             raise ahp.NotReady("cli-failed")
 

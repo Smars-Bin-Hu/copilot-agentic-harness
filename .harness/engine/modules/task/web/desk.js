@@ -1149,7 +1149,7 @@
 
   // --- starting, late, error (1.8.5) -----------------------------------------------------------------------------------------------
   // The board sent something to the agent and has not seen it start (`desk.starting`): one calm card with the seconds, in place of what the task waits for. After two minutes the card is a yellow note
-  // with Try again and Open VS Code. An agent that stopped with an error (`desk.state === "error"`) gets the red bar at the top of the page body; what the task waits for stays, but not hot.
+  // with Try again. An agent that stopped with an error (`desk.state === "error"`) gets the red bar at the top of the page body; what the task waits for stays, but not hot.
   const startingNow = () => Boolean(served() && !desk.past && desk.status === "open" && desk.starting && !desk.starting.late);
   const lateNow = () => Boolean(served() && !desk.past && desk.status === "open" && desk.starting && desk.starting.late);
   const errorNow = () => Boolean(served() && !desk.past && !saved && desk.status === "open" && desk.state === "error");

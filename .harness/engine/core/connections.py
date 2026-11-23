@@ -1256,6 +1256,15 @@ def choose(root: Path, primary: str = "") -> Dict[str, Any]:
     return state(root)
 
 
+def saved_stamp(root: Path) -> str:
+    """When the `.env` (where the identities are kept) last changed, as a word with no secret in it: a password saved again changes it, so a running agent host that holds
+    the identities is stale and restarts once no chat works. "" when there is no file."""
+    try:
+        return str((root / ENV_FILE).stat().st_mtime_ns)
+    except OSError:
+        return ""
+
+
 def host_identities(root: Path) -> Dict[str, Any]:
     """H5b, H6: what the board's agent host is started with for the identities it holds (`state`: every saved one it can, one Windows account): `env` (the variables of those it holds itself), `netonly` ((account, password)
     of the Windows account it is started with, or None) and `mark` (which ones, never a secret: a change of the choice or of the account makes the running host stale).
@@ -1273,7 +1282,7 @@ def host_identities(root: Path) -> Dict[str, Any]:
         identity = identity_of(env, planned["primary"], known[servers[planned["primary"]]["type"]])
         if identity.get("account") and identity.get("password"):
             account = (str(identity["account"]), str(identity["password"]))
-    mark = json.dumps({"direct": planned["direct"], "primary": planned["primary"], "account": account[0] if account else "", "names": sorted(variables_out)}, sort_keys=True)
+    mark = json.dumps({"direct": planned["direct"], "primary": planned["primary"], "account": account[0] if account else "", "names": sorted(variables_out), "saved": saved_stamp(root)}, sort_keys=True)
     return {"env": variables_out, "netonly": account, "mark": mark}
 
 

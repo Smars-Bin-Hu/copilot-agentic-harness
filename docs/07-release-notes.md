@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.28 (1.8.0 – 1.8.28, 2026-11-17 – 2026-11-22)
+## 1.8.29 (1.8.0 – 1.8.29, 2026-11-17 – 2026-11-23)
 
 ### Added
 
@@ -44,6 +44,8 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- A password saved again for a connection reached the agent host only after a restart of the computer, and a board restart kept the old host (1.8.29): the host restarts with the new one as soon as no chat is working.
+- The agent host kept running after the board was stopped, and a reinstall could find files of the old copy held (1.8.29): stopping the board (its power button, `harness task board --stop`, Ctrl+C) stops the host too, unless a chat works; `--stop` with no board running stops a host left behind. **Restart board** and an update keep the host, so chats go on.
 - A slow approval covered the whole page until the server answered (1.8.25): after you type the code and confirm, the window closes within a second and the approval goes on behind the page. Only that card says *Working…*; the chat, the queue and the other cards keep working, also in Focus and in a task page inside the deck. A refusal that comes late opens the window again with your code and the reason.
 - At most window widths the search and greeting pills at the top right covered the mode tabs, *+ New task* and the task page's tools (1.8.25): the header now stops before them.
 - **Off work** left tasks that waited for you inside a turn of their chat (an Allow, a plan just written), and its answer named a command (1.8.25): every task the board shows as waiting for you is paused now. The two buttons are one small pill (☾ n, ☀ n).

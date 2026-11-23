@@ -687,6 +687,10 @@
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
       desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null] : null));
     document.documentElement.style.setProperty("--tkh", ui.head.offsetHeight + "px");  // the tab bar sticks under the header
+    if (!ui.headWatch && typeof ResizeObserver === "function") {  // and again when the header changes height without a drawing (the window made narrow and wide again)
+      ui.headWatch = new ResizeObserver(() => document.documentElement.style.setProperty("--tkh", ui.head.offsetHeight + "px"));
+      ui.headWatch.observe(ui.head);
+    }
     Status.refresh();
   }
 

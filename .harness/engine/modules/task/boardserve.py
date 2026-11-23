@@ -2156,7 +2156,7 @@ def handler_for(board: Board) -> type:
                 if isinstance(asked, dict):  # the "earlier steps" control: the parts of a turn that fell out of the link's memory, from the task's stream file
                     where = asked.get("i")
                     if isinstance(asked.get("turn"), str) and len(asked["turn"]) <= 200 and isinstance(where, int) and not isinstance(where, bool) and where >= 0:
-                        return self.answer(200, {"older": board.link.older(task_name, asked["turn"], where)})
+                        return self.answer(200, {"older": board.link.older(task_name, asked["turn"], where, 1000000 if data.get("all") is True else 60)})  # `all`: a filter or a search needs the whole round (B19, B20)
                     return self.answer(200, {"older": {"items": [], "before": None}})
                 asked_sub = data.get("sub")
                 if "sub" in data:  # a subagent's whole chat for the side panel: from memory, else the stream file (B4a)
@@ -2167,6 +2167,16 @@ def handler_for(board: Board) -> type:
                 if "turn_items" in data:  # (C1) one whole turn as Live items, for the Agent actions tab: memory, else the stream file; the task need not be bound
                     asked_turn = data.get("turn_items")
                     return self.answer(200, {"turn_items": board.link.turn_items(task_name, asked_turn) if isinstance(asked_turn, str) and 0 < len(asked_turn) <= 200 else {"items": [], "turn": ""}})
+                asked_find = data.get("find")
+                if "find" in data:  # (B20) a search of the whole round: every part, also those not loaded
+                    if isinstance(asked_find, dict) and isinstance(asked_find.get("turn"), str) and 0 < len(asked_find["turn"]) <= 200 and isinstance(asked_find.get("q"), str):
+                        return self.answer(200, {"find": board.link.find(task_name, asked_find["turn"], asked_find["q"][:200])})
+                    return self.answer(200, {"find": {"hits": [], "more": False, "turn": ""}})
+                asked_counts = data.get("counts")
+                if "counts" in data:  # (B19) the filter's numbers for the steps the page has not loaded
+                    if isinstance(asked_counts, dict) and isinstance(asked_counts.get("turn"), str) and 0 < len(asked_counts["turn"]) <= 200 and isinstance(asked_counts.get("before"), int) and not isinstance(asked_counts.get("before"), bool):
+                        return self.answer(200, {"counts": board.link.counts(task_name, asked_counts["turn"], asked_counts["before"])})
+                    return self.answer(200, {"counts": {}})
                 if "receipt" in data:  # the receipt of a turn that ended (B6): calls, files and their lines, time, context, credits
                     asked_turn = data.get("receipt")
                     return self.answer(200, {"receipt": board.link.receipt(task_name, asked_turn) if isinstance(asked_turn, str) and 0 < len(asked_turn) <= 200 else {}})

@@ -571,6 +571,36 @@ class LinkTests(LinkCase):
         self.assertIsNone(found["credits"])  # no session total before and after
         self.assertIsNone(found["ctx"])  # no usage
 
+    def test_find_looks_in_every_part_of_a_turn_also_those_the_memory_let_go_of(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.long_turn(120)  # the turn runs: the memory holds its last 60 parts, the file the ones that ended
+        found = until(lambda: (lambda d: d if len({hit["id"] for hit in d["hits"]}) == 11 else None)(self.link.find(TASK, "t2", "FILE 3")))
+        self.assertTrue(found, self.link.find(TASK, "t2", "FILE 3"))
+        self.assertEqual([hit["id"] for hit in found["hits"]][:1], ["k3"])  # k3 is no longer in memory: read from the file
+        self.assertEqual({hit["id"] for hit in found["hits"]}, {"k3"} | {f"k3{n}" for n in range(10)})
+        self.assertEqual((found["turn"], found["more"]), ("t2", False))
+        self.assertEqual(until(lambda: [hit["id"] for hit in self.link.find(TASK, "t2", "nothing wrong")["hits"]]), ["mm"])  # the newest part, in memory
+        self.assertEqual(self.link.find(TASK, "t2", "  ")["hits"], [])
+        self.assertEqual(self.link.find(TASK, "no-such-turn", "file")["hits"], [])
+        self.assertEqual(self.link.find(TASK, 5, "file")["hits"], [])  # type: ignore[arg-type]
+        with mock.patch.object(chatstream, "read", side_effect=OSError("gone")):
+            self.assertEqual(self.link.find(TASK, "t2", "file 3")["hits"], [])
+
+    def test_counts_are_of_the_steps_before_a_place_the_page_has_not_loaded(self) -> None:
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.long_turn(120)
+        self.assertTrue(until(lambda: len([part for turn in chatstream.read(self.root, TASK, self.chat)["turns"] if turn["id"] == "t2" for part in turn["parts"]]) >= 100))
+        live = until(lambda: (lambda d: d if d.get("before") else None)(self.link.live(TASK)))
+        before = live["before"]["i"]
+        counts = self.link.counts(TASK, "t2", before)
+        self.assertEqual((counts["turn"], counts["before"], counts["all"], counts["fail"], counts["change"], counts["run"], counts["wait"]), ("t2", before, before, 0, 0, 0, 0))  # reads, one per part
+        self.assertEqual(self.link.counts(TASK, "t2", 0)["all"], 0)
+        self.assertEqual(self.link.counts(TASK, "no-such-turn", before)["all"], 0)
+        with mock.patch.object(chatstream, "read", side_effect=OSError("gone")):
+            self.assertEqual(self.link.counts(TASK, "t2", before)["all"], 0)
+
     def test_call_of_something_not_there_is_nothing_and_never_raises(self) -> None:
         self.assertEqual(self.link.call(TASK, "t1", "c1"), {})  # not connected: no binding
         self.link.start()

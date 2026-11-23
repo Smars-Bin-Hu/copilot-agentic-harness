@@ -85,7 +85,30 @@ const LIVE = (function () {
   const latestBtn = h("button", {type: "button", class: "wb-latest"}, h("span", {"aria-hidden": "true"}, "\u2193 "), t("desk.live.latest"));
   const waitBar = h("div", {class: "lv-waitbar", hidden: ""}, waitGo, waitList, latestBtn);
   const waitWrap = h("div", {class: "lv-wbwrap"}, waitBar);
-  const root = h("section", {class: "lv", hidden: ""}, head, stale, barWrap, feed, waitWrap, calm, life);
+  // B19, B20: one row over the round: show only the failed steps, the changes, the commands or what waits; and a search of the whole round, opened with / (Ctrl+F while the Live tab is shown)
+  const FILTERS = ["all", "fail", "change", "run", "wait"];
+  // written out so each message key is found by a search
+  const FILTER_WORD = {all: "desk.live.filter.all", fail: "desk.live.filter.fail", change: "desk.live.filter.change", run: "desk.live.filter.run", wait: "desk.live.filter.wait"};
+  const WHERE_WORD = {me: "desk.live.find.where.me", text: "desk.live.find.where.text", think: "desk.live.find.where.think", ask: "desk.live.find.where.ask", note: "desk.live.find.where.note",
+    command: "desk.live.find.where.command", input: "desk.live.find.where.input", diff: "desk.live.find.where.diff", line: "desk.live.find.where.line"};
+  const chipNodes = new Map(FILTERS.map((name) => [name, h("button", {type: "button", class: "lv-chip" + (name === "all" ? " on" : ""), "aria-pressed": String(name === "all"), "data-filter": name}, h("span", null, t(FILTER_WORD[name])), h("b", {class: "lv-chip-n"}))]));
+  const findBtn = h("button", {type: "button", class: "lv-findbtn", title: t("desk.live.find.open"), "aria-label": t("desk.live.find.open"), "aria-keyshortcuts": "/"});
+  const filterSaid = h("span", {class: "sub lv-filter-said", hidden: ""});
+  const tools = h("div", {class: "lv-tools", hidden: "", role: "toolbar", "aria-label": t("desk.live.filter.label")}, ...chipNodes.values(), filterSaid, h("span", {class: "lv-tools-sp"}), findBtn);
+  const findInput = h("input", {type: "search", class: "lv-find-in", placeholder: t("desk.live.find.ph"), "aria-label": t("desk.live.find.ph"), maxlength: "200", autocomplete: "off", spellcheck: "false"});
+  const findN = h("span", {class: "lv-find-n", "aria-live": "polite"});
+  const findUp = h("button", {type: "button", class: "lv-find-b", title: t("desk.live.find.prev"), "aria-label": t("desk.live.find.prev")}, "\u2191");
+  const findDown = h("button", {type: "button", class: "lv-find-b", title: t("desk.live.find.next"), "aria-label": t("desk.live.find.next")}, "\u2193");
+  const findShut = h("button", {type: "button", class: "lv-find-b", title: t("desk.live.find.close"), "aria-label": t("desk.live.find.close")}, "\u00d7");
+  const findWhere = h("div", {class: "lv-find-where", hidden: ""});
+  const findRow = h("div", {class: "lv-find", hidden: "", role: "search"}, h("div", {class: "lv-find-bar"}, findInput, findN, findUp, findDown, findShut), findWhere);
+  const toolsWrap = h("div", {class: "lv-toolswrap"}, tools, findRow);
+  // B18: where the person last looked, when they come back: a dashed line after that step, and what happened since
+  const sinceText = h("span", {class: "lv-since-t"});
+  const sinceSum = h("span", {class: "lv-since-s"});
+  const sinceSeen = h("button", {type: "button", class: "lv-since-ok"}, t("desk.live.since.seen"));
+  const sinceLi = h("li", {class: "lv-since", "data-id": "~since"}, h("div", {class: "lv-since-line"}, sinceText), h("div", {class: "lv-since-box"}, sinceSum, sinceSeen));
+  const root = h("section", {class: "lv", hidden: ""}, head, stale, barWrap, toolsWrap, feed, waitWrap, calm, life);
   const roundsHere = (box) => { if (box.parentNode !== root) root.insertBefore(box, stale); };
 
   link.addEventListener("click", () => {
@@ -705,8 +728,8 @@ const LIVE = (function () {
         return button;
       };
       out.push(h("div", {class: "tc-tabs", role: "tablist"}, pick("out", run ? "desk.live.call.output" : "desk.live.call.result"), input ? pick("in", "desk.live.call.input") : null, h("span", {class: "tc-sp"}),
-        run && exit !== null ? h("span", {class: "tc-exit " + (exit === 0 ? "ok" : "bad")}, t("desk.live.call.exit", {code: exit})) : null));
-    }
+        run && exit !== null ? h("span", {class: "tc-exit " + (exit === 0 ? "ok" : "bad")}, t("desk.live.call.exit", {code: exit})) : null, askButton(rec, exit)));
+    } else { const ask = askButton(rec, exit); if (ask) out.push(h("div", {class: "tc-askrow"}, ask)); }
     if (tab === "in") out.push(box(input, "tc-in"), d.input_cut ? note("desk.live.call.cut") : null);
     else for (const part of parts) out.push(...partNodes(rec, part));
     if (d.error) out.push(h("p", {class: "tc-error bad", role: "alert"}, String(d.error)));
@@ -733,6 +756,7 @@ const LIVE = (function () {
     tb.replaceChildren(...kids);
     const now = [...tb.querySelectorAll(".tc-box")];
     if (now.length === was.length) now.forEach((node, at) => { node.scrollTop = was[at]; });  // the same boxes: the reader's place in them stays
+    if (rec.onDrawn && d) { const call = rec.onDrawn; rec.onDrawn = null; requestAnimationFrame(() => call(rec)); }  // B20: a search waits for the call's detail to mark the hit in it
   }
 
   // --- scroll: follow the bottom only when the person is there; never move what they are reading --------------------------
@@ -768,6 +792,9 @@ const LIVE = (function () {
     for (const group of st.groups.values()) group.li.remove();
     st.groups.clear();
     st.head = ""; st.older = []; st.tail = []; st.reach = 0; st.seen = false; st.have = -1; st.loadingOlder = false;
+    st.filter = "all"; st.counts = null; st.since = null; st.loadingAll = null;  // B18, B19: a new round shows all of itself; the line of the last look belongs to the round it was put in
+    for (const node of st.hidPool || []) node.remove();
+    sinceLi.remove();
     earlier.disabled = false; earlierBad.hidden = true;
   }
   // The ids of the answer in the server's order, with the ones the page holds that the answer no longer has put back where they were (after the id that came before them).
@@ -828,19 +855,29 @@ const LIVE = (function () {
     }
     if (!nodes.includes(earlierLi)) nodes.unshift(earlierLi);
     const running = Boolean(data && data.bound && (data.started || data.state === "busy"));
-    const folded = fold(nodes, running, st.groups);
+    if (st.arriveDue && !root.hidden && !document.hidden && data && data.bound && !data.loading && ids.length) arrive();
+    const folded = st.filter && st.filter !== "all" ? filtered(nodes) : fold(nodes, running, st.groups);
+    if (!st.filter || st.filter === "all") for (const node of st.hidPool || []) node.remove();
+    for (const rec of nodes) if (rec && rec.el) rec.el.classList.toggle("lv-dim", Boolean(st.filter && st.filter !== "all" && THREAD.includes(rec.kind)));
     for (const node of [...feed.children]) if (node.classList.contains("fi-group") && !folded.includes(node)) node.remove();
     nodes.length = 0; nodes.push(...folded);
+    const lineAt = sinceAt(nodes);
+    if (lineAt >= 0) nodes.splice(lineAt, 0, sinceLi); else sinceLi.remove();
     let expected = feed.firstChild;
     for (const node of nodes) {
       if (node !== expected) feed.insertBefore(node, expected); else expected = expected.nextSibling;
     }
-    earlierLi.hidden = !(data && data.bound && ids.length && st.reach > 0);
+    earlierLi.hidden = !(data && data.bound && ids.length && st.reach > 0) || Boolean(st.filter && st.filter !== "all");
+    paintSince();
+    if (!findRow.hidden && fd.q && ids.length !== fd.size) refreshFind();
+    if (st.since && st.since.jump && sinceLi.isConnected && !root.hidden) { st.since.jump = false; toSince(); }
+    paintTools(data);
     paintCalm(data, items);
     paintLife(data);
     rcFollow(data);
     paintBar(data);
     queueWaits();
+    seenSoon();
     if (feed.querySelector(".st-run[data-since]") || life.querySelector(".st-run[data-since]")) { Status.clock(); Status.tick(); }
   }
 
@@ -1011,7 +1048,7 @@ const LIVE = (function () {
     const facts = data && data.round ? data.round : null;
     const runningSince = data && data.started ? Date.parse(data.started) : NaN;
     const took = rc.data && typeof rc.data.ms === "number" ? rc.data.ms : null;
-    const sig = JSON.stringify([me && me.text, facts, data && data.started, took]);
+    const sig = JSON.stringify([me && me.text, facts, data && data.started, took, st.filter]);
     if (sig !== barSig) {
       barSig = sig;
       setText(barText, me ? firstSentence(me.text) : "");
@@ -1022,6 +1059,7 @@ const LIVE = (function () {
         parts.push(h("span", {class: "rb-st", title: typeof facts.credits === "number" ? t("desk.live.receipt.credits", {n: rcCredits(facts.credits)}) : t("desk.live.receipt.credits.none")}, lineSvg(RB_ICONS.credits), h("b", null, typeof facts.credits === "number" ? rcCredits(facts.credits) : "-")));
         parts.push(h("span", {class: "rb-st", title: t("desk.live.receipt.calls", {n: facts.calls || 0})}, lineSvg(RB_ICONS.tools), h("b", null, String(facts.calls || 0))));
       }
+      if (st.filter && st.filter !== "all") parts.push(h("span", {class: "rb-filter"}, t(FILTER_WORD[st.filter] || FILTER_WORD.all)));  // B19: the page shows only some steps: said where the person looks
       barStats.replaceChildren(...parts);
       if (!isNaN(runningSince)) { Status.clock(); Status.tick(); }
     }
@@ -1035,12 +1073,13 @@ const LIVE = (function () {
   function placeBar() {
     const me = st.head ? st.nodes.get(st.head) : null;
     const show = Boolean(!root.hidden && st.data && st.data.bound && me && me.el.isConnected && barText.textContent);
-    if (!show) { bar.hidden = true; return; }
+    if (!show) { bar.hidden = true; if (toolsWrap.classList.contains("is-finding")) toolsWrap.style.top = barTop() + "px"; return; }
     const top = barTop();
     barWrap.style.top = top + "px";
     const past = me.el.getBoundingClientRect().bottom < top + 8;
     const feedEnd = feed.getBoundingClientRect().bottom > top + 60;
     bar.hidden = !(past && feedEnd);
+    if (toolsWrap.classList.contains("is-finding")) toolsWrap.style.top = (top + (bar.hidden ? 0 : bar.offsetHeight + 10)) + "px";  // B20: the search row stays in sight, under the title of the round
   }
   let barFrame = 0;
   window.addEventListener("scroll", () => { if (!barFrame) barFrame = requestAnimationFrame(() => { barFrame = 0; placeBar(); }); }, {passive: true});
@@ -1275,7 +1314,427 @@ const LIVE = (function () {
     });
   }
   function kick() { if (wanted() && !document.hidden && !st.timer && !st.busy) st.timer = setTimeout(loop, 0); }
-  document.addEventListener("visibilitychange", () => { if (document.hidden) { clearTimeout(st.timer); st.timer = 0; } else kick(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { clearTimeout(st.timer); st.timer = 0; } else { st.arriveDue = true; kick(); } });
+
+  // --- B19: show only some steps of the round (prototype 6 pin 3) ------------------------------------------------------------------------------------------
+  // The chips count the steps of the whole round: those on the page, and those the page has not loaded yet (the server counts them once per place: they are over and do not change). A chip
+  // shows only its steps, one row each, no groups; what the person and the agent said stays as a grey line to know where one is; the steps between are one line "N steps hidden". A filter
+  // first loads the whole round. A new round shows all of itself again.
+  const TOOLS_AT = 6;  // steps in the round before the row shows (a search or a filter on keeps it)
+  const THREAD = ["me", "text", "err"];
+  const isStep = (rec) => Boolean(rec && rec.el) && !THREAD.includes(rec.kind) && !(rec.kind === "note" && rec.item && rec.item.starts);
+  function facetsOf(rec) {
+    const item = rec.item || {}, out = [];
+    if (rec.kind === "tool") {
+      if (rec.el.classList.contains("is-fail")) out.push("fail");
+      if (item.kind === "edit" || item.kind === "create") out.push("change");
+      if (item.kind === "run") out.push("run");
+      if (rec.el.classList.contains("is-wait")) out.push("wait");
+    } else if (rec.kind === "ask" && item.st === "wait") out.push("wait");
+    return out;
+  }
+  st.hidPool = [];
+  function filtered(nodes) {
+    const out = [];
+    let hidden = 0, used = 0;
+    const flush = () => {
+      if (!hidden) return;
+      let li = st.hidPool[used];
+      if (!li) { li = h("li", {class: "fi lv-hid", "data-id": "~h" + used}); st.hidPool.push(li); }
+      setText(li, hidden === 1 ? t("desk.live.filter.hidden.one") : t("desk.live.filter.hidden", {n: hidden}));
+      used += 1; out.push(li); hidden = 0;
+    };
+    for (const node of nodes) {
+      const rec = node && node.el ? node : null;
+      if (!rec) { out.push(node); continue; }
+      if (!isStep(rec) || facetsOf(rec).includes(st.filter)) { flush(); rec.el.hidden = false; out.push(rec.el); continue; }
+      rec.el.hidden = true; out.push(rec.el); hidden += 1;
+    }
+    flush();
+    for (const li of st.hidPool.slice(used)) li.remove();
+    return out;
+  }
+  function paintTools(data) {
+    const recs = order().map((id) => st.nodes.get(id)).filter(Boolean);
+    const counts = {all: 0, fail: 0, change: 0, run: 0, wait: 0};
+    for (const rec of recs) { if (!isStep(rec)) continue; counts.all += 1; for (const name of facetsOf(rec)) counts[name] += 1; }
+    const extra = st.counts && st.counts.turn === st.turn && st.counts.before === st.reach ? st.counts : null;
+    if (st.reach > 0 && !extra) askCounts();
+    if (extra) for (const name of FILTERS) if (name !== "wait") counts[name] += Number(extra[name]) || 0;  // a step that was let go of waits no more
+    const on = st.filter && st.filter !== "all";
+    tools.hidden = !(data && data.bound && (counts.all >= TOOLS_AT || on || !findRow.hidden));
+    for (const [name, chip] of chipNodes) {
+      const mine = st.filter === name || (!on && name === "all");
+      chip.classList.toggle("on", mine);
+      chip.setAttribute("aria-pressed", String(mine));
+      setText(chip.lastChild, String(counts[name]) + (st.reach > 0 && !extra && name !== "wait" ? "+" : ""));
+      chip.disabled = !mine && name !== "all" && counts[name] === 0;
+    }
+  }
+  function askCounts() {
+    const key = st.turn + "|" + st.reach;
+    if (st.countsAsked === key || Date.now() - (st.countsFailed || 0) < 10000) return;
+    st.countsAsked = key;
+    const task = st.task, turn = st.turn, before = st.reach;
+    SERVE.post("/api/live", {task, counts: {turn, before}}).then((answer) => {
+      const found = answer && answer.counts;
+      if (task !== st.task || turn !== st.turn || !found || found.turn !== turn) return;
+      st.counts = found;
+      paintTools(st.data);
+    }, () => { st.countsAsked = ""; st.countsFailed = Date.now(); });
+  }
+  // The whole round on the page: every step the page has not loaded, from the file, at once (a filter, a search). One question at a time; the place of the reader stays.
+  function loadAll() {
+    if (!st.turn || st.reach <= 0) return Promise.resolve(true);
+    if (st.loadingAll) return st.loadingAll;
+    const task = st.task, turn = st.turn, epoch = st.epoch;
+    st.loadingAll = SERVE.post("/api/live", {task, before: {turn, i: st.reach}, all: true}).then((answer) => {
+      st.loadingAll = null;
+      if (epoch !== st.epoch || task !== st.task) return false;
+      const found = (answer && answer.older) || {items: [], before: null};
+      const fresh = (found.items || []).filter((item) => item.k !== "me" && !st.full.has(item.id));
+      for (const item of fresh) st.full.set(item.id, item);
+      st.older = [...new Set([...fresh.map((item) => item.id), ...st.older])];
+      st.reach = found.before ? found.before.i || 0 : 0;
+      const keep = new Set(order());
+      if (st.data) view(() => show(st.data, null, true), (node) => node !== earlierLi && keep.has(node.dataset.id));
+      return true;
+    }, (error) => { st.loadingAll = null; throw error; });
+    return st.loadingAll;
+  }
+  function toolsInView() {  // after a change of filter the row stays where the person looks: brought under the title bar when it went above
+    const box = toolsWrap.getBoundingClientRect(), top = barTop();
+    if (box.top < top || box.top > window.innerHeight - 80) window.scrollBy({top: box.top - top - 8, behavior: "instant"});
+  }
+  function setFilter(name) {
+    st.filter = name === st.filter || !FILTERS.includes(name) ? "all" : name;  // the chip that is on, again: back to All
+    filterSaid.hidden = true;
+    const draw = () => { if (st.data) { show(st.data, null, false); toolsInView(); } };
+    if (st.filter !== "all" && st.reach > 0) {
+      setText(filterSaid, t("desk.live.filter.loading")); filterSaid.hidden = false;
+      loadAll().then(() => { filterSaid.hidden = true; draw(); }, (error) => { setText(filterSaid, (error && error.message) || String(error)); });
+    }
+    draw();
+  }
+  for (const [name, chip] of chipNodes) chip.addEventListener("click", () => setFilter(name));
+
+  // --- B20: search the whole round (prototype 6 pin 4) ---------------------------------------------------------------------------------------------------
+  // The server looks in every part of the round (`/api/live {find: {turn, q}}`): the words, the thoughts, every call's command, input, output and diff, also those folded and those not loaded.
+  // ↑ ↓ (Enter, Shift+Enter) go from hit to hit: the round is loaded whole when needed, the group opens, the step opens on the tab of the hit, and every place of the words in it is marked
+  // (the CSS highlight of the browser: nothing in the page is changed). Only this round.
+  const MARK = typeof window.Highlight === "function" ? window.Highlight : null;  // the browser's own: the page's syntax colouring (highlight.js) has the name `Highlight` too
+  const HL = Boolean(typeof CSS !== "undefined" && CSS.highlights && MARK);
+  const fd = {q: "", hits: [], at: -1, more: false, timer: 0, seq: 0};
+  const REGION = {command: ".tc-cmd", input: ".tc-in", output: ".tc-body .tc-box:not(.tc-in)", diff: ".tc-body", text: ".tx", think: ".tx", me: ".me-tx", ask: ".fb", line: ".tc-line", note: ".note-tx"};
+  function openFind() {
+    findRow.hidden = false;
+    toolsWrap.classList.add("is-finding");
+    placeBar();
+    paintTools(st.data);
+    findInput.focus();
+    findInput.select();
+  }
+  function shutFind() {
+    clearTimeout(fd.timer);
+    fd.seq += 1; fd.q = ""; fd.hits = []; fd.at = -1; fd.more = false;
+    findInput.value = "";
+    findRow.hidden = true;
+    toolsWrap.classList.remove("is-finding");
+    toolsWrap.style.top = "";
+    findWhere.hidden = true;
+    setText(findN, "");
+    clearMarks();
+    if (st.data) paintTools(st.data);
+  }
+  function clearMarks() { if (HL) { CSS.highlights.delete("lv-find"); CSS.highlights.delete("lv-find-now"); } }
+  function runFind(now) {
+    clearTimeout(fd.timer);
+    const q = findInput.value.trim();
+    if (!q) { fd.seq += 1; fd.q = ""; fd.hits = []; fd.at = -1; paintFind(); clearMarks(); return; }
+    fd.timer = setTimeout(() => {
+      const seq = ++fd.seq, task = st.task, turn = st.turn;
+      setText(findN, t("desk.live.find.busy"));
+      SERVE.post("/api/live", {task, find: {turn, q}}).then((answer) => {
+        if (seq !== fd.seq || task !== st.task) return;
+        const found = (answer && answer.find) || {};
+        fd.q = q; fd.hits = Array.isArray(found.hits) ? found.hits : []; fd.more = Boolean(found.more); fd.at = -1; fd.size = order().length;
+        if (fd.hits.length) goHit(0); else { paintFind(); clearMarks(); }
+      }, (error) => { if (seq === fd.seq) setText(findN, (error && error.message) || String(error)); });
+    }, now ? 0 : 250);
+  }
+  // The round grew while the search is open: asked again (at most every 3 s), the count changes, the place the person is at stays
+  function refreshFind() {
+    fd.size = order().length;
+    if (fd.refreshing || Date.now() - (fd.refreshed || 0) < 3000) return;
+    fd.refreshing = true;
+    const seq = fd.seq, task = st.task, q = fd.q, was = fd.hits[fd.at];
+    SERVE.post("/api/live", {task, find: {turn: st.turn, q}}).then((answer) => {
+      fd.refreshing = false; fd.refreshed = Date.now();
+      if (seq !== fd.seq || task !== st.task || q !== fd.q) return;
+      const found = (answer && answer.find) || {};
+      fd.hits = Array.isArray(found.hits) ? found.hits : []; fd.more = Boolean(found.more);
+      const again = was ? fd.hits.findIndex((one) => one.id === was.id && one.where === was.where && one.line === was.line) : -1;
+      fd.at = again >= 0 ? again : Math.min(fd.at, fd.hits.length - 1);
+      paintFind();
+    }, () => { fd.refreshing = false; fd.refreshed = Date.now(); });
+  }
+  function whereWords(hit) {
+    const item = st.full.get(hit.id);
+    const base = hit.where === "line" ? "" : hit.where === "output" ? t("desk.live.find.where.output", {line: hit.line}) : (WHERE_WORD[hit.where] ? t(WHERE_WORD[hit.where]) : "");
+    const what = item && item.k === "tool" ? [wordOf(item), item.target || ""].filter(Boolean).join(" ").replace(/\s+/g, " ").slice(0, 90) : "";
+    return [base, what].filter(Boolean).join(" · ") || t("desk.live.find.where.line");
+  }
+  function paintFind() {
+    const count = fd.hits.length;
+    setText(findN, !fd.q ? "" : !count ? t("desk.live.find.none") : t(fd.more ? "desk.live.find.n.more" : "desk.live.find.n", {at: Math.max(1, fd.at + 1), n: count}));
+    findN.classList.toggle("bad", Boolean(fd.q) && !count);
+    findUp.disabled = findDown.disabled = count < 2;
+    const hit = fd.hits[fd.at];
+    findWhere.hidden = !hit;
+    if (hit) findWhere.replaceChildren(h("span", {class: "lv-find-w"}, whereWords(hit)), h("span", {class: "lv-find-snip"}, hit.snip[0], h("mark", null, hit.snip[1]), hit.snip[2]));
+  }
+  function goHit(at) {
+    if (!fd.hits.length) return;
+    fd.at = (at + fd.hits.length) % fd.hits.length;
+    const hit = fd.hits[fd.at], seq = fd.seq;
+    paintFind();
+    const step = () => {
+      if (seq !== fd.seq || hit !== fd.hits[fd.at]) return;
+      const rec = st.nodes.get(hit.id);
+      if (!rec) { setText(findN, t("desk.live.find.gone")); return; }
+      if (st.filter !== "all" && rec.el.hidden) { st.filter = "all"; show(st.data, null, false); }
+      for (const group of st.groups.values()) if (group.members.includes(rec) && !group.open) { group.open = true; paintGroup(group); }
+      paintFind();
+      const nth = fd.hits.slice(0, fd.at).filter((one) => one.id === hit.id && one.where === hit.where).length;
+      const mark = () => markHit(rec, hit, nth, false);
+      if (rec.kind === "tool" && ["command", "input", "output", "diff"].includes(hit.where) && canOpen(rec)) {
+        const tab = hit.where === "input" ? "in" : "out";
+        if (hit.where === "output" && hit.line <= hit.lines - OUT_TAIL) rec.all = true;  // above the last lines shown first
+        const redraw = rec.tab !== tab || (hit.where === "output" && rec.all);
+        rec.tab = tab;
+        if (!rec.open) { rec.open = true; syncOpen(rec); rec.onDrawn = mark; fetchCall(rec); }
+        else if (!rec.detail || rec.loading) rec.onDrawn = mark;
+        else { if (redraw) drawBody(rec); mark(); }
+        rec.el.scrollIntoView({block: "center"});
+        return;
+      }
+      if (rec.kind === "think" && !rec.open && rec.item && rec.item.text) { rec.open = true; paintThought(rec, rec.item); }
+      if (rec.kind === "text" && rec.foldable && !rec.open) { rec.open = true; applyFold(rec); }
+      if (rec.kind === "me" && !rec.mopen) { rec.mopen = true; paintMe(rec); }
+      if (rec.kind === "ask" && !rec.open && rec.item && rec.item.st !== "wait") { rec.open = true; paintAsk(rec, rec.item); }
+      mark();
+    };
+    if (!st.full.has(hit.id) && st.reach > 0) loadAll().then(step, (error) => { setText(findN, (error && error.message) || String(error)); });
+    else step();
+  }
+  function rangesIn(node, needle) {
+    const out = [];
+    if (!node || !needle) return out;
+    const walk = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walk.nextNode(); text && out.length < 400; text = walk.nextNode()) {
+      const low = text.nodeValue.toLowerCase();
+      for (let at = low.indexOf(needle); at >= 0 && out.length < 400; at = low.indexOf(needle, at + needle.length)) {
+        const range = document.createRange();
+        range.setStart(text, at); range.setEnd(text, at + needle.length);
+        out.push(range);
+      }
+    }
+    return out;
+  }
+  function markHit(rec, hit, nth, again) {
+    if (!rec.el.isConnected) return;
+    const needle = fd.q.toLowerCase();
+    const region = rec.el.querySelector(REGION[hit.where] || ".fb") || rec.el;
+    let ranges = rangesIn(region, needle);
+    if (!ranges.length && rec.kind === "tool" && hit.where === "output" && !rec.all && !again) { rec.all = true; drawBody(rec); markHit(rec, hit, nth, true); return; }  // cut from the tail shown first
+    if (!ranges.length) ranges = rangesIn(rec.el, needle);
+    const now = ranges.length ? ranges[Math.min(nth, ranges.length - 1)] : null;
+    if (HL) {
+      if (ranges.length) CSS.highlights.set("lv-find", new MARK(...ranges)); else CSS.highlights.delete("lv-find");
+      if (now) CSS.highlights.set("lv-find-now", new MARK(now)); else CSS.highlights.delete("lv-find-now");
+    }
+    const holder = now ? (now.startContainer.parentElement || rec.el).closest(".tc-box, .tx, .dv-body, .tc-body") : null;  // a box with its own scroll: its place first
+    if (holder && holder.scrollHeight > holder.clientHeight + 2) { const inner = now.getBoundingClientRect(), outer = holder.getBoundingClientRect(); holder.scrollTop += inner.top - outer.top - holder.clientHeight / 2; }
+    const box = now ? now.getBoundingClientRect() : rec.el.getBoundingClientRect();
+    const top = Math.max(barTop() + 70, toolsWrap.classList.contains("is-finding") ? toolsWrap.getBoundingClientRect().bottom + 24 : 0), bottom = window.innerHeight - 110;  // below the search row that stays on top
+    if (box.top < top || box.bottom > bottom) window.scrollBy({top: box.top - (top + bottom) / 2, behavior: "instant"});
+    flash(rec.el);
+  }
+  findBtn.append(svg(ICONS.search, 15));
+  findBtn.addEventListener("click", () => (findRow.hidden ? openFind() : shutFind()));
+  findInput.addEventListener("input", () => runFind(false));
+  findInput.addEventListener("keydown", (event) => {
+    if (event.isComposing) return;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (findInput.value.trim() !== fd.q) runFind(true); else goHit(fd.at + (event.shiftKey ? -1 : 1));
+    } else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); shutFind(); findBtn.focus({preventScroll: true}); }
+    else if (event.key === "ArrowDown") { event.preventDefault(); goHit(fd.at + 1); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); goHit(fd.at - 1); }
+  });
+  findUp.addEventListener("click", () => goHit(fd.at - 1));
+  findDown.addEventListener("click", () => goHit(fd.at + 1));
+  findShut.addEventListener("click", () => { shutFind(); findBtn.focus({preventScroll: true}); });
+  document.addEventListener("keydown", (event) => {  // / opens the search; so does Ctrl+F (Cmd+F) while the Live tab is shown, and once more inside the box gives the browser's own
+    if (root.hidden || !st.data || !st.data.bound || event.isComposing || event.defaultPrevented) return;
+    if (typeof SERVE !== "undefined" && SERVE.open && SERVE.open()) return;
+    const inField = event.target instanceof Element && (/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) || event.target.isContentEditable);
+    if (event.key === "/" && !inField && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); openFind(); return; }
+    if ((event.key === "f" || event.key === "F") && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && document.activeElement !== findInput && !inField) { event.preventDefault(); openFind(); }
+  });
+
+  // --- B18: back after you left (prototype 6 pin 2) -----------------------------------------------------------------------------------------------------
+  // While the Live tab is seen, the last step in the window is kept in this browser, per task (it only moves down in a round). When the person comes back (the page opened again, the tab or the
+  // window shown again) after a minute or more, and the round has steps after that one, a dashed line goes after it with what happened since: steps done, failed, what waits; the page goes to it.
+  // Mark as seen takes it away. The line stays while the person reads on; the next return puts a new one.
+  const SEEN_KEY = "harness.live.seen", AWAY_MS = 60000, SEEN_TASKS = 60;
+  function seenAll() { try { const all = JSON.parse(localStorage.getItem(SEEN_KEY) || "{}"); return all && typeof all === "object" ? all : {}; } catch (error) { return {}; } }
+  function seenOf(task) { const one = seenAll()[task]; return one && typeof one === "object" && typeof one.ms === "number" && typeof one.id === "string" ? one : null; }
+  function keepSeen(mark) {
+    try {
+      const all = seenAll();
+      all[st.task] = mark;
+      const names = Object.keys(all);
+      if (names.length > SEEN_TASKS) { names.sort((a, b) => ((all[a] || {}).ms || 0) - ((all[b] || {}).ms || 0)); for (const name of names.slice(0, names.length - SEEN_TASKS)) delete all[name]; }
+      localStorage.setItem(SEEN_KEY, JSON.stringify(all));
+    } catch (error) { /* no storage: no line */ }
+  }
+  let seenFrame = 0, seenSig = "";
+  const seenSoon = () => { if (!seenFrame) seenFrame = requestAnimationFrame(noteSeen); };
+  window.addEventListener("scroll", seenSoon, {passive: true});
+  function lastSeenId() {
+    let found = "";
+    const end = window.innerHeight - 60;
+    for (const node of feed.children) {
+      if (node.hidden || !node.dataset || !node.dataset.id) continue;
+      const box = node.getBoundingClientRect();
+      if (!box.height) continue;
+      if (box.top >= end) break;
+      const id = node.dataset.id;
+      if (id.startsWith("~g:")) { const group = [...st.groups.values()].find((one) => one.li === node); const last = group && group.members[group.members.length - 1]; if (last && last.item) found = last.item.id; }
+      else if (!id.startsWith("~")) found = id;
+    }
+    return found;
+  }
+  function noteSeen() {
+    seenFrame = 0;
+    if (document.hidden || root.hidden || st.arriveDue || !st.task || !st.turn || !st.data || !st.data.bound) return;
+    const id = lastSeenId();
+    if (!id) return;
+    const ids = order(), old = seenOf(st.task);
+    const keepId = old && old.turn === st.turn && ids.indexOf(old.id) > ids.indexOf(id) ? old.id : id;  // reading up does not move it back
+    const sig = st.turn + "|" + keepId, now = Date.now();
+    if (sig === seenSig && old && now - old.ms < 5000) return;
+    seenSig = sig;
+    keepSeen({turn: st.turn, id: keepId, ms: now});
+  }
+  function arrive() {
+    st.arriveDue = false;
+    const mark = seenOf(st.task);
+    if (!mark || Date.now() - mark.ms < AWAY_MS) return;
+    const ids = order();
+    let at = -1;
+    const fresh = mark.turn !== st.turn;
+    if (!fresh) { at = ids.indexOf(mark.id); if (at < 0 && !(st.reach > 0)) return; }
+    else at = ids.indexOf(st.head);
+    const after = ids.slice(at + 1).map((id) => st.full.get(id)).filter(Boolean);
+    if (!after.some((item) => item.k !== "me")) return;
+    st.since = {id: at >= 0 ? ids[at] : "", ms: mark.ms, fresh, jump: true, away: Date.now() - mark.ms, sig: ""};
+  }
+  function sinceAt(nodes) {  // where the line goes among the nodes of the feed: after the step last seen, else at the top of what is loaded
+    const since = st.since;
+    if (!since || !st.data || !st.data.bound) return -1;
+    if (since.id) {
+      const rec = st.nodes.get(since.id);
+      const at = rec ? nodes.indexOf(rec.el) : -1;
+      if (at < 0) { st.since = null; return -1; }
+      let end = at + 1;
+      while (end < nodes.length && nodes[end] === earlierLi) end += 1;
+      return end;
+    }
+    const top = nodes.indexOf(earlierLi);
+    return top >= 0 ? top + 1 : 0;
+  }
+  function paintSince() {
+    const since = st.since;
+    if (!since) return;
+    const ids = order();
+    const at = since.id ? ids.indexOf(since.id) : -1;
+    let done = 0, failed = 0;
+    for (const id of ids.slice(at + 1)) {
+      const rec = st.nodes.get(id);
+      if (!rec || !isStep(rec)) continue;
+      if (!rec.el.classList.contains("is-run") && !rec.el.classList.contains("is-wait") && !(rec.kind === "think" && rec.item && rec.item.run)) done += 1;
+      if (rec.el.classList.contains("is-fail")) failed += 1;
+    }
+    const waits = waitsNow().count;
+    const time = new Date(since.ms).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+    const plus = !since.id && st.reach > 0 ? "+" : "";
+    const sig = [since.fresh, time, done, failed, waits, plus].join("|");
+    if (sig === since.sig) return;
+    since.sig = sig;
+    setText(sinceText, t(since.fresh ? "desk.live.since.new" : "desk.live.since.line", {time}));
+    const num = (value, key, cls) => h("span", {class: "lv-since-n" + (cls ? " " + cls : "")}, t(key, {n: String(value) + (key === "desk.live.since.done" ? plus : "")}));
+    sinceSum.replaceChildren(...[h("span", null, t("desk.live.since.away", {time: clock(since.away / 1000)})), num(done, "desk.live.since.done"),
+      failed ? num(failed, "desk.live.since.fail", "bad") : null, waits ? num(waits, "desk.live.since.wait", "hot") : null].filter(Boolean));
+  }
+  // The page goes to the line once it is drawn; and again a moment later if what loads above it (the receipt, the cards) pushed it away and the person has not moved the page themself.
+  let moved = false;
+  for (const name of ["wheel", "touchstart", "keydown", "mousedown"]) window.addEventListener(name, () => { moved = true; }, {passive: true, capture: true});
+  function toSince() {
+    moved = false;
+    const go = () => { if (!sinceLi.isConnected || root.hidden) return; const box = sinceLi.getBoundingClientRect(), top = barTop() + 70; if (Math.abs(box.top - top) > 40) window.scrollBy({top: box.top - top, behavior: "instant"}); };
+    requestAnimationFrame(go);
+    for (const wait of [400, 1200]) setTimeout(() => { if (!moved) go(); }, wait);
+  }
+  sinceSeen.addEventListener("click", () => {
+    const next = sinceLi.nextElementSibling;
+    st.since = null;
+    sinceLi.remove();
+    const target = next && next.querySelector("button:not([disabled])");  // the keyboard stays where the line was
+    if (target) target.focus({preventScroll: true});
+    const ids = order();
+    if (ids.length) { keepSeen({turn: st.turn, id: ids[ids.length - 1], ms: Date.now()}); seenSig = ""; }
+  });
+
+  // --- B17: ask about this (prototype 6 pin 1) ----------------------------------------------------------------------------------------------------------
+  // An opened call has Ask: the reply box gets a quote of it (which step, the command, its exit) and the lines the person selected in it, else the last lines of its output or the start of its
+  // diff; the person adds a sentence. The agent gets the quote and the words as one message.
+  const QUOTE_LINES = 30, QUOTE_CHARS = 3000, QUOTE_TAIL = 5;
+  function pickedIn(node) {
+    const sel = window.getSelection();
+    if (!node || !sel || sel.isCollapsed || !sel.rangeCount) return "";
+    return node.contains(sel.getRangeAt(0).commonAncestorContainer) ? sel.toString() : "";
+  }
+  function quoteOf(rec, picked, exit) {
+    const item = rec.item || {}, d = rec.detail || {};
+    const calls = order().filter((id) => (st.full.get(id) || {}).k === "tool");
+    const n = !rec.fixed && !rec.subCall && st.reach === 0 ? calls.indexOf(item.id) + 1 : 0;
+    const what = (d.command ? String(d.command) : [wordOf(item), item.target || ""].filter(Boolean).join(" ")).replace(/\s+/g, " ").trim().slice(0, 200);  // a command says its program itself
+    const title = [n > 0 ? t("desk.live.ask.step", {n}) : "", what, typeof exit === "number" ? t("desk.live.call.exit", {code: exit}) : ""].filter(Boolean).join(" · ");
+    let lines = [];
+    if (picked.trim()) lines = picked.replace(/\s+$/, "").split("\n");
+    else {
+      const parts = Array.isArray(d.parts) ? d.parts : [];
+      const diff = parts.find((part) => part && part.k === "diff" && Array.isArray(part.files) && part.files.length);
+      const said = parts.find((part) => part && ["term", "text", "file"].includes(part.k) && String(part.text || "").trim());
+      if (diff) { const file = diff.files[0]; lines = [String(file.path || "")].concat((Array.isArray(file.lines) ? file.lines : []).slice(0, 12).map(String)); }
+      else if (said) lines = String(said.text).replace(/\s+$/, "").split("\n").slice(-QUOTE_TAIL);
+      else if (d.error || d.reason) lines = [String(d.error || d.reason)];
+    }
+    if (lines.length > QUOTE_LINES) lines = lines.slice(0, QUOTE_LINES).concat("…");
+    let text = lines.join("\n");
+    if (text.length > QUOTE_CHARS) text = text.slice(0, QUOTE_CHARS) + "…";
+    return {title, lines: text ? text.split("\n") : []};
+  }
+  function askButton(rec, exit) {
+    if (typeof REPLY === "undefined" || !REPLY.quote || !REPLY.shown()) return null;
+    const button = h("button", {type: "button", class: "tc-ask", title: t("desk.live.ask.about.tip")}, svg(ICONS.ask, 13), h("span", null, t("desk.live.ask.about")));
+    let picked = "";
+    button.addEventListener("mousedown", () => { picked = pickedIn(rec.tb); });  // before the click takes the selection away
+    button.addEventListener("click", () => { const chosen = picked || pickedIn(rec.tb); picked = ""; REPLY.quote(quoteOf(rec, chosen, exit)); });
+    return button;
+  }
 
   // --- what the page gives -------------------------------------------------------------------------------------------------
   return {
@@ -1285,6 +1744,7 @@ const LIVE = (function () {
       if (info.task !== st.task) {  // another task: nothing of the first one is kept
         st.task = info.task; st.rev = ""; st.data = null; st.fails = 0; st.turn = "";
         forget();
+        st.arriveDue = true; shutFind();
         PANEL.reset();
         show(null);
       }
@@ -1347,6 +1807,6 @@ const LIVE = (function () {
       list.append(...fold(recs, false, new Map()));
       return list;
     },
-    visible(on) { root.hidden = !on; if (on) kick(); },
+    visible(on) { const was = root.hidden; root.hidden = !on; if (on && was) st.arriveDue = true; if (on) kick(); },
   };
 })();

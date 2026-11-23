@@ -380,3 +380,66 @@ button.lt-back{background:none;font:12px var(--sans);cursor:pointer}
 @keyframes lvflash{0%{box-shadow:0 0 0 0 var(--hot)}30%{box-shadow:0 0 0 4px var(--hot)}100%{box-shadow:0 0 0 0 transparent}}
 .lv-flash{animation:lvflash 1.5s ease-out;border-radius:12px}
 @media (max-width:560px){.wb-l{display:none!important}.lv-waitbar{gap:6px;padding:6px 8px}}
+/* B19, B20: the row over the round: show only some steps, and search the whole round */
+.lv-toolswrap{margin:2px 0 8px}
+.lv-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.lv-tools[hidden],.lv-find[hidden],.lv-find-where[hidden],.lv-filter-said[hidden]{display:none}
+.lv-tools-sp{flex:1}
+.lv-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--soft);font:12.5px var(--sans);cursor:pointer;white-space:nowrap}
+.lv-chip:hover:not(:disabled){color:var(--ink);background:var(--hover)}
+.lv-chip.on{border-color:var(--ink);color:var(--ink);background:var(--hover)}
+.lv-chip:disabled{opacity:.45;cursor:default}
+.lv-chip-n{font-weight:500;color:var(--soft);font-variant-numeric:tabular-nums}
+.lv-chip[data-filter="fail"] .lv-chip-n:not(:empty){color:var(--bad)}
+.lv-chip[data-filter="wait"] .lv-chip-n:not(:empty){color:var(--hot)}
+.lv-chip[data-filter="fail"]:disabled .lv-chip-n,.lv-chip[data-filter="wait"]:disabled .lv-chip-n{color:var(--soft)}
+.lv-filter-said{font-size:12px}
+.lv-findbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;border:1px solid var(--line2);border-radius:8px;background:transparent;color:var(--soft);cursor:pointer}
+.lv-findbtn:hover{color:var(--ink);background:var(--hover)}
+.lv-find{margin-top:8px}
+.lv-find-bar{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);min-width:0}
+.lv-find-bar:focus-within{border-color:var(--ink)}
+.lv-find-in{flex:1;min-width:60px;border:0;outline:0;background:transparent;color:var(--ink);font:13.5px var(--sans);padding:4px 0}
+.lv-find-n{flex:none;color:var(--soft);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.lv-find-n.bad{color:var(--bad)}
+.lv-find-b{flex:none;width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:var(--soft);font:15px var(--sans);cursor:pointer}
+.lv-find-b:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+.lv-find-b:disabled{opacity:.4;cursor:default}
+.lv-find-where{display:flex;flex-wrap:wrap;gap:2px 10px;margin:6px 2px 0;font-size:12px;color:var(--soft);min-width:0}
+.lv-find-w{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.lv-find-snip{font:12px var(--mono);overflow-wrap:anywhere;min-width:0}
+.lv-find-snip mark{background:rgba(255,180,0,.32);color:var(--ink);border-radius:3px;padding:0 1px}
+::highlight(lv-find){background-color:rgba(255,180,0,.3);color:inherit}
+::highlight(lv-find-now){background-color:rgba(255,150,0,.85);color:#111}
+.fi.lv-hid{padding:3px 0 3px 22px;font-size:12px;color:var(--soft)}
+.fi.lv-hid::before{content:"";position:absolute;left:1px;top:50%;width:7px;height:1px;background:var(--line2)}
+.fi.lv-dim .fb{opacity:.55}
+.fi.lv-dim .tx,.fi.lv-dim .me-tx{max-height:1.55em;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent)}
+.fi.lv-dim .lv-folds,.fi.lv-dim .me-all,.fi.lv-dim .me-files{display:none!important}
+.rb-filter{padding:1px 8px;border:1px solid var(--ink);border-radius:999px;color:var(--ink);font-size:11.5px}
+/* B18: since you last looked */
+.lv-since{display:block;padding:8px 0 10px;list-style:none}
+.lv-since-line{display:flex;align-items:center;gap:10px;color:var(--hot);font-size:12.5px;white-space:nowrap}
+.lv-since-line::before,.lv-since-line::after{content:"";flex:1;border-top:1px dashed var(--hot-line)}
+.lv-since-t{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lv-since-box{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px;padding:8px 12px;border:1px solid var(--hot-line);border-radius:10px;background:var(--hot-bg);font-size:12.5px;color:var(--ink)}
+.lv-since-s{display:flex;flex-wrap:wrap;gap:4px 14px;flex:1;min-width:0}
+.lv-since-n{font-variant-numeric:tabular-nums;white-space:nowrap}.lv-since-n.bad{color:var(--bad)}.lv-since-n.hot{color:var(--hot)}
+.lv-since-ok{flex:none;padding:3px 11px;border:1px solid var(--line2);border-radius:999px;background:var(--card);color:var(--ink);font:12.5px var(--sans);cursor:pointer}
+.lv-since-ok:hover{background:var(--hover)}
+/* B17: ask about this step */
+.tc-ask{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:2px 10px;border:1px solid var(--line2);border-radius:999px;background:var(--card);color:var(--ink);font:12px var(--sans);cursor:pointer;white-space:nowrap}
+.tc-ask:hover{background:var(--hover)}.tc-ask svg{width:13px;height:13px}
+.tc-askrow{display:flex;justify-content:flex-end;border-top:0!important;padding-bottom:0!important}
+.rp-quote{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;padding:7px 8px 7px 10px;border-left:3px solid var(--hot);border-radius:6px;background:var(--hover);font-size:12.5px;color:var(--soft);min-width:0}
+.rp-quote[hidden]{display:none}
+.rp-quote-m{flex:none;color:var(--hot)}
+.rp-quote-b{flex:1;min-width:0}
+.rp-quote-b b{display:block;color:var(--ink);font-weight:550;overflow-wrap:anywhere}
+.rp-quote-l{margin:4px 0 0;font:12px/1.45 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:6.5em;overflow:hidden}
+.rp-quote-x{flex:none;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;background:transparent;color:var(--soft);cursor:pointer}
+.rp-quote-x:hover{background:var(--card);color:var(--ink)}
+@media (max-width:560px){.lv-chip{padding:3px 8px}.lv-find-where{display:none}}
+.lv-toolswrap.is-finding{position:sticky;z-index:14;padding:6px 0 8px;background:var(--card);box-shadow:0 10px 12px -10px rgba(0,0,0,.35)}
+.lv-find-bar .lv-find-in{border:0!important;box-shadow:none!important;background:transparent!important;padding:4px 0!important;height:auto;min-height:0}
+.lv-find-in::-webkit-search-cancel-button{display:none}

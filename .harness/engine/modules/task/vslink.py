@@ -498,6 +498,52 @@ class VsLink:
         except Exception:  # a page's question must not break the link
             return nothing
 
+    def _whole_turn(self, task: str, turn: str) -> Optional[Dict[str, Any]]:
+        """Turn `turn` of the task's chats with every part, for a search (B20): from memory when it holds the turn whole; else the task's stream file (the bound chat, else any of the task's), with
+        the parts memory has and the file not yet (the newest of a turn that runs) after them. None when neither has it. The parts are copied under the lock; the file is read after it."""
+        with self.lock:
+            binding = self.bound.get(task) if self.ready else None
+            chat = str(binding["chat"]) if binding else ""
+            state = (self.chats.get(chat) or {}).get("state") if chat else None
+            held = None
+            if isinstance(state, dict):
+                one = next((one for one in chatlive.all_turns(state) if str(one.get("id") or "") == turn), None)
+                if one is not None:
+                    held = dict(one, responseParts=[dict(part) for part in one.get("responseParts") or [] if isinstance(part, dict)])
+        if held is not None and not held.get("dropped"):
+            return held
+        found = next((one for one in chatstream.read(self.root, task, chat or None)["turns"] if one["id"] == turn and not one.get("sub")), None)
+        if found is None:
+            return held
+        known = {chatlive.part_id(part) for part in found["parts"]}
+        extra = [part for part in (held or {}).get("responseParts") or [] if chatlive.part_id(part) and chatlive.part_id(part) not in known]
+        view = dict(found, parts=list(found["parts"]) + extra)
+        if held is not None and isinstance(held.get("message"), dict):
+            view["message"] = held["message"]
+        return view
+
+    def find(self, task: str, turn: str, query: str) -> Dict[str, Any]:
+        """(B20) Where `query` is in turn `turn` of the task's chat, every part of it, also those memory let go of: `chatlive.search` and `{turn}`. Not found, any failure: no hit. Never raises."""
+        nothing: Dict[str, Any] = {"hits": [], "more": False, "turn": turn if isinstance(turn, str) else ""}
+        try:
+            if not isinstance(turn, str) or not turn or not isinstance(query, str):
+                return nothing
+            whole = self._whole_turn(task, turn)
+            if whole is None:
+                return nothing
+            return dict(chatlive.search(whole, query, self.root), turn=turn)
+        except Exception:  # a page's question must not break the link
+            return nothing
+
+    def counts(self, task: str, turn: str, before: int) -> Dict[str, Any]:
+        """(B19) How many of the steps of turn `turn` before part `before` (those the page has not loaded) are in each filter: `chatlive.facets`, with `{turn, before}`. Those steps are over: they do
+        not change, so the page asks once per place. Never raises."""
+        try:
+            found = self.older(task, turn, before, 1000000) if isinstance(before, int) and not isinstance(before, bool) and before > 0 else {"items": []}
+            return dict(chatlive.facets(found["items"]), turn=turn, before=before)
+        except Exception:  # a page's question must not break the link
+            return dict(chatlive.facets([]), turn=turn, before=before)
+
     def sub(self, task: str, call: str, have: int = -1) -> Dict[str, Any]:
         """The whole chat of the subagent that tool call `call` of the task's chat started, for the side panel (B4a): `{call, title, st, items, turn, n, usage: {calls, ms?}}`. `items`: all the items of all the
         turns of that chat in order (`chatlive.build_all`), the first of each turn is the prompt the subagent was given (kind `me`). `st`: `run`, `wait`, `done` or `fail` (as on the call's summary); `turn`: the id

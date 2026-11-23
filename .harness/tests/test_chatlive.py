@@ -588,6 +588,50 @@ class WholeTurnTests(unittest.TestCase):
         self.assertEqual(chatlive.items_of(dict(turn, parts=[dict(tool("c1", "running"), i=0)]), False, {})[1]["st"], "stop")  # not running: a call left open is `stop`
 
 
+class SearchTests(unittest.TestCase):
+    """B19, B20: the counts of the filter and the search of a whole round."""
+
+    def turn(self) -> Dict[str, Any]:
+        run = tool("c1", "failed", toolInput={"command": "python3 -m pytest -q"}, content=[{"type": "terminal", "result": {"preview": "..F\nFAILED test_retry_on_429\n1 failed", "exitCode": 1}}])
+        edit = {"kind": "toolCall", "toolCall": {"toolCallId": "e1", "toolName": "apply_patch", "status": "completed", "toolInput": "*** Begin Patch", "content": [{"type": "text", "text": "diff --git a/src/r.py b/src/r.py\n--- a/src/r.py\n+++ b/src/r.py\n@@ -1 +1 @@\n-RETRY_ON = (500,)\n+RETRY_ON = (429, 500)\n"}]}}
+        return {"id": "t", "message": {"text": "Keep the Retry rules", "origin": {"kind": "user"}}, "responseParts": [text("m1", "Looking at retry now.\nSecond line"), {"kind": "reasoning", "id": "r1", "content": "the retry path"}, run, edit]}
+
+    def test_a_search_finds_each_place_in_the_words_thoughts_commands_outputs_and_diffs_case_not_minded(self) -> None:
+        found = chatlive.search(self.turn(), "RETRY")
+        self.assertFalse(found["more"])
+        places = [(hit["id"], hit["where"]) for hit in found["hits"]]
+        self.assertEqual(places, [("t.me", "me"), ("m1", "text"), ("r1", "think"), ("c1", "output"), ("e1", "diff"), ("e1", "diff")])
+        output = found["hits"][3]
+        self.assertEqual((output["line"], output["lines"], output["snip"][1]), (2, 3, "retry"))
+        self.assertEqual(output["snip"][0], "..F FAILED test_")  # the line breaks of the text around a hit are spaces
+        self.assertEqual([hit["where"] for hit in chatlive.search(self.turn(), "pytest")["hits"]], ["line", "command"])
+        self.assertEqual(chatlive.search(self.turn(), "  ")["hits"], [])
+        self.assertEqual(chatlive.search(self.turn(), "x" * 201)["hits"], [])
+        self.assertEqual(chatlive.search(self.turn(), None)["hits"], [])  # type: ignore[arg-type]
+
+    def test_a_search_stops_at_its_cap_and_says_there_is_more(self) -> None:
+        many = {"id": "t", "responseParts": [text(f"m{n}", "word word word") for n in range(100)]}
+        found = chatlive.search(many, "word")
+        self.assertEqual((len(found["hits"]), found["more"]), (chatlive.FIND_HITS, True))
+        long = {"id": "t", "responseParts": [text("m1", "some words " * 50 + "needle" + " more words" * 50)]}
+        snip = chatlive.search(long, "needle")["hits"][0]["snip"]
+        self.assertEqual((len(snip[0]), snip[0][0], len(snip[2]), snip[2][-1]), (chatlive.FIND_SIDE + 1, "…", chatlive.FIND_SIDE + 1, "…"))
+
+    def test_a_search_redacts_what_it_shows(self) -> None:
+        secret = "ghp_" + "A" * 36
+        turn = {"id": "t", "responseParts": [tool("c1", toolInput={"command": f"echo {secret} token here"})]}
+        found = chatlive.search(turn, "token here")
+        self.assertTrue(found["hits"])
+        self.assertNotIn(secret, json.dumps(found))
+        self.assertEqual(chatlive.search(turn, secret)["hits"], [])
+
+    def test_facets_count_the_steps_of_each_filter_and_never_what_is_said(self) -> None:
+        items = chatlive.items_of(self.turn(), False, {}) + [{"id": "q", "k": "ask", "st": "wait"}, {"id": "w", "k": "tool", "st": "wait", "kind": "run"}]
+        self.assertEqual(chatlive.facets(items), {"all": 5, "fail": 1, "change": 1, "run": 2, "wait": 2})
+        self.assertEqual(chatlive.facet_of({"k": "text"}), [])
+        self.assertEqual(chatlive.facets([None, "x"]), {"all": 0, "fail": 0, "change": 0, "run": 0, "wait": 0})  # type: ignore[list-item]
+
+
 class LiveLinkTests(base.LinkCase):
     def live(self, last: str = "") -> Dict[str, Any]:
         return self.link.live(TASK, last)
@@ -688,6 +732,30 @@ class ServeLiveTests(base.BoardCase):
                 receipt.assert_not_called()
         self.assertEqual(self.request("POST", "/api/live", {"task": task, "receipt": "t1"}, header=False)[0], 403)
 
+    def test_the_route_answers_a_search_and_counts_from_the_link_and_a_bad_question_with_nothing(self) -> None:
+        self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
+        task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
+        made = {"hits": [{"id": "c1", "where": "output", "snip": ["a", "b", "c"], "line": 1, "lines": 1}], "more": False, "turn": "t1"}
+        with mock.patch.object(self.vs, "find", return_value=made) as find:
+            self.assertEqual(self.request("POST", "/api/live", {"task": task, "find": {"turn": "t1", "q": "b" * 300}})[1]["find"], made)
+            find.assert_called_once_with(task, "t1", "b" * 200)  # the words are cut, not refused
+            for bad in (5, {"turn": "t1"}, {"turn": "", "q": "x"}, {"turn": "x" * 201, "q": "x"}, {"turn": "t1", "q": 5}):
+                find.reset_mock()
+                self.assertEqual(self.request("POST", "/api/live", {"task": task, "find": bad})[1]["find"]["hits"], [], bad)
+                find.assert_not_called()
+        counted = {"all": 3, "fail": 1, "change": 0, "run": 2, "wait": 0, "turn": "t1", "before": 40}
+        with mock.patch.object(self.vs, "counts", return_value=counted) as counts:
+            self.assertEqual(self.request("POST", "/api/live", {"task": task, "counts": {"turn": "t1", "before": 40}})[1]["counts"], counted)
+            counts.assert_called_once_with(task, "t1", 40)
+            for bad in ({"turn": "t1", "before": "40"}, {"turn": "t1", "before": True}, {"turn": "", "before": 4}, []):
+                counts.reset_mock()
+                self.assertEqual(self.request("POST", "/api/live", {"task": task, "counts": bad})[1]["counts"], {}, bad)
+                counts.assert_not_called()
+        with mock.patch.object(self.vs, "older", return_value={"items": [], "before": None}) as older:
+            self.request("POST", "/api/live", {"task": task, "before": {"turn": "t1", "i": 50}, "all": True})
+            self.request("POST", "/api/live", {"task": task, "before": {"turn": "t1", "i": 50}})
+            self.assertEqual([one.args for one in older.call_args_list], [(task, "t1", 50, 1000000), (task, "t1", 50, 60)])  # `all`: the whole round, for a filter or a search
+
     def test_the_route_reads_have_and_answers_a_before_with_older(self) -> None:
         self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
         task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
@@ -705,7 +773,7 @@ class ServeLiveTests(base.BoardCase):
         with mock.patch.object(self.vs, "older", return_value={"items": [], "before": None}) as older:
             status, data, _ = self.request("POST", "/api/live", {"task": task, "rev": "", "before": {"turn": "t1", "i": 4}})
             self.assertEqual((status, data["older"]), (200, {"items": [], "before": None}))
-            older.assert_called_once_with(task, "t1", 4)
+            older.assert_called_once_with(task, "t1", 4, 60)
             for bad in ({"turn": "t1", "i": -1}, {"turn": "t1", "i": "4"}, {"turn": "t1", "i": True}, {"turn": 5, "i": 4}, {"turn": "x" * 201, "i": 4}, {"i": 4}):
                 older.reset_mock()
                 data = self.request("POST", "/api/live", {"task": task, "before": bad})[1]

@@ -1098,3 +1098,119 @@ def attach_subs(items: List[Dict[str, Any]], subs: List[Tuple[Dict[str, Any], Op
             if why:
                 found["said"] = why
         item["sub"] = found
+
+
+# --- B19, B20: the filter's counts and the search of a whole round ----------------------------------------------------------------------------------------------
+FIND_HITS = 200  # hits of one search; more are counted as `more`
+FIND_SIDE = 60  # characters shown on each side of a hit
+FIND_QUERY = 200
+
+
+def facet_of(item: Dict[str, Any]) -> List[str]:
+    """The filters of the Live tab an item is in (B19), as the page counts them: `fail` (a call that failed), `change` (an edit or a new file), `run` (a command), `wait` (a call or a question
+    that waits for the person). What is said (the person's words, a reply, an error) is in none: it is the thread, never filtered out."""
+    kind = item.get("k")
+    out: List[str] = []
+    if kind == "tool":
+        if item.get("st") == "fail":
+            out.append("fail")
+        if item.get("kind") in ("edit", "create"):
+            out.append("change")
+        if item.get("kind") == "run":
+            out.append("run")
+        if item.get("st") == "wait":
+            out.append("wait")
+    elif kind == "ask" and item.get("st") == "wait":
+        out.append("wait")
+    return out
+
+
+def facets(items: List[Dict[str, Any]]) -> Dict[str, int]:
+    """How many items are in each filter (`facet_of`), and `all`: the steps (calls, thoughts, questions, notes)."""
+    counts = {"all": 0, "fail": 0, "change": 0, "run": 0, "wait": 0}
+    for item in items:
+        if not isinstance(item, dict) or item.get("k") not in ("tool", "think", "ask", "note"):
+            continue
+        counts["all"] += 1
+        for name in facet_of(item):
+            counts[name] += 1
+    return counts
+
+
+def _fields(part: Dict[str, Any], item: Dict[str, Any], root: Optional[Path]) -> List[Tuple[str, str]]:
+    """The texts of one item a search looks in, each with where it is: `text` (a reply), `think`, `ask`, `note`, and for a call `line` (its target and the agent's words), `command`, `input`,
+    `output` and `diff`. Every text redacted (the item's own, and `detail`)."""
+    kind = item.get("k")
+    if kind in ("text", "think", "note", "err"):
+        return [("think" if kind == "think" else "text" if kind != "note" else "note", str(item.get("text") or ""))]
+    if kind == "ask":
+        bits = [str(item.get("text") or "")] + [f"{one.get('title') or ''} {one.get('answer') or ''}" for one in item.get("qs") or [] if isinstance(one, dict)]
+        return [("ask", "\n".join(bits))]
+    if kind != "tool":
+        return []
+    out: List[Tuple[str, str]] = [("line", " ".join(str(item.get(key) or "") for key in ("word", "name", "target", "say")))]
+    call = part.get("toolCall") if isinstance(part.get("toolCall"), dict) else {}
+    found = detail(call, root)
+    if found.get("command"):
+        out.append(("command", str(found["command"])))
+    if found.get("input"):
+        out.append(("input", str(found["input"])))
+    for one in found.get("parts") or []:
+        if one.get("k") in ("term", "text", "file"):
+            out.append(("output", str(one.get("text") or "")))
+        elif one.get("k") == "diff":
+            lines: List[str] = []
+            for file in one.get("files") or []:
+                lines.append(str(file.get("path") or ""))
+                lines.extend(str(line) for line in file.get("lines") or [])
+            out.append(("diff", "\n".join(lines)))
+    for key in ("error", "reason"):
+        if found.get(key):
+            out.append(("output", str(found[key])))
+    return out
+
+
+def search(turn: Dict[str, Any], query: Any, root: Optional[Path] = None) -> Dict[str, Any]:
+    """Every place of one turn where `query` is (B20), case not minded: `{hits, more}`. A hit: `{id, where, snip: [before, found, after], line, lines}`, `id` the Live item's id, `line` the line
+    of the text it is on (1 for the first) and `lines` how many the text has. The person's words, replies, thoughts, questions, notes and every call: its line, command, input, output and diff
+    (redacted, as an opened call shows them). At most FIND_HITS hits, in the order of the turn; `more` when there were others. An empty or too long query: no hit."""
+    needle = str(query or "").strip().lower()
+    if not needle or len(needle) > FIND_QUERY:
+        return {"hits": [], "more": False}
+    parts = [part for part in (turn.get("responseParts") if isinstance(turn.get("responseParts"), list) else turn.get("parts") if isinstance(turn.get("parts"), list) else []) if isinstance(part, dict)]
+    base = int(turn.get("dropped") or 0) if isinstance(turn.get("dropped"), int) and not isinstance(turn.get("dropped"), bool) else 0
+    places: List[Tuple[str, List[Tuple[str, str]]]] = []
+    said = said_item(turn)
+    if said:
+        places.append((f"{turn.get('id')}.me", [("me", str(said.get("text") or ""))]))
+    for at, part in enumerate(parts):
+        index = part["i"] if isinstance(part.get("i"), int) and not isinstance(part.get("i"), bool) else base + at
+        ident = part_id(part) or f"{turn.get('id')}.{index}"
+        try:
+            item = part_item(part, ident, False, False, None, root)
+        except Exception:  # noqa: BLE001 - one part that cannot be read is no hit; the others are searched
+            item = None
+        if item is not None:
+            places.append((ident, _fields(part, item, root)))
+    hits: List[Dict[str, Any]] = []
+    more = False
+    for ident, fields in places:
+        for where, text in fields:
+            low = text.lower()
+            start = low.find(needle)
+            while start >= 0:
+                if len(hits) >= FIND_HITS:
+                    more = True
+                    break
+                end = start + len(needle)
+                before = text[max(0, start - FIND_SIDE):start]
+                after = text[end:end + FIND_SIDE]
+                flatten = lambda value: re.sub(r"\s+", " ", value)  # noqa: E731
+                hits.append({"id": ident, "where": where, "snip": [("…" if start > FIND_SIDE else "") + flatten(before).lstrip(), flatten(text[start:end]), flatten(after).rstrip() + ("…" if end + FIND_SIDE < len(text) else "")],
+                             "line": text.count("\n", 0, start) + 1, "lines": text.count("\n") + 1})
+                start = low.find(needle, end)
+            if more:
+                break
+        if more:
+            break
+    return {"hits": hits, "more": more}

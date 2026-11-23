@@ -2142,3 +2142,17 @@ class SigninsOnTheBoard(ProgramNeeds):
             self.assertIn(word, servers, word)
         self.assertNotIn("toolRow", servers, "no row for a tool: a connection whose way in is the tool's sign-in has its own Sign in (1.7.38)")
         self.assertIn("machine.net.title", setup)  # the Settings window names its Network section
+
+
+class SamplePackTests(unittest.TestCase):
+    """(1.8.31) A sample pack (demotracker) says so in its toolpack.json; Settings does not list it while no knowledge base turns it on."""
+
+    HARNESS = Path(__file__).resolve().parents[1]
+
+    def test_only_the_demo_pack_is_a_sample_and_settings_leaves_samples_out(self) -> None:
+        samples = {path.parent.name for path in (self.HARNESS / "toolpacks").glob("*/toolpack.json") if json.loads(path.read_text(encoding="utf-8")).get("sample") is True}
+        self.assertEqual(samples, {"demotracker"})
+        source = (self.HARNESS / "engine" / "core" / "toolpacks.py").read_text(encoding="utf-8")
+        self.assertIn('"sample": found.get("sample") is True', source)  # each row of `toolpacks.check` carries it
+        settings = (self.HARNESS / "engine" / "modules" / "task" / "web" / "settings.js").read_text(encoding="utf-8")
+        self.assertIn('row.from === "harness" && !row.sample', settings)

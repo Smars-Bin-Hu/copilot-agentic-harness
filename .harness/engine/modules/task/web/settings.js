@@ -132,7 +132,7 @@ const SETTINGS = (function () {
           return null;
         }
         return ask("/api/machine", "toolpacks").then((found) => {
-          const rows = (found.toolpacks || []).filter((row) => row.from === "harness");
+          const rows = (found.toolpacks || []).filter((row) => row.from === "harness" && !row.sample);  // a sample pack (demotracker) is not a tool a newcomer has: not listed until a knowledge base turns it on (1.8.31)
           const list = h("div", {class: "st-packlist"}, rows.map((row) => h("div", {class: "st-pack"}, h("span", {class: "st-pdot"}), h("b", null, row.name), h("span", {class: "tl-ver"}, row.version || ""), h("span", {class: "st-pdesc", title: row.description || ""}, row.description || ""))));
           env.inside([h("p", {class: "st-sub"}, t("tools.packs.lead")), h("p", {class: "st-note"}, t("settings.packs.nokb")), list]);
         });

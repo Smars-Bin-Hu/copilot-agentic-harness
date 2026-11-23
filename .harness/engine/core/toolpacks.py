@@ -3,7 +3,8 @@
 The harness knows no tool pack. A tool pack brings what the harness already reads, each in its usual form:
 
   toolpack.json   {"schema_version": 1, "name", "version", "harness": the lowest harness version it works with, "description",
-                    "needs": {"programs": [...], "trust": [variables that name the CA bundle for its program]}}
+                    "needs": {"programs": [...], "trust": [variables that name the CA bundle for its program]},
+                    "sample": true for a pack that only shows how one is made (1.8.31: Settings does not list it while no knowledge base turns it on)}
   kinds/*.json     kinds of server (core.servers): a ticket board is a "server" with an org and a project, reached by the tool's own sign-in
   systems.json     {"systems": {...}}: systems of the tools policy written by hand; layered after the company pack's, before tools.override.json
   skills/<name>-*  skills, copied to `.github/skills/` (Copilot finds them only there). Each starts with the tool pack's name, so two never clash
@@ -1218,7 +1219,7 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
         for one in report:
             programs[one["program"]] = one["found"] and programs.get(one["program"], True)
         row = {"name": name, "version": str(found.get("version") or ""), "from": item["source"], "source": item["source"], "active": item["active"], "removable": item["source"] not in (COMPANY, HARNESS),
-               "errors": errors, "programs": programs, "needs": report if item["active"] else [], "trust": bool(needs.get("trust")), "bundle": bool(bundle), "description": str(found.get("description") or ""), "types": types_here,
+               "errors": errors, "programs": programs, "needs": report if item["active"] else [], "trust": bool(needs.get("trust")), "bundle": bool(bundle), "description": str(found.get("description") or ""), "sample": found.get("sample") is True, "types": types_here,
                "skills": len(_skills(folder)), "links": sorted((found.get("links") or {}).keys()) if isinstance(found.get("links"), dict) else [],
                "mcp_rules": len((found.get("mcp") or {}).get("tools") or []) if isinstance(found.get("mcp"), dict) else 0, "commands": [str(one) for one in found.get("commands") or []],
                "put": list((book.get(name) or {}).get("skills") or []), "newer": False, "updated": _updated(book.get(name) or {}), "toggle": "" if item["source"] != HARNESS else "on" if targets.company_folder(root) else "nocompany",

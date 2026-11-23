@@ -2,6 +2,7 @@
 // scan, save, summary, finish, and the old ones); this page shows and sends. Needs common.js (h, t, clock, copyCommand), serve.js (SERVE), readyui.js (READY: dock.js reads it when it loads), dock.js (DOCK: the folder picker), servers.js (SERVERS: the connections window).
 // `?only=programs` and `?only=copilot` draw that one page with a Done button (the Enter screen's fix button). `?fake=1` answers every call from data in the contract's shape, so the page walks end to end with no server
 // work; more parameters pick a state for a picture: page, prog=missing|all|long, cop=idle|code|done, kb=empty|copy|done, kbsub, longname=1, job=0|1, lang, theme, hold=1 (no automatic step forward).
+// (1.8.33) How it moves: the shell (top line, bar, robot, foot) is built once; a page turn, the bar, the robot and the foot go through motion.js and robot.js (see the shell section). Settings draws none of it.
 // Each page's drawing is `WIZARD.parts.<page>(box, opts)`, so the Settings window can draw the same page without the steps (`opts.bare`: no title).
 "use strict";
 
@@ -46,6 +47,8 @@ const WIZARD = (function () {
     kb: {step: "empty", a: 0, b: 0, err: "", file: ""},
   };
   let api = null, ctl = null, shell = null, readyTimer = 0;
+  let holding = false;  // a language was written and this page is about to load again: serve.js waits (E6)
+  if (typeof SERVE !== "undefined" && SERVE.stay) SERVE.stay(() => holding);
 
   // ------------------------------------------------------------------------------------------------ the calls: real, or fake
   function realApi() {
@@ -256,8 +259,7 @@ const WIZARD = (function () {
     ];
     const good = cells.filter((cell) => cell.querySelector(".wz-dot.ok")).length;
     const need = cells.length - good;
-    const bot = ROBOT.svg({glow: true});
-    put(box, bot, h("h1", null, t("wizard.w.title")), el("p", "wz-sub", t("wizard.w.sub")), el("div", "wz-look", cells),
+    put(box, el("div", "wz-slot"), h("h1", null, t("wizard.w.title")), el("p", "wz-sub", t("wizard.w.sub")), el("div", "wz-look", cells),
       el("p", "wz-look-sum", h("b", null, t("wizard.w.done", {a: good})), " \u00b7 ", t("wizard.w.rest", {b: need, c: minutes()})));
     return {stop() {}, foot: () => ({back: false, later: null, why: "", main: {label: t("wizard.start"), go: opts.next, wide: true}})};
   };
@@ -282,6 +284,7 @@ const WIZARD = (function () {
       el("div", "wz-field", el("span", "cap", t("wizard.y.lang")), tiles, el("div", "hint", t(opts.bare ? "wizard.y.lang.hint.save" : "wizard.y.lang.hint")), savedNote), said);  // the pick waits for Save (Settings) or Continue (the wizard) (1.8.32)
     const commit = () => {
       said.hidden = true;
+      holding = !FAKE && M.lang !== document.documentElement.lang;  // (1.8.33) serve.js would load the page again the moment the save answers; this page does it itself, after the veil (E6)
       return api.setup("save", {part: "you", name: M.name.trim(), language: M.lang}).then(() => {
         M.saved.you = true;
         if (M.st) { M.st.name = M.name.trim(); M.st.language = M.lang; }
@@ -291,11 +294,11 @@ const WIZARD = (function () {
             else sessionStorage.setItem(KEEP, JSON.stringify({page: nextFrom(M.page, 1)}));
           } catch (error) { /* starts at the welcome */ }
           const link = new URL(location.href);
-          if (link.searchParams.has("page")) { link.searchParams.delete("page"); location.replace(link.toString()); } else location.reload();  // a `?page=` in the address would win over the page kept: one Continue must go on
-          return;
+          const again = () => { if (link.searchParams.has("page")) { link.searchParams.delete("page"); location.replace(link.toString()); } else location.reload(); };  // a `?page=` in the address would win over the page kept: one Continue must go on
+          return MOTION.leave(again, {content: thinking()});  // (1.8.33) E6: the page fades to its own colour with a small robot thinking, so the new language comes out of it, not out of black
         }
         opts.next();
-      }, (error) => { said.textContent = errorText(error); said.hidden = false; });
+      }, (error) => { holding = false; said.textContent = errorText(error); said.hidden = false; });
     };
     return {stop() {}, focus: () => name.focus(), foot: () => ({back: true, later: null, why: "", main: {label: t("wizard.cont"), off: !M.name.trim(), go: commit}})};
   };
@@ -337,7 +340,9 @@ const WIZARD = (function () {
       return el("div", "wz-li" + (needsFix || harnessBad ? " miss" : ""), el("span", "wz-ic", programIcon[row.id] || row.id.slice(0, 2)), main, state, needsFix ? fix(row) : again);
     }
     function take(found) {
+      const was = Boolean(M.progs && M.progs.all_found);
       M.progs = found;
+      if (!was && found.all_found && !opts.bare && !ONLY) hopHead();  // (1.8.33) W7: the last program was found while the page was open
       const sign = JSON.stringify([found.rows.map((row) => [row.id, row.found, row.path, row.blocked, row.version, row.trouble, row.why]), M.shortBusy, M.shortError]);
       if (sign !== shown) { shown = sign; put(list, ...found.rows.map(paintRow)); }
       opts.changed();
@@ -378,7 +383,8 @@ const WIZARD = (function () {
       shown = sign;
       if (signed) {
         put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), el("div", "t2", ONLY || opts.bare ? "" : t("wizard.c.next")))));  // Settings (bare) only shows the state: no "Moving on", no step forward (1.8.32)
-        if (sawOut && !ONLY && !opts.bare && q("hold", "") !== "1" && !advance) advance = setTimeout(() => { if (!stopped) opts.next(); }, 1500);
+        if (sawOut && !ONLY && !opts.bare && !advance) hopHead();  // (1.8.33) W7: a step done: the head hops twice and the bulb lights
+        if (sawOut && !ONLY && !opts.bare && q("hold", "") !== "1" && !advance) advance = setTimeout(() => { if (!stopped) opts.next(); }, HOLD);  // the card stays 1500 ms, never less than 900 (W7)
       } else if (line.why === "signing-in") {
         waitText = null;
         const copy = btn(t("wizard.c.copy"), "sm", () => copyCommand(copy, line.code));
@@ -709,55 +715,227 @@ const WIZARD = (function () {
     put(box, ...head(opts, "wizard.s.rev", t("wizard.v.title.check"), t("wizard.v.sub")), holder, said);
     const title = box.querySelector("h1");  // "Ready to go" only when nothing is left to set up (1.8.32)
     api.setup("summary").then((found) => { summary = found; paint(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
-    const confirm = () => { finishing = true; opts.changed(); said.hidden = true; return api.setup("finish").then(() => { try { sessionStorage.removeItem(KEEP); } catch (error) { /* nothing kept */ } leave(); }, (error) => { finishing = false; said.textContent = errorText(error); said.hidden = false; opts.changed(); }); };
+    const confirm = () => { finishing = true; opts.changed(); said.hidden = true; return api.setup("finish").then(() => { try { sessionStorage.removeItem(KEEP); } catch (error) { /* nothing kept */ } return toEnter(); }, (error) => { finishing = false; said.textContent = errorText(error); said.hidden = false; opts.changed(); }); };
     const lacking = () => (summary ? summary.rows.filter((row) => row.required && !row.done).map((row) => row.label) : []);  // what Confirm needs: the server refuses too (409)
     return {stop() {}, foot: () => { const need = lacking(); return {back: true, later: null, why: need.length ? t("wizard.v.need", {what: need.join(", ")}) : "", main: {label: t("wizard.v.go"), off: !summary || finishing || need.length > 0, go: confirm}}; }};
   };
 
-  // ------------------------------------------------------------------------------------------------ the shell: top line, bar, page, foot, strip
-  function bar() {
-    const idx = M.page - 1;
-    const part = M.page === 4 ? ((subs().indexOf(M.kbsub) + 1) / subs().length) * 100 : 55;
-    // a part is done when the computer says it is fine ("You" cannot be skipped, so behind us it is done); a part behind us that is not fine was skipped with Later: a yellow dot, never a tick
-    const state = (i) => (i === idx ? "cur" : fine(i + 1) || (i === 0 && i < idx) ? "done" : i < idx ? "skip" : null);
-    const bars = SEGMENTS.map((key, i) => h("i", {class: state(i), style: "--part:" + part + "%"}));
-    const names = SEGMENTS.map((key, i) => h("span", {class: state(i)}, state(i) === "done" ? [tick(), ""] : state(i) === "skip" ? [dot("hot wz-skip"), ""] : "", t(key)));
-    return el("div", "wz-prog", el("div", "wz-bars", bars), el("div", "wz-names", names));
+  // ------------------------------------------------------------------------------------------------ the shell: top line, bar, page, foot, robot (1.8.33)
+  // Built once, when the page opens (W1): a turn changes only the page (W4), the bar (W5), the robot (W3, W6) and the foot's place. All of it goes through motion.js and robot.js:
+  // transform and opacity, nothing in Lite or under reduced motion, and no move blocks a button. In Settings (`opts.bare`) none of this exists: there is no shell there.
+  const BOT = {fw: 91, fh: 96, hw: 30, hh: 31, k: 1.76, hx: 45.3, hy: 33.5};  // the whole robot, the small head, how much bigger the head of the whole robot is, the middle of that head
+  const HOLD = 1500;  // W7: the "Signed in" card stays this long before the page goes on (never less than 900 ms)
+  const at = (x, y, s) => "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px)" + (s && s !== 1 ? " scale(" + s.toFixed(3) + ")" : "");
+  let turning = false, busy = false, drawn = null, run = 0;  // a page turn is playing; a press is being answered; what is on screen {page, sub}; counts the renders
+
+  function buildShell(root) {
+    const alone = Boolean(ONLY);
+    const count = el("div", "wz-count");
+    const bars = alone ? [] : SEGMENTS.map(() => h("i", null, h("b", {class: "f"}), h("b", {class: "s"})));
+    const names = alone ? [] : SEGMENTS.map((key) => h("span", null, el("span", "wz-mk", el("span", "wz-tk", h("i", null), h("i", null)), dot("hot wz-skip")), el("span", "wz-nm", t(key))));
+    const content = el("div", "wz-pg"), footRow = el("div", "wz-row"), foot = el("div", "wz-foot", footRow);
+    const job = el("div", "wz-job"); job.hidden = true;
+    const full = alone ? null : el("div", "wz-mate full", ROBOT.svg({glow: true})), head = alone ? null : el("div", "wz-mate head", ROBOT.svg({head: true}));
+    if (full) { full.hidden = true; head.hidden = true; }
+    const body = el("div", "wz-body", el("div", "wz-page", content, foot));
+    root.className = "wz";
+    put(root, el("div", "wz-top", el("div", "wz-brand", "HARNESS"), count), alone ? null : el("div", "wz-prog", el("div", "wz-bars", bars), el("div", "wz-names", names)), body, job, full, head);
+    shell = {root, count, bars, names, state: SEGMENTS.map(() => null), body, content, foot, footRow, job, full, head, mainBtn: null, mainGo: null, moving: false};
+    if (!alone) { window.addEventListener("resize", settle); body.addEventListener("scroll", settle); }
+  }
+
+  // The bar. A part is done when it is behind the page and the computer says it is fine ("You" cannot be skipped, so behind us it is done); behind and not fine: skipped with Later, a yellow dot,
+  // never a tick. Ahead of the page nothing shows: the head ticks a part as it passes it (W6).
+  const barState = (i, idx) => (i === idx ? "cur" : i < idx ? (fine(i + 1) || i === 0 ? "done" : "skip") : null);
+  const wanted = () => SEGMENTS.map((key, i) => barState(i, M.page - 1));
+  function paintBar(states) {
+    if (!shell || !shell.bars.length) return;
+    states.forEach((state, i) => {
+      if (shell.state[i] === state) return;
+      shell.state[i] = state;
+      for (const node of [shell.bars[i], shell.names[i]]) { node.classList.remove("cur", "done", "skip"); if (state) node.classList.add(state); }
+    });
+  }
+
+  // The robot: the whole one stands in the slot of the welcome page; from the first step on a small head stands above the current part of the bar.
+  const headAt = (i) => { const r = shell.bars[i].getBoundingClientRect(); return {x: r.left + r.width / 2 - BOT.hw / 2, y: r.top - BOT.hh - 5}; };
+  const fullAt = () => { const slot = shell.content.querySelector(".wz-slot"); if (!slot) return null; const r = slot.getBoundingClientRect(); return {x: r.left + r.width / 2 - BOT.fw / 2, y: r.top}; };
+  const placeAt = (node, spot) => { node.style.transform = at(spot.x, spot.y); };
+  function settle() {  // the robot where this page wants it, with no move (also after a resize or a scroll)
+    if (!shell || !shell.full || shell.moving) return;
+    const hello = M.page === 0, spot = hello ? fullAt() : headAt(M.page - 1);
+    shell.full.hidden = !(hello && spot);
+    shell.head.hidden = hello || !spot;
+    if (spot) placeAt(hello ? shell.full : shell.head, spot);
+  }
+  const rest = () => { for (const mate of [shell.full, shell.head]) for (const move of mate.getAnimations()) move.cancel(); };
+  const headSvg = () => (shell && shell.head && !shell.head.hidden ? shell.head.querySelector("svg") : null);
+  const hopHead = () => { const svg = headSvg(); if (svg && !turning) ROBOT.act(svg, "hop"); };
+
+  // W3: the whole robot shrinks into the small head and flies to the bar (500 ms); `back` is the way home. Both are on screen at the middle of the flight, one fading as the other comes.
+  function fly(a, b, back) {
+    const small = 1 / BOT.k;
+    const centre = (spot, whole) => (whole ? {x: spot.x + BOT.hx, y: spot.y + BOT.hy} : {x: spot.x + BOT.hw / 2, y: spot.y + BOT.hh / 2});  // the middle of the head, wherever the robot is
+    const asHead = (c, s) => at(c.x - BOT.hw * s / 2, c.y - BOT.hh * s / 2, s);  // the small head, `s` times as big, with its middle at c
+    const asFull = (c, s) => at(c.x - BOT.hx * s, c.y - BOT.hy * s, s);
+    const whole = back ? b : a, little = back ? a : b;
+    const wc = centre(whole, true), lc = centre(little, false);
+    shell.full.hidden = false; shell.head.hidden = false;
+    placeAt(shell.full, whole); placeAt(shell.head, little);
+    const opts = {ms: 500, fill: "forwards"};
+    const ofFull = back ? [{transform: asFull(lc, small), opacity: 0}, {opacity: 0, offset: .3}, {opacity: 1, offset: .7}, {transform: at(whole.x, whole.y), opacity: 1}]
+      : [{transform: at(whole.x, whole.y), opacity: 1}, {opacity: 0, offset: .55}, {transform: asFull(lc, small), opacity: 0}];
+    const ofHead = back ? [{transform: at(little.x, little.y), opacity: 1}, {opacity: 0, offset: .55}, {transform: asHead(wc, BOT.k), opacity: 0}]
+      : [{transform: asHead(wc, BOT.k), opacity: 0}, {opacity: 0, offset: .25}, {opacity: 1, offset: .7}, {transform: at(little.x, little.y), opacity: 1}];
+    return Promise.all([MOTION.play(shell.full, ofFull, opts), MOTION.play(shell.head, ofHead, opts)]);
+  }
+
+  // W3 / W6: the head walks along the bar. One step is the page turn's own length; several steps (the pages already fine are skipped) go cell by cell, 120 ms each, with a small hop, and
+  // `arrived(i)` says each cell it reaches so the bar can tick it as the head passes.
+  async function walk(a, b, mine, arrived) {
+    const step = b > a ? 1 : -1, many = Math.abs(b - a) > 1;
+    shell.head.hidden = false;
+    let prev = headAt(a);
+    for (let i = a + step; mine === run; i += step) {
+      const next = headAt(i), top = Math.min(prev.y, next.y) - 6;
+      await MOTION.play(shell.head, many ? [{transform: at(prev.x, prev.y)}, {transform: at((prev.x + next.x) / 2, top), offset: .5}, {transform: at(next.x, next.y)}] : [{transform: at(prev.x, prev.y)}, {transform: at(next.x, next.y)}], {ms: many ? MOTION.MS.micro : MOTION.MS.page, fill: "forwards"});
+      if (mine !== run) return;
+      if (arrived) arrived(i);
+      if (i === b) return;
+      prev = next;
+    }
+  }
+
+  // A copy of the page that is leaving, for it to move out while the real one has already changed. It sits in the same sheet rules as the page (a wrapper that draws no box of its own).
+  function ghostOf(node, hello) {
+    const copy = MOTION.ghost(node);
+    if (!copy) return null;
+    const wrap = el("div", "wz-page" + (hello ? " wz-hello" : ""));
+    wrap.style.display = "contents";
+    copy.style.zIndex = "2";
+    shell.root.append(wrap);
+    wrap.append(copy);
+    const was = node.querySelectorAll("input"), now = copy.querySelectorAll("input");
+    was.forEach((input, i) => { if (now[i]) now[i].value = input.value; });  // what was typed is only a property, a copy would show the first value
+    return {copy, wrap};
   }
 
   function render() {
     if (ctl && ctl.stop) ctl.stop();
     ctl = null;
-    const root = document.getElementById("app");
-    const name = PAGES[M.page];
-    const alone = Boolean(ONLY);
-    const content = el("div");
-    const footRow = el("div", "wz-row");
-    const job = el("div", "wz-job"); job.hidden = true;
-    shell = {job, footRow};
-    const count = el("div", "wz-count", M.page && !alone ? t("wizard.step", {n: M.page, m: 6}) : "");
-    root.className = "wz" + (name === "welcome" ? " wz-hello" : "");
-    put(root, el("div", "wz-top", el("div", "wz-brand", "HARNESS"), count), M.page && !alone ? bar() : "", el("div", "wz-body", el("div", "wz-page", content, el("div", "wz-foot", footRow))), job);
-    const opts = {
-      changed: drawFoot, rerender: render, next: forward, back: backward,
-      jump: (page) => go(page),
+    const root = shell.root, first = !drawn, mine = ++run;
+    const dir = first ? 0 : M.page !== drawn.page ? (M.page > drawn.page ? 1 : -1) : M.kbsub !== drawn.sub ? (M.kbsub > drawn.sub ? 1 : -1) : 0;  // forward, back, or the same page again
+    const from = first ? M.page : drawn.page, name = PAGES[M.page];
+    const old = shell.content, content = el("div", "wz-pg");
+    const ghost = dir ? ghostOf(old, root.classList.contains("wz-hello")) : null;
+    const wasHello = shell.full && from === 0 ? fullAt() : null;  // where the whole robot stands now, before the page changes
+    const change = () => {
+      old.replaceWith(content);
+      shell.content = content;
+      root.classList.toggle("wz-hello", name === "welcome");
+      shell.count.textContent = M.page && !ONLY ? t("wizard.step", {n: M.page, m: 6}) : "";
+      ctl = parts[name](content, {changed: drawFoot, rerender: render, next: forward, back: backward, jump: (page) => go(page)});
+      drawn = {page: M.page, sub: M.kbsub};
+      drawFoot();
+      paintJob();
+      shell.body.scrollTop = 0;
     };
-    ctl = parts[name](content, opts);
-    drawFoot();
-    paintJob();
-    if (ctl.focus) ctl.focus();
-    document.querySelector(".wz-body").scrollTop = 0;
+    if (!dir) {  // the first page, or the same page drawn again (a state that changed): no turn
+      change();
+      if (first) {
+        void root.offsetWidth;  // the bar was there before: its fill is a move from empty
+        paintBar(wanted());
+        settle();
+        MOTION.appear(content, {ms: MOTION.MS.show});
+        MOTION.appear(shell.foot, {ms: MOTION.MS.show});
+        for (const mate of [shell.full, shell.head]) if (mate && !mate.hidden) MOTION.play(mate, [{opacity: 0}, {opacity: 1}], {ms: MOTION.MS.show});
+        if (M.page === 0) welcomeLife(content);
+      }
+      if (ctl.focus) ctl.focus();
+      return;
+    }
+    turning = true;
+    const slide = MOTION.glide(shell.foot, change);  // the foot goes where the new page's height puts it
+    const spot = shell.full ? (M.page === 0 ? fullAt() : headAt(M.page - 1)) : null;  // measured now, before the new page starts to move in
+    const states = wanted();
+    if (shell.bars.length) {
+      if (dir > 0 && from > 0 && M.page - from > 1) {  // W6: the pages already fine are skipped; the head hops cell by cell and ticks each one it passes
+        const stage = states.slice();
+        for (let i = from; i < M.page; i++) stage[i] = shell.state[i];
+        paintBar(stage);
+      } else paintBar(states);
+    }
+    const turn = MOTION.turn(ghost && ghost.copy, content, dir);
+    if (shell.full) {
+      shell.moving = true;
+      rest();
+      const arrived = (i) => { const part = shell.state.slice(); part[i] = states[i]; if (i === M.page - 2) part[M.page - 1] = states[M.page - 1]; paintBar(part); };
+      const travel = M.page === from ? Promise.resolve() : from === 0 && spot ? fly(wasHello, spot, false) : M.page === 0 && spot ? fly(headAt(from - 1), spot, true) : walk(from - 1, M.page - 1, mine, arrived);
+      travel.then(() => { if (mine === run) { rest(); shell.moving = false; paintBar(states); settle(); } });
+    }
+    Promise.all([turn, slide]).then(() => {
+      if (ghost) ghost.wrap.remove();
+      if (mine === run) { turning = false; if (ctl && ctl.focus && !root.contains(document.activeElement)) ctl.focus(); }
+    });
+    setTimeout(() => { if (mine === run) turning = false; }, 900);  // a safety: a turn that never reports does not hold the buttons
   }
+
+  // W2: the welcome page's one blink and its list coming in row by row, 30 ms apart
+  function welcomeLife(content) {
+    const eyes = shell.full && shell.full.querySelector(".r-eyes");
+    if (eyes) { eyes.style.transformBox = "fill-box"; eyes.style.transformOrigin = "center"; MOTION.play(eyes, [{transform: "none"}, {transform: "scaleY(.1)", offset: .5}, {transform: "none"}], {ms: 240, delay: 500}); }
+    const cells = Array.from(content.querySelectorAll(".wz-it")), tops = [...new Set(cells.map((cell) => cell.offsetTop))];
+    cells.forEach((cell) => MOTION.play(cell, [{opacity: 0}, {opacity: 1}], {ms: 140, delay: Math.min(120, tops.indexOf(cell.offsetTop) * 30)}));
+  }
+
+  // E6 (the language was saved and the page loads again): a small robot and three dots in the middle of the veil
+  function thinking() {
+    const mark = ROBOT.svg({head: true});
+    return el("div", "m-think", mark, el("div", "m-dots", h("i", null), h("i", null), h("i", null)));
+  }
+
+  // W9 and the wizard's half of W10: the head jumps and sparks fly, the page fades out (120 ms), then the veil takes the Enter screen's background and the page goes to "/", where the Enter
+  // screen plays the rest (the mark says it came from here). The veil is motion.js's; it only gets the Enter background class.
+  function toEnter() {
+    if (!shell) return Promise.resolve(leave());
+    ROBOT.act(headSvg(), "cheer");
+    const fades = [shell.content, shell.foot].map((node) => MOTION.play(node, [{opacity: 1}, {opacity: 0}], {ms: 120, ease: MOTION.OUT, fill: "forwards"}));
+    return Promise.all(fades).then(() => {
+      MOTION.mark("from-wizard");
+      const had = new Set(document.querySelectorAll(".m-veil"));
+      const gone = MOTION.leave(() => location.assign("/"));
+      for (const veil of document.querySelectorAll(".m-veil")) if (!had.has(veil)) veil.classList.add("enter-bg");
+      return gone;
+    });
+  }
+
+  // The foot. Its main button stays the same node from page to page, so a change between off and on is a fade (W8), and a press (Continue, Back, Skip) is answered once: a burst of clicks
+  // moves one page, and nothing is pressed while a turn plays or a save is being answered.
+  const pressed = MOTION.guard((go) => {
+    const out = go();
+    if (out && typeof out.then === "function") { busy = true; const done = () => { busy = false; }; out.then(done, done); setTimeout(done, 15000); }
+    return out;
+  }, 300);
+  const press = (go) => { if (!turning && !busy) pressed(go); };
   function drawFoot() {
     if (!ctl || !shell) return;
     const foot = ctl.foot();
-    const back = foot.back ? btn("\u2190 " + t("wizard.back"), "", foot.backGo || backward) : null;
-    const later = foot.later ? link(t("wizard.skip"), foot.laterGo || (() => (M.fromReview ? forward() : go(nextFrom(M.page, 1)))), foot.later.note) : null;  // `laterGo`: a small page of the knowledge base goes on to the next small page, not past all of them
-    const main = btn(foot.main.label + " \u2192", "primary" + (foot.main.off ? " off" : ""), () => { if (!foot.main.off) foot.main.go(); });
-    if (foot.main.wide) main.style.minWidth = "200px";
-    else if (foot.main.minw) main.style.minWidth = foot.main.minw + "px";
-    if (foot.main.off) main.setAttribute("aria-disabled", "true");
-    put(shell.footRow, ...(foot.main.wide ? [el("span", "wz-grow"), main, el("span", "wz-grow")] : [back, el("span", "wz-grow"), foot.why ? el("span", "wz-why", foot.why) : null, later, main]));
+    const back = foot.back ? btn("← " + t("wizard.back"), "", () => press(foot.backGo || backward)) : null;
+    const later = foot.later ? link(t("wizard.skip"), () => press(foot.laterGo || (() => (M.fromReview ? forward() : go(nextFrom(M.page, 1))))), foot.later.note) : null;  // `laterGo`: a small page of the knowledge base goes on to the next small page, not past all of them
+    let main = shell.mainBtn;
+    if (!main) { main = btn("", "primary"); main.addEventListener("click", () => { if (shell.mainGo) press(shell.mainGo); }); shell.mainBtn = main; }
+    shell.mainGo = foot.main.off ? null : foot.main.go;
+    main.textContent = foot.main.label + " →";
+    main.className = "wz-btn primary" + (foot.main.off ? " off" : "");
+    main.style.minWidth = foot.main.wide ? "200px" : foot.main.minw ? foot.main.minw + "px" : "";
+    if (foot.main.off) main.setAttribute("aria-disabled", "true"); else main.removeAttribute("aria-disabled");
+    const row = shell.footRow, wide = Boolean(foot.main.wide);
+    const before = (wide ? [el("span", "wz-grow")] : [back, el("span", "wz-grow"), foot.why ? el("span", "wz-why", foot.why) : null, later]).filter(Boolean);
+    const after = wide ? [el("span", "wz-grow")] : [];
+    for (const child of Array.from(row.children)) if (child !== main) child.remove();
+    for (const node of before) { if (main.parentNode === row) row.insertBefore(node, main); else row.append(node); }
+    if (main.parentNode !== row) row.append(main);
+    for (const node of after) row.append(node);
   }
 
   // ------------------------------------------------------------------------------------------------ start
@@ -779,6 +957,7 @@ const WIZARD = (function () {
 
   // This browser is not paired: no data was read, so the page says only that (the bar of serve.js is hidden on this page, it would cover the progress bar), and goes on by itself once the browser is paired.
   function unpairedPage(root) {
+    shell = null;
     root.className = "wz";
     put(root, el("div", "wz-top", el("div", "wz-brand", "HARNESS"), el("div", "wz-count", "")),
       el("div", "wz-body", el("div", "wz-page", h("h1", null, t("wizard.unpaired.title")), el("p", "wz-sub", t("wizard.unpaired.sub")), el("p", "wz-unpaired", t("board.serve.notpaired"), " ", SERVE.pairControl()))));
@@ -789,11 +968,10 @@ const WIZARD = (function () {
   function start() {
     const root = document.getElementById("app");
     document.body.classList.add("wz-doc");  // the page has no gear and no help beside it (wizard.css)
-    root.className = "wz wz-loading";
-    put(root, );
     const theme = q("theme", "");
     if (FAKE && (theme === "light" || theme === "dark")) document.documentElement.setAttribute("data-theme", theme);
     api = FAKE ? fakeApi() : realApi();
+    buildShell(root);  // (1.8.33) W1: the top line, the bar and the robot's place are there at once; the page fades in when what it shows has been read
     load().then(() => {
       if (M.unpaired) { unpairedPage(root); return null; }
       let page = Number(q("page", "")) ;

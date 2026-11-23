@@ -556,33 +556,33 @@ class ReadyOwnHostTest(unittest.TestCase):
     def lines(self) -> tuple:
         vscode = self.ready.vscode()
         copilot = self.ready.copilot(vscode)
-        checks = [dict(vscode, id="vscode"), dict(copilot, id="copilot")]
-        return vscode, copilot, self.ready.action(checks)
+        checks = [{"id": "setup", "state": "ok"}, {"id": "paired", "state": "ok"}, {"id": "doctor", "state": "ok"}, dict(vscode, id="vscode"), dict(copilot, id="copilot")]
+        return vscode, copilot, self.ready.button(checks, all(line["state"] == "ok" for line in checks))  # the middle button of the Enter screen
 
     def test_all_well(self) -> None:
         vscode, copilot, action = self.lines()
         self.assertEqual((vscode["state"], vscode["version"]), ("ok", "1.147.0"))
         self.assertEqual((copilot["state"], copilot["n"], copilot["login"]), ("ok", 25, "alex"))
-        self.assertEqual(action["kind"], "none")
+        self.assertEqual(action["kind"], "enter")
 
     def test_vscode_not_installed(self) -> None:
         self.link.installed_found = {"found": False, "version": "", "off": False}
         vscode, copilot, action = self.lines()
         self.assertEqual((vscode["state"], vscode["why"]), ("fail", "no-code"))
         self.assertEqual(copilot["why"], "vscode")
-        self.assertEqual((action["kind"], action["url"]), ("get-vscode", self.ready_module.VSCODE_PAGE))
+        self.assertEqual((action["kind"], action["program"], action["download"]), ("program", "VS Code", self.ready_module.PROGRAM_PAGES["vscode"]))
 
     def test_no_gh(self) -> None:
         self.gh = {"gh": "", "version": "", "signed_in": False, "login": "", "why": "no-gh", "download": "https://cli.github.com/"}
         _, copilot, action = self.lines()
         self.assertEqual((copilot["state"], copilot["why"]), ("fail", "no-gh"))
-        self.assertEqual((action["kind"], action["url"], action["off"]), ("get-gh", "https://cli.github.com/", False))
+        self.assertEqual((action["kind"], action["program"], action["download"], action["off"]), ("program", "GitHub CLI", "https://cli.github.com/", False))
 
-    def test_gh_that_does_not_run_has_no_button(self) -> None:
+    def test_gh_that_does_not_run_sends_to_the_programs_page(self) -> None:
         self.gh = {"gh": "/x/gh", "version": "", "signed_in": False, "login": "", "why": "cannot-run"}
         _, copilot, action = self.lines()
         self.assertEqual(copilot["why"], "gh-broken")
-        self.assertEqual(action["kind"], "none")
+        self.assertEqual((action["kind"], action["program"]), ("program", "GitHub CLI"))
 
     def test_not_signed_in_offers_the_sign_in(self) -> None:
         self.gh = {"gh": "/opt/gh", "version": "2.105.0", "signed_in": False, "login": "", "why": "not-signed-in"}

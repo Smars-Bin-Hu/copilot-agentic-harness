@@ -340,7 +340,7 @@ def register(subparsers: Any) -> None:
     seen.add_argument("--probe", action="store_true", help="run the probes now and keep the answers (the hook does this at the start of a chat, in VS Code's identity)")
     seen.set_defaults(handler=lambda args: tools_reach(repo_root(), args.probe))
 
-    machine = tools_commands.add_parser("launch-env", help="what the board gives VS Code when it starts it: the tool folders put before PATH and the CA bundle (Get ready, This computer)")
+    machine = tools_commands.add_parser("launch-env", help="what the board gives VS Code when it starts it: the tool folders put before PATH and the CA bundle (Settings, Programs and Network)")
     machine.set_defaults(handler=lambda args: _launch_state(repo_root()))
     bundle = tools_commands.add_parser("ca-bundle", help="make the CA bundle for the tools of this computer: the public roots and the chain this computer trusts for an outside address, through the proxy; kept only when a check with it passes")
     bundle.add_argument("--host", default="", help="the outside address to reach (default example.com); any address the proxy inspects will do")
@@ -354,7 +354,7 @@ def register(subparsers: Any) -> None:
     mcp.set_defaults(handler=lambda a: _mcp(repo_root(), a.allow, a.block))
 
     acting = subparsers.add_parser("as", help="run one command of a server with that server's saved identity (when this window does not hold it): harness as <alias> -- <command>")
-    acting.add_argument("alias", help="the server, as Get ready lists it")
+    acting.add_argument("alias", help="the server, as Settings lists it")
     acting.add_argument("rest", nargs=argparse.REMAINDER, help="-- then the command, whole")
     acting.set_defaults(handler=lambda a: run_as(repo_root(), a.alias, a.rest))
     def connections_parser(name: str, help_text: str, wrap: Callable[[Dict[str, Any]], Dict[str, Any]]) -> None:

@@ -1,11 +1,9 @@
-"""Get ready (1.6.57): the short command, and what the form checks and writes."""
+"""The short command, and what the setup steps write (1.6.57; the first-run wizard and Settings call them)."""
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +11,7 @@ from unittest import mock
 
 import support  # noqa: F401
 
-from core import messages, registry, setup, shortcmd
+from core import messages, registry, setup, shortcmd, wizard
 from modules.task import setupjob
 
 
@@ -62,12 +60,6 @@ class TryTests(unittest.TestCase):
             launcher.write_text("#!/bin/sh\necho broken >&2\nexit 2\n", encoding="utf-8")
             with mock.patch.object(shortcmd, "fresh_path", return_value=folder + os.pathsep + os.environ["PATH"]):
                 self.assertEqual(shortcmd.test(Path(folder)), {"ok": False, "output": "broken"})
-
-    def test_a_command_not_found_says_so(self) -> None:
-        with mock.patch.object(shortcmd, "fresh_path", return_value="/nothing/here"):
-            found = setup.try_short(Path("/r"))
-        self.assertFalse(found["ok"])
-        self.assertEqual(found["why"], messages.text("setup.short.bad"))
 
     def test_python_is_looked_at_on_windows_only(self) -> None:
         with mock.patch.object(shortcmd.sys, "platform", "darwin"):
@@ -133,7 +125,6 @@ class FinishTests(unittest.TestCase):
         return json.loads(path.read_text(encoding="utf-8"))
 
     def run_steps(self, data: dict) -> list:
-        setup.check(self.root, data)
         return [(key, step()) for key, step in setup.steps(self.root, data)]
 
     def test_only_name_and_language_are_needed_and_other_keys_stay(self) -> None:
@@ -165,11 +156,12 @@ class FinishTests(unittest.TestCase):
                 setup.refused(root, path)
 
     def test_one_wrong_field_stops_before_anything_is_written(self) -> None:
-        for data in ({"name": "", "language": "en"}, {"name": "A", "language": "fr"}, {"name": "x" * 101, "language": "en"}, {"name": "A", "language": "en", "repos_root": "relative/path"},
-                     {"name": "A", "language": "en", "repos_root": "/no/such/folder/at/all"}, {"name": "A", "language": "en", "kb_mode": "package"}, {"name": "A", "language": "en", "kb_mode": "odd"},
-                     {"name": "A", "language": "en", "skill_prefix": "Bad Word"}):
+        for data in ({"name": "", "language": "en"}, {"name": "A", "language": "fr"}, {"name": "x" * 101, "language": "en"}):
             with self.assertRaises(ValueError, msg=str(data)):
-                setup.check(self.root, data)
+                wizard.save_you(self.root, data)
+        for data in ({"skill_prefix": "Bad Word"}, {"install_command": "x" * 501}, {"refused": ["relative/path"]}, {"refused": "not a list"}):
+            with self.assertRaises(ValueError, msg=str(data)):
+                wizard.save_advanced(self.root, data)
         self.assertFalse(self.user.exists())
 
     def test_a_broken_file_is_not_overwritten(self) -> None:
@@ -203,9 +195,6 @@ class RepositoryListTests(unittest.TestCase):
 
     def finish(self, data: dict) -> dict:
         full = {"name": "A", "language": "en", **data}
-        with mock.patch.dict(os.environ):
-            os.environ.pop(messages.ENVIRONMENT, None)
-            setup.check(self.root, full)
         for _key, step in setup.steps(self.root, full):
             step()
         return json.loads((self.root / ".harness" / "policies" / "target.override.json").read_text(encoding="utf-8"))
@@ -227,7 +216,7 @@ class RepositoryListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             setup.add_repo(self.shelf / "orders", str(self.shelf))
         with self.assertRaises(ValueError):
-            setup.check(self.root, {"name": "A", "language": "en", "singles": [far, other]})
+            wizard.save_repos(self.root, {"paths": [far, other]})  # two repositories of one name
 
     def test_a_folder_and_single_ones_together(self) -> None:
         far = str(self.base / "far" / "billing")
@@ -253,14 +242,14 @@ class RepositoryListTests(unittest.TestCase):
     def test_a_language_the_harness_does_not_have_changes_nothing(self) -> None:
         with mock.patch.dict(os.environ, {messages.ENVIRONMENT: "fr"}):
             self.assertFalse(setup.status(self.root, {"found": "/x"})["language_forced"])
-            setup.check(self.root, {"name": "A", "language": "en"})
+            wizard.save_you(self.root, {"name": "A", "language": "en"})
 
     def test_a_broken_file_is_said_as_it_is(self) -> None:
         (self.root / ".harness" / "policies" / "user.override.json").write_text("{ broken", encoding="utf-8")
         with mock.patch.dict(os.environ):
             os.environ.pop(messages.ENVIRONMENT, None)
             with self.assertRaises(ValueError) as told:
-                setup.check(self.root, {"name": "A", "language": "en", "stamp": "old"})
+                wizard.save_you(self.root, {"name": "A", "language": "en", "stamp": "old"})
         self.assertNotIn(messages.text("setup.changed"), str(told.exception))
 
     def test_taking_the_folder_off_takes_its_rules_with_it(self) -> None:
@@ -314,8 +303,8 @@ class RepositoryListTests(unittest.TestCase):
         with mock.patch.dict(os.environ):
             os.environ.pop(messages.ENVIRONMENT, None)
             with self.assertRaises(ValueError) as told:
-                setup.check(self.root, {"name": "A", "language": "en", "stamp": opened})
-            setup.check(self.root, {"name": "A", "language": "en", "stamp": setup.stamp(self.root)})
+                wizard.save_you(self.root, {"name": "A", "language": "en", "stamp": opened})
+            wizard.save_you(self.root, {"name": "A", "language": "en", "stamp": setup.stamp(self.root)})
         self.assertIn(messages.text("setup.changed"), str(told.exception))
 
     def test_the_install_command_is_shown_and_an_empty_box_takes_it_off(self) -> None:
@@ -333,7 +322,7 @@ class RepositoryListTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {messages.ENVIRONMENT: "zh"}):
             found = setup.status(self.root, {"found": "/x"})
             self.assertEqual((found["language"], found["language_forced"]), ("zh", True))
-            setup.check(self.root, {"name": "A", "language": "zh"})
+            wizard.save_you(self.root, {"name": "A", "language": "zh"})
             for _key, step in setup.steps(self.root, {"name": "A", "language": "zh"})[:1]:
                 step()
         self.assertEqual(setup.kept(self.root, "user")["language"], "en")
@@ -450,9 +439,8 @@ class JobTests(unittest.TestCase):
         job = setupjob.Job()
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
-        with mock.patch.object(setup, "check"), mock.patch.object(setupjob, "ahead"), mock.patch.object(setup, "steps", return_value=steps[:1]), \
-                mock.patch.object(setupjob, "steps", return_value=steps[1:]), mock.patch.object(setup, "write"):
-            first = job.start(root, {})
+        with mock.patch.object(setupjob, "ahead"), mock.patch.object(setupjob, "steps", return_value=steps):
+            first = job.start_kb(root, {"kb_mode": "folder", "kb_path": str(root)})
             for _ in range(100):
                 if not job.view()["running"]:
                     break
@@ -463,45 +451,20 @@ class JobTests(unittest.TestCase):
         def boom():
             raise RuntimeError("no network")
 
-        first, last = self.run_job([("user", lambda: "a"), ("kb", lambda: "b"), ("sync", lambda: "c")])
+        first, last = self.run_job([("kb", lambda: "a"), ("git", lambda: "b"), ("sync", lambda: "c")])
         self.assertEqual((first["total"], last["total"], last["done"], len(last["lines"])), (3, 3, True, 3))
-        first, last = self.run_job([("user", lambda: "a"), ("kb", boom), ("sync", lambda: "c")])
+        first, last = self.run_job([("kb", lambda: "a"), ("git", boom), ("sync", lambda: "c")])
         self.assertEqual((last["total"], last["done"], last["running"]), (3, False, False))
         self.assertEqual([line["ok"] for line in last["lines"]], [True, False])  # it stops at the failed step and says why
         self.assertIn("no network", last["lines"][1]["detail"])
 
 
-class GuideTests(unittest.TestCase):
+class SampleTests(unittest.TestCase):
     def test_the_sample_comes_from_the_table_of_the_lesson(self) -> None:
         found = setup.sample(support.REPO)
         self.assertEqual((found["name"], found["kind"]), ("order-monitor", "design"))
         self.assertIn("orders", found["text"])
         self.assertEqual(setup.sample(Path("/no/such/root")), {})
-
-    def test_every_section_of_the_guide_is_a_heading_of_the_docs(self) -> None:
-        found = setup.guide(support.REPO)
-        for part in found["sections"]:
-            self.assertTrue(part["blocks"], part["title"])
-
-    def test_the_guide_says_whether_the_company_folder_is_there(self) -> None:
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            (root / ".harness" / "policies").mkdir(parents=True)
-            self.assertFalse(setup.guide(root)["company"])
-            (root / "knowledge-base" / "company").mkdir(parents=True)
-            found = setup.guide(root)
-            self.assertTrue(found["company"])
-            self.assertIn("instructions", found["missing"], "the one file is still missing: the page says so, not 'not found'")
-
-    def test_a_team_may_declare_it_has_no_skills_but_not_no_repositories(self) -> None:
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            (root / ".harness" / "policies").mkdir(parents=True)
-            self.assertEqual(setup.declare(root, "skills", True), ["skills"])
-            self.assertEqual(setup.declare(root, "skills", False), [])
-            with self.assertRaises(ValueError):
-                setup.declare(root, "repos", True)
-
 
 
 class CompanyFactsTests(unittest.TestCase):
@@ -566,130 +529,6 @@ class CompanyFactsTests(unittest.TestCase):
             (root / ".harness" / "policies").mkdir(parents=True)
             found = setup.status(root, {"found": True, "command": "", "windows": False})
             self.assertEqual((found["kb"], found["company"]["skills"], found["company"]["instructions_n"]), ({"here": False, "domains": 0, "domain_skills": 0, "version": "", "path": "", "prefix": ""}, {"n": 0, "off": []}, 0))
-
-    def test_the_page_draws_four_cards_and_keeps_every_control(self) -> None:
-        web = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
-        source = (web / "setup.js").read_text(encoding="utf-8")
-        messages = json.loads((support.REPO / ".harness" / "engine" / "core" / "messages.en.json").read_text(encoding="utf-8"))
-        for key, number, head in (("you", "2", "null"), ("company", "3", 'h("span", {class: "su-tag"}'), ("computer", "4", 'openTab("local")')):
-            self.assertIn(f'card("{key}", "{number}", {head}', source)
-            self.assertIn(f"setup.sec.{key}", messages)
-        self.assertNotIn("setup.form.title", source)
-        for control in ("name", "chips", "repos", "modes", "kbPath", "prefix", "install", "refusedBox", "more", "go"):
-            self.assertIn(control, source)
-        # 1.7.38: card 3 holds the knowledge base, the facts and the code repositories, in that order; card 4 is Local and holds the programs, the network and MCP, with one Open
-        card = source[source.index('card("company", "3"'):source.index('card("computer", "4"')]
-        self.assertLess(card.index("kbRow"), card.index("factsBox"))
-        self.assertLess(card.index("factsBox"), card.index("repoRow"))
-        self.assertIn("computerBox", source[source.index('card("computer", "4"'):])
-        self.assertIn('["packs", ""], ["packs", ""]', source)  # Tool packs and Connections have their own Open, which opens their own window
-        self.assertIn('["connections", ""], ["connections", ""]', source)
-        self.assertIn("TOOLS.open(go[0], loadTools, go[1])", source)
-        self.assertIn("TOOLS.open(open[0], loadTools, open[1])", source)
-        self.assertIn("paintUnpaired", source, "a browser that is not paired is told so inside the first card")
-        # the small print is a hover: HARNESS_LANGUAGE only when set, the override files beside Finish setup
-        self.assertIn('title: t("setup.language.forced")', source)
-        self.assertIn('title: t("setup.finish.note")', source)
-        self.assertIn('location.assign("/setup")', (web / "enter.js").read_text(encoding="utf-8"))  # the centre button of kind `setup` (O3)
-
-
-WEB = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
-FINISH_SCRIPT = r"""
-const assert = require("assert"), fs = require("fs"), vm = require("vm");
-const [web, mode, change] = process.argv.slice(2);  // mode: "press" (the person presses Finish) or "resume" (the page is loaded again while the work runs); change: a text to take out of setup.js
-class Node {
-  constructor(tag) { this.tag = tag; this.attrs = {}; this.kids = []; this.on = {}; this.hidden = false; this.disabled = false; this.value = ""; this.textContent = ""; this.dataset = {}; this.style = {}; this.isConnected = true; this.checked = false; this.open = false; this.classes = new Set(); this.classList = {add: (c) => this.classes.add(c), remove: (c) => this.classes.delete(c), toggle: (c, on) => (on === undefined ? !this.classes.has(c) : on) ? this.classes.add(c) : this.classes.delete(c), contains: (c) => this.classes.has(c)}; }
-  setAttribute(name, value) { this.attrs[name] = value; if (name === "hidden") this.hidden = true; if (name === "disabled") this.disabled = true; if (name.startsWith("data-")) this.dataset[name.slice(5)] = value; if (name === "class") String(value).split(" ").forEach((c) => this.classes.add(c)); }
-  get lastChild() { return this.kids[this.kids.length - 1] || {}; }
-  getAttribute(name) { return this.attrs[name] === undefined ? null : this.attrs[name]; }
-  append(...kids) { this.kids.push(...kids); }
-  replaceChildren(...kids) { this.kids = kids; }
-  addEventListener(type, fn) { (this.on[type] = this.on[type] || []).push(fn); }
-  removeEventListener() {}
-  querySelector() { return null; }
-  querySelectorAll() { return []; }
-  remove() {}
-  after() {}
-  focus() {}
-  scrollIntoView() {}
-  contains() { return false; }
-}
-const all = [];
-const document = {documentElement: {lang: "en"}, hidden: false, body: new Node("body"), activeElement: null,
-  createElement: (tag) => { const node = new Node(tag); all.push(node); return node; }, createTextNode: (text) => ({text}),
-  getElementById: (id) => (id === "data" ? {textContent: JSON.stringify({serve: {actions: []}, getReady: false})} : new Node("main")),
-  querySelector() { return null; }, querySelectorAll() { return []; }, addEventListener() {}, removeEventListener() {}};
-let reloads = 0, left = [];
-const location = {hash: "", pathname: "/setup", search: "", reload() { reloads++; }, assign(where) { left.push(where); }};
-// The board, in the part Finish meets: every answer carries the language; the work writes it first, then goes on; the work is over after `LONG` asks.
-const LONG = 5;
-let language = "en", asks = 0, running = mode === "resume";
-const found = {problem: "", name: "Tester", language: "en", language_forced: false, repos_root: "", root: null, singles: [], broken: [], skill_prefix: "", install_command: "", rules: [], example: "/x", stamp: "s1",
-  kb: {here: false, domains: 0, domain_skills: 0, version: "", path: "", prefix: ""}, company: {}, short: {found: "/bin/harness", command: "", windows: false}, reopen: false};
-function answer(step, body) {
-  if (step === "state") return found;
-  if (step === "guide") return {missing: [], declared: [], sections: [], company: false};
-  if (step === "act") { running = true;  /* the person chose zh: the work writes it first */ asks = 0; setTimeout(() => { language = "zh"; }, 0); return {lines: [], running: true, done: false, total: 6, stamp: "s1"}; }
-  if (step === "job") {
-    if (running && ++asks > LONG) running = false;
-    return {lines: running ? [{key: "kb", ok: true, detail: "x"}] : [{key: "kb", ok: true, detail: "x"}, {key: "doctor", ok: true, detail: "y"}], running, done: !running, total: 6, stamp: "s2"};
-  }
-  return {};
-}
-const fetch = (path, options) => {
-  const body = JSON.parse(options.body || "{}");
-  const data = path === "/api/status" ? {paired: true} : path === "/api/setup" ? {result: answer(body.step, body)} : {};
-  return Promise.resolve({ok: true, json: () => Promise.resolve({...data, language})});
-};
-const quick = (fn, ms) => setTimeout(fn, Math.min(ms || 0, 3));
-const context = vm.createContext({document, location, fetch, window: {addEventListener() {}}, history: {replaceState() {}}, Node, URLSearchParams, console, setTimeout: quick, clearTimeout, setInterval: () => 0, clearInterval() {}, JSON, Promise});
-const load = (file, edit) => vm.runInContext(edit ? fs.readFileSync(web + "/" + file, "utf8").replace(edit, "") : fs.readFileSync(web + "/" + file, "utf8"), context, {filename: file});
-vm.runInContext("DATA = undefined;", context);
-for (const file of ["common.js", "serve.js"]) load(file);
-vm.runInContext("globalThis.SERVE = SERVE;", context);
-vm.runInContext(fs.readFileSync(web + "/setup.js", "utf8").replace(change || "\0", "") + "\nglobalThis.SETUP = SETUP;", context, {filename: "setup.js"});
-const wait = (ms) => new Promise((done) => setTimeout(done, ms));
-(async () => {
-  await wait(20);  // the pairing
-  const app = new Node("main");
-  context.SETUP.mount(app);
-  await wait(30);
-  if (mode === "press") {
-    const go = all.find((node) => node.attrs.class === "act hot big");
-    assert.ok(go, "the Finish button is drawn");
-    assert.strictEqual(go.disabled, false, "the form is ready to be sent");
-    for (const fn of go.on.click) fn();
-  }
-  for (let turn = 0; turn < 100 && !left.length; turn++) await wait(10);
-  console.log(JSON.stringify({reloads, left}));
-  process.exit(0);
-})();
-"""
-
-
-@unittest.skipUnless(shutil.which("node"), "node is not installed")
-class FinishKeepsThePageTests(unittest.TestCase):
-    """N1 of the retest: with 中文 chosen, Finish wrote the language first, the next answer carried it, and the page loaded itself again in the middle of the work: a stale form and no way back to Enter."""
-
-    def run_page(self, mode: str, change: str = "") -> dict:
-        with tempfile.TemporaryDirectory() as folder:
-            file = Path(folder) / "finish.js"
-            file.write_text(FINISH_SCRIPT, encoding="utf-8")
-            done = subprocess.run([shutil.which("node"), str(file), str(WEB), mode, change], capture_output=True, text=True, check=False)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        return json.loads(done.stdout.strip().splitlines()[-1])
-
-    def test_a_changed_language_does_not_load_the_page_again_while_the_work_runs(self) -> None:
-        seen = self.run_page("press")
-        self.assertEqual(seen, {"reloads": 0, "left": ["/"]}, "the work is followed to its end, then the page leaves for Enter")
-
-    def test_without_asking_to_stay_the_page_is_lost(self) -> None:
-        seen = self.run_page("press", "SERVE.stay(() => st.touched && app.isConnected);")
-        self.assertGreaterEqual(seen["reloads"], 1, "the test can see the fault it is for")
-
-    def test_a_page_loaded_again_while_the_work_runs_goes_on_showing_it(self) -> None:
-        seen = self.run_page("resume")
-        self.assertEqual(seen, {"reloads": 0, "left": ["/"]})
 
 
 if __name__ == "__main__":

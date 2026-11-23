@@ -148,11 +148,12 @@ const SETTINGS = (function () {
       env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body.filter((node) => node.dataset && node.dataset.part === "network")]);
     }
 
-    // Advanced: the Python install command, the paths not to touch, the skill prefix and the older copy go through the steps of the old form (act, refuse, older); MCP is machine.js's switch
+    // Advanced: the Python install command, the paths not to touch, the skill prefix and the older copy go through `save` (part advanced), `refuse` and `older`; MCP is machine.js's switch
     function advancedSection(id, env) {
       return ask("/api/setup", "state").then((state) => {
         const rules = state.rules.slice(), refused = [];
         const field = (caption, node, hint) => h("div", {class: "wz-field"}, h("span", {class: "cap"}, caption), node, hint ? h("div", {class: "hint"}, hint) : null);
+        const literal = (text) => text.split("{package}").flatMap((part, i) => (i ? [h("code", null, "{package}"), part] : [part]));  // `{package}` is a placeholder the person types: it always shows as it is, in the code font
         const install = h("input", {type: "text", class: "wz-in mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph"), value: state.install_command || "", "aria-label": t("setup.install")});
         const prefix = h("input", {type: "text", class: "wz-in mono st-short", maxlength: 31, autocomplete: "off", spellcheck: "false", value: state.skill_prefix || (state.kb && state.kb.prefix) || "", "aria-label": t("setup.prefix")});
         const path = h("input", {type: "text", class: "wz-in mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: state.example, "aria-label": t("setup.refused")});
@@ -172,17 +173,10 @@ const SETTINGS = (function () {
         add.addEventListener("click", addPath);
         paintRules();
         const save = h("button", {type: "button", class: "wz-btn primary"}, t("settings.save"));
-        const follow = (began) => ask("/api/setup", "job").then((job) => {
-          const bad = (job.lines || []).find((line) => line.ok === false);
-          if (bad) throw new Error(bad.detail || t("setup.run.failed", {step: t("setup.line." + bad.key)}));
-          if (job.running && Date.now() - began < 180000) return new Promise((resolve) => setTimeout(resolve, 1000)).then(() => (env.live() ? follow(began) : null));
-          if (job.running) throw new Error(t("setup.run.working"));
-          return job;
-        });
         save.addEventListener("click", () => {
           said.hidden = true; done.textContent = ""; save.disabled = true;
-          const values = {name: state.name, language: state.language, repos_root: state.repos_root, singles: state.singles, kb_mode: "none", kb_path: "", kb_replace: false, skill_prefix: prefix.value, install_command: install.value, refused, rules, stamp: state.stamp};
-          ask("/api/setup", "act", values).then(() => follow(Date.now())).then(() => {
+          const values = {part: "advanced", skill_prefix: prefix.value, install_command: install.value, refused, rules, stamp: state.stamp};  // three fields: no knowledge base sync and no doctor
+          ask("/api/setup", "save", values).then(() => {
             saved(); done.textContent = "✓ " + t("settings.saved");
             return ask("/api/setup", "state").then((now) => { state.stamp = now.stamp; refused.splice(0); rules.splice(0, rules.length, ...now.rules); paintRules(); });
           }).catch((error) => { said.textContent = errorText(error); said.hidden = false; }).then(() => { save.disabled = false; });
@@ -191,7 +185,7 @@ const SETTINGS = (function () {
         older.addEventListener("click", () => olderDialog(saved));
         const made = MACHINE.localPanel(ctx);
         env.inside([
-          field(t("setup.install"), install, t("setup.install.example")),
+          field(t("setup.install"), install, literal(t("setup.install.example"))),
           field(t("setup.refused"), h("div", {class: "st-add"}, path, add), t("setup.refused.hint")), h("div", {class: "st-under"}, list), said,
           field(t("setup.prefix"), prefix, t("setup.prefix.hint")),
           h("div", {class: "st-line"}, save, done),

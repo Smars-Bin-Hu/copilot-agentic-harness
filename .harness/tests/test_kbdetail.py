@@ -91,7 +91,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("found.next", dock.split("function near(")[0].split("function nextCard(")[1])
 
     def test_ask_why_is_on_a_served_report_and_not_on_a_saved_one(self) -> None:
-        served = taskhtml.build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "kbatlas.js", "setup.js", "task.js"], "t", {"info": {}, "serve": {}})
+        served = taskhtml.build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "kbatlas.js", "task.js"], "t", {"info": {}, "serve": {}})
         self.assertIn('DOCK.start("harness-task-report", info.name)', served)
         self.assertIn('served() ? [" \\u00b7 ", h("a", {href: "/report-save/"', (taskhtml.WEB / "task.js").read_text(encoding="utf-8"))
 

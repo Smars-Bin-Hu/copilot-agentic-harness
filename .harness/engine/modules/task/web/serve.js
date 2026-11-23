@@ -24,7 +24,7 @@ const SERVE = (function () {
   }
 
   let reloading = false;
-  // A page that shows work in progress asks to stay (1.7.38): the Get ready form writes the language first and goes on for a while, and a reload then lost the work it was showing.
+  // A page that shows work in progress asks to stay (1.7.38): the wizard writes the language first and goes on for a while, and a reload then lost the work it was showing.
   // `keep()` says whether it still asks. The page that changes the language itself (the settings panel) passes `now`: that one reloads.
   const keepers = [];
   const stay = (keep) => { keepers.push(keep); };

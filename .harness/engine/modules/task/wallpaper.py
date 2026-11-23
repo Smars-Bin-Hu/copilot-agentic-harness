@@ -93,7 +93,7 @@ def picker(prompt: str) -> Optional[List[str]]:
 
 
 def file_picker(prompt: str) -> Optional[List[str]]:
-    """The same window for one zip file (Get ready)."""
+    """The same window for one zip file (Settings)."""
     if sys.platform == "darwin":
         return ["osascript", *[part for line in MAC_FILE for part in ("-e", line)], prompt]
     if sys.platform == "win32":

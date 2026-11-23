@@ -1177,7 +1177,7 @@ def new(root: Path, name: str, out: str = "") -> Dict[str, Any]:
         "rules": {"none": {"read": "allow", "write": "outbox", "exec": "human", "destroy": "deny"}}}, indent=2) + "\n", encoding="utf-8")
     (target / "skills" / f"{name}-use" / "SKILL.md").write_text(SKELETON_SKILL.format(name=name), encoding="utf-8")
     (target / "README.md").write_text(f"# {name}\n\nWhat it is for, in one line.\n\n1. Try it: `harness toolpack add <this folder>`. To keep it, put it in the knowledge base, `company/tools/packs/{name}/`.\n"
-                                      "2. Set up: Get ready, Tools, This computer (the program's folder, a CA bundle behind a proxy).\n3. Sign in: Get ready, Tools, Connections.\n"
+                                      "2. Set up: Settings, Programs (the program's folder) and Network (a CA bundle behind a proxy).\n3. Sign in: Settings, Connections.\n"
                                       "4. Try: ask the agent for a read, then for a write: the write waits for you.\n", encoding="utf-8")
     return {"made": str(target), "next": say("toolpack.new.done", path=str(target))}
 

@@ -5,7 +5,7 @@ Two blocks (1.7.38, block B).
   without one the harness cannot work here. They are `checks`, each with `group: "required"` and `blocking: true`, and a `level` for its dot: ok, grey, yellow, red.
 - OPTIONAL, from the company: knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories (`core/readyitems.py`). They never block. `optional` holds the items and the
   `problems` to look at; each problem has the place that mends it.
-`problems.required` is what is not ok in the first block (the red block of the board after Enter), and `action` is the button beside Enter: the fix of the VS Code or Copilot line (H6: the board runs its own
+`problems.required` is what is not ok in the first block (the red block of the board after Enter), and `button` is the one button of the Enter screen (the first thing that holds, or Enter; H6: the board runs its own
 agent host, so VS Code only has to be installed).
 
 Nothing here waits on the outside world, so the server never hangs on it:
@@ -58,6 +58,7 @@ EFFECTS = {"kb": "ready.effect.kb", "instructions": "ready.effect.instructions",
 NOTES = {"kb": "ready.note.kb", "instructions": "ready.note.instructions", "skills": "ready.note.skills", "standards": "ready.note.standards", "packs": "ready.note.packs", "connections": "ready.note.connections", "repos": "ready.note.repos"}  # the words of its dot on the gear
 BUTTONS = {"pair": "ready.btn.pair", "setup": "ready.btn.setup", "program": "ready.btn.program", "doctor": "ready.btn.doctor", "signin": "ready.btn.signin", "signing": "ready.btn.signing", "preparing": "ready.btn.preparing", "restart-host": "ready.btn.restart-host",
            "wait": "ready.btn.wait", "check": "ready.btn.check", "enter": "ready.btn.enter"}  # the label of each kind of the middle button
+RED_FIX = {"signin": "signin", "refused": "signin", "no-gh": "get-gh"}  # the board's red block (readybar.js): the fix button of a Copilot line, by its reason
 PROGRAM_PAGES = {"vscode": "https://code.visualstudio.com/download", "gh": ghauth.DOWNLOAD_PAGE}
 
 
@@ -616,18 +617,6 @@ class Ready:
         out["label"] = say(words.get(kind) or BUTTONS[kind], program=out["program"], n=out["n"], percent=out["percent"])
         return out
 
-    ACTIONS = {"signin": "signin", "refused": "signin", "no-gh": "get-gh", "signing-in": "signing", "host-preparing": "preparing", "host-starting": "preparing", "no-code": "get-vscode"}
-
-    def action(self, checks: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """1.8.x: the button beside Enter: the fix of the VS Code or Copilot line that is not ok (sign in, get gh, get VS Code), or what goes on (preparing, signing in: off)."""
-        for line in checks:
-            if line["id"] in ("vscode", "copilot") and line["state"] != "ok":
-                kind = self.ACTIONS.get(str(line.get("why") or ""), "")
-                if kind:
-                    return {"kind": kind, "label": messages.text(f"ready.act.{kind}"), "off": kind in ("signing", "preparing"), "url": str(line.get("download") or "")}
-                return {"kind": "none"}
-        return {"kind": "none"}
-
     # --- the answer -----------------------------------------------------------------------------------------------
 
     def level(self, line: Dict[str, Any]) -> str:
@@ -646,7 +635,7 @@ class Ready:
                 continue
             text, reason, fix = "", "", {}
             if key == "setup":
-                text, reason, fix = say("ready.r.setup.new"), say("ready.r.setup.new.why"), {"to": "setup", "sec": "you", "label": say("board.enter.getready")}
+                text, reason, fix = say("ready.r.setup.new"), say("ready.r.setup.new.why"), {"to": "setup", "sec": "you", "label": say("ready.btn.setup")}
             elif key == "paired":
                 text, reason = say("ready.r.paired"), say("ready.r.paired.why")
             elif key == "doctor":
@@ -659,8 +648,8 @@ class Ready:
                 if why == "vscode":
                     continue
                 text, reason = say(f"ready.r.copilot.{why}"), say(f"board.enter.m.copilot.{why}", n=line.get("n", ""), detail=line.get("detail", ""))
-                kind = self.ACTIONS.get(why, "")
-                if kind in ("signin", "get-gh"):
+                kind = RED_FIX.get(why, "")
+                if kind:
                     fix = {"to": "copilot", "kind": kind, "url": line.get("download", ""), "label": say(f"ready.act.{kind}")}
             out.append({"key": key, "level": "red" if state == "fail" else "yellow", "code": why, "text": plain(text), "why": plain(short(reason)), "fix": fix})
         return out
@@ -717,7 +706,7 @@ class Ready:
             time.sleep(KEEP_EVERY)
 
     def answer(self, paired: bool) -> Dict[str, Any]:
-        """`{ready, checks, optional, problems, action}`. `checks`: the five required lines `{id, group, blocking, level, state, why, ...}`. `state`: ok, wait (it comes by itself), fail (needs the person), check
+        """`{ready, checks, optional, problems, button, notes}`. `checks`: the five required lines `{id, group, blocking, level, state, why, ...}`. `state`: ok, wait (it comes by itself), fail (needs the person), check
         (not known yet). `ready`: every required line is ok, and only then Enter is on (1.7.38)."""
         checks: List[Dict[str, Any]] = []
         took: Dict[str, float] = {}
@@ -752,4 +741,4 @@ class Ready:
         for line in checks:
             line["level"] = self.level(line)
         return {"ready": all(line["state"] == "ok" for line in checks), "checks": checks, "optional": optional, "problems": {"required": self.required_problems(checks), "optional": optional["problems"]},
-                "action": self.action(checks), "button": self.button(checks, all(line["state"] == "ok" for line in checks)), "notes": optional["notes"]}
+                "button": self.button(checks, all(line["state"] == "ok" for line in checks)), "notes": optional["notes"]}

@@ -296,7 +296,7 @@ const SHELL = (function () {
   function buildFixed() {
     const pill = h("button", {type: "button", class: "sh-pill", "aria-label": t("board.shell.search") + " " + mod + " K", title: t("board.shell.search") + " (" + mod + " K)"}, icon("search"), h("span", null, t("board.shell.search")), h("kbd", null, mod + " K"));
     pill.addEventListener("click", () => (open() ? closePalette() : openPalette()));
-    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.gear"), title: t("board.shell.gear"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("sliders"));  // the sliders: theme, wallpaper, language (1.7.35; the dock's Get ready button above it has the gear)
+    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.gear"), title: t("board.shell.gear"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("sliders"));  // the sliders: theme, wallpaper, language (1.7.35; the dock's Settings gear is above it)
     gear.addEventListener("click", () => (settingsOpen() ? closeSettings() : openSettings()));
     document.body.append(pill, gear);
   }

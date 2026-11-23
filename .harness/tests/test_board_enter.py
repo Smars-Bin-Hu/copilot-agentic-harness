@@ -688,16 +688,17 @@ class BlockPageTests(unittest.TestCase):
         for name in ("board", "desk"):
             self.assertNotIn("const READY =", pages[name], name)  # a page on disk calls nothing out
 
-    def test_the_block_hides_by_the_set_of_problems_in_a_try_and_the_red_one_has_no_hide(self) -> None:
+    def test_the_board_block_is_the_red_one_alone_and_it_cannot_be_hidden(self) -> None:
+        """O5: the yellow block (optional problems, with its hide and fingerprint) is the dot on the gear now; the red block stays."""
         code = (WEB / "readybar.js").read_text(encoding="utf-8")
-        self.assertIn("harness.ready.hidden", code)
-        self.assertRegex(code, r"try \{ return localStorage\.getItem\(KEY\)")
-        self.assertRegex(code, r"try \{ localStorage\.setItem\(KEY, value\); \} catch")
-        self.assertIn("fingerprint(optional)", code)  # hidden until the set of problems changes
-        red = code[code.index("function red("):code.index("function yellow(")]
-        self.assertNotIn("board.ready.hide", red)  # the red block cannot be hidden
+        for gone in ("harness.ready.hidden", "localStorage", "fingerprint", "function yellow(", "board.ready.hide", "board.ready.show", "board.ready.yellow"):
+            self.assertNotIn(gone, code, gone)
+        red = code[code.index("function red("):code.index("function paint(")]
         self.assertIn('role: "alert"', red)
-        self.assertIn("html.rd-red .vs-banner{display:none}", (WEB / "readybar.css").read_text(encoding="utf-8"))
+        self.assertIn("READY.notes(data.notes)", code)  # the optional things are the dot on the gear
+        css = (WEB / "readybar.css").read_text(encoding="utf-8")
+        self.assertNotIn("rd-yellow", css)
+        self.assertIn("html.rd-red .vs-banner{display:none}", css)
 
     def test_the_board_asks_the_same_answer_as_the_screen_and_not_while_the_screen_is_up(self) -> None:
         code = (WEB / "readybar.js").read_text(encoding="utf-8")

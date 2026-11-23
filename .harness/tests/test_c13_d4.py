@@ -315,16 +315,6 @@ class SendToFolderTests(unittest.TestCase):
         found = setupjob.probe_folder(self.root, self.source)
         self.assertEqual(found["update"]["send"]["subjects"], ["my card"])
 
-    def test_the_window_and_its_words_are_in_the_page(self) -> None:
-        text = (REPO / ".harness" / "engine" / "modules" / "task" / "web" / "setup.js").read_text(encoding="utf-8")
-        self.assertIn("function sendWindow", text)
-        self.assertIn("SERVE.dialog", text[text.index("function sendWindow"):text.index("function sendWindow") + 1500])
-        self.assertNotIn('TERM.run(u.pull, checkKb));  // the Terminal says how it ended', text, "the button no longer runs the line itself")
-        for key in ("setup.kb.update.send.about", "setup.kb.update.send.folder", "setup.kb.update.send.branch", "setup.kb.update.send.commits", "setup.kb.update.send.commits.one", "setup.kb.update.send.go"):
-            self.assertIn(key, text)
-            for language in ("en", "zh"):
-                self.assertTrue(messages.table(language).get(key), (key, language))
-
 
 class TheAgentClosesNothingTests(AcceptCase):
     """Closing rule (C13): a look and a ticket chore are delivered like any other task, the person accepts and closes them, follow-ups stay in the same task, and the gate refuses `task close` from the agent."""

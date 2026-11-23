@@ -1,4 +1,4 @@
-"""Get ready (1.6.57): what the page `/setup` shows and writes. No agent, no premium request.
+"""Settings and the first-run wizard (1.6.57): what the page `/setup` and the Settings window read and write. No agent, no premium request.
 
 Everything goes into the person's own `*.override.json`, next to what is already there. A broken file stops the write; nothing is overwritten. One wrong field: nothing is written.
 """
@@ -345,63 +345,6 @@ def status(root: Path, short: Optional[Dict[str, Any]] = None) -> Dict[str, Any]
             "short": short_state(root) if short is None else short, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 
 
-def try_short(root: Path) -> Dict[str, Any]:
-    """What the test button of the short command shows: its output, and on Windows whether hooks can run."""
-    found = shortcmd.test(root)
-    problem = shortcmd.python_problem()
-    return {**found, "why": "" if found["ok"] else say("setup.short.bad"), "python": say("setup.python.stub") if problem == "stub" else say("setup.python.missing") if problem else ""}
-
-
-def check(root: Path, data: Dict[str, Any]) -> None:
-    """Every field, before anything is written. ValueError: all that is wrong."""
-    name = " ".join(str(data.get("name") or "").split())
-    language = str(data.get("language") or "").strip().lower()
-    repos = repositories(data.get("repos_root"))
-    wrong: List[str] = []
-    if not name or len(name) > MAX_NAME:
-        wrong.append(say("setup.name.need", limit=MAX_NAME))
-    if language not in messages.LANGUAGES:
-        wrong.append(say("setup.language.need"))
-    if not repos["ok"]:
-        wrong.append(repos["why"])
-    held: List[str] = []
-    for item in single_list(data):
-        try:
-            if add_repo(item, data.get("repos_root"), held, root)["kind"] != "repo":
-                wrong.append(say("setup.repos.none"))
-            held.append(item)
-        except ValueError as error:
-            wrong.append(f"{item}: {error}")
-    for item in data.get("refused") if isinstance(data.get("refused"), list) else []:
-        try:
-            refused(data.get("repos_root"), item, single_list(data))
-        except ValueError as error:
-            wrong.append(f"{item}: {error}")
-    if len(str(data.get("install_command") or "")) > MAX_INSTALL:
-        wrong.append(say("setup.install.long", limit=MAX_INSTALL))
-    now = stamp(root)
-    if not now:
-        try:
-            kept(root, "user"), kept(root, "target"), kept(root, "tools")
-        except ValueError as error:
-            wrong.append(str(error))
-    elif data.get("stamp") and data["stamp"] != now:
-        wrong.append(say("setup.changed"))
-    forced = forced_language()
-    if forced and forced != language:
-        wrong.append(say("serve.language.env", name=messages.ENVIRONMENT))
-    mode = str(data.get("kb_mode") or "none")
-    if mode not in ("none", "package", "folder"):
-        wrong.append(say("setup.kb.mode"))
-    elif mode != "none" and not clean_path(data.get("kb_path")):
-        wrong.append(say("setup.kb.path"))
-    prefix = str(data.get("skill_prefix") or "").strip()
-    if prefix and not PREFIX.fullmatch(prefix):
-        wrong.append(say("setup.prefix.bad"))
-    if wrong:
-        raise ValueError(" ".join(wrong))
-
-
 def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]]]:
     """The writes of the person's own files, in order. Each can be run again."""
 
@@ -464,10 +407,6 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
     return [("user", user), ("target", target), ("tools", tools)]
 
 
-SECTIONS = (("repos", "Target repositories"), ("kb", "Knowledge base"), ("instructions", "Company content"), ("skills", "Skills"), ("standards", "Code standards"), ("python", "Python packages"))  # the headings of docs/03-configure.md: a test holds them
-CAN_DECLARE = ("skills", "standards")  # a team may have none of these
-
-
 def no_such(root: Path) -> List[str]:
     """What the person said the team has none of."""
     try:
@@ -475,57 +414,6 @@ def no_such(root: Path) -> List[str]:
     except ValueError:
         return []
     return found if isinstance(found, list) else []
-
-
-def missing(root: Path) -> List[str]:
-    """What the big warning of the board lists: repos, domains, instructions, skills, standards. Quick: a few file looks, nothing that runs."""
-    user = {}
-    try:
-        user = kept(root, "user")
-    except ValueError:
-        pass
-    declared = no_such(root)
-    folder = targets.company_folder(root)
-    out: List[str] = []
-    try:
-        kb = {name for name, _path in targets.knowledge_bases(root)}
-        if not [name for name in targets.load(root).repos if name not in kb]:
-            out.append("repos")
-    except Exception:  # noqa: BLE001 - a broken policy is doctor's to report
-        out.append("repos")
-    if not any(targets.knowledge_base_content(path) for _name, path in targets.knowledge_bases(root)):
-        out.append("domains")
-    if not (folder and company.instruction_sources(folder)):
-        out.append("instructions")
-    if not str(user.get("skill_prefix") or "").strip() and "skills" not in declared:
-        out.append("skills")
-    if not (folder and (folder / standards.COMPANY_FILE).is_file()) and "standards" not in declared:
-        out.append("standards")
-    return out
-
-
-def declare(root: Path, key: Any, on: Any) -> List[str]:
-    """`We have none` of the guide: it goes in `none` of `user.override.json`."""
-    if key not in CAN_DECLARE:
-        raise ValueError(say("serve.refused.request"))
-    held = kept(root, "user").get("none")
-    found = set(held if isinstance(held, list) else [])
-    found.add(key) if on else found.discard(key)
-    write(root, "user", {"none": sorted(found)})
-    return sorted(found)
-
-
-def guide(root: Path) -> Dict[str, Any]:
-    """The explanation of each section, cut out of docs/03-configure.md: the page keeps no copy of it. A heading that moved shows no text; the test catches it first."""
-    from modules.task import mdtree  # noqa: PLC0415 - a module of the board; core is imported by it
-
-    try:
-        text = (root / "docs" / "03-configure.md").read_text(encoding="utf-8")
-    except OSError:
-        text = ""
-    parts = re.split(r"^## ", text, flags=re.M)
-    found = {part.split("\n", 1)[0].strip(): part.split("\n", 1)[1] if "\n" in part else "" for part in parts[1:]}
-    return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root), "declared": no_such(root), "company": targets.company_folder(root) is not None}
 
 
 def sample(root: Path) -> Dict[str, str]:

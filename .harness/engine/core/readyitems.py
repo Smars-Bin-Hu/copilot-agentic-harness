@@ -7,7 +7,7 @@
   key       kb, instructions, skills, standards, packs, connections, repos
   state     ok (there, and right), grey (not there, nothing to do now), yellow (there or missing, and something is off)
   detail    the short value, in the language of the engine: `acme-kb . 4 domains . 12 domain skills`; `-` when there is nothing
-  fix       the place that mends the item, or {}: {to, label, ...}; `to` is setup (the Get ready form: `sec`), tools (a window: `tab`, `part`), kb (the knowledge base window: `tab`)
+  fix       the place that mends the item, or {}: {to, label, ...}; `to` is setup (a section of Settings: `sec`), tools (a window: `tab`, `part`), kb (the knowledge base window: `tab`)
   names     packs and connections: [{name, state}] (ok, need, down, none, untested), for a dot each
   problems  [{key, text, why, short, fix}]: one for each thing the person should look at; `text` and `why` for the board block, `short` for a note under the Enter row
   tip       a sentence for the hover of the row; "" when there is none

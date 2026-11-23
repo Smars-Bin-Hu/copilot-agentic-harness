@@ -175,7 +175,7 @@ class Plan:
             self.skip(".harness/.env", say("reinstall.why.exists"))
         else:
             self.copy("identities", ".env", "file", source, target)
-        certs, here = old / ".harness" / "certs", root / ".harness" / "certs"  # the CA bundle Get ready made (1.7.11): `.env` names it inside the copy
+        certs, here = old / ".harness" / "certs", root / ".harness" / "certs"  # the CA bundle Settings made (1.7.11): `.env` names it inside the copy
         if certs.is_dir() and not here.exists():
             self.copy("identities", "certs", "dir", certs, here)
 

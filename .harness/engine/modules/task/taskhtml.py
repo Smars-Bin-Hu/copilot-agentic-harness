@@ -23,12 +23,12 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   wbpanels.js, wbpanels.css     the board only, a served page: what the workbench draws in its places from the rows of the board (the tree of the agents that run, the Data panel, the picture of Focus, the hover card of a task, the entrance)
   enter.js, enter.css     a served page only: the Enter screen (wordmark, robot, hold to charge, the two blocks of `/api/ready`: Harness & Local required, From the company optional, and the VS Code button); a file on disk has none
   stop.js                 a served page only (1.8.11): the stop button at the top right (paired browsers; asks once, `POST /api/shutdown`), and the page that says the board has stopped and asks for nothing more
-  readyui.js              a served page only: where a fix of the readiness answer leads (the setup form, a Tools window, the knowledge base window, the Terminal) and the VS Code button's restart (1.7.38)
-  readybar.js, readybar.css   the board only: the red and the yellow block under its header after Enter (1.7.38)
+  readyui.js              a served page only: where a fix of the readiness answer leads (a section of Settings, the wizard, the knowledge base window, the Terminal) (1.7.38)
+  readybar.js, readybar.css   the board only: the red block under its header after Enter, for a required problem (1.7.38)
   page.css, lobby.css     where things go, shared / the board's lobby
   common.js               helpers shared by both pages
   settings.js, settings.css, wizard.js   a served page only (the board, the task page): the Settings window the gear opens (O4): the wizard's pages drawn bare, and the panels of machine.js and servers.js
-  tools.js                a served page only: where a Tools tab leads (a section of Settings) and the facts of Get ready (1.7.17, three windows 1.7.38)
+  tools.js                a served page only: where a Tools tab leads (a section of Settings) and the facts of Settings (1.7.17, three windows 1.7.38)
   machine.js              a served page only: the Tool packs and Local windows (the packs, tool folders, the CA bundle, MCP)
   servers.js              a served page only: the Connections & sign-ins window (each connection with its sign-in and Test, Export) and the main account of the agent host (1.7.10, H6)
   perf.js, perf.css       the task's report page: the small part of the Agent Performance Review (1.7.41): the free accounts, the review's one line, the link to its page, the button that starts one
@@ -159,7 +159,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
     texts = page_text()
     if not linked:
         data["text"] = texts  # a file on its own carries its texts; a linked page loads them from /asset/ (window.PAGE_TEXT, 1.8.25)
-    css = "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([CALLVIEW_CSS] if "callview.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *([AUTORUN_CSS] if "autorun.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["setup.css", "wizard.css", "settings.css"] if "settings.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([REOPEN_CSS] if "reopen.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *([SUPER_CSS] if "super.js" in scripts else []), *([WORKBENCH_CSS] if "workbench.js" in scripts else []), *([WBPANELS_CSS] if "wbpanels.js" in scripts else []), *([COMPANION_CSS] if "companion.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])])
+    css = "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([CALLVIEW_CSS] if "callview.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *([AUTORUN_CSS] if "autorun.js" in scripts else []), *(["dock.css", "kbatlas.css", "company.css"] if "dock.js" in scripts else []), *(["wizard.css", "settings.css"] if "settings.js" in scripts else []), *(["readybar.css"] if "readybar.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([REOPEN_CSS] if "reopen.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else []), *([SUPER_CSS] if "super.js" in scripts else []), *([WORKBENCH_CSS] if "workbench.js" in scripts else []), *([WBPANELS_CSS] if "wbpanels.js" in scripts else []), *([COMPANION_CSS] if "companion.js" in scripts else []), *(["perf.css"] if "perf.js" in scripts else [])])
     js = "\n".join(read(name) for name in scripts)
     parts = {
         "<!--REFRESH-->": f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else "",
@@ -221,8 +221,8 @@ SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsaf
 
 def setup_page(serve: Dict[str, Any], linked: bool = False) -> str:
     """The first-run setup wizard (O2), as the board server sends it. It has no Enter screen: it is where a new copy goes from there.
-    setup.css stays for the pieces of the old form that the picker and the connections window still draw (dock.js, servers.js)."""
-    return build("setup.html", ["common.js", "serve.js", "readyui.js", "dock.js", "servers.js", "wizard.js"], say("setup.title"), {"serve": serve, "wizard": True}, 0, ["page.css", "setup.css", "wizard.css"], linked)
+    settings.css is there for the pieces the folder picker and the connections panel (dock.js, servers.js) draw."""
+    return build("setup.html", ["common.js", "serve.js", "readyui.js", "dock.js", "servers.js", "wizard.js"], say("setup.title"), {"serve": serve, "wizard": True}, 0, ["page.css", "wizard.css", "settings.css"], linked)
 
 
 def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None, linked: bool = False) -> str:

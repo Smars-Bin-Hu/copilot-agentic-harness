@@ -75,7 +75,7 @@ class OwnConnectionFormTests(ConnectionsCase):
         self.assertIn('h("option", {value: ""}, t("connections.own.env.pick")), names.map(', source)  # a first, empty kind
         self.assertIn('envField.hidden = !spec || spec.env === "none"', source)
         self.assertIn("authField.hidden = !spec", source)
-        self.assertIn(".sv-field[hidden]{display:none}", (WEB / "setup.css").read_text(encoding="utf-8"))
+        self.assertIn(".sv-field[hidden]{display:none}", (WEB / "settings.css").read_text(encoding="utf-8"))
 
 
 class AllConnectionsTests(FindCase):

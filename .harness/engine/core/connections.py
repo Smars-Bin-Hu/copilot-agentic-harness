@@ -7,7 +7,7 @@ Three layers, each with one owner:
                answer (`expect`, `denied`, `down`), and for the gate the programs (`cli`), how a command names one connection (`match`), the verbs and rules.
   connections  `.harness/policies/connections.company.json` (from `company/tools/connections.json`): `{"connections": {name: {type, env, auth, <fields>}}}`.
                The person's own connections live in `.harness/.env` with their identities.
-  identities   `.harness/.env`: `HARNESS_CONNECTION_<NAME>_<FIELD>=value`, written by Get ready after a test passed. Never in git, a log, a page or the
+  identities   `.harness/.env`: `HARNESS_CONNECTION_<NAME>_<FIELD>=value`, written by Settings after a test passed. Never in git, a log, a page or the
                knowledge base; `reinstall` carries it; the gate refuses the agent a read of it.
 
 Each connection becomes a system of the tools policy (`derived`): the gate judges its commands, the reach check probes it, with nothing written by hand.

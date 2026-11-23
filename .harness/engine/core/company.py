@@ -308,7 +308,7 @@ def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
 
 
 def sync_after(root: Path, remove: bool = False) -> Optional[Dict[str, Any]]:
-    """`sync` at the end of another command: a problem goes in that command's answer, it does not undo what was done. `remove` (the Save of Get ready: the person asked, as for Sync now) takes back what left the content."""
+    """`sync` at the end of another command: a problem goes in that command's answer, it does not undo what was done. `remove` (the Save of Settings: the person asked, as for Sync now) takes back what left the content."""
     try:
         found = sync(root, remove=remove)
     except (CompanyError, OSError) as error:

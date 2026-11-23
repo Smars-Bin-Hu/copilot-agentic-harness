@@ -352,7 +352,7 @@ const SERVERS = (function () {
     if (typeof SETTINGS !== "undefined") SETTINGS.open("connections", {done});
   }
 
-  // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
+  // One line for Settings and the Enter screen: how many servers, how many with the person's identity.
   // A connection whose tool pack is off is not counted (Q22); `off` names them, for the hover.
   function summary() {
     return ask("list").then((found) => ({orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.signed).length,

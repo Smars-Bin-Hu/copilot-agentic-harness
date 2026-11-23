@@ -344,6 +344,36 @@ class SaveTests(HarnessTestCase):
         self.assertFalse(config.override_path(self.root, "target").exists())
         self.assertFalse(config.override_path(self.root, "user").exists())
 
+    def test_advanced_writes_the_prefix_the_install_command_and_the_paths_not_to_touch_and_nothing_else(self) -> None:
+        (one,) = self.make_repos("orders")
+        far = self.make_repos("billing")[0]
+        write_user(self.root, name="Alex", language="en", skill_prefix="old")
+        setup.write(self.root, "target", {"repos_root": str(self.root / "code")})
+        wizard.save_repos(self.root, {"paths": [far]})
+        user_before = dict(read_user(self.root))
+        wizard.save_advanced(self.root, {"skill_prefix": " acme ", "install_command": " pip install {package} ", "refused": [one + "/deploy", far + "/x.sql"]})
+        user = read_user(self.root)
+        self.assertEqual((user["skill_prefix"], user["name"], user["language"], user["setup_wizard"]), ("acme", "Alex", "en", user_before["setup_wizard"]))
+        self.assertEqual(setup.kept(self.root, "tools")["python"]["install_command"], "pip install {package}")
+        target = setup.kept(self.root, "target")
+        self.assertEqual(target["repos_root"], str(self.root / "code"))  # the folder of repositories stays
+        self.assertEqual(target["repos"]["billing"], {"path": far, "refused_paths": [".git/**", "x.sql"]})  # the single repository stays, with its rule
+        self.assertEqual(target["repos"]["orders"]["refused_paths"], [".git/**", "deploy"])
+        rules = setup.status(self.root, {"found": "/x"})["rules"]
+        wizard.save_advanced(self.root, {"skill_prefix": "", "install_command": "", "rules": rules[:1]})  # an empty box takes the command off; a rule the page no longer sends goes
+        self.assertNotIn("install_command", setup.kept(self.root, "tools")["python"])
+        self.assertEqual(len(setup.status(self.root, {"found": "/x"})["rules"]), 1)
+
+    def test_advanced_checks_every_field_first_and_writes_nothing_when_one_is_wrong(self) -> None:
+        for data in ({"skill_prefix": "Bad Word"}, {"install_command": "x" * 501}, {"refused": ["relative/path"]}, {"refused": [str(self.root / "elsewhere")]}, {"refused": "no list"}, {"rules": "no list"}, {"skill_prefix": "ok", "refused": ["/"]}):
+            with self.assertRaises(ValueError, msg=str(data)):
+                wizard.save_advanced(self.root, data)
+        self.assertFalse(config.override_path(self.root, "user").exists())
+        self.assertFalse(config.override_path(self.root, "tools").exists())
+        with self.assertRaises(ValueError) as caught:
+            wizard.save_advanced(self.root, {"skill_prefix": "acme", "stamp": "old"})
+        self.assertEqual(str(caught.exception), messages.text("setup.changed"))
+
     def test_the_knowledge_base_page_runs_kb_git_and_sync_only(self) -> None:
         ran: List[str] = []
 
@@ -371,18 +401,6 @@ class SaveTests(HarnessTestCase):
         with self.assertRaises(ValueError):  # a folder that holds nothing of a knowledge base: told before the job starts
             job.start_kb(self.root, {"kb_mode": "folder", "kb_path": str(self.root / "nothing-here")})
         self.assertFalse(job.view()["running"])
-
-    def test_the_whole_job_of_the_old_form_still_writes_setup_done_and_takes_the_wizard_mark_away(self) -> None:
-        write_user(self.root, setup_wizard="open")
-        job = setupjob.Job()
-        with mock.patch.object(setup, "check"), mock.patch.object(setupjob, "ahead"), mock.patch.object(setup, "steps", return_value=[("user", lambda: "a")]), mock.patch.object(setupjob, "steps", return_value=[("kb", lambda: "b")]):
-            job.start(self.root, {})
-            for _ in range(200):
-                if not job.view()["running"]:
-                    break
-                time.sleep(0.02)
-        found = read_user(self.root)
-        self.assertEqual((found.get("setup_done"), "setup_wizard" in found), (True, False))
 
 
 class SummaryTests(HarnessTestCase):
@@ -518,6 +536,16 @@ class BoardSteps(ServeCase):
         self.assertNotIn("setup_done", read_user(self.root))
         self.assertEqual(read_user(self.root)["setup_wizard"], "open")
 
+    def test_advanced_saves_without_the_sync_and_the_doctor(self) -> None:
+        with mock.patch.object(ready.Ready, "doctor_again", side_effect=AssertionError("no doctor")), mock.patch.object(ready.Ready, "run_doctor", side_effect=AssertionError("no doctor")), \
+                mock.patch.object(setupjob.company, "sync_after", side_effect=AssertionError("no sync")), mock.patch.object(setupjob.Job, "start_kb", side_effect=AssertionError("no job")):
+            status, data, _ = self.post("save", {"part": "advanced", "skill_prefix": "acme", "install_command": "pip install {package}", "stamp": self.post("state")[1]["result"]["stamp"]})
+        self.assertEqual((status, data["result"]["saved"]), (200, True))
+        self.assertEqual(data["result"]["stamp"], setup.stamp(self.root))
+        self.assertEqual(read_user(self.root)["skill_prefix"], "acme")
+        self.assertEqual(self.post("save", {"part": "advanced", "skill_prefix": "Bad Word"})[0], 409)
+        self.assertEqual(self.post("save", {"part": "advanced"}, cookie="x")[0], 403)
+
     def test_the_host_button_restarts_the_host_only_while_no_chat_works(self) -> None:
         with mock.patch.object(vslink.VsLink, "restart_host", return_value={"state": "starting"}) as restart:
             self.agent_stopped()
@@ -646,8 +674,7 @@ class ReadyFieldsTests(HarnessTestCase):
             wizard.finish(self.root)
             found = settled(ready.Ready(self.root, link, clean))
         self.assertEqual((found["button"]["kind"], found["button"]["label"]), ("signin", "Sign in to Copilot"))
-        self.assertIn("action", found)  # the 1.8 button stays until a later step takes it away
-        self.assertEqual(found["action"]["kind"], "signin")
+        self.assertNotIn("action", found)  # the old button beside Enter is gone: `button` is the one
 
     def test_a_browser_that_is_not_paired_gets_the_pair_button_and_the_fallback_answers_have_a_button_and_notes(self) -> None:
         wizard.finish(self.root)

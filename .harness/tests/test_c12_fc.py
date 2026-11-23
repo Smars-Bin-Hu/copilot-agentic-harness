@@ -238,16 +238,6 @@ class SeenInViewTests(TaskCase):
         self.assertEqual(list(approvals.approved(self.root, SESSION, 10, file=approvals.ACTIONS)[0]["files"]), [SCRIPT])
 
 
-class FolderUpdateListTests(unittest.TestCase):
-    def test_the_list_of_a_folder_update_never_hands_a_bare_null_to_replacechildren(self) -> None:
-        """N3: `replaceChildren(..., null)` writes the word "null" into the page (a state with no Send button)."""
-        source = (WEB / "setup.js").read_text(encoding="utf-8")
-        start = source.index("function paintChanges()")
-        body = source[start: source.index("function paintParts(", start)]
-        self.assertIn("...(send ? [send] : [])", body)
-        self.assertNotIn("]: []), send)", body)
-
-
 class ReportCountsHeldApartTests(unittest.TestCase):
     """RB-N6: a call that waits for the person is held, not refused; the report counted it as refused and told the agent to try another way."""
 

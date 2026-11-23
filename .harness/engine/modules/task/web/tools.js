@@ -22,7 +22,7 @@ const TOOLS = (function () {
     SETTINGS.open(section, {done, part: focus || undefined});
   }
 
-  // The setup form: the three summaries in one go, each null when it cannot be read. setup.js draws them as facts of its cards.
+  // The three summaries in one go, each null when it cannot be read (Settings draws them as facts).
   function facts() {
     return Promise.all([MACHINE.toolpacksSummary(), SERVERS.summary(), MACHINE.summary()].map((promise) => promise.catch(() => null))).then(([packs, conns, pc]) => ({packs, conns, pc}));
   }

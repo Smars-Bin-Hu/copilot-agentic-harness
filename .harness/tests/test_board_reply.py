@@ -478,23 +478,15 @@ class PageTests(unittest.TestCase):
         self.assertLess(desk.index("again.setSelectionRange(typing.start"), desk.index("for (const node of app.querySelectorAll(\"[data-keep]\")) if (kept.has"))  # the caret first: the box's own scroll is put back after it
 
     def test_see_what_moves_shows_a_wait_and_holds_its_buttons(self) -> None:
-        """1.6.109: an old copy of many files took a while to read, and the click showed nothing."""
-        setup = source("setup.js")
-        self.assertIn('const done = waiting("setup.older.looking");', setup)
-        self.assertIn('const done = waiting("setup.older.carrying");', setup)
-        self.assertIn("path.disabled = look.disabled = apply.disabled = true;", setup)
-        self.assertEqual(setup.count("}, (error) => { done(); out.textContent = error.message || String(error); });"), 2)  # an error gives the buttons back
-        self.assertIn(".su-busy::before", source("setup.css"))
-        # what came over is a small window of its own: three numbers, the groups, the lists folded in a box that scrolls
-        self.assertIn("view.close();\n          result(found);", setup)
-        self.assertIn('folded("setup.older.failed.n", failed, true, true)', setup)
-        self.assertIn(".su-older-box{max-height:220px;overflow:auto", source("setup.css"))
-        self.assertNotIn("setup.older.failed\"", setup)  # no red line for each failed file
-        # a number opens what it counts, a group opens Carried over at that group
-        self.assertIn('stat("setup.older.count.copied", copied, copied ? "good" : "", carried)', setup)
-        self.assertIn('groups(found.copied, carried)', setup)
-        self.assertIn('h("button", {type: "button", class: "su-older-stat"', setup)
-        self.assertIn('const moves = groupList("setup.older.moves.n", found.would_copy);', setup)
+        """1.6.109: an old copy of many files took a while to read, and the click showed nothing. The window is in Settings, Advanced (O5)."""
+        settings = source("settings.js")
+        self.assertIn('const end = busy("setup.older.looking");', settings)
+        self.assertIn('const end = busy("setup.older.carrying");', settings)
+        self.assertIn("path.disabled = look.disabled = apply.disabled = true;", settings)
+        self.assertEqual(settings.count("(error) => { end(); put(out, errorText(error)); }"), 2)  # an error gives the buttons back
+        # what came over: the numbers, the groups, the lists folded
+        self.assertIn('folded("setup.older.failed.n", found.failed)', settings)
+        self.assertNotIn("setup.older.failed\"", settings)  # no red line for each failed file
 
     def test_earlier_rounds_show_the_last_five_and_fold_the_rest(self) -> None:
         """1.6.108: every earlier round was drawn, and scrolling up drew more, so the Live tab grew with the chat. One button opens the folded ones and folds them again."""

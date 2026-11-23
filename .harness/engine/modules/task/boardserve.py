@@ -1290,7 +1290,7 @@ class Board:
         return self.short_kept
 
     def servers(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get ready, Servers (1.7.10). `step`: list, test, save (only what passed a test in the last 15 minutes, the same values), forget, share, plan, open
+        """Settings, Connections (1.7.10). `step`: list, test, save (only what passed a test in the last 15 minutes, the same values), forget, share, plan, open
         (H6: the agent host holds every saved identity by itself; `open` picks its Windows account when several are saved, and restarts it once no chat works). Never a password back to the page."""
         import hashlib
 
@@ -1371,7 +1371,7 @@ class Board:
             pass
 
     def machine(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get ready, This computer (1.7.11): the tool folders and the CA bundle VS Code is started with (`core.launchenv`). `step`: state, paths, bundle, drop."""
+        """Settings, Programs and Network (1.7.11): the tool folders and the CA bundle VS Code is started with (`core.launchenv`). `step`: state, paths, bundle, drop."""
         step = str(data.get("step", ""))
         if step == "paths":
             launchenv.save_paths(self.root, [str(item) for item in (data.get("paths") or []) if isinstance(item, str)])
@@ -1422,7 +1422,7 @@ class Board:
             except toolpacks.ToolpackError as error:
                 raise ValueError(str(error)) from None
             step = "toolpacks"
-        if step == "toolpacks":  # Get ready, Tool packs (1.7.13): what each has and lacks, with the servers of its kinds and whether each is signed in
+        if step == "toolpacks":  # Settings, Tool packs (1.7.13): what each has and lacks, with the servers of its kinds and whether each is signed in
             from core import toolpacks
 
             found = toolpacks.check(self.root)
@@ -1440,14 +1440,12 @@ class Board:
         return dict(launchenv.state(self.root), vscode_open=bool(self.link.status().get("ready", False)), **({"agent_host": self.apply_local()} if changed else {}))
 
     def setup(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears, the agent host that runs does not have it on PATH yet:
+        """Settings and the wizard (`core/setup.py`). `step`: state, probe, job, folders, pick, refuse, repo, short, older and the wizard's own (save, summary, finish...). When the short command appears, the agent host that runs does not have it on PATH yet:
         it is marked stale and restarted once no chat works (H6)."""
         step = str(data.get("step", ""))
         if step == "probe":
             kind = str(data.get("kind") or "repos")
             return setupjob.probe_package(self.root, data.get("path")) if kind == "package" else setupjob.probe_folder(self.root, data.get("path"))
-        if step == "act":
-            return self.setup_job.start(self.root, data)
         if step == "job":
             found = self.setup_job.view()
             if found["done"]:
@@ -1468,12 +1466,6 @@ class Board:
             if problem:
                 raise CommandError(problem)
             return {"done": True}
-        if step == "test":
-            return core_setup.try_short(self.root)
-        if step == "guide":
-            return core_setup.guide(self.root)
-        if step == "none":
-            return {"none": core_setup.declare(self.root, data.get("key"), data.get("on"))}
         if step == "older":
             return reinstall.run(self.root, str(data.get("path", "")), bool(data.get("apply")), True if data.get("apply") else None)
         if step in ("programs", "folder", "scan", "save", "summary", "finish"):  # the first-run wizard (O1)
@@ -1498,7 +1490,7 @@ class Board:
         return core_programs.rows(self.root, self.link.installed(), short, say)
 
     def wizard(self, step: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """The steps of the first-run wizard (contract §2): programs, folder, scan, save (part you, repos or kb), summary and finish. Each can be asked again."""
+        """The steps of the first-run wizard (contract §2): programs, folder, scan, save (part you, repos, kb or advanced), summary and finish. Each can be asked again."""
         if step == "programs":
             return self.programs()
         if step == "folder":
@@ -1526,6 +1518,9 @@ class Board:
             return {"saved": True, "language": messages.language()}
         if part == "repos":
             return {"saved": True, "n": core_wizard.save_repos(self.root, data)}
+        if part == "advanced":  # Settings, Advanced: three fields; no sync and no doctor run
+            core_wizard.save_advanced(self.root, data)
+            return {"saved": True, "stamp": core_setup.stamp(self.root)}
         if part == "kb":
             core_wizard.stamp_ok(self.root, data)
             core_wizard.mark(self.root)
@@ -2357,7 +2352,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
-            if path == "/api/connections":  # Get ready, Servers (1.7.10): the paired browser only; it writes the person's identities to .harness/.env
+            if path == "/api/connections":  # Settings, Connections (1.7.10): the paired browser only; it writes the person's identities to .harness/.env
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
@@ -2367,7 +2362,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
-            if path == "/api/machine":  # Get ready, This computer (1.7.11): the paired browser only; it writes .harness/.env and .harness/certs/
+            if path == "/api/machine":  # Settings, Programs and Network (1.7.11): the paired browser only; it writes .harness/.env and .harness/certs/
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
@@ -2377,7 +2372,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
-            if path == "/api/setup":  # Get ready: the paired browser only; it writes the person's own override files
+            if path == "/api/setup":  # Settings and the wizard: the paired browser only; it writes the person's own override files
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

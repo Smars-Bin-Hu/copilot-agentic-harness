@@ -530,7 +530,7 @@ def make(root: Path, host: str = "", proxy: Optional[str] = None, get_chain: Cal
     return out
 
 
-# --- what Get ready shows ---------------------------------------------------------------------------------------------------------------------------------
+# --- what Settings (Programs, Network) shows ---------------------------------------------------------------------------------------------------------------------------------
 
 _FAULT = re.compile(r"^\$(?P<path>[^:]*): (?P<what>.*)$", re.S)
 _REASONS = {"host": "may hold letters, digits, dots and hyphens, and a port after a colon (`host:port`)", "proxy": "must look like `host:port`, for example `127.0.0.1:9000`"}

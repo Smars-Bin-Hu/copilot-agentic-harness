@@ -1,4 +1,4 @@
-"""Get ready: the part of Finish that can take long (1.6.58). It runs on a thread of its own and the page reads its lines. Each step can be run again.
+"""The knowledge base copy of the wizard and of Settings (1.6.58): the part that can take long. It runs on a thread of its own and the page reads its lines. Each step can be run again.
 
 The knowledge base is written here because a person chose it on the page, as `company update --apply` and `target init-kb` are run by a person at a terminal.
 """
@@ -13,11 +13,11 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 from core import company, messages, paths, setup, targets
 
-from . import kbsetup, ready
+from . import kbsetup
 
 PLACEHOLDER = (".gitkeep", "README.md")  # what `knowledge-base/` of a copy made before 1.7.38 holds: a placeholder README, then an empty `.gitkeep`; the harness ships no such folder now
 MAX_LISTED = 2000  # entries of one folder in the picker
@@ -128,13 +128,7 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
         first = say("setup.kb.synced.some", names=", ".join(left)) if left else say("setup.kb.synced")
         return " ".join([first + ("; " + say("setup.kb.synced.back", names=", ".join(back)) if back else ""), *lines])
 
-    def doctor() -> str:
-        found = ready.run_doctor(root)
-        if found["failed"] or found["errors"]:
-            raise ValueError(found["failed"] or "\n".join(found.get("lines") or [found["first"]]))
-        return say("setup.doctor.warned", n=found["warned"], first=found["warning"]) if found.get("warned") else say("setup.doctor.clean")
-
-    return [("kb", content), ("git", repository), ("sync", synced), ("doctor", doctor)]
+    return [("kb", content), ("git", repository), ("sync", synced)]
 
 
 KB_STEPS = ("kb", "git", "sync")  # what the wizard's knowledge base page runs of `steps`
@@ -153,18 +147,6 @@ class Job:
     def view(self) -> Dict[str, Any]:
         with self.lock:
             return self.view_locked()
-
-    def start(self, root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Checks all the fields first: a ValueError here means nothing was written."""
-        setup.check(root, data)
-        ahead(root, data)
-        with self.lock:
-            if self.running:
-                return self.view_locked()
-            self.lines, self.running, self.done = [], True, False
-            self.total = len(setup.steps(root, data)) + len(steps(root, data))
-        threading.Thread(target=self.work, args=(root, data), daemon=True).start()
-        return self.view()
 
     def start_kb(self, root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
         """The wizard's knowledge base page (O1): only the steps kb, git and sync. No name, repositories or Python are written, doctor is not run, and the copy is not marked set up."""
@@ -185,25 +167,20 @@ class Job:
     def view_locked(self) -> Dict[str, Any]:
         return {"lines": list(self.lines), "running": self.running, "done": self.done, "total": self.total}
 
-    def work(self, root: Path, data: Dict[str, Any], only: Optional[Tuple[str, ...]] = None) -> None:
+    def work(self, root: Path, data: Dict[str, Any], only: Tuple[str, ...]) -> None:
         good = True
-        for key, step in [item for item in steps(root, data) if item[0] in only] if only else [*setup.steps(root, data), *steps(root, data)]:
+        for key, step in [item for item in steps(root, data) if item[0] in only]:
             try:
                 line = {"key": key, "ok": True, "detail": step()}
-            except Exception as error:  # noqa: BLE001 - told on the page; the person fixes it and presses Finish again
+            except Exception as error:  # noqa: BLE001 - told on the page; the person fixes it and tries again
                 line = {"key": key, "ok": False, "detail": str(error)[:LINE]}
                 good = False
             with self.lock:
                 self.lines.append(line)
             if not line["ok"]:
                 break
-        try:
-            if good and not only:
-                setup.write(root, "user", {"setup_done": True})
-                setup.remove(root, "user", ["setup_wizard"])
-        finally:
-            with self.lock:
-                self.running, self.done = False, good
+        with self.lock:
+            self.running, self.done = False, good
 
 
 def ahead(root: Path, data: Dict[str, Any]) -> None:

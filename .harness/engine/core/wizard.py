@@ -47,7 +47,11 @@ def under_way(root: Path) -> bool:
 # --- save, one page at a time ------------------------------------------------------------------------------------------
 
 def stamp_ok(root: Path, data: Dict[str, Any]) -> None:
-    if data.get("stamp") and data["stamp"] != setup.stamp(root):
+    now = setup.stamp(root)
+    if not now:  # a broken file of the person's: told as it is, never overwritten
+        for name in ("user", "target", "tools"):
+            setup.kept(root, name)
+    elif data.get("stamp") and data["stamp"] != now:
         raise ValueError(say("setup.changed"))
 
 
@@ -91,6 +95,41 @@ def save_repos(root: Path, data: Dict[str, Any]) -> int:
     base = str(setup.kept(root, "target").get("repos_root") or "")
     dict(setup.steps(root, {"repos_root": base, "singles": held}))["target"]()
     return len(held)
+
+
+def save_advanced(root: Path, data: Dict[str, Any]) -> None:
+    """Settings, Advanced (O5): the skill prefix (user), the Python install command (tools) and the paths not to touch (target). The fields are checked as `setup.check` checks them; the name,
+    the language, the folder of repositories (`repos_root`) and the single repositories stay as they are, and nothing else runs (no sync, no doctor)."""
+    wrong: List[str] = []
+    prefix = str(data.get("skill_prefix") or "").strip()
+    command = str(data.get("install_command") or "").strip()
+    if prefix and not setup.PREFIX.fullmatch(prefix):
+        wrong.append(say("setup.prefix.bad"))
+    if len(command) > setup.MAX_INSTALL:
+        wrong.append(say("setup.install.long", limit=setup.MAX_INSTALL))
+    for key in ("refused", "rules"):
+        if key in data and not isinstance(data[key], list):
+            raise ValueError(say("serve.refused.request"))
+    stamp_ok(root, data)
+    held = setup.kept(root, "target")
+    base = str(held.get("repos_root") or "")
+    singles = [setup.clean_path(entry["path"]) for entry in (held.get("repos") or {}).values() if setup.is_single(entry)]
+    for item in data.get("refused") or []:
+        try:
+            setup.refused(base, item, singles)
+        except ValueError as error:
+            wrong.append(f"{item}: {error}")
+    if wrong:
+        raise ValueError(" ".join(wrong))
+    setup.write(root, "user", {"skill_prefix": prefix})
+    pick = {"repos_root": base, "singles": singles, "install_command": command}
+    if "refused" in data:
+        pick["refused"] = data["refused"]
+    if "rules" in data:
+        pick["rules"] = data["rules"]
+    todo = dict(setup.steps(root, pick))
+    todo["tools"]()
+    todo["target"]()
 
 
 # --- scan: the repositories on this computer ---------------------------------------------------------------------------

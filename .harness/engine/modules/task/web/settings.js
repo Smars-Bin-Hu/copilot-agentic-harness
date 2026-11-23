@@ -57,9 +57,10 @@ const SETTINGS = (function () {
     };
     if (typeof READY !== "undefined") READY.onNotes(() => { if (win && win.view === view) refreshDots(); });
     const stopPart = () => { if (stop) { try { stop(); } catch (error) { /* a part that is gone */ } stop = null; } };
-    const leave = () => { stopPart(); if (win && win.view === view) win = null; if (changed) location.reload(); else if (given.done) given.done(); };  // the name, the knowledge base or the repositories changed: the page reads them again
+    let left = false, watch = 0;
+    const leave = () => { if (left) return; left = true; clearInterval(watch); stopPart(); if (win && win.view === view) win = null; if (changed) location.reload(); else if (given.done) given.done(); };  // once: the X, a close from outside and the watch below all end here; the name, the knowledge base or the repositories changed: the page reads them again
     x.addEventListener("click", () => { view.close(); leave(); });
-    const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); leave(); } }, 300);  // the dialog closes itself on Escape
+    watch = setInterval(() => { if (!view.box.isConnected) leave(); }, 300);  // the dialog closes itself on Escape
 
     // what to scroll to once the section has drawn (a part or a row): asked again as it fills in, for a few seconds
     let want = null, until = 0;

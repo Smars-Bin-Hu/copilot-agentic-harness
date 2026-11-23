@@ -623,6 +623,16 @@ def safe_name(name: str) -> bool:
     return bool(name) and "\\" not in name and ":" not in name and not path.is_absolute() and ".." not in path.parts and not NOT_CONTENT.intersection(path.parts)
 
 
+def manifest_fault(error: Exception) -> str:
+    """What went wrong with a package, in words: a part the manifest lacks is named (a bare `KeyError: 'files'` said nothing), a manifest that is not an object is said so."""
+    key = error.args[0] if isinstance(error, KeyError) and error.args else None
+    if isinstance(key, str) and re.fullmatch(r"\w+", key):
+        return say("company.update.bad.part", file=MANIFEST_PATH, part=key)
+    if isinstance(error, (TypeError, AttributeError)):
+        return say("company.update.bad.shape", file=MANIFEST_PATH)
+    return str(error)
+
+
 def load(raw: str) -> Tuple[Path, Dict[str, Any]]:
     """The package and its manifest, every file checked against it: a bad zip stops here, before any file is touched."""
     path = Path(raw).expanduser()
@@ -639,7 +649,7 @@ def load(raw: str) -> Tuple[Path, Dict[str, Any]]:
                     raise ValueError(f"{name} is damaged")
             str(manifest["version"])
     except (OSError, KeyError, TypeError, AttributeError, ValueError, zipfile.BadZipFile) as error:
-        raise CompanyError(say("company.update.bad_zip", path=str(path), error=error)) from None
+        raise CompanyError(say("company.update.bad_zip", path=str(path), error=manifest_fault(error))) from None
     return path, manifest
 
 

@@ -57,6 +57,7 @@ const WIZARD = (function () {
       machine: (step, body) => send("/api/machine", {step, ...(body || {})}),
       machinePoll: (step, body) => call("/api/machine", {step, ...(body || {})}, 12).then((data) => data.result),
       gh: (body) => send("/api/gh", body),
+      host: (body) => send("/api/host", body),
       ready: () => call("/api/ready", {}, 8),
       language: (language) => SERVE.post("/api/language", {language}, true),
     };
@@ -79,15 +80,16 @@ const WIZARD = (function () {
     const names = Array.from({length: count}, (item, i) => (i < NAMES.length ? NAMES[i] : "service-" + (i + 1) + "-with-a-name"));
     const home = long ? "C:\\Users\\a.very.long.user.name\\source\\repos\\" : "/Users/alex/Developer/";
     F.repos = names.map((name, i) => ({path: home + name, shown: (long ? "" : "~/Developer/") + (long ? home : "") + name, name, branch: "main", picked: false}));
+    if (q("inroot", "") === "1") F.repos.slice(0, 2).forEach((row) => { row.picked = true; row.in_root = true; });  // ?inroot=1: two rows found through the repositories folder
     const rows = () => [
       {id: "python", name: "Python", required: true, found: true, path: long ? "C:\\Users\\a.very.long.user.name\\AppData\\Local\\Programs\\Python\\Python312\\python.exe" : "/opt/homebrew/bin/python3", version: "3.12.4", how: "path", download: "https://www.python.org/downloads/", blocked: ""},
-      {id: "git", name: "Git", required: true, found: true, path: long ? "C:\\Program Files\\Git\\cmd\\git.exe" : "/usr/bin/git", version: "2.47.1", how: "path", download: "https://git-scm.com/downloads", blocked: ""},
+      {id: "git", name: "Git", required: true, found: true, path: long ? "C:\\Program Files\\Git\\cmd\\git.exe" : "/usr/bin/git", version: q("git", "") === "fails" ? "" : "2.47.1", how: "path", download: "https://git-scm.com/downloads", blocked: "", trouble: q("git", "") === "fails" ? "fails" : q("git", "") === "slow" ? "slow" : "", why: q("git", "") === "fails" ? "xcode-select: note: no developer tools were found" : ""},
       {id: "vscode", name: "VS Code", required: true, found: true, path: long ? "C:\\Users\\a.very.long.user.name\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd" : "/usr/local/bin/code", version: "1.147.0", how: "standard", download: "https://code.visualstudio.com/download", blocked: ""},
       F.ghFound ? {id: "gh", name: "GitHub CLI", required: true, found: true, path: long ? "C:\\Users\\a.very.long.user.name\\AppData\\Local\\Programs\\GitHub CLI\\gh.exe" : "/opt/homebrew/bin/gh", version: "2.105.0", how: "path", download: "https://cli.github.com/", blocked: ""}
         : {id: "gh", name: "GitHub CLI", required: true, found: false, path: "", version: "", how: "", download: "https://cli.github.com/", blocked: ""},
       {id: "harness", name: "harness command", required: false, found: F.ranHarness || q("harness", "1") === "1", path: "/usr/local/bin/harness", version: "1.8.26", how: "path", download: "", blocked: "", command: "python3 .harness/engine/harness.py short"},
     ];
-    const programs = () => { const list = rows(); return {rows: list, all_found: list.filter((row) => row.required).every((row) => row.found && !row.blocked)}; };
+    const programs = () => { const list = rows(); return {rows: list, all_found: list.filter((row) => row.required).every((row) => row.found && !row.blocked && !row.trouble)}; };
     const kbHere = () => F.kb === "done";
     const state = () => ({name: F.name, name_git: q("gitname", "1") === "1" && !F.nameSaved, language: F.lang, kb: kbHere() ? {here: true, domains: 3, domain_skills: 12, version: "3.2.0", path: "~/harness/knowledge-base", prefix: "sample"} : {here: false, domains: 0, domain_skills: 0, version: "", path: "", prefix: ""},
       company: kbHere() ? {packs: ["ado", "sqlserver"], connections: [{}, {}, {}], recipe: {present: true}} : {packs: [], connections: [], recipe: {present: false}}});
@@ -100,6 +102,8 @@ const WIZARD = (function () {
     const copilot = () => {
       if (F.cop === "code") return {id: "copilot", state: "wait", why: "signing-in", code: "5F59-4EB2", url: "https://github.com/login/device", left: F.codeAt ? Math.max(0, 872 - Math.round((Date.now() - F.codeAt) / 1000)) : 872};
       if (F.cop === "done") return {id: "copilot", state: "ok", why: "ok", login: "alex", n: 25};
+      if (q("cop", "") === "hostfailed") return {id: "copilot", state: "fail", why: "host-failed", detail: "it could not open its port", login: "alex"};  // ?cop=hostfailed | error: the lines that are not about the sign-in
+      if (q("cop", "") === "error") return {id: "copilot", state: "fail", why: "error", detail: "OSError: the check could not read its state"};
       return {id: "copilot", state: "fail", why: F.ghFound ? "signin" : "no-gh", gh: "/opt/homebrew/bin/gh"};
     };
     const ready = () => {
@@ -110,7 +114,7 @@ const WIZARD = (function () {
     const setup = {
       state, programs: () => programs(),
       folder: (body) => (!String(body.path || "").trim() || /bad$/.test(body.path) ? fail("No " + body.program + " in that folder.") : (F.ghFound = true, programs())),
-      short: () => { F.ranHarness = true; return {done: true}; },
+      short: () => { F.shortTries = (F.shortTries || 0) + 1; if (q("short", "") === "fail" && F.shortTries < 2) throw new Error("Could not write the short command: permission denied for /usr/local/bin"); F.ranHarness = true; return {done: true}; },  // ?short=fail: the first try fails
       scan: () => ({places: ["~/Developer", "~/source/repos"].slice(0, count ? 2 : 0), rows: F.repos, more: false}),
       probe: (body) => (/ahead$/.test(body.path) ? {ok: false, why: "The knowledge base here has 4 commits that this folder does not have (listed below). They stay, and nothing was changed. Send them to the folder first, then update again.", update: {state: "ahead", ahead: 4, branch: "main", subjects: ["Add the glossary page", "Fix a link in the checks", "Rename the sample domain"], pull: "git -C ./kb push ./folder main", send: {folder: body.path, branch: "main", ahead: 4, subjects: ["Add the glossary page", "Fix a link in the checks", "Rename the sample domain"]}}} : /bad$/.test(body.path) ? {ok: false, why: "Nothing in it looks like a knowledge base."} : kbHere() && body.kind === "folder" ? {ok: false, full: true, why: "A knowledge base is in place already, and this folder has no history in common with it."} : {ok: true, why: "", version: "3.2.0"}),
       repo: (body) => ({kind: "repo", name: String(body.path).split(/[\\/]/).pop() || "extra", path: body.path}),
@@ -147,7 +151,7 @@ const WIZARD = (function () {
       return fail("fake: no step " + step);
     };
     return {
-      setup: (step, body) => (setup[step] ? done(setup[step](body || {})) : fail("fake: no step " + step)),
+      setup: (step, body) => { try { return setup[step] ? done(setup[step](body || {})) : fail("fake: no step " + step); } catch (error) { return fail(error.message); } },
       poll: (step, body) => (setup[step] ? done(setup[step](body || {}), 20) : fail("fake: no step " + step)),
       machine, machinePoll: machine,
       gh: (body) => {
@@ -155,6 +159,7 @@ const WIZARD = (function () {
         if (body.do === "cancel") F.cop = "idle";
         return done({state: F.cop});
       },
+      host: (body) => done(body.do === "restart" && q("busy", "") === "1" ? {state: "waiting", busy: ["fix-the-tests", "write-notes"]} : {state: "restarted", busy: []}),
       ready: () => done(ready(), 20),
       language: (language) => { F.lang = language; return done({language}); },
       fake: F,
@@ -208,8 +213,9 @@ const WIZARD = (function () {
     (((M.extras && M.extras.packs) || {}).toolpacks || []).forEach((pack) => (pack.connections || []).forEach((conn) => out.push({alias: conn.alias, pack: pack.name, saved: Boolean(conn.saved)})));
     return out;
   };
-  const kbRest = () => packPrograms().filter((row) => !row.found || row.blocked).length + packConnections().filter((row) => !row.saved).length;
-  const subs = () => (M.kb.step === "done" && M.extras ? [0, ...(packPrograms().length ? [1] : []), ...(packConnections().length ? [2] : [])] : [0, 1, 2]);
+  const packMissing = () => packPrograms().filter((row) => !row.found || row.blocked);
+  const kbRest = () => packMissing().length + packConnections().filter((row) => !row.saved).length;
+  const subs = () => (M.kb.step === "done" && M.extras ? [0, ...(packMissing().length || M.kbsub === 1 ? [1] : []), ...(packConnections().length ? [2] : [])] : [0, 1, 2]);  // the programs page only when one is missing (it stays while the person is on it)
   function loadExtras() {
     return Promise.all([api.machine("state").catch(() => null), api.machine("toolpacks").catch(() => null)]).then(([machine, packs]) => { M.extras = {machine: machine || {programs: []}, packs: packs || {toolpacks: []}}; });
   }
@@ -223,7 +229,7 @@ const WIZARD = (function () {
     const row = (id) => rows.find((item) => item.id === id) || {found: false, version: ""};
     const line = copilotLine();
     const item = (label, value, kind) => el("div", "wz-it", dot(kind === "hot" ? "hot" : kind === "none" ? "none" : "ok"), el("span", "n", label), el("span", "v" + (kind === "hot" ? " hot" : ""), value));
-    const prog = (id, key) => (row(id).found ? item(t(key), row(id).version || t("wizard.p.found"), "ok") : item(t(key), t("wizard.nf"), "hot"));
+    const prog = (id, key) => (row(id).found && !row(id).trouble && !row(id).blocked ? item(t(key), row(id).version || t("wizard.p.found"), "ok") : item(t(key), t("wizard.nf"), "hot"));
     const st = M.st;
     const signed = copilotSignedIn(line);
     const repos = M.scan ? M.scan.rows.length : 0;
@@ -297,24 +303,32 @@ const WIZARD = (function () {
       return el("div", "wz-fix", download ? el("div", "line", download) : null, el("div", "line", t("wizard.p.or"), field, use), say, el("div", "watch", spin(), t("wizard.p.watch")));
     }
     function paintRow(row) {
-      const ok = row.found && !row.blocked;
+      const ok = row.found && !row.blocked && !row.trouble;
+      const slow = row.trouble === "slow";
       const note = ok && row.id === "vscode" ? t("wizard.p.code.n") : ok && row.id === "harness" ? t("wizard.p.hc.n") : "";
       const how = {path: t("wizard.p.how.path"), folder: t("wizard.p.how.folder"), standard: t("wizard.p.how.standard")}[row.how] || "";
       const label = row.id === "harness" ? t("wizard.p.hc") : row.name;
-      const state = ok ? el("span", "wz-state ok", dot("ok"), t("wizard.p.found")) : row.id === "harness" ? el("span", "wz-state", spin(), t("wizard.p.adding")) : el("span", "wz-state hot", dot("hot"), t(row.blocked ? "wizard.p.blocked" : "wizard.p.nf"));
+      const harnessBad = row.id === "harness" && !ok && !M.shortBusy && M.shortError;  // the short command did not go in: the reason, and a button, never the command text
+      const state = ok ? el("span", "wz-state ok", dot("ok"), t("wizard.p.found")) : harnessBad ? el("span", "wz-state hot", dot("hot"), t("wizard.p.nf")) : row.id === "harness" ? el("span", "wz-state", spin(), t("wizard.p.adding"))
+        : slow ? el("span", "wz-state", spin(), t("wizard.p.slow")) : el("span", "wz-state hot", dot("hot"), t(row.blocked || row.trouble ? "wizard.p.blocked" : "wizard.p.nf"));
       if (ok) state.title = how;
       const main = el("div", "wz-main", el("div", "wz-name", h("b", null, label), row.version ? h("small", null, row.version) : null),
-        row.path ? where(row) : row.command && row.id === "harness" ? el("div", "wz-where plain", row.command) : null, note ? el("div", "wz-where plain", note) : null);
-      const needsFix = !ok && row.id !== "harness";
-      return el("div", "wz-li" + (needsFix ? " miss" : ""), el("span", "wz-ic", programIcon[row.id] || row.id.slice(0, 2)), main, state, needsFix ? fix(row) : null);
+        row.path ? where(row) : null, note ? el("div", "wz-where plain", note) : null, row.trouble === "fails" && row.why ? el("div", "wz-where plain", row.why) : null, harnessBad ? el("div", "wz-where plain", M.shortError) : null);
+      const needsFix = !ok && !slow && row.id !== "harness";
+      const again = harnessBad ? el("div", "wz-fix", el("div", "line", btn(t("wizard.p.again"), "sm primary", () => trySetShort()))) : null;
+      return el("div", "wz-li" + (needsFix || harnessBad ? " miss" : ""), el("span", "wz-ic", programIcon[row.id] || row.id.slice(0, 2)), main, state, needsFix ? fix(row) : again);
     }
     function take(found) {
       M.progs = found;
-      const sign = JSON.stringify(found.rows.map((row) => [row.id, row.found, row.path, row.blocked, row.version]));
+      const sign = JSON.stringify([found.rows.map((row) => [row.id, row.found, row.path, row.blocked, row.version, row.trouble, row.why]), M.shortBusy, M.shortError]);
       if (sign !== shown) { shown = sign; put(list, ...found.rows.map(paintRow)); }
       opts.changed();
       const harness = found.rows.find((row) => row.id === "harness");
-      if (harness && !harness.found && !M.shortTried) { M.shortTried = true; api.setup("short").then(() => api.poll("programs")).then(take, () => {}); }
+      if (harness && !harness.found && !M.shortTried) { M.shortTried = true; trySetShort(); }
+    }
+    function trySetShort() {  // the `harness` short command: once by itself, and again on the button; a failure keeps its reason
+      M.shortBusy = true; M.shortError = ""; if (M.progs) take(M.progs);
+      api.setup("short").then(() => api.poll("programs")).then((found) => { M.shortBusy = false; take(found); }, (error) => { M.shortBusy = false; M.shortError = errorText(error) || t("wizard.p.nf"); if (M.progs) take(M.progs); });
     }
     function loop() {
       if (stopped) return;
@@ -324,7 +338,7 @@ const WIZARD = (function () {
     put(box, ...head(opts, "wizard.s.prog", t("wizard.p.title"), t("wizard.p.sub")), list);
     if (M.progs) take(M.progs);
     timer = setTimeout(loop, 3000);
-    const firstMissing = () => ((M.progs && M.progs.rows) || []).find((row) => row.required && (!row.found || row.blocked));
+    const firstMissing = () => ((M.progs && M.progs.rows) || []).find((row) => row.required && (!row.found || row.blocked || row.trouble));
     return {stop() { stopped = true; clearTimeout(timer); }, foot() {
       const missing = firstMissing();
       return {back: !ONLY, later: null, why: missing ? t("wizard.p.need", {name: missing.name}) : "", main: {label: ONLY ? t("wizard.done") : t("wizard.cont"), off: Boolean(missing) || !M.progs, go: ONLY ? leave : opts.next}};
@@ -355,6 +369,11 @@ const WIZARD = (function () {
         const cancel = link(t("wizard.c.cancel"), () => api.gh({do: "cancel"}).then(tick, () => {}));
         put(body, el("div", "wz-codebox", el("div", "cap", t("wizard.c.cap")), el("div", "wz-code", el("span", "digits", line.code || "\u2026"), copy),
           el("div", "acts", open, cancel), el("div", "waiting", spin(), waitText = el("span", null, t("wizard.c.wait", {t: clock(line.left || 0)})))));
+      } else if (line.why === "host-failed" || line.why === "error") {  // not about the sign-in: the reason, and the one thing a person can do (never the sign-in button)
+        const act = line.why === "error"
+          ? btn(t("wizard.c.again"), "primary", () => { act.disabled = true; said.hidden = true; tick().then(() => { act.disabled = false; }); })
+          : btn(t("wizard.c.restart"), "primary", () => { act.disabled = true; said.hidden = true; api.host({do: "restart"}).then((found) => { if (found && found.state === "waiting") { said.textContent = t("wizard.c.host.waiting"); said.hidden = false; } return tick(); }, (error) => { said.textContent = errorText(error); said.hidden = false; }).then(() => { act.disabled = false; }); });
+        put(body, el("p", "wz-err", t(line.why === "error" ? "wizard.c.error" : "wizard.c.hostfail", {why: line.detail || "-"})), el("div", "wz-cp", act));
       } else if (line.why === "no-gh" || line.why === "gh-broken") {
         put(body, el("p", "wz-err", t("wizard.c.nogh")), link(t("wizard.s.prog") + " \u2192", () => opts.jump(2)));
       } else {
@@ -582,9 +601,11 @@ const WIZARD = (function () {
       const shownRows = visible();
       if (!rows.length) { put(listBox, el("div", "wz-list", el("div", "wz-empty", t("wizard.r.none")))); count.textContent = ""; opts.changed(); return; }
       put(listBox, el("div", "wz-list wz-scroll", ...shownRows.map((row) => {
-        const on = M.picks.has(row.path);
-        const item = el("div", "wz-li wz-repo", el("span", "wz-box" + (on ? " on" : ""), on ? "\u2713" : ""), el("div", "wz-main", el("span", "wz-name", row.name), el("div", "wz-where", h("bdi", null, row.shown || row.path))));
+        const fixed = Boolean(row.in_root);  // found through the repositories folder: it stays while that folder is set, so the box cannot be unticked here
+        const on = fixed || M.picks.has(row.path);
+        const item = el("div", "wz-li wz-repo" + (fixed ? " fixed" : ""), el("span", "wz-box" + (on ? " on" : ""), on ? "\u2713" : ""), el("div", "wz-main", el("span", "wz-name", row.name), el("div", "wz-where", h("bdi", null, row.shown || row.path)), fixed ? el("div", "wz-where plain", t("wizard.r.inroot")) : null));
         item.setAttribute("role", "checkbox"); item.setAttribute("aria-checked", on ? "true" : "false"); item.tabIndex = 0;
+        if (fixed) { item.setAttribute("aria-disabled", "true"); item.tabIndex = -1; return item; }
         const flip = () => { if (on) M.picks.delete(row.path); else M.picks.add(row.path); paint(); };
         item.addEventListener("click", flip);
         item.addEventListener("keydown", (event) => { if (event.key === " " || isEnter(event)) { event.preventDefault(); flip(); } });
@@ -594,7 +615,7 @@ const WIZARD = (function () {
       opts.changed();
     }
     filter.addEventListener("input", () => { M.filter = filter.value; paint(); });
-    const all = link(t("wizard.r.all"), () => { const shownRows = visible(); const every = shownRows.every((row) => M.picks.has(row.path)); shownRows.forEach((row) => (every ? M.picks.delete(row.path) : M.picks.add(row.path))); paint(); });
+    const all = link(t("wizard.r.all"), () => { const shownRows = visible().filter((row) => !row.in_root); const every = shownRows.every((row) => M.picks.has(row.path)); shownRows.forEach((row) => (every ? M.picks.delete(row.path) : M.picks.add(row.path))); paint(); });
     const add = link("+ " + t("wizard.r.add"), () => {
       const taken = (path) => { api.setup("repo", {path, repos_root: "", singles: [...M.picks]}).then((found) => {
         const fresh = (found.kind === "repo" ? [{path: found.path, name: found.name}] : (found.repos || []).filter((row) => !row.held && !row.off)).filter((row) => !rows.some((have) => have.path === row.path));

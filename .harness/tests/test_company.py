@@ -47,6 +47,26 @@ class CompanyCase(HarnessTestCase):
         put(self.kb, FILES)
 
 
+class ManifestWordsTests(CompanyCase):
+    def zip_with(self, manifest: object) -> str:
+        import zipfile
+        target = self.root / "bad.zip"
+        with zipfile.ZipFile(target, "w") as package:
+            package.writestr(company.MANIFEST_PATH, json.dumps(manifest))
+        return str(target)
+
+    def test_a_manifest_without_files_says_which_part_is_missing(self) -> None:
+        """Round 3 A2: the page showed `is not a good package: 'files'`."""
+        with self.assertRaises(company.CompanyError) as caught:
+            company.load(self.zip_with({"version": "1"}))
+        text = str(caught.exception)
+        self.assertIn('no "files" entry', text)
+        self.assertNotIn("'files'", text)
+        with self.assertRaises(company.CompanyError) as caught:
+            company.load(self.zip_with(["not", "an", "object"]))
+        self.assertIn("not a JSON object", str(caught.exception))
+
+
 class SyncTests(CompanyCase):
     def test_no_company_content_is_not_a_problem(self) -> None:
         shutil.rmtree(self.kb / "company")

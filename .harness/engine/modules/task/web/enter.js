@@ -484,7 +484,7 @@
     if (b.kind === "program") { location.assign("/setup?only=programs"); return true; }
     if (b.kind === "doctor") { chk0.docOpen = !chk0.docOpen; render(); return true; }
     if (b.kind === "signin") { act(() => ask("/api/gh", {do: "login"})); return true; }
-    if (b.kind === "restart-host") { act(() => ask("/api/host", {do: "restart"})); return true; }
+    if (b.kind === "restart-host") { act(() => ask("/api/host", {do: "restart"}).then((data) => { const found = data && data.result; if (found && found.state === "waiting") chk0.said = t("board.enter.host.waiting"); })); return true; }  // chats still work: the host restarts once they finish
     if (b.kind === "pair") { act(() => ask("/api/reopen", {}).then((data) => { chk0.said = data && data.opened ? "" : t("board.serve.pair.notopened"); })); return true; }
     return false;
   }

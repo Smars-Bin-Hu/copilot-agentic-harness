@@ -533,3 +533,19 @@ class CompanyFactsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StatusNameTests(unittest.TestCase):
+    def test_git_is_asked_for_the_name_once_when_none_is_saved(self) -> None:
+        """Round 3 B5: `git_name` starts a program (about 1.5 s on a work computer); `status` ran it twice."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            with mock.patch.object(setup, "git_name", return_value="Alex Doe") as asked:
+                found = setup.status(root, {"found": "", "command": ""})
+            self.assertEqual((found["name"], found["name_git"]), ("Alex Doe", True))
+            self.assertEqual(asked.call_count, 1)
+            setup.write(root, "user", {"name": "Sam"})
+            with mock.patch.object(setup, "git_name", return_value="Alex Doe") as asked:
+                found = setup.status(root, {"found": "", "command": ""})
+            self.assertEqual((found["name"], found["name_git"], asked.call_count), ("Sam", False, 0))

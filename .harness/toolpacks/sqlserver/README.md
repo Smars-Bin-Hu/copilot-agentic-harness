@@ -31,7 +31,7 @@ The refuse list is best effort: it catches the plain spellings and a spelling it
 ## To use it
 
 1. **Turn on**: name it in `<knowledge base>/company/tools/packs.json` (`{"use": ["sqlserver"]}`), and put your connections in `company/tools/connections.json` (the form: `.harness/contracts/toolpack/connections.md`). Import the knowledge base in Get ready, or run `harness company sync`.
-2. **Set up**: Get ready, Local: the folder of `sqlcmd` when it is not on the PATH.
+2. **Set up**: Settings, Programs: the folder of `sqlcmd` when it is not on the PATH.
 3. **Sign in**: Connections & sign-ins: each colleague presses **Sign in** on a connection, types the account (`DOMAIN\id` for `windows`) and the password, and **Sign in** tests it and keeps it when the test passes. The identity stays in `.harness/.env` on that computer.
 4. **Try**: the board's agent host holds every saved identity by itself. With two different Windows accounts (one for DEV, one for IST), it holds one, the main one (**Choose the main account** on the yellow note); the other is reached through `harness as <name> -- sqlcmd -S <its server> ...` (the prefix gives the sign-in, not the server; `harness connections find <name>` prints the call), which the agent is told at the start of each chat.
 

@@ -207,6 +207,7 @@ class Ready:
         self.running = False
         self.started = ""  # 1.8.23: the release number this board process started with (the board sets it); "" in a test without a board
         self.kept: Optional[Dict[str, Any]] = None  # 1.8.13: the last answer of `keep_fresh`
+        self.confirmed = 0  # bumped by `setup_now_done`: an answer worked out before that read `setup_done` too early
         self.asked_at = -1e9
         self.worker: Optional[threading.Thread] = None
         self.first = threading.Event()
@@ -411,17 +412,19 @@ class Ready:
         """Confirm of the wizard just wrote `setup_done` (1.8.x): the kept answer says "new" until the next round, and the page would go back to the wizard. Set that line to ok and work out `ready`,
         `button` and `problems.required` again from the kept lines: no slow work, nothing is run."""
         with self.lock:
-            kept = self.kept
-            if kept is None:
-                return
-            for line in kept["checks"]:
-                if line["id"] == "setup":
-                    line.update(state="ok", why="ok")
-                    line["level"] = self.level(line)
-            is_ready = all(line["state"] == "ok" for line in kept["checks"])
-            kept["ready"] = is_ready
-            kept["problems"]["required"] = self.required_problems(kept["checks"])
-            kept["button"] = self.button(kept["checks"], is_ready)
+            self.confirmed += 1
+            if self.kept is not None:
+                self.patch_setup(self.kept)
+
+    def patch_setup(self, answer: Dict[str, Any]) -> None:
+        """The setup line of an answer set to ok, and `ready`, `button` and `problems.required` worked out again (the caller holds the lock)."""
+        for line in answer["checks"]:
+            if line["id"] == "setup":
+                line.update(state="ok", why="ok", level="ok")
+        is_ready = all(line["state"] == "ok" for line in answer["checks"])
+        answer["ready"] = is_ready
+        answer["problems"]["required"] = self.required_problems(answer["checks"])
+        answer["button"] = self.button(answer["checks"], is_ready)
 
     def doctor_again(self) -> bool:
         """Check again, pressed by the person (1.7.45): doctor runs now, not when its wait is over. False when one runs already."""
@@ -713,6 +716,8 @@ class Ready:
                     self.worker = None
                     return
             began = time.monotonic()
+            with self.lock:
+                gen = self.confirmed
             try:
                 found = self.answer(True)
             except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
@@ -724,6 +729,8 @@ class Ready:
                 parts = ", ".join(f"{name} {value:.1f}" for name, value in sorted((getattr(self, "took", {}) or {}).items(), key=lambda item: -item[1]) if value >= 0.1)
                 print(messages.text("ready.slow", seconds=f"{spent:.1f}", parts=parts or "-"), flush=True)
             with self.lock:
+                if self.confirmed != gen and any(line.get("id") == "setup" for line in found.get("checks", [])):
+                    self.patch_setup(found)  # Confirm came while this answer was worked out: it read the state before it
                 self.kept = found
             self.first.set()
             time.sleep(KEEP_EVERY)

@@ -12,8 +12,8 @@ Three words, used the same way on the board, in commands and in files:
 |---|---|---|
 | tool pack | how the agent reaches one tool: its program, the gate's rules for it, its skills | `.harness/toolpacks/<name>/` (factory, on when `use` names it), `company/tools/packs/<name>/` (the company's), a folder added with `toolpack add` |
 | connection type | a kind of place the tool reaches (SQL Server, Azure DevOps project): its fields, its sign-in, its test | `types/<type>.json` of a tool pack |
-| connection | one place, with the person's sign-in (orders-dev, the Sales project) | `company/tools/connections.json` ([connections.md](connections.md)), or the person's own in Get ready |
-| computer recipe | what every colleague's computer needs and holds no secret: the CA bundle address and proxy, hints for where a program is installed (`tool_folders`: `{label, hint, program}`) | `company/tools/computer.json`, copied to `.harness/policies/computer.company.json`; shown in Get ready, This computer |
+| connection | one place, with the person's sign-in (orders-dev, the Sales project) | `company/tools/connections.json` ([connections.md](connections.md)), or the person's own in Settings, Connections |
+| computer recipe | what every colleague's computer needs and holds no secret: the CA bundle address and proxy, hints for where a program is installed (`tool_folders`: `{label, hint, program}`) | `company/tools/computer.json`, copied to `.harness/policies/computer.company.json`; shown in Settings, Network |
 
 ## Layout
 
@@ -90,7 +90,7 @@ When the harness runs a connection's `test` or probe (the board's Test, Enter, `
 A company may block MCP (VS Code's organization policy). Every tool pack must work there:
 
 - Give the command-line way (`via: cli`, a program) for everything the agent must do. `mcp.json` and `via: mcp` types are extras.
-- Where MCP is allowed (Get ready, This computer; `harness tools mcp --allow`), turning the pack on adds its `mcp.json` servers to `.vscode/mcp.json`; blocking MCP or turning the pack off takes them out again. A server of the same name that is not the pack's own is left alone.
+- Where MCP is allowed (Settings, Network; `harness tools mcp --allow`), turning the pack on adds its `mcp.json` servers to `.vscode/mcp.json`; blocking MCP or turning the pack off takes them out again. A server of the same name that is not the pack's own is left alone.
 - A skill says: use the MCP tools when they are there, else the program. The gate judges both.
 
 ## Three answers for a type with lists (1.7.38)

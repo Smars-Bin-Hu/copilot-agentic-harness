@@ -3,6 +3,7 @@ for the Enter screen (the kind and effect of the items, the middle button, the n
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import stat
@@ -201,6 +202,68 @@ class ProgramsTests(HarnessTestCase):
         self.assertEqual((row["found"], row["blocked"]), (False, str(stuck)))
         self.assertFalse(found["all_found"])
 
+    def fake_ok_rows(self, **extra: Any) -> Dict[str, Any]:
+        for name, text in (("python3", "Python 3.11.2"), ("git", "git version 2.1.0"), ("gh", "gh version 2.0.1 (x)")):
+            if name not in extra:
+                fake_program(self.bin, name, text)
+        code = fake_program(self.root / "app", "code", "unused")
+        return self.rows(str(self.bin), {"found": True, "version": "1.1.0", "path": str(code), "how": "path"})
+
+    @unittest.skipUnless(POSIX, "shell scripts stand for the programs")
+    def test_a_program_whose_version_probe_fails_is_not_found_ok_and_says_why(self) -> None:
+        """Round 3 B2: a file that is there but does not run (a macOS stub, a program a policy blocks) is not "found"."""
+        stub = self.bin / "git"
+        self.bin.mkdir(parents=True)
+        stub.write_text("#!/bin/sh\necho 'xcode-select: note: no developer tools were found' >&2\nexit 1\n", encoding="utf-8")
+        stub.chmod(0o755)
+        found = self.fake_ok_rows(git=True)
+        row = self.by(found)["git"]
+        self.assertEqual((row["trouble"], row["version"]), ("fails", ""))
+        self.assertIn("no developer tools", row["why"])
+        self.assertTrue(row["found"] and not row["blocked"])  # the file is there: the folder box and the download page stay on the row
+        self.assertFalse(found["all_found"])
+        self.assertTrue(all(self.by(found)[name]["trouble"] == "" for name in ("python", "vscode", "gh")))
+
+    @unittest.skipUnless(POSIX, "shell scripts stand for the programs")
+    def test_a_program_that_cannot_be_started_is_a_failure_with_the_reason(self) -> None:
+        tool = self.root / "tool"
+        tool.write_text("#!/bin/sh\n", encoding="utf-8")
+        tool.chmod(0o755)
+        programs._failed.clear()
+
+        def denied(args: Any, **kwargs: Any) -> Any:
+            raise PermissionError(13, "Access is denied")
+
+        said = programs.check(str(tool), denied)
+        self.assertEqual((said["state"], said["version"]), ("fails", ""))
+        self.assertIn("denied", said["why"])
+        programs._failed.clear()
+
+    @unittest.skipUnless(POSIX, "shell scripts stand for the programs")
+    def test_a_program_that_does_not_answer_in_time_is_still_checking_and_is_asked_again(self) -> None:
+        self.bin.mkdir(parents=True)
+        slow = self.bin / "git"
+        slow.write_text("#!/bin/sh\n/bin/sleep 20\n", encoding="utf-8")
+        slow.chmod(0o755)
+        programs._failed.clear()
+        with mock.patch.object(programs, "PROBE_WAIT", 0.4):
+            found = self.fake_ok_rows(git=True)
+            row = self.by(found)["git"]
+            self.assertEqual((row["trouble"], row["why"]), ("slow", ""))
+            self.assertFalse(found["all_found"])
+            self.assertEqual(programs._failed, {})  # nothing kept: the next poll starts it again
+        # the same program answering later is found
+        slow.write_text("#!/bin/sh\necho 'git version 2.3.4'\n", encoding="utf-8")
+        os.utime(slow, (time.time() + 5, time.time() + 5))
+        found = self.fake_ok_rows(git=True)
+        self.assertEqual((self.by(found)["git"]["trouble"], self.by(found)["git"]["version"]), ("", "2.3.4"))
+        self.assertTrue(found["all_found"])
+        programs._failed.clear()
+        programs._seen.clear()
+
+    def test_the_probe_wait_is_long_enough_for_a_slow_work_computer(self) -> None:
+        self.assertGreaterEqual(programs.PROBE_WAIT, 8.0)
+
     def test_the_folder_step_refuses_a_folder_without_the_program_and_a_program_it_does_not_know(self) -> None:
         empty = self.root / "empty"
         empty.mkdir()
@@ -246,12 +309,12 @@ class ProbeCacheTests(HarnessTestCase):
         self.tool.chmod(0o755)
 
     def test_a_probe_that_failed_is_not_run_again_for_a_while_and_a_changed_file_is(self) -> None:
-        """B3: the wizard asks every 3 s; a program that is blocked or hangs must not be started each time."""
+        """B3: the wizard asks every 3 s; a program that is blocked must not be started each time (one that only timed out is asked again: B2 of round 3)."""
         calls: List[Any] = []
 
         def hang(args: Any, **kwargs: Any) -> Any:
             calls.append(args)
-            raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+            return subprocess.CompletedProcess(args, 126, b"", b"cannot execute")
 
         self.assertEqual(programs.probe(str(self.tool), hang), "")
         self.assertEqual(programs.probe(str(self.tool), hang), "")
@@ -363,6 +426,7 @@ class ScanTests(HarnessTestCase):
         rows = {row["name"]: row for row in found["rows"]}
         self.assertEqual(sorted(rows), ["orders", "svc"])
         self.assertTrue(rows["orders"]["picked"])
+        self.assertEqual((rows["svc"]["in_root"], rows["orders"]["in_root"]), (True, False))  # B8: the one found through the repositories folder is marked; the page does not offer to untick it
         self.assertIn(setup.shown_path(self.root, base), found["places"])
 
     def test_a_single_repository_outside_the_usual_places_is_listed_picked_and_marked(self) -> None:
@@ -844,9 +908,43 @@ class ReadyFieldsTests(HarnessTestCase):
             found = check.latest(True)
         self.assertNotEqual(found["button"]["kind"], "setup")
         self.assertEqual(next(line for line in found["checks"] if line["id"] == "setup")["state"], "ok")
+        self.assertEqual(next(line for line in found["checks"] if line["id"] == "setup")["level"], "ok")  # B9: the dot too
         self.assertNotIn("setup", [problem["key"] for problem in found["problems"]["required"]])
         self.assertEqual(found["button"]["kind"], "signin")  # the next thing that holds, not the wizard
         self.assertEqual(ready.Ready(self.root, link, clean).setup_now_done(), None)  # no answer kept yet: nothing to change
+
+    def test_confirm_while_an_answer_is_worked_out_is_not_undone_by_it(self) -> None:
+        """Round 3 B1: `keep_fresh` read `setup_done` before Confirm and stored its answer after it: the page went back to the wizard. Confirm now bumps a number the worker compares."""
+        link = StubLink({"ready": True, "bound": 1, "unbound": 0, "why": "ok"})
+        signed_out = {"gh": "/usr/bin/gh", "version": "2.0.0", "signed_in": False, "login": "", "why": "not-signed-in"}
+        with mock.patch.object(ready.ghauth, "check", side_effect=lambda root=None, extra=None: dict(signed_out)), mock.patch.object(ready, "KEEP_EVERY", 0):
+            check = ready.Ready(self.root, link, clean)
+            wizard.mark(self.root)
+            stale = settled(check)  # setup is "new" in it
+            self.assertEqual(stale["button"]["kind"], "setup")
+            inside, go = threading.Event(), threading.Event()
+
+            def slow(paired: bool) -> Dict[str, Any]:
+                inside.set()
+                go.wait(5)
+                return copy.deepcopy(stale)
+
+            check.answer = slow  # type: ignore[method-assign]
+            check.asked_at = check.clock()
+            worker = threading.Thread(target=check.keep_fresh, daemon=True)
+            worker.start()
+            self.assertTrue(inside.wait(5))
+            wizard.finish(self.root)
+            check.setup_now_done()  # nothing kept yet: only the number changes
+            check.asked_at = -1e9  # the worker stops after this answer
+            go.set()
+            worker.join(5)
+            found = check.kept
+        assert found is not None
+        line = next(one for one in found["checks"] if one["id"] == "setup")
+        self.assertEqual((line["state"], line["level"]), ("ok", "ok"))
+        self.assertNotEqual(found["button"]["kind"], "setup")
+        self.assertNotIn("setup", [problem["key"] for problem in found["problems"]["required"]])
 
     def test_a_browser_that_is_not_paired_gets_the_pair_button_and_the_fallback_answers_have_a_button_and_notes(self) -> None:
         wizard.finish(self.root)

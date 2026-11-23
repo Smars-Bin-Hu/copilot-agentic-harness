@@ -193,6 +193,10 @@ def scan(root: Path, home: Optional[Path] = None) -> Dict[str, Any]:
                 places.append(place)
         except OSError:
             continue
+    try:
+        in_base = Path(setup.clean_path(base)).resolve() if base else None
+    except OSError:
+        in_base = None
     own = setup.own_folders(root)
     picked = picked_paths(root)
     rows: List[Dict[str, Any]] = []
@@ -214,7 +218,7 @@ def scan(root: Path, home: Optional[Path] = None) -> Dict[str, Any]:
                     more = True
                     break
                 seen.add(full)
-                rows.append({"path": str(item), "shown": setup.shown_path(root, item), "name": item.name, "branch": setup.head_branch(item), "picked": str(full) in picked})
+                rows.append({"path": str(item), "shown": setup.shown_path(root, item), "name": item.name, "branch": setup.head_branch(item), "picked": str(full) in picked, "in_root": in_base is not None and full.parent == in_base})  # in_root: found because of the repositories folder; it is not a choice of the page
             except OSError:
                 continue
         if more:
@@ -260,7 +264,7 @@ def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> Di
     name = str(kept.get("name") or "")
     language = str(kept.get("language") or messages.language())
     found = programs.get("rows") or []
-    have = [row for row in found if row.get("required") and row.get("found") and not row.get("blocked")]
+    have = [row for row in found if row.get("required") and row.get("found") and not row.get("blocked") and not row.get("trouble")]
     total = len([row for row in found if row.get("required")])
     kb = items.get("kb") or {}
     out: List[Dict[str, Any]] = []

@@ -193,3 +193,4 @@ html.lite .wz .wz-spin,html.lite .wz .wz-btn.is-waiting::before{animation:none}@
 .wz-have .wz-stats{margin-top:16px;grid-template-columns:repeat(2,minmax(0,140px))}
 .wz-have .wz-hv{margin:14px 0 0;font-size:14px;line-height:1.5}
 .wz-choice{display:flex;align-items:center;flex-wrap:wrap;gap:12px 22px;margin-top:20px}
+.wz-repo.fixed{cursor:default}.wz-repo.fixed .wz-box{opacity:.5}

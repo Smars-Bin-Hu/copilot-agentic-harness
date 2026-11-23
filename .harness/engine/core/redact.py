@@ -33,9 +33,14 @@ def _camel(part: str) -> bool:
     return bool(_CAMEL.fullmatch(part)) and any(len(word) >= 4 for word in _WORD.findall(part))
 
 
+_DIGEST = re.compile(r"(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})")  # SHA-1 and SHA-256 in hex: a certificate thumbprint, a git commit, a file hash. Named secrets (`token=<hex>`) are caught by the rules above.
+
+
 def _long_run(found: Match[str]) -> str:
-    """A long run with no space is a key or a hash, unless it reads as a path (at least two slashes and words between them) or as a name of code. A key that has slashes (base64) mixes its cases
-    inside a part."""
+    """A long run with no space is a key or a hash, unless it is a plain hex digest (a thumbprint, a commit: the agent's reply must show it), reads as a path (at least two slashes and words between
+    them) or as a name of code. A key that has slashes (base64) mixes its cases inside a part."""
+    if _DIGEST.fullmatch(found.group(0)):
+        return found.group(0)
     parts = found.group(0).split("/")
     if len(parts) >= 3 and all((_PATH_PART.fullmatch(part) or _camel(part)) and (len(part) < 32 or "-" in part or "_" in part) for part in parts):
         return found.group(0)

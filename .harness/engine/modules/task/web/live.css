@@ -40,6 +40,9 @@
 .fi .tx.md p{margin:.55em 0}.fi .tx.md ul,.fi .tx.md ol{margin:.5em 0;padding-left:1.4em}
 .fi .tx.md .md-h{font-size:14.5px;margin:.9em 0 .35em}
 .fi .tx.md .code-box{margin:.7em 0}
+/* inline `code` in what the agent wrote: a chip, so a name, a path or a hash is told from the words around it (the document rule is `article.md code`; this text is not in an article) */
+.tx.md code{font-family:var(--mono);font-size:.88em;background:var(--track);border:1px solid var(--line);border-radius:5px;padding:1px 5px;overflow-wrap:anywhere}
+.tx.md pre.code code{background:none;border:0;padding:0;font-size:inherit}
 /* what the person said: a small mark; the words are in its card */
 .fi-me{padding:3px 0}
 .fi-me .dot{width:7px;height:7px;margin:7px 0 0 1px;background:var(--bg);border-color:var(--soft)}

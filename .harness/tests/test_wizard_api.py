@@ -113,10 +113,20 @@ class ProgramsTests(HarnessTestCase):
 
     def rows(self, path: str, installed: Optional[Dict[str, Any]] = None, short: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         with mock.patch.dict(os.environ, {"PATH": path}):
+            os.environ.pop("HARNESS_GH", None)  # the tests switch gh off for the whole suite; here it is the PATH that decides
             return programs.rows(self.root, installed or {"found": False, "version": "", "path": "", "how": ""}, short or {"found": "", "command": "run-this"}, messages.text)
 
     def by(self, found: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         return {row["id"]: row for row in found["rows"]}
+
+    @unittest.skipUnless(POSIX, "shell scripts stand for the programs")
+    def test_a_gh_switched_off_is_not_found_here_as_it_is_not_found_by_the_sign_in_check(self) -> None:
+        fake_program(self.bin, "gh", "gh version 2.105.0 (2026-01-01)")
+        with mock.patch.dict(os.environ, {"PATH": str(self.bin), "HARNESS_GH": "off"}):
+            found = programs.rows(self.root, {"found": False, "version": "", "path": "", "how": ""}, {"found": "", "command": "x"}, messages.text)
+        row = self.by(found)["gh"]
+        self.assertEqual((row["found"], row["path"], row["how"]), (False, "", ""))
+        self.assertFalse(found["all_found"])
 
     @unittest.skipUnless(POSIX, "shell scripts stand for the programs")
     def test_every_program_found_says_where_how_and_which_version(self) -> None:
@@ -201,6 +211,15 @@ class ProgramsTests(HarnessTestCase):
             found = self.rows(str(folder))
         self.assertLess(time.monotonic() - began, 3.0)
         self.assertEqual((self.by(found)["git"]["found"], self.by(found)["git"]["version"]), (True, ""))  # a version that cannot be had is empty, not an error
+
+
+class PageScriptsTests(unittest.TestCase):
+    def test_dock_reads_READY_when_it_loads_so_every_page_that_loads_dock_loads_readyui_first(self) -> None:
+        from modules.task import taskhtml
+        pages = {"setup": taskhtml.setup_page({"actions": [], "refresh": 3}), "task": taskhtml.task_page({"name": "a", "title": "a"}, 3, serve={"actions": [], "refresh": 3})}
+        for name, page in pages.items():
+            self.assertIn("const READY =", page, name)
+            self.assertLess(page.index("const READY ="), page.index("function notesDot"), name)
 
 
 class ScanTests(HarnessTestCase):
@@ -444,6 +463,7 @@ class BoardSteps(ServeCase):
             folder = self.root / "ghplace"
             fake_program(folder, "gh", "gh version 2.9.9 (x)")
             with mock.patch.dict(os.environ, {"PATH": str(empty)}):  # the gh of this machine is not on the path asked about
+                os.environ.pop("HARNESS_GH", None)  # switched off for the whole suite: here the folder decides
                 status, data, _ = self.post("folder", {"program": "gh", "path": str(folder)})
             self.assertEqual(status, 200)
             row = next(row for row in data["result"]["rows"] if row["id"] == "gh")

@@ -81,7 +81,8 @@ def rows(root: Path, installed: Dict[str, Any], short: Dict[str, Any], say: Call
     place["git"] = where("git", base, folders)
     code = installed.get("path") or ""
     place["vscode"] = (code, installed.get("how") or "standard") if code else ("", "")
-    place["gh"] = where("gh", base, folders, next((item for item in ghauth.standard_places() if os.path.isfile(item)), None))
+    chosen = ghauth.find_gh(folders)  # the finder of the sign-in check itself: a gh the person set (`HARNESS_GH`, or `off`) counts here as it does there
+    place["gh"] = (chosen, "path" if chosen == shutil.which("gh", path=base) else "folder" if os.path.dirname(chosen) in folders else "standard") if chosen else ("", "")
     versions: Dict[str, str] = {}
 
     def look(program: str) -> None:

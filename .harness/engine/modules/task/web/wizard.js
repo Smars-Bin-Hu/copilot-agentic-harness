@@ -356,7 +356,7 @@ const WIZARD = (function () {
         const start = btn("", "primary gh-btn", () => { starting = true; start.disabled = true; said.hidden = true; api.gh({do: "login"}).then(tick, (error) => { starting = false; said.textContent = errorText(error); said.hidden = false; start.disabled = false; }); });
         start.append(ghIcon(), t("wizard.c.btn"));
         start.disabled = starting;
-        const why = line.last ? t("wizard.c.trouble", {why: line.detail || line.last}) : "";
+        const why = line.last && line.last !== "cancelled" ? t("wizard.c.trouble", {why: line.detail || line.last}) : "";
         put(body, el("div", "wz-cp", start, el("div", "wz-under", t("wizard.c.how"))), why ? el("p", "wz-err", why) : null);
       }
       opts.changed();

@@ -2143,4 +2143,3 @@ class SigninsOnTheBoard(ProgramNeeds):
         self.assertNotIn("toolRow", servers, "no row for a tool: a connection whose way in is the tool's sign-in has its own Sign in (1.7.38)")
         for word in ("machine.prog.title", "machine.net.title"):
             self.assertIn(word, setup, word)
-        self.assertIn("machine.conn.notusable", enter)

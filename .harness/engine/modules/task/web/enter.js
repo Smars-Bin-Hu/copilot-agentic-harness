@@ -1,11 +1,9 @@
-// The Enter screen of a served page (1.6 B86): the wordmark HARNESS, the robot floating over its middle (in 3D, bot3d.js; flat when it cannot be), the pointer light, hold to charge, and the readiness list.
+// The Enter screen of a served page (1.6 B86): the wordmark HARNESS, the robot floating over its middle (in 3D, bot3d.js; flat when it cannot be), the pointer light, hold to charge, and one button.
 // A page on disk has none (no SERVE). The search and the settings are the global ones of shell.js; this screen adds nothing to the top but the greeting.
 //
-// Readiness: POST /api/ready every 3 s (a read; the server answers from caches and waits for nothing). Two blocks (1.7.38). Harness & Local is required: this copy is set up, this browser is paired, harness doctor has
-// no error, VS Code is installed, Copilot is signed in through gh (the board runs its own agent host). Enter is allowed only when every one is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page.
-// From the company is optional (knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories): never a gate, but what is missing is said here with a link to the place that
-// mends it, and again in the block of the board after Enter (readybar.js). The button beside Enter is the fix of the VS Code or Copilot line (`action`: sign in, get gh, get VS Code), or none.
-// A check that cannot run shows as failed with its reason; a board that does not answer shows a line saying so and the screen goes on asking.
+// The button (1.8.x, O3): `POST /api/ready` every 3 s (a read; the server answers from caches and waits for nothing) gives `button`: its kind (enter, setup, program, doctor, signin, signing, preparing, restart-host, wait, check, pair), its label in the
+// person's language and what the kind needs (the code of the sign-in, the percent of the host's download, the reason a host stopped). The screen has no list: what is missing is said in the setup page (/setup), the gear's dot (`notes`) and the block of the board
+// after Enter (readybar.js). A board that does not answer shows a line saying so and the screen goes on asking.
 //
 // Showing it: once for each tab session (sessionStorage, in try/catch), not on a poll, a reload of the board or a way back from a task. A task page opened from a link skips it only when everything
 // is ready (the screen stays hidden for the first answers); when not, it shows the screen and the task is under it. The page below keeps loading its data while the screen is up.
@@ -21,8 +19,6 @@
   const NS = "http://www.w3.org/2000/svg";
   const SEEN = "harness.entered";
   const POLL = 3000;
-  const STEP = 140;  // ms between two lines lighting up
-  const FIRST = 380;  // ms before the first one
   const HOLD_FULL = 1.5;  // seconds of holding for a full charge
   let memorySeen = false;
   const seen = () => { try { return sessionStorage.getItem(SEEN) === "1"; } catch (error) { return memorySeen; } };
@@ -56,23 +52,21 @@
   const canvas = h("canvas", {id: "en-fx", "aria-hidden": "true"});
   const bot = h("div", {class: "en-bot", "aria-hidden": "true"});
   const say = h("div", {class: "en-say", "aria-hidden": "true"});
-  const headText = h("span", null, t("board.enter.checking"));
-  const getReady = h("button", {type: "button", class: "en-open en-getready", hidden: "hidden", title: t("board.enter.getready.tip")}, t("board.enter.getready"));  // beside "Not ready": the way to /setup (1.7.19)
-  getReady.addEventListener("click", () => location.assign("/setup"));
-  const head = h("div", {class: "en-chk-h h-check"}, h("i"), headText, getReady);
-  const list = h("ul", {class: "en-chk-l"});
-  const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
   const KEEP_READY = 120 * Math.max(1, Number(DATA.pace) || 1);  // 1.8.13: seconds a ready answer still counts while the board answers late
   const legal = h("p", {class: "en-legal"}, t("board.enter.legal", {copyright: t("board.copyright"), version: DATA.serve.version || ""}));
-  const body = h("div", {class: "en-chk-body"}, head, list, errLine);  // the lines scroll here; the legal line below it stays in view (1.7.24)
-  const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
-  const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
-  const vsBtn = h("button", {type: "button", class: "en-vs", hidden: "hidden"});  // beside Enter: the fix of the VS Code or Copilot line (`action`), when there is one
-  const card = h("div", {class: "en-card", role: "status", hidden: "hidden"});  // 1.8.x: above the buttons: gh's one-time code, the download of the agent host, or where gh is
-  const cta = h("div", {class: "en-cta"}, card, vsBtn, go);
+  const label = h("span", {class: "en-lab"}, t("board.enter.checking"));
+  const fill = h("i", {class: "en-fill", "aria-hidden": "true"});  // the progress of `preparing`, drawn inside the button
+  const goSpin = h("i", {class: "en-spin", "aria-hidden": "true", hidden: "hidden"});
+  const kbd = h("kbd", null, "\u21b5");
+  const go = h("button", {type: "button", class: "en-go k-check plain off", disabled: "disabled"}, fill, goSpin, label, kbd);  // the one button; its kind comes from /api/ready (`button`)
+  const card = h("div", {class: "en-card", role: "status", hidden: "hidden"});  // above the button: the one-time code of the sign-in, or the problems of doctor
+  const subDot = h("i", {class: "en-dot", hidden: "hidden"}), subText = h("span");
+  const sub = h("div", {class: "en-sub", hidden: "hidden"}, subDot, subText);  // under the button: one short line
+  const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
+  const cta = h("div", {class: "en-cta", "aria-live": "polite"}, card, go, sub, errLine);
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
-    h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, cta, hint));
+    h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, legal, cta, hint));
   document.body.append(enter);
   const stage = enter.querySelector(".en-stage");
   let open = true;
@@ -310,7 +304,7 @@
       wake(); loop();
     });
     enter.addEventListener("pointerdown", (event) => {
-      if (event.button || event.target.closest("button,.en-bot,.en-chk")) return;
+      if (event.button || event.target.closest("button,.en-bot,.en-card")) return;
       wm.px = event.clientX; wm.py = event.clientY;
       if (!fxOn()) return;
       try { enter.setPointerCapture(event.pointerId); } catch (error) { /* the release is then taken from the window */ }
@@ -329,353 +323,118 @@
     window.addEventListener("blur", () => { if (FX.down) { FX.down = false; fxClear(); tremble(0, 0); botReact(0, false); } });
   }
 
-  // ---------- readiness ----------
-  // Two blocks (1.7.38). `/api/ready` gives `checks` (Harness & Local, all blocking) and `optional.items` (From the company, never blocking).
-  const REQ = ["setup", "paired", "doctor", "vscode", "copilot"];
-  const OPT = ["kb", "instructions", "skills", "standards", "packs", "connections", "repos"];
-  const GROUPS = [["required", REQ], ["optional", OPT]];
-  const ORDER = GROUPS.flatMap((group) => group[1]);
-  const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, ready: false, fail: ""};
+  // ---------- readiness: one button ----------
+  // `/api/ready` gives `button` (O1): {kind, label, off, code, url, left, percent, program, download, detail, n}. The label is already in the person's language. The screen is the wordmark, the robot and this button;
+  // the lists of what is set up live in the setup page (/setup) and the gear (dock.js), not here. An older server that has no `button` yet: `enter` when `ready`, else `check`.
+  const chk0 = {t0: 0, last: null, at: 0, error: "", inflight: false, timer: 0, tick: 0, ready: false, kind: "", fail: "", docOpen: false, acting: false, said: ""};
   const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
   const setClass = (node, cls) => { if (node.className !== cls) node.className = cls; };
-  const slot = (i) => chk0.t0 && Date.now() - chk0.t0 >= FIRST + i * STEP;
-  function build() {
-    for (const [group, ids] of GROUPS) {
-      list.append(h("li", {class: "gh", "data-g": group}, h("i", {class: "ck"}), h("span", {class: "gh-t"}, t("board.enter.g." + group)), h("span", {class: "gh-tag"}), h("span", {class: "gh-n"})));
-      for (const id of ids) list.append(h("li", {class: "row", "data-id": id, "data-g": group}, h("i", {class: "ck"}), h("span", {class: "t"}), h("em"), h("p", {class: "m", hidden: "hidden"})));
-    }
-  }
-  const rowOf = (id) => list.querySelector('li.row[data-id="' + id + '"]');
-  const word = (key, vals, fallback) => (Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key, vals) : fallback || "");
-  const langWord = () => { try { return new Intl.DisplayNames([root.lang], {type: "language"}).of(root.lang) || root.lang; } catch (error) { return root.lang; } };  // English, or the name of the language in itself
-  // A line of the first block -> {state, level, tag, note, soft, tip}: a short word on the line; the long words in the note under it only where the person must do something.
-  const CARDED = ["signing-in", "no-gh", "host-preparing"];  // their words are on the card above the buttons, not under the line
-  function ghTip(c) {
-    const lines = [];
-    if (c.gh) lines.push(t("board.enter.gh.tip.gh", {path: c.gh, version: c.gh_version || "?"}));
-    if (c.login && c.state === "ok") lines.push(t("board.enter.gh.tip.account", {login: c.login}));
-    if (c.host_version) lines.push(t("board.enter.gh.tip.host", {version: c.host_version, seconds: c.host_seconds === undefined || c.host_seconds === null ? "?" : c.host_seconds}));
-    if (c.n) lines.push(t("board.enter.gh.tip.models", {n: c.n}));
-    return lines.join("\n");
-  }
-  function ownView(c) {
-    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, login: c.login || "", percent: c.host && typeof c.host.percent === "number" ? c.host.percent : 0, detail: plainWords(c.detail || "")};
-    if (c.state === "check") return {state: "check", level: "grey", tag: "", note: "", soft: false, tip: ""};
-    if (id === "vscode") {
-      const tip = c.version ? "VS Code " + c.version : "";
-      if (c.state === "ok") return {state: "ok", level: c.level || "ok", tag: c.version || t("board.enter.d.vscode.ok"), note: "", soft: true, tip};
-      return {state: c.state, level: c.level || "red", tag: word("board.enter.d.vscode." + c.why, vals, t("board.enter.tag.fail")), note: word("board.enter.m.vscode." + c.why, vals), soft: false, tip};
-    }
-    const tip = ghTip(c);
-    if (c.state === "ok") return {state: "ok", level: c.level || "ok", tag: c.login ? t("board.enter.d.copilot.signed", vals) : t("board.enter.d.copilot.ok", vals), note: "", soft: true, tip};
-    const tag = word("board.enter.d.copilot." + c.why, vals, t(c.state === "wait" ? "board.enter.tag.wait" : "board.enter.tag.fail"));
-    let note = c.why === "vscode" || CARDED.includes(c.why) ? "" : word("board.enter.m.copilot." + c.why, vals);
-    if (c.why === "signin" && c.last) note = word("board.enter.m.copilot.login." + c.last, vals) + (root.lang === "zh" ? "" : " ") + note;
-    return {state: c.state, level: c.level, tag, note, soft: c.state === "wait", tip};
-  }
-  function reqView(c) {
-    if (c.id === "vscode" || c.id === "copilot") return ownView(c);
-    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || ""), since: clock(c.since)};
-    let state = c.state, level = c.level || "grey", tag = "", note = "", tip = "";
-    if (state === "check") return {state, level: "grey", tag: "", note: "", soft: false, tip: ""};
-    if (state === "ok") {
-      tag = id === "setup" ? [String(DATA.serve.user || "").trim(), langWord()].filter(Boolean).join(" · ") : t("board.enter.d." + id + ".ok", vals);
-      return {state, level, tag, note, soft: true, tip};
-    }
-    if (state === "wait") tag = t("board.enter.tag.wait");
-    else if (id === "paired") tag = t("board.enter.d.paired.unpaired");
-    else if (id === "doctor" && c.why === "stale") tag = t("board.enter.d.doctor.stale");  // 1.8.23: the folder holds a newer release than the board runs
-    else if (id === "doctor") tag = c.why === "failed" ? t("board.enter.d.doctor.failed") : t(c.n === 1 ? "board.enter.d.doctor.errors.one" : "board.enter.d.doctor.errors", vals);
-    else tag = t("board.enter.tag.fail");
-    if (id === "setup") note = word("board.enter.m.setup." + c.why, vals);
-    else if (id === "paired") note = t("board.enter.m.paired.unpaired");
-    else if (id === "doctor" && c.why === "stale") note = t("board.enter.m.doctor.stale", {started: c.started, now: c.now});
-    else if (id === "doctor") note = word("board.enter.m.doctor." + c.why + (c.why === "errors" && c.n === 1 ? ".one" : ""), vals, plainWords(c.detail || ""));
-    return {state, level, tag, note, soft: state === "wait", tip};
-  }
-  // An item of the second block -> {state, level, tag, notes: [{text, fix}], tip}. The note is what the problems of the row say, with a link each to where it is mended.
-  function optView(c) {
-    const level = c.state === "ok" ? "ok" : c.state === "red" ? "red" : c.state === "yellow" ? "yellow" : "grey";  // red (1.7.38, G-1): a tool pack with a faulty file
-    const notes = (c.problems || []).filter((problem) => problem.short).map((problem) => ({text: problem.short, fix: problem.fix}));
-    return {state: c.state === "ok" ? "ok" : "note", level, tag: c.detail || "", notes, tip: c.tip || ""};
-  }
-  // Names with a dot each (tool packs, connections): one line, "+N" for those that do not fit; the table of environments, states, reasons and times of the connections is a window on hover (1.7.19).
-  // A name is never cut: the first one wraps when it alone is wider than the line.
-  const pop = h("div", {class: "en-pop", hidden: "hidden", role: "tooltip"});
-  let popTimer = 0, popFor = null;
-  const ago = (stamp) => {
-    const date = new Date(stamp || "");
-    if (!stamp || isNaN(date.getTime())) return t("board.enter.sys.never");
-    const seconds = Math.max(0, (Date.now() - date.getTime()) / 1000);
-    return seconds < 60 ? t("board.enter.sys.now") : seconds < 3600 ? t("board.enter.sys.min", {n: Math.floor(seconds / 60)}) : seconds < 86400 ? t("board.enter.sys.hour", {n: Math.floor(seconds / 3600)}) : t("board.enter.sys.day", {n: Math.floor(seconds / 86400)});
-  };
-  const itemOf = (key) => (chk0.last && chk0.last.optional ? chk0.last.optional.items.find((x) => x.key === key) : null);
-  function popTable(c) {
-    const head = ["system", "env", "status", "reason", "checked", "pack"].map((key) => h("th", null, t("board.enter.sys.col." + key)));
-    const body = [];
-    let last = null;
-    for (const row of c.rows || []) {
-      const first = row.system !== last;
-      last = row.system;
-      body.push(h("tr", {class: first ? "first" : ""}, h("td", {class: "sy-n"}, first ? row.system : ""), h("td", {class: "sy-e"}, row.env && row.env !== "none" ? row.env.toUpperCase() : ""),
-        h("td", {class: "sy-s " + row.state}, h("i", {class: "sy-d " + row.state}), t("board.enter.sys.state." + row.state)), h("td", {class: "sy-r"}, row.reason || "", row.note ? h("div", {class: "sy-warn"}, row.note) : null),
-        h("td", {class: "sy-t"}, row.state === "unknown" ? t("board.enter.sys.never") : ago(row.at)), h("td", {class: "sy-p"}, first ? row.pack || "" : "")));
-    }
-    return h("div", {class: "en-pop-in"}, h("table", null, h("thead", null, h("tr", null, ...head)), h("tbody", null, ...body)), c.off ? h("p", {class: "sy-off"}, c.off.text) : null);  // VS Code without the settings of this copy: said once here, not in every row (RC-1); the connections whose tool pack is off are not in the table (1.7.38)
-  }
-  const fillPop = (c) => { pop.replaceChildren(popTable(c)); };
-  function markScroll(c) {  // more rows than the window holds: it says so, and how many there are
-    const inner = pop.firstChild;
-    if (inner && inner.scrollHeight > inner.clientHeight + 2) inner.append(h("p", {class: "sy-scroll"}, t("board.enter.sys.scroll", {n: new Set(c.rows.map((row) => row.system)).size})));
-  }
-  function popShow(li) {
-    const c = itemOf("connections");
-    if (!c || !c.rows || !c.rows.length) return;
-    clearTimeout(popTimer); popFor = li;
-    fillPop(c);
-    pop.hidden = false;
-    markScroll(c);
-    const r = li.getBoundingClientRect(), w = pop.offsetWidth, ph = pop.offsetHeight;
-    pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
-    pop.style.top = (r.top - ph - 6 > 8 ? r.top - ph - 6 : Math.min(innerHeight - ph - 8, r.bottom + 6)) + "px";
-  }
-  const popHide = (later) => { clearTimeout(popTimer); popTimer = setTimeout(() => { pop.hidden = true; popFor = null; }, later ? 250 : 0); };
-  document.body.append(pop);
-  pop.addEventListener("mouseenter", () => clearTimeout(popTimer));
-  pop.addEventListener("mouseleave", () => popHide(true));
-  function fitNames(sy) {  // show the names that fit on one line, "+N" for the rest
-    const items = [...sy.querySelectorAll(".sy-i")], more = sy.querySelector(".sy-more");
-    items.forEach((item) => { item.hidden = false; });
-    more.hidden = true;
-    if (!sy.clientWidth) return;
-    const room = sy.clientWidth, size = (item) => Math.min(item.offsetWidth, room) + 10;
-    const place = (limit) => {  // one by one, in order: a name that does not fit is skipped and the next, shorter one may still go in; the first stays, whole
-      const keep = new Set();
-      let used = 0;
-      items.forEach((item, index) => { if (!index || used + size(item) <= limit) { keep.add(index); used += size(item); } });
-      return keep;
-    };
-    let keep = place(room + 10);
-    if (keep.size < items.length) keep = place(room - 34);  // room kept for "+N"
-    if (keep.size === items.length) return;
-    items.forEach((item, index) => { item.hidden = !keep.has(index); });
-    more.textContent = "+" + (items.length - keep.size); more.hidden = false;
-    more.title = items.filter((item, index) => !keep.has(index)).map((item) => item.textContent).join(", ");
-  }
-  const DOT = {ok: "ok", need: "partly", down: "partly", held: "partly", none: "none", untested: "unknown", bad: "down"};  // the state of a pack or a connection -> the class of its dot
-  function names(li, c, hover) {
-    let sy = li.querySelector(".sy");
-    if (!sy) {
-      sy = h("div", {class: "sy", tabindex: "0"});
-      li.append(sy);
-      if (hover) { li.addEventListener("mouseenter", () => popShow(li)); li.addEventListener("mouseleave", () => popHide(true)); sy.addEventListener("focus", () => popShow(li)); sy.addEventListener("blur", () => popHide(false)); }
-    }
-    sy.setAttribute("aria-label", t("board.enter.t." + c.key));
-    const key = JSON.stringify([c.names, root.lang]);
-    if (sy.dataset.k !== key) {
-      sy.dataset.k = key;
-      const title = (item) => (hover ? "" : c.key === "packs" ? (item.state === "ok" ? "" : item.state === "bad" ? (item.fault || "") : t("machine.conn.notusable", {programs: item.missing || ""})) : t("board.enter.cs." + item.state));  // the connections row has its window on hover: a second bubble beside it covered the lines below (C12 N7)
-      sy.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: title(item)}, h("i", {class: "sy-d " + (DOT[item.state] || "unknown")}), item.name)), h("span", {class: "sy-more", hidden: ""}));
-    }
-    fitNames(sy);
-    if (hover && popFor === li && !pop.hidden) { fillPop(c); markScroll(c); }  // an open window follows the new answer
-  }
-  const noNames = (li) => { const sy = li.querySelector(".sy"); if (sy) sy.remove(); };
-
-  // A required line that is still at work has a bar under it (1.7.43): doctor takes a minute and more on a work computer, and "checking" alone looked stuck. Doctor tells its steps:
-  // the bar fills, the line says how far and how long, the hover names the step. Any other line waits for something it cannot count: the bar moves to and fro. `c` null: no bar.
-  function busyBar(li, em, c) {
-    let bar = li.querySelector(".pg");
-    if (!c) { if (bar) bar.remove(); return; }
-    if (!bar) { bar = h("div", {class: "pg"}, h("i")); li.insertBefore(bar, li.querySelector(".m")); }
-    const p = c.id === "doctor" && c.progress ? c.progress : c.id === "copilot" && c.host && typeof c.host.percent === "number" ? {done: c.host.percent, total: 100, host: true} : null;
-    const known = Boolean(p && p.total > 0);
-    setClass(bar, "pg" + (known ? "" : " pg-any"));
-    const width = known ? Math.max(4, Math.round(100 * p.done / p.total)) + "%" : "";
-    if (bar.firstChild.style.width !== width) bar.firstChild.style.width = width;
-    if (!p || p.host) return;  // the host's percent is on the line's tag already
-    setText(em, known ? t("board.enter.doctor.progress", {done: p.done, total: p.total, s: p.seconds}) : t("board.enter.doctor.seconds", {s: p.seconds}));
-    li.title = p.step ? t("board.enter.doctor.step", {step: p.step}) : "";
-  }
-  const optionalCount = () => (chk0.last && chk0.last.optional ? chk0.last.optional.count : 0);
-  function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks
-    if (!list.children.length) build();
-    const data = chk0.last, checks = data ? data.checks : [], optional = data && data.optional ? data.optional : null;
-    let all = Boolean(data), pending = false, anyCheck = false, missing = 0;
-    ORDER.forEach((id, i) => {
-      const li = rowOf(id), req = i < REQ.length;
-      const c = req ? checks.find((x) => x.id === id) : optional && optional.items.find((x) => x.key === id);
-      const lit = c && slot(i);
-      const view = !lit ? {state: "check", level: "", tag: "", note: "", notes: [], soft: false, tip: ""} : req ? reqView(c) : optView(c);
-      if (req && view.state !== "ok") { all = false; if (lit && view.state !== "check") missing += 1; }
-      if (view.state === "check") { anyCheck = true; if (!c || req || !lit) pending = true; }
-      setClass(li, "row s-" + view.state + (view.level ? " l-" + view.level : "") + (req ? " blocks" : " warns") + (!req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? " has-fix" : "") + (!req && c && c.names && c.names.length ? " has-names" : ""));
-      setText(li.querySelector(".t"), t("board.enter.t." + id));
-      const em = li.querySelector("em");
-      li.title = id === "connections" && c && c.rows && c.rows.length ? "" : view.tip || "";  // the hover table has the same sentence at its foot: not a second bubble beside it
-      li.dataset.fix = !req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? "1" : "";
-      if (!req && c && c.names && c.names.length) { setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setText(em, view.tag || (view.state === "check" ? "" : "—")); }
-      busyBar(li, em, lit && req && (view.state === "check" || (view.state === "wait" && !(id === "copilot" && c.why === "vscode"))) ? c : null);
-      const p = li.querySelector(".m");
-      const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), c && c.integrity, root.lang]);
-      const note = view.note, soft = view.soft;
-      const has = Boolean(note) || Boolean((view.notes || []).length);
-      if (has) {
-        if (p.dataset.k !== keyNote) {
-          p.dataset.k = keyNote;
-          const nodes = [];
-          if (note) nodes.push(note);
-          if ((view.notes || []).length) {
-            const gap = root.lang === "zh" ? "" : " ";  // a Chinese sentence ends in a full stop: no space after it (C12 N11)
-            nodes.push(view.notes.map((n) => n.text).join(gap));
-            const seen = new Set();
-            const links = view.notes.map((n) => n.fix).filter((fix) => { if (!fix || !fix.to || seen.has(fix.label)) return false; seen.add(fix.label); return true; });
-            links.forEach((fix, index) => nodes.push(index ? " · " : gap, READY.link(fix, {done: () => poll()}, fix.short || fix.label)));
-          }
-          if (id === "paired") nodes.push(" ", SERVE.pairControl());  // 1.8.11: one click opens the board paired in the default browser
-          if (id === "doctor" && c && c.why === "stale" && typeof SHELL !== "undefined") {  // 1.8.23: one click to the new release; the restart accepts its guardrail files
-            const b = h("button", {type: "button", class: "en-open"}, t("board.enter.restart"));
-            b.addEventListener("click", () => SHELL.restartBoard(b, (words) => { chk0.fail = words; render(); }));
-            nodes.push(h("br"), b);
-          }
-          else if (id === "doctor" && c && c.integrity) nodes.push(" ", READY.acceptButton(() => poll()));
-          else if (id === "doctor" && c && c.state === "fail") nodes.push(" ", READY.link({to: "doctor"}, {done: () => poll()}, t("board.enter.doctor.again")));  // 1.7.45: run doctor now, not when its wait is over  // guardrail files not as accepted (1.7.39): the board accepts them after listing them
-          p.replaceChildren(...nodes);
-        }
-        setClass(p, "m" + (soft ? " soft" : "") + ((req && view.state === "fail") || (!req && view.level === "red") ? " bad" : "")); if (p.hidden) p.hidden = false;  // a red row has a red note, not an amber one (F1 U1)
-      } else if (!p.hidden) { p.hidden = true; p.dataset.k = ""; }
-    });
-    const down = Boolean(chk0.error) && (chk0.misses || 0) >= 2;  // 1.8.13: one late answer is not a board that is down: Enter stayed off with every line green
-    // 1.8.13: a slow computer is not a broken one. While the last answer that came was ready (KEEP_READY s ago at most), Enter stays on and the line says the board is slow,
-    // in amber, with how long ago it last answered; only after that, or when the last answer was not ready, is it red and Enter off. The checks themselves stay as they are.
-    const lastOk = chk0.readyAt ? Math.round((Date.now() - chk0.readyAt) / 1000) : -1;
-    const slowOnly = down && lastOk >= 0 && lastOk <= KEEP_READY;
-    if (down && !slowOnly && all) all = false;
-    errLine.hidden = !down; setText(errLine, slowOnly ? t("board.enter.slow", {s: lastOk}) : down ? t("board.enter.noanswer", {error: chk0.error}) : "");
-    errLine.classList.toggle("soft", slowOnly);
-    const ready = all && !pending && (!down || slowOnly) && slot(ORDER.length - 1);
-    if (ready && !down) chk0.readyAt = Date.now();
-    chk0.ready = ready;
-    root.classList.toggle("en-notready", !ready && !pending);  // the reflection of the wordmark goes when the list has something to say (1.7.29)
-    const looks = optionalCount(), noKb = Boolean(optional) && !optional.kb;
-    const mood = pending ? "h-check" : !ready ? "h-bad" : looks || noKb ? "h-warn" : "h-ok";
-    setClass(head, "en-chk-h " + mood);
-    setText(headText, pending ? t("board.enter.checking") : !ready ? t("board.enter.notready") : noKb ? t("board.enter.ready.nokb") : looks ? t("board.enter.ready.look", {n: looks}) : t("board.enter.ready"));
-    // the two block heads: the name, a tag (REQUIRED, OPTIONAL) with what is missing or to look at, and, folded, a summary
-    const reqMissing = ORDER.slice(0, REQ.length).filter((id) => { const c = checks.find((x) => x.id === id); return c && c.state !== "ok" && c.state !== "check"; }).length;
-    const tags = {required: t("board.enter.tag.required") + (reqMissing ? " · " + t("board.enter.tag.missing", {n: reqMissing}) : ""), optional: t("board.enter.tag.optional") + (looks ? " · " + t("board.enter.tag.look", {n: looks}) : "")};
-    const dots = {required: !data || pending ? "grey" : reqMissing ? "red" : "ok", optional: !data ? "grey" : looks ? "yellow" : "ok"};
-    list.querySelectorAll("li.gh").forEach((gh) => {
-      const group = gh.dataset.g;
-      setText(gh.querySelector(".gh-tag"), tags[group]);
-      setClass(gh, "gh l-" + dots[group]);
-      setText(gh.querySelector(".gh-n"), group === "required" ? t("board.enter.fold.required", {n: REQ.length - reqMissing, total: REQ.length}) : foldWords(optional));
-    });
-    // every line green: the list folds into one line a block; hover or a click unfolds it
-    const folded = ready && !looks && !noKb && !anyCheck;
-    list.classList.toggle("folded", folded);
-    const missingSetup = checks.find((x) => x.id === "setup");
-    chk0.setup = Boolean(missingSetup && missingSetup.state !== "ok" && missingSetup.state !== "wait");  // a new copy: the button goes to Get ready, whatever the other lines say
-    chk0.sec = chk0.setup ? "you" : "";
-    go.disabled = !(ready || chk0.setup);
-    const offer = !ready && !pending && !chk0.setup && checks.some((x) => x.id === "paired" && x.state !== "ok");  // not paired: Get ready is still one click away
-    if (getReady.hidden === offer) getReady.hidden = !offer;
-    const first = (REQ.map((id) => checks.find((x) => x.id === id)).find((x) => x && x.state !== "ok" && x.state !== "check") || {}).id;
-    const tip = ready ? "" : (first ? t("board.enter.t." + first) + ": " + (rowOf(first).querySelector("em").textContent || "") : down ? errLine.textContent : t("board.enter.checking"));
-    if (go.title !== tip) go.title = tip.length > 400 ? tip.slice(0, 399) + "…" : tip;
-    setText(go.firstChild, chk0.setup ? t("board.enter.getready") : ready ? t("board.enter.go") : pending ? t("board.enter.checking") : t("board.enter.notready"));
-    const k = go.querySelector("kbd").style, kd = ready ? "" : "none"; if (k.display !== kd) k.display = kd;
-    go.classList.toggle("plain", !ready);  // no key beside the word: it stands in the middle
-    paintButton(ready);
-    fitList();
-    return ready;
-  }
-  // The folded summary of the second block: the knowledge base, the packs and the sign-ins, as far as there are any.
-  function foldWords(optional) {
-    if (!optional) return "";
-    const by = (key) => optional.items.find((x) => x.key === key) || {};
-    const kb = (by("kb").detail || "").split(" · ")[0];
-    const packs = (by("packs").names || []).length, signed = (by("connections").names || []).filter((x) => x.state === "ok").length;
-    return [kb, packs ? t(packs === 1 ? "board.enter.fold.pack" : "board.enter.fold.packs", {n: packs}) : "", signed ? t("board.enter.fold.signed", {n: signed}) : ""].filter(Boolean).join(" · ");
-  }
-  function paintOwn(ready) {  // 1.8.x: the button is the fix of the VS Code or Copilot line (sign in, get gh, get VS Code), or what goes on; none when all is well
-    const act = chk0.last.action || {kind: "none"};
-    vsBtn.hidden = act.kind === "none";
-    setText(vsBtn, act.label || "");
-    vsBtn.disabled = Boolean(act.off) || chk0.acting;
-    vsBtn.classList.toggle("hot", !ready && !chk0.setup && !act.off);
-    vsBtn.title = act.url || "";
-    paintCard();
-  }
   const mmss = (s) => { const n = Math.max(0, Math.round(Number(s) || 0)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
-  function paintCard() {
-    const c = (chk0.last.checks || []).find((x) => x.id === "copilot") || {};
-    const kind = c.why === "signing-in" && c.code ? "code" : c.why === "no-gh" ? "nogh" : c.host && c.host.state === "preparing" ? "prep" : c.host && c.host.state === "starting" && (c.host.seconds || 0) >= 5 ? "start" : "";
-    if (!kind) { if (!card.hidden) { card.hidden = true; card.dataset.k = ""; } return; }
-    const key = kind + "|" + (c.code || "") + "|" + root.lang;
-    if (card.dataset.k !== key) {  // made again only when what it holds changes; the times below change in place
+  function view() {
+    const data = chk0.last;
+    if (!data) return {kind: "check", label: t("board.enter.checking"), off: true};
+    if (data.button && data.button.kind) return data.button;
+    return data.ready ? {kind: "enter", label: t("board.enter.go"), off: false} : {kind: "check", label: t("board.enter.checking"), off: true};
+  }
+  const checkOf = (id) => ((chk0.last && chk0.last.checks) || []).find((x) => x.id === id) || {};
+  const CAPTION = {signin: ["board.enter.cap.signin", ""], preparing: ["board.enter.cap.preparing", ""], doctor: ["board.enter.cap.doctor", "bad"], program: ["board.enter.cap.program", "hot"], "restart-host": ["", "bad"]};
+  function paintSub(b) {  // the short line under the button: what it is about, with the reason in its hover
+    const cap = CAPTION[b.kind];
+    const text = chk0.said || (b.kind === "restart-host" || !cap ? plainWords(b.detail || "") : t(cap[0], {program: b.program || ""}));
+    const level = chk0.said ? "bad" : cap ? cap[1] : "";
+    sub.hidden = !text;
+    setText(subText, text);
+    setClass(subDot, "en-dot" + (level ? " " + level : ""));
+    subDot.hidden = !level;
+    sub.title = b.kind === "restart-host" ? plainWords(b.detail || "") : "";
+  }
+  function paintCode(b) {  // the code card of the sign-in: made again only when the code changes; the time left changes in place
+    const key = "code|" + (b.code || "") + "|" + root.lang;
+    if (card.dataset.k !== key) {
       card.dataset.k = key;
-      if (kind === "code") {
-        const copy = h("button", {type: "button", class: "en-mini"}, t("board.enter.gh.copy"));
-        copy.addEventListener("click", () => { try { navigator.clipboard.writeText(c.code).then(() => { copy.textContent = t("board.enter.gh.copied"); }); } catch (error) { /* the code stays on view */ } });
-        const openGh = h("button", {type: "button", class: "en-mini"}, t("board.enter.gh.open"));
-        openGh.addEventListener("click", () => window.open(c.url || "https://github.com/login/device", "_blank", "noopener"));
-        const cancel = h("button", {type: "button", class: "en-mini en-mini-end"}, t("board.enter.gh.cancel"));
-        cancel.addEventListener("click", () => { cancel.disabled = true; ask("/api/gh", {do: "cancel"}).then(poll, poll); });
-        card.replaceChildren(h("div", {class: "en-card-t"}, t("board.enter.gh.title")), h("div", {class: "en-code"}, c.code), h("div", {class: "en-card-acts"}, copy, openGh, cancel), h("p", {class: "en-card-w", "data-w": "1"}));
-      } else if (kind === "nogh") {
-        const input = h("input", {type: "text", placeholder: t("board.enter.gh.folder"), spellcheck: "false"});
-        const use = h("button", {type: "button", class: "en-mini"}, t("board.enter.gh.use"));
-        const said = h("p", {class: "en-card-w bad", hidden: "hidden"});
-        const send = () => { const path = input.value.trim(); if (!path) return; use.disabled = true; ask("/api/gh", {do: "folder", path}).then(() => { said.hidden = true; poll(); }, (error) => { said.hidden = false; said.textContent = error.message || String(error); }).then(() => { use.disabled = false; }); };
-        use.addEventListener("click", send);
-        input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); send(); } });
-        card.replaceChildren(h("div", {class: "en-card-t"}, h("i", {class: "en-dot bad"}), t("board.enter.gh.nogh")), h("p", {class: "en-card-w"}, t("board.enter.gh.nogh.about")), h("div", {class: "en-card-f"}, input, use), said);
+      const copy = h("button", {type: "button", class: "en-mini"}, t("board.enter.gh.copy"));
+      copy.addEventListener("click", () => { try { navigator.clipboard.writeText(b.code).then(() => { copy.textContent = t("board.enter.gh.copied"); }); } catch (error) { /* the code stays on view */ } });
+      const openGh = h("button", {type: "button", class: "en-mini en-mini-go"}, t("board.enter.gh.open"));
+      openGh.addEventListener("click", () => window.open(chk0.last && chk0.last.button && chk0.last.button.url || b.url || "https://github.com/login/device", "_blank", "noopener"));
+      const cancel = h("button", {type: "button", class: "en-mini en-mini-end"}, t("board.enter.gh.cancel"));
+      cancel.addEventListener("click", () => { cancel.disabled = true; ask("/api/gh", {do: "cancel"}).then(poll, poll); });
+      card.replaceChildren(h("div", {class: "en-card-t"}, t("board.enter.gh.title")), h("div", {class: "en-code-row"}, h("div", {class: "en-code"}, b.code || ""), copy), h("div", {class: "en-card-acts"}, openGh, cancel), h("p", {class: "en-card-w", "data-w": "1"}, h("i", {class: "en-spin"}), h("span")));
+    }
+    const left = Math.max(0, (Number(b.left) || 0) - Math.floor((Date.now() - chk0.at) / 1000));
+    setText(card.querySelector("[data-w] span"), t("board.enter.card.left", {left: mmss(left)}));
+  }
+  function paintDoctor() {  // the problems of `harness doctor`: the line it found first, and the ways on from it
+    const c = checkOf("doctor"), b = view();
+    const key = ["doctor", c.why, c.detail, c.n, c.integrity, c.started, c.now, b.n, root.lang].join("|");
+    if (card.dataset.k !== key) {
+      card.dataset.k = key;
+      const said = c.why === "stale" ? t("board.enter.m.doctor.stale", {started: c.started, now: c.now}) : plainWords(c.detail || "");
+      const rows = [h("div", {class: "en-prob"}, h("i", {class: "en-dot bad"}), h("span", null, said))];
+      const more = (Number(c.n) || b.n || 0) - 1;
+      if (c.why === "errors" && more > 0) rows.push(h("div", {class: "en-prob soft"}, h("i", {class: "en-dot"}), h("span", null, t("board.enter.doc.more", {n: more}))));
+      const acts = h("div", {class: "en-card-acts end"});
+      if (c.why === "stale" && typeof SHELL !== "undefined") {
+        const restart = h("button", {type: "button", class: "en-mini en-mini-go"}, t("board.enter.restart"));
+        restart.addEventListener("click", () => SHELL.restartBoard(restart, (words) => { chk0.said = words; render(); }));
+        acts.append(restart);
       } else {
-        card.replaceChildren(h("div", {class: "en-card-t"}, h("i", {class: "en-spin"}), t("board.enter.gh.prep")), h("div", {class: "pg"}, h("i")), h("p", {class: "en-card-w", "data-w": "1"}));
+        if (c.integrity) acts.append(READY.acceptButton(() => poll()));
+        acts.append(READY.link({to: "doctor"}, {done: () => poll()}, t("board.enter.doctor.again")));
       }
+      card.replaceChildren(h("div", {class: "en-card-t"}, t("board.enter.doc.title")), h("div", {class: "en-probs"}, ...rows), acts);
+      for (const node of acts.querySelectorAll(".en-link,.en-open")) node.className = "en-mini" + (node === acts.lastChild ? " en-mini-go" : "");
     }
-    const w = card.querySelector("[data-w]");
-    if (w && kind === "code") setText(w, t("board.enter.gh.wait", {waited: mmss(c.waited), left: mmss(c.left)}));
-    if (w && (kind === "prep" || kind === "start")) {
-      setText(w, kind === "prep" ? t("board.enter.gh.prep.size", {done: c.host.downloaded_mb || 0, total: c.host.total_mb || 620}) : t("board.enter.gh.prep.start", {seconds: clock(c.host.seconds)}));
-      const bar = card.querySelector(".pg");
-      setClass(bar, "pg" + (kind === "prep" ? "" : " pg-any"));
-      const width = kind === "prep" ? Math.max(3, c.host.percent || 0) + "%" : "";
-      if (bar.firstChild.style.width !== width) bar.firstChild.style.width = width;
-    }
+  }
+  function paintCard(b) {
+    const kind = b.kind === "signing" && b.code ? "code" : b.kind === "doctor" && chk0.docOpen ? "doctor" : "";
+    if (!kind) { if (!card.hidden) { card.hidden = true; card.dataset.k = ""; } return; }
+    if (kind === "code") paintCode(b); else paintDoctor();
     card.hidden = false;
   }
-  function paintButton(ready) {
-    if (chk0.last && chk0.last.action) { paintOwn(ready); return; }
-    card.hidden = true;
-    vsBtn.hidden = true;
+  function render() {  // in place: the nodes are made once; only their class and text change, so nothing blinks
+    const data = chk0.last, b = view();
+    const down = Boolean(chk0.error) && (chk0.misses || 0) >= 2;  // 1.8.13: one late answer is not a board that is down
+    // 1.8.13: a slow computer is not a broken one. While the last answer that came was ready (KEEP_READY s ago at most), Enter stays on and the line says the board is slow, in amber; only after that is it red and Enter off.
+    const lastOk = chk0.readyAt ? Math.round((Date.now() - chk0.readyAt) / 1000) : -1;
+    const slowOnly = down && lastOk >= 0 && lastOk <= KEEP_READY;
+    const ready = Boolean(data) && b.kind === "enter" && (!down || slowOnly);
+    if (ready && !down) chk0.readyAt = Date.now();
+    chk0.ready = ready; chk0.kind = b.kind;
+    errLine.hidden = !down; setText(errLine, slowOnly ? t("board.enter.slow", {s: lastOk}) : down ? t("board.enter.noanswer", {error: chk0.error}) : "");
+    errLine.classList.toggle("soft", slowOnly);
+    root.classList.toggle("en-notready", b.kind !== "enter" && b.kind !== "check");  // the reflection of the wordmark goes when the button has something to say (1.7.29)
+    const off = Boolean(b.off) || chk0.acting || (down && !slowOnly && b.kind === "enter");
+    go.disabled = off;
+    setClass(go, "en-go k-" + b.kind + (b.kind === "enter" ? "" : " plain") + (off ? " off" : ""));
+    setText(label, b.label || "");
+    const percent = b.kind === "preparing" ? clamp(Number(b.percent) || 0, 0, 100) : 0;
+    const width = b.kind === "preparing" ? Math.max(3, percent) + "%" : "0";
+    if (fill.style.width !== width) fill.style.width = width;
+    goSpin.hidden = !(b.kind === "signing" || b.kind === "wait" || b.kind === "check");
+    kbd.hidden = b.kind !== "enter";
+    go.title = b.kind === "check" || b.kind === "wait" ? "" : go.title;
+    paintCard(b); paintSub(b);
+    roomForCard();
+    return ready;
   }
-  function fitList() {  // a short window: the list scrolls inside the room under the wordmark instead of running into it
+  function roomForCard() {  // a short window: the card is never taller than the room between the wordmark and the button
     const wr = svg.getBoundingClientRect();
-    if (!wr.height) return;
-    const stacked = matchMedia("(max-width:1100px)").matches;  // the pill is above the list then (enter.css)
-    const room = Math.max(150, innerHeight - (wr.bottom + 16) - 44 - (stacked ? go.offsetHeight + 14 : 0));
+    if (!wr.height || card.hidden) return;
+    const room = Math.max(120, go.getBoundingClientRect().top - (wr.bottom + 16));
     const value = Math.round(room) + "px";
-    if (chk.style.getPropertyValue("--chk-max") !== value) chk.style.setProperty("--chk-max", value);
-    markMore();
+    if (card.style.getPropertyValue("--card-max") !== value) card.style.setProperty("--card-max", value);
   }
-  function markMore() {  // lines below the box edge: a fade at the foot says "scroll" (the buttons and the systems row can be down there)
-    const more = body.scrollHeight - body.scrollTop - body.clientHeight > 2;
-    if (chk.classList.contains("more") !== more) chk.classList.toggle("more", more);
-  }
-  body.addEventListener("scroll", markMore, {passive: true});
 
   const ask = (path, body) => SERVE.call(path, body, 8);  // a POST with a deadline (serve.js): the same headers and cookie as every other call
   function poll() {
     if (!open || chk0.inflight || document.hidden) return;
     chk0.inflight = true;
-    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.error = ""; chk0.misses = 0; } else { chk0.error = "bad answer"; chk0.misses = (chk0.misses || 0) + 1; } },
+    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.at = Date.now(); chk0.error = ""; chk0.misses = 0; READY.notes(data.notes); } else { chk0.error = "bad answer"; chk0.misses = (chk0.misses || 0) + 1; } },
       (error) => { chk0.error = String(error.message || error).slice(0, 200); chk0.misses = (chk0.misses || 0) + 1; })
       .then(() => {
         chk0.inflight = false; settle();
-        // A line the server does not know yet (the one doctor run) is asked again after a second, not at the next 3 s poll. Still one cheap read.
-        if (open && chk0.last && chk0.last.checks.some((c) => c.state === "check")) { clearTimeout(chk0.soon); chk0.soon = setTimeout(poll, 1000); }
+        // A doctor that is still running is asked again after a second, not at the next 3 s poll. Still one cheap read.
+        if (open && chk0.last && (view().kind === "check" || checkOf("doctor").state === "check")) { clearTimeout(chk0.soon); chk0.soon = setTimeout(poll, 1000); }
       });
   }
   let pendingUntil = isTask ? Date.now() + 2500 : 0;
@@ -684,7 +443,7 @@
     const ready = render();
     if (!shown) {  // a task page opened from a link: skip when ready, show when something needs the person, wait a moment while it is only checking
       if (ready) { finish(true); return; }
-      const needs = chk0.last && chk0.last.checks.some((c) => c.blocking && (c.state === "fail" || c.state === "wait"));
+      const needs = chk0.last && !["enter", "wait", "check"].includes(view().kind);
       if (needs || chk0.error || Date.now() >= pendingUntil) reveal();
     }
   }
@@ -707,7 +466,7 @@
   }
   function finish(quick) {  // the screen goes; the page under it was never held back
     if (!open) return;
-    open = false; remember(); pop.remove();
+    open = false; remember();
     clearInterval(chk0.timer); clearInterval(chk0.tick); clearTimeout(chk0.soon); cancelAnimationFrame(wm.raf); wm.raf = 0; FX.down = false; FX.rel = null; fxClear(); tremble(0, 0);
     app.inert = false; root.classList.remove("en-open");
     if (typeof SPACE !== "undefined") { SPACE.hosted = null; SPACE.onTilt = null; SPACE.set(SPACE.tx / 2, SPACE.ty / 2); }
@@ -715,37 +474,34 @@
     if (quick || still()) { enter.remove(); return; }
     enter.classList.add("out"); setTimeout(() => enter.remove(), 450);
   }
-  function tryEnter() {
-    if (open && shown && chk0.setup) { location.assign("/setup?first=1&sec=" + (chk0.sec || "you")); return true; }
-    if (open && shown && chk0.ready) { finish(false); return true; }
+  // What the button does, by the kind the server gave it. A kind that is `off` does nothing.
+  function press() {
+    if (!open || !shown || go.disabled) return false;
+    const b = view();
+    if (b.kind === "enter") { if (!chk0.ready) return false; finish(false); return true; }
+    if (b.kind === "setup") { location.assign("/setup"); return true; }
+    if (b.kind === "program") { location.assign("/setup?only=programs"); return true; }
+    if (b.kind === "doctor") { chk0.docOpen = !chk0.docOpen; render(); return true; }
+    if (b.kind === "signin") { act(() => ask("/api/gh", {do: "login"})); return true; }
+    if (b.kind === "restart-host") { act(() => ask("/api/host", {do: "restart"})); return true; }
+    if (b.kind === "pair") { act(() => ask("/api/reopen", {}).then((data) => { chk0.said = data && data.opened ? "" : t("board.serve.pair.notopened"); })); return true; }
     return false;
   }
+  function act(call) {  // one press at a time: the button waits for the answer, the next look at the board shows what came of it
+    chk0.acting = true; chk0.said = ""; render();
+    call().then(() => {}, (error) => { chk0.said = plainWords(error && error.message ? error.message : String(error)).slice(0, 200); }).then(() => { chk0.acting = false; render(); poll(); });
+  }
+  const tryEnter = () => press();
 
-  list.addEventListener("click", (event) => { if (list.classList.contains("folded") && !event.target.closest("button, .row.has-fix .t")) list.classList.toggle("unfold"); });  // a folded list opens on a click as well as on hover
-  list.addEventListener("click", (event) => {  // the name of an optional row opens the place that mends it (a window of Tools, the setup form, the knowledge base)
-    const name = event.target.closest(".row.has-fix .t");
-    if (!name) return;  // 1.7.38: a folded list shows no row, so a name that was clicked is one of an unfolded list (hover or a click): it opens its window
-    const item = itemOf(name.closest("li").dataset.id);
-    const to = item && ((item.home && item.home.to) ? item.home : item.fix);  // the row's own window; a note's link leads to the fix (1.7.38)
-    if (to) READY.go(to, {done: () => poll()});
-  });
+  go.addEventListener("click", () => { press(); });
 
-  // The button beside Enter (1.8.x): sign in through gh, or GitHub's or VS Code's own download page (the board downloads nothing).
-  vsBtn.addEventListener("click", () => {
-    if (vsBtn.disabled) return;
-    const act = chk0.last && chk0.last.action;
-    if (!act) return;
-    if (act.kind === "signin") { chk0.acting = true; render(); ask("/api/gh", {do: "login"}).then(() => {}, (error) => { chk0.fail = error.message || String(error); }).then(() => { chk0.acting = false; poll(); }); }
-    else if (act.url) window.open(act.url, "_blank", "noopener");
-  });
-  go.addEventListener("click", () => { tryEnter(); });
   document.addEventListener("keydown", (event) => {
     if (!open || !shown || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
     if (typeof SHELL !== "undefined" && SHELL.isOpen()) return;  // the palette or the settings own the keys
     if (document.body.classList.contains("has-dialog")) return;  // a window opened from the dock over this screen owns the keys (1.7.32)
     if (["Shift", "Control", "Alt", "Meta", "Tab", "Escape", "CapsLock", "Dead", "Process"].includes(event.key) || /^F\d+$/.test(event.key)) return;
     const target = event.target;
-    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],.en-vs,.en-link")) return;
+    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],.en-card,.en-link")) return;
     if (document.querySelector(".dock-panel:not([hidden])")) return;  // the ? panel is open: its words are read, its text is typed in (1.7.34)
     if (target && target.closest && target.closest(".dock-btn") && (event.key === "Enter" || event.key === " ")) return;  // a dock button keeps its own Enter and Space; after its window closed, any other key goes in
     if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready
@@ -753,7 +509,7 @@
 
   // ---------- start ----------
   buildWord(); buildBot(); bindPlay(); wm.spot.setAttribute("cx", (VBW * .62).toFixed(1));
-  window.addEventListener("resize", () => { placeBot(); fxSize(); fitList(); roomForHi(); list.querySelectorAll(".sy").forEach(fitNames); });
+  window.addEventListener("resize", () => { placeBot(); fxSize(); roomForHi(); roomForCard(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) return; poll(); loop(); });
   chk0.t0 = Date.now();
   if (shown) present(true); else render();

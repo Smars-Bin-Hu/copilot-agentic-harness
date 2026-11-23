@@ -164,7 +164,7 @@ class ServedTests(test_boardserve.ServeCase):
         self.assertEqual(self.request("POST", "/api/reopen", {})[0], 200)
         web = Path(boardserve.__file__).parent / "web"
         self.assertIn("/api/reopen", (web / "serve.js").read_text(encoding="utf-8"))
-        self.assertIn("pairControl", (web / "enter.js").read_text(encoding="utf-8"))
+        self.assertIn("/api/reopen", (web / "enter.js").read_text(encoding="utf-8"))  # the centre button of the Enter screen, kind `pair`
 
 
 if __name__ == "__main__":

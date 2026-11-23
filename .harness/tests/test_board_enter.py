@@ -649,7 +649,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("DATA.rows", code)  # status only, no task data
         self.assertNotIn("localStorage", code)  # nothing that lets a person skip it: the only memory is the tab's own session
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
-            self.assertIn(call, ("/api/ready", "/api/gh"))  # the one read, and gh's web sign-in (1.8.x), the paired browser only
+            self.assertIn(call, ("/api/ready", "/api/gh", "/api/host", "/api/reopen"))  # the one read, gh's web sign-in, the agent host's restart and the pair button (1.8.x), the paired browser only
 
     def test_every_text_of_the_screen_is_in_both_languages(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")
@@ -659,14 +659,6 @@ class PageTests(unittest.TestCase):
             self.assertIn(key, en, key)
         names = {key for key in en if key.startswith(("board.enter.", "board.ready.", "ready."))}
         self.assertEqual(names, {key for key in zh if key.startswith(("board.enter.", "board.ready.", "ready."))})
-        # the keys the screen builds from a check (board.enter.m.<id>.<why>, d.<id>.ok ...) exist for every state the server can give
-        for why in ("no-code", "off"):
-            self.assertIn(f"board.enter.m.vscode.{why}", en)
-        for key in ("board.enter.m.doctor.errors", "board.enter.m.doctor.failed", "board.enter.m.paired.unpaired", "board.enter.m.setup.new", "board.enter.d.vscode.ok", "board.enter.d.copilot.ok",
-                    "board.enter.d.doctor.ok", "board.enter.d.paired.ok", "board.enter.d.paired.unpaired",
-                    "board.enter.d.doctor.errors", "board.enter.d.doctor.failed", *[f"board.enter.t.{name}" for name in ("setup", "paired", "doctor", "vscode", "copilot", "kb", "instructions", "skills", "standards", "packs", "connections", "repos")],
-                    *[f"board.enter.cs.{state}" for state in ("ok", "none", "down", "untested")]):
-            self.assertIn(key, en, key)
 
     def test_no_motion_under_lite_and_reduced_motion_and_the_colours_are_tokens(self) -> None:
         css = (WEB / "enter.css").read_text(encoding="utf-8")

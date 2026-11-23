@@ -841,8 +841,8 @@ class WordsOfTheBoardTests(unittest.TestCase):
 
     def test_a_red_row_of_the_enter_screen_has_a_red_note(self) -> None:
         text = (WEB / "enter.js").read_text(encoding="utf-8")
-        self.assertIn('(!req && view.level === "red") ? " bad" : ""', text)
-        self.assertRegex(text, r'\? " bad" : ""\)\); if \(p\.hidden\) p\.hidden = false;\s+//', "the note is still shown: the comment comes after the code on that line, not before it")
+        self.assertNotIn("view.level", text, "the Enter screen has no list of rows any more (O3): its one button says it, the doctor card has the red dot")
+        self.assertIn("en-prob", text)
 
     def test_the_add_button_has_the_action_and_the_form_keeps_the_longer_name(self) -> None:
         text = (WEB / "servers.js").read_text(encoding="utf-8")
@@ -923,8 +923,4 @@ class HeldConnectionDotsTests(English, ListedCase):
 
     def test_the_page_draws_a_held_dot_in_the_yellow_of_a_partly_one_and_the_words_exist_in_both_languages(self) -> None:
         web = Path(boardserve.__file__).parent / "web"
-        self.assertIn("held: \"partly\"", (web / "enter.js").read_text(encoding="utf-8"))
-        css = (web / "enter.css").read_text(encoding="utf-8")
-        self.assertIn(".sy-d.held", css)
-        self.assertIn(".en-chk-l .sy-d.held", css)
-        both_languages(self, "ready.conn.held", "ready.p.held", "ready.p.held.one", "ready.p.held.why", "ready.p.held.short", "ready.p.held.short.one", "board.enter.cs.held", "board.enter.sys.state.held", "board.enter.sys.held.reason")
+        both_languages(self, "ready.conn.held", "ready.p.held", "ready.p.held.one", "ready.p.held.why", "ready.p.held.short", "ready.p.held.short.one", "board.enter.sys.state.held", "board.enter.sys.held.reason")

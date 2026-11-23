@@ -54,6 +54,13 @@ VSCODE_PAGE = "https://code.visualstudio.com/"
 SLOW_ANSWER = 3.0  # 1.8.13: an answer that took longer is written to the board's log, with the time of each part
 
 
+EFFECTS = {"kb": "ready.effect.kb", "instructions": "ready.effect.instructions", "skills": "ready.effect.skills", "standards": "ready.effect.standards", "packs": "ready.effect.packs", "connections": "ready.effect.connections", "repos": "ready.effect.repos"}  # what is lost while an item is not set up (O1)
+NOTES = {"kb": "ready.note.kb", "instructions": "ready.note.instructions", "skills": "ready.note.skills", "standards": "ready.note.standards", "packs": "ready.note.packs", "connections": "ready.note.connections", "repos": "ready.note.repos"}  # the words of its dot on the gear
+BUTTONS = {"pair": "ready.btn.pair", "setup": "ready.btn.setup", "program": "ready.btn.program", "doctor": "ready.btn.doctor", "signin": "ready.btn.signin", "signing": "ready.btn.signing", "preparing": "ready.btn.preparing", "restart-host": "ready.btn.restart-host",
+           "wait": "ready.btn.wait", "check": "ready.btn.check", "enter": "ready.btn.enter"}  # the label of each kind of the middle button
+PROGRAM_PAGES = {"vscode": "https://code.visualstudio.com/download", "gh": ghauth.DOWNLOAD_PAGE}
+
+
 def short(text: Any) -> str:
     one = " ".join(str(text).split())
     return one if len(one) <= REASON_MAX else one[: REASON_MAX - 1] + "…"
@@ -76,11 +83,15 @@ def plain(text: Any) -> str:
 
 
 def setup_done(root: Path) -> bool:
-    """Get ready was finished, or this is an older copy: it has a repository setting or tasks, and its owner is not asked again."""
+    """Is this copy set up? `setup_done` in the person's file: yes. `setup_wizard` set and no `setup_done`: the wizard is under way, not yet. Neither, but a repository setting or tasks: an older copy, its owner is not asked
+    again. Nothing at all: a new copy, which goes to the wizard (O1)."""
     try:
         kept = json.loads(config.override_path(root, "user").read_text(encoding="utf-8-sig"))
-        if isinstance(kept, dict) and kept.get("setup_done"):
-            return True
+        if isinstance(kept, dict):
+            if kept.get("setup_done"):
+                return True
+            if kept.get("setup_wizard"):
+                return False
     except (OSError, ValueError):
         pass
     return config.override_path(root, "target").exists() or bool(tasks.folders(root))
@@ -534,12 +545,17 @@ class Ready:
                 self.optional_kept = (mark, now, base)
         notes = self.doctor_notes()
         listed = [dict(entry) for entry in base["items"]]
+        gaps = [entry for entry in listed if entry["state"] in ("yellow", "red")]  # before the notes of doctor and the identities colour a row: those are not a thing left to set up
+        for entry in listed:
+            entry["kind"] = "setup"
+            if entry["state"] != "ok":
+                entry["effect"] = messages.text(EFFECTS[entry["key"]]) if entry["key"] in EFFECTS else ""
         if notes["n"]:
             for entry in listed:
                 if entry["key"] == "kb":
                     problem = {"key": "doctor", "text": messages.text("ready.p.doctor.one" if notes["n"] == 1 else "ready.p.doctor", n=notes["n"]), "why": clip(plain(notes["first"]), 180), "short": messages.text("ready.p.doctor.short.one" if notes["n"] == 1 else "ready.p.doctor.short", n=notes["n"]),
                                "fix": {"to": "term", "run": "harness doctor", "label": messages.text("ready.fix.doctor")}}
-                    entry["problems"] = [*entry["problems"], problem]
+                    entry["problems"] = [*entry["problems"], dict(problem, kind="note")]
                     entry["state"] = "yellow"
         lacks = self.identity_lacks()
         if lacks:  # not in Required: a yellow note on the connections row (1.7.38, C13 D3-3)
@@ -548,9 +564,57 @@ class Ready:
                     entry["problems"] = [*entry["problems"], readyitems.identity_problem(lacks, len((conn_core.state(self.root).get("accounts") or [])) > 1)]
                     entry["state"] = "yellow" if entry.get("state") != "red" else "red"
         problems = readyitems.problems(listed)
-        return {"items": listed, "problems": problems, "count": len(problems), "kb": any(entry["key"] == "kb" and entry.get("found") for entry in listed)}
+        return {"items": listed, "problems": problems, "count": len(problems), "kb": any(entry["key"] == "kb" and entry.get("found") for entry in listed), "notes": self.notes(gaps, listed)}
+
+    def notes(self, gaps: List[Dict[str, Any]], listed: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """The dot on the gear (O1): `{key, text, effect}` for each thing of the company that is not set up, and for each reminder of kind `note`."""
+        out = [{"key": entry["key"], "text": messages.text(NOTES[entry["key"]]) if entry["key"] in NOTES else entry["key"], "effect": messages.text(EFFECTS[entry["key"]]) if entry["key"] in EFFECTS else ""} for entry in gaps]
+        for entry in listed:
+            for problem in entry["problems"]:
+                if problem.get("kind") == "note":
+                    out.append({"key": str(problem["key"]), "text": problem["text"], "effect": problem.get("why", "")})
+        return out
 
     # --- VS Code: the button --------------------------------------------------------------------------------------
+
+    def button(self, checks: List[Dict[str, Any]], is_ready: bool) -> Dict[str, Any]:
+        """The one button in the middle of the Enter screen (O1): the first of BUTTONS that holds. `{kind, label, off, code, url, left, percent, program, download, detail, n}`; the page only draws it."""
+        say = messages.text
+        found = {entry["id"]: entry for entry in checks}
+        setup, paired, doctor, vscode, copilot = (found.get(name) or {} for name in self.REQUIRED)
+        out: Dict[str, Any] = {"kind": "", "label": "", "off": False, "code": "", "url": "", "left": None, "percent": None, "program": "", "download": "", "detail": "", "n": 0}
+        why = str(copilot.get("why") or "")
+        kind = "check"
+        if paired.get("state") == "fail":
+            kind = "pair"
+        elif setup.get("state") == "fail":
+            kind = "setup"
+        elif vscode.get("why") in ("no-code", "off") and vscode.get("state") == "fail":
+            kind, out["program"], out["download"] = "program", "VS Code", PROGRAM_PAGES["vscode"]
+        elif copilot.get("state") == "fail" and why in ("no-gh", "gh-broken"):
+            kind, out["program"], out["download"], out["detail"] = "program", "GitHub CLI", str(copilot.get("download") or PROGRAM_PAGES["gh"]), str(copilot.get("detail") or "")
+        elif doctor.get("state") == "fail":
+            kind, out["n"] = "doctor", int(doctor.get("n") or 1)
+        elif copilot.get("state") == "fail" and why in ("signin", "refused"):
+            kind = "signin"
+        elif copilot.get("state") == "wait" and why == "signing-in":
+            kind, out["code"], out["url"], out["left"] = "signing", str(copilot.get("code") or ""), str(copilot.get("url") or ""), copilot.get("left")
+        elif copilot.get("state") == "wait" and why == "host-preparing":
+            kind, out["percent"] = "preparing", (copilot.get("host") or {}).get("percent")
+        elif copilot.get("state") == "fail" and why == "host-failed":
+            kind, out["detail"] = "restart-host", str(copilot.get("detail") or "")
+        elif vscode.get("state") == "wait" or (copilot.get("state") == "wait" and why in ("host-starting", "connecting", "models", "vscode")):
+            kind = "wait"
+        elif any(entry.get("state") == "check" for entry in checks):
+            kind = "check"
+        elif is_ready:
+            kind = "enter"
+        elif any(entry.get("state") == "wait" for entry in checks):
+            kind = "wait"
+        out["kind"], out["off"] = kind, kind in ("signing", "preparing", "wait", "check")
+        words = {"doctor": "ready.btn.doctor.one" if out["n"] == 1 else "ready.btn.doctor", "preparing": "ready.btn.preparing" if isinstance(out["percent"], (int, float)) else "ready.btn.preparing.plain"}
+        out["label"] = say(words.get(kind) or BUTTONS[kind], program=out["program"], n=out["n"], percent=out["percent"])
+        return out
 
     ACTIONS = {"signin": "signin", "refused": "signin", "no-gh": "get-gh", "signing-in": "signing", "host-preparing": "preparing", "host-starting": "preparing", "no-code": "get-vscode"}
 
@@ -616,8 +680,8 @@ class Ready:
             with self.lock:
                 kept = self.kept
         if kept is None:
-            return {"ready": False, "checks": [{"id": name, "blocking": True, "group": "required", "state": "check", "why": "running", "level": "grey"} for name in self.REQUIRED],
-                    "optional": {"items": [], "problems": [], "count": 0}, "problems": {"required": [], "optional": []}}
+            checking = [{"id": name, "blocking": True, "group": "required", "kind": "setup" if name == "setup" else "run", "state": "check", "why": "running", "level": "grey"} for name in self.REQUIRED]
+            return {"ready": False, "checks": checking, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": [], "optional": []}, "button": self.button(checking, False), "notes": []}
         out = copy.deepcopy(kept)
         if not paired:  # worked out for a paired browser: this one is not
             for line in out["checks"]:
@@ -626,6 +690,7 @@ class Ready:
                     line["level"] = self.level(line)
             out["ready"] = False
             out["problems"]["required"] = self.required_problems(out["checks"])
+            out["button"] = self.button(out["checks"], False)
         return out
 
     def keep_fresh(self) -> None:
@@ -639,8 +704,9 @@ class Ready:
             try:
                 found = self.answer(True)
             except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
-                found = {"ready": False, "checks": [{"id": "doctor", "blocking": True, "group": "required", "state": "fail", "why": "failed", "level": "red", "detail": short(f"{type(error).__name__}: {error}")}],
-                         "optional": {"items": [], "problems": [], "count": 0}, "problems": {"required": [], "optional": []}}
+                broken = [{"id": "doctor", "blocking": True, "group": "required", "kind": "run", "state": "fail", "why": "failed", "level": "red", "detail": short(f"{type(error).__name__}: {error}")}]
+                found = {"ready": False, "checks": broken, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": self.required_problems(broken), "optional": []},
+                         "button": self.button(broken, False), "notes": []}  # the doctor button, with the error in its card: a check that broke is shown, never a "Checking…" that does not end
             spent = time.monotonic() - began
             if spent > SLOW_ANSWER:
                 parts = ", ".join(f"{name} {value:.1f}" for name, value in sorted((getattr(self, "took", {}) or {}).items(), key=lambda item: -item[1]) if value >= 0.1)
@@ -664,7 +730,7 @@ class Ready:
                 line = {"state": "fail", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
             finally:
                 took[name] = time.monotonic() - began
-            line = dict(line, id=name, blocking=True, group="required")
+            line = dict(line, id=name, blocking=True, group="required", kind="setup" if name == "setup" else "run")
             checks.append(line)
             return line
 
@@ -686,4 +752,4 @@ class Ready:
         for line in checks:
             line["level"] = self.level(line)
         return {"ready": all(line["state"] == "ok" for line in checks), "checks": checks, "optional": optional, "problems": {"required": self.required_problems(checks), "optional": optional["problems"]},
-                "action": self.action(checks)}
+                "action": self.action(checks), "button": self.button(checks, all(line["state"] == "ok" for line in checks)), "notes": optional["notes"]}

@@ -680,8 +680,10 @@ class VsLink:
 
     def installed(self) -> Dict[str, Any]:
         """1.8.x: is VS Code installed here (its `code` command found; it never has to be open), and which version. Files only, no program started."""
-        code = ahp.find_code()
-        return {"found": bool(code), "version": ahp.code_version(code) if code else "", "off": ahp.switched_off()}
+        folders = launchenv.tool_folders(self.root)
+        code = ahp.find_code(folders=folders)  # O1: a folder a person gave counts too
+        how = "" if not code else "standard" if code in ahp.standard_places() else "folder" if str(Path(code).parent) in folders else "path"
+        return {"found": bool(code), "version": ahp.code_version(code) if code else "", "off": ahp.switched_off(), "path": code or "", "how": how}
 
     def own_host(self) -> agenthost.Host:
         """1.8.x: the board's own agent host, made once (`core.agenthost`); it gets the tool folders and the CA bundle of Local when it starts."""

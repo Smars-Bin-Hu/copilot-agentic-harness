@@ -109,8 +109,8 @@ def switched_off(environ: Optional[Dict[str, str]] = None) -> bool:
     return (os.environ if environ is None else environ).get(CLI_ENV, "").strip().lower() == "off"
 
 
-def find_code(environ: Optional[Dict[str, str]] = None, platform: Optional[str] = None, exists: Callable[[str], bool] = os.path.isfile) -> Optional[str]:
-    """The `code` command: the one a person set (`HARNESS_VSCODE_CLI`), the standard install places, then PATH. None when there is none: VS Code is not installed here."""
+def find_code(environ: Optional[Dict[str, str]] = None, platform: Optional[str] = None, exists: Callable[[str], bool] = os.path.isfile, folders: Optional[List[str]] = None) -> Optional[str]:
+    """The `code` command: the one a person set (`HARNESS_VSCODE_CLI`), the standard install places, the tool folders a person gave (`folders`, O1), then PATH. None when there is none: VS Code is not installed here."""
     env = os.environ if environ is None else environ
     if switched_off(env):
         return None
@@ -120,6 +120,10 @@ def find_code(environ: Optional[Dict[str, str]] = None, platform: Optional[str] 
     for place in standard_places(env, platform):
         if exists(place):
             return place
+    for folder in folders or []:
+        found = shutil.which("code", path=folder)
+        if found:
+            return found
     if environ is None:
         found = shutil.which("code")
         if found and "remote-cli" not in found.replace("\\", "/"):

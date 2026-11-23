@@ -2302,7 +2302,7 @@
   "desk.outbox.tell": "Tell the agent to run it",
   "desk.outbox.approved.close": "Close this card. The approval stays until the agent runs the command or it runs out.",
   "desk.outbox.tell.body": "Approved: {codes}. Run the exact command now, in this chat. A command you have already run since is not run again.",
-  "desk.outbox.tell.hint": "The agent runs an approved command only when it is told. One click sends that to its chat; the approval lasts {minutes} minutes.",
+  "desk.outbox.tell.hint": "The board could not reach the agent: it went on without waiting and is still at work, or its chat cannot take a message now. The agent picks the approval up when it runs the command again; one click sends it to its chat. The approval lasts {minutes} minutes.",
   "desk.outbox.approve": "Approve",
   "desk.outbox.view": "View",
   "desk.outbox.lines": "({n} lines)",

@@ -109,6 +109,7 @@ WHEEL = "|/-\\"
 WHEEL_EVERY = 0.15
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 SETTINGS = ("review set", "task allow", "task link", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
+CALL_DECISIONS = ("approve-action", "dismiss action")  # 1.8.31: the person's word on a held call goes through while the agent works: it is bound to the digest of what they saw and changes nothing under the agent's hands
 WAKING = ("confirm-req", "approve-plan", "approve-promote")  # the decisions of the person that wake the agent by themselves (1.7.38, C13 RB-2)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
@@ -926,11 +927,7 @@ class Board:
         try:
             if str(data.get("step", "act")) == "preview":
                 return outbox.batch_preview(self.root, codes, self.batch_salt)
-            before = {str(item.get("code")): item for item in (self.entry(code) for code in codes) if item}
-            for item in before.values():  # as for one call: while the agent is at work on the task (not waiting on a call), the page may be old and the agent may be answering
-                if item.get("task"):
-                    self.idle("approve-action", str(item["task"]))
-                    break
+            before = {str(item.get("code")): item for item in (self.entry(code) for code in codes) if item}  # as for one call, no wait for the agent to stop (1.8.31: CALL_DECISIONS)
             result = outbox.approve_batch(self.root, codes, str(data.get("code", "")), self.batch_salt, data.get("seen") if isinstance(data.get("seen"), dict) else {}, interactive=True)
         except outbox.BatchRefused as error:
             refusal = CommandError(str(error))
@@ -966,7 +963,7 @@ class Board:
             return dict(result, board=tasklife.board_said(action, result))  # 1.8.25: the board's answer has no command in it
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
-        still = False if action in SETTINGS else self.idle(action, task)
+        still = False if action in SETTINGS or action in CALL_DECISIONS else self.idle(action, task)
         if action == "accept" and step == "preview":  # the calls of the task that still wait for the person: the page lists them and asks before it closes the task (1.7.38, C13 FB-4)
             return {"held": accept.held(self.root, task)}
         if action == "accept":  # the person accepts the delivered work (1.7.38): the board closes the task; nothing is sent to the chat. `void`: the person said yes to the calls that still wait: they are void now
@@ -1200,9 +1197,11 @@ class Board:
 
     def place_of(self, entry: Dict[str, Any]) -> str:
         """`outbox.agent_place`, with one more fact (1.7.38, C13 FR 8): a wait that still beats but whose agent has stopped its turn is `ended`, not `wait`: the board wakes the agent with the decision, as it does for a wait that ran out. A page
-        that said "goes on now" for it was wrong: nobody read the answer of the wait."""
+        that said "goes on now" for it was wrong: nobody read the answer of the wait. 1.8.31: an agent that went on without its wait (`away`) and has stopped its turn since is `ended` too: the board wakes it, so the
+        person's word reaches it without the card's button. Not one that delivered the work and left the call (`left`): that call was given up."""
         place = outbox.agent_place(entry)
-        if place == "wait" and entry.get("task") and self.turn_ended(str(entry["task"])):
+        wait = entry.get("wait") if isinstance(entry.get("wait"), dict) else {}
+        if place in ("wait", "away") and wait.get("state") != "left" and entry.get("task") and self.turn_ended(str(entry["task"])):
             return "ended"
         return place
 
@@ -1228,7 +1227,7 @@ class Board:
                 with task_ops.locked(self.root, task) as data:
                     task_ops.note(data, "outbox-dismiss", f"{done.get('code')}: {outbox.reason_text(str(done.get('reason') or ''), str(done.get('note') or ''))}", code=str(done.get("code") or ""), reason=str(done.get("reason") or ""), note=str(done.get("note") or ""))
             place = done.get("agent")
-            if place == "wait" and task and self.turn_ended(task):  # its wait runs in a background terminal and its turn is over: the reason and the person's line reach it only by a message (1.7.38, C13 FR 21)
+            if place in ("wait", "away") and task and (entry.get("wait") if isinstance(entry.get("wait"), dict) else {}).get("state") != "left" and self.turn_ended(task):  # its wait runs in a background terminal, or it went on without one (1.8.31), and its turn is over: the reason and the person's line reach it only by a message (1.7.38, C13 FR 21)
                 place = "ended"
             if place == "wait":
                 return "wait"

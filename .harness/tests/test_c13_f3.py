@@ -584,14 +584,14 @@ class BatchBoardTests(BatchCase):
         with self.assertRaises(CommandError):
             off.batch({"step": "preview", "codes": [a, b]})
 
-    def test_while_the_agent_is_at_work_on_the_task_the_board_does_not_approve_as_it_does_not_for_one_call(self) -> None:
+    def test_while_the_agent_is_at_work_on_the_task_the_board_approves_as_it_does_for_one_call(self) -> None:
+        """1.8.31: a decision on held calls is bound to what the person saw; it does not wait for the agent to stop (the agent tells the person what the command does before it starts its wait)."""
         self.new(kind="rca")
         a, b = self.hold('sqlcmd -S s -Q "SELECT 1"'), self.hold('sqlcmd -S s -Q "SELECT 2"')  # no Stop: the agent works
         board = self.board()
-        shown = board.batch({"step": "preview", "codes": [a, b]})  # the code may be asked for
-        with self.assertRaises(CommandError):
-            board.batch({"step": "act", "codes": [a, b], "code": shown["code"], "seen": {}})
-        self.assertEqual([approvals.find(self.root, code, 10, file=approvals.ACTIONS)["state"] for code in (a, b)], ["pending", "pending"])
+        shown = board.batch({"step": "preview", "codes": [a, b]})
+        board.batch({"step": "act", "codes": [a, b], "code": shown["code"], "seen": {}})
+        self.assertEqual([approvals.find(self.root, code, 10, file=approvals.ACTIONS)["state"] for code in (a, b)], ["approved", "approved"])
 
     def test_the_endpoint_is_for_the_paired_browser_only(self) -> None:
         text = Path(boardserve.__file__).read_text(encoding="utf-8")

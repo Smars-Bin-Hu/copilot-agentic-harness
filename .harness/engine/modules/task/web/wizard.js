@@ -266,7 +266,8 @@ const WIZARD = (function () {
             if (opts.bare) sessionStorage.setItem("harness.reopen", "settings:you");  // Settings: the window comes back at this section
             else sessionStorage.setItem(KEEP, JSON.stringify({page: nextFrom(M.page, 1)}));
           } catch (error) { /* starts at the welcome */ }
-          location.reload();
+          const link = new URL(location.href);
+          if (link.searchParams.has("page")) { link.searchParams.delete("page"); location.replace(link.toString()); } else location.reload();  // a `?page=` in the address would win over the page kept: one Continue must go on
           return;
         }
         opts.next();

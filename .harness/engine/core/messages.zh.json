@@ -1161,6 +1161,7 @@
   "serve.port.busy": "端口 {port} 用不了（{error}）。换一个：`--port <端口号>`，或在 task.override.json 里设 board.port。",
   "serve.action.off": "看板页面没打开 `{action}`。到终端里运行，或把它加进 task.override.json 的 board.actions。",
   "serve.preview.none": "无需批准：这条命令不要求确认码。",
+  "serve.host.do": "agent host 只接受请求 do = restart。",
   "serve.refused.request": "拒绝：只有这个服务的看板页面能发这个请求。",
   "serve.refused.body": "拒绝：读不懂这个请求。",
   "serve.pair.embedded": "看板不在 VS Code 里的浏览器里配对：agent 能操作那个浏览器。请用 Chrome、Edge 或 Firefox 打开链接。",

@@ -1161,6 +1161,7 @@
   "serve.port.busy": "Port {port} cannot be used ({error}). Pick another: `--port <number>`, or set board.port in task.override.json.",
   "serve.action.off": "`{action}` is not switched on for the board page. Run it in a terminal, or add it to board.actions in task.override.json.",
   "serve.preview.none": "Nothing to approve: the command did not ask for a code.",
+  "serve.host.do": "The agent host takes only the request do = restart.",
   "serve.refused.request": "Refused: only the board page of this server may ask this.",
   "serve.refused.body": "Refused: the request could not be read.",
   "serve.pair.embedded": "The board does not pair in a browser inside VS Code: the agent can drive that one. Open the link in Chrome, Edge or Firefox.",

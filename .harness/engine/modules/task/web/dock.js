@@ -538,7 +538,23 @@ const DOCK = (function () {
     const tip = h("div", {class: "dock-tip", role: "tooltip", hidden: ""});
     gear.append(dot);
     document.body.append(tip);
-    const place = () => { const r = gear.getBoundingClientRect(); tip.style.top = Math.max(8, Math.min(innerHeight - tip.offsetHeight - 8, r.top + r.height / 2 - tip.offsetHeight / 2)) + "px"; tip.style.right = Math.max(8, innerWidth - r.left + 10) + "px"; };
+    const place = () => {  // never over the Enter screen's button or its line (`.en-cta`): above the gear, else beside it, else narrower on the free side; always inside the viewport
+      tip.style.maxWidth = "";
+      const r = gear.getBoundingClientRect(), cta = document.documentElement.classList.contains("en-open") ? document.querySelector(".en-cta") : null, hold = cta ? cta.getBoundingClientRect() : null;
+      const hits = (x, y, w, hgt) => Boolean(hold && hold.width && x < hold.right + 8 && x + w > hold.left - 8 && y < hold.bottom + 8 && y + hgt > hold.top - 8);
+      const put = (x, y, w) => { tip.style.top = y + "px"; tip.style.right = Math.max(8, innerWidth - x - w) + "px"; };
+      const tries = (w, hgt) => [[Math.max(8, Math.min(innerWidth - w - 8, r.right - w)), r.top - hgt - 10], [Math.max(8, r.left - w - 10), Math.max(8, Math.min(innerHeight - hgt - 8, r.top + r.height / 2 - hgt / 2))]];
+      let w = tip.offsetWidth, hgt = tip.offsetHeight;
+      const pick = tries(w, hgt).find(([x, y]) => y >= 8 && !hits(x, y, w, hgt));
+      if (pick) return put(pick[0], pick[1], w);
+      const free = hold ? innerWidth - 8 - (hold.right + 12) : 0;  // the room right of the button
+      if (free >= 160) {
+        tip.style.maxWidth = free + "px"; w = tip.offsetWidth; hgt = tip.offsetHeight;
+        const x = innerWidth - 8 - w, y = Math.max(8, r.top - hgt - 10);
+        if (!hits(x, y, w, hgt)) return put(x, y, w);
+      }
+      const [x, y] = tries(w, hgt)[1]; put(x, Math.max(8, y), w);  // no room that keeps clear: beside the gear, inside the screen
+    };
     const show = () => { if (dot.hidden) return; tip.hidden = false; place(); };
     const hide = () => { tip.hidden = true; };
     gear.addEventListener("mouseenter", show); gear.addEventListener("focus", show); gear.addEventListener("mouseleave", hide); gear.addEventListener("blur", hide);

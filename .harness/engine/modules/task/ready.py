@@ -407,6 +407,22 @@ class Ready:
         with self.lock:
             self.at = -1e9
 
+    def setup_now_done(self) -> None:
+        """Confirm of the wizard just wrote `setup_done` (1.8.x): the kept answer says "new" until the next round, and the page would go back to the wizard. Set that line to ok and work out `ready`,
+        `button` and `problems.required` again from the kept lines: no slow work, nothing is run."""
+        with self.lock:
+            kept = self.kept
+            if kept is None:
+                return
+            for line in kept["checks"]:
+                if line["id"] == "setup":
+                    line.update(state="ok", why="ok")
+                    line["level"] = self.level(line)
+            is_ready = all(line["state"] == "ok" for line in kept["checks"])
+            kept["ready"] = is_ready
+            kept["problems"]["required"] = self.required_problems(kept["checks"])
+            kept["button"] = self.button(kept["checks"], is_ready)
+
     def doctor_again(self) -> bool:
         """Check again, pressed by the person (1.7.45): doctor runs now, not when its wait is over. False when one runs already."""
         with self.lock:

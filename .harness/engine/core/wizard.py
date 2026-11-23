@@ -14,10 +14,16 @@ MARK = "setup_wizard"
 PLACES = ("Developer", "source/repos", "git", "repos", "code", "projects")  # under the home folder; one level deep, a folder with `.git` in it is a repository
 MAX_ROWS = 300
 MAX_PICKS = 300
+SIGNED_WAITS = ("host-starting", "host-preparing", "connecting", "models")  # Copilot lines that wait for the agent host: gh is signed in already (the page's `copilotSignedIn` says the same)
 ORDER = ("you", "programs", "copilot", "kb", "packs", "connections", "repos")
 LABELS = {"you": "setup.w.label.you", "programs": "setup.w.label.programs", "copilot": "setup.w.label.copilot", "kb": "setup.w.label.kb", "packs": "setup.w.label.packs", "connections": "setup.w.label.connections", "repos": "setup.w.label.repos"}
 REQUIRED = ("you", "programs", "copilot")  # what Confirm needs: name and language, the programs (Python, Git, VS Code, GitHub CLI), the Copilot sign-in
 LANGUAGE_NAMES = {"en": "desk.send.lang.en", "zh": "desk.send.lang.name.zh"}  # each language in its own words: the same messages as the language tiles of the wizard page
+
+
+def copilot_done(line: Dict[str, Any]) -> bool:
+    """"Copilot signed in" (contract §1): the line is ok, or it waits only for the agent host (starting, preparing, connecting, models) after a real sign-in."""
+    return bool(line) and (line.get("state") == "ok" or line.get("why") in SIGNED_WAITS)
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -147,6 +153,7 @@ def save_advanced(root: Path, data: Dict[str, Any]) -> None:
             wrong.append(f"{item}: {error}")
     if wrong:
         raise ValueError(" ".join(wrong))
+    mark(root)
     setup.write(root, "user", {"skill_prefix": prefix})
     pick = {"repos_root": base, "singles": singles, "install_command": command}
     if "refused" in data:
@@ -263,7 +270,7 @@ def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> Di
 
     add("you", bool(name) and has_language(root), f"{name} · {language_name(language)}" if name else "", say("setup.w.you.effect"))
     add("programs", bool(programs.get("all_found")), say("setup.w.programs.detail", n=len(have), total=total), say("setup.w.programs.effect"))
-    ok = copilot.get("state") == "ok"
+    ok = copilot_done(copilot)
     add("copilot", ok, str(copilot.get("login") or "") if ok else "", say("setup.w.copilot.effect"))
     held = setup.kb_state(root)  # the same name and version as the knowledge base card of the wizard page (`prefix` and `version`)
     kb_detail = (str(held.get("prefix") or "") or say("wizard.k.name")) + (f" · {held['version']}" if held.get("version") else "") if held.get("here") else ""

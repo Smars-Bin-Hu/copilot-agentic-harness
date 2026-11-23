@@ -12,18 +12,21 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import ahp, ghauth, launchenv, procrun, registry, toolpacks
 
 PROBE_WAIT = 2.0  # seconds a `--version` may take
+FAILED_FOR = 60.0  # seconds a probe that failed is not run again (the wizard asks every 3 s; a blocked program must not be started each time)
 VERSION = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
 PAGES = {"python": "https://www.python.org/downloads/", "git": "https://git-scm.com/downloads", "vscode": "https://code.visualstudio.com/download", "gh": ghauth.DOWNLOAD_PAGE}
 NAMES = {"python": "Python", "git": "Git", "vscode": "VS Code", "gh": "GitHub CLI"}
 PYTHONS = ("python.exe",) if os.name == "nt" else ("python3", "python")
 FOLDER_NAME = {"python": PYTHONS[0], "git": "git", "vscode": "code", "gh": "gh"}  # what `launchenv.add_folder` looks for in a folder
 _seen: Dict[Tuple[str, float], str] = {}  # (program file, its time) -> the version it said: a program that did not change is not asked again
+_failed: Dict[Tuple[str, float], float] = {}  # (program file, its time) -> when its probe failed
 _lock = threading.Lock()
 
 
@@ -41,15 +44,24 @@ def probe(path: str, run: Callable[..., Any] = procrun.run) -> str:
     with _lock:
         if stamp in _seen:
             return _seen[stamp]
+        if stamp in _failed and time.monotonic() - _failed[stamp] < FAILED_FOR:
+            return ""
+
+    def failed() -> str:
+        with _lock:
+            _failed[stamp] = time.monotonic()
+        return ""
+
     try:
         done = run([path, "--version"], timeout=PROBE_WAIT, stdin=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0)
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return ""
+    except (OSError, subprocess.SubprocessError, ValueError):  # a timeout is a SubprocessError: `procrun.run` ended the whole tree before it raised
+        return failed()
     found = VERSION.search((done.stdout or b"").decode("utf-8", "replace") + (done.stderr or b"").decode("utf-8", "replace")) if done.returncode == 0 else None
     if not found:
-        return ""
+        return failed()
     with _lock:
         _seen[stamp] = found.group(1)
+        _failed.pop(stamp, None)
     return found.group(1)
 
 

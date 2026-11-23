@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import threading
@@ -233,6 +234,55 @@ class ProgramsTests(HarnessTestCase):
         self.assertEqual((self.by(found)["git"]["found"], self.by(found)["git"]["version"]), (True, ""))  # a version that cannot be had is empty, not an error
 
 
+class ProbeCacheTests(HarnessTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(programs._failed.clear)
+        self.addCleanup(programs._seen.clear)
+        programs._failed.clear()
+        programs._seen.clear()
+        self.tool = self.root / "tool"
+        self.tool.write_text("#!/bin/sh\n", encoding="utf-8")
+        self.tool.chmod(0o755)
+
+    def test_a_probe_that_failed_is_not_run_again_for_a_while_and_a_changed_file_is(self) -> None:
+        """B3: the wizard asks every 3 s; a program that is blocked or hangs must not be started each time."""
+        calls: List[Any] = []
+
+        def hang(args: Any, **kwargs: Any) -> Any:
+            calls.append(args)
+            raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+
+        self.assertEqual(programs.probe(str(self.tool), hang), "")
+        self.assertEqual(programs.probe(str(self.tool), hang), "")
+        self.assertEqual(len(calls), 1)
+        with mock.patch.object(programs.time, "monotonic", return_value=time.monotonic() + programs.FAILED_FOR + 1):
+            programs.probe(str(self.tool), hang)  # the time is over: asked again
+        self.assertEqual(len(calls), 2)
+        os.utime(self.tool, (1, 1))  # another file time: another program
+        programs.probe(str(self.tool), hang)
+        self.assertEqual(len(calls), 3)
+
+    def test_a_success_is_kept_and_a_later_one_replaces_a_failure(self) -> None:
+        answers = iter([subprocess.CompletedProcess([], 1, b"", b"boom"), subprocess.CompletedProcess([], 0, b"git version 2.47.1", b"")])
+        self.assertEqual(programs.probe(str(self.tool), lambda *a, **k: next(answers)), "")
+        programs._failed.clear()
+        self.assertEqual(programs.probe(str(self.tool), lambda *a, **k: next(answers)), "2.47.1")
+        self.assertEqual(programs.probe(str(self.tool), lambda *a, **k: 1 / 0), "2.47.1")  # kept: not run again
+
+    def test_a_probe_that_times_out_has_its_child_ended(self) -> None:
+        """`procrun.run` ends the whole tree on a timeout: the sleeping program leaves no process behind."""
+        slow = self.root / "slow"
+        slow.write_text("#!/bin/sh\necho $$ > '%s'\nsleep 30\n" % (self.root / "pid"), encoding="utf-8")
+        slow.chmod(0o755)
+        with mock.patch.object(programs, "PROBE_WAIT", 0.5):
+            self.assertEqual(programs.probe(str(slow)), "")
+        pid = int((self.root / "pid").read_text().strip())
+        time.sleep(0.3)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
+
+
 class PageScriptsTests(unittest.TestCase):
     def test_dock_reads_READY_when_it_loads_so_every_page_that_loads_dock_loads_readyui_first(self) -> None:
         from modules.task import taskhtml
@@ -419,6 +469,11 @@ class SaveTests(HarnessTestCase):
         self.assertNotIn("install_command", setup.kept(self.root, "tools")["python"])
         self.assertEqual(len(setup.status(self.root, {"found": "/x"})["rules"]), 1)
 
+    def test_advanced_marks_a_new_copy_like_the_other_saves(self) -> None:
+        wizard.save_advanced(self.root, {"skill_prefix": "acme"})
+        self.assertEqual(read_user(self.root)["setup_wizard"], "open")
+        self.assertFalse(ready.setup_done(self.root))
+
     def test_advanced_checks_every_field_first_and_writes_nothing_when_one_is_wrong(self) -> None:
         for data in ({"skill_prefix": "Bad Word"}, {"install_command": "x" * 501}, {"refused": ["relative/path"]}, {"refused": [str(self.root / "elsewhere")]}, {"refused": "no list"}, {"rules": "no list"}, {"skill_prefix": "ok", "refused": ["/"]}):
             with self.assertRaises(ValueError, msg=str(data)):
@@ -494,6 +549,20 @@ class SummaryTests(HarnessTestCase):
             with self.assertRaises(ValueError, msg=label) as caught:
                 wizard.refuse_finish(self.root, programs_, copilot)
             self.assertIn(messages.text(label), str(caught.exception))
+
+    def test_a_signed_in_gh_with_the_host_still_coming_up_counts_as_signed_in_on_the_list_and_for_confirm(self) -> None:
+        """A1: the progress bar of the page counts these lines as done; the list and Confirm must say the same."""
+        every = {"rows": [{"id": "python", "required": True, "found": True, "blocked": ""}], "all_found": True}
+        write_user(self.root, name="Alex", language="en")
+        for why in ("host-starting", "host-preparing", "connecting", "models"):
+            line = {"state": "wait", "why": why, "host": {"state": "preparing", "percent": 12}}
+            self.assertTrue(wizard.copilot_done(line), why)
+            self.assertTrue(self.rows(wizard.summary(self.root, every, line))["copilot"]["done"], why)
+            wizard.refuse_finish(self.root, every, line)  # no error
+        for line in ({"state": "wait", "why": "signing-in"}, {"state": "wait", "why": "vscode"}, {"state": "fail", "why": "host-failed"}, {"state": "fail", "why": "signin"}, {"state": "check", "why": "running"}, {}):
+            self.assertFalse(wizard.copilot_done(line), str(line))
+            with self.assertRaises(ValueError, msg=str(line)):
+                wizard.refuse_finish(self.root, every, line)
 
     def test_everything_done_has_no_effects_and_the_language_is_in_its_own_words(self) -> None:
         write_user(self.root, name="Wei", language="zh")
@@ -637,7 +706,9 @@ class BoardSteps(ServeCase):
                 status, data, _ = self.post("", {"do": "restart"}, "/api/host")
             self.assertEqual((status, data["result"]["state"], data["result"]["busy"]), (200, "waiting", ["job1"]))
             restart.assert_not_called()
-        self.assertEqual(self.post("", {"do": "stop"}, "/api/host")[0], 409)
+        status, data, _ = self.post("", {"do": "stop"}, "/api/host")
+        self.assertEqual((status, data["error"]), (409, messages.text("serve.host.do")))  # a message of its own, in the language of the board, not the English string "do: restart"
+        self.assertNotIn("do: restart", data["error"])
 
 
 class ReadyFieldsTests(HarnessTestCase):
@@ -755,6 +826,27 @@ class ReadyFieldsTests(HarnessTestCase):
             found = settled(ready.Ready(self.root, link, clean))
         self.assertEqual((found["button"]["kind"], found["button"]["label"]), ("signin", "Sign in to Copilot"))
         self.assertNotIn("action", found)  # the old button beside Enter is gone: `button` is the one
+
+    def test_confirm_at_once_takes_the_setup_button_off_the_kept_answer(self) -> None:
+        """B1: the kept answer (the cache of `keep_fresh`) said "new"; `/` asked it right after Confirm and the page went back to the wizard."""
+        link = StubLink({"ready": True, "bound": 1, "unbound": 0, "why": "ok"})
+        signed_out = {"gh": "/usr/bin/gh", "version": "2.0.0", "signed_in": False, "login": "", "why": "not-signed-in"}
+        with mock.patch.object(ready.ghauth, "check", side_effect=lambda root=None, extra=None: dict(signed_out)):
+            check = ready.Ready(self.root, link, clean)
+            wizard.mark(self.root)
+            check.kept = settled(check)
+            check.worker = threading.current_thread()  # alive: `latest` starts no thread that would work the answer out again
+            check.asked_at = check.clock()
+            self.assertEqual(check.latest(True)["button"]["kind"], "setup")  # warm cache: setup is "new"
+            wizard.finish(self.root)
+            self.assertEqual(check.latest(True)["button"]["kind"], "setup")  # the cache is still the old answer
+            check.setup_now_done()
+            found = check.latest(True)
+        self.assertNotEqual(found["button"]["kind"], "setup")
+        self.assertEqual(next(line for line in found["checks"] if line["id"] == "setup")["state"], "ok")
+        self.assertNotIn("setup", [problem["key"] for problem in found["problems"]["required"]])
+        self.assertEqual(found["button"]["kind"], "signin")  # the next thing that holds, not the wizard
+        self.assertEqual(ready.Ready(self.root, link, clean).setup_now_done(), None)  # no answer kept yet: nothing to change
 
     def test_a_browser_that_is_not_paired_gets_the_pair_button_and_the_fallback_answers_have_a_button_and_notes(self) -> None:
         wizard.finish(self.root)

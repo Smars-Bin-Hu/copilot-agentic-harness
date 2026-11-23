@@ -634,7 +634,7 @@ class Board:
     def host(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """O1, `/api/host`: `{do: "restart"}` starts the agent host again (the Enter button of a host that failed). Only while no chat works: a restart stops a running turn. `{state: restarted | waiting, busy}`."""
         if str(data.get("do") or "") != "restart":
-            raise ValueError("do: restart")
+            raise ValueError(say("serve.host.do"))
         names = self.working_tasks()
         busy = names + self.other_chats(names)
         if busy:
@@ -1509,6 +1509,7 @@ class Board:
             line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})  # the board's last answer: gh is not run again in this request
             core_wizard.refuse_finish(self.root, self.programs(), line)  # ValueError: what is still missing (409)
             core_wizard.finish(self.root)
+            self.ready.setup_now_done()  # the kept answer must not send the page back to the wizard
             self.ready.doctor_again()  # the first doctor of a set-up copy; the page does not wait for it
             print(say("serve.did", action="setup finish", task="-"), flush=True)
             return {"ok": True}

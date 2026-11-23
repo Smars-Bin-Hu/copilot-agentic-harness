@@ -101,11 +101,7 @@ def ask(brain: Any, data: Dict[str, Any]) -> Dict[str, Any]:
         done = brain.link.dispatch(kind, task, text, chatsend.model_of(found))
     except vslink.Refused as error:
         return refusal(reason(error.why))
-    except Exception as error:  # noqa: BLE001 - the host's words are not for the page
-        try:
-            brain.link.host_said(error)
-        except Exception:  # noqa: BLE001
-            pass
+    except Exception:  # noqa: BLE001 - the host's words are not for the page
         return refusal("error")
     state = "sent" if kind == "send" else "queued"
     entry = {"id": "ask-" + uuid.uuid4().hex[:12], "task": short(task), "path": task, "text": words, "at": utc_now(), "state": state, "turn": str(done.get("turn") or "") if kind == "send" else "",

@@ -142,7 +142,7 @@ class ServedTests(test_boardserve.ServeCase):
         self.assertNotIn("terminal", data["error"])
 
     def test_an_unpaired_request_to_an_acting_endpoint_is_refused(self) -> None:
-        for path in ("/api/send", "/api/create", "/api/restart", "/api/open"):
+        for path in ("/api/send", "/api/create"):
             status, data, _ = self.request("POST", path, {"task": test_boardserve.TASK, "text": "hi"})
             self.assertEqual((status, data.get("unpaired")), (403, True), path)
 

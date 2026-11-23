@@ -26,8 +26,6 @@
 .tk-cv{min-width:2.8em;text-align:right;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .tk-cv.hot{color:var(--bad)}.tk-cv.warm{color:var(--hot)}
 .tk-tools{flex:none;display:inline-flex;align-items:center;gap:6px;padding-left:6px;border-left:1px solid var(--line)}
-.tk-tools .vs-btn{margin:0;width:30px;height:30px;border-radius:9px}
-.tk-tools .vs-btn svg{width:16px;height:16px}
 .tk-more{position:relative;display:inline-flex}
 .tk-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:60;display:flex;flex-direction:column;gap:2px;min-width:230px;max-width:min(340px,calc(100vw - 40px));padding:6px;border:1px solid var(--line2);border-radius:12px;background:var(--pop);box-shadow:var(--shadow)}
 .tk-menu .act{width:100%;height:30px;margin:0;justify-content:flex-start;border-color:transparent;text-decoration:none}
@@ -276,7 +274,7 @@ li .tr-call>summary:hover .tr-cmdline{color:var(--ink)}li .tr-call[open] .tr-cmd
 .wc-dt-b{padding:8px 10px;border-radius:7px;background:var(--bg);font-size:12.5px;line-height:1.5;color:var(--soft);overflow-wrap:anywhere}.wc-dt-b p{margin:0 0 4px}
 .wc-other{display:grid;gap:4px;margin-top:4px}.wc-raw{margin:0;padding:6px 8px;border-radius:6px;background:var(--bg);font:11.5px/16px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:14em;overflow:auto}
 /* Embed mode (`?embed=1`, class `embed` on <html> from theme.js): the task page inside the board's workbench frame. The frame has its own tabs with the name; the fixed buttons, the wallpaper and the banner are the board's, not the frame's. */
-html.embed .sh-pill,html.embed .sh-gear,html.embed .setp,html.embed .dock-btn,html.embed .term-toggle,html.embed .hd-acct,html.embed #sp,html.embed .vs-banner,html.embed .tk-back,html.embed .tk-stage,html.embed .tk-checks,html.embed .tk-ctx,html.embed .tk-tools .vs-btn,html.embed .tk-tools .vs-pill{display:none!important}
+html.embed .sh-pill,html.embed .sh-gear,html.embed .setp,html.embed .dock-btn,html.embed .term-toggle,html.embed .hd-acct,html.embed #sp,html.embed .vs-banner,html.embed .tk-back,html.embed .tk-stage,html.embed .tk-checks,html.embed .tk-ctx,html.embed .tk-tools .vs-pill{display:none!important}
 html.embed body{background:var(--bg)}
 html.embed main{max-width:none;padding:0 12px 28px}
 html.embed .tk-head{min-height:34px;margin:0 -12px;padding:4px 12px;gap:8px}

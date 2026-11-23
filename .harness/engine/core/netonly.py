@@ -119,17 +119,6 @@ def run(account: str, password: str, command: str, cwd: Path, extra_env: Optiona
             pass
 
 
-def start(account: str, password: str, argv: list, cwd: Path, extra_env: Optional[Dict[str, str]] = None) -> bool:
-    """Start a program (VS Code) with these network credentials and do not wait. Every process it starts has them too."""
-    if not available():
-        return False
-    info = _create(account, password, subprocess.list2cmdline(argv), cwd, extra_env or {}, CREATE_NO_WINDOW)  # (1.7.39) DETACHED_PROCESS is not a flag CreateProcessWithLogonW takes: Windows answered 87, the parameter is wrong. CREATE_NO_WINDOW, as `run` uses: no console for `cmd.exe /c code.cmd`
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
-    kernel.CloseHandle(ctypes.c_void_p(info.hProcess))
-    kernel.CloseHandle(ctypes.c_void_p(info.hThread))
-    return True
-
-
 class Output:
     """The output file of a process started with network credentials, read like a pipe (H5b): `readline` waits for the next line and gives b"" once the process has ended and
     everything it wrote was read. CreateProcessWithLogonW hands no pipe to the caller, so the shell writes to a file."""
@@ -171,7 +160,7 @@ class Output:
 
 class Process:
     """A program (the board's agent host) started with these network credentials, kept like a `subprocess.Popen` (H5b): `pid`, `stdout`, `poll`, `wait`, `kill`.
-    Every process it starts reaches other computers with the account, as VS Code opened with identities did. Windows only."""
+    Every process it starts reaches other computers with the account. Windows only."""
 
     def __init__(self, account: str, password: str, argv: List[str], cwd: Path, env: Dict[str, str]) -> None:
         handle, name = tempfile.mkstemp(prefix="harness-host-", suffix=".txt")

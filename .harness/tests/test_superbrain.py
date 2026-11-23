@@ -49,9 +49,6 @@ class FakeLink:
     def model_list(self) -> List[Dict[str, Any]]:
         return [{"id": superbrain.MODEL_ID, "thinking": None}]
 
-    def host_said(self, error: BaseException) -> None:
-        pass
-
     def super_watch(self, session: str, chat: str) -> None:
         self.watch = (session, chat)
 

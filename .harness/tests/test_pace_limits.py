@@ -19,7 +19,7 @@ from taskcase import TaskCase
 
 from core import connections, gitread, netonly, pace, systems
 from core.paths import board_serve_file
-from modules.task import autorun_start, boardbg, boardserve, vsrestart
+from modules.task import autorun_start, boardbg, boardserve
 
 
 def with_factor(value: float):
@@ -61,21 +61,6 @@ class LimitsGrowTests(unittest.TestCase):
                 mock.patch.object(connections, "variables", return_value={}):
             connections.run_with({}, {}, {}, "x", Path("."))
         self.assertEqual(run.call_args.kwargs["timeout"], 75.0)
-
-    def test_the_quit_command_and_the_quit_wait(self) -> None:
-        seen = Seen()
-        with with_factor(5.0):
-            vsrestart.ask_to_quit(run=seen, platform="darwin")
-            self.assertEqual(seen.timeouts, [75.0])
-        restart = vsrestart.Restart(lambda: True, lambda: None, ask=lambda: True, sleep=lambda _s: None)
-        self.assertIsNone(restart.wait, "the wait is not fixed when the restart is made")
-        for factor, looks in ((1.0, 2), (5.0, 3)):  # the clock says 0, then 100, then 160: 30 s run out at the first look, 150 s at the second
-            ticks = iter([0.0, 100.0, 160.0])
-            pulled = []
-            restart = vsrestart.Restart(lambda: True, lambda: None, ask=lambda: True, clock=lambda: pulled.append(1) or next(ticks), sleep=lambda _s: None)
-            with with_factor(factor):
-                restart.work(False)
-            self.assertEqual((restart.state, len(pulled)), ("failed", looks))
 
     def test_the_launcher_waits_are_scaled_and_a_given_one_stays(self) -> None:
         seen = []

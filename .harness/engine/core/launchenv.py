@@ -1,7 +1,7 @@
-"""What VS Code needs at its start so that the agent's commands reach the tools of this computer (1.7.11).
+"""What the board's agent host needs at its start so that the agent's commands reach the tools of this computer (1.7.11; 1.8.x: the board's own host, H5).
 
-The agent's terminal commands run in the editor's agent host, which has the environment VS Code was started with: a setting of the editor's terminals
-does not reach them. So two things are given when the board opens VS Code (`extra`), never later:
+The agent's terminal commands run in the agent host, which has the environment it was started with. So these are given when the board starts it (`extra`), never later
+(a change restarts the host once no chat works):
 
   tool folders  `HARNESS_TOOL_PATH` in `.harness/.env`: folders put before PATH (a tool unpacked under the person's own folder, where PATH cannot be
                 changed without an administrator).
@@ -26,9 +26,7 @@ import socket
 import ssl
 import subprocess
 import sys
-import time
 import urllib.request
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -235,7 +233,7 @@ def tool_folders(root: Path) -> List[str]:
 
 
 def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Optional[Tuple[str, ...]] = None) -> Dict[str, str]:
-    """The variables the board adds when it starts its agent host (and VS Code, until H6): PATH with the tool folders first, each trust variable naming the bundle (when it is there),
+    """The variables the board adds when it starts its agent host: PATH with the tool folders first, each trust variable naming the bundle (when it is there),
     and the proxy when the board's own environment names none (`proxy_extra`)."""
     base = dict(os.environ if environ is None else environ)
     kept = settings(root)
@@ -293,277 +291,6 @@ def system_bypass(platform: str = sys.platform) -> List[str]:
         return []
     return [item.strip() for item in found if item.strip() and item.strip() != "<local>" and re.match(r"^[A-Za-z0-9.*\-\[\]:/]+$", item.strip())][:50]
 
-
-# --- what VS Code really got (1.7.21) ----------------------------------------------------------------------------------------------------------------------------
-
-SEEN = Path(".harness") / "runtime" / "state" / "vscode-env.json"
-
-
-def _same(one: str, other: str) -> bool:
-    return os.path.normcase(os.path.normpath(one)) == os.path.normcase(os.path.normpath(other))
-
-
-def lacking(root: Path, environ: Optional[Dict[str, str]] = None) -> List[str]:
-    """What `extra` would give that this environment does not have: `PATH <folder>` for a tool folder not on the PATH, the name of a trust variable that does not name the bundle.
-    Run by a hook, the environment is the one VS Code was started with: when it is not there, VS Code was started without the settings of this computer."""
-    env = dict(os.environ if environ is None else environ)
-    out: List[str] = []
-    key = next((name for name in env if name.upper() == "PATH"), "PATH")
-    on_path = [item for item in env.get(key, "").split(os.pathsep) if item]
-    out.extend(f"PATH {folder}" for folder in tool_folders(root) if not any(_same(folder, item) for item in on_path))
-    bundle = bundle_path(root)
-    if bundle:
-        out.extend(name for name in trusted_by(root) if not env.get(name) or not _same(env[name], str(bundle)))
-    return out
-
-
-def note_seen(root: Path, environ: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-    """Called by the hook at the start of a chat: keep what this environment lacks. `{ok, missing, at}`."""
-    found = {"ok": False, "missing": lacking(root, environ), "at": utc_now(), "by": "hook"}
-    found["ok"] = not found["missing"]
-    target = root / SEEN
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temp = target.with_suffix(".tmp")
-    temp.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
-    os.replace(temp, target)
-    return found
-
-
-def seen(root: Path) -> Dict[str, Any]:
-    """What the hook of the latest chat found: `{ok, missing, at}`; empty when no chat has told yet."""
-    try:
-        found = json.loads((root / SEEN).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return found if isinstance(found, dict) else {}
-
-
-def mark_started(root: Path) -> None:
-    """The board starts VS Code itself, with the settings: what an older VS Code lacked no longer holds. The next chat's hook says what is true."""
-    target = root / SEEN
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps({"ok": True, "missing": [], "at": utc_now(), "by": "board"}), encoding="utf-8")
-    except OSError:
-        pass
-
-
-# --- is the VS Code that runs the one with this copy's settings? Before any chat (1.7.38, Q2) ---------------------------------------------------------------------
-#
-# The hook tells it at the first chat (`note_seen`). The board can tell earlier, because the editor's agent host names itself in `code agent endpoints` (its `pid`): the agent's commands and the
-# hooks run in that process, so its environment is what the hook would see.
-#   macOS, Linux   its environment is read (`ps eww`, `/proc/<pid>/environ`): the same `lacking` the hook runs, on the same variables.
-#   Windows        another process's environment cannot be read without reading its memory, and that is what a security tool on a work computer watches for: it is not done. Instead the
-#                  board knows when it started VS Code (`mark_started`) and when that process was created (`process_started`, a query that needs no right on the process): a VS Code
-#                  created after the board's start got its settings; one created before did not. A VS Code the board did not start, with no chat yet, is "unseen": nothing proves it.
-# What a VS Code must carry for this copy is `needs`: the tool folders and the CA bundle (what `lacking` can check). Which identities a window holds is the person's choice (Open with
-# identities), and `harness as` reaches the others: they do not make a VS Code wrong.
-
-CARRIED, FREE, MISSING, UNSEEN = "carried", "free", "missing", "unseen"
-START_SLACK = 3.0  # seconds: the board marks its start just before it asks VS Code to open; a process created within this much before the mark is the board's
-
-
-def needs(root: Path) -> Dict[str, Any]:
-    """What a VS Code must be started with for this copy: `{folders, bundle}`; both empty: any VS Code will do."""
-    bundle = bundle_path(root)
-    return {"folders": tool_folders(root), "bundle": str(bundle) if bundle else ""}
-
-
-def parse_ps_environ(text: str) -> Dict[str, str]:
-    """The environment in the output of `ps eww`: the command and its arguments, then `NAME=value` words. A value may hold spaces (a folder named `Visual Studio Code.app`): it runs to the next ` NAME=`.
-    An argument is no name (`--type=utility` starts with a dash)."""
-    words = list(re.finditer(r"(?:(?<=\s)|^)([A-Za-z_][A-Za-z0-9_]*)=", text))
-    out: Dict[str, str] = {}
-    for index, found in enumerate(words):
-        end = words[index + 1].start() if index + 1 < len(words) else len(text)
-        out[found.group(1)] = text[found.end():end].rstrip()
-    return out
-
-
-def host_environ(pid: Any, platform: str = sys.platform, run: Callable[..., Any] = subprocess.run, read: Callable[[str], bytes] = lambda path: Path(path).read_bytes()) -> Optional[Dict[str, str]]:
-    """The environment of a process of this user, or None when it cannot be read (Windows, a process that is gone, a refusal). Never a guess."""
-    try:
-        number = int(pid)
-    except (TypeError, ValueError):
-        return None
-    try:
-        if platform.startswith("win"):
-            return None  # not without reading another process's memory
-        if platform == "darwin":
-            done = run(["ps", "eww", "-o", "command=", "-p", str(number)], capture_output=True, text=True, timeout=5)
-            return parse_ps_environ(done.stdout or "") if done.returncode == 0 and (done.stdout or "").strip() else None
-        raw = read(f"/proc/{number}/environ")
-        return {key: value for key, _, value in (item.decode("utf-8", "replace").partition("=") for item in raw.split(b"\0")) if key} or None
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return None
-
-
-def _elapsed_seconds(text: str) -> Optional[float]:
-    """`ps -o etime=`: `[[dd-]hh:]mm:ss`."""
-    found = re.match(r"^\s*(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)\s*$", text or "")
-    if not found:
-        return None
-    days, hours, minutes, seconds = (int(item or 0) for item in found.groups())
-    return float(((days * 24 + hours) * 60 + minutes) * 60 + seconds)
-
-
-def process_started(pid: Any, platform: str = sys.platform, run: Callable[..., Any] = subprocess.run, now: Callable[[], float] = time.time) -> Optional[float]:
-    """When a process was created, in seconds since 1970; None when it is not known. Windows: `GetProcessTimes` on a handle that may only ask for limited information (no memory is read)."""
-    try:
-        number = int(pid)
-    except (TypeError, ValueError):
-        return None
-    try:
-        if platform.startswith("win"):
-            import ctypes
-            from ctypes import wintypes
-
-            kernel = ctypes.windll.kernel32  # type: ignore[attr-defined]
-            kernel.OpenProcess.restype = wintypes.HANDLE  # a handle is as wide as a pointer: say it, or ctypes cuts it to an int
-            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-            kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
-            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-            handle = kernel.OpenProcess(0x1000, False, number)  # PROCESS_QUERY_LIMITED_INFORMATION
-            if not handle:
-                return None
-            try:
-                created, other_a, other_b, other_c = (wintypes.FILETIME() for _ in range(4))
-                if not kernel.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(other_a), ctypes.byref(other_b), ctypes.byref(other_c)):
-                    return None
-                ticks = (created.dwHighDateTime << 32) | created.dwLowDateTime  # 100 ns since 1601
-                return ticks / 10_000_000 - 11644473600
-            finally:
-                kernel.CloseHandle(handle)
-        done = run(["ps", "-o", "etime=", "-p", str(number)], capture_output=True, text=True, timeout=5)
-        elapsed = _elapsed_seconds(done.stdout or "") if done.returncode == 0 else None
-        return None if elapsed is None else now() - elapsed
-    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
-        return None
-
-
-def _stamp(text: Any) -> Optional[float]:
-    try:
-        return datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return None
-
-
-def carried(root: Path, pid: Any, environ: Optional[Callable[[Any], Optional[Dict[str, str]]]] = None, started: Optional[Callable[[Any], Optional[float]]] = None) -> Dict[str, Any]:
-    """Was the VS Code whose agent host has this `pid` started with the settings of this copy? `{state, by, missing}`. state: `free` (this copy has no settings to carry), `carried`, `missing` (it is
-    known to lack them: `missing` lists what), `unseen` (nothing proves either way). `by`: env (its environment was read), hook (the hook of a chat in this VS Code said so), board (the board started it),
-    none. No VS Code known (`pid` empty) is `unseen` with `by` none: the caller does not judge then."""
-    want = needs(root)
-    if not want["folders"] and not want["bundle"]:
-        return {"state": FREE, "by": "none", "missing": []}
-    if not pid:
-        return {"state": UNSEEN, "by": "none", "missing": []}
-    read = (environ or host_environ)(pid)
-    if read is not None:  # the same words as the hook's: what `extra` would give and this environment lacks
-        lost = lacking(root, read)
-        return {"state": MISSING if lost else CARRIED, "by": "env", "missing": lost}
-    since = (started or process_started)(pid)
-    found = seen(root)
-    at = _stamp(found.get("at")) if found else None
-    if since is not None and at is not None:
-        if found.get("by") == "board":
-            return {"state": CARRIED, "by": "board", "missing": []} if since >= at - START_SLACK else {"state": MISSING, "by": "board", "missing": [str(item) for item in want["folders"][:3]] or ["CA bundle"]}  # created before the board's start: not the board's
-        if found.get("by") == "hook" and at >= since:  # a chat of this VS Code told: its word is the truth
-            lost = [str(item) for item in found.get("missing") or []]
-            return {"state": MISSING if lost or found.get("ok") is False else CARRIED, "by": "hook", "missing": lost}
-    return {"state": UNSEEN, "by": "none", "missing": []}
-
-
-def windows_without_settings(root: Path, endpoints: Optional[Callable[[], List[Any]]] = None) -> List[Dict[str, Any]]:
-    """(1.7.38, C13 TA-Q2) For `harness doctor`: the VS Code processes that run now and are known to lack the settings of this copy: `[{pid, by, missing}]`. The same check the board makes (`carried`: macOS and Linux read
-    the environment of the editor's agent host by its pid; Windows compares when the board started VS Code with when that process was created); a VS Code the check cannot judge (`unseen`) is not listed. Empty
-    when this copy has nothing to carry, when no `code` command or no running VS Code is found, or when it cannot be asked. `endpoints` is for the tests. Never raises."""
-    want = needs(root)
-    if not want["folders"] and not want["bundle"]:
-        return []
-    try:
-        if endpoints is None:
-            from . import ahp
-
-            code = ahp.find_code()
-            if not code:
-                return []
-            found = ahp.parse_endpoints(ahp.run_code(code, ["agent", "endpoints"], timeout=pace.scaled(10)))
-        else:
-            found = endpoints()
-        out: List[Dict[str, Any]] = []
-        done: set = set()
-        for endpoint in found:
-            pid = getattr(endpoint, "pid", None)
-            if not pid or pid in done:
-                continue
-            done.add(pid)
-            verdict = carried(root, pid)
-            if verdict["state"] == MISSING:
-                out.append({"pid": pid, "by": verdict.get("by", ""), "missing": list(verdict.get("missing") or [])})
-        return out
-    except Exception:  # noqa: BLE001 - a look at the editor must never hurt a check
-        return []
-
-
-def code_windows() -> Optional[bool]:
-    """Windows: is a visible window owned by a `Code.exe`? None when it cannot be told (no ctypes, a call refused). No process is started: one is slow on a work computer (1.7.41).
-    A `Code.exe` with no window is not a VS Code the person has open: the `code` command itself (`code agent endpoints`, run by the board's link) and helpers left by a VS Code that ended run as `Code.exe` too,
-    and `tasklist` counted them, so the board said "VS Code did not quit" while no VS Code was open."""
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        user32, kernel32 = ctypes.WinDLL("user32", use_last_error=True), ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel32.OpenProcess.restype = wintypes.HANDLE
-        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
-        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-        user32.IsWindowVisible.argtypes = [wintypes.HWND]
-        callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-        owners: set = set()
-
-        def each(hwnd: Any, _: Any) -> bool:
-            if user32.IsWindowVisible(hwnd):
-                pid = wintypes.DWORD()
-                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-                owners.add(pid.value)
-            return True
-
-        if not user32.EnumWindows(callback(each), 0):
-            return None
-        for pid in owners:
-            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-            if not handle:
-                continue
-            try:
-                size = wintypes.DWORD(1024)
-                name = ctypes.create_unicode_buffer(size.value)
-                if kernel32.QueryFullProcessImageNameW(handle, 0, name, ctypes.byref(size)) and name.value.replace("/", "\\").rsplit("\\", 1)[-1].lower() == "code.exe":
-                    return True
-            finally:
-                kernel32.CloseHandle(handle)
-        return False
-    except Exception:  # noqa: BLE001 - not told: the caller falls back to tasklist
-        return None
-
-
-def vscode_running(run: Callable[..., Any] = subprocess.run, platform: str = sys.platform, windows: Optional[Callable[[], Optional[bool]]] = None) -> bool:
-    """Is a VS Code open on this computer? macOS and Linux: `pgrep`. Windows: a visible window of `Code.exe` (`code_windows`); only when that cannot be told, one `tasklist`. A start that finds one running gives it no environment."""
-    try:
-        if platform.startswith("win"):
-            seen = (windows or code_windows)()
-            if seen is not None:
-                return seen
-            done = run(["tasklist", "/FI", "IMAGENAME eq Code.exe", "/NH"], capture_output=True, text=True, timeout=10)
-            return "Code.exe" in (done.stdout or "")
-        pattern = "Visual Studio Code.app" if platform == "darwin" else "/code"
-        return run(["pgrep", "-f", pattern], capture_output=True, text=True, timeout=5).returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        return False
-
-
-# --- the CA bundle ----------------------------------------------------------------------------------------------------------------------------------------------
 
 def detect_proxy(environ: Optional[Dict[str, str]] = None) -> str:
     """`host:port` of the HTTPS proxy this computer names (the environment, then the system's own setting), or ""."""

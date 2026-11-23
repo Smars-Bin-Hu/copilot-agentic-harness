@@ -7,7 +7,6 @@ from unittest import mock
 import os
 import stat
 import sys
-import types
 from pathlib import Path
 from typing import Any, Dict
 
@@ -208,8 +207,10 @@ class GateTests(ConnectionsCase):
         self.assertEqual(self.term('fakedb --host db1:5000 get x; echo $FAKEDB_PASS').get("permissionDecision"), "deny")  # another command beside it
 
     def test_a_wrapped_server_is_reached_through_the_prefix_and_the_chat_is_told(self) -> None:
-        (self.root / connections.STATE_FILE).parent.mkdir(parents=True, exist_ok=True)
-        (self.root / connections.STATE_FILE).write_text(json.dumps({"direct": ["db-ist"], "wrap": ["db-dev"]}), encoding="utf-8")
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "win", "host": "db1", "port": "5000"}, "db-ist": {"type": "fakedb", "env": "ist", "auth": "win", "host": "db2", "port": "5000"}})
+        connections.save(self.root, "db-dev", {"account": "CORP\\a", "password": "x"})
+        connections.save(self.root, "db-ist", {"account": "CORP\\b", "password": "y"})  # two Windows accounts: the host holds one, the other goes through the prefix
+        self.assertEqual(connections.choose(self.root, "db-ist")["wrap"], ["db-dev"])
         refused = self.term("fakedb --host db1:5000 get orders")
         self.assertEqual(refused.get("permissionDecision"), "deny")
         self.assertIn("harness as db-dev -- fakedb --host db1:5000 get orders", refused["permissionDecisionReason"])
@@ -232,7 +233,7 @@ class GateTests(ConnectionsCase):
         asked["cwd"] = str(self.root)
         named = self.hook(asked).get("additionalContext", "")
         self.assertIn("- db-ist (IST): Fake DB", named)  # 1.7.20: the fields; no tool pack skill, so the test command is offered as that
-        self.assertIn(messages.text("connections.named.call", call="fakedb --host db2:5000 --who"), named, "1.7.38 (C13 FR 9): how to call it comes first")
+        self.assertIn(messages.text("connections.named.call", call="fakedb --host db2:5000 --trusted --who"), named, "1.7.38 (C13 FR 9): how to call it comes first")
         self.assertIn(messages.text("connections.named.fields", fields="host: db2; port: 5000"), named, "the fields are facts, not `host=db2`")
         self.assertNotIn("host=db2", named)
         self.assertIn("`fakedb --host db2:5000", named)
@@ -373,26 +374,10 @@ class BoardChecksItself(ConnectionsCase):
         self.assertTrue(checker.start())  # Check and Open VS Code ask whatever the age
         checker.last.join(10)
 
-    def test_no_check_starts_while_vscode_is_quitting_and_one_that_does_not_answer_is_told_in_the_singular(self) -> None:
-        """Retest N3: after a failed restart the Enter screen showed "1 do not answer" for a minute: a check had run against a VS Code that was half gone."""
+    def test_one_connection_that_does_not_answer_is_told_in_the_singular(self) -> None:
         from core import reach
-        from modules.task import reachcheck
 
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
-        asked = []
-        check = self.ready(reachcheck.Checker(self.root, probe=lambda root: asked.append(1)))
-        states = {"state": "quitting", "since": 5.0}
-        check.restart = types.SimpleNamespace(view=lambda: states)
-        check.answer(True)
-        self.assertEqual(asked, [], "a quit is waiting: no check")
-        for state, since in (("failed", 100.0), ("opening", 200.0)):
-            states.update(state=state, since=since)
-            check.answer(True)
-            self.assertEqual(asked, [], state)
-        states.update(state="failed", since=400.0)  # long ago: the board looks again
-        check.answer(True)
-        check.checker.last.join(10)
-        self.assertEqual(asked, [1])
         reach._write(self.root, {"db-dev:dev": {"state": reach.FAILED, "at": "2026-11-08T10:00:00Z", "why": "no-answer", "who": "", "source": "board"}})
         found = self.line(self.ready())
         self.assertIn(messages.text("ready.conn.down.one", n=1), found["detail"])
@@ -411,13 +396,12 @@ class BoardChecksItself(ConnectionsCase):
         self.assertEqual(found["names"], [{"name": "db-dev", "state": "ok", "saved": True}, {"name": "db-ist", "state": "none", "saved": False}])
         row = found["rows"][0]
         self.assertEqual((row["system"], row["env"], row["state"], row["reason"]), ("db-dev", "dev", "ok", "alice"))
-        self.assertEqual(self.ready().answer(True)["optional"]["identities"], 1)  # one sign-in saved and its test passed: the VS Code button may say "with identities"
+        self.assertNotIn("identities", self.ready().answer(True)["optional"])  # H6: nothing to choose, the host holds what is saved
         connections.save(self.root, "db-dev", {"account": "alice", "password": "wrong"})
         connections.probe_all(self.root)
         found = self.line(self.ready())
         self.assertEqual(found["names"][0]["state"], "down")  # saved, and the last test failed
         self.assertEqual([problem["key"] for problem in found["problems"] if problem["key"] != "identity"], ["signin", "down"])
-        self.assertEqual(self.ready().answer(True)["optional"]["identities"], 0)
 
     def test_the_table_follows_the_order_of_the_window_and_says_not_signed_in_for_a_connection_with_no_sign_in(self) -> None:
         """C12 N6, N7: the window sorts by the label of the kind, then environment, then name; the table sorted by the name of the pack and said "not checked" with no reason where the name had said "Not signed in"."""

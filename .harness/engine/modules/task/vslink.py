@@ -1,6 +1,6 @@
-"""The link from the board to the VS Code that runs the chats (1.6, B71). One background thread holds the connection and a cache; a page request only reads the cache.
+"""The link from the board to the agent host that runs the chats (1.6, B71). One background thread holds the connection and a cache; a page request only reads the cache.
 
-- The thread finds `code`, reads the endpoint (`core.ahp`), connects, and lists the chats of Copilot. The root notifications of the host keep the list true; a new list is asked
+- The thread starts (or adopts) the board's own agent host (`core.agenthost`, 1.8.x: `code agent host`, no VS Code window), connects, hands it gh's token, and lists the chats of Copilot. The root notifications of the host keep the list true; a new list is asked
   for every few minutes in case one was missed. Nothing is subscribed but the chats bound to an open task (and, for one moment, a chat read to find its Copilot session id).
 - Where it cannot connect, it tries again with longer waits. A page gets no error and no wait; the Enter screen says what is missing. A request never starts `code` or touches the host.
 - Which chat belongs to which task: `chatlink`. What a task's line shows: `tasksub`.
@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import copy
 import datetime
-import os
 import queue
 import threading
 import time
@@ -31,7 +30,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from core import agenthost, ahp, config, ghauth, launchenv, messages, pace, tasks
+from core import agenthost, ahp, config, ghauth, launchenv, messages, pace, shortcmd, tasks
 from core.paths import utc_now
 from core import connections as conn_core
 
@@ -49,14 +48,8 @@ NO_CLI_WAIT = 300.0  # no `code` command: look again only now and then
 JOB_WAIT = 25.0  # seconds a page request waits for the thread to send, steer or stop
 CREATE_WAIT = 60.0  # a create makes the chat, sends, then waits for the host to list it (1.8.6: 45 before; `createSession` may take ahp.CREATE_TIMEOUT)
 REREAD_AFTER_ANSWER = 10.0  # seconds after a person answered in which a session that still says "input" is not read again for a missed item
-PROBLEM_FOR = 120.0  # seconds a "Copilot is not usable" answer of the host is still told after it was heard
 INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
 UNDO_WAIT = 12.0  # seconds a Withdraw waits for the turn it stopped to end
-HURRY_FOR = 60.0  # seconds after the board opens VS Code in which the link looks for the host every HURRY_EVERY seconds, not after the grown wait (1.7.19)
-HURRY_EVERY = 1.0
-OPEN_EVERY = 3.0  # 1.8.8: a VS Code window is open but its host is not reached yet (it comes about a minute after the window on a work computer): look this often, not after the grown wait
-WATCH_EVERY = 2.0  # 1.8.13: how often the watcher thread looks for a VS Code window while the host is not reached (the probe answers from a cache of RUNNING_KEEP s)
-WINDOW_EVERY = 5.0  # 1.8.8: a long wait looks this often whether a VS Code window was opened (by hand, not by the board), and then ends
 SUB_FOLLOW = 16  # chats of subagents followed for each bound chat, the newest: a safety cap, every subagent of a normal turn is followed (1.6.105: 3; B4a: 16)
 SLOW_LIMIT = 3  # 1.7.45: calls in a row the host did not answer in time before the connection is given up; one slow answer of a busy computer is not a lost VS Code
 SLOW_RETRY = 30.0  # seconds before a list the host did not answer in time is asked again
@@ -105,31 +98,6 @@ def turn_at(turns: List[Dict[str, Any]], at: Any) -> Optional[int]:
         if -rewind.MATCH_BEFORE <= gap <= rewind.MATCH_AFTER:
             near.append((abs(gap), index))
     return min(near)[1] if near else None
-
-
-def choose(found: List[ahp.Endpoint], root: Path, connect: Callable[[ahp.Endpoint], ahp.Connection] = ahp.connect) -> ahp.Connection:
-    """One endpoint: that one. Several (several VS Code programs): the one that has chats of this harness folder; none or two of them: not ready, never a guess."""
-    if len(found) == 1:
-        return connect(found[0])
-    matches = []
-    for endpoint in found:
-        try:
-            link = connect(endpoint)
-        except (ahp.AhpError, OSError):
-            continue
-        try:
-            mine = any(ahp.session_in(item, str(root)) for item in link.sessions() if ahp.is_ours(item))
-        except ahp.AhpError:
-            mine = False
-        if mine:
-            matches.append(link)
-        else:
-            link.close()
-    if len(matches) == 1:
-        return matches[0]
-    for link in matches:
-        link.close()
-    raise ahp.NotReady("many")
 
 
 def chat_state(summary: Dict[str, Any], cached: Dict[str, Any]) -> str:
@@ -181,27 +149,21 @@ NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "conf
 
 class VsLink:
     def __init__(self, root: Path, enabled: bool = True, opener: Optional[Callable[[], ahp.Connection]] = None, persist: bool = True,
-                 turn: float = 1.0, backoff: Optional[ahp.Backoff] = None, running: Optional[Callable[[], Optional[bool]]] = None) -> None:
+                 turn: float = 1.0, backoff: Optional[ahp.Backoff] = None) -> None:
         self.root = root
-        self.running = running  # 1.8.8: is a VS Code window open on this computer (any folder)? Cheap and never waits (`ready.Running.get`); None: not known
         self.enabled = enabled
         self.persist = persist
         self.stream_lost = 0  # records of the task streams (`chatstream`) a failed write left out; the chat goes on
         self.turn = turn
         self.backoff = backoff or ahp.Backoff()
-        self._opener = opener or self._open
-        self.own_mode = opener is None  # 1.8.x: the link runs the board's own agent host; a test that gives its own opener (a fake editor host) keeps the old lines of the Enter screen
+        self._opener = opener or self._open  # a test gives its own (a fake host); the board opens its own agent host
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.wake = threading.Event()
-        self.jobs: "queue.Queue[Any]" = queue.Queue()  # "open", or a Job
+        self.jobs: "queue.Queue[Any]" = queue.Queue()  # "auth", or a Job
         self.thread: Optional[threading.Thread] = None
-        self.watcher: Optional[threading.Thread] = None  # 1.8.13: looks for a VS Code window on its own, so a slow `code agent endpoints` does not hide it
-        self.window_seen = False  # 1.8.13: the watcher's last answer
         self.ready = False
-        self.host_pid: Any = None  # the editor process of the connection: its agent host (1.7.38)
-        self.hurry_until = 0.0  # monotonic time until which a missing host is looked for often
-        self.open_at = 0.0  # 1.8.8: monotonic time the link first saw a VS Code window open while it could not reach the host; 0 when connected or no window is open
+        self.down_at = 0.0  # monotonic time the link first failed to reach the host since it was last connected; 0 when connected (`harness speed`)
         self.losses = 0  # how many times a working link went away: VS Code was closed, however soon it came back
         self.why = "off" if not enabled else "starting"
         self.sessions: Dict[str, Dict[str, Any]] = {}  # the chats of this folder, by resource
@@ -223,7 +185,6 @@ class VsLink:
         self.created: List[Dict[str, Any]] = []  # chats this board made whose task does not exist yet (`chatnew.pending`); memory only
         self.expect: Dict[str, Dict[str, Any]] = {}  # session resource of a chat this board made that the host has not listed yet -> {stub, until}; memory only
         self.listed_at = 0.0
-        self.problem: Tuple[str, float] = ("", 0.0)  # what the host last said that means Copilot is not usable: ("provider" | "client" | "", when); the Enter screen shows it
         self.dirty = True
         self.slow = 0  # calls in a row the host did not answer in time (SLOW_LIMIT)
         self.shown: Dict[str, Dict[str, Any]] = {}  # task -> what its row showed of the chat when the connection went away (KEEP_SHOWN)
@@ -247,17 +208,6 @@ class VsLink:
         if self.enabled and self.thread is None:
             self.thread = threading.Thread(target=self._run, name="vscode-link", daemon=True)
             self.thread.start()
-            if self.running is not None:
-                self.watcher = threading.Thread(target=self._watch, name="vscode-window", daemon=True)
-                self.watcher.start()
-
-    def _watch(self) -> None:
-        """1.8.13: is a VS Code window open, looked at every WATCH_EVERY seconds on a thread of its own. Before, the link looked only between two tries to reach the host,
-        and a `code agent endpoints` that hangs on a work computer (25 s and more) kept the Enter screen on "open VS Code" while VS Code had been open for minutes."""
-        while not self.stop_flag.is_set():
-            if not self.ready:
-                self.window_open()
-            self.stop_flag.wait(WATCH_EVERY)
 
     def stop(self) -> None:
         self.stop_flag.set()
@@ -269,33 +219,15 @@ class VsLink:
         with self.lock:
             return self.losses
 
-    def host(self) -> Any:
-        """The pid of the editor process the link is connected to (`code agent endpoints`), or None when it is not connected."""
-        with self.lock:
-            return self.host_pid if self.ready else None
-
     def status(self) -> Dict[str, Any]:
-        """`{ready, bound, unbound, why}`: for `/api/status` and `/api/board`. `bound` and `unbound` count the open tasks.
-        `open_for` (1.8.8), only while not connected and a VS Code window is open: seconds since the link first saw that window."""
+        """`{ready, bound, unbound, why}`: for `/api/status` and `/api/board`. `bound` and `unbound` count the open tasks."""
         with self.lock:
-            out = {"ready": self.ready, "bound": len(self.bound) if self.ready else 0, "unbound": len(self.unbound) if self.ready else 0, "why": "ok" if self.ready else self.why}
-            if not self.ready and self.open_at:
-                out["open_for"] = max(0, int(time.monotonic() - self.open_at))
-            return out
-
-    def host_said(self, error: BaseException) -> None:
-        """Remember the two things the host says when Copilot itself is not usable (`Provider copilotcli is not ready`, `Client is not connected`); any other error is not Copilot's sign-in."""
-        text = str(error).lower()
-        found = ("provider" if "provider" in text else "client") if ahp.problem_of(error)[0] == "copilot" else ""
-        if found:
-            with self.lock:
-                self.problem = (found, time.monotonic())
+            return {"ready": self.ready, "bound": len(self.bound) if self.ready else 0, "unbound": len(self.unbound) if self.ready else 0, "why": "ok" if self.ready else self.why}
 
     def copilot(self) -> Dict[str, Any]:
-        """For the Enter screen, from the cache: how many models the host lists (those the policy allows) and what it last said about Copilot (`provider`, `client`, or empty; forgotten after 2 minutes)."""
+        """For the Enter screen, from the cache: how many models the host lists (those the policy allows)."""
         with self.lock:
-            kind, at = self.problem
-            return {"models": len(self.models) if self.ready else 0, "problem": kind if kind and time.monotonic() - at < PROBLEM_FOR else ""}
+            return {"models": len(self.models) if self.ready else 0}
 
     def chat_of(self, task: str, name: str = "") -> Dict[str, Any]:
         """What a row or a task page shows of the chat: `{bound, why, state, title, model, how}` and, when the chat said something, `sub` and `recent`.
@@ -650,7 +582,6 @@ class VsLink:
             return {"session": resource, "pending": True}
         job.done.wait()  # 1.8.7: a chat with no task (a one-click skill) is waited for with no limit too: "failed" while it still goes on would make a second one
         if job.error is not None:
-            self.host_said(job.error)
             raise job.error
         return job.result
 
@@ -680,7 +611,6 @@ class VsLink:
         self.wake.set()
         job.done.wait()  # 1.8.7: making the chat is never given up (an empty chat would be left); the view shows the agent at work meanwhile
         if job.error is not None:
-            self.host_said(job.error)
             raise job.error
         return job.result
 
@@ -711,18 +641,8 @@ class VsLink:
             job.cancelled = True  # a late thread must not send what the person was told failed
             raise Refused("timeout")
         if job.error is not None:
-            self.host_said(job.error)
             raise job.error
         return job.result
-
-    def open_window(self) -> str:
-        """Ask the thread to bring the VS Code window of this folder to the front (`code <folder>`, never `-r`). Returns at once: `queued`, or why it cannot (`off`, `no-cli`)."""
-        with self.lock:
-            if not self.enabled or self.why in ("off", "no-cli"):
-                return "off" if not self.enabled else self.why
-        self.jobs.put("open")
-        self.hurry()
-        return "queued"
 
     def ask_of(self, task: str) -> Optional[Dict[str, Any]]:
         """What the chat of this task waits for a person to answer, from the cache: the oldest tool confirmation or question (`chatask.shown`, plus `count` of them and `since`). None: nothing, or the
@@ -753,7 +673,6 @@ class VsLink:
             job.cancelled = True  # a late thread must not answer what the person was told failed
             raise Refused("timeout")
         if job.error is not None:
-            self.host_said(job.error)
             raise job.error
         return job.result
 
@@ -768,7 +687,8 @@ class VsLink:
         """1.8.x: the board's own agent host, made once (`core.agenthost`); it gets the tool folders and the CA bundle of Local when it starts."""
         with self.lock:
             if self.own is None:
-                self.own = agenthost.Host(self.root, extra=lambda: launchenv.extra(self.root), identities=lambda: conn_core.host_identities(self.root))  # H5b: and the identities chosen
+                self.own = agenthost.Host(self.root, extra=lambda: launchenv.extra(self.root), identities=lambda: conn_core.host_identities(self.root),
+                                          path=shortcmd.fresh_path)  # H5b: and the identities chosen; H6: and the PATH of a new terminal
             return self.own
 
     def host_stale(self) -> bool:
@@ -776,6 +696,13 @@ class VsLink:
         with self.lock:
             own = self.own
         return own is not None and own.stale()
+
+    def host_outdate(self) -> None:
+        """H6: the short command was just put on PATH: the running host does not have it until it starts again (the board restarts it once no chat works)."""
+        with self.lock:
+            own = self.own
+        if own is not None:
+            own.outdate()
 
     def restart_host(self) -> Dict[str, Any]:
         """H5: stop the board's own agent host and start it again with the Local settings of now. The connection drops and the link opens it again (and hands gh's token).
@@ -877,50 +804,22 @@ class VsLink:
         with self.lock:
             self.losses += 1 if self.ready and not ready else 0
             self.ready, self.why = ready, why
-            waited = time.monotonic() - self.open_at if ready and self.open_at else 0.0
+            if not ready and not self.down_at:
+                self.down_at = time.monotonic()
+            waited = time.monotonic() - self.down_at if ready and self.down_at else 0.0
             if ready:
-                self.open_at = 0.0  # a later loss counts its wait from then, not from before this connection
+                self.down_at = 0.0  # a later loss counts its wait from then, not from before this connection
         if waited > 0:
             try:
                 from core import speednet
-                speednet.record_vscode_start(self.root, waited)  # `harness speed`: seconds from a window seen to connected
+                speednet.record_vscode_start(self.root, waited)  # `harness speed`: seconds from the first failed try to connected (the agent host starting)
             except Exception:  # noqa: BLE001 - a helper must not disturb the link
                 pass
 
-    def hurry(self) -> None:
-        """The board just opened VS Code: look for its host every second for a while. The wait had grown to a minute while no window was open, and the Enter screen stayed
-        red (and the Open VS Code button shown) until it ran out."""
-        self.hurry_until = time.monotonic() + HURRY_FOR
-        self.backoff.reset()
-        self.wake.set()
-
-    def window_open(self) -> bool:
-        """1.8.8: is a VS Code window open while the host cannot be reached? Keeps `open_at`. A probe that is missing, breaks or does not know yet says no."""
-        try:
-            seen = bool(self.running()) if self.running is not None else False
-        except Exception:  # noqa: BLE001 - a probe that breaks says nothing
-            seen = False
-        with self.lock:
-            self.window_seen = seen and not self.ready
-            if self.ready or not seen:
-                self.open_at = 0.0
-            elif not self.open_at:
-                self.open_at = time.monotonic()
-        return seen
-
     def _wait(self, seconds: float) -> None:
-        """Wait `seconds` (the grown wait), or less: every second for a while after the board opened VS Code (`hurry`), and at most OPEN_EVERY while a VS Code window is open
-        but its host is not reached (1.8.8: the wait had grown to a minute, and a person who had opened VS Code by hand saw "not open" that long after its host was up)."""
-        if time.monotonic() < self.hurry_until:
-            seconds = min(seconds, HURRY_EVERY)
-        start = time.monotonic()
-        end = start + seconds
-        while not self.stop_flag.is_set():
-            if self.window_seen if self.watcher is not None else self.window_open():  # the watcher keeps it fresh; a link without one looks here
-                end = min(end, start + OPEN_EVERY)
-            left = end - time.monotonic()
-            if left <= 0 or self.wake.wait(min(left, WINDOW_EVERY)):
-                break
+        """Wait `seconds` (the grown wait), or less when something wakes the thread (a job, a stop)."""
+        if not self.stop_flag.is_set():
+            self.wake.wait(seconds)
         self.wake.clear()
 
     def _run(self) -> None:
@@ -985,16 +884,6 @@ class VsLink:
                     job.done.set()
                 else:
                     self._do(link, job)
-                continue
-            self._open_code()
-
-    def _open_code(self) -> None:
-        code = ahp.find_code()
-        if code:
-            try:
-                ahp.run_code(code, [str(self.root)], extra=launchenv.extra(self.root))  # the folder, no `-r`: a window that has it is brought forward
-            except ahp.AhpError:
-                pass
 
     def _models(self, link: ahp.Connection) -> None:
         """The models of the host, read from its root state once and then with every new list. One read, then we let go of the channel."""
@@ -1004,8 +893,7 @@ class VsLink:
             link.unsubscribe("ahp-root:/")
         except ahp.ConnectionClosed:
             raise
-        except ahp.AhpError as error:
-            self.host_said(error)
+        except ahp.AhpError:
             return
         with self.lock:
             self.models, self.limits = found, limits
@@ -1030,8 +918,6 @@ class VsLink:
             self.dirty = True
 
     def _serve(self, link: ahp.Connection) -> None:
-        with self.lock:
-            self.host_pid = getattr(link, "pid", None)
         self._list(link)
         self._models(link)
         self._set(True, "ok")
@@ -1072,8 +958,6 @@ class VsLink:
                     queues[self.lane_of(job.task)].put(job)
                 elif job == "auth":
                     self._hand_token(link)
-                else:
-                    self._open_code()
         finally:
             ended.set()
             for lane in lanes:
@@ -1164,7 +1048,7 @@ class VsLink:
         sends to that chat until the order has reached its last stage (the relay waits). `allow`: the host's value for Allow all, or "" to leave it."""
         with self.lock:
             self.starts[task] = autorun_start.new_order(model, allow, datetime.datetime.now(datetime.timezone.utc))
-        self.hurry()
+        self.backoff.reset()
         self.wake.set()
 
     def cancel_start(self, task: str) -> None:
@@ -1201,8 +1085,6 @@ class VsLink:
                 job = Job("send", task, item["text"], item["model"])
                 self._do(link, job)  # on this thread: it looks at the binding and the chat again, and refuses rather than guess
                 if job.error is not None:
-                    if isinstance(job.error, ahp.AhpError):
-                        self.host_said(job.error)
                     continue
                 with self.lock:
                     self.follow.pop(task, None)
@@ -1237,8 +1119,6 @@ class VsLink:
                 def do(kind: str, text: str, model: Optional[Dict[str, Any]], plan: Optional[Dict[str, Any]], task: str = task) -> Optional[BaseException]:
                     job = Job(kind, task, text, model, plan)
                     self._do(link, job)  # on this thread: it looks at the binding and the chat again, and refuses rather than guess
-                    if isinstance(job.error, ahp.AhpError):
-                        self.host_said(job.error)
                     return job.error
 
                 autorun_start.step(self.root, task, order, state, status, do)
@@ -1284,8 +1164,6 @@ class VsLink:
 
                 autorun_relay.step(self.root, task, state, status, windows, send)
                 if sent and sent[0] is not None:
-                    if isinstance(sent[0], ahp.AhpError):
-                        self.host_said(sent[0])
                     self.relay_hold[task] = time.monotonic() + RELAY_HOLD
             except ahp.ConnectionClosed:
                 raise
@@ -1982,8 +1860,7 @@ class VsLink:
                 self.read_at[resource] = time.monotonic()
             except ahp.ConnectionClosed:
                 raise
-            except ahp.AhpError as error:
-                self.host_said(error)
+            except ahp.AhpError:
                 ids = set()  # this chat cannot be opened now: it is not read again until it changes
                 self.read_at.pop(resource, None)
             with self.lock:
@@ -2058,12 +1935,10 @@ class VsLink:
                 state = ahp.trimmed(full)
             except ahp.ConnectionClosed:
                 raise
-            except ahp.AhpError as error:
-                self.host_said(error)
+            except ahp.AhpError:
                 continue
             with self.lock:
                 self.chats[chat] = {"state": state, "tool_at": ""}
-                self.problem = ("", 0.0)  # a chat of Copilot was read: Copilot works
                 owner = self._stream_task(chat) if self.persist else None
             if owner is not None:  # 1.8.x: the finished turns of this chat that the task's stream does not hold yet (the file work is done outside the lock)
                 try:
@@ -2118,8 +1993,7 @@ class VsLink:
                     break
                 except ahp.ConnectionClosed:
                     raise
-                except ahp.AhpError as error:
-                    self.host_said(error)
+                except ahp.AhpError:
                     continue
             with self.lock:
                 self.sess[resource] = held

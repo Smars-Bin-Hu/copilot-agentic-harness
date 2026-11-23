@@ -43,7 +43,7 @@ A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the
 
 ## Gotchas
 
-- **Check the way in first** (`harness tools reach`: the connection must be reachable). The identity is on the VS Code process: a VS Code that was already running when the person started another one with the identity does not have it, and `sqlcmd` then asks for a password and fails (`liner: function not supported in this terminal`). Stop and tell the person to quit VS Code and start it as the pack's launch script says.
+- **Check the way in first** (`harness tools reach`: the connection must be reachable). The identity is on the board's agent host: when `sqlcmd` asks for a password and fails (`liner: function not supported in this terminal`), the host does not hold that Windows account. Use the call `harness connections find <name>` prints (with `harness as <name> --` when it says so), or stop and tell the person to check the sign-in in Connections & sign-ins.
 - `usp_job_start` returns at once; the job runs on the server. "Started" is not "done": only `harness wait` on the log table says done.
 - Waiting costs no model calls; asking the agent to "check again in a minute" costs one each time.
 - The query is in the command, in the quotes after `-Q`: a query in a shell variable or a file has no verb the gate can see, and counts as a write.

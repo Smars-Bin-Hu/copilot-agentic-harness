@@ -1,6 +1,6 @@
 // The blocks at the top of the board after Enter (1.7.38, block B): what is still missing, from the same answer as the Enter screen (`/api/ready`, asked again every few seconds).
 //
-//   red     "The agent cannot work right now": a line of Harness & Local (required) is not ok after Enter, for example VS Code was closed. It has the button that mends it and it cannot be hidden.
+//   red     "The agent cannot work right now": a line of Harness & Local (required) is not ok after Enter, for example gh signed out. It has the button that mends it and it cannot be hidden.
 //   yellow  "Not fully ready for your company's tasks": the problems of From the company (optional), one line each with one button to the place that mends it. Hide hides it until the set of problems changes
 //           (the fingerprint of the set is kept in this browser, in try/catch). With a red block above, it is one line (Show opens it).
 //
@@ -12,7 +12,7 @@ const READYBAR = (function () {
   const EVERY = 6000;
   const root = document.documentElement;
   const wrap = h("div", {class: "rd-wrap", hidden: ""});
-  let last = null, at = 0, inflight = false, restart = null, failed = "", openYellow = false, shownKey = "";
+  let last = null, at = 0, inflight = false, openYellow = false, shownKey = "";
 
   const keep = {
     get() { try { return localStorage.getItem(KEY) || ""; } catch (error) { return ""; } },
@@ -22,21 +22,15 @@ const READYBAR = (function () {
   const fingerprint = (list) => JSON.stringify(list.map((problem) => [problem.row, problem.key, problem.text]));
   const dot = (level) => h("i", {class: "rd-dot " + level});
 
-  function line(problem, level, extra) {
-    const hooks = {done: () => poll(true), onState: (view) => { restart = view; paint(); }, opened: () => { restart = null; setTimeout(() => poll(true), 1500); }, fail: (error) => { failed = error.message || String(error); paint(); }};
-    const said = extra || "";
+  function line(problem, level) {
+    const hooks = {done: () => poll(true)};  // an error is said on the button itself (READY.button)
+    const said = "";
     return h("div", {class: "rd-li"}, dot(level), h("span", {class: "rd-t"}, h("span", {class: "rd-what"}, problem.text), document.documentElement.lang === "zh" ? "" : " ", h("span", {class: "rd-why"}, said || problem.why || "")),
-      problem.fix && problem.fix.to ? READY.button(problem.fix, hooks, "act rd-fix" + (level === "red" && problem.fix.to === "vscode" ? " hot live" : "")) : null);
+      problem.fix && problem.fix.to ? READY.button(problem.fix, hooks, "act rd-fix") : null);
   }
 
   function red(problems) {
-    const going = restart && (restart.state === "quitting" || restart.state === "opening");
-    const note = (problem) => (problem.key === "vscode" ? (going ? READY.restartNote(restart) : failed || (restart && restart.state === "failed" ? READY.restartNote(restart) : "")) : "");
-    const rows = problems.map((problem) => {
-      const row = line(problem, problem.level === "yellow" ? "yellow" : "red", note(problem));
-      if (going && problem.key === "vscode") { const button = row.querySelector("button"); if (button) { button.disabled = true; button.textContent = t(restart.state === "opening" ? "board.enter.opening" : "board.enter.vs.quitting"); } }
-      return row;
-    });
+    const rows = problems.map((problem) => line(problem, problem.level === "yellow" ? "yellow" : "red"));
     return h("section", {class: "rd-bar rd-red", role: "alert"}, h("h3", null, dot("red"), t("board.ready.red.title")), h("div", {class: "rd-grp"}, t("board.enter.g.required") + " · " + t("board.enter.tag.required")), ...rows);
   }
 
@@ -53,34 +47,10 @@ const READYBAR = (function () {
     return h("section", {class: "rd-bar rd-yellow"}, head, h("div", {class: "rd-grp"}, t("board.enter.g.optional") + " · " + t("board.enter.tag.optional")), ...problems.map((problem) => line(problem, "yellow")));
   }
 
-  // The dialog "New task" (1.7.38): a VS Code that was not started with this copy's settings does not stop it, but the person is told there too, in the words of the red block and with its button.
-  const notes = new Set();
-  function vsNote() {
-    const box = h("div", {class: "rd-note", role: "alert", hidden: ""});
-    let shown = "";
-    const draw = () => {
-      const problem = ((last && last.problems && last.problems.required) || []).find((item) => item.key === "vscode" && ["env", "unseen"].includes(item.code));
-      const going = restart && (restart.state === "quitting" || restart.state === "opening");
-      const key = JSON.stringify([problem && problem.text, problem && problem.fix, going && restart.state, failed, root.lang]);
-      if (key === shown) return;
-      shown = key;
-      box.hidden = !problem;
-      if (!problem) { box.replaceChildren(); return; }
-      const row = line(problem, "red", going ? READY.restartNote(restart) : failed || (restart && restart.state === "failed" ? READY.restartNote(restart) : ""));
-      const button = row.querySelector("button");
-      if (going && button) { button.disabled = true; button.textContent = t(restart.state === "opening" ? "board.enter.opening" : "board.enter.vs.quitting"); }
-      box.replaceChildren(row);
-    };
-    notes.add(() => { if (!box.isConnected) return false; draw(); return true; });
-    draw();
-    return box;
-  }
-
   function paint() {
-    for (const redraw of [...notes]) if (!redraw()) notes.delete(redraw);
     if (!last) { wrap.hidden = true; return; }
     const required = (last.problems && last.problems.required) || [], optional = (last.problems && last.problems.optional) || [], kb = Boolean(last.optional && last.optional.kb);
-    const sig = JSON.stringify([required, optional, kb, restart && restart.state, failed, openYellow, memory === fingerprint(optional), root.lang]);
+    const sig = JSON.stringify([required, optional, kb, openYellow, memory === fingerprint(optional), root.lang]);
     if (sig === shownKey) return;
     shownKey = sig;
     const hidden = optional.length && memory === fingerprint(optional);
@@ -99,12 +69,10 @@ const READYBAR = (function () {
     SERVE.call("/api/ready", {}, 8).then((data) => {
       if (!Array.isArray(data.checks)) return;
       last = data; at = Date.now();
-      if (data.restart && !(restart && (restart.state === "quitting" || restart.state === "opening"))) restart = data.restart;
-      if (!(data.problems.required || []).some((problem) => problem.key === "vscode")) failed = "";  // VS Code is back: what the last try said is over
       paint();
     }, () => {}).then(() => { inflight = false; });
   }
   if (typeof SERVE !== "undefined" && DATA.serve) setInterval(() => poll(false), 1000);
 
-  return {node: () => wrap, poll, vsNote};
+  return {node: () => wrap, poll};
 })();

@@ -57,8 +57,7 @@ const LIVE = (function () {
   };
 
   // --- the nodes made once ----------------------------------------------------------------------------------------------
-  const link = h("button", {type: "button", class: "lv-link"}, t("desk.live.whole"));
-  const head = h("div", {class: "lv-h"}, h("span", {class: "lv-t"}, t("desk.live.title")), h("span", {class: "sub lv-sub"}, t("desk.live.sub")), link);
+  const head = h("div", {class: "lv-h"}, h("span", {class: "lv-t"}, t("desk.live.title")), h("span", {class: "sub lv-sub"}, t("desk.live.sub")));
   const earlier = h("button", {type: "button", class: "lv-earlier-btn"}, t("desk.live.earlier"));
   const earlierBad = h("span", {class: "bad lv-earlier-bad", role: "alert", hidden: ""});
   const earlierLi = h("li", {class: "lv-earlier", "data-id": "~earlier", hidden: ""}, earlier, earlierBad);  // right under the person's message: the older steps appear exactly there
@@ -71,10 +70,6 @@ const LIVE = (function () {
   const root = h("section", {class: "lv", hidden: ""}, head, stale, feed, calm, life);
   const roundsHere = (box) => { if (box.parentNode !== root) root.insertBefore(box, stale); };
 
-  link.addEventListener("click", () => {
-    link.disabled = true;
-    SERVE.openVS().then(() => { setTimeout(() => { link.disabled = false; }, 1500); }, (error) => { link.disabled = false; SERVE.failed(error, st.chat && st.chat.title); });
-  });
 
   // --- time -------------------------------------------------------------------------------------------------------------
   const seconds = (ms) => (ms < 10000 ? t("unit.seconds", {s: (Math.max(0, ms) / 1000).toFixed(1)}) : clock(ms / 1000));
@@ -771,24 +766,21 @@ const LIVE = (function () {
 
   // The calm states: no chat, a chat that has not said anything, a link that dropped. One line says what and why.
   function paintCalm(data, items) {
-    let title = "", why = "", button = false;
-    link.hidden = !data || !data.bound;  // no chat: the window alone is the button of the calm state
+    let title = "", why = "";
     if (!data) { title = t("desk.live.reading"); }
     else if (!data.bound) {
       title = LINK_DOWN.includes(data.why) ? t("desk.live.down") : t("desk.live.none");
       why = t("board.vs.why." + (data.why || "no-chat"));
-      button = data.why !== "off" && data.why !== "no-cli";
     } else if (data.loading) title = t("desk.live.reading");
     else if (!items.length) { title = t("desk.live.quiet"); why = t("desk.live.quiet.why"); }
     calm.hidden = !title;
     if (!title) { calm.replaceChildren(); calm.dataset.sig = ""; return; }
-    const fresh = Boolean(data && !data.bound && st.task && st.off === "" && ["", "no-chat", "no-session"].includes(data.why || ""));
-    const sig = title + "|" + why + "|" + button + "|" + fresh;
+    const fresh = Boolean(data && !data.bound && st.task && st.off === "" && ["", "no-chat", "no-session"].includes(data.why || ""));  // no chat yet: Go on in a new chat
+    const sig = title + "|" + why + "|" + fresh;
     if (calm.dataset.sig === sig) return;
     calm.dataset.sig = sig;
-    const open = button ? h("button", {type: "button", class: "act hot live big"}, t(fresh ? "board.go.new" : "desk.live.open")) : null;
-    if (open && fresh) open.addEventListener("click", () => chatGoOn(st.task.split("/").pop()));
-    else if (open) open.addEventListener("click", () => { open.disabled = true; SERVE.openVS().then(() => { setTimeout(() => { open.disabled = false; }, 1500); }, (error) => { open.disabled = false; SERVE.failed(error, st.chat && st.chat.title); }); });
+    const open = fresh ? h("button", {type: "button", class: "act hot live big"}, t("board.go.new")) : null;
+    if (open) open.addEventListener("click", () => chatGoOn(st.task.split("/").pop()));
     calm.replaceChildren(...[robot(), h("h3", null, title), why ? h("p", null, why) : null, open].filter(Boolean));
   }
 
@@ -853,9 +845,6 @@ const LIVE = (function () {
       const answer = Boolean(info.answer);  // the agent sits in `harness wait --approval`: the chat is busy, but the agent waits for the person (1.7.38, C12 TB-15)
       const starting = Boolean(info.starting);  // 1.8.5: the board sent something and the agent has not started: the footer does not say what the chat said before
       if (answer !== st.answer || starting !== st.starting) { st.answer = answer; st.starting = starting; if (st.data) paintLife(st.data); }
-      const nothing = st.chat && !st.chat.bound ? st.chat.why || "" : "";
-      link.title = nothing === "no-cli" || nothing === "off" ? t("board.vs.why." + nothing) : t("board.vs.open");
-      link.disabled = nothing === "no-cli" || nothing === "off";
       if (st.off) { clearTimeout(st.timer); st.timer = 0; }
       else if (!st.data && st.chat && !st.chat.bound) show({bound: false, why: st.chat.why || "no-chat"});  // the page already knows: no wait for the first answer
       kick();

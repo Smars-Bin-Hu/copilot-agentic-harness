@@ -198,7 +198,7 @@ def note_call(root: Path, system_name: str, system: Dict[str, Any], env: str, an
 def view(root: Path, listed: Dict[str, Any]) -> List[Dict[str, Any]]:
     """For the board: one line per system and environment that has a probe, `{system, env, state, at, why, who, source, launch}`; unknown when never seen."""
     found = read(root)
-    from . import launchenv, messages  # they read the connections, which read this module
+    from . import messages  # it reads the connections, which read this module
 
     from . import connections as conn_core
 
@@ -207,8 +207,6 @@ def view(root: Path, listed: Dict[str, Any]) -> List[Dict[str, Any]]:
         kept = {alias for alias in conn_core.listed(root) if any(saved.get(conn_core.env_key(alias, field)) for field in conn_core.IDENTITY_FIELDS)}
     except Exception:  # noqa: BLE001 - a view must not fail for a broken list
         kept = set()
-    lacks = launchenv.seen(root)
-    started_wrong = bool(lacks) and lacks.get("ok") is False  # a hook found VS Code started without the settings of this computer: what the board's own check found does not count (1.7.21)
     out: List[Dict[str, Any]] = []
     for name, system in (listed or {}).items():
         launch = (system.get("needs") or {}).get("launch") or ""
@@ -216,10 +214,6 @@ def view(root: Path, listed: Dict[str, Any]) -> List[Dict[str, Any]]:
             line = found.get(f"{name}:{env}") or {"state": UNKNOWN, "at": "", "why": "", "who": "", "source": ""}
             if line.get("state") == DENIED and line.get("why") in ("identity", "other-identity") and name in kept:
                 launch = messages.text("reach.denied.saved", alias=name)  # an identity is kept here and was not accepted: starting VS Code again would change nothing
-            if started_wrong:
-                line = {**line, "state": DENIED, "why": "vscode-env", "who": ""}
-                gaps = [str(item) for item in lacks.get("missing") or []]
-                launch = messages.text("reach.vscode_env", missing=", ".join(gaps[:3]) + (", \u2026" if len(gaps) > 3 else "") if gaps else "-")
             out.append({"system": name, "env": env, **line, "launch": launch})
     return out
 
@@ -248,22 +242,3 @@ def by_env(lines: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         state = DENIED if DENIED in states else FAILED if FAILED in states else UNKNOWN if UNKNOWN in states else OK
         out.append({**item, "state": state, "who": ", ".join(item["who"]), "launch": "; ".join(item["launch"]), "why": "; ".join(item["why"])})
     return out
-
-
-def launch_script(root: Path, platform: str = sys.platform) -> Optional[Path]:
-    """A tool pack's script that starts VS Code with the identity (`launch/` of an installed tool pack): Windows only, the first `.cmd` or `.bat`."""
-    if not platform.startswith("win"):
-        return None
-    from . import toolpacks  # the active packs only (1.7.30)
-
-    found = sorted(item for pack in toolpacks.active(root).values() for item in (pack["folder"] / "launch").glob("*") if item.suffix.lower() in (".cmd", ".bat"))
-    return found[0] if found else None
-
-
-def run_launch(root: Path) -> bool:
-    """Start the launch script in a window of its own (it asks the person for the account and the password itself). False when there is none."""
-    script = launch_script(root)
-    if script is None:
-        return False
-    subprocess.Popen(["cmd", "/c", "start", "", str(script)], cwd=str(root), close_fds=True)  # noqa: S603,S607 - the company's script, started as the person would
-    return True

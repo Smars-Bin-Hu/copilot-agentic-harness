@@ -602,8 +602,8 @@ def check_task_names(report: Report, root: Path) -> None:
 
 
 def check_vscode(report: Report) -> None:
-    """Can the board reach VS Code (1.6)? A warning at most: the board works without it. One `code` process and one connection, as `doctor` is run by hand and seldom.
-    The board's own run (1.7.45) leaves it out: the board's VS Code line says it, from the link it keeps open."""
+    """Is VS Code installed (its `code` command found)? The board starts its own agent host from it (1.8.x); no window has to be open. A warning at most.
+    The board's own run (1.7.45) leaves it out: the board's VS Code line says it."""
     if os.environ.get(TOPICS):
         return
     if ahp.switched_off():
@@ -613,18 +613,7 @@ def check_vscode(report: Report) -> None:
     if not code:
         report.warn(say("doctor.vscode.nocli"))
         return
-    secret = ""
-    try:
-        found = ahp.read_endpoints(code)
-        if not found:
-            report.warn(say("doctor.vscode.none"))
-            return
-        secret = found[0].token()
-        ahp.connect(found[0]).close()
-    except (ahp.AhpError, OSError) as error:
-        report.warn(say("doctor.vscode.failed", error=ahp.scrub(error, secret)))
-        return
-    report.ok(say("doctor.vscode.ok", count=len(found)))
+    report.ok(say("doctor.vscode.ok", version=ahp.code_version(code) or "?"))
 
 
 def check_optional_packages(report: Report, root: Path) -> None:
@@ -706,24 +695,6 @@ def check_toolpacks(report: Report, root: Path) -> None:
             report.warn(say("doctor.toolpacks.unset", alias=item["alias"], type=item["type"], fields=", ".join(item["fields"])))
         for item in toolpacks.command_problems(root):
             report.warn(say("doctor.toolpacks.command", **item))
-    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
-        report.warn(say("doctor.company.failed", error=error))
-
-
-def check_vscode_settings(report: Report, root: Path) -> None:
-    """(1.7.38, C13 TA-Q2) A VS Code that runs without the settings of this copy (the tool folders, the CA bundle): a warning that says what is missing and where to mend it. The board makes the same check itself
-    (its VS Code line), so the board's own run of doctor leaves it out. A VS Code that cannot be judged says nothing."""
-    if os.environ.get(TOPICS):
-        return
-    try:
-        from core import launchenv
-
-        found = launchenv.windows_without_settings(root)
-        if found:
-            from modules.task import ready
-
-            lost = list(dict.fromkeys(item for one in found for item in one["missing"]))
-            report.warn(say("doctor.vscode.settings", missing=ready.missing_words(lost) or "-"))
     except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
         report.warn(say("doctor.company.failed", error=error))
 
@@ -1007,7 +978,7 @@ def check_integrity(report: Report, root: Path) -> None:
 
 PROGRESS = "HARNESS_DOCTOR_PROGRESS"  # set by the board (1.7.43): each step is told on stderr as it starts, for the Enter screen's progress bar
 PROGRESS_MARK = "harness-doctor-step"
-STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'vscode_settings', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
+STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
 
 
 def tick(name: str) -> None:
@@ -1095,8 +1066,6 @@ def run(root: Path, accept: bool = False) -> int:
     check_toolpacks(report, root)
     tick('check_integrity')
     check_integrity(report, root)
-    tick('check_vscode_settings')
-    check_vscode_settings(report, root)
     report.topic = "company"
     tick('check_standards')
     check_standards(report, root)

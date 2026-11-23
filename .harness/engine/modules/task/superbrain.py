@@ -463,9 +463,8 @@ class Brain:
             done = self.send(rec, message)
         except vslink.Refused as error:
             why = "asleep" if error.why in ("off", "not-ready") else "busy" if error.why == "not-idle" else error.why
-        except Exception as error:  # noqa: BLE001 - the host's words are not for the page
+        except Exception:  # noqa: BLE001 - the host's words are not for the page
             why = "error"
-            self.link.host_said(error)
         with self.lock:
             self.sending = False
             if why == "timeout":  # the chat may have been made after the wait ended: keep it, so the next ask does not make a second one

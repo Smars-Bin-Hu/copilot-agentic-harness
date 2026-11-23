@@ -401,7 +401,7 @@ const SETUP = (function () {
       shortBox.replaceChildren(h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "1"), h("h2", null, t("setup.short.title"))), h("p", {class: "su-note bad"}, t(unpaired ? "setup.short.unpaired" : "setup.short.nolink")), h("p", {class: "su-note"}, (error && error.message) || ""));
     }
     function paintShort(found) {
-      const key = JSON.stringify([found.short, found.reopen]);
+      const key = JSON.stringify([found.short]);
       if (key === st.shortKey) return;  // the poll must not take away the button the person is about to press
       st.shortKey = key;
       const done = Boolean(found.short.found);
@@ -417,7 +417,6 @@ const SETUP = (function () {
         });
         parts.push(h("p", {class: "su-note"}, t("setup.short.do")), h("div", {class: "su-cmd"}, h("code", null, found.short.command), copy), h("div", {class: "su-end"}, run), out);
       } else {
-        if (found.reopen) parts.push(h("p", {class: "su-warn"}, t("setup.short.reopen")));
         parts.push(h("p", {class: "su-note"}, t("setup.short.where")));  // the path above may be another copy's: it runs the copy of the folder you are in (1.7.38)
         const test = h("button", {type: "button", class: "act"}, t("setup.short.test"));
         test.addEventListener("click", () => testShort(test));

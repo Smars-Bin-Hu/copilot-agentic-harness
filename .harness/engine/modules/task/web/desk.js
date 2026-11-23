@@ -548,7 +548,6 @@
     ui.checks = slot("span", "tk-checks");
     ui.ctx = slot("span", "tk-ctx");
     Status.card(ui.ctx.node, ctxCard);
-    ui.vs = slot("span", "tk-vs");
     ui.moreBtn = h("button", {type: "button", class: "tk-icon tk-morebtn", "aria-haspopup": "menu", "aria-expanded": "false", title: t("desk.menu.more"), "aria-label": t("desk.menu.more")}, icon(["M3 8h.01M8 8h.01M13 8h.01"], 16));
     ui.menu = h("div", {class: "tk-menu", role: "menu", hidden: ""});
     ui.more = h("span", {class: "tk-more"}, ui.moreBtn, ui.menu);
@@ -556,7 +555,7 @@
     ui.menu.addEventListener("click", (event) => { if (event.target.closest("a,button")) setTimeout(closeMenu, 0); });  // after the click has done its work
     document.addEventListener("click", (event) => { if (menuOpen && !ui.more.contains(event.target)) closeMenu(); });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menuOpen) { closeMenu(); ui.moreBtn.focus(); } });
-    ui.head = h("header", {class: "tk-head"}, ui.back, ui.nameBox, ui.state.node, ui.stage.node, ui.checks.node, h("span", {class: "tk-sp"}), ui.ctx.node, h("span", {class: "tk-tools"}, ui.vs.node, ui.more));
+    ui.head = h("header", {class: "tk-head"}, ui.back, ui.nameBox, ui.state.node, ui.stage.node, ui.checks.node, h("span", {class: "tk-sp"}), ui.ctx.node, h("span", {class: "tk-tools"}, ui.more));
     ui.infoL = slot("div", "tk-info-l");
     ui.rounds = slot("span", "tk-rounds");
     ui.pill = slot("span", "tk-pill");
@@ -659,7 +658,6 @@
     const meter = bound && chat.context && typeof chat.context.percent === "number" ? chat.context : null;
     ui.ctx.set(bound ? JSON.stringify(meter ? [meter.percent, meter.limit, meter.notice] : null) : "", () => (bound ? ctxBar(meter ? meter.percent : null, meter) : null));
     if (bound) ui.ctx.node.setAttribute("aria-label", meter ? t("board.status.context", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)}) : t("desk.ctx.unknown"));
-    ui.vs.set(chat ? "vs:" + (chat.bound ? "" : chat.why || "") : "", () => (chat ? SERVE.vsButton(chat) : null));
     paintMenu(false);
 
     const kindName = t("task.kind." + (desk.kind || "none"));
@@ -1154,11 +1152,7 @@
     button.addEventListener("click", () => { SERVE.post("/api/resume", {task: desk.name}).then(() => SERVE.done(), (error) => SERVE.failed(error, t("desk.reply.retry"))); });
     return button;
   }
-  function openVsButton() {
-    const button = h("button", {type: "button", class: "act"}, t("desk.live.open"));
-    button.addEventListener("click", () => { button.disabled = true; SERVE.openVS().then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; SERVE.failed(error, desk.chat && desk.chat.title); }); });
-    return button;
-  }
+
   function sinceLine(stamp) {
     const from = Date.parse(stamp);
     if (isNaN(from)) return null;
@@ -1174,7 +1168,7 @@
     return h("section", {class: "tk-need tk-late", title: startingTip(desk.starting)},
       h("div", {class: "tk-need-h"}, h("b", null, t("desk.waits.late.title")), sinceLine(desk.starting.since)),
       h("p", {class: "tk-need-p"}, t("desk.waits.late.hint")),
-      h("div", {class: "tk-need-go"}, canRetry() ? retryButton() : null, openVsButton()));
+      h("div", {class: "tk-need-go"}, canRetry() ? retryButton() : null));
   }
   function paintErr() {
     const on = errorNow();

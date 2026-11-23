@@ -1,4 +1,4 @@
-// Shared by the Enter screen (enter.js) and the block of the board after Enter (readybar.js) (1.7.38, block B): where a fix of the readiness answer leads, and the VS Code button.
+// Shared by the Enter screen (enter.js) and the block of the board after Enter (readybar.js) (1.7.38, block B): where a fix of the readiness answer leads.
 // A fix is what `core/readyitems.py` and `modules/task/ready.py` give each problem: {to, label, ...}.
 //   setup   the Get ready form at a card:          /setup?sec=company|computer|you
 //   tools   a window of Tools:                     TOOLS.open(tab, done, part), tab packs | connections | local (the three windows of block C; the old window knows packs and connections)
@@ -6,40 +6,11 @@
 //   term    a command the Terminal window runs:    TERM.run(line)
 //   sync    the company's copies: `company sync`, or with op prefix the company's word first (DOCK.syncCompany); the answer is a promise
 //   copilot 1.8.x, the board's own agent host:     signin (gh's web sign-in, POST /api/gh), or a download page (`url`)
-//   vscode  the VS Code button:                    open, open with identities, restart, or restart with identities (vsAct)
+//   identities the main Windows account of the agent host, when several are saved (H6): the picker of servers.js
 // Needs common.js (h, t), serve.js (SERVE). The other windows are used when the page has them.
 "use strict";
 
 const READY = (function () {
-  // The picker is held until the board sees VS Code gone: it refuses to open one while a VS Code of this folder is open.
-  function waitGone() {
-    const until = Date.now() + 15000 * Math.max(1, Number(DATA.pace) || 1);
-    return new Promise((resolve) => {
-      const look = () => SERVE.call("/api/ready", {}, 8).then((data) => {
-        const vs = (data.checks || []).find((line) => line.id === "vscode");
-        const up = vs && (vs.state === "ok" || vs.why === "env" || vs.why === "unseen");  // connected, though not started with this copy's settings (Q2): still there until it has gone
-        if (!up || Date.now() > until) resolve(); else setTimeout(look, 700);
-      }, () => resolve());
-      look();
-    });
-  }
-  // The VS Code button (1.7.38). Open and Restart: ask VS Code to quit the normal way if it runs, wait, open it again.
-  // With identities the person chooses first and VS Code is closed only after that choice is confirmed (T1-14b: a choice that is cancelled changes nothing, VS Code stays open): the picker (servers.js) is up at once,
-  // and its button quits VS Code (`quit` below, the same quit as Restart, with the same question when an agent works), waits until the board sees it gone, and opens it with the identities.
-  // hooks: {onState(view, willOpen), opened()}; `willOpen`: this restart ends with VS Code open (not with the picker). The promise ends when the restart has ended (open) or the picker is up (identities);
-  // it fails with the reason (`quiet`: the person cancelled).
-  // Open with identities (1.7.42): no VS Code runs, so the picker opens it with no quit first; its "Open without identities" is the plain Open.
-  function vsAct(kind, hooks) {
-    const given = hooks || {};
-    if (kind === "open-identities" && typeof SERVERS !== "undefined") {
-      return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, null, () => {}));  // H5b: the same choice for the agent host
-    }
-    if (kind === "identities" && typeof SERVERS !== "undefined") {
-      return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, null, () => {}));  // H5b: the agent host restarts with the choice: VS Code is not quit first
-    }
-    return SERVE.restartVS({open: true, onState: (view) => { if (given.onState) given.onState(view, true); }}).then((view) => { if (given.opened) given.opened(); return view; });
-  }
-
   function go(fix, hooks) {
     if (!fix || !fix.to) return;
     const given = hooks || {};
@@ -50,7 +21,7 @@ const READY = (function () {
     else if (fix.to === "sync" && typeof DOCK !== "undefined") return DOCK.syncCompany(fix.op).then(() => { if (given.done) given.done(); });  // an error goes to the caller: the button says it
     else if (fix.to === "copilot" && fix.kind === "signin") return SERVE.post("/api/gh", {do: "login"}).then(() => { if (given.done) given.done(); });  // 1.8.x: gh's web sign-in; the Enter screen shows its code
     else if (fix.to === "copilot" && fix.url) window.open(fix.url, "_blank", "noopener");  // GitHub's or VS Code's own download page: the board downloads nothing
-    else if (fix.to === "vscode") vsAct(fix.kind, given).catch((error) => { if (given.fail && !error.quiet) given.fail(error); });
+    else if (fix.to === "identities" && typeof SERVERS !== "undefined") SERVERS.choose(() => { if (given.done) given.done(); });
     else if (fix.to === "doctor") return SERVE.post("/api/doctor-again", {}).then(() => { if (given.done) given.done(); });  // 1.7.45: doctor runs now; the line shows its progress at the next look
     return undefined;
   }
@@ -74,15 +45,6 @@ const READY = (function () {
     const node = h("button", {type: "button", class: "en-link"}, text || fix.label || "");
     node.addEventListener("click", () => wait(node, fix, hooks));
     return node;
-  }
-
-  // The words of a restart that is going on or that failed, for a note under the VS Code line. "" when there is nothing to say.
-  function restartNote(view) {
-    if (!view) return "";
-    if (view.state === "quitting") return t("board.vs.restart.quitting");
-    if (view.state === "opening") return t("board.vs.restart.opening");
-    if (view.state === "failed") return SERVE.restartWhy(view.why, view.names);
-    return "";
   }
 
   // Accept the guardrail files as they are now (1.7.39): the files are listed first; the person accepts in a window. After a new zip of the same version, or a change the person made on purpose.
@@ -113,5 +75,5 @@ const READY = (function () {
     return b;
   }
 
-  return {go, button, link, vsAct, restartNote, acceptFiles, acceptButton};
+  return {go, button, link, acceptFiles, acceptButton};
 })();

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import support  # noqa: F401 - the engine on sys.path
 from support import HarnessTestCase, pre_tool, use_packs
@@ -78,36 +79,24 @@ class OwnConnectionFormTests(ConnectionsCase):
 
 
 class AllConnectionsTests(FindCase):
-    """C12 FB-3: every connection counts and is found; the ones VS Code was not opened with are marked and run through `harness as`."""
+    """C12 FB-3, H6: every connection counts and is found; the agent host holds the saved identities, only the ones it cannot hold run through `harness as`."""
 
-    OPENED = {"direct": ["orders-dev"], "wrap": []}
+    WRAPPED = {"chosen": ["orders-dev", "hr-dev"], "direct": ["orders-dev"], "wrap": ["hr-dev"], "primary": "", "accounts": []}
 
-    def opened(self) -> None:
-        import json
-
-        path = self.root / connections.STATE_FILE
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.OPENED), encoding="utf-8")
-
-    def test_the_calls_of_the_connections_the_window_was_not_opened_with_go_through_harness_as(self) -> None:
-        self.opened()
-        window = {one["alias"]: one for one in connections.calls(self.root)}
-        every = {one["alias"]: one for one in connections.calls(self.root, every=True)}
-        self.assertEqual(sorted(window), ["orders-dev"])
-        self.assertEqual(sorted(every), ["ado", "hr-dev", "orders-dev", "orders-ist"])
+    def test_every_connection_is_listed_and_only_the_wrapped_ones_go_through_harness_as(self) -> None:
+        plain = {one["alias"]: one for one in connections.calls(self.root, every=True)}
+        self.assertEqual(sorted(plain), ["ado", "hr-dev", "orders-dev", "orders-ist"])
+        self.assertFalse(any(one["call"].startswith("harness as ") for one in plain.values()), "nothing is wrapped when the host holds what is saved")
+        with mock.patch.object(connections, "state", return_value=self.WRAPPED):
+            every = {one["alias"]: one for one in connections.calls(self.root, every=True)}
         self.assertTrue(every["hr-dev"]["call"].startswith("harness as hr-dev -- "))
+        self.assertFalse(every["orders-dev"]["call"].startswith("harness as "))
         self.assertNotIn("away", every["orders-dev"])
-        self.assertEqual(connections.away_aliases(self.root), ["orders-ist", "hr-dev", "ado"])
 
-    def test_a_prompt_that_names_one_of_them_gets_its_details_with_the_prefix(self) -> None:
-        self.opened()
+    def test_a_prompt_that_names_one_of_them_gets_its_details_without_the_prefix_when_the_host_holds_it(self) -> None:
         said = self.prompt("look at hr-dev please")
         self.assertIn("- hr-dev (DEV): SQL Server", said)
-        self.assertIn("harness as hr-dev --", said)
-
-    def test_a_window_opened_with_nothing_said_marks_nothing(self) -> None:
-        self.assertEqual(connections.away_aliases(self.root), [])
-        self.assertNotIn(messages.text("connections.away.context", n=1), self.start())
+        self.assertNotIn("harness as hr-dev --", said)
 
 
 class OldCodeTests(unittest.TestCase):

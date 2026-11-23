@@ -10,7 +10,6 @@ import tempfile
 import io
 import threading
 import time
-import types
 import unittest
 import sys
 from pathlib import Path
@@ -23,8 +22,8 @@ from test_ahp import FakeHost, TOKEN
 from test_boardserve import ServeCase
 from test_vslink import until
 
-from core import ahp, launchenv, messages, render
-from modules.task import boardserve, ready, taskhtml, vslink
+from core import ahp, messages
+from modules.task import ready, taskhtml, vslink
 
 WEB = taskhtml.WEB
 
@@ -49,17 +48,42 @@ class SetupLineTests(unittest.TestCase):
         self.assertTrue(ready.setup_done(self.root))
 
 
-class StubLink:
-    """What `Ready` reads of the link: status, and the Copilot cache."""
+SIGNED = {"gh": "/usr/bin/gh", "version": "2.0.0", "signed_in": True, "login": "someone", "why": ""}
 
-    def __init__(self, status: Dict[str, Any], copilot: Dict[str, Any] = None) -> None:
-        self._status, self._copilot = status, copilot or {"models": 3, "problem": ""}
+
+def setUpModule() -> None:  # noqa: N802 - gh is signed in unless a test says otherwise (HARNESS_GH=off has no gh at all)
+    patcher = mock.patch.object(ready.ghauth, "check", side_effect=lambda root=None, extra=None: dict(SIGNED))
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
+class StubLink:
+    """What `Ready` reads of the link (H6: the board's own agent host): VS Code installed, the host, the sign-in, the connection and the models."""
+
+    def __init__(self, status: Dict[str, Any], copilot: Dict[str, Any] = None, installed: bool = True, host: str = "ready") -> None:
+        self._status, self._copilot = status, copilot or {"models": 3}
+        self._installed, self._host = installed, host
 
     def status(self) -> Dict[str, Any]:
         return self._status
 
     def copilot(self) -> Dict[str, Any]:
         return self._copilot
+
+    def installed(self) -> Dict[str, Any]:
+        return {"found": self._installed, "version": "1.150.0" if self._installed else "", "off": False}
+
+    def host_state(self) -> Dict[str, Any]:
+        return {"state": self._host, "version": "1.150.0", "seconds": 3.0, "starts": 1}
+
+    def login_state(self) -> Dict[str, Any]:
+        return {"state": "none"}
+
+    def signin_state(self) -> Dict[str, Any]:
+        return {"state": "handed", "login": "", "ago": 1.0}
+
+    def sign_in_again(self) -> None:
+        pass
 
 
 def clean(_root: Path) -> Dict[str, Any]:
@@ -82,87 +106,6 @@ UP = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
 
 def item(found: Dict[str, Any], key: str) -> Dict[str, Any]:
     return next(entry for entry in found["optional"]["items"] if entry["key"] == key)
-
-
-class HostLink(StubLink):
-    """A link that knows the process of the editor's agent host (`code agent endpoints`, 1.7.38)."""
-
-    def __init__(self, status: Dict[str, Any], pid: Any = 4711) -> None:
-        super().__init__(status)
-        self.pid = pid
-
-    def host(self) -> Any:
-        return self.pid
-
-
-class SettingsOfThisCopyTests(TaskCase):
-    """Q2: the VS Code line is red, blocks Enter and offers the restart when the VS Code that is connected was not started with the settings of this copy; no settings, no check."""
-
-    def answer(self, verdict: Dict[str, Any], link: Any = None, clock: Any = None) -> Any:
-        check = ready.Ready(self.root, link or HostLink(UP), clean, clock=clock) if clock else ready.Ready(self.root, link or HostLink(UP), clean)
-        with mock.patch.object(ready.launchenv, "carried", return_value=verdict) as carried:
-            self.carried = carried
-            return settled(check)
-
-    def test_a_vscode_started_without_the_settings_is_red_blocks_enter_and_the_button_restarts_it(self) -> None:
-        found = self.answer({"state": "missing", "by": "env", "missing": ["PATH /x/bin", "REQUESTS_CA_BUNDLE"]})
-        vscode = line(found, "vscode")
-        self.assertEqual((vscode["state"], vscode["why"], vscode["level"], vscode["env"]), ("fail", "env", "red", "missing"))
-        self.assertEqual(vscode["detail"], f"{messages.text('ready.vs.lacks.folders')} x/bin; {messages.text('ready.vs.lacks.bundle')}")
-        self.assertFalse(found["ready"], "Enter stays off")
-        self.assertEqual(line(found, "copilot")["state"], "ok", "Copilot is judged by its connection, not by the settings")
-        problem = next(item for item in found["problems"]["required"] if item["key"] == "vscode")
-        self.assertEqual((problem["level"], problem["fix"]["to"], problem["fix"]["kind"]), ("red", "vscode", "restart"))
-        self.assertEqual(problem["text"], messages.text("ready.r.vscode.env"))
-        self.assertEqual(problem["code"], "env", "the New task dialog shows this line by the code, with the button, and does not block")
-        self.assertTrue(found["vscode_button"]["up"])  # it runs: the button is Restart, not Open
-
-    def test_a_vscode_the_board_cannot_vouch_for_says_so_in_its_own_words(self) -> None:
-        found = self.answer({"state": "unseen", "by": "none", "missing": []})
-        vscode = line(found, "vscode")
-        self.assertEqual((vscode["state"], vscode["why"], vscode["level"]), ("fail", "unseen", "red"))
-        self.assertFalse(found["ready"])
-        problem = next(item for item in found["problems"]["required"] if item["key"] == "vscode")
-        self.assertEqual((problem["text"], problem["code"]), (messages.text("ready.r.vscode.unseen"), "unseen"))
-
-    def test_a_vscode_with_the_settings_and_a_copy_with_none_are_green(self) -> None:
-        for verdict in ({"state": "carried", "by": "env", "missing": []}, {"state": "free", "by": "none", "missing": []}):
-            found = self.answer(verdict)
-            self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["level"]), ("ok", "ok"), verdict)
-            self.assertTrue(found["ready"], verdict)
-        self.assertNotIn("env", line(self.answer({"state": "free", "by": "none", "missing": []}), "vscode"))
-
-    def test_no_known_host_means_no_judgment_and_a_vscode_that_is_not_connected_is_told_as_before(self) -> None:
-        found = self.answer({"state": "missing", "by": "env", "missing": ["PATH x"]}, link=StubLink(UP))  # a link with no `host`
-        self.assertEqual((line(found, "vscode")["state"], found["ready"]), ("ok", True))
-        found = self.answer({"state": "missing", "by": "env", "missing": ["PATH x"]}, link=HostLink({"ready": False, "bound": 0, "unbound": 0, "why": "none"}, pid=None))
-        self.assertEqual((line(found, "vscode")["why"], found["ready"]), ("none", False))
-        self.carried.assert_not_called()
-
-    def test_the_answer_is_kept_a_few_seconds_and_a_new_host_is_asked_at_once(self) -> None:
-        now = [100.0]
-        link = HostLink(UP)
-        check = ready.Ready(self.root, link, clean, clock=lambda: now[0])
-        with mock.patch.object(ready.launchenv, "carried", return_value={"state": "carried", "by": "env", "missing": []}) as carried:
-            settled(check)
-            check.answer(True)
-            self.assertEqual(carried.call_count, 1)
-            now[0] += ready.ENV_KEEP + 1
-            check.answer(True)
-            self.assertEqual(carried.call_count, 2)
-            link.pid = 4712  # VS Code was started again
-            check.answer(True)
-            self.assertEqual(carried.call_count, 3)
-
-    def test_a_hooks_old_word_does_not_count_against_a_vscode_that_was_seen_to_carry_the_settings(self) -> None:
-        wrong = {"rows": [], "checking": False, "launch": False, "env_wrong": True}  # what the hook's old record makes of the connections row
-        with mock.patch.object(ready.Ready, "connection_facts", return_value=wrong):
-            found = self.answer({"state": "carried", "by": "env", "missing": []})
-            self.assertEqual((line(found, "vscode")["level"], "env_wrong" in line(found, "vscode")), ("ok", False))
-            with mock.patch.object(ready.launchenv, "carried") as carried:  # a link that does not know its host: the old yellow word stays
-                found = settled(ready.Ready(self.root, StubLink(UP), clean))
-            carried.assert_not_called()
-            self.assertEqual((line(found, "vscode")["level"], line(found, "vscode")["env_wrong"], found["ready"]), ("yellow", True, True))
 
 
 class ReadinessTests(TaskCase):
@@ -455,40 +398,21 @@ class ReadinessTests(TaskCase):
         source = (support.REPO / ".harness" / "engine" / "modules" / "task" / "boardserve.py").read_text(encoding="utf-8")
         self.assertIn("        board.ready.start_doctor()  # the Enter screen waits for it", source)  # only without `ready`: the tests start no doctor of their own
 
-    def test_vscode_states(self) -> None:
-        cases = {"none": ("fail", True), "off": ("fail", False), "no-cli": ("fail", False), "cli-failed": ("fail", False), "many": ("fail", False), "starting": ("wait", True), "lost": ("wait", True), "error": ("wait", True), "cli-slow": ("wait", True)}
-        for why, (state, can_open) in cases.items():
-            found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why}), clean))
-            self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"], line(found, "vscode")["open"]), (state, why, can_open), why)
-            self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("wait", "vscode"), why)  # Copilot waits for VS Code
-            self.assertFalse(found["ready"], why)  # 1.7.38: VS Code open for this copy is required
-            self.assertEqual(line(found, "vscode")["level"], "red" if state == "fail" else "yellow", why)
-            problems = found["problems"]["required"]
-            self.assertEqual([entry["key"] for entry in problems], ["vscode"], why)  # Copilot waiting for it is no problem of its own
-            self.assertEqual(problems[0]["level"], "red" if state == "fail" else "yellow", why)
-            self.assertEqual(bool(problems[0]["fix"]), why == "none", why)  # only a VS Code that is not running has the button that mends it
-
-    def test_a_vs_code_window_that_is_open_is_getting_ready_not_closed(self) -> None:
-        """1.8.8: the window is open, its host is not up yet (about a minute on a work computer): yellow with the time waited, no button that restarts it; after HOST_WAIT red, with the button."""
-        for why in ("none", "starting", "error", "cli-slow"):
-            found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": 42}), clean))
-            vs = line(found, "vscode")
-            self.assertEqual((vs["state"], vs["why"], vs["since"], vs["level"]), ("wait", "getting-ready", 42, "yellow"), why)
-            problem = found["problems"]["required"][0]
-            self.assertEqual((problem["level"], problem["fix"]), ("yellow", {}), why)
-            self.assertIn(render.duration(42), problem["why"], why)
-            found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": int(ready.HOST_WAIT) + 5}), clean))
-            vs = line(found, "vscode")
-            self.assertEqual((vs["state"], vs["why"], vs["level"]), ("fail", "no-host", "red"), why)
-            problem = found["problems"]["required"][0]
-            self.assertEqual((problem["level"], problem["fix"]["to"]), ("red", "vscode"), why)
-            self.assertIn(render.duration(int(ready.HOST_WAIT) + 5), problem["why"], why)
-        for why, state in (("many", "fail"), ("cli-failed", "fail"), ("lost", "wait")):  # a window being open changes nothing for these
-            found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": 42}), clean))
-            self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), (state, why))
+    def test_vscode_and_copilot_lines_follow_the_agent_host(self) -> None:
+        """H6: VS Code only has to be installed; Copilot waits while the host starts or the link connects, and is ok once the host lists a model."""
+        found = settled(ready.Ready(self.root, StubLink(UP, installed=False), clean))
+        self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"], line(found, "copilot")["why"]), ("fail", "no-code", "vscode"))
+        self.assertEqual([(entry["key"], entry["fix"]["kind"]) for entry in found["problems"]["required"]], [("vscode", "get-vscode")])  # Copilot waiting for it is no problem of its own
+        for host, why in (("starting", "host-starting"), ("preparing", "host-preparing")):
+            found = settled(ready.Ready(self.root, StubLink(UP, host=host), clean))
+            self.assertEqual((line(found, "vscode")["state"], line(found, "copilot")["state"], line(found, "copilot")["why"]), ("ok", "wait", why))
+        down = {"ready": False, "bound": 0, "unbound": 0, "why": "lost"}
+        found = settled(ready.Ready(self.root, StubLink(down), clean))
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"], found["ready"]), ("wait", "connecting", False))
+        self.assertEqual(line(found, "copilot")["level"], "yellow")
 
     def test_pace_grows_the_waits_and_a_slow_code_command_stays_yellow(self) -> None:
-        """1.8.15: at a factor of 5 the host wait, the first wait and the default doctor deadline are 5 times the base (the doctor one stops at 1800); VS Code still starting or `cli-slow` is yellow, not red."""
+        """1.8.15: at a factor of 5 the first wait and the default doctor deadline are 5 times the base (the doctor one stops at 1800)."""
         from core import pace
         with mock.patch.object(pace, "factor", return_value=5.0):
             with mock.patch.object(ready.config, "policy_or_empty", return_value={}):
@@ -497,16 +421,6 @@ class ReadinessTests(TaskCase):
                 self.assertEqual(ready.doctor_seconds(self.root), 1500.0)
             with mock.patch.object(ready.config, "policy_or_empty", return_value={"board": {"doctor_seconds": 600}}):
                 self.assertEqual(ready.doctor_seconds(self.root), 1800.0)  # scaled, then kept under the top bound
-            for why in ("starting", "cli-slow"):
-                for open_for in (None, int(ready.HOST_WAIT) + 5):  # past the base wait, still inside the scaled one
-                    status = {"ready": False, "bound": 0, "unbound": 0, "why": why}
-                    if open_for is not None:
-                        status["open_for"] = open_for
-                    found = settled(ready.Ready(self.root, StubLink(status), clean))
-                    vs = line(found, "vscode")
-                    self.assertEqual((vs["state"], vs["level"]), ("wait", "yellow"), (why, open_for))
-                found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why, "open_for": int(ready.HOST_WAIT * 5) + 5}), clean))
-                self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), ("fail", "no-host"))
             one = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean)
             one.found = {"errors": 1, "failed": "x", "timeout": 5}
             self.assertEqual(one.next_wait(), ready.RETRY_TIMEOUT * 5)
@@ -514,25 +428,19 @@ class ReadinessTests(TaskCase):
             with mock.patch.object(ready.config, "policy_or_empty", return_value={}):
                 self.assertEqual(ready.doctor_seconds(self.root), ready.DOCTOR_TIMEOUT)
 
-    def test_copilot_needs_a_model_and_a_host_that_says_it_is_ready(self) -> None:
-        up = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
-        for copilot, why in (({"models": 0, "problem": ""}, "nomodel"), ({"models": 0, "problem": "provider"}, "provider"), ({"models": 2, "problem": "client"}, "client")):
-            found = settled(ready.Ready(self.root, StubLink(up, copilot), clean))
-            self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"], found["ready"]), ("fail", why, False))
-            self.assertEqual(line(found, "copilot")["level"], "red")
-            self.assertEqual([(entry["key"], entry["text"]) for entry in found["problems"]["required"]], [("copilot", messages.text("ready.r.copilot"))])
-        found = settled(ready.Ready(self.root, StubLink(up, {"models": 2, "problem": ""}), clean))
+    def test_copilot_needs_a_model_from_the_host(self) -> None:
+        found = settled(ready.Ready(self.root, StubLink(UP, {"models": 0}), clean))
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"], found["ready"]), ("wait", "models", False))
+        found = settled(ready.Ready(self.root, StubLink(UP, {"models": 2}), clean))
         self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["n"]), ("ok", 2))
 
     def test_every_required_line_blocks_the_way_in(self) -> None:
-        down = {"ready": False, "bound": 0, "unbound": 0, "why": "none"}
-
         def boom(_root: Path) -> Dict[str, Any]:
             return {"errors": 3, "first": "bad", "failed": ""}
 
-        check = ready.Ready(self.root, StubLink(down, {"models": 0, "problem": "provider"}), boom)
+        check = ready.Ready(self.root, StubLink(UP, installed=False), boom)
         found = settled(check)
-        self.assertFalse(found["ready"])  # VS Code not open, Copilot silent, doctor red: all of them stop the way in
+        self.assertFalse(found["ready"])  # VS Code not installed, Copilot waiting, doctor red: all of them stop the way in
         self.assertEqual([entry["id"] for entry in found["checks"] if entry["blocking"]], ["setup", "paired", "doctor", "vscode", "copilot"])
         self.assertEqual((line(found, "doctor")["level"], line(found, "vscode")["level"], line(found, "copilot")["level"]), ("red", "red", "yellow"))
         self.assertEqual([entry["key"] for entry in found["problems"]["required"]], ["doctor", "vscode"])
@@ -544,7 +452,7 @@ class ReadinessTests(TaskCase):
         found = settled(ready.Ready(self.root, StubLink(UP), clean))
         self.assertTrue(found["ready"])  # no knowledge base, no repositories, no connections: it is still ready
         optional = found["optional"]
-        self.assertEqual((optional["kb"], optional["count"], optional["identities"]), (False, len(found["problems"]["optional"]), 0))
+        self.assertEqual((optional["kb"], optional["count"]), (False, len(found["problems"]["optional"])))
         self.assertEqual(found["problems"]["optional"][0]["key"], "kb")  # no knowledge base is the first problem that belongs here
         self.assertEqual(found["problems"]["optional"][0]["row"], "kb")
 
@@ -568,100 +476,23 @@ class ReadinessTests(TaskCase):
         self.assertEqual([(entry["key"], entry["fix"]) for entry in found["problems"]["required"]], [("paired", {})])
         self.assertTrue(settled(ready.Ready(self.root, StubLink(UP), clean))["ready"])
 
-    def test_a_new_copy_says_get_ready_and_a_new_short_command_says_restart(self) -> None:
+    def test_a_new_copy_says_get_ready(self) -> None:
         found = settled(ready.Ready(self.root, StubLink(UP), clean))
         self.assertEqual(found["problems"]["required"], [])
         with mock.patch.object(ready, "setup_done", return_value=False):
             found = settled(ready.Ready(self.root, StubLink(UP), clean))
         self.assertEqual([(entry["key"], entry["fix"]["to"], entry["fix"]["sec"]) for entry in found["problems"]["required"]], [("setup", "setup", "you")])
         self.assertFalse(found["ready"])
-        link = types.SimpleNamespace(drops=lambda: 0, status=lambda: UP, copilot=lambda: {"models": 1, "problem": ""})
-        check = ready.Ready(self.root, link, clean)
-        check.wait_reopen()
-        found = settled(check)
-        self.assertEqual([(entry["key"], entry["fix"]["to"]) for entry in found["problems"]["required"]], [("setup", "vscode")])  # the Restart VS Code button is the way
 
     def test_a_check_that_breaks_is_a_failed_line_and_the_answer_still_comes(self) -> None:
         class Broken(StubLink):
-            def status(self) -> Dict[str, Any]:
+            def installed(self) -> Dict[str, Any]:
                 raise OSError("the cache is gone")
 
         found = settled(ready.Ready(self.root, Broken({}), clean))
         self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), ("fail", "error"))
         self.assertIn("the cache is gone", line(found, "vscode")["detail"])
         self.assertFalse(found["ready"])
-
-    def test_the_vscode_button_is_open_restart_or_restart_with_identities(self) -> None:
-        """Always there. Open: no VS Code runs. Restart: one runs (for this copy, or any, by the probe). With identities: and a connection has a sign-in saved that a window holds and a test that passed.
-        Open with identities (1.7.42): none runs and there is such a sign-in, so the first open carries them and VS Code does not start twice."""
-        down = {"ready": False, "bound": 0, "unbound": 0, "why": "none"}
-        for status, running, identities, kind in ((down, False, 0, "open"), (down, True, 0, "restart"), (UP, None, 0, "restart"), (UP, False, 3, "identities"), (down, False, 3, "open-identities"),
-                                                    ({"ready": False, "bound": 0, "unbound": 0, "why": "starting"}, False, 0, "restart")):
-            check = ready.Ready(self.root, StubLink(status), clean, running=ready.Running(probe=lambda value=running: bool(value)))
-            check.vs_running.look()
-            vscode = check.vscode()
-            button = check.vscode_button(vscode, identities)
-            self.assertEqual((button["kind"], button["up"]), (kind, vscode["state"] in ("ok", "wait") or bool(running)), (status["why"], running, identities))
-            self.assertEqual(button["label"], messages.text("ready.vs." + kind))
-        self.assertEqual([messages.table("en")["ready.vs." + kind] for kind in ("open", "open-identities", "restart", "identities")], ["Open VS Code", "Agent host identities", "Restart VS Code", "Agent host identities"])  # H5b: the identities are the agent host's
-
-    def test_the_words_of_the_vscode_button_do_not_jump_while_the_answer_of_the_probe_does(self) -> None:
-        """1.7.38: with VS Code closed the button went Open, Restart with identities, Open: a helper process came and went. A new answer counts after it stood BUTTON_HOLD seconds."""
-        down = {"ready": False, "bound": 0, "unbound": 0, "why": "none"}
-        now = [100.0]
-        seen = {"value": False}
-        running = ready.Running(probe=lambda: seen["value"], clock=lambda: now[0])
-        check = ready.Ready(self.root, StubLink(down), clean, clock=lambda: now[0], running=running)
-        kinds = []
-
-        def look(value: bool, seconds: float = 0.0) -> str:
-            now[0] += seconds
-            seen["value"] = value
-            running.forget()
-            running.look()
-            kind = check.vscode_button(check.vscode(), 3)["kind"]
-            kinds.append(kind)
-            return kind
-
-        self.assertEqual(look(False), "open-identities")
-        self.assertEqual(look(True, 3), "open-identities")  # a helper shows up for a moment
-        self.assertEqual(look(False, 3), "open-identities")
-        self.assertEqual(look(True, 3), "open-identities")
-        self.assertEqual(look(True, ready.BUTTON_HOLD - 1), "open-identities")  # it stood, but not long enough yet
-        self.assertEqual(look(True, 2), "identities")  # it stands: a VS Code does run
-        self.assertEqual(look(False, 3), "identities")  # and one that goes away for a moment changes nothing
-        self.assertEqual(look(False, ready.BUTTON_HOLD), "open-identities")
-        up = {"ready": True, "bound": 1, "unbound": 0, "why": "ok"}
-        check.link = StubLink(up)
-        self.assertEqual(check.vscode_button(check.vscode(), 3)["kind"], "identities")  # a VS Code that is linked is never in doubt
-
-    def test_whether_any_vscode_runs_is_looked_at_in_a_thread_and_kept_for_a_few_seconds(self) -> None:
-        calls, now = [], [0.0]
-        gate = threading.Event()
-
-        def probe() -> bool:
-            calls.append(threading.current_thread().name)
-            gate.wait(5)
-            return True
-
-        running = ready.Running(probe=probe, clock=lambda: now[0])
-        begun = time.monotonic()
-        self.assertIsNone(running.get())  # not known yet: the poll did not wait for it
-        self.assertLess(time.monotonic() - begun, 1.0)
-        running.get()
-        gate.set()
-        self.assertTrue(until(lambda: running.value is True))
-        now[0] += ready.RUNNING_KEEP - 1
-        self.assertTrue(running.get())
-        self.assertEqual(len(calls), 1)  # kept
-        now[0] += 2
-        running.get()
-        self.assertTrue(until(lambda: len(calls) == 2))
-        self.assertEqual(calls[0], "ready-running")
-        running.forget()
-        running.probe = lambda: (_ for _ in ()).throw(OSError("gone"))
-        running.get()
-        self.assertTrue(until(lambda: running.value is None and not running.busy))  # a probe that breaks says nothing
 
     def test_the_hover_table_goes_by_kind_then_environment_then_name_like_the_connections_window(self) -> None:
         check = ready.Ready(self.root, StubLink(UP), clean)
@@ -672,48 +503,29 @@ class ReadinessTests(TaskCase):
         self.assertEqual([(row["system"], row["env"]) for row in got["rows"]], [("ado", ""), ("b-sql", "dev"), ("b-sql", "ist"), ("z-sql", "dev"), ("a-sql", "ist")])
         self.assertEqual([item["name"] for item in got["names"]], ["ado", "b-sql", "z-sql", "a-sql"], "the names of the row go in the same order")
 
-    def test_the_answer_carries_the_restart_that_is_going_on(self) -> None:
-        check = ready.Ready(self.root, StubLink(UP), clean)
-        self.assertNotIn("restart", settled(check))
-        check.restart = types.SimpleNamespace(view=lambda: {"state": "quitting", "why": "", "since": 1.0})
-        self.assertEqual(settled(check)["restart"]["state"], "quitting")
-
-    def test_a_connection_that_vscode_was_not_given_the_settings_for_makes_the_vscode_line_yellow(self) -> None:
-        """1.7.24, kept: a hook found VS Code started without this computer's settings. The line is yellow and says so; the way out is the Restart VS Code button."""
-        from core import launchenv, reach
+    def test_a_connection_row_says_what_its_probe_found_and_why_a_call_was_refused(self) -> None:
+        """1.7.24, kept without the VS Code part (H6): the rows of the connections are what the probes and the calls found."""
+        from core import reach
         from modules.gate import external
 
         policies = self.root / ".harness" / "policies"
         policies.joinpath("tools.json").write_text(json.dumps({"schema_version": 1, "python": {}, "systems": {}}), encoding="utf-8")
         probe = f"{sys.executable} -c \"print('CORP\\\\me')\""
         systems = {"sql": {"reach": {"cli": "sqlcmd"}, "env_from": [{"pattern": "dev", "env": "dev"}, {"pattern": "ist", "env": "ist"}],
-                           "needs": {"probes": {"dev": probe, "ist": probe}, "expect": r"^(CORP\\\S+)", "launch": "Start VS Code with start-vscode.cmd."}}}
+                           "needs": {"probes": {"dev": probe, "ist": probe}, "expect": r"^(CORP\\\S+)", "launch": "Save the sign-in in Connections."}}}
         policies.joinpath("tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
         board = lambda: settled(ready.Ready(self.root, StubLink(UP), clean))  # noqa: E731
         got = item(board(), "connections")
-        self.assertEqual((got["rows"], got["env_wrong"]), ([{"system": "sql", "env": "dev", "state": "unknown", "reason": "", "at": "", "pack": ""}, {"system": "sql", "env": "ist", "state": "unknown", "reason": "", "at": "", "pack": ""}], False))
+        self.assertEqual(got["rows"], [{"system": "sql", "env": "dev", "state": "unknown", "reason": "", "at": "", "pack": ""}, {"system": "sql", "env": "ist", "state": "unknown", "reason": "", "at": "", "pack": ""}])
+        self.assertNotIn("env_wrong", got)
+        self.assertNotIn("launch", got)
         reach.probe_all(self.root, systems, lambda command: external.run_probe(command, self.root))
         got = item(board(), "connections")
         self.assertEqual([(row["env"], row["state"], row["reason"]) for row in got["rows"]], [("dev", "ok", "CORP\\me"), ("ist", "ok", "CORP\\me")])
         reach.note_call(self.root, "sql", dict(systems["sql"], needs=dict(systems["sql"]["needs"], denied="Login failed")), "ist", "Msg 18456, Login failed for user", False)
-        with mock.patch.object(ready.reach, "launch_script", return_value=Path("start-vscode.cmd")):
-            got = item(board(), "connections")
+        got = item(board(), "connections")
         self.assertEqual([row["state"] for row in got["rows"]], ["ok", "down"])
-        self.assertIn("start-vscode.cmd", got["rows"][1]["reason"])
-        self.assertTrue(got["launch"])  # the company's launch script can start VS Code with an identity (Windows)
-        self.assertFalse(got["env_wrong"])
-        seen = self.root / launchenv.SEEN  # a hook found VS Code started without the settings of this computer
-        seen.parent.mkdir(parents=True, exist_ok=True)
-        seen.write_text(json.dumps({"ok": False, "missing": ["PATH"]}), encoding="utf-8")
-        found = board()
-        self.assertTrue(item(found, "connections")["env_wrong"])
-        self.assertEqual((line(found, "vscode")["level"], line(found, "vscode")["env_wrong"]), ("yellow", True))
-        self.assertTrue(found["ready"])  # open, and only without the settings: the button restarts it
-        from modules.task import boardserve
-
-        self.assertTrue(boardserve.servers_view(self.root, True)["env_wrong"])
-        seen.write_text(json.dumps({"ok": True, "missing": []}), encoding="utf-8")
-        self.assertFalse(boardserve.servers_view(self.root, True)["env_wrong"])
+        self.assertIn("Save the sign-in in Connections.", got["rows"][1]["reason"])
 
 
 class StalledCommandTests(TaskCase):
@@ -732,9 +544,7 @@ class StalledCommandTests(TaskCase):
         for _ in range(5):
             found = check.answer(True)
         self.assertLess(time.monotonic() - begun, 2.0)  # five polls, none waited on the command
-        self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), ("wait", "starting"))
-        self.assertEqual(link.open_window(), "queued")  # the Open VS Code button answers at once too
-        self.assertLess(time.monotonic() - begun, 3.0)
+        self.assertFalse(found["ready"])
 
 
 class FakeHostReadinessTests(TaskCase):
@@ -766,6 +576,8 @@ class FakeHostReadinessTests(TaskCase):
         # a task whose session id is in no chat: the board reads the chat of this folder to look for it
         self.new()
         made = vslink.VsLink(self.root, opener=opener, persist=False, turn=0.05, backoff=ahp.Backoff(0.05, 0.2))
+        made.installed = lambda: {"found": True, "version": "1.150.0", "off": False}  # type: ignore[method-assign] - no `code` in the tests: the host is the fake one
+        made.host_state = lambda: {"state": "ready", "version": "1.150.0"}  # type: ignore[method-assign]
         self.addCleanup(made.stop)
         made.start()
         self.assertTrue(until(lambda: made.status()["ready"]))
@@ -777,23 +589,10 @@ class FakeHostReadinessTests(TaskCase):
         self.assertEqual((line(found, "vscode")["state"], line(found, "copilot")["state"], line(found, "copilot")["n"]), ("ok", "ok", 1))
         self.assertTrue(found["ready"])
 
-    def test_a_host_with_no_allowed_model_says_to_sign_in(self) -> None:
+    def test_a_host_with_no_allowed_model_waits_for_one(self) -> None:
         link = self.make([{"id": "off-one", "policyState": "disabled"}])
         found = settled(ready.Ready(self.root, link, clean))
-        self.assertEqual((line(found, "vscode")["state"], line(found, "copilot")["state"], line(found, "copilot")["why"]), ("ok", "fail", "nomodel"))
-
-    def test_the_hosts_own_words_for_a_copilot_that_is_not_signed_in_are_recognised(self) -> None:
-        for said, why in (("Provider copilotcli is not ready", "provider"), ("Client is not connected. Call start() first.", "client")):
-            self.setUp()
-            link = self.make([{"id": "gpt-x", "policyState": "enabled"}], fail=said)
-            link.host_said(ahp.AhpError(said))  # a chat subscribe that the host refused with these words
-            found = settled(ready.Ready(self.root, link, clean))
-            self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", why), said)
-        link.host_said(ahp.AhpError("something else"))
-        self.assertEqual(link.copilot()["problem"], "client")  # another error does not change it
-        link.problem = ("provider", time.monotonic() - vslink.PROBLEM_FOR - 1)
-        self.assertEqual(link.copilot()["problem"], "")  # and an old one is forgotten
-
+        self.assertEqual((line(found, "vscode")["state"], line(found, "copilot")["state"], line(found, "copilot")["why"]), ("ok", "wait", "models"))
 
 class ServedReadTests(ServeCase):
     def test_ready_is_a_read_with_the_headers_of_the_other_reads_and_tells_a_browser_that_is_not_paired(self) -> None:
@@ -850,7 +649,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("DATA.rows", code)  # status only, no task data
         self.assertNotIn("localStorage", code)  # nothing that lets a person skip it: the only memory is the tab's own session
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
-            self.assertIn(call, ("/api/ready", "/api/launch", "/api/gh"))  # 1.8.x: /api/gh is gh's web sign-in, the paired browser only  # the one read and the person-only action (1.7.9: the company's launch script, Windows); the VS Code button calls /api/restart through readyui.js (serve.js)
+            self.assertIn(call, ("/api/ready", "/api/gh"))  # the one read, and gh's web sign-in (1.8.x), the paired browser only
 
     def test_every_text_of_the_screen_is_in_both_languages(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")
@@ -858,20 +657,16 @@ class PageTests(unittest.TestCase):
         used = set(re.findall(r'"(board\.enter\.[a-z0-9.\-]*[a-z0-9])"', code))
         for key in used:
             self.assertIn(key, en, key)
-        names = {key for key in en if key.startswith(("board.enter.", "board.ready.", "board.vs.restart.", "ready.", "restart."))}
-        self.assertEqual(names, {key for key in zh if key.startswith(("board.enter.", "board.ready.", "board.vs.restart.", "ready.", "restart."))})
+        names = {key for key in en if key.startswith(("board.enter.", "board.ready.", "ready."))}
+        self.assertEqual(names, {key for key in zh if key.startswith(("board.enter.", "board.ready.", "ready."))})
         # the keys the screen builds from a check (board.enter.m.<id>.<why>, d.<id>.ok ...) exist for every state the server can give
-        for why in ("none", "starting", "lost", "error", "off", "no-cli", "cli-failed", "cli-slow", "many", "getting-ready", "no-host"):
+        for why in ("no-code", "off"):
             self.assertIn(f"board.enter.m.vscode.{why}", en)
-        for why in ("provider", "client", "nomodel"):
-            self.assertIn(f"board.enter.m.copilot.{why}", en)
-        for key in ("board.enter.m.doctor.errors", "board.enter.m.doctor.failed", "board.enter.m.paired.unpaired", "board.enter.m.setup.new", "board.enter.m.setup.reopen", "board.enter.d.vscode.ok", "board.enter.d.copilot.ok",
-                    "board.enter.d.doctor.ok", "board.enter.d.paired.ok", "board.enter.d.vscode.none", "board.enter.d.vscode.stuck", "board.enter.d.copilot.vscode", "board.enter.d.copilot.fail", "board.enter.d.paired.unpaired",
+        for key in ("board.enter.m.doctor.errors", "board.enter.m.doctor.failed", "board.enter.m.paired.unpaired", "board.enter.m.setup.new", "board.enter.d.vscode.ok", "board.enter.d.copilot.ok",
+                    "board.enter.d.doctor.ok", "board.enter.d.paired.ok", "board.enter.d.paired.unpaired",
                     "board.enter.d.doctor.errors", "board.enter.d.doctor.failed", *[f"board.enter.t.{name}" for name in ("setup", "paired", "doctor", "vscode", "copilot", "kb", "instructions", "skills", "standards", "packs", "connections", "repos")],
                     *[f"board.enter.cs.{state}" for state in ("ok", "none", "down", "untested")]):
             self.assertIn(key, en, key)
-        self.assertIn("Sign in to Copilot in VS Code", en["board.enter.m.copilot.provider"])
-        self.assertIn("Sign in to Copilot in VS Code", en["board.enter.m.copilot.client"])
 
     def test_no_motion_under_lite_and_reduced_motion_and_the_colours_are_tokens(self) -> None:
         css = (WEB / "enter.css").read_text(encoding="utf-8")
@@ -931,30 +726,8 @@ class BlockPageTests(unittest.TestCase):
         for fix in [item for item in fixes if item]:
             self.assertIn(f'fix.to === "{fix["to"]}"', ui, fix)
             self.assertIn(fix["tab"] if fix["to"] in ("tools", "kb") else fix["sec"], ("packs", "connections", "local", "company"), fix)
-        self.assertIn('fix.to === "vscode"', ui)
+        self.assertIn('fix.to === "identities"', ui)  # H6: the main Windows account of the agent host
         self.assertIn("TOOLS.open(fix.tab, given.done, fix.part || undefined)", ui)
-
-    def test_the_vscode_button_goes_through_the_restart_and_never_through_the_old_open_dialog(self) -> None:
-        screen, ui, serve = [(WEB / name).read_text(encoding="utf-8") for name in ("enter.js", "readyui.js", "serve.js")]
-        self.assertIn("READY.vsAct(buttonKind()", screen)
-        self.assertNotIn("SERVE.openVS", screen)
-        self.assertIn("SERVE.restartVS({open: true", ui)  # Open and Restart: quit, wait, open
-        self.assertIn("SERVERS.choose(", ui)
-        # H5b: with identities the picker is up at once and VS Code is never quit: the board's agent host restarts with the choice; its other button restarts the host with none
-        self.assertNotIn("restartVS({open: false", ui)
-        self.assertEqual(len(re.findall(r"SERVERS\.choose\(\(\) => \{[^}]*\}, null, \(\) => \{\}\)", ui)), 2)
-        picker = (WEB / "servers.js").read_text(encoding="utf-8")
-        self.assertIn("function choose(opened, before, plain)", picker)
-        self.assertIn('h("div", {class: "row win-foot"}, go, bare, close)', picker)
-        self.assertIn('ask("open", {chosen: [], primary: ""})', picker)
-        self.assertIn("(before ? before(", picker)
-        self.assertIn(": Promise.resolve()).then(() => ask(\"open\"", picker)  # quit, wait until it is gone, then open with the identities
-        self.assertIn("error && error.quiet", picker)  # no to the question about a working agent: nothing was touched
-        self.assertIn('"/api/restart"', serve)
-        self.assertIn("board.vs.restart.busy.one", serve)  # the question before it stops an agent at work
-        self.assertIn("board.vs.restart.anyway", serve)
-        self.assertIn("openVS, restartVS", serve)  # /api/open and openVS stay for the task page
-
 
 class DockOnEnterTests(unittest.TestCase):
     """1.7.34: the Enter screen has no gear; the dock comes down; a key counts after a window closed and not while the ? panel is open."""
@@ -977,19 +750,6 @@ class CornerTests(unittest.TestCase):
         self.assertIn("html.en-open .sh-pill{right:var(--en-hi,16px)}", css)
         self.assertNotIn("margin-right:176px", css)
         self.assertIn('root.style.setProperty("--en-hi"', script)
-
-
-class ReopenTests(unittest.TestCase):
-    def test_the_wait_ends_when_vs_code_went_away_whatever_page_is_open(self) -> None:
-        link = types.SimpleNamespace(count=2, drops=lambda: link.count)
-        checks = ready.Ready(Path("."), link)
-        self.assertFalse(checks.still_reopen())
-        checks.wait_reopen()
-        self.assertTrue(checks.still_reopen())
-        link.count = 3
-        self.assertFalse(checks.still_reopen())
-        self.assertFalse(checks.still_reopen())
-
 
 
 class PaceInCallTests(unittest.TestCase):

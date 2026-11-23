@@ -157,12 +157,14 @@ class Host:
 
     def __init__(self, root: Path, code: Optional[str] = None, extra: Optional[Callable[[], Dict[str, str]]] = None, popen: Callable[..., Any] = subprocess.Popen,
                  clock: Callable[[], float] = time.monotonic, ready_wait: float = READY_WAIT, identities: Optional[Callable[[], Dict[str, Any]]] = None,
-                 netonly_popen: Optional[Callable[[str, str], Callable[..., Any]]] = None) -> None:
+                 netonly_popen: Optional[Callable[[str, str], Callable[..., Any]]] = None, path: Optional[Callable[[], str]] = None) -> None:
         self.root = Path(root)
         self.code = code
         self.extra = extra or (lambda: {})
         self.identities = identities or (lambda: {"env": {}, "netonly": None, "mark": ""})  # H5b: `connections.host_identities`: variables, a Windows account, and a mark with no secret
         self.netonly_popen = netonly_popen  # H5b: how a host is started with a Windows account (`netonly.popen`); the tests pass their own
+        self.path = path  # H6: the PATH a new terminal would see (`shortcmd.fresh_path`): the board may have been started before the short command was put on PATH
+        self.outdated = False  # H6: something the host only reads at start changed outside Local (the short command was put on PATH): it is stale until it starts again
         self.popen = popen
         self.clock = clock
         self.ready_wait = ready_wait
@@ -275,6 +277,7 @@ class Host:
         env = {key: value for key, value in os.environ.items() if not key.startswith("VSCODE_IPC") and key != "ELECTRON_RUN_AS_NODE"}
         given = dict(self.extra() or {})
         env.update(given)
+        self._fresh_path(env)
         held = self._held()
         env.update(held.get("env") or {})  # H5b: the variables of the identities the host holds; never in the record, never in the output kept
         popen_now = self.popen
@@ -305,7 +308,7 @@ class Host:
             return self.status()
         with self.lock:
             self.process, self.pid, self.port, self._token = process, process.pid, 0, token
-            self.given = self._mark(given, held)
+            self.given, self.outdated = self._mark(given, held), False
             self.state, self.why, self.version, self.commit, self.adopted = "starting", "", "", "", False
             self.started_at, self.ready_at = self.clock(), 0.0
             self.starts += 1
@@ -404,12 +407,33 @@ class Host:
     def _mark(self, given: Dict[str, str], held: Dict[str, Any]) -> str:
         return env_mark(given) + (":" + hashlib.sha256(str(held.get("mark") or "").encode("utf-8")).hexdigest()[:16] if held.get("mark") else "")
 
+    def _fresh_path(self, env: Dict[str, str]) -> None:
+        """Add to the PATH of `env` the folders a new terminal has and this process does not (H6). Never raises: a PATH that cannot be told adds nothing."""
+        if self.path is None:
+            return
+        try:
+            fresh = [item for item in str(self.path() or "").split(os.pathsep) if item]
+        except Exception:  # noqa: BLE001 - the host still starts with the PATH it has
+            return
+        key = next((name for name in env if name.upper() == "PATH"), "PATH")
+        have = [item for item in env.get(key, "").split(os.pathsep) if item]
+        more = [item for item in fresh if item not in have]
+        if more:
+            env[key] = os.pathsep.join(have + more)
+
+    def outdate(self) -> None:
+        """H6: mark a running host stale for a reason `extra` does not show (the short command is on PATH now); the board restarts it once no chat works."""
+        with self.lock:
+            self.outdated = True
+
     def stale(self) -> bool:
         """H5: the host runs (or starts) with other variables than `extra` gives now: a tool folder, the CA bundle or the proxy changed in Local since, or (H5b) the identities it holds.
         Only a restart gives it the new ones."""
         with self.lock:
             if self.state not in ("starting", "preparing", "ready"):
                 return False
+            if self.outdated:
+                return True
             given = self.given
         return given != self._mark(dict(self.extra() or {}), self._held())
 

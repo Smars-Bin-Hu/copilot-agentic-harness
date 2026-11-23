@@ -250,18 +250,17 @@ class ToolsTests(CompanyCase):
     PACK = {"schema_version": 1, "name": "sqlpack", "version": "1.0.0", "description": "x"}
     RULES = {"systems": {"dev-sql": {"reach": {"cli": "sqlcmd"}, "env": "dev", "verbs": [{"pattern": r"^\s*select\b", "verb": "read"}]}}}
 
-    def test_a_tool_pack_is_installed_its_rules_read_under_the_persons_override_and_its_launch_script_found(self) -> None:
+    def test_a_tool_pack_is_installed_its_rules_read_under_the_persons_override(self) -> None:
         set_prefix(self.root)
         put(self.kb, {"company/tools/packs/sqlpack/toolpack.json": json.dumps(self.PACK), "company/tools/packs/sqlpack/rules.json": json.dumps(self.RULES),
-                      "company/tools/packs/sqlpack/launch/start-vscode.cmd": "@echo off\r\nrunas ...\r\n", "company/tools/connections.json": json.dumps({"connections": {}})})
+                      "company/tools/connections.json": json.dumps({"connections": {}})})
         result = company.sync(self.root)
         from core import toolpacks
 
         self.assertEqual(toolpacks.listed(self.root)["sqlpack"]["source"], "company", "read where it lies: nothing is copied but skills")
         self.assertIn(".harness/policies/connections.company.json", result["copied"])
-        from core import config, reach
+        from core import config
 
-        self.assertEqual(reach.launch_script(self.root, "win32"), self.kb / "company" / "tools" / "packs" / "sqlpack" / "launch" / "start-vscode.cmd")
         self.assertEqual(config.load_policy(self.root, "tools")["systems"]["dev-sql"]["env"], "dev")
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": {"dev-sql": {"env": "qat"}}}), encoding="utf-8")
         merged = config.load_policy(self.root, "tools")["systems"]["dev-sql"]

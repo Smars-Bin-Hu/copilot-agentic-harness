@@ -130,16 +130,11 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
                 taskreview.set_by_person(root, task, checks, interactive=True)
             done = link.create(dict(skillsend.plan(lang or "en", name), model=model), first_message(root, name, lang or "en", text, reopen, after), files)
             skillsend.record(root, SKILL, "chat", done)
-            # no `open_window()` (unlike "Go on in a new chat"): the person stays in the super view. `create` needs only the ready link, which means VS Code is up.
         else:
             done = link.dispatch(job, task, text, model, files)
     except vslink.Refused as error:
         return refusal(error.why)
     except Exception as error:  # noqa: BLE001 - the host said no: the name of the error only, never its text
-        try:
-            link.host_said(error)
-        except Exception:  # noqa: BLE001
-            pass
         return refusal("host", error=type(error).__name__)
     extra: Dict[str, Any] = {"by": "super", "lang": made["lang"], "model": model or {}, "files": chatsend.listed(files)}
     if reopen:

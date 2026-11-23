@@ -32,7 +32,7 @@ def server_frame(data: bytes, opcode: int = 1, final: bool = True) -> bytes:
 
 
 class SocketTransport:
-    """What `ahp.Unix` is, over a socket pair (a fake host needs no path)."""
+    """What `ahp.Tcp` is, over a socket pair (a fake host needs no port)."""
 
     def __init__(self, sock: socket.socket) -> None:
         self.sock = sock
@@ -154,19 +154,12 @@ class CommandTests(unittest.TestCase):
         self.assertTrue(ahp.switched_off())
         self.assertIsNone(ahp.find_code())
 
-    def test_endpoints_come_from_the_json_and_the_token_is_not_in_what_a_person_can_see(self) -> None:
-        text = json.dumps({"userDataPath": "/x", "endpoints": [
-            {"schemaVersion": 2, "type": "editor", "pid": 7, "instanceId": "abc", "connectionToken": TOKEN, "endpoint": {"type": "socket", "path": "/tmp/a.sock"}},
-            {"type": "standalone", "pid": 8, "connectionToken": "other", "endpoint": {"type": "socket", "path": "/tmp/b.sock"}},
-            {"type": "editor", "pid": 9, "endpoint": {"type": "socket", "path": "/tmp/c.sock"}},  # no token: not usable
-        ]})
-        found = ahp.parse_endpoints(text)
-        self.assertEqual([item.path for item in found], ["/tmp/a.sock"])
-        self.assertNotIn(TOKEN, repr(found[0]) + str(found[0]))
-        self.assertEqual(found[0].token(), TOKEN)
-        self.assertEqual(ahp.parse_endpoints(json.dumps({"endpoints": []})), [])  # empty: not ready, not an error
-        with self.assertRaises(ahp.NotReady):
-            ahp.parse_endpoints("not json")
+    def test_the_token_of_an_endpoint_is_not_in_what_a_person_can_see_and_only_tcp_is_opened(self) -> None:
+        found = ahp.Endpoint("tcp", "localhost:1", 7, "", TOKEN)
+        self.assertNotIn(TOKEN, repr(found) + str(found))
+        self.assertEqual(found.token(), TOKEN)
+        with self.assertRaises(ahp.NotReady):  # H6: the editor's own endpoints (a unix socket, a named pipe) are gone
+            ahp.open_transport(ahp.Endpoint("socket", "/tmp/a.sock", 7, "", TOKEN))
 
     def test_a_connection_keeps_the_pid_and_the_instance_of_the_endpoint_it_was_made_from(self) -> None:
         host = FakeHost({"initialize": {"protocolVersion": ahp.PROTOCOL}})

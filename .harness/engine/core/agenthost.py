@@ -248,13 +248,22 @@ class Host:
         with self.cycle:
             return self._start()
 
+    def _tool_folders(self) -> List[str]:
+        """The folders a person gave for their tools (O1: VS Code may be in one of them); never an error."""
+        try:
+            from . import launchenv  # noqa: PLC0415 - it reads this module's neighbours
+
+            return launchenv.tool_folders(self.root)
+        except Exception:  # noqa: BLE001 - a broken setting must not hide the VS Code found elsewhere
+            return []
+
     def _start(self) -> Dict[str, Any]:
         with self.lock:
             if self.state in ("starting", "preparing", "ready"):
                 return self._status_unlocked()
         if self.adopt():
             return self.status()
-        code = self.code or ahp.find_code()
+        code = self.code or ahp.find_code(folders=self._tool_folders())
         if not code:
             with self.lock:
                 self.state, self.why = "no-code", "VS Code is not installed (no `code` command)"

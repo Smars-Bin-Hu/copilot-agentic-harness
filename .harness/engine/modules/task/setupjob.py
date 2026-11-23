@@ -137,6 +137,9 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
     return [("kb", content), ("git", repository), ("sync", synced), ("doctor", doctor)]
 
 
+KB_STEPS = ("kb", "git", "sync")  # what the wizard's knowledge base page runs of `steps`
+
+
 class Job:
     """One Finish at a time. `lines` grow as the steps end."""
 
@@ -163,12 +166,28 @@ class Job:
         threading.Thread(target=self.work, args=(root, data), daemon=True).start()
         return self.view()
 
+    def start_kb(self, root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The wizard's knowledge base page (O1): only the steps kb, git and sync. No name, repositories or Python are written, doctor is not run, and the copy is not marked set up."""
+        mode = str(data.get("kb_mode") or "none")
+        if mode not in ("package", "folder"):
+            raise ValueError(say("setup.kb.mode"))
+        if not setup.clean_path(data.get("kb_path")):
+            raise ValueError(say("setup.kb.path"))
+        ahead(root, data)
+        with self.lock:
+            if self.running:
+                return self.view_locked()
+            self.lines, self.running, self.done = [], True, False
+            self.total = len(KB_STEPS)
+        threading.Thread(target=self.work, args=(root, data, KB_STEPS), daemon=True).start()
+        return self.view()
+
     def view_locked(self) -> Dict[str, Any]:
         return {"lines": list(self.lines), "running": self.running, "done": self.done, "total": self.total}
 
-    def work(self, root: Path, data: Dict[str, Any]) -> None:
+    def work(self, root: Path, data: Dict[str, Any], only: Optional[Tuple[str, ...]] = None) -> None:
         good = True
-        for key, step in [*setup.steps(root, data), *steps(root, data)]:
+        for key, step in [item for item in steps(root, data) if item[0] in only] if only else [*setup.steps(root, data), *steps(root, data)]:
             try:
                 line = {"key": key, "ok": True, "detail": step()}
             except Exception as error:  # noqa: BLE001 - told on the page; the person fixes it and presses Finish again
@@ -179,8 +198,9 @@ class Job:
             if not line["ok"]:
                 break
         try:
-            if good:
+            if good and not only:
                 setup.write(root, "user", {"setup_done": True})
+                setup.remove(root, "user", ["setup_wizard"])
         finally:
             with self.lock:
                 self.running, self.done = False, good

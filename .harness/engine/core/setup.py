@@ -53,6 +53,20 @@ def write(root: Path, name: str, values: Dict[str, Any]) -> None:
         raise ValueError(say("setup.file.nowrite", file=str(path), error=error.strerror or error)) from None
 
 
+def remove(root: Path, name: str, keys: List[str]) -> None:
+    """Take keys out of a person's own file; nothing is written when none of them is there."""
+    found = kept(root, name)
+    if not any(key in found for key in keys):
+        return
+    for key in keys:
+        found.pop(key, None)
+    path = config.override_path(root, name)
+    try:
+        files.atomic_write(path, found)
+    except OSError as error:
+        raise ValueError(say("setup.file.nowrite", file=str(path), error=error.strerror or error)) from None
+
+
 def git_name() -> str:
     try:
         done = subprocess.run(["git", "config", "--global", "user.name"], capture_output=True, text=True, timeout=GIT_WAIT, check=False)

@@ -65,7 +65,7 @@ from core import filecache, launchenv, pace
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
-from core import company, reinstall, setup as core_setup, shortcmd, skillboard
+from core import company, programs as core_programs, reinstall, setup as core_setup, shortcmd, skillboard, wizard as core_wizard
 
 from . import chatrounds, testrecord
 from . import kbview
@@ -630,6 +630,18 @@ class Board:
         self.ready.forget_gh()
         print(say("serve.did", action="gh " + step, task="-"), flush=True)
         return {key: value for key, value in found.items() if key != "token"}
+
+    def host(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """O1, `/api/host`: `{do: "restart"}` starts the agent host again (the Enter button of a host that failed). Only while no chat works: a restart stops a running turn. `{state: restarted | waiting, busy}`."""
+        if str(data.get("do") or "") != "restart":
+            raise ValueError("do: restart")
+        names = self.working_tasks()
+        busy = names + self.other_chats(names)
+        if busy:
+            return {"state": "waiting", "busy": busy}
+        self.link.restart_host()
+        print(say("serve.did", action="agent host restart (button)", task="-"), flush=True)
+        return {"state": "restarted", "busy": []}
 
     def working_tasks(self) -> List[str]:
         """The names of the open tasks whose agent is at work now: the hook log says so and VS Code does not say its chat runs no turn (`idle`), or VS Code says the chat is busy. A restart of the agent host would stop them."""
@@ -1445,15 +1457,61 @@ class Board:
             return {"none": core_setup.declare(self.root, data.get("key"), data.get("on"))}
         if step == "older":
             return reinstall.run(self.root, str(data.get("path", "")), bool(data.get("apply")), True if data.get("apply") else None)
+        if step in ("programs", "folder", "scan", "save", "summary", "finish"):  # the first-run wizard (O1)
+            return self.wizard(step, data)
         if step != "state":
             raise CommandError(say("serve.refused.request"))
         found = core_setup.status(self.root, self.short_now())
-        if not found["short"]["found"]:
+        self.note_short(found["short"])
+        return found
+
+    def note_short(self, short: Dict[str, Any]) -> None:
+        if not short["found"]:
             self.short_missing = True
         elif self.short_missing:
             self.short_missing = False
             self.link.host_outdate()  # H6: the agent host started before the short command was on PATH; the sweep restarts it once no chat works (`apply_local`)
-        return found
+
+    def programs(self) -> Dict[str, Any]:
+        """The wizard's Programs page: Python, Git, VS Code, GitHub CLI and the short command, found as the agent will find them (`core.programs`)."""
+        short = self.short_now()
+        self.note_short(short)
+        return core_programs.rows(self.root, self.link.installed(), short, say)
+
+    def wizard(self, step: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The steps of the first-run wizard (contract §2): programs, folder, scan, save (part you, repos or kb), summary and finish. Each can be asked again."""
+        if step == "programs":
+            return self.programs()
+        if step == "folder":
+            core_programs.add_folder(self.root, str(data.get("program") or ""), str(data.get("path") or ""))  # ValueError: no such program in that folder
+            self.ready.forget_gh()
+            self.ready.drop_optional()
+            self.apply_local()  # the agent host gets the folder when it starts; a restart waits until no chat works
+            print(say("serve.did", action="setup folder " + str(data.get("program")), task="-"), flush=True)
+            return self.programs()
+        if step == "scan":
+            return core_wizard.scan(self.root)
+        if step == "summary":
+            line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})
+            return core_wizard.summary(self.root, self.programs(), line)
+        if step == "finish":
+            core_wizard.finish(self.root)
+            self.ready.doctor_again()  # the first doctor of a set-up copy; the page does not wait for it
+            print(say("serve.did", action="setup finish", task="-"), flush=True)
+            return {"ok": True}
+        part = str(data.get("part") or "")
+        if part == "you":
+            core_wizard.save_you(self.root, data)
+            self.language_stamp = []
+            self.sync_language()
+            return {"saved": True, "language": messages.language()}
+        if part == "repos":
+            return {"saved": True, "n": core_wizard.save_repos(self.root, data)}
+        if part == "kb":
+            core_wizard.stamp_ok(self.root, data)
+            core_wizard.mark(self.root)
+            return dict(self.setup_job.start_kb(self.root, data), saved=True)
+        raise ValueError(say("serve.refused.request"))
 
     def skill(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """A one-click skill (`skillsend.py`): `step` preview or act. The message is made here, each time, from the skill name and the words."""
@@ -2313,6 +2371,13 @@ def handler_for(board: Board) -> type:
                 try:
                     return self.answer(200, {"result": board.gh(data)})
                 except ValueError as error:  # a folder without gh in it: said on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/host":  # O1: restart the board's own agent host (the Enter button `restart-host`): the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    return self.answer(200, {"result": board.host(data)})
+                except ValueError as error:
                     return self.answer(409, {"error": str(error)})
             if path == "/api/doctor-again":  # (1.7.45) Check again on the doctor line: run doctor now, not when its wait is over. The paired browser only: it starts a program
                 if not board.paired(self.token()):

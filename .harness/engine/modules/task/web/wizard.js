@@ -895,17 +895,14 @@ const WIZARD = (function () {
   }
 
   // W9 and the wizard's half of W10: the head jumps and sparks fly, the page fades out (120 ms), then the veil takes the Enter screen's background and the page goes to "/", where the Enter
-  // screen plays the rest (the mark says it came from here). The veil is motion.js's; it only gets the Enter background class.
+  // screen plays the rest (the mark says it came from here). The veil is motion.js's, with the Enter screen's backdrop (`cls: "enter-bg"`, light or dark).
   function toEnter() {
     if (!shell) return Promise.resolve(leave());
     ROBOT.act(headSvg(), "cheer");
     const fades = [shell.content, shell.foot].map((node) => MOTION.play(node, [{opacity: 1}, {opacity: 0}], {ms: 120, ease: MOTION.OUT, fill: "forwards"}));
     return Promise.all(fades).then(() => {
       MOTION.mark("from-wizard");
-      const had = new Set(document.querySelectorAll(".m-veil"));
-      const gone = MOTION.leave(() => location.assign("/"));
-      for (const veil of document.querySelectorAll(".m-veil")) if (!had.has(veil)) veil.classList.add("enter-bg");
-      return gone;
+      return MOTION.leave(() => location.assign("/"), {cls: "enter-bg"});
     });
   }
 

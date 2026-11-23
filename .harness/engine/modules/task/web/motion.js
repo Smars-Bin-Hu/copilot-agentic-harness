@@ -102,11 +102,11 @@ const MOTION = (function () {
     };
   }
 
-  // leave(then, {content}): the page fades to its own background (160 ms) before it goes away (a reload after a language change E6, the wizard to the Enter
+  // leave(then, {content, cls}): the page fades to its own background (160 ms) before it goes away (a reload after a language change E6, the wizard to the Enter
   // screen W10), so the next page comes out of the same colour instead of a flash. `content` (a node) sits in the middle meanwhile.
   function leave(then, opts) {
     const veil = document.createElement("div");
-    veil.className = "m-veil";
+    veil.className = "m-veil" + (opts && opts.cls ? " " + opts.cls : "");  // cls "enter-bg": the Enter screen's backdrop, light or dark
     veil.setAttribute("aria-hidden", "true");
     if (opts && opts.content) veil.append(opts.content);
     document.body.append(veil);

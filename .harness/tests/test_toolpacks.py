@@ -2156,3 +2156,5 @@ class SamplePackTests(unittest.TestCase):
         self.assertIn('"sample": found.get("sample") is True', source)  # each row of `toolpacks.check` carries it
         settings = (self.HARNESS / "engine" / "modules" / "task" / "web" / "settings.js").read_text(encoding="utf-8")
         self.assertIn('row.from === "harness" && !row.sample', settings)
+        machine = (self.HARNESS / "engine" / "modules" / "task" / "web" / "machine.js").read_text(encoding="utf-8")
+        self.assertIn('row.from === "harness" && (!row.sample || row.active)', machine)  # with a knowledge base: shown only once it is on

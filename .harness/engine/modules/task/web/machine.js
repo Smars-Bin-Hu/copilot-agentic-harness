@@ -179,7 +179,7 @@ const MACHINE = (function () {
     const list = addedBlock(ctx, added, change);
     const paint = () => ask("toolpacks").then((found) => {
       const rows = found.toolpacks;
-      const fact = rows.filter((row) => row.from === "harness"), own = rows.filter((row) => row.from === "company");
+      const fact = rows.filter((row) => row.from === "harness" && (!row.sample || row.active)), own = rows.filter((row) => row.from === "company");  // a sample pack shows only once a knowledge base turns it on (1.8.31)
       heads.shipped.textContent = " · " + t("machine.pack.shipped.n", {n: fact.length, used: fact.filter((row) => row.used).length});
       heads.company.textContent = own.length ? " · " + own.length : "";
       nokb.hidden = Boolean(found.company);

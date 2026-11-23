@@ -350,6 +350,39 @@ class EndHostTest(unittest.TestCase):
             self.assertEqual(boardserve.stop_wanted(tmp), "stop")
 
 
+    def test_sigterm_takes_the_path_of_a_stop_on_purpose(self) -> None:
+        import signal
+
+        from modules.task import boardserve
+
+        if not hasattr(signal, "SIGTERM"):
+            self.skipTest("no SIGTERM")
+        fake = type("B", (), {"stop_asked": threading.Event()})()
+        before = signal.getsignal(signal.SIGTERM)
+        restore = boardserve.stop_on_signal(fake)
+        try:
+            handler = signal.getsignal(signal.SIGTERM)
+            self.assertIsNot(handler, before)
+            handler(signal.SIGTERM, None)
+            self.assertTrue(fake.stop_asked.is_set(), "the wait loop of `serve` ends, and then `end_host` runs")
+        finally:
+            restore()
+        self.assertIs(signal.getsignal(signal.SIGTERM), before)
+
+    def test_a_side_thread_sets_no_handler(self) -> None:
+        import signal
+
+        from modules.task import boardserve
+
+        before = signal.getsignal(signal.SIGTERM)
+        seen: List[Any] = []
+        thread = threading.Thread(target=lambda: seen.append(boardserve.stop_on_signal(type("B", (), {})())()))
+        thread.start()
+        thread.join(5)
+        self.assertEqual(len(seen), 1)
+        self.assertIs(signal.getsignal(signal.SIGTERM), before)
+
+
 class VsLinkStaleTest(unittest.TestCase):
     def test_no_own_host_is_not_stale_and_a_restart_does_nothing(self) -> None:
         from modules.task import vslink

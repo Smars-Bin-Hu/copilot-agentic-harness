@@ -46,8 +46,8 @@ All pictures are from a made-up team's tasks, on the real board.
 
 <table>
 <tr>
-<td width="50%"><a href="docs/images/enter.png"><img alt="The Enter screen: the robot over the word HARNESS, Ready, and two lines: Harness and Local, and what the company brings" src="docs/images/enter.png"></a><br><sub><b>Start.</b> Double-click Start Harness. It checks what the harness needs on this computer, and what the company brings.</sub></td>
-<td width="50%"><a href="docs/images/get-ready.png"><img alt="Get ready: the short command tested, then a form for your name, repositories and knowledge base" src="docs/images/get-ready.png"></a><br><sub><b>Get ready.</b> Set up in the browser. No agent runs.</sub></td>
+<td width="50%"><a href="docs/images/enter.png"><img alt="The Enter screen: the robot over the word HARNESS, one Enter button, and a dot on the gear whose hover says what is not set up yet" src="docs/images/enter.png"></a><br><sub><b>Start.</b> Double-click Start Harness. The screen has one button: Enter, or the fix when something blocks the work. A dot on the gear lists what you skipped.</sub></td>
+<td width="50%"><a href="docs/images/setup.png"><img alt="The setup wizard on its Programs page: a progress bar of six parts, Python, Git and VS Code found, the GitHub CLI not found with a download link and a box for its folder" src="docs/images/setup.png"></a><br><sub><b>Set up.</b> A wizard in the browser: one thing on each page. No agent runs.</sub></td>
 </tr>
 <tr>
 <td width="50%"><a href="docs/images/how-can-i-help.png"><img alt="The question mark panel on the board: ask, the course, the first lesson, everything you can ask for" src="docs/images/how-can-i-help.png"></a><br><sub><b>How can I help?</b> Ask, start a lesson, or see every skill.</sub></td>
@@ -66,7 +66,7 @@ All pictures are from a made-up team's tasks, on the real board.
 <td width="50%"><a href="docs/images/report.png"><img alt="The task analysis: working time, waiting time, prompts, Credits, key points and the Agent Performance Review" src="docs/images/report.png"></a><br><sub><b>Where the time went.</b> Working and waiting, every prompt, Credits, the checks.</sub></td>
 </tr>
 <tr>
-<td width="50%"><a href="docs/images/tools.png"><img alt="The Tool packs window: ado and sqlserver used by the company, demotracker not used, each with its connection type, skills and the programs it needs" src="docs/images/tools.png"></a><br><sub><b>Tool packs.</b> The outside systems the agent can work with, and what each brings.</sub></td>
+<td width="50%"><a href="docs/images/tools.png"><img alt="Settings on Tool packs: ado and sqlserver used by the company, demotracker not used, each with its connection type, skills and the programs it needs" src="docs/images/tools.png"></a><br><sub><b>Settings: Tool packs.</b> The outside systems the agent can work with, and what each brings.</sub></td>
 <td width="50%"><a href="docs/images/held-write.png"><img alt="A task page with an outside call waiting for approval: a write to orders-dev on DEV, the statement that will run, a code to type, Approve and Do not approve" src="docs/images/held-write.png"></a><br><sub><b>A write waits for you.</b> The system, the environment and the exact statement. The agent waits for your answer.</sub></td>
 </tr>
 <tr>
@@ -79,7 +79,7 @@ More pictures, in the order of a task's life, are in the [overview](docs/00-over
 
 ## What you get
 
-- **Set up in the browser.** Double-click **Start Harness** and fill in **Get ready**: the short command, your code repositories, your knowledge base. No agent runs and you edit no file.
+- **Set up in the browser.** Double-click **Start Harness** and a wizard leads you through one thing on each page: you, the programs, Copilot, your knowledge base, your code repositories. No agent runs and you edit no file. What you skip shows as a dot on the gear; **Settings** has it all later.
 - **Led step by step.** **How can I help?** on the board starts the lesson you need, and **Everything you can ask for** lists every skill by what you want to do.
 - **A task, not a chat.** Every piece of work is a folder: the requirement, the plan, the steps, the log and the changes are files. A new chat reads `TASK.md` and goes on. Kinds: question, root cause analysis, design, development, testing, knowledge base update.
 - **A board you follow in the browser.** Every open task, what it waits for you for, and since when. The lobby shows each one as a small agent: at work, waiting for you, resting. A click opens the task as pages: stages, requirement, plan, TODO, changes, checks, test results, history.
@@ -116,12 +116,12 @@ The harness carries no business knowledge. It makes the agent safe to use and po
 
 ## Get started
 
-You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. Nothing is required to `pip install`: Word and Excel (`.xlsx`) files are read with the standard library. Old Excel (`.xls`) and PDF files need one small package each (`xlrd`, `pypdf`). Get ready has a row for the install command, and if the install fails you ask your administrator: see [Python packages](docs/03-configure.md#python-packages).
+You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. Nothing is required to `pip install`: Word and Excel (`.xlsx`) files are read with the standard library. Old Excel (`.xls`) and PDF files need one small package each (`xlrd`, `pypdf`). **Settings**, under **Advanced**, has a row for the install command, and if the install fails you ask your administrator: see [Python packages](docs/03-configure.md#python-packages).
 
 Clone this repository, or download the zip from GitHub and extract it (git is optional; on Windows extract to a short path such as `C:\dev\harness`). Open the folder in VS Code. Then:
 
 1. **Start.** Double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows) and keep the window open. If the double-click is blocked, run `sh .harness/bin/harness task board` (Windows: `.harness\bin\harness.cmd task board`) in a terminal.
-2. **Set up.** Press **Get ready** on the page that opens. The form sets up the short command `harness`, your code repositories and your knowledge base. No agent runs. To change it later, press the sliders button at the bottom right of the board.
+2. **Set up.** A new copy opens the **setup wizard**. It looks for the programs, sets up the short command `harness`, signs in to Copilot, and takes your knowledge base and your code repositories, one page each, with a bar on top. Most of it is filled in already. No agent runs. A copy that is set up opens the **Enter** screen: one button, which turns into the fix when something blocks the work. To change anything later, press the **gear** at the bottom right of the board: **Settings**.
 3. **Learn.** Press the question mark at the bottom right of the board, **How can I help?**. Ask how the harness works, or start a lesson; the board opens the chat for you. **Everything you can ask for** lists every skill, with the knowledge base ones in the order you build it.
 4. **Build your knowledge base.** Press the book button to see the steps and the next one. The agent leads you, you give a few facts only you know and approve each step.
 
@@ -133,7 +133,7 @@ Clone this repository, or download the zip from GitHub and extract it (git is op
 
 You don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
 
-To move to a newer copy of the harness later, press **Coming from an older copy?** on Get ready, or type `/harness-reinstall` in the new copy: it carries your tasks, settings and knowledge base over.
+To move to a newer copy of the harness later, press **Coming from an older copy?** in **Settings**, under **Advanced**, or type `/harness-reinstall` in the new copy: it carries your tasks, settings and knowledge base over.
 
 After that, daily use takes one sentence: press **New task** on the board, or tell Copilot what you want done. It asks until the request is clear, then opens a task. You don't write long prompts or paths. See [what to say day to day](docs/01-quickstart.md#7-what-to-say-day-to-day).
 
@@ -156,10 +156,10 @@ There is more: queued write-back when several tasks target the same repository, 
 
 ## What you must plug in
 
-The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** **Get ready** sets up both.
+The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** The **setup wizard** and **Settings** set up both.
 
-- **Company knowledge base.** Bring it in on Get ready, as a package or a folder, or build one from your code. It goes in `knowledge-base/`, and the **instructions that come with it** go in [.github/instructions/knowledgebase.instructions.md](.github/instructions/knowledgebase.instructions.md). This file ships empty. Without it the agent doesn't know how to read the knowledge base through its index. `doctor` reminds you.
-- **Target repositories.** On Get ready, add the folder that holds your code repositories, or single repositories. They go in `target.override.json`. Until this is set, the agent cannot change your code. Once it is set, a target repository can be written only through a promote that you approve.
+- **Company knowledge base.** Bring it in on the wizard's Knowledge base page (or in Settings), as a package or a folder, or build one from your code. It goes in `knowledge-base/`, and the **instructions that come with it** go in [.github/instructions/knowledgebase.instructions.md](.github/instructions/knowledgebase.instructions.md). This file ships empty. Without it the agent doesn't know how to read the knowledge base through its index. `doctor` reminds you.
+- **Target repositories.** On the wizard's Code repositories page (or in Settings), add the folder that holds your code repositories, or single repositories. They go in `target.override.json`. Until this is set, the agent cannot change your code. Once it is set, a target repository can be written only through a promote that you approve.
 
 The harness is designed for the git repositories of data engineering teams: no entry point, cannot be run on a laptop, and a large number of Python, SQL, `.json`, `.sh` and PowerShell files organised by domain. The agent cannot verify its work by running it, so it depends more on the knowledge base. See [configuration](docs/03-configure.md).
 

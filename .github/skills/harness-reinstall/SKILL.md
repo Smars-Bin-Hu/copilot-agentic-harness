@@ -30,7 +30,7 @@ board-order: 6
    - `skipped`: what is in this copy already, with the reason. Nothing is overwritten.
    - `changed_in_old_not_copied`: files changed in the old copy that nothing carries. The user decides what to do with each.
 3. **Hand over the copy.** Tell the user to stop the board of the old copy and close its VS Code windows, then run the same command with `--apply` **in their own terminal**. You cannot run it. It runs `doctor` and checks every copied task at the end.
-4. **Read the result the user pastes** (or run `harness doctor` and `harness task list --text` yourself). Every `[ERROR]` must be fixed. For a `[WARN]` about the short command pointing at another copy, follow step 1 of the setup guide on the board.
+4. **Read the result the user pastes** (or run `harness doctor` and `harness task list --text` yourself). Every `[ERROR]` must be fixed. For a `[WARN]` about the short command pointing at another copy, open Settings on the board (the gear), Programs.
 5. **Tell the user what does not carry over** (below), and that the old copy can go once they have seen it all works.
 
 ## Gotchas

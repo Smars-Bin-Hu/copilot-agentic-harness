@@ -19,11 +19,11 @@ Teach a first-time user four things: what it is like to work this way (a story);
 - The user uses this harness for the first time and wants to know what it is and how to use it.
 - The user used an earlier version and wants to know how it works now.
 
-When the environment is not set up (the `harness` command is not found, no target repository is set up), tell the user to double-click `Start Harness` and press Get ready first. For opening tasks day to day use `harness-my-task`, not this skill.
+When the environment is not set up (the `harness` command is not found, no target repository is set up), tell the user to double-click `Start Harness` and follow the setup wizard first. For opening tasks day to day use `harness-my-task`, not this skill.
 
 ## Prerequisites
 
-- `harness doctor` runs. If it does not, send the user to the setup guide on the board first.
+- `harness doctor` runs. If it does not, send the user to Settings on the board (the gear) first.
 - The knowledge base, the company skills and the target repositories are taken to be set up. If they are not, the lesson still works.
 
 ## Step-by-Step Workflows
@@ -42,7 +42,7 @@ At the start, send the user the list, and tick each item as it is done:
 
 ### Opening
 
-1. Run `harness doctor`. If there is an `[ERROR]`, stop and send the user to the setup guide on the board. Read any `[WARN]` to the user; it does not block.
+1. Run `harness doctor`. If there is an `[ERROR]`, stop and send the user to Settings on the board (the gear). Read any `[WARN]` to the user; it does not block.
 2. Ask the user one question, so you know how slowly to go. Use a question tool if you have one; if not, list numbers:
    1. Only used code completion (the grey text while typing code)
    2. Asked questions in the Chat window
@@ -94,7 +94,7 @@ The links: [Overview](../../../docs/00-overview.md) (the whole picture, with scr
 
 | Issue | Solution |
 | --- | --- |
-| `harness: command not found` | Double-click `Start Harness`, press Get ready |
+| `harness: command not found` | Double-click `Start Harness`, follow the setup wizard |
 | `harness task board` says the port is in use | The board is already running: open `http://127.0.0.1:8765/` |
 | The page says "not paired" and an approval is refused | The browser was not opened by the program. Press Enter in the board's terminal and open the link it prints |
 | `Task ... exists already` | Left over from the last practice. Go on with it using `task open <task name>`, or pick another name |

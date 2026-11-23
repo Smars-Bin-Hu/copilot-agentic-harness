@@ -101,4 +101,4 @@ A command prints aligned lines of text when you run it in a terminal, and JSON w
 
 ## Common questions
 
-- **"The command is not found?"** Double-click `Start Harness`: Get ready sets up the short command.
+- **"The command is not found?"** Double-click `Start Harness`: the setup wizard sets up the short command.

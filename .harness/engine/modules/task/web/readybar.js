@@ -69,6 +69,7 @@ const READYBAR = (function () {
     SERVE.call("/api/ready", {}, 8).then((data) => {
       if (!Array.isArray(data.checks)) return;
       last = data; at = Date.now();
+      READY.notes(data.notes);  // the dot on the gear
       paint();
     }, () => {}).then(() => { inflight = false; });
   }

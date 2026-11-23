@@ -544,8 +544,33 @@ const DOCK = (function () {
     const home = icon("dock-home", t("dock.home"), ["M3.5 11.5 12 4.5l8.5 7M6 9.5V20h12V9.5M10 20v-5.5h4V20"], enterScreen);
     kb.append(h("span", {class: "dock-count", title: t("dock.kb.badge"), hidden: ""}));
     document.body.append(panel, button, kb, setup, home);
+    notesDot(setup);
     watchStale();
     watchCompany();
+  }
+
+  // The dot on the gear (O3): the setup items that were skipped (`notes` of /api/ready, handed in by the Enter screen and the board's block, see readyui.js). Hover or focus: one line for each, the item, then what it means for the person.
+  function notesDot(gear) {
+    const dot = h("i", {class: "dock-dot", hidden: ""});
+    const tip = h("div", {class: "dock-tip", role: "tooltip", hidden: ""});
+    gear.append(dot);
+    document.body.append(tip);
+    const place = () => { const r = gear.getBoundingClientRect(); tip.style.top = Math.max(8, Math.min(innerHeight - tip.offsetHeight - 8, r.top + r.height / 2 - tip.offsetHeight / 2)) + "px"; tip.style.right = Math.max(8, innerWidth - r.left + 10) + "px"; };
+    const show = () => { if (dot.hidden) return; tip.hidden = false; place(); };
+    const hide = () => { tip.hidden = true; };
+    gear.addEventListener("mouseenter", show); gear.addEventListener("focus", show); gear.addEventListener("mouseleave", hide); gear.addEventListener("blur", hide);
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") hide(); });
+    READY.onNotes((list) => {
+      dot.hidden = !list.length;
+      gear.title = list.length ? "" : t("dock.setup");  // the hover below says it; a second bubble beside it would cover it
+      gear.classList.toggle("has-notes", Boolean(list.length));
+      gear.setAttribute("aria-label", t("dock.setup") + (list.length ? " \u00b7 " + t("board.enter.notes.title") : ""));
+      tip.replaceChildren(h("div", {class: "dock-tip-t"}, t("board.enter.notes.title")), ...list.map((note) => h("div", {class: "dock-tip-i"}, h("i", {class: "dock-tip-d"}), h("span", null, h("b", null, note.text), note.effect ? h("em", null, note.effect) : null))));
+      if (!list.length) hide(); else if (!tip.hidden) place();
+    });
+    // a page that has no block of the board (the task page) asks for itself, slowly, and not while the Enter screen does
+    const ask = () => { if (document.hidden || document.documentElement.classList.contains("en-open") || typeof READYBAR !== "undefined" || typeof SERVE === "undefined") return; SERVE.call("/api/ready", {}, 8).then((data) => { if (Array.isArray(data.checks)) READY.notes(data.notes); }, () => {}); };
+    setTimeout(ask, 1500); setInterval(ask, 8000);
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();

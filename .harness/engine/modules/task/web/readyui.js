@@ -75,5 +75,18 @@ const READY = (function () {
     return b;
   }
 
-  return {go, button, link, acceptFiles, acceptButton};
+  // The skipped setup items of the answer (`notes`: [{key, text, effect}]): the dot on the gear (dock.js) shows them. Whoever reads `/api/ready` (the Enter screen, the board's block, the dock itself) hands them in here;
+  // a listener is told only when the list changes.
+  let current = [], currentKey = "[]";
+  const listeners = [];
+  function notes(list) {
+    const next = (Array.isArray(list) ? list : []).filter((note) => note && note.text).map((note) => ({key: String(note.key || ""), text: String(note.text), effect: String(note.effect || "")}));
+    const key = JSON.stringify(next);
+    if (key === currentKey) return;
+    currentKey = key; current = next;
+    listeners.forEach((fn) => fn(current));
+  }
+  function onNotes(fn) { listeners.push(fn); fn(current); }
+
+  return {go, button, link, acceptFiles, acceptButton, notes, onNotes};
 })();

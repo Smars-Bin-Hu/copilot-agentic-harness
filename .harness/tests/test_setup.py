@@ -590,7 +590,7 @@ class CompanyFactsTests(unittest.TestCase):
         # the small print is a hover: HARNESS_LANGUAGE only when set, the override files beside Finish setup
         self.assertIn('title: t("setup.language.forced")', source)
         self.assertIn('title: t("setup.finish.note")', source)
-        self.assertIn("sec=", (web / "enter.js").read_text(encoding="utf-8"))
+        self.assertIn('location.assign("/setup")', (web / "enter.js").read_text(encoding="utf-8"))  # the centre button of kind `setup` (O3)
 
 
 WEB = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"

@@ -397,7 +397,14 @@ class Board:
 
     def serve_info(self, found: Dict[str, Any], refresh: int) -> Dict[str, Any]:
         """What a served page gets besides the rows: the actions, the refresh, and what the Enter screen shows without asking (the name, the release)."""
-        return {"actions": self.served, "refresh": refresh, "run_kinds": taskrun.kinds(), **found, "user": self.user_name(), "version": self.release()}
+        return {"actions": self.served, "refresh": refresh, "run_kinds": taskrun.kinds(), **found, "user": self.user_name(), "version": self.release(), "fresh": self.is_fresh()}
+
+    def is_fresh(self) -> bool:
+        """(1.8.31) A copy that is not set up: the Enter screen, if it is shown at all, shows only the wordmark until it goes to the wizard."""
+        try:
+            return not core_setup.set_up(self.root)
+        except Exception:  # noqa: BLE001 - unknown: not fresh, the Enter screen asks as before
+            return False
 
     def release(self) -> str:
         try:
@@ -421,6 +428,10 @@ class Board:
         """What the page may run: the settings' actions and the ones that talk to the chat."""
         return self.actions + [item for item in BUILTIN if item not in self.actions]
 
+    def page_address(self, base: str, code: str) -> str:
+        """(1.8.31) The address the browser is opened at: a copy that is not set up lands on the wizard (the Enter screen would only say "Checking" and jump); a set-up copy on the board. The code is traded by serve.js on either page."""
+        return f"{base}{'setup' if self.is_fresh() else ''}#pair={code}"
+
     def open_page(self) -> bool:
         """The browser of this computer, with a new code. Not more than once in REOPEN_EVERY seconds: a request must not be able to flood the screen with tabs."""
         with self.lock:
@@ -429,7 +440,7 @@ class Board:
             self.reopened = time.monotonic()
             self.page_served = self.page_seen = self.page_paired = False  # a new page is asked for: the flag turns true when it has come
         try:
-            return bool(self.opener(f"http://127.0.0.1:{self.port}/#pair={self.new_code()}"))
+            return bool(self.opener(self.page_address(f"http://127.0.0.1:{self.port}/", self.new_code())))
         except Exception:  # noqa: BLE001 - the second start opens the plain address then
             return False
 
@@ -2153,6 +2164,7 @@ def handler_for(board: Board) -> type:
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
             if path == "/setup":
+                board.look_at_page(True)  # (1.8.31) a new copy is opened at the wizard: the launcher's flags turn from this page too
                 return self.send(200, taskhtml.setup_page(board.serve_info({}, 0), linked=True).encode("utf-8"), "text/html; charset=utf-8")
             if path in ("/", "/board.html") or path.startswith("/task/"):
                 if path in ("/", "/board.html"):
@@ -2931,7 +2943,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     print(say("serve.started.bg" if background else "serve.started", address=address, actions=", ".join(button(action) for action in board.actions)), file=out, flush=True)  # the terminal speaks first, then the browser opens (1.7.43)
     opened = False
     try:
-        opened = board.restarted or bool(opener(f"{address}#pair={board.code}"))  # after a restart the page is there, and asks for itself
+        opened = board.restarted or bool(opener(board.page_address(address, board.code)))  # after a restart the page is there, and asks for itself
     except Exception:  # noqa: BLE001 - the person can pair by hand
         opened = False
     if ready is not None:

@@ -589,7 +589,7 @@ class WalkThroughTests(unittest.TestCase):
     def test_the_words_of_a_stop_and_of_a_dim_button_are_where_they_are_read(self) -> None:
         en = messages.table("en")
         self.assertIn("Stop on this page", en["desk.busy.note"])
-        self.assertIn("here or in VS Code", en["desk.wait.cancelled"])
+        self.assertIn("new message in the chat", en["desk.wait.cancelled"])
         self.assertIn(".tk-need-h{display:flex;flex-wrap:wrap", (WEB / "desk.css").read_text(encoding="utf-8"))  # on a phone the title wrapped letter by letter
 
     def test_an_empty_file_says_so_and_a_paused_task_has_its_way_back_on_the_card(self) -> None:

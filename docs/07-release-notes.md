@@ -8,10 +8,12 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.27 (1.8.0 – 1.8.27, 2026-11-17 – 2026-11-22)
+## 1.8.28 (1.8.0 – 1.8.28, 2026-11-17 – 2026-11-22)
 
 ### Added
 
+- **The board's own agent host** (1.8.28): VS Code only has to be installed, never open. The board starts `code agent host` (no window), signs it in with `gh`, and gives it this computer's tool folders, CA bundle and proxy, and the PATH a new terminal has. The Enter screen asks for VS Code installed and Copilot signed in through gh, with a button for each (gh's code and address on the screen, or the download page), and shows the first download of the host. When Local, a saved identity or the short command changes, the board restarts the host as soon as no chat is working.
+- **Identities without ticking** (1.8.28): the agent host holds every identity saved in Connections & sign-ins. It holds one Windows account; with several saved, **Choose the main account** on the yellow note picks it, and the agent signs in to the others one call at a time.
 - **A new autorun** (1.8.0): the default agent only schedules; a `worker` subagent does each step of `TODO.md` in a fresh context; a step that cannot be settled is parked (`[?]`) and its question goes to `QUESTIONS.md`, all asked at the end. A Start form on the task page sets the models, compact percent, minutes and a spend limit; the board relays the next message when the chat stops, with pit stops for `/compact`; a run card shows steps, spend and questions.
 - **The super agent view** (1.8.3): a third view next to Lobby and List, with what waits for you across all tasks as messages with the board's own buttons, task avatars, and a chat with a read-only `super` agent that sums up the day (`super.daily_credits` in `task.json`, 50 by default). It can ask a task a question, steer or stop it, and propose actions as cards you press; a pop-out stays on top of other windows.
 - **The super view as a place to finish things** (1.8.4): a queue pinned above the chat, most urgent first, with **Done (n)**; header counts of waits, the oldest, stuck tasks and errors; stuck tasks (`board.stuck_seconds`) and errors with **Try again**; an old wait moves up (`board.age_up_seconds`); approve a held call after **View**; previews of a requirement and a delivery.
@@ -67,6 +69,7 @@ To see which version you have: `harness --version`.
 
 ### Retired
 
+- **Open, Restart and Open with identities of VS Code** (1.8.28): the board no longer opens, restarts or looks for a VS Code window, and no window has to be open. The **VS** buttons of the task rows and the task page, *open the whole chat* on the Live tab and **Open VS Code** of the super view are gone: the chat is in the board. The check whether VS Code was started with this copy's settings, the Windows launch script of a tool pack (`launch/`), and the picker of identities are gone too. After upgrading: install `gh` and sign in once on the Enter screen; nothing else to do.
 - **The old autorun** (1.8.0): the default agent doing every step itself is gone; the scheduling chat must use a Claude model; the default run time is 480 minutes. `autorun.max_denies` and the `denied` stop reason are gone: a refusal parks the step. Remove `max_denies` from an override file.
 - **Accept and close at once** (1.8.4): it counts down 10 seconds, with Undo; leaving the page before then closes nothing.
 - **`DEV/_manual/`** (1.8.9): it is `DEV/_server/` now, a script run on a server and never promoted. An old task's `DEV/_manual/` still counts as one. A skill that writes `DEV/_manual/`, or a folder of its own at the task root, should write `DEV/_server/`, `TEST/` or `RUNS/<ENV>/` instead.

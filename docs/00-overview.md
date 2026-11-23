@@ -77,7 +77,7 @@ You can put any task aside (pause), take it up again (resume), or let the agent 
 
 ## 4. Follow and steer it in the browser
 
-Run `harness task board` in your own terminal. Your browser first shows an Enter screen (once for each tab) that checks that this copy is set up, the browser is paired, `harness doctor` has no error, VS Code is open and Copilot is connected, and lets you in only when they are. What the company's side still lacks (knowledge base, sign-ins, a program a tool pack needs) is told too, and never stops you. Then it opens on the board of every task. It opens as a **lobby**: each open task is a small agent on the floor, in the zone of what it is doing (at work, waiting for you, resting). Point at one: a card shows the task, its model, context, run time, stage and TODO, its time and Credits, and the same buttons as the list.
+Run `harness task board` in your own terminal. Your browser first shows an Enter screen (once for each tab) that checks that this copy is set up, the browser is paired, `harness doctor` has no error, VS Code is installed and Copilot is signed in through gh, and lets you in only when they are. What the company's side still lacks (knowledge base, sign-ins, a program a tool pack needs) is told too, and never stops you. Then it opens on the board of every task. It opens as a **lobby**: each open task is a small agent on the floor, in the zone of what it is doing (at work, waiting for you, resting). Point at one: a card shows the task, its model, context, run time, stage and TODO, its time and Credits, and the same buttons as the list.
 
 ![The lobby: every open task as a small agent; the card of one shows its stage, how long it waited and its buttons](images/board.png)
 
@@ -123,9 +123,9 @@ An approval works as in the terminal: the page shows what you approve and asks y
 
 ![The Task Record of a task](images/task-history.png)
 
-**With VS Code.** When VS Code is open on the folder, the board also reaches its chats. After an approval it sends the "go on" message to the right chat for you, you can steer or stop a working agent, allow a command or answer a question the agent asked, and start a new task (a chat in VS Code) from a button. Only you can; the agent cannot press them. See [Features](02-features.md#the-board-and-vs-code).
+**With VS Code.** The board also runs the chats: it starts its own agent host from VS Code (no window has to be open). After an approval it sends the "go on" message to the right chat for you, you can steer or stop a working agent, allow a command or answer a question the agent asked, and start a new task (a chat in the board's agent hoste) from a button. Only you can; the agent cannot press them. See [Features](02-features.md#the-board-and-vs-code).
 
-So the work splits cleanly: you talk to the agent and check the code in VS Code; you follow, approve and steer the tasks in the browser. What an agent writes is drawn as text only: nothing in a task file can run on the page. Details: [Features](02-features.md#the-task-page-in-the-browser).
+So the work splits cleanly: you talk to the agent, follow, approve and steer the tasks in the browser; you read and change the code in VS Code. What an agent writes is drawn as text only: nothing in a task file can run on the page. Details: [Features](02-features.md#the-task-page-in-the-browser).
 
 ## 5. Where the time went
 

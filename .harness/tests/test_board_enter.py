@@ -23,7 +23,7 @@ from test_boardserve import ServeCase
 from test_vslink import until
 
 from core import ahp, messages
-from modules.task import ready, taskhtml, vslink
+from modules.task import boardserve, ready, taskhtml, vslink
 
 WEB = taskhtml.WEB
 
@@ -680,7 +680,8 @@ class PageTests(unittest.TestCase):
         code = (WEB / "enter.js").read_text(encoding="utf-8")
         self.assertIn("chk0.ready", code)
         self.assertNotIn("DATA.rows", code)  # status only, no task data
-        self.assertNotIn("localStorage", code)  # nothing that lets a person skip it: the only memory is the tab's own session
+        self.assertNotIn("localStorage.getItem(SEEN", code)  # nothing that lets a person skip it: the only memory is the tab's own session
+        self.assertEqual(set(re.findall(r"localStorage\.\w+\((\w+)", code)), {"HINT_KEY"})  # (1.8.31) the one thing kept in the browser is that it has seen the screen, for the hint
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
             self.assertIn(call, ("/api/ready", "/api/gh", "/api/host", "/api/reopen"))  # the one read, gh's web sign-in, the agent host's restart and the pair button (1.8.x), the paired browser only
 
@@ -701,6 +702,61 @@ class PageTests(unittest.TestCase):
         code = (WEB / "enter.js").read_text(encoding="utf-8")
         self.assertIn("still()", code)
         self.assertIn("prefers-reduced-motion: reduce", code)
+
+
+class FirstRunPolishTests(unittest.TestCase):
+    """1.8.31 (A2, A5, #38): a new copy lands on the wizard, the hint of hold to charge waits, a page loaded again has no opening."""
+
+    def test_a_new_copy_is_opened_at_the_wizard_and_a_set_up_one_at_the_board(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            fake = mock.Mock(root=root)
+            fake.is_fresh = lambda: boardserve.Board.is_fresh(fake)
+            self.assertEqual(boardserve.Board.page_address(fake, "http://127.0.0.1:1/", "abc"), "http://127.0.0.1:1/setup#pair=abc")
+            (root / ".harness" / "policies" / "user.override.json").write_text('{"setup_done": true}', encoding="utf-8")
+            self.assertEqual(boardserve.Board.page_address(fake, "http://127.0.0.1:1/", "abc"), "http://127.0.0.1:1/#pair=abc")
+
+    def test_the_wizard_page_counts_for_the_launcher_and_the_page_tells_the_screen_it_is_new(self) -> None:
+        for text in ('board.look_at_page(True)  # (1.8.31) a new copy', '"fresh": self.is_fresh()'):
+            self.assertIn(text, (Path(boardserve.__file__)).read_text(encoding="utf-8"))
+        code, css = (WEB / "enter.js").read_text(encoding="utf-8"), (WEB / "enter.css").read_text(encoding="utf-8")
+        self.assertIn('DATA.serve.fresh ? " fresh"', code)
+        self.assertIn("#enter.fresh .en-foot{display:none}", css)
+
+    def test_the_hint_is_not_for_the_first_visit_and_comes_after_three_seconds_on_the_wordmark(self) -> None:
+        code, css = (WEB / "enter.js").read_text(encoding="utf-8"), (WEB / "enter.css").read_text(encoding="utf-8")
+        self.assertIn("HINT_AFTER = 3000", code)
+        self.assertIn("if (!visited) return;", code)  # the first visit binds nothing: no hint
+        self.assertIn('svg.addEventListener("pointerenter"', code)
+        self.assertIn('hint.classList.add("on")', code)
+        self.assertRegex(css, r"\.en-hint\{[^}]*opacity:0;visibility:hidden")
+        self.assertIn(".en-hint.on{opacity:1;visibility:visible", css)
+
+    def test_a_page_loaded_again_has_no_opening(self) -> None:
+        code = (WEB / "enter.js").read_text(encoding="utf-8")
+        self.assertIn('nav.type === "reload"', code)
+        self.assertIn("if (play && !still() && !reloaded)", code)
+
+    def test_the_label_of_a_kept_answer_is_made_again_in_the_language_of_now(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            check = ready.Ready(root, mock.Mock())
+            checks = [{"id": name, "state": "ok", "why": "ok", "blocking": True, "group": "required"} for name in ready.Ready.REQUIRED]
+            check.kept = {"ready": True, "checks": checks, "button": {"kind": "enter", "label": "old words"}, "problems": {"required": []}}
+            check.asked_at = check.clock()
+            check.worker = mock.Mock(is_alive=lambda: True)
+            try:
+                with mock.patch.dict(os.environ, {"HARNESS_LANGUAGE": "zh"}):
+                    messages.reset()
+                    zh = check.latest(True)["button"]["label"]
+                with mock.patch.dict(os.environ, {"HARNESS_LANGUAGE": "en"}):
+                    messages.reset()
+                    en = check.latest(True)["button"]["label"]
+            finally:
+                messages.reset()
+        self.assertEqual((zh, en), (messages.table("zh")["ready.btn.enter"], messages.table("en")["ready.btn.enter"]))
 
 
 class BlockPageTests(unittest.TestCase):

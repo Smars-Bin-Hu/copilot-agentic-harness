@@ -24,6 +24,11 @@
   const seen = () => { try { return sessionStorage.getItem(SEEN) === "1"; } catch (error) { return memorySeen; } };
   const remember = () => { memorySeen = true; try { sessionStorage.setItem(SEEN, "1"); } catch (error) { /* shown again on the next page: nothing can be kept */ } };
   if (seen()) return;
+  // (1.8.31) A page loaded again (a language change, F5) has no opening: the wordmark and the button are there at once. The letters rise as SVG on the main thread, and on a slow one that took seconds.
+  const reloaded = (() => { try { const nav = performance.getEntriesByType("navigation")[0]; return Boolean(nav && nav.type === "reload"); } catch (error) { return false; } })();
+  // (1.8.31) The hint is not for the first visit of this browser (the one right after the wizard); after that it shows when the pointer has rested on the wordmark for HINT_AFTER ms.
+  const HINT_KEY = "harness.enter.visited", HINT_AFTER = 3000;
+  const visited = (() => { try { return localStorage.getItem(HINT_KEY) === "1"; } catch (error) { return true; } })();  // no storage: the hint waits for the pointer, never shown unasked
 
   const reduceQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   const still = () => root.classList.contains("lite") || Boolean(reduceQuery && reduceQuery.matches);  // no motion at all: no loop, no charge
@@ -64,12 +69,12 @@
   const sub = h("div", {class: "en-sub", hidden: "hidden"}, subDot, subText);  // under the button: one short line
   const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
   const cta = h("div", {class: "en-cta", "aria-live": "polite"}, card, go, sub, errLine);
-  const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
-  const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
+  const hint = h("div", {class: "en-cap en-hint", "aria-hidden": "true"}, t("board.enter.hint"));
+  const enter = h("div", {id: "enter", class: (isTask ? "pending" : "") + (DATA.serve.fresh ? " fresh" : ""), role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
     h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, legal, cta, hint));
   document.body.append(enter);
   const stage = enter.querySelector(".en-stage");
-  let open = true;
+  let open = true;  // (1.8.31) `fresh` (a copy that is not set up) shows only the wordmark until it goes to the wizard
   let shown = !isTask;  // the screen is on view (a task page opened from a link keeps it hidden until it is known that it is needed)
 
   function buildWord() {
@@ -288,6 +293,12 @@
     wm.raf = requestAnimationFrame(tick);
   }
   function loop() { if (!wm.raf && open && shown && !still() && !document.hidden) { wm.last = 0; wm.raf = requestAnimationFrame(tick); } }
+  let hintTimer = 0;
+  function bindHint() {  // the pointer on the wordmark for HINT_AFTER ms: the hint of hold to charge comes (not the first time, `visited`); it stays until the screen goes
+    if (!visited) return;
+    svg.addEventListener("pointerenter", () => { clearTimeout(hintTimer); hintTimer = setTimeout(() => { hint.classList.add("on"); hint.removeAttribute("aria-hidden"); }, HINT_AFTER); });
+    svg.addEventListener("pointerleave", () => clearTimeout(hintTimer));
+  }
   function bindPlay() {
     enter.addEventListener("pointermove", (event) => {
       const p = svgPt(event.clientX, event.clientY);
@@ -452,7 +463,8 @@
     palette(); fxSize(); app.inert = true; root.classList.add("en-open");
     roomForHi();
     if (typeof SPACE !== "undefined") { SPACE.hosted = () => Boolean(wm.raf); SPACE.onTilt = stageApply; }
-    if (play && !still()) { void enter.offsetWidth; enter.classList.add("intro"); }
+    if (play && !still() && !reloaded) { void enter.offsetWidth; enter.classList.add("intro"); }
+    if (!visited) { try { localStorage.setItem(HINT_KEY, "1"); } catch (error) { /* seen again as the first time: no harm */ } }
     placeBot(); render(); loop();
     setTimeout(placeBot, 60); setTimeout(() => { if (open && shown) wake(); }, 1500);
     try { enter.focus({preventScroll: true}); } catch (error) { /* no focus */ }
@@ -501,7 +513,7 @@
   });
 
   // ---------- start ----------
-  buildWord(); buildBot(); bindPlay(); wm.spot.setAttribute("cx", (VBW * .62).toFixed(1));
+  buildWord(); buildBot(); bindPlay(); bindHint(); wm.spot.setAttribute("cx", (VBW * .62).toFixed(1));
   window.addEventListener("resize", () => { placeBot(); fxSize(); roomForHi(); roomForCard(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) return; poll(); loop(); });
   chk0.t0 = Date.now();

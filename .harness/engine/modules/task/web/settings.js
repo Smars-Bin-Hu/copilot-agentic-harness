@@ -17,6 +17,45 @@ const SETTINGS = (function () {
 
   let win = null;  // the window that is open: {view, show}
 
+  // ------------------------------------------------------------------------------------------------ how it moves (1.8.33, motion.js; nothing here moves under Lite or the system's reduced motion but a fade)
+  // The window grows out of the gear it was opened with (scale .96 to 1 and opacity, 280 ms; the shade 200 ms) and leaves the same way (200 ms); opened from elsewhere (a fix button, the palette): from its centre.
+  let lastDown = {node: null, at: 0};
+  document.addEventListener("pointerdown", (event) => { lastDown = {node: event.target, at: performance.now()}; }, true);
+  const gearOf = () => {  // the gear (dock.js) when the person pressed or focused it just now, else null
+    const gear = document.querySelector(".dock-setup");
+    if (!gear || !gear.isConnected) return null;
+    const pressed = lastDown.node && gear.contains(lastDown.node) && performance.now() - lastDown.at < 800;
+    return pressed || gear.contains(document.activeElement) ? gear : null;
+  };
+  const moves = () => typeof MOTION !== "undefined";
+  const cut = (node) => { for (const running of (node.getAnimations ? node.getAnimations() : [])) running.cancel(); };
+  const SHRINK = "scale(.96)";
+  // grow(box, shade, gear): the way in; returns the way out for the same window
+  function grow(box, shade, gear) {
+    if (!moves()) return () => {};
+    const at = box.getBoundingClientRect(), from = gear ? gear.getBoundingClientRect() : null;
+    box.style.transformOrigin = (from ? from.left + from.width / 2 - at.left : at.width / 2) + "px " + (from ? from.top + from.height / 2 - at.top : at.height / 2) + "px";
+    MOTION.play(box, [{opacity: 0, transform: SHRINK}, {opacity: 1, transform: "none"}], {ms: MOTION.MS.window});
+    MOTION.play(shade, [{opacity: 0}, {opacity: 1}], {ms: MOTION.MS.show});
+    return () => {  // the window is gone from the page (X, Esc, a click beside it, a close from outside): its shade comes back, inert, for 200 ms, and fades
+      cut(box); cut(shade);
+      document.body.append(shade);
+      shade.inert = true;
+      shade.style.pointerEvents = "none";
+      Promise.all([
+        MOTION.play(box, [{opacity: 1, transform: "none"}, {opacity: 0, transform: SHRINK}], {ms: MOTION.MS.show, ease: MOTION.OUT, fill: "forwards"}),
+        MOTION.play(shade, [{opacity: 1}, {opacity: 0}], {ms: MOTION.MS.show, ease: MOTION.OUT, fill: "forwards"}),
+      ]).then(() => shade.remove());
+    };
+  }
+  // what a section looks like while it loads (S3): grey bars [width %, height px] in the shape of what comes
+  const BAR = {sub: [70, 16], field: [100, 40], label: [24, 14], row: [100, 52], short: [60, 40]};
+  const SHAPES = {
+    you: ["sub", "label", "short", "label", "field"], programs: ["sub", "row", "row", "row", "row"], copilot: ["sub", "row", "row"], kb: ["sub", "label", "field", "row", "row", "row"],
+    packs: ["sub", "row", "row", "row", "row"], repos: ["sub", "row", "row", "row"], connections: ["sub", "row", "row", "row"], network: ["sub", "label", "field", "label", "field"], adv: ["label", "field", "label", "field", "label", "short"],
+  };
+  const skeleton = (id) => h("div", {class: "st-skel", role: "status", "aria-label": t("settings.loading")}, (SHAPES[id] || SHAPES.you).map((kind) => h("div", {class: "st-sk " + kind, style: "width:" + BAR[kind][0] + "%;height:" + BAR[kind][1] + "px"})));
+
   // ------------------------------------------------------------------------------------------------ the dots: what is not set up, by section
   function dotsOf(list, hold) {
     const out = new Set();
@@ -44,13 +83,23 @@ const SETTINGS = (function () {
     const pane = h("div", {class: "st-pane"}, h("div", {class: "st-head"}, heading, x), body);
     const view = SERVE.dialog([h("div", {class: "st-side"}, h("h2", {class: "st-h"}, t("dock.setup")), nav), pane]);
     view.box.classList.add("st-win");
+    const shade = view.box.parentNode;
+    const vanish = grow(view.box, shade, gearOf());
+    let closing = false;
+    const closer = new MutationObserver(() => { if (shade.isConnected || closing) return; closing = true; closer.disconnect(); vanish(); });  // any way of closing removes the shade: one place to move it out
+    closer.observe(document.body, {childList: true});
     const items = SECTIONS.map((id) => {
       const mark = h("i", {class: "st-dot", hidden: ""});
       const node = h("button", {type: "button", class: "st-i", "data-sec": id}, h("span", {class: "st-n"}, t(LABELS[id])), mark);
       node.addEventListener("click", () => show(id));
       return {id, node, mark};
     });
-    put(nav, items.map((item) => [item.id === "adv" ? h("div", {class: "st-sep"}) : null, item.node]));
+    const sel = h("i", {class: "st-sel", "aria-hidden": "true"});  // the selected item's background: one block that glides to the item chosen (S2); in the narrow window the chips draw their own
+    const place = (item) => { if (!item) return; Object.assign(sel.style, {left: item.node.offsetLeft + "px", top: item.node.offsetTop + "px", width: item.node.offsetWidth + "px", height: item.node.offsetHeight + "px"}); };
+    put(nav, sel, items.map((item) => [item.id === "adv" ? h("div", {class: "st-sep"}) : null, item.node]));
+    let current = null;
+    const relayout = () => { if (closing) window.removeEventListener("resize", relayout); else if (current) place(items.find((item) => item.id === current)); };
+    window.addEventListener("resize", relayout);
     const refreshDots = () => {
       dots = dotsOf(typeof READY !== "undefined" ? READY.current() : [], hold);
       items.forEach((item) => { const on = dots.has(item.id); item.mark.hidden = !on; item.node.classList.toggle("hot", on); });
@@ -60,7 +109,7 @@ const SETTINGS = (function () {
     let left = false, watch = 0;
     const leave = () => { if (left) return; left = true; clearInterval(watch); stopPart(); if (win && win.view === view) win = null; if (changed) location.reload(); else if (given.done) given.done(); };  // once: the X, a close from outside and the watch below all end here; the name, the knowledge base or the repositories changed: the page reads them again
     x.addEventListener("click", () => { view.close(); leave(); });
-    watch = setInterval(() => { if (!view.box.isConnected) leave(); }, 300);  // the dialog closes itself on Escape
+    watch = setInterval(() => { if (!view.box.isConnected || closing) leave(); }, 300);  // the dialog closes itself on Escape
 
     // what to scroll to once the section has drawn (a part or a row): asked again as it fills in, for a few seconds
     let want = null, until = 0;
@@ -79,22 +128,63 @@ const SETTINGS = (function () {
     };
     const saved = () => { changed = true; };
 
+    // The section area (S2, S3): the old section fades out (120 ms), the new one rises 8 px and fades in (200 ms); while it loads, grey bars stand in. One section is on screen at a time: a burst of
+    // clicks shares the one fade out and only the last click lands.
+    let fading = null;
+    const fadeOut = () => {
+      if (fading) return fading;
+      if (!body.firstChild || !moves()) return Promise.resolve();
+      const from = Number(getComputedStyle(body).opacity);
+      const frames = [{opacity: Number.isFinite(from) ? from : 1}, {opacity: 0}];
+      cut(body); cut(heading);
+      const run = Promise.all([body, heading].map((node) => MOTION.play(node, frames, {ms: MOTION.MS.micro, ease: MOTION.OUT, fill: "forwards"}))).then(() => { fading = null; });
+      fading = run;
+      return run;
+    };
+    const leaveBars = () => {  // the grey bars go (120 ms) before the section comes in: the title stays
+      const from = Number(getComputedStyle(body).opacity);
+      cut(body);
+      return MOTION.play(body, [{opacity: Number.isFinite(from) ? from : 1}, {opacity: 0}], {ms: MOTION.MS.micro, ease: MOTION.OUT, fill: "forwards"});
+    };
+    const rise = () => { if (!moves()) return; cut(body); cut(heading); MOTION.appear(body, {y: 8}); MOTION.appear(heading); };
+
     function show(id, part, focus) {
       stopPart();
       const mine = ++token;
       want = part || focus ? {part, focus} : null; until = Date.now() + 4000;
-      items.forEach((item) => { item.node.classList.toggle("on", item.id === id); item.node.setAttribute("aria-current", item.id === id ? "page" : "false"); });
-      heading.textContent = t(LABELS[id]);
-      body.className = "st-body wz st-sec-" + id;
-      pane.scrollTop = 0;
-      put(body, h("p", {class: "st-wait"}, h("span", {class: "wz-spin"}), " ", t("settings.loading")));
+      const target = items.find((item) => item.id === id);
+      const select = () => {
+        items.forEach((item) => { item.node.classList.toggle("on", item.id === id); item.node.setAttribute("aria-current", item.id === id ? "page" : "false"); });
+        place(target);
+      };
+      if (current && moves()) MOTION.glide(sel, select, MOTION.MS.show); else select();
+      current = id;
+      const first = !body.firstChild;
+      let ready = null, parted = false, onSkeleton = false, skeletonAt = 0;
+      const arrive = (nodes) => {  // the section has drawn (or failed): in once the old one has left; over the grey bars with a fade of their own
+        if (!parted) { ready = {nodes}; return; }
+        if (!onSkeleton) { put(body, nodes); reveal(); return; }
+        const land = () => { if (mine !== token) return; onSkeleton = false; cut(body); put(body, nodes); if (moves()) MOTION.appear(body, {y: 8}); reveal(); };
+        if (first || performance.now() - skeletonAt < 120 || !moves()) land();  // the window's own opening covers the first one else leaveBars().then(land);
+      };
+      fadeOut().then(() => {
+        if (mine !== token) return;
+        parted = true;
+        heading.textContent = t(LABELS[id]);
+        body.className = "st-body wz st-sec-" + id;
+        pane.scrollTop = 0;
+        cut(body); cut(heading);
+        if (ready) put(body, ready.nodes); else { put(body, skeleton(id)); onSkeleton = true; skeletonAt = performance.now(); }
+        if (!first) rise();
+        if (ready) reveal();
+      });
       const live = () => mine === token && win && win.view === view;
       const env = {
         live, saved, refresh: () => { if (live()) refreshDots(); }, jump: (sec) => show(sec),
-        inside: (nodes, stopper) => { if (!live()) { if (stopper) stopper(); return; } stop = stopper || null; put(body, nodes); reveal(); },
+        inside: (nodes, stopper) => { if (!live()) { if (stopper) stopper(); return; } stop = stopper || null; arrive(nodes); },
       };
       const draw = {you: wizardSection, programs: wizardSection, copilot: wizardSection, kb: wizardSection, repos: wizardSection, packs: packsSection, connections: connectionsSection, network: networkSection, adv: advancedSection}[id];
-      Promise.resolve(draw(id, env)).catch((error) => { if (live()) put(body, h("p", {class: "bad"}, errorText(error))); });
+      Promise.resolve(draw(id, env)).catch((error) => { if (live()) arrive([h("p", {class: "bad"}, errorText(error))]); });
     }
 
     // the sections that are pages of the wizard: prepared (read again), drawn bare, with a Save of their own where the page saves

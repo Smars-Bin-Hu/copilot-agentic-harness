@@ -8,6 +8,18 @@
 .st-win .st-i{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;min-height:36px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:var(--soft);font:inherit;font-size:14px;text-align:left;cursor:pointer}
 .st-win .st-i:hover{background:var(--hover);color:var(--ink)}
 .st-win .st-i.on{background:var(--track);color:var(--ink);font-weight:600}
+/* (1.8.33) the selected background is one block that glides (settings.js, S2): the wide window draws it, the narrow window's chips draw their own */
+.st-win .st-nav{position:relative}
+.st-win .st-sel{position:absolute;left:0;top:0;border-radius:10px;background:var(--track);pointer-events:none}
+.st-win .st-i{position:relative;z-index:1}
+@media (min-width:901px){.st-win .st-i.on,.st-win .st-i.on:hover{background:transparent}}
+/* grey bars while a section loads (S3): opacity only; still under Lite and the system's reduced motion */
+.st-win .st-skel{display:flex;flex-direction:column;gap:12px}
+.st-win .st-sk{max-width:100%;border-radius:10px;background:var(--track);animation:st-pulse 1.1s ease-in-out infinite alternate}
+.st-win .st-sk.sub,.st-win .st-sk.label{border-radius:6px}
+@keyframes st-pulse{from{opacity:.45}to{opacity:1}}
+html.lite .st-win .st-sk{animation:none}
+@media (prefers-reduced-motion:reduce){.st-win .st-sk{animation:none}}
 .st-win .st-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .st-win .st-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--hot-dot)}.st-win .st-dot[hidden]{display:none}
 .st-win .st-sep{height:1px;margin:10px 12px;background:var(--line)}
@@ -20,7 +32,6 @@
 .st-win .st-body.wz::after{display:none}
 .st-win .st-sub{margin:0 0 18px;color:var(--soft);font-size:14px}
 .st-win .st-note{margin:0 0 16px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;color:var(--soft);font-size:13.5px}
-.st-win .st-wait{color:var(--soft);display:flex;align-items:center;gap:8px}
 .st-win .st-foot,.st-win .st-line{display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-top:18px}
 .st-win .st-saved{color:var(--good);font-size:13.5px;font-weight:600}
 .st-win .st-rule{height:1px;margin:22px 0;background:var(--line)}
@@ -48,6 +59,7 @@
   .st-win .st-i{width:auto;min-height:34px;padding:0 14px;border:1px solid var(--line2);border-radius:999px;font-size:13.5px}
   .st-win .st-i.on{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
   .st-win .st-sep{display:none}
+  .st-win .st-sel{display:none}
   .st-win .st-head{padding:16px 18px 8px}.st-win .st-body{padding:4px 18px 24px}
 }
 /* The pieces of the old setup form that the panels still draw: the folder picker (dock.js), the Programs and Network panels (machine.js), the Connections panel (servers.js), the Settings window.

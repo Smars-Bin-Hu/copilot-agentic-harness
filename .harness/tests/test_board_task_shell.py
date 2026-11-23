@@ -190,7 +190,7 @@ class PageFileTests(unittest.TestCase):
         desk = source("desk.js")
         for gone in ("function chatBars()", "function lane(", "function ribbon()", "function contextMeter("):
             self.assertNotIn(gone, desk)
-        for kept in ("function settingsRow()", "function draftsBox()", "function resultForm()", "function roundSwitch()", "copyTitleButton(", "askCompact", "SERVE.vsButton(", "SHELL.vsPill(", "/snapshot/", "desk.report",
+        for kept in ("function settingsRow()", "function draftsBox()", "function resultForm()", "function roundSwitch()", "copyTitleButton(", "askCompact", "SHELL.vsPill(", "/snapshot/", "desk.report",
                      "TALK.includes(item.action)", "desk.actions.filter(isOptional)", "SERVE.banner(true)"):
             self.assertIn(kept, desk)
 

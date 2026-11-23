@@ -308,6 +308,58 @@ def with_commands(node: Dict[str, Any], started: List[Dict[str, Any]], outside: 
             row["call"] = {key: str(call.get(key) or "") for key in ("system", "env", "verb", "how", "code")}
 
 
+REPLY_CHARS = 1500  # of the agent's last words in a prompt, shown under it (C1); the whole round opens from the board's stream
+
+
+def with_stream(root: Path, task: str, nodes: List[Dict[str, Any]]) -> None:
+    """(C1) What the board kept of the task's chats (`.task/stream.jsonl`, `chatstream`) put on the prompts: each prompt whose turn the stream holds (matched by its start, `turn_of_round`) gets `turn`
+    (its id: the page opens the whole round from it), `reply` (the agent's last words, cut to REPLY_CHARS; `reply_cut`), the prompt's own words when Copilot's record gave none, and on each tool row
+    of the hook log the call of that turn it was (`call_id`, by tool name in order) with `live`, the line the Live tab draws for it (a call opens to its input and output from there), and the
+    command when the record gave none. Works with Copilot's record gone. Never raises: the stream is an extra."""
+    try:
+        from . import chatlive, chatstream
+        turns = [turn for turn in chatstream.read(root, task)["turns"] if not turn.get("sub")]
+    except Exception:  # noqa: BLE001
+        return
+    if not turns:
+        return
+    for node in nodes:
+        try:
+            turn = chatstream.turn_of_round(turns, node.get("at"), node.get("text"))
+            if turn is None:
+                continue
+            node["turn"] = turn["id"]
+            if not node.get("text") and turn.get("text"):
+                node["text"] = _clip(turn["text"])
+            said = [part for part in turn["parts"] if part.get("kind") == "markdown" and str(part.get("content") or "").strip()]
+            if said:
+                text = str(said[-1]["content"])
+                node["reply"] = redact.text(text[:REPLY_CHARS])
+                node["reply_cut"] = len(text) > REPLY_CHARS
+            calls = [part["toolCall"] for part in turn["parts"] if part.get("kind") == "toolCall" and isinstance(part.get("toolCall"), dict)]
+            used: set = set()
+            for row in node["rows"]:
+                if row.get("kind") != "tool" or row.get("source"):
+                    continue
+                name = str(row.get("tool") or "").lower()
+                at = next((index for index, call in enumerate(calls) if index not in used and str(call.get("toolName") or "").lower() == name), None)
+                if at is None:
+                    continue
+                used.add(at)
+                call = calls[at]
+                ident = str(call.get("toolCallId") or "")
+                if not ident:
+                    continue
+                row["call_id"] = ident
+                row["live"] = chatlive.tool_item(call, ident, False, root)
+                if not row.get("command"):
+                    found = chatlive.detail(call, root)
+                    if found.get("command"):
+                        row["command"] = _clip(found["command"], COMMAND_CHARS)
+        except Exception:  # noqa: BLE001 - one prompt that cannot be matched leaves the others
+            continue
+
+
 def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """The prompts of the task, newest first, with what the agent did for each; `stats`, the numbers of the whole task; `problems`, what was blocked or failed, newest first. Empty: nothing to show."""
     info = taskinsight.of_task(root, task, None, True)
@@ -326,6 +378,7 @@ def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
         path = None if item.get("until") else copilot_events.events_path(item.get("session_id") or "")
         stopped = copilot_events.cancelled_at(path) if path is not None else None
         settle(node, item, copilot_events.seconds(stopped) if stopped else None)
+    with_stream(root, task, nodes)  # (C1) the board's own record of the chats: the reply, the turn, each call's input and output; a command only where Copilot's record gave none
     problems: List[Dict[str, Any]] = []
     for node in nodes:
         for row in node["rows"]:

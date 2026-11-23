@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import redact
+from core import ahp, redact
 
 from . import mdtree
 
@@ -50,6 +50,9 @@ def part_id(part: Any) -> str:
         return ""
     if part.get("kind") == "toolCall":
         return str((part.get("toolCall") or {}).get("toolCallId") or "") if isinstance(part.get("toolCall"), dict) else ""
+    if part.get("kind") == "inputRequest":  # B8: a question of the agent, by its request id
+        request = part.get("request") if isinstance(part.get("request"), dict) else {}
+        return "q:" + str(request["id"]) if isinstance(request.get("id"), str) and request["id"] else ""
     return str(part.get("id") or "")
 
 
@@ -61,10 +64,20 @@ def stamp(cached: Dict[str, Any], action: Dict[str, Any], now: int) -> None:
         marks.clear()
         return
     ident = str(action.get("toolCallId") or "") if kind.startswith("chat/toolCall") else part_id(action.get("part")) if kind == "chat/responsePart" else ""
+    if kind == "chat/inputRequested" and isinstance(action.get("request"), dict) and isinstance(action["request"].get("id"), str):
+        ident = "q:" + action["request"]["id"]
+    elif kind == "chat/inputCompleted" and isinstance(action.get("requestId"), str):
+        ident = "q:" + action["requestId"]
     if not ident:
         return
-    if kind in ("chat/responsePart", "chat/toolCallStart"):
+    if kind in ("chat/responsePart", "chat/toolCallStart", "chat/inputRequested"):
         marks.setdefault(ident, [now, 0])
+    elif kind == "chat/inputCompleted":
+        mark = marks.setdefault(ident, [0, 0])
+        mark[1] = now
+    elif kind == "chat/toolCallConfirmed" and action.get("approved"):
+        mark = marks.setdefault(ident, [now, 0])
+        mark[:] = [now, 0, now]  # B8: it runs from now, and this is when it was let go
     elif kind == "chat/toolCallReady" and action.get("confirmed"):
         marks[ident] = [now, 0]  # it runs from now: the wait for a person's yes is not run time
     elif kind == "chat/toolCallComplete":
@@ -619,6 +632,8 @@ def tool_item(call: Dict[str, Any], ident: str, active: bool, root: Optional[Pat
     reason = call.get("reason") if str(call.get("status") or "") == "cancelled" else None
     if isinstance(reason, str) and reason:
         item["reason"] = reason[:40]  # why a call was cancelled (`denied`, `result-denied`, ...): a call the person refused is drawn as stopped, not failed, before it is opened
+    if call.get("confirmed") == "user-action":
+        item["ok"] = "you"  # B8: it waited for a person, who let it go
     if target and target != say:  # words of Copilot, not a place: once is enough
         item["target"] = target
     item.update(facts)
@@ -631,7 +646,11 @@ def said_item(turn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """What the person said to start a turn: a small mark in the stream, with the words in its card. None for a turn no person started. A turn read from the stream file (`chatstream.read`) has
     no `message`: its `text` and `files` are the person's words, so it counts as the person's (a turn no person started has no text there)."""
     message = _message_of(turn)
-    if (message.get("origin") or {}).get("kind") != "user":
+    origin = (message.get("origin") or {}).get("kind")
+    if origin == "systemNotification":  # B13: a turn Copilot started itself (a background command ended): its words, as a grey line, not as the person's
+        text, _was_cut = cut(message.get("text"), SAY_CAP * 4)
+        return {"id": f"{turn.get('id')}.me", "k": "note", "text": text, "starts": True} if text.strip() else None
+    if origin != "user":
         return None
     text, was_cut = cut(message.get("text"), TEXT_CAP)
     if not text:
@@ -687,6 +706,19 @@ def part_item(part: Dict[str, Any], ident: str, running: bool, last: bool, mark:
         if isinstance(part.get("_meta"), dict) and not isinstance(call.get("_meta"), dict):  # `sub_calls` reads the meta from the part too
             call = dict(call, _meta=part["_meta"])
         item = tool_item(call, ident, running, root)
+    elif kind == "inputRequest" and isinstance(part.get("request"), dict):
+        item = ask_item(part, ident)
+    elif kind == "systemNotification":  # B13: what Copilot itself tells the chat (a background command ended, a subagent is done): one grey line
+        content = part.get("content")
+        text, _was_cut = cut(content.get("markdown") if isinstance(content, dict) else content, SAY_CAP * 4)
+        if not text.strip():
+            return None  # the host's marks with no words (the end of a response round)
+        item = {"id": ident, "k": "note", "text": text}
+    elif kind == "compaction":  # B14: the context was compacted by Copilot itself
+        item = {"id": ident, "k": "note", "kind": "compact", "text": ""}
+        for key in ("before", "after", "count"):
+            if isinstance(part.get(key), int) and not isinstance(part.get(key), bool):
+                item[key] = part[key]
     elif kind == "error":  # 1.8.5: the turn ended in an error; the page draws it red, with its words
         text, _was_cut = cut(part.get("message"), ERROR_CAP)
         item = {"id": ident, "k": "err", "text": text, "resumable": part.get("resumable") is True}
@@ -694,9 +726,51 @@ def part_item(part: Dict[str, Any], ident: str, running: bool, last: bool, mark:
         return None
     if mark and mark[0]:
         item["t0"] = mark[0]
-        if mark[1] and item["k"] == "tool":
+        if mark[1] and item["k"] in ("tool", "ask"):
             item["t1"] = mark[1]
+    if item["k"] == "tool" and mark and len(mark) > 2 and mark[2]:
+        item["okAt"] = mark[2]  # B8: when the person let it go
     return item
+
+
+ASK_LINE = 300  # characters of an answer on the closed line of a question
+
+
+def answer_words(value: Any, options: Optional[List[Dict[str, Any]]] = None) -> str:
+    """An answer as words: the host's `{state, value: {kind, value}}` unwrapped, an option id turned into its label, a list joined. Empty: no answer."""
+    labels = {str(item.get("id")): str(item.get("label") or "") for item in options or [] if isinstance(item, dict)}
+    for _ in range(4):
+        if isinstance(value, dict) and "value" in value:
+            value = value["value"]
+        else:
+            break
+    if isinstance(value, dict):
+        value = value.get("selectedValues") or value.get("selected") or value.get("text") or value.get("label") or ""
+    if isinstance(value, list):
+        return ", ".join(answer_words(one, options) for one in value[:20] if answer_words(one, options))
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value or "")
+    return labels.get(text) or text
+
+
+def ask_item(part: Dict[str, Any], ident: str) -> Dict[str, Any]:
+    """A question of the agent (B8): `{id, k: ask, text, qs: [{title, answer}], st}`. `st`: `wait` (not answered yet), `done` (answered), `skip` (declined or cancelled). `text`: the message, else
+    the first question's title. The answers are words (`answer_words`), each cut to `ASK_LINE`."""
+    request = part["request"]
+    answers = request.get("answers") if isinstance(request.get("answers"), dict) else {}
+    qs = []
+    for question in request.get("questions") or [] if isinstance(request.get("questions"), list) else []:
+        if not isinstance(question, dict):
+            continue
+        title = words(question.get("title") or question.get("message") or "")
+        qs.append({"title": cut(title, SAY_CAP)[0], "answer": cut(answer_words(answers.get(str(question.get("id"))), question.get("options")), ASK_LINE)[0]})
+    text = cut(words(request.get("message") or request.get("title") or (qs[0]["title"] if qs else "")), SAY_CAP)[0]
+    response = part.get("response")
+    st = "wait" if response is None else "done" if response == "accept" else "skip"
+    return {"id": ident, "k": "ask", "text": text, "qs": qs[:20], "st": st}
 
 
 def _thought_ends(items: List[Dict[str, Any]]) -> None:
@@ -713,7 +787,9 @@ def _signature(part: Dict[str, Any], last: bool, running: bool, mark: List[int])
         return (kind, len(part["content"]) if isinstance(part.get("content"), str) else 0, last, tuple(mark), part.get("duration") if kind == "reasoning" else None)
     call = part.get("toolCall")
     if kind == "toolCall" and isinstance(call, dict):
-        return (kind, running, call.get("status"), call.get("success"), tuple(len(str(call.get(key) or "")) for key in ("pastTenseMessage", "intention", "invocationMessage", "displayName", "toolInput")), _content_sig(call), tuple(mark))
+        return (kind, running, call.get("status"), call.get("success"), tuple(len(str(call.get(key) or "")) for key in ("pastTenseMessage", "intention", "invocationMessage", "displayName", "toolInput")), _content_sig(call), tuple(mark), call.get("confirmed"))
+    if kind == "inputRequest" and isinstance(part.get("request"), dict):
+        return (kind, part.get("response"), json.dumps(part["request"].get("answers"), sort_keys=True, default=str)[:2000], len(json.dumps(part["request"], default=str)), tuple(mark))
     if kind == "error":
         return (kind, len(str(part.get("message") or "")), part.get("resumable") is True)
     return ("skip", kind if isinstance(kind, str) else "")
@@ -805,6 +881,22 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
     return {"items": items, "more": pointer is not None, "started": str(turn.get("startedAt") or "") if running else "", "before": pointer, "turn": str(turn.get("id") or "")}
 
 
+def round_facts(state: Dict[str, Any]) -> Dict[str, Any]:
+    """The live numbers of the last turn, for the title of the round that stays at the top of the Live tab (B9): `{calls, credits}`. `calls`: its tool calls, the ones that fell out of memory
+    too; `credits`: how much the session's total grew since the turn before ended, None when the host did not say both (as the receipt counts it)."""
+    from . import chatctx  # local: only this function needs it
+    turn, _running = last_turn(state)
+    if turn is None:
+        return {"calls": 0, "credits": None}
+    parts = turn.get("responseParts") if isinstance(turn.get("responseParts"), list) else []
+    calls = sum(1 for part in parts if isinstance(part, dict) and part.get("kind") == "toolCall") + (int(turn.get("droppedCalls") or 0) if isinstance(turn.get("droppedCalls"), int) else 0)
+    done = [one for one in state.get("turns") or [] if isinstance(one, dict) and one is not turn]
+    before = done[-1] if done else None
+    now = chatctx.session_total(turn.get("usage"))
+    then = chatctx.session_total(before.get("usage")) if before else (0.0 if not done else None)
+    return {"calls": calls, "credits": round(max(0.0, now - then), 2) if now is not None and then is not None else None}
+
+
 def all_turns(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Every turn of a chat state in memory, oldest first, the one that runs last."""
     turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)] if isinstance(state.get("turns"), list) else []
@@ -866,6 +958,61 @@ def latest(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pa
     items.reverse()
     _thought_ends(items)
     return {"items": items, "more": more, "started": str(active.get("startedAt") or "") if active else ""}
+
+
+RECEIPT_FILES = 200  # files a receipt lists (the rest are counted in `more`)
+RECEIPT_CALLS = 20  # tool call ids kept for one file: what the page opens to show its diff
+
+
+def call_files(call: Dict[str, Any], root: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """The files an edit or create call that completed changed: `[{path, add, del, new}]`, as its closed line counts them (`_facts`): from the git-style diff of its result, else from the host's
+    `fileEdit` items (their `after` uri, else `before`, and their counts). Any other call, one that did not complete, or a result with neither: []."""
+    given = _given(call)
+    if state_of(call, False) not in ("done", "fail") or kind_of(call, given) not in ("edit", "create"):
+        return []
+    items = _items(call)
+    files = parse_diff("\n".join(_diff_texts(items)), root)[0]
+    if files:
+        return [{"path": one["path"], "add": one["add"], "del": one["del"], "new": bool(one["new"])} for one in files if one.get("path")]
+    out: List[Dict[str, Any]] = []
+    for item in items:
+        if item.get("type") != "fileEdit":
+            continue
+        side = item.get("after") if isinstance(item.get("after"), dict) else item.get("before") if isinstance(item.get("before"), dict) else {}
+        path = ahp.uri_path(str(side.get("uri") or "")) if isinstance(side.get("uri"), str) else ""
+        if not path:
+            continue
+        diff = item.get("diff") if isinstance(item.get("diff"), dict) else {}
+        out.append({"path": _relative(path, root), "add": _count(diff.get("added")), "del": _count(diff.get("removed")), "new": not isinstance(item.get("before"), dict)})
+    return out
+
+
+def receipt(parts: List[Any], root: Optional[Path] = None) -> Dict[str, Any]:
+    """What a turn did, for its receipt (B6): `{calls, files: [{path, add, del, new, calls}], add, del, more}`. `calls`: the tool calls among `parts` (a subagent is one call: its own steps are in
+    its chat); `files`: each file the edit and create calls changed, in the order first changed, with the lines added and removed summed over the calls and the ids of those calls (at most
+    `RECEIPT_CALLS`: the page opens them for the diff); `add`, `del`: over all the files; `more`: files past `RECEIPT_FILES`, which are counted in `add` and `del` but not listed. Only what the calls'
+    results say: a file a command changed (`sed -i`, a script) is not in it. `parts` are the parts of one turn, from memory or from the stream file."""
+    calls = 0
+    files: Dict[str, Dict[str, Any]] = {}
+    add = gone = 0
+    for part in parts:
+        call = part.get("toolCall") if isinstance(part, dict) and part.get("kind") == "toolCall" else None
+        if not isinstance(call, dict):
+            continue
+        calls += 1
+        ident = str(call.get("toolCallId") or part_id(part) or "")
+        for one in call_files(call, root):
+            add += one["add"]
+            gone += one["del"]
+            held = files.get(one["path"])
+            if held is None:
+                held = files[one["path"]] = {"path": one["path"], "add": 0, "del": 0, "new": one["new"], "calls": []}
+            held["add"] += one["add"]
+            held["del"] += one["del"]
+            if ident and ident not in held["calls"] and len(held["calls"]) < RECEIPT_CALLS:
+                held["calls"].append(ident)
+    listed = list(files.values())
+    return {"calls": calls, "files": listed[:RECEIPT_FILES], "add": add, "del": gone, "more": max(0, len(listed) - RECEIPT_FILES)}
 
 
 SUB_SAID = 160  # characters of what a finished subagent said last, on its row
@@ -951,3 +1098,119 @@ def attach_subs(items: List[Dict[str, Any]], subs: List[Tuple[Dict[str, Any], Op
             if why:
                 found["said"] = why
         item["sub"] = found
+
+
+# --- B19, B20: the filter's counts and the search of a whole round ----------------------------------------------------------------------------------------------
+FIND_HITS = 200  # hits of one search; more are counted as `more`
+FIND_SIDE = 60  # characters shown on each side of a hit
+FIND_QUERY = 200
+
+
+def facet_of(item: Dict[str, Any]) -> List[str]:
+    """The filters of the Live tab an item is in (B19), as the page counts them: `fail` (a call that failed), `change` (an edit or a new file), `run` (a command), `wait` (a call or a question
+    that waits for the person). What is said (the person's words, a reply, an error) is in none: it is the thread, never filtered out."""
+    kind = item.get("k")
+    out: List[str] = []
+    if kind == "tool":
+        if item.get("st") == "fail":
+            out.append("fail")
+        if item.get("kind") in ("edit", "create"):
+            out.append("change")
+        if item.get("kind") == "run":
+            out.append("run")
+        if item.get("st") == "wait":
+            out.append("wait")
+    elif kind == "ask" and item.get("st") == "wait":
+        out.append("wait")
+    return out
+
+
+def facets(items: List[Dict[str, Any]]) -> Dict[str, int]:
+    """How many items are in each filter (`facet_of`), and `all`: the steps (calls, thoughts, questions, notes)."""
+    counts = {"all": 0, "fail": 0, "change": 0, "run": 0, "wait": 0}
+    for item in items:
+        if not isinstance(item, dict) or item.get("k") not in ("tool", "think", "ask", "note"):
+            continue
+        counts["all"] += 1
+        for name in facet_of(item):
+            counts[name] += 1
+    return counts
+
+
+def _fields(part: Dict[str, Any], item: Dict[str, Any], root: Optional[Path]) -> List[Tuple[str, str]]:
+    """The texts of one item a search looks in, each with where it is: `text` (a reply), `think`, `ask`, `note`, and for a call `line` (its target and the agent's words), `command`, `input`,
+    `output` and `diff`. Every text redacted (the item's own, and `detail`)."""
+    kind = item.get("k")
+    if kind in ("text", "think", "note", "err"):
+        return [("think" if kind == "think" else "text" if kind != "note" else "note", str(item.get("text") or ""))]
+    if kind == "ask":
+        bits = [str(item.get("text") or "")] + [f"{one.get('title') or ''} {one.get('answer') or ''}" for one in item.get("qs") or [] if isinstance(one, dict)]
+        return [("ask", "\n".join(bits))]
+    if kind != "tool":
+        return []
+    out: List[Tuple[str, str]] = [("line", " ".join(str(item.get(key) or "") for key in ("word", "name", "target", "say")))]
+    call = part.get("toolCall") if isinstance(part.get("toolCall"), dict) else {}
+    found = detail(call, root)
+    if found.get("command"):
+        out.append(("command", str(found["command"])))
+    if found.get("input"):
+        out.append(("input", str(found["input"])))
+    for one in found.get("parts") or []:
+        if one.get("k") in ("term", "text", "file"):
+            out.append(("output", str(one.get("text") or "")))
+        elif one.get("k") == "diff":
+            lines: List[str] = []
+            for file in one.get("files") or []:
+                lines.append(str(file.get("path") or ""))
+                lines.extend(str(line) for line in file.get("lines") or [])
+            out.append(("diff", "\n".join(lines)))
+    for key in ("error", "reason"):
+        if found.get(key):
+            out.append(("output", str(found[key])))
+    return out
+
+
+def search(turn: Dict[str, Any], query: Any, root: Optional[Path] = None) -> Dict[str, Any]:
+    """Every place of one turn where `query` is (B20), case not minded: `{hits, more}`. A hit: `{id, where, snip: [before, found, after], line, lines}`, `id` the Live item's id, `line` the line
+    of the text it is on (1 for the first) and `lines` how many the text has. The person's words, replies, thoughts, questions, notes and every call: its line, command, input, output and diff
+    (redacted, as an opened call shows them). At most FIND_HITS hits, in the order of the turn; `more` when there were others. An empty or too long query: no hit."""
+    needle = str(query or "").strip().lower()
+    if not needle or len(needle) > FIND_QUERY:
+        return {"hits": [], "more": False}
+    parts = [part for part in (turn.get("responseParts") if isinstance(turn.get("responseParts"), list) else turn.get("parts") if isinstance(turn.get("parts"), list) else []) if isinstance(part, dict)]
+    base = int(turn.get("dropped") or 0) if isinstance(turn.get("dropped"), int) and not isinstance(turn.get("dropped"), bool) else 0
+    places: List[Tuple[str, List[Tuple[str, str]]]] = []
+    said = said_item(turn)
+    if said:
+        places.append((f"{turn.get('id')}.me", [("me", str(said.get("text") or ""))]))
+    for at, part in enumerate(parts):
+        index = part["i"] if isinstance(part.get("i"), int) and not isinstance(part.get("i"), bool) else base + at
+        ident = part_id(part) or f"{turn.get('id')}.{index}"
+        try:
+            item = part_item(part, ident, False, False, None, root)
+        except Exception:  # noqa: BLE001 - one part that cannot be read is no hit; the others are searched
+            item = None
+        if item is not None:
+            places.append((ident, _fields(part, item, root)))
+    hits: List[Dict[str, Any]] = []
+    more = False
+    for ident, fields in places:
+        for where, text in fields:
+            low = text.lower()
+            start = low.find(needle)
+            while start >= 0:
+                if len(hits) >= FIND_HITS:
+                    more = True
+                    break
+                end = start + len(needle)
+                before = text[max(0, start - FIND_SIDE):start]
+                after = text[end:end + FIND_SIDE]
+                flatten = lambda value: re.sub(r"\s+", " ", value)  # noqa: E731
+                hits.append({"id": ident, "where": where, "snip": [("…" if start > FIND_SIDE else "") + flatten(before).lstrip(), flatten(text[start:end]), flatten(after).rstrip() + ("…" if end + FIND_SIDE < len(text) else "")],
+                             "line": text.count("\n", 0, start) + 1, "lines": text.count("\n") + 1})
+                start = low.find(needle, end)
+            if more:
+                break
+        if more:
+            break
+    return {"hits": hits, "more": more}

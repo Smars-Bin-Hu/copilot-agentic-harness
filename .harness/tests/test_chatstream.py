@@ -67,6 +67,19 @@ class StreamCase(TaskCase):
 
 
 class TakeTests(StreamCase):
+    def test_a_question_is_written_once_it_was_answered_and_read_back_as_an_item(self) -> None:
+        self.push(started("t1"), says("t1", "m1", "Let me ask."))
+        asked = {"type": "chat/inputRequested", "turnId": "t1", "request": {"id": "r1", "message": "Which?", "questions": [{"id": "q1", "title": "Pick"}]}}
+        self.assertFalse([record for record in self.push(asked) if record["k"] == "part" and record["part"].get("kind") == "inputRequest"])  # not answered: not final
+        done = self.push({"type": "chat/inputCompleted", "turnId": "t1", "requestId": "r1", "response": "accept", "answers": {"q1": "yes"}})
+        written = [record for record in done if record["k"] == "part" and record["part"].get("kind") == "inputRequest"]
+        self.assertEqual(len(written), 1)
+        self.push(finished("t1"))
+        turn = self.read()["turns"][0]
+        items = chatlive.items_of(turn, False, {})
+        ask = next(item for item in items if item["k"] == "ask")
+        self.assertEqual((ask["id"], ask["st"], ask["qs"]), ("q:r1", "done", [{"title": "Pick", "answer": "yes"}]))
+
     def test_every_record_starts_with_its_k_and_the_file_has_one_object_per_line(self) -> None:
         self.push(started("t1", "hello"), says("t1", "m1", "text"), call_start("t1", "c1"), call_done("t1", "c1"), finished("t1"))
         lines = self.lines()
@@ -224,6 +237,38 @@ class TakeTests(StreamCase):
         self.assertEqual((turns[0]["state"], turns[0]["duration"]), ("complete", 5))
         label = lambda part: part["toolCall"]["toolCallId"] if "toolCall" in part else part.get("content") or part["kind"]  # noqa: E731
         self.assertEqual([label(part) for part in turns[0]["parts"]], ["first try", "c1", "error", "second try"])
+
+
+class AgentActionsTests(StreamCase):
+    """C1: the Agent actions tab reads the board's stream: the prompt's turn, the agent's last words, each call row matched to its call; and a link that is not bound gives the turn back."""
+
+    def round(self) -> None:
+        self.push(started("t1", "Count the rows"), call_start("t1", "c1", "view"), call_done("t1", "c1", "def f(): pass"),
+                  call_start("t1", "c2", "bash"), call_done("t1", "c2", "41446"), says("t1", "m1", "There are 41446 rows."), finished("t1"))
+
+    def test_a_prompt_gets_its_turn_reply_and_calls_from_the_stream(self) -> None:
+        from modules.task import tasktrace
+        self.round()
+        nodes = [{"n": 1, "at": "2026-01-01T10:00:01.000Z", "text": "", "rows": [{"kind": "tool", "tool": "view", "at": "2026-01-01T10:00:02Z"}, {"kind": "gate", "tool": "bash", "at": "2026-01-01T10:00:03Z"},
+                                                                              {"kind": "tool", "tool": "bash", "at": "2026-01-01T10:00:04Z"}, {"kind": "tool", "tool": "bash", "at": "2026-01-01T10:00:05Z"}]},
+                 {"n": 2, "at": "2026-01-01T11:00:00.000Z", "text": "", "rows": []}]
+        tasktrace.with_stream(self.root, TASK, nodes)
+        first = nodes[0]
+        self.assertEqual((first["turn"], first["text"], first["reply"], first["reply_cut"]), ("t1", "Count the rows", "There are 41446 rows.", False))
+        self.assertEqual([row.get("call_id") for row in first["rows"]], ["c1", None, "c2", None])  # by tool name in order; a gate row and a call the turn does not have stay as they were
+        self.assertEqual(first["rows"][0]["live"]["id"], "c1")
+        self.assertNotIn("turn", nodes[1])  # no turn starts near it
+        tasktrace.with_stream(self.root, "no/such/task", [{"n": 1, "at": "x", "rows": []}])  # never raises
+
+    def test_a_link_that_is_not_bound_gives_a_turn_and_a_call_from_the_stream(self) -> None:
+        from modules.task import vslink
+        self.round()
+        link = vslink.VsLink(self.root, opener=lambda: None)
+        found = link.turn_items(TASK, "t1")
+        self.assertEqual([item["k"] for item in found["items"]], ["me", "tool", "tool", "text"])
+        self.assertEqual(link.call(TASK, "t1", "c2")["id"], "c2")
+        self.assertEqual(link.turn_items(TASK, "nope"), {"items": [], "turn": "nope"})
+        self.assertEqual(link.turn_items(TASK, 5), {"items": [], "turn": ""})  # type: ignore[arg-type]
 
 
 class FileTests(StreamCase):

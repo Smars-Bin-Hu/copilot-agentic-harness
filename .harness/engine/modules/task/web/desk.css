@@ -288,3 +288,18 @@ html.embed .tk-menu{max-width:calc(100vw - 24px)}
 html.embed .tk-pane,html.embed .tk-surface,html.embed .tk-need{min-width:0}
 html.embed img,html.embed video,html.embed table,html.embed pre{max-width:100%}
 html.embed pre{overflow-x:auto}
+/* C1: under a prompt of the Agent actions tab, the agent's last words and the round as the chat showed it (drawn by the Live tab's code) */
+.tr-stream{display:grid;gap:8px;margin:8px 0 4px 0;min-width:0}
+.tr-reply{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--hover);min-width:0}
+.tr-reply-t{font-size:13.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden}
+.tr-round-btn{justify-self:start}
+.tr-lv{margin:0;padding:0;border:0;background:none}
+.tr-call.tr-live .tr-lv{margin-top:4px}
+.tr-call.tr-live,.tr-call.tr-live .tr-lv,.tr-stream{min-width:0;max-width:100%}
+.tr-call.tr-live .tr-lv .lv-feed{overflow-x:auto}
+.tr-stream .tr-lv{overflow-x:auto}
+.timeline.trace li .what{min-width:0}
+.tr-lv .lv-feed>li,.tr-lv .fb,.tr-lv .tc-line{min-width:0;max-width:100%}
+.tr-lv .tc-line{flex-wrap:wrap}
+.tr-lv .tc-line{overflow:hidden}
+.tr-call.tr-live,.tr-round{overflow-x:auto;overflow-y:hidden}

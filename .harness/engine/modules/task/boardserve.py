@@ -1635,6 +1635,25 @@ class Board:
             task_ops.note(again, "chat-resume", "-")
         return {"resumed": True}
 
+    def bgstop(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """B16: stop one shell the chat of the task runs in the background (`id`, as the Live tab lists it)."""
+        task, _found = self.target(data)
+        ident = str(data.get("id", ""))[:200]
+        if not ident.startswith("shell:"):
+            raise CommandError(say("ask.refused.shown"))
+        try:
+            done = self.link.dispatch("bgstop", task, ident)
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        except Exception as error:  # noqa: BLE001
+            raise CommandError(ahp_scrub(error)) from None
+        try:
+            with task_ops.locked(self.root, task) as again:
+                task_ops.note(again, "stop", "background " + ident[6:66])
+        except Exception:  # noqa: BLE001
+            pass
+        return {"stopped": done.get("stopped", False)}
+
     def stop(self, data: Dict[str, Any]) -> Dict[str, Any]:
         task, found = self.target(data)
         try:
@@ -2160,7 +2179,7 @@ def handler_for(board: Board) -> type:
                 if isinstance(asked, dict):  # the "earlier steps" control: the parts of a turn that fell out of the link's memory, from the task's stream file
                     where = asked.get("i")
                     if isinstance(asked.get("turn"), str) and len(asked["turn"]) <= 200 and isinstance(where, int) and not isinstance(where, bool) and where >= 0:
-                        return self.answer(200, {"older": board.link.older(task_name, asked["turn"], where)})
+                        return self.answer(200, {"older": board.link.older(task_name, asked["turn"], where, 1000000 if data.get("all") is True else 60)})  # `all`: a filter or a search needs the whole round (B19, B20)
                     return self.answer(200, {"older": {"items": [], "before": None}})
                 asked_sub = data.get("sub")
                 if "sub" in data:  # a subagent's whole chat for the side panel: from memory, else the stream file (B4a)
@@ -2168,6 +2187,22 @@ def handler_for(board: Board) -> type:
                         had = asked_sub.get("have")
                         return self.answer(200, {"sub": board.link.sub(task_name, asked_sub["call"], had if isinstance(had, int) and not isinstance(had, bool) else -1)})
                     return self.answer(200, {"sub": {}})
+                if "turn_items" in data:  # (C1) one whole turn as Live items, for the Agent actions tab: memory, else the stream file; the task need not be bound
+                    asked_turn = data.get("turn_items")
+                    return self.answer(200, {"turn_items": board.link.turn_items(task_name, asked_turn) if isinstance(asked_turn, str) and 0 < len(asked_turn) <= 200 else {"items": [], "turn": ""}})
+                asked_find = data.get("find")
+                if "find" in data:  # (B20) a search of the whole round: every part, also those not loaded
+                    if isinstance(asked_find, dict) and isinstance(asked_find.get("turn"), str) and 0 < len(asked_find["turn"]) <= 200 and isinstance(asked_find.get("q"), str):
+                        return self.answer(200, {"find": board.link.find(task_name, asked_find["turn"], asked_find["q"][:200])})
+                    return self.answer(200, {"find": {"hits": [], "more": False, "turn": ""}})
+                asked_counts = data.get("counts")
+                if "counts" in data:  # (B19) the filter's numbers for the steps the page has not loaded
+                    if isinstance(asked_counts, dict) and isinstance(asked_counts.get("turn"), str) and 0 < len(asked_counts["turn"]) <= 200 and isinstance(asked_counts.get("before"), int) and not isinstance(asked_counts.get("before"), bool):
+                        return self.answer(200, {"counts": board.link.counts(task_name, asked_counts["turn"], asked_counts["before"])})
+                    return self.answer(200, {"counts": {}})
+                if "receipt" in data:  # the receipt of a turn that ended (B6): calls, files and their lines, time, context, credits
+                    asked_turn = data.get("receipt")
+                    return self.answer(200, {"receipt": board.link.receipt(task_name, asked_turn) if isinstance(asked_turn, str) and 0 < len(asked_turn) <= 200 else {}})
                 asked_call = data.get("call")
                 if "call" in data:  # an opened tool call: its whole command, input, output and diff (from memory, else the stream file)
                     if isinstance(asked_call, dict) and all(isinstance(asked_call.get(key), str) and len(asked_call[key]) <= 200 for key in ("turn", "id")):
@@ -2200,7 +2235,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"ok": True, **result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                     return self.answer(409, {"ok": False, "error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/rewind", "/api/verdict", "/api/export", "/api/confirm", "/api/answer", "/api/title"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/rewind", "/api/verdict", "/api/export", "/api/confirm", "/api/answer", "/api/title", "/api/bgstop"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

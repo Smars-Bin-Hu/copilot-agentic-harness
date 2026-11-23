@@ -166,3 +166,24 @@ def session_cost(state: Dict[str, Any]) -> Optional[float]:
         if found is not None:
             return round(found / 1e9, 1)
     return None
+
+
+def percent_of(usage: Any, state: Dict[str, Any], limits: Dict[str, Dict[str, int]]) -> Optional[float]:
+    """How full the context was after the turn with `usage` (B6, the receipt): `meter`'s percent for that one usage. A usage that names no model takes the model of the chat's newest usage. None:
+    no usage with the two numbers, or the window is not known."""
+    if not isinstance(usage, dict) or number(usage.get("inputTokens")) is None or number(usage.get("outputTokens")) is None:
+        return None
+    model = str(usage.get("model") or "") or str((newest_usage(state or {}) or {}).get("model") or "")
+    window = window_of(dict(usage, model=model), limits, chosen_size(state or {}, model))
+    if not window:
+        return None
+    return round((number(usage["inputTokens"]) + number(usage["outputTokens"])) * 100.0 / window, 1)
+
+
+def session_total(usage: Any) -> Optional[float]:
+    """The credits of the whole session when the call of `usage` was made (`copilotUsage.sessionTotalNanoAiu`), in credits; None when it does not say."""
+    meta = usage.get("_meta") if isinstance(usage, dict) and isinstance(usage.get("_meta"), dict) else {}
+    used = meta.get("copilotUsage") if isinstance(meta.get("copilotUsage"), dict) else {}
+    found = number(used.get("sessionTotalNanoAiu"))
+    return found / 1e9 if found is not None else None
+

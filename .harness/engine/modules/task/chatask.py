@@ -291,8 +291,13 @@ def find(items: Any, ident: str) -> Optional[Dict[str, Any]]:
     return next((item for item in items or [] if isinstance(item, dict) and item.get("id") == ident), None)
 
 
-def first_for(items: Any, chat: Any) -> Tuple[Optional[Dict[str, Any]], int]:
-    """The oldest item of this chat that is one of the kinds the board shows, and how many there are. The page shows one at a time: the one answered first."""
+def all_for(items: Any, chat: Any) -> List[Dict[str, Any]]:
+    """Every item of this chat (and its subagents' chats) that is one of the kinds the board shows, oldest first."""
     chats = {chat} if isinstance(chat, str) else set(chat)  # the chat of the task and, while their calls run, the chats of its subagents
-    mine = [view for view in (shown(item) for item in items or [] if isinstance(item, dict) and item.get("chat") in chats) if view]
+    return [view for view in (shown(item) for item in items or [] if isinstance(item, dict) and item.get("chat") in chats) if view]
+
+
+def first_for(items: Any, chat: Any) -> Tuple[Optional[Dict[str, Any]], int]:
+    """The oldest item of this chat that is one of the kinds the board shows, and how many there are."""
+    mine = all_for(items, chat)
     return (mine[0] if mine else None), len(mine)

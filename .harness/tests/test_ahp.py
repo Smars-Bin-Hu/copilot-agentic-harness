@@ -545,5 +545,88 @@ class PaceTests(unittest.TestCase):
         self.assertEqual(most[0], 1)
 
 
+class ChatSideTests(unittest.TestCase):
+    """B13-B16: what the chat does besides its turn: the host's activity, the work that runs in the background, a compaction of the context (counted in the usage)."""
+
+    def test_activity_and_background_work_are_kept_bounded_and_in_a_snapshot(self) -> None:
+        state: Dict[str, Any] = {"turns": [], "activeTurn": None}
+        ahp.reduce_chat(state, {"type": "chat/activityChanged", "activity": "Loading plugins " + "x" * 500})
+        self.assertEqual(len(state["activity"]), ahp.ACTIVITY_KEEP)
+        ahp.reduce_chat(state, {"type": "chat/activityChanged"})
+        self.assertIsNone(state["activity"])
+        for n in range(ahp.BACKGROUND_KEEP + 3):
+            ahp.reduce_chat(state, {"type": "chat/backgroundWorkSet", "work": {"kind": "shell", "id": f"shell:{n}", "command": "c" * 900, "terminal": {"big": "x"}}})
+        ahp.reduce_chat(state, {"type": "chat/backgroundWorkSet", "work": {"kind": "shell", "id": "shell:22", "label": "again"}})  # the same id: replaced, not added
+        self.assertEqual(len(state["backgroundWork"]), ahp.BACKGROUND_KEEP)
+        self.assertEqual(state["backgroundWork"][-1], {"id": "shell:22", "kind": "shell", "label": "again"})
+        self.assertEqual(len(state["backgroundWork"][0]["command"]), 400)
+        ahp.reduce_chat(state, {"type": "chat/backgroundWorkRemoved", "id": "shell:22"})
+        self.assertNotIn("shell:22", [item["id"] for item in state["backgroundWork"]])
+        ahp.reduce_chat(state, {"type": "chat/backgroundWorkSet", "work": {"id": 5}})  # no id of the right kind: nothing
+        trimmed = ahp.trimmed(dict(state, activity="Busy"))
+        self.assertEqual((trimmed["activity"], len(trimmed["backgroundWork"])), ("Busy", ahp.BACKGROUND_KEEP - 1))
+
+    def test_a_compaction_counted_in_the_usage_is_a_part_of_the_turn(self) -> None:
+        state: Dict[str, Any] = {"turns": [], "activeTurn": None}
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "t1", "startedAt": "2026-01-01T10:00:00Z", "message": {"text": "go"}})
+        usage = lambda total, count: {"inputTokens": total, "outputTokens": 1, "_meta": {"contextAttribution": {"totalTokens": total, "entries": [], "compactions": count}}}  # noqa: E731
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": usage(180000, 2)})  # the first usage of the turn: nothing to compare with
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": usage(181000, 2)})
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": usage(40000, 3)})
+        parts = state["activeTurn"]["responseParts"]
+        self.assertEqual(parts, [{"kind": "compaction", "id": "compact-3-0", "count": 3, "before": 181000, "after": 40000}])
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": {"inputTokens": 5, "outputTokens": 1}})  # no count: nothing
+        self.assertEqual(len(parts), 1)
+
+
+class InputRequestTests(unittest.TestCase):
+    """B8: a question of the agent is a part of the turn (the host's reducer: inputRequested, inputAnswerChanged, inputCompleted), kept bounded."""
+
+    def state(self) -> Dict[str, Any]:
+        state: Dict[str, Any] = {"turns": [], "activeTurn": None}
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "t1", "startedAt": "2026-01-01T10:00:00Z", "message": {"text": "go"}})
+        return state
+
+    def test_a_question_is_asked_answered_and_completed_as_one_part(self) -> None:
+        state = self.state()
+        request = {"id": "r1", "message": "Which?", "questions": [{"id": "q1", "title": "Pick", "kind": "single-select", "options": [{"id": "a", "label": "A", "extra": "x"}]}], "_meta": {"purpose": "askUser"}}
+        ahp.reduce_chat(state, {"type": "chat/inputRequested", "turnId": "t1", "request": request})
+        ahp.reduce_chat(state, {"type": "chat/inputAnswerChanged", "turnId": "t1", "requestId": "r1", "questionId": "q1", "answer": {"state": "draft", "value": "a"}})
+        parts = state["activeTurn"]["responseParts"]
+        self.assertEqual(len(parts), 1)
+        self.assertEqual(parts[0]["request"]["answers"], {"q1": {"state": "draft", "value": "a"}})
+        self.assertNotIn("_meta", parts[0]["request"])
+        self.assertEqual(parts[0]["request"]["questions"][0]["options"], [{"id": "a", "label": "A"}])
+        ahp.reduce_chat(state, {"type": "chat/inputCompleted", "turnId": "t1", "requestId": "r1", "response": "accept", "answers": {"q1": {"state": "submitted", "value": "a"}}})
+        self.assertEqual((parts[0]["response"], parts[0]["request"]["answers"]["q1"]["state"]), ("accept", "submitted"))
+        ahp.reduce_chat(state, {"type": "chat/inputCompleted", "turnId": "t1", "requestId": "r1", "response": "cancel"})  # answered already: nothing changes
+        self.assertEqual(parts[0]["response"], "accept")
+        ahp.reduce_chat(state, {"type": "chat/inputRequested", "turnId": "t1", "request": dict(request, message="Again?")})  # the same id once answered: a new part
+        self.assertEqual(len(parts), 2)
+
+    def test_a_question_is_kept_bounded_and_odd_shapes_change_nothing(self) -> None:
+        state = self.state()
+        huge = {"id": "r2", "message": "m" * 10000, "questions": [{"id": f"q{n}", "title": "t" * 900, "options": [{"id": str(k), "label": "l"} for k in range(80)]} for n in range(30)]}
+        ahp.reduce_chat(state, {"type": "chat/inputRequested", "turnId": "t1", "request": huge})
+        kept = state["activeTurn"]["responseParts"][0]["request"]
+        self.assertEqual(len(kept["message"]), ahp.INPUT_TEXT)
+        self.assertEqual(len(kept["questions"]), ahp.INPUT_QUESTIONS)
+        self.assertEqual(len(kept["questions"][0]["options"]), ahp.INPUT_OPTIONS)
+        self.assertEqual(len(kept["questions"][0]["title"]), 400)
+        for odd in ({"type": "chat/inputRequested", "turnId": "t1", "request": "x"}, {"type": "chat/inputRequested", "turnId": "t1", "request": {"id": 5}},
+                    {"type": "chat/inputAnswerChanged", "turnId": "t1", "requestId": "nope", "questionId": "q", "answer": 1}, {"type": "chat/inputCompleted", "turnId": "t1", "requestId": None}):
+            ahp.reduce_chat(state, odd)
+        self.assertEqual(len(state["activeTurn"]["responseParts"]), 1)
+        slim = ahp.slim_part({"kind": "inputRequest", "request": huge, "response": "accept"})
+        self.assertEqual((len(slim["request"]["questions"]), slim["response"]), (ahp.INPUT_QUESTIONS, "accept"))
+
+    def test_a_call_let_go_without_a_reason_was_let_go_by_a_person(self) -> None:
+        state = self.state()
+        ahp.reduce_chat(state, {"type": "chat/toolCallStart", "turnId": "t1", "toolCallId": "c1", "toolName": "bash", "displayName": "Bash"})
+        ahp.reduce_chat(state, {"type": "chat/toolCallReady", "turnId": "t1", "toolCallId": "c1", "toolInput": "{}"})
+        ahp.reduce_chat(state, {"type": "chat/toolCallConfirmed", "turnId": "t1", "toolCallId": "c1", "approved": True})
+        self.assertEqual(state["activeTurn"]["responseParts"][0]["toolCall"]["confirmed"], "user-action")
+
+
 if __name__ == "__main__":
     unittest.main()

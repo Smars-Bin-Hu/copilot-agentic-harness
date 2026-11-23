@@ -124,15 +124,20 @@ const SPACE = (function () {
   let note = null, asked = false;
   const snoozed = () => { const at = Number(keep.get(ASKED)); return at > 1 && Date.now() - at < SNOOZE && at <= Date.now() + 60000; };
   // Not while the setup wizard runs or the Settings window is open (1.8.31): the note would sit on top of what the person is doing. The check goes on, so it may come later.
+  // Not on the first visit of this browser to the Enter screen either (1.8.31): enter.js sets `harness.enter.visited` once it is open, and this script loads first, so the key is read now.
+  const firstVisit = (() => { try { return localStorage.getItem("harness.enter.visited") !== "1"; } catch (error) { return true; } })();
   const busy = () => document.body.classList.contains("wz-doc") || Boolean(document.querySelector(".wz-top")) || (typeof SETTINGS !== "undefined" && SETTINGS.isOpen());
   function offer() {
-    if (asked || note || lite() || !on() || snoozed() || busy() || typeof harnessTheme === "undefined" || typeof t !== "function") return;
+    if (asked || note || firstVisit || lite() || !on() || snoozed() || busy() || typeof harnessTheme === "undefined" || typeof t !== "function") return;
     asked = true;
     const go = h("button", {type: "button", class: "go"}, t("board.space.slow.lite"));
     const no = h("button", {type: "button"}, t("board.space.slow.keep"));
     note = h("div", {class: "sp-slow", role: "status"}, h("p", null, t("board.space.slow")), h("div", {class: "row"}, no, go));
     document.body.append(note);
-    const close = () => { note.remove(); };
+    const close = () => { note.remove(); note = null; };
+    // Settings or the wizard opens while the note is up (1.8.31): it goes away, and may be offered again later (not asked, not snoozed). A timer chain, not an interval.
+    const watch = () => { if (!note) return; if (busy()) { close(); asked = false; return; } setTimeout(watch, 300); };
+    setTimeout(watch, 300);
     go.addEventListener("click", () => { harnessTheme.setLite(true); close(); });
     no.addEventListener("click", () => { keep.set(ASKED, String(Date.now())); close(); });
   }

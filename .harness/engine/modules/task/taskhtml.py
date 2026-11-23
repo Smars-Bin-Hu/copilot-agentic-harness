@@ -29,7 +29,7 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   common.js               helpers shared by both pages
   tools.js                a served page only: the three Tools windows (Tool packs, Connections & sign-ins, Local), opened one at a time, and the facts of Get ready (1.7.17, three windows 1.7.38)
   machine.js              a served page only: the Tool packs and Local windows (the packs, tool folders, the CA bundle, MCP)
-  servers.js              a served page only: the Connections & sign-ins window (each connection with its sign-in and Test, Export) and Open VS Code with identities (1.7.10)
+  servers.js              a served page only: the Connections & sign-ins window (each connection with its sign-in and Test, Export) and the main account of the agent host (1.7.10, H6)
   perf.js, perf.css       the task's report page: the small part of the Agent Performance Review (1.7.41): the free accounts, the review's one line, the link to its page, the button that starts one
   perfpage.html, perfpage.js, perfpage.css   the Agent Performance Review page of a task (`/tasks/<task>/performance`, 1.7.41): the conclusion and the waste by owner, the cost of each prompt,
                           the findings as chains with their evidence, the prompt critiques, the suggestions by owner, the call timeline, the notes of each prompt

@@ -179,7 +179,7 @@ const SERVE = (function () {
 
   // `title`: the chat's title, given where the person has to find a chat by hand (the VS button): a button copies it.
   function failed(error, title) {
-    if (error && error.quiet) return;  // the person already answered a window about it (Open VS Code, 1.7.29)
+    if (error && error.quiet) return;  // the person already answered a window about it
     const close = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
     const copy = title ? h("button", {class: "act", type: "button", "data-label": t("desk.chat.copy")}, t("desk.chat.copy")) : null;
     if (copy) copy.addEventListener("click", () => copyCommand(copy, title));

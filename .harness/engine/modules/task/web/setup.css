@@ -36,7 +36,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .su-older-row{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-bottom:1px dashed var(--line);min-width:0}.su-older-row:last-child{border-bottom:0}
 .su-older-row code{font-size:12px;overflow-wrap:anywhere}.su-older-row .su-note{margin:0}.su-older-file{display:flex;flex-direction:column;gap:1px;margin:2px 0 0 12px;min-width:0}
 .su-older-row code{display:block}.su-older-group{font-size:12.5px;font-weight:600}.su-flash{animation:suflash 1.2s ease-out}@keyframes suflash{from{background:var(--hover)}to{background:transparent}}html.lite .su-flash{animation:none}@media (prefers-reduced-motion:reduce){.su-flash{animation:none}}
-/* Servers (1.7.10): one line per server, its identity in place; the chooser of Open VS Code with identities */
+/* Servers (1.7.10): one line per server, its identity in place; the chooser of the agent host's main account */
 .sv-win{width:min(820px,calc(100vw - 32px))}.sv-list{display:flex;flex-direction:column;gap:4px}
 .sv-line{display:flex;align-items:center;gap:10px;width:100%;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .sv-line:hover,.sv-line[aria-expanded=true]{border-color:var(--line2);background:var(--hover)}

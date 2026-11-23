@@ -34,7 +34,7 @@ from urllib.parse import quote, unquote, urlparse
 from . import pace, procrun
 
 PROTOCOL = "1.1.0"
-CLI_TIMEOUT = 25  # seconds for `code agent endpoints` and `code <folder>`
+CLI_TIMEOUT = 25  # seconds for a `code` command (`--version`, `<file>`)
 CALL_TIMEOUT = 20
 CREATE_TIMEOUT = 40  # 1.8.6: `createSession` on a busy work computer took more than CALL_TIMEOUT (1.8.7: the board waits with no limit; a caller without a reader still uses it)
 READ_SLICE = 0.5  # seconds the reader waits for bytes before it looks whether the connection was closed
@@ -331,7 +331,7 @@ class Connection:
         self._given_up: Dict[int, Tuple[str, float]] = {}  # id -> (method, when its caller stopped waiting)
         self.late: Deque[Dict[str, Any]] = collections.deque(maxlen=LATE_KEPT)  # {method, id, late_s}: answers nobody waited for any more
         self.default_timeout: Optional[float] = call_timeout()  # what a call waits when it names no time (the board's link sets more)
-        self.pid: Any = None  # the editor process this host runs in, as `code agent endpoints` names it (1.7.38: the board reads its environment before any chat)
+        self.pid: Any = None  # the process of the agent host, from the endpoint the board made
         self.instance = ""
 
     def upgrade(self) -> None:

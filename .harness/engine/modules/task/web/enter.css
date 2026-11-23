@@ -204,7 +204,7 @@ html[data-theme="light"] .en-chk-l .m.bad{background:linear-gradient(var(--bad-b
 .en-chk-l.folded:not(.unfold):not(:hover) .gh-n{display:inline;margin-left:auto;text-align:right;color:var(--en-cap);max-width:70%}
 .en-chk-l.folded:not(.unfold):not(:hover) .gh-n::after{content:" \25b8"}
 html[lang="zh"] .en-chk-l.folded:not(.unfold):not(:hover) li.gh{font-size:12.5px}
-/* the buttons beside the pill: Open / Restart VS Code and Enter */
+/* the buttons beside the pill: the fix of the VS Code or Copilot line, and Enter */
 .en-cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center}
 .en-vs{font:600 15px var(--sans);display:inline-flex;align-items:center;height:54px;padding:0 26px;border-radius:999px;cursor:pointer;color:var(--en-ink);background:var(--en-bg0);border:1px solid var(--line2);box-shadow:0 8px 22px rgba(0,0,0,.14);transition:transform .2s,box-shadow .2s;white-space:nowrap;max-width:100%}
 .en-vs[hidden]{display:none}

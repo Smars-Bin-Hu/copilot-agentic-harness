@@ -109,7 +109,11 @@ const WIZARD = (function () {
     };
     const ready = () => {
       const line = copilot();
-      if (q("job", "1") === "1" && M.page >= 3) line.host = {state: "preparing", seconds: 64, downloaded_mb: 312, total_mb: 620, percent: 50};
+      if (q("job", "1") === "1" && M.page >= 3) {  // the fake download moves (about 6 MB a second from 312, and stops before the end), so a picture taken later does not look frozen (1.8.31)
+        F.jobAt = F.jobAt || Date.now();
+        const lapse = (Date.now() - F.jobAt) / 1000, mb = Math.min(600, 312 + Math.floor(lapse * 6));
+        line.host = {state: "preparing", seconds: 64 + Math.floor(lapse), downloaded_mb: mb, total_mb: 620, percent: Math.round(mb / 620 * 100)};
+      }
       return {ready: false, checks: [line]};
     };
     const setup = {
@@ -133,14 +137,14 @@ const WIZARD = (function () {
       summary: () => {
         const list = programs();
         const out = [{id: "you", required: true, done: true, label: t("wizard.v.you"), detail: F.name + " \u00b7 " + langName(F.lang), effect: ""},
-          {id: "programs", required: true, done: list.all_found, label: t("wizard.v.prog"), detail: t("wizard.v.prog.s", {n: 5}), effect: ""},
+          {id: "programs", required: true, done: list.all_found, label: t("wizard.v.prog"), detail: t("wizard.v.prog.s", {n: 5, total: 5}), effect: ""},
           {id: "copilot", required: true, done: F.cop === "done", label: t("wizard.v.cop"), detail: "alex", effect: ""}];
-        out.push({id: "kb", done: kbHere(), label: t("wizard.v.kb"), detail: kbHere() ? "sample 3.2.0" : "", effect: kbHere() ? "" : "No tool packs and no connections: the agent has only what the harness brings. You can bring one in later in Settings."});
+        out.push({id: "kb", done: kbHere(), label: t("wizard.v.kb"), detail: kbHere() ? "sample \u00b7 3.2.0" : "", effect: kbHere() ? "" : "No tool packs and no connections: the agent has only what the harness brings. You can bring one in later in Settings."});
         if (kbHere()) {
           out.push({id: "packs", done: F.sqlcmd, label: t("wizard.v.sq"), detail: "", effect: t("wizard.v.sq.e")});
           out.push({id: "connections", done: F.signed, label: t("wizard.v.cn"), detail: "", effect: t("wizard.v.cn.e")});
         }
-        out.push({id: "repos", done: F.savedRepos.length > 0, label: t("wizard.v.repo"), detail: F.savedRepos.length + "", effect: t("wizard.v.repo.e")});
+        out.push({id: "repos", done: F.savedRepos.length > 0, label: t("wizard.v.repo"), detail: t(F.savedRepos.length === 1 ? "wizard.v.repo.s.one" : "wizard.v.repo.s", {n: F.savedRepos.length}), effect: t("wizard.v.repo.e")});
         return {rows: out};
       },
       finish: () => ({ok: true}),
@@ -176,6 +180,13 @@ const WIZARD = (function () {
     4: () => Boolean(M.saved.repos || (M.scan && M.scan.rows.some((row) => row.picked))),
   };
   const fine = (page) => (known[page - 1] ? known[page - 1]() : false);
+  // (1.8.31) What the person chose, as saved: the rows the scan marks as chosen, plus what was saved in this visit; the Welcome page counts this, never the number found
+  function chosenRepos() {
+    const rows = (M.scan && M.scan.rows) || [];
+    return rows.filter((row) => row.picked || row.in_root || (M.saved.repos && M.picks && M.picks.has(row.path))).length;
+  }
+  // (1.8.31) "about N min" for Welcome: one minute for each page that will really show (the pages already fine are skipped), and the review
+  const minutes = () => Math.max(1, [1, 2, 3, 4, 5].filter((page) => !fine(page)).length + 1);
   function nextFrom(page, step) {  // the next page that is not already fine; the review and the welcome are never skipped
     let at = page + step;
     while (at > 1 && at < 6 && fine(at)) at += step;
@@ -230,23 +241,24 @@ const WIZARD = (function () {
     const rows = (M.progs && M.progs.rows) || [];
     const row = (id) => rows.find((item) => item.id === id) || {found: false, version: ""};
     const line = copilotLine();
-    const item = (label, value, kind) => el("div", "wz-it", dot(kind === "hot" || kind === "pick" ? "hot" : "ok"), el("span", "n", label), el("span", "v" + (kind === "hot" ? " hot" : ""), value));  // "pick": found, but yours to choose: the same orange dot as the others that need you (1.8.31)
+    const item = (label, value, kind) => el("div", "wz-it", dot(kind === "hot" ? "hot" : "ok"), el("span", "n", label), el("span", "v" + (kind === "hot" ? " hot" : ""), value));  // (1.8.31) hot = orange dot and words
     const prog = (id, key) => (row(id).found && !row(id).trouble && !row(id).blocked ? item(t(key), row(id).version || t("wizard.p.found"), "ok") : item(t(key), t("wizard.nf"), "hot"));
     const st = M.st;
     const signed = copilotSignedIn(line);
-    const repos = M.scan ? M.scan.rows.length : 0;
+    const found = M.scan ? M.scan.rows.length : 0;
+    const chosen = chosenRepos();  // (1.8.31) the saved answer, not what was found
     const cells = [
       item(t("wizard.l.name"), st.name || t("wizard.notyet"), st.name ? "ok" : "hot"), item(t("wizard.l.lang"), langName(M.lang), "ok"),
       prog("python", "wizard.l.py"), prog("git", "wizard.l.git"), prog("vscode", "wizard.l.code"), prog("gh", "wizard.l.gh"),
       item(t("wizard.l.sign"), signed ? (line.login || t("wizard.p.found")) : t("wizard.notyet"), signed ? "ok" : "hot"),
       item(t("wizard.l.kb"), st.kb.here ? (st.kb.version || t("wizard.p.found")) : t("wizard.notyet"), st.kb.here ? "ok" : "hot"),
-      item(t("wizard.l.repo"), repos ? t("wizard.l.repo.v", {n: repos}) : t("wizard.nf"), repos ? "pick" : "hot"),
+      chosen ? item(t("wizard.l.repo"), t(chosen === 1 ? "wizard.l.repo.n.one" : "wizard.l.repo.n", {n: chosen}), "ok") : item(t("wizard.l.repo"), found ? t("wizard.l.repo.v", {n: found}) : t("wizard.nf"), "hot"),  // none chosen yet: orange, in words that say so (1.8.31)
     ];
     const good = cells.filter((cell) => cell.querySelector(".wz-dot.ok")).length;
     const need = cells.length - good;
     const bot = ROBOT.svg({glow: true});
     put(box, bot, h("h1", null, t("wizard.w.title")), el("p", "wz-sub", t("wizard.w.sub")), el("div", "wz-look", cells),
-      el("p", "wz-look-sum", h("b", null, t("wizard.w.done", {a: good})), " \u00b7 ", t("wizard.w.rest", {b: need, c: need > 1 ? 4 : 1})));
+      el("p", "wz-look-sum", h("b", null, t("wizard.w.done", {a: good})), " \u00b7 ", t("wizard.w.rest", {b: need, c: minutes()})));
     return {stop() {}, foot: () => ({back: false, later: null, why: "", main: {label: t("wizard.start"), go: opts.next, wide: true}})};
   };
 
@@ -408,7 +420,7 @@ const WIZARD = (function () {
     const sub = M.kbsub;
     const list = subs();
     const at = Math.max(0, list.indexOf(sub));
-    const eyebrowText = t("wizard.k.eyebrow", {n: at + 1, m: list.length});
+    const eyebrowText = t("wizard.s.kb");  // (1.8.31) no "n of m": the bar above has the step, and the middle page comes only when a program is missing
     const nextSub = () => { const rest = list.slice(at + 1); if (rest.length) { M.kbsub = rest[0]; opts.rerender(); } else opts.next(); };
     const prevSub = () => { if (at > 0) { M.kbsub = list[at - 1]; opts.rerender(); } else opts.back(); };
     let timer = 0, stopped = false;
@@ -516,7 +528,7 @@ const WIZARD = (function () {
     if (k.step === "done" && !M.extras) loadExtras().then(() => { if (!stopped) { opts.rerender(); } });
     return {stop, foot: () => (k.step === "done"
       ? {back: true, later: null, why: "", main: {label: t("wizard.cont"), go: nextSub}, backGo: prevSub}
-      : {back: true, later: k.step === "replace" ? null : later(t("wizard.k.skipnote")), why: "", main: {label: t("wizard.cont"), off: true, go: nextSub}, backGo: prevSub})};
+      : {back: true, later: k.step === "replace" ? null : later(t("wizard.k.skipnote")), why: t(k.step === "copy" ? "wizard.k.why.copy" : k.step === "replace" ? "wizard.k.why.replace" : "wizard.k.why"), main: {label: t("wizard.cont"), off: true, go: nextSub}, backGo: prevSub})};  // a grey Continue says why (1.8.31)
   };
 
   function kbPrograms(box, opts, eyebrowText, nextSub, prevSub, stop) {
@@ -596,6 +608,19 @@ const WIZARD = (function () {
     return {stop, foot: () => ({back: true, backGo: prevSub, later: packConnections().some((row) => !row.saved) ? {note: ""} : null, why: "", main: {label: t("wizard.cont"), go: nextSub}})};  // all signed in: nothing to skip (1.8.31)
   }
 
+  // (1.8.31) The list shows whole rows only: its height is cut to the last row that fits in the height the sheet allows (a half row at the bottom looked broken; the fade says there is more)
+  function snap(scroller) {
+    scroller.style.maxHeight = "";
+    if (!scroller.isConnected || scroller.scrollHeight <= scroller.clientHeight) return;
+    const limit = scroller.clientHeight, base = scroller.getBoundingClientRect().top + scroller.clientTop;
+    let fit = 0;
+    for (const row of scroller.children) {
+      const bottom = row.getBoundingClientRect().bottom - base;
+      if (bottom > limit + 0.5) break;
+      fit = bottom;
+    }
+    if (fit > 0) scroller.style.maxHeight = Math.ceil(fit) + (getComputedStyle(scroller).boxSizing === "border-box" ? scroller.offsetHeight - scroller.clientHeight : 0) + "px";
+  }
   parts.repos = function (box, opts) {
     const scan = M.scan || {places: [], rows: [], more: false};
     if (!M.picks) M.picks = new Set(scan.rows.filter((row) => row.picked).map((row) => row.path));
@@ -606,7 +631,9 @@ const WIZARD = (function () {
     const visible = () => { const word = M.filter.trim().toLowerCase(); return word ? rows.filter((row) => (row.name + " " + row.shown).toLowerCase().includes(word)) : rows; };
     function paint() {
       all.hidden = !rows.length; filter.hidden = !rows.length;
+      all.textContent = t(everyOn() ? "wizard.r.none.all" : "wizard.r.all");
       const shownRows = visible();
+      const was = listBox.querySelector(".wz-scroll"), at = was ? was.scrollTop : 0;  // a tick must not send the list back to the top
       if (!rows.length) { put(listBox, el("div", "wz-list", el("div", "wz-empty", t("wizard.r.none")))); count.textContent = ""; opts.changed(); return; }
       const scroller = el("div", "wz-list wz-scroll", ...(shownRows.length ? [] : [el("div", "wz-empty", t("wizard.r.nomatch"))]), ...shownRows.map((row) => {
         const fixed = Boolean(row.in_root);  // found through the repositories folder: it stays while that folder is set, so the box cannot be unticked here
@@ -623,12 +650,14 @@ const WIZARD = (function () {
       const edge = () => fade.classList.toggle("end", scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 4);
       scroller.addEventListener("scroll", edge);
       put(listBox, fade);
-      requestAnimationFrame(edge);
+      requestAnimationFrame(() => { snap(scroller); scroller.scrollTop = at; edge(); });
       count.textContent = t("wizard.r.found", {n: rows.length, places: scan.places.join(t("wizard.r.and"))});
       opts.changed();
     }
     filter.addEventListener("input", () => { M.filter = filter.value; paint(); });
-    const all = link(t("wizard.r.all"), () => { const shownRows = visible().filter((row) => !row.in_root); const every = shownRows.every((row) => M.picks.has(row.path)); shownRows.forEach((row) => (every ? M.picks.delete(row.path) : M.picks.add(row.path))); paint(); });
+    const choosable = () => visible().filter((row) => !row.in_root);
+    const everyOn = () => { const list = choosable(); return list.length > 0 && list.every((row) => M.picks.has(row.path)); };
+    const all = link(t("wizard.r.all"), () => { const on = everyOn(); choosable().forEach((row) => (on ? M.picks.delete(row.path) : M.picks.add(row.path))); paint(); });  // all ticked: it becomes "Select none" and unticks (1.8.31)
     const add = link("+ " + t("wizard.r.add"), () => {
       const taken = (path) => { api.setup("repo", {path, repos_root: "", singles: [...M.picks]}).then((found) => {
         const fresh = (found.kind === "repo" ? [{path: found.path, name: found.name}] : (found.repos || []).filter((row) => !row.held && !row.off)).filter((row) => !rows.some((have) => have.path === row.path));
@@ -647,6 +676,17 @@ const WIZARD = (function () {
     }};
   };
 
+  // (1.8.31) The gear of the dock's Settings button (dock.js draws the same two paths), with the yellow dot (wizard.css)
+  const GEAR = ["M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6z", "M12 2.4l1.5 2.55 3-0.6 0.9 3 2.85 1.2-1.05 2.85 1.95 2.4-2.4 1.95 0.15 3-3 0.45-1.5 2.7L12 20.4l-2.4 1.5-1.5-2.7-3-0.45 0.15-3L3 13.35l1.95-2.4-1.05-2.85 2.85-1.2 0.9-3 3 0.6z"];
+  function gearIcon() {
+    const NS = "http://www.w3.org/2000/svg", wrap = el("span", "wz-gear"), svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
+    GEAR.forEach((d) => { const path = document.createElementNS(NS, "path"); path.setAttribute("d", d); svg.append(path); });
+    wrap.append(svg);
+    return wrap;
+  }
+  // (1.8.31) Every "Set up" row is "label · value", with a unit where it is a count; the server's detail is used as it is, except where it is a bare name (the sign-in) or empty
+  const valueText = (row) => (row.id === "copilot" && row.detail ? t("wizard.v.cop.s", {name: row.detail}) : row.detail || t("wizard.v.ok"));
   parts.review = function (box, opts) {
     const holder = el("div");
     let summary = null, finishing = false;
@@ -657,12 +697,12 @@ const WIZARD = (function () {
       const ok = summary.rows.filter((row) => row.done), no = summary.rows.filter((row) => !row.done);
       if (title) title.textContent = t(no.length ? "wizard.v.title.check" : "wizard.v.title");
       const parts = [];
-      if (ok.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.done")), el("div", "wz-donegrid", ok.map((row) => el("div", "wz-d", dot("ok"), h("b", null, row.label), el("span", "s", row.detail || ""))))));
+      if (ok.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.done")), el("div", "wz-donegrid", ok.map((row) => el("div", "wz-d", dot("ok"), h("b", null, row.label), el("span", "s", valueText(row)))))));
       if (no.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.todo")), listOf(no.map((row) => {
         const set = btn(t("wizard.v.set"), "sm", () => { M.fromReview = true; const spot = where[row.id] || [2]; go(spot[0], spot[1] || 0); });
         return el("div", "wz-li wz-rv", dot("hot"), el("div", "wz-main", el("div", "t", row.label), el("div", "eff", row.effect || "")), set);
       }))));
-      if (no.length) parts.push(el("div", "wz-later", el("span", "wz-gear", "\u2699"), t("wizard.v.later")));
+      if (no.length) parts.push(el("div", "wz-later", gearIcon(), t("wizard.v.later")));
       put(holder, ...parts);
       opts.changed();
     }

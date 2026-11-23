@@ -466,6 +466,32 @@ class PageTests(unittest.TestCase):
         self.assertIn("4000", space)  # for a few seconds
         self.assertIn("role", space)
 
+    def test_the_slow_note_waits_for_the_second_visit_and_goes_when_settings_opens(self) -> None:  # 1.8.31 walk 2 #2
+        space = source("space.js")
+        self.assertIn('localStorage.getItem("harness.enter.visited") !== "1"', space)  # read when the script loads, before enter.js sets it
+        self.assertIn("asked || note || firstVisit", space)
+        self.assertIn("if (busy()) { close(); asked = false; return; }", space)  # Settings or the wizard opens: the note goes, and may come again
+        self.assertEqual(len(re.findall(r"\bsetInterval\(", space)), 0)
+        css = source("space.css")
+        rule = re.search(r"\.sp-slow\{([^}]*)\}", css).group(1)
+        self.assertIn("left:20px", rule)  # the dock column is at the right
+        self.assertNotIn("right:", rule)
+
+    def test_the_mcp_choice_shows_the_chosen_one_filled_and_one_is_always_chosen(self) -> None:  # 1.8.31 walk 2 #17
+        machine = source("machine.js")
+        self.assertIn("const on = state.mcp.allowed === true;", machine)  # never set: blocked, chosen
+        self.assertIn('class: on === value ? "on" : ""', machine)
+        css = source("settings.css")
+        self.assertRegex(css, r"\.mc-mcp \.seg2 button\.on\{[^}]*background:var\(--btn\)")
+
+    def test_the_empty_knowledge_base_points_to_settings_not_to_the_setup(self) -> None:  # 1.8.31 walk 2 #19
+        for language in ("en", "zh"):
+            table = messages.table(language)
+            for key in ("dock.kb.empty", "dock.kb.what.targets", "dock.kb.what.kb_repo"):
+                self.assertNotRegex(table[key], r"in the setup|setup 里", key)
+                self.assertRegex(table[key], r"Settings \u2192 Knowledge base|设置 \u2192 知识库", key)
+        self.assertIn('setupWindow("kb")', source("dock.js"))  # the button still goes to the knowledge base section
+
     def test_at_most_three_blurred_layers_and_only_over_a_picture(self) -> None:
         blurred = {}
         for name in ("tokens.css", "page.css", "ui.css", "lobby.css", "desk.css", "status.css", "live.css", "diffview.css", "highlight.css", "shell.css", "enter.css", "space.css"):

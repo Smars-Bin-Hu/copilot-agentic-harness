@@ -44,7 +44,7 @@ html.lite #wp .wl,html.lite #wp,html.lite #sp-studio{transition:none}
 @media (prefers-reduced-motion:reduce){#sp-world{transform:none!important}#wp .wl{transition:none}}
 
 /* The note offered once when the background moves slowly: in the style of the settings panel, above the gear. */
-.sp-slow{position:fixed;right:20px;bottom:74px;z-index:175;width:300px;max-width:calc(100vw - 40px);padding:14px 16px;border-radius:16px;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--glass-hi),var(--glass-shadow)}
+.sp-slow{position:fixed;left:20px;bottom:44px;z-index:175;width:250px;max-width:calc(100vw - 120px);padding:14px 16px;border-radius:16px;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--glass-hi),var(--glass-shadow)}
 .sp-slow[hidden]{display:none}
 .sp-slow p{margin:0 0 10px;font-size:13px;line-height:1.5}
 .sp-slow .row{display:flex;gap:8px;justify-content:flex-end}

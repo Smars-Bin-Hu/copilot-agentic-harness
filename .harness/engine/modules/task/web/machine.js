@@ -110,7 +110,7 @@ const MACHINE = (function () {
       make.textContent = t(state.bundle.path ? "machine.ca.again" : "machine.ca.make");
       make.className = "act" + (state.bundle.path ? "" : " hot");
       drop.hidden = !state.bundle.path;
-      const on = state.mcp.allowed;
+      const on = state.mcp.allowed === true;  // never set: the default, not allowed, shows as chosen (1.8.31)
       const chips = [["allowed", true], ["blocked", false]].map(([word, value]) => {
         const toggle = h("button", {type: "button", class: on === value ? "on" : "", "aria-pressed": String(on === value)}, t(value ? "machine.mcp.allowed" : "machine.mcp.blocked"));
         toggle.addEventListener("click", () => { if (on !== value) ask("mcp", {allowed: value}).then((next) => { paint(next); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }); });

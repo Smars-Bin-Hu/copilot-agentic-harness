@@ -97,6 +97,23 @@ class EmptyBoardTests(unittest.TestCase):
         self.assertIn('typeof options.first === "function"', lobby)
         self.assertIn("!rows.length", lobby)
 
+    def test_the_empty_block_has_the_one_new_task_button_and_no_sample_or_lesson(self) -> None:  # 1.8.31
+        board = source("board.js")
+        block = board.split("function firstTask()")[1].split("// The pill that says")[0]
+        self.assertIn("bigNewTask()", block)
+        self.assertNotIn("board.empty.sample", board)
+        self.assertNotIn("board.empty.lesson", board)
+        self.assertNotIn("board.empty.own", board)
+        self.assertNotIn("lessonLink", board)
+        self.assertNotIn("first-link", block)
+        self.assertNotIn("first-row", block)
+        self.assertNotIn("CHAT.create(true)", block)
+        self.assertIn('t("board.new")', board.split("function bigNewTask()")[1].split("function firstTask()")[0])  # the header's label
+        for lang in ("en", "zh"):
+            keys = json.loads((WEB.parents[2] / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
+            for gone in ("board.empty.sample", "board.empty.lesson", "board.empty.own"):
+                self.assertNotIn(gone, keys)
+
     def test_the_lobby_with_only_closed_tasks_keeps_its_quiet_sentence(self) -> None:
         lobby = source("lobby.js")
         self.assertIn('t(go ? "board.lobby.quiet" : "board.lobby.quiet.disk")', lobby)  # with the big button; a page on disk has none

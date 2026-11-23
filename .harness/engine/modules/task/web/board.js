@@ -551,18 +551,11 @@
     go.addEventListener("click", () => CHAT.create());
     return go;
   }
-  function lessonLink() {
-    const link = h("button", {type: "button", class: "first-link"}, t("board.empty.lesson"));
-    link.addEventListener("click", () => DOCK.start("harness-rookie-quick-start", ""));
-    return link;
-  }
+  // The empty block (1.8.31): the title, the line, and the one New task button (the same label as the header's); no sample button, no lesson link.
   function firstTask() {
     const go = bigNewTask(), served = Boolean(go);
-    if (go) go.textContent = t("board.empty.own");
-    const sample = served ? h("button", {type: "button", class: "act hot live first-go new-task"}, t("board.empty.sample")) : null;
-    if (sample) { sample.addEventListener("click", () => CHAT.create(true)); go.classList.remove("hot"); }
     return h("div", {class: "first-task"}, h("h2", null, t(served ? "board.empty.title" : "board.empty.title.disk")),
-      h("p", null, served ? t("board.empty.text") : t("board.empty.disk", {command: cli + " task board"})), served ? h("div", {class: "first-row"}, sample, go) : null, served ? lessonLink() : null);
+      h("p", null, served ? t("board.empty.text") : t("board.empty.disk", {command: cli + " task board"})), go);
   }
   // The pill that says whether VS Code is linked is SHELL.vsPill (shell.js): the same state as the banner and the dimmed buttons.
   const cli = DATA.cli || "harness";

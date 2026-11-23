@@ -63,7 +63,7 @@ Teach from [workplace.md](references/workplace.md): the Chat window and the boar
 
 ### 4. Do a practice task
 
-First run `harness task list --text`. If the sample task of [scenario.md](references/scenario.md) is there, the user already did it with **Try the sample** on the board: skip this part and say so. Otherwise go step by step from [walkthrough.md](references/walkthrough.md). The scenario is in [scenario.md](references/scenario.md); when `references/scenario.override.md` exists, use only that (it is for a team's own scenario, so the upstream file stays unchanged). This is the main part of the lesson: the user sends messages and presses the buttons on the task's page with their own hands. For every step you do, first say "what I am about to do, and why", after it say "what is new", then stop.
+First run `harness task list --text`. If the sample task of [scenario.md](references/scenario.md) is there, the user already did it from the board: skip this part and say so. Otherwise go step by step from [walkthrough.md](references/walkthrough.md). The scenario is in [scenario.md](references/scenario.md); when `references/scenario.override.md` exists, use only that (it is for a team's own scenario, so the upstream file stays unchanged). This is the main part of the lesson: the user sends messages and presses the buttons on the task's page with their own hands. For every step you do, first say "what I am about to do, and why", after it say "what is new", then stop.
 
 ### 5. How to use it every day
 

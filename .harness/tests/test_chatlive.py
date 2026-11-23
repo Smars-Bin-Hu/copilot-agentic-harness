@@ -588,6 +588,50 @@ class WholeTurnTests(unittest.TestCase):
         self.assertEqual(chatlive.items_of(dict(turn, parts=[dict(tool("c1", "running"), i=0)]), False, {})[1]["st"], "stop")  # not running: a call left open is `stop`
 
 
+class SearchTests(unittest.TestCase):
+    """B19, B20: the counts of the filter and the search of a whole round."""
+
+    def turn(self) -> Dict[str, Any]:
+        run = tool("c1", "failed", toolInput={"command": "python3 -m pytest -q"}, content=[{"type": "terminal", "result": {"preview": "..F\nFAILED test_retry_on_429\n1 failed", "exitCode": 1}}])
+        edit = {"kind": "toolCall", "toolCall": {"toolCallId": "e1", "toolName": "apply_patch", "status": "completed", "toolInput": "*** Begin Patch", "content": [{"type": "text", "text": "diff --git a/src/r.py b/src/r.py\n--- a/src/r.py\n+++ b/src/r.py\n@@ -1 +1 @@\n-RETRY_ON = (500,)\n+RETRY_ON = (429, 500)\n"}]}}
+        return {"id": "t", "message": {"text": "Keep the Retry rules", "origin": {"kind": "user"}}, "responseParts": [text("m1", "Looking at retry now.\nSecond line"), {"kind": "reasoning", "id": "r1", "content": "the retry path"}, run, edit]}
+
+    def test_a_search_finds_each_place_in_the_words_thoughts_commands_outputs_and_diffs_case_not_minded(self) -> None:
+        found = chatlive.search(self.turn(), "RETRY")
+        self.assertFalse(found["more"])
+        places = [(hit["id"], hit["where"]) for hit in found["hits"]]
+        self.assertEqual(places, [("t.me", "me"), ("m1", "text"), ("r1", "think"), ("c1", "output"), ("e1", "diff"), ("e1", "diff")])
+        output = found["hits"][3]
+        self.assertEqual((output["line"], output["lines"], output["snip"][1]), (2, 3, "retry"))
+        self.assertEqual(output["snip"][0], "..F FAILED test_")  # the line breaks of the text around a hit are spaces
+        self.assertEqual([hit["where"] for hit in chatlive.search(self.turn(), "pytest")["hits"]], ["line", "command"])
+        self.assertEqual(chatlive.search(self.turn(), "  ")["hits"], [])
+        self.assertEqual(chatlive.search(self.turn(), "x" * 201)["hits"], [])
+        self.assertEqual(chatlive.search(self.turn(), None)["hits"], [])  # type: ignore[arg-type]
+
+    def test_a_search_stops_at_its_cap_and_says_there_is_more(self) -> None:
+        many = {"id": "t", "responseParts": [text(f"m{n}", "word word word") for n in range(100)]}
+        found = chatlive.search(many, "word")
+        self.assertEqual((len(found["hits"]), found["more"]), (chatlive.FIND_HITS, True))
+        long = {"id": "t", "responseParts": [text("m1", "some words " * 50 + "needle" + " more words" * 50)]}
+        snip = chatlive.search(long, "needle")["hits"][0]["snip"]
+        self.assertEqual((len(snip[0]), snip[0][0], len(snip[2]), snip[2][-1]), (chatlive.FIND_SIDE + 1, "…", chatlive.FIND_SIDE + 1, "…"))
+
+    def test_a_search_redacts_what_it_shows(self) -> None:
+        secret = "ghp_" + "A" * 36
+        turn = {"id": "t", "responseParts": [tool("c1", toolInput={"command": f"echo {secret} token here"})]}
+        found = chatlive.search(turn, "token here")
+        self.assertTrue(found["hits"])
+        self.assertNotIn(secret, json.dumps(found))
+        self.assertEqual(chatlive.search(turn, secret)["hits"], [])
+
+    def test_facets_count_the_steps_of_each_filter_and_never_what_is_said(self) -> None:
+        items = chatlive.items_of(self.turn(), False, {}) + [{"id": "q", "k": "ask", "st": "wait"}, {"id": "w", "k": "tool", "st": "wait", "kind": "run"}]
+        self.assertEqual(chatlive.facets(items), {"all": 5, "fail": 1, "change": 1, "run": 2, "wait": 2})
+        self.assertEqual(chatlive.facet_of({"k": "text"}), [])
+        self.assertEqual(chatlive.facets([None, "x"]), {"all": 0, "fail": 0, "change": 0, "run": 0, "wait": 0})  # type: ignore[list-item]
+
+
 class LiveLinkTests(base.LinkCase):
     def live(self, last: str = "") -> Dict[str, Any]:
         return self.link.live(TASK, last)
@@ -674,6 +718,44 @@ class ServeLiveTests(base.BoardCase):
         self.assertEqual(self.request("POST", "/api/live", {"task": 5, "rev": ["x"]})[0], 200)  # a wrong type is a miss, not an error
         self.assertNotIn(base.TOKEN, json.dumps(data))
 
+    def test_the_route_answers_a_receipt_from_the_link_and_a_bad_turn_with_nothing(self) -> None:
+        self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
+        task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
+        made = {"turn": "t1", "calls": 2, "files": [], "add": 0, "del": 0, "more": 0, "at": "", "ms": 5, "ctx": None, "credits": None}
+        with mock.patch.object(self.vs, "receipt", return_value=made) as receipt:
+            status, data, _ = self.request("POST", "/api/live", {"task": task, "receipt": "t1"})
+            self.assertEqual((status, data["receipt"]), (200, made))
+            receipt.assert_called_once_with(task, "t1")
+            for bad in (5, "", "x" * 201, None, ["t1"]):
+                receipt.reset_mock()
+                self.assertEqual(self.request("POST", "/api/live", {"task": task, "receipt": bad})[1]["receipt"], {}, bad)
+                receipt.assert_not_called()
+        self.assertEqual(self.request("POST", "/api/live", {"task": task, "receipt": "t1"}, header=False)[0], 403)
+
+    def test_the_route_answers_a_search_and_counts_from_the_link_and_a_bad_question_with_nothing(self) -> None:
+        self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
+        task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
+        made = {"hits": [{"id": "c1", "where": "output", "snip": ["a", "b", "c"], "line": 1, "lines": 1}], "more": False, "turn": "t1"}
+        with mock.patch.object(self.vs, "find", return_value=made) as find:
+            self.assertEqual(self.request("POST", "/api/live", {"task": task, "find": {"turn": "t1", "q": "b" * 300}})[1]["find"], made)
+            find.assert_called_once_with(task, "t1", "b" * 200)  # the words are cut, not refused
+            for bad in (5, {"turn": "t1"}, {"turn": "", "q": "x"}, {"turn": "x" * 201, "q": "x"}, {"turn": "t1", "q": 5}):
+                find.reset_mock()
+                self.assertEqual(self.request("POST", "/api/live", {"task": task, "find": bad})[1]["find"]["hits"], [], bad)
+                find.assert_not_called()
+        counted = {"all": 3, "fail": 1, "change": 0, "run": 2, "wait": 0, "turn": "t1", "before": 40}
+        with mock.patch.object(self.vs, "counts", return_value=counted) as counts:
+            self.assertEqual(self.request("POST", "/api/live", {"task": task, "counts": {"turn": "t1", "before": 40}})[1]["counts"], counted)
+            counts.assert_called_once_with(task, "t1", 40)
+            for bad in ({"turn": "t1", "before": "40"}, {"turn": "t1", "before": True}, {"turn": "", "before": 4}, []):
+                counts.reset_mock()
+                self.assertEqual(self.request("POST", "/api/live", {"task": task, "counts": bad})[1]["counts"], {}, bad)
+                counts.assert_not_called()
+        with mock.patch.object(self.vs, "older", return_value={"items": [], "before": None}) as older:
+            self.request("POST", "/api/live", {"task": task, "before": {"turn": "t1", "i": 50}, "all": True})
+            self.request("POST", "/api/live", {"task": task, "before": {"turn": "t1", "i": 50}})
+            self.assertEqual([one.args for one in older.call_args_list], [(task, "t1", 50, 1000000), (task, "t1", 50, 60)])  # `all`: the whole round, for a filter or a search
+
     def test_the_route_reads_have_and_answers_a_before_with_older(self) -> None:
         self.assertTrue(base.until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
         task = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["task"]
@@ -691,7 +773,7 @@ class ServeLiveTests(base.BoardCase):
         with mock.patch.object(self.vs, "older", return_value={"items": [], "before": None}) as older:
             status, data, _ = self.request("POST", "/api/live", {"task": task, "rev": "", "before": {"turn": "t1", "i": 4}})
             self.assertEqual((status, data["older"]), (200, {"items": [], "before": None}))
-            older.assert_called_once_with(task, "t1", 4)
+            older.assert_called_once_with(task, "t1", 4, 60)
             for bad in ({"turn": "t1", "i": -1}, {"turn": "t1", "i": "4"}, {"turn": "t1", "i": True}, {"turn": 5, "i": 4}, {"turn": "x" * 201, "i": 4}, {"i": 4}):
                 older.reset_mock()
                 data = self.request("POST", "/api/live", {"task": task, "before": bad})[1]
@@ -961,6 +1043,133 @@ class Quick(unittest.TestCase):
         for _ in range(1000):
             json.dumps({"live": {"rev": "ahp-chat:/abc:1524:busy", "same": True}, "language": "en"})
         self.assertLess(time.perf_counter() - started, 1.0)
+
+
+class AskItemTests(unittest.TestCase):
+    """B8: a question of the agent as an item, and a call the person let go."""
+
+    def test_a_question_is_an_item_with_its_answers_as_words(self) -> None:
+        part = {"kind": "inputRequest", "response": "accept", "request": {"id": "r1", "message": "Which columns?", "questions": [
+            {"id": "cols", "title": "Columns", "options": [{"id": "day", "label": "Day"}, {"id": "amount", "label": "Amount"}]},
+            {"id": "days", "title": "Days back"}, {"id": "ok", "title": "Sure?"}, {"id": "left", "title": "Not answered"}],
+            "answers": {"cols": {"state": "submitted", "value": {"kind": "selected", "value": ["day", "amount"]}}, "days": {"state": "submitted", "value": {"kind": "text", "value": "7"}}, "ok": True}}}
+        self.assertEqual(chatlive.part_id(part), "q:r1")
+        item = chatlive.part_item(part, "q:r1", False, False, [1000, 2000], None)
+        self.assertEqual((item["k"], item["st"], item["text"], item["t0"], item["t1"]), ("ask", "done", "Which columns?", 1000, 2000))
+        self.assertEqual(item["qs"], [{"title": "Columns", "answer": "Day, Amount"}, {"title": "Days back", "answer": "7"}, {"title": "Sure?", "answer": "yes"}, {"title": "Not answered", "answer": ""}])
+        waiting = chatlive.part_item(dict(part, response=None), "q:r1", True, False, None, None)
+        self.assertEqual(waiting["st"], "wait")
+        del part["response"]
+        self.assertEqual(chatlive.part_item(part, "q:r1", True, False, None, None)["st"], "wait")
+        self.assertEqual(chatlive.part_item(dict(part, response="decline"), "q:r1", True, False, None, None)["st"], "skip")
+
+    def test_the_times_of_a_question_and_of_a_yes_are_noted(self) -> None:
+        cached: Dict[str, Any] = {}
+        chatlive.stamp(cached, {"type": "chat/inputRequested", "request": {"id": "r1"}}, 100)
+        chatlive.stamp(cached, {"type": "chat/inputCompleted", "requestId": "r1"}, 250)
+        chatlive.stamp(cached, {"type": "chat/toolCallStart", "toolCallId": "c1"}, 300)
+        chatlive.stamp(cached, {"type": "chat/toolCallConfirmed", "toolCallId": "c1", "approved": True}, 900)
+        chatlive.stamp(cached, {"type": "chat/toolCallComplete", "toolCallId": "c1"}, 1000)
+        self.assertEqual(cached["marks"], {"q:r1": [100, 250], "c1": [900, 1000, 900]})
+        call = {"toolCallId": "c1", "toolName": "bash", "status": "completed", "success": True, "confirmed": "user-action", "toolInput": "{\"command\": \"ls\"}"}
+        item = chatlive.part_item({"kind": "toolCall", "toolCall": call}, "c1", False, False, cached["marks"]["c1"], None)
+        self.assertEqual((item["ok"], item["okAt"], item["t0"], item["t1"]), ("you", 900, 900, 1000))
+        self.assertNotIn("ok", chatlive.part_item({"kind": "toolCall", "toolCall": dict(call, confirmed="not-needed")}, "c1", False, False, None, None))
+
+
+class RoundFactsTests(unittest.TestCase):
+    """B9: the live numbers of the round's title: its calls (those that fell out of memory too) and its credits."""
+
+    @staticmethod
+    def usage(total: float) -> Dict[str, Any]:
+        return {"inputTokens": 1, "outputTokens": 1, "_meta": {"copilotUsage": {"sessionTotalNanoAiu": int(total * 1e9)}}}
+
+    def test_calls_count_what_fell_out_of_memory_and_credits_are_the_growth_since_the_turn_before(self) -> None:
+        state: Dict[str, Any] = {"turns": [{"id": "t0", "usage": self.usage(2.0)}], "activeTurn": None}
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "t1", "startedAt": "2026-01-01T10:00:00Z", "message": {"text": "go"}})
+        for n in range(ahp.PARTS_KEEP + 30):
+            ahp.reduce_chat(state, {"type": "chat/toolCallStart", "turnId": "t1", "toolCallId": f"c{n}", "toolName": "bash", "displayName": "Bash"})
+            ahp.reduce_chat(state, {"type": "chat/responsePart", "turnId": "t1", "part": {"kind": "markdown", "id": f"m{n}", "content": "x"}})
+        self.assertGreater(state["activeTurn"]["dropped"], 0)
+        ahp.reduce_chat(state, {"type": "chat/usage", "turnId": "t1", "usage": self.usage(3.25)})
+        self.assertEqual(chatlive.round_facts(state), {"calls": ahp.PARTS_KEEP + 30, "credits": 1.25})
+        slim = ahp.slim({"id": "t9", "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": f"k{n}"}} for n in range(ahp.PARTS_KEEP + 7)]})
+        self.assertEqual(slim["droppedCalls"], 7)
+
+    def test_a_first_turn_counts_from_zero_and_an_unknown_total_is_none(self) -> None:
+        first = {"turns": [], "activeTurn": {"id": "t1", "responseParts": [], "usage": self.usage(0.5)}}
+        self.assertEqual(chatlive.round_facts(first), {"calls": 0, "credits": 0.5})
+        unknown = {"turns": [{"id": "t0", "usage": {}}], "activeTurn": {"id": "t1", "responseParts": [], "usage": self.usage(0.5)}}
+        self.assertIsNone(chatlive.round_facts(unknown)["credits"])
+        self.assertEqual(chatlive.round_facts({"turns": [], "activeTurn": None}), {"calls": 0, "credits": None})
+
+
+class NoteTests(unittest.TestCase):
+    """B13, B14: a note of Copilot's own, a turn it started itself, a compaction."""
+
+    def test_notes_are_grey_items_and_a_mark_with_no_words_is_nothing(self) -> None:
+        self.assertEqual(chatlive.part_item({"kind": "systemNotification", "content": "Background command done"}, "n1", False, False, None, None), {"id": "n1", "k": "note", "text": "Background command done"})
+        self.assertEqual(chatlive.part_item({"kind": "systemNotification", "content": {"markdown": "**Done**"}}, "n2", False, False, None, None)["text"], "**Done**")
+        self.assertIsNone(chatlive.part_item({"kind": "systemNotification", "content": "", "_meta": {"kind": "responseRoundEnded"}}, "n3", False, False, None, None))
+        self.assertEqual(chatlive.part_item({"kind": "compaction", "id": "c", "count": 2, "before": 9000, "after": 3000}, "c", False, False, None, None),
+                         {"id": "c", "k": "note", "kind": "compact", "text": "", "count": 2, "before": 9000, "after": 3000})
+        turn = {"id": "t9", "message": {"text": "Background agent 'x' completed", "origin": {"kind": "systemNotification"}}, "responseParts": []}
+        self.assertEqual(chatlive.said_item(turn), {"id": "t9.me", "k": "note", "text": "Background agent 'x' completed", "starts": True})
+
+
+class ReceiptTests(unittest.TestCase):
+    """The receipt of a turn (B6): the calls, and the files the edit and create calls changed with their lines and the calls that changed them."""
+
+    ROOT = Path("/r")
+
+    @staticmethod
+    def part(ident: str, tool: str, content: Any = None, status: str = "completed", success: bool = True) -> Dict[str, Any]:
+        call: Dict[str, Any] = {"toolCallId": ident, "toolName": tool, "displayName": tool.title(), "status": status, "success": success}
+        if content is not None:
+            call["content"] = content
+        return {"kind": "toolCall", "toolCall": call}
+
+    @staticmethod
+    def edit(path: str, added: int, removed: int, new: bool = False) -> Dict[str, Any]:
+        item: Dict[str, Any] = {"type": "fileEdit", "after": {"uri": "file:///r/" + path}, "diff": {"added": added, "removed": removed}}
+        if not new:
+            item["before"] = {"uri": "file:///r/" + path}
+        return item
+
+    def test_files_are_summed_over_calls_in_the_order_first_changed_with_the_calls_that_changed_them(self) -> None:
+        patch = "diff --git a/r/src/b.py b/r/src/b.py\n--- a/r/src/b.py\n+++ b/r/src/b.py\n@@ -1,3 +1,4 @@\n-old\n+new\n+more\n same\n"
+        parts = [
+            {"kind": "markdown", "id": "m1", "content": "Working."},
+            self.part("c1", "edit", [self.edit("src/a.py", 3, 1)]),
+            self.part("c2", "bash", [{"type": "text", "text": "ok"}]),
+            self.part("c3", "apply_patch", [{"type": "text", "text": patch}]),
+            self.part("c4", "edit", [self.edit("src/a.py", 2, 2)]),
+            self.part("c5", "create", [self.edit("tests/test_new.py", 40, 0, new=True)]),
+            self.part("c6", "edit", [self.edit("src/c.py", 9, 9)], status="running"),  # not completed: its lines are not known yet
+            {"kind": "toolCall"},  # no call in it: not counted
+        ]
+        found = chatlive.receipt(parts, self.ROOT)
+        self.assertEqual(found["calls"], 6)
+        self.assertEqual([(one["path"], one["add"], one["del"], one["new"], one["calls"]) for one in found["files"]],
+                         [("src/a.py", 5, 3, False, ["c1", "c4"]), ("src/b.py", 2, 1, False, ["c3"]), ("tests/test_new.py", 40, 0, True, ["c5"])])
+        self.assertEqual((found["add"], found["del"], found["more"]), (47, 4, 0))
+
+    def test_a_command_reading_or_a_failed_odd_result_changes_no_file(self) -> None:
+        parts = [self.part("r1", "view", [{"type": "text", "text": "diff --git a/x b/x"}]), self.part("r2", "bash", [self.edit("x.py", 1, 1)]),
+                 self.part("r3", "edit", "not a list"), self.part("r4", "edit", [{"type": "fileEdit", "after": {"uri": "https://elsewhere/x"}}]), self.part("r5", "edit", [{"type": "fileEdit"}])]
+        found = chatlive.receipt(parts, self.ROOT)
+        self.assertEqual((found["calls"], found["files"], found["add"], found["del"]), (5, [], 0, 0))
+        self.assertEqual(chatlive.receipt([], self.ROOT), {"calls": 0, "files": [], "add": 0, "del": 0, "more": 0})
+
+    def test_files_past_the_cap_are_counted_not_listed_and_a_file_keeps_at_most_the_cap_of_calls(self) -> None:
+        many = [self.part(f"e{n}", "edit", [self.edit(f"f{n}.py", 1, 0)]) for n in range(chatlive.RECEIPT_FILES + 5)]
+        same = [self.part(f"s{n}", "edit", [self.edit("one.py", 1, 1)]) for n in range(chatlive.RECEIPT_CALLS + 3)]
+        found = chatlive.receipt(many + same, self.ROOT)
+        self.assertEqual(len(found["files"]), chatlive.RECEIPT_FILES)
+        self.assertEqual(found["more"], 6)  # the five past the cap and one.py, which came last
+        self.assertEqual(found["add"], chatlive.RECEIPT_FILES + 5 + chatlive.RECEIPT_CALLS + 3)
+        alone = chatlive.receipt(same, self.ROOT)["files"][0]
+        self.assertEqual((alone["add"], alone["del"], len(alone["calls"])), (chatlive.RECEIPT_CALLS + 3, chatlive.RECEIPT_CALLS + 3, chatlive.RECEIPT_CALLS))
 
 
 if __name__ == "__main__":

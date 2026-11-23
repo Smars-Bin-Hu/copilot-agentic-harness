@@ -29,7 +29,7 @@ board-order: 6
    - `would_copy`: per group (`tasks`, `reports`, `goals`, `runtime`, `policies`, `knowledge-base`, `company`).
    - `skipped`: what is in this copy already, with the reason. Nothing is overwritten.
    - `changed_in_old_not_copied`: files changed in the old copy that nothing carries. The user decides what to do with each.
-3. **Hand over the copy.** Tell the user to close the VS Code windows of the old copy, then run the same command with `--apply` **in their own terminal**. You cannot run it. It runs `doctor` and checks every copied task at the end.
+3. **Hand over the copy.** Tell the user to stop the board of the old copy and close its VS Code windows, then run the same command with `--apply` **in their own terminal**. You cannot run it. It runs `doctor` and checks every copied task at the end.
 4. **Read the result the user pastes** (or run `harness doctor` and `harness task list --text` yourself). Every `[ERROR]` must be fixed. For a `[WARN]` about the short command pointing at another copy, follow step 1 of the setup guide on the board.
 5. **Tell the user what does not carry over** (below), and that the old copy can go once they have seen it all works.
 
@@ -51,5 +51,5 @@ board-order: 6
 | "is this copy, or holds it, or is inside it" | The path points at this repository. Ask for the old one |
 | "newer than this one" | The old copy has a higher version. Update this copy first; copying back is not supported |
 | "only a person at a terminal" | The user ran it in a pipe or the agent ran `--apply`. The user runs it in a plain terminal window |
-| `failed` is not empty | A file was locked (an open VS Code window of the old copy, an open editor). Close it and run the same command again: what went over is skipped |
+| `failed` is not empty | A file was locked (the old copy's board or agent host still running, an open VS Code window, an open editor). Close it and run the same command again: what went over is skipped |
 | `tasks_unreadable` lists a task | The task's `.task/task.json` did not come over whole. Check the old folder, delete the new task folder and run the command again |

@@ -685,6 +685,10 @@
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
       desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null] : null));
     document.documentElement.style.setProperty("--tkh", ui.head.offsetHeight + "px");  // the tab bar sticks under the header
+    if (!ui.headWatch && typeof ResizeObserver === "function") {  // and again when the header changes height without a drawing (the window made narrow and wide again)
+      ui.headWatch = new ResizeObserver(() => document.documentElement.style.setProperty("--tkh", ui.head.offsetHeight + "px"));
+      ui.headWatch.observe(ui.head);
+    }
     Status.refresh();
   }
 
@@ -1126,7 +1130,10 @@
     if (!desk.ask || !served() || !canAct() || typeof CHAT === "undefined" || !CHAT.card || !["confirm", "question", "auth"].includes(desk.waiting_why)) return null;
     const row = actionRow();
     const find = (name) => desk.actions.find((entry) => entry.action === name);
-    return CHAT.card(row, {stop: find("stop") ? actionButton(row, find("stop")) : null, answer: find("question") ? actionButton(row, find("question")) : null, waited: waitedLine()});
+    const first = CHAT.card(row, {stop: find("stop") ? actionButton(row, find("stop")) : null, answer: find("question") ? actionButton(row, find("question")) : null, waited: waitedLine()});
+    // what waits past the first: a card each with its own buttons (a question of more than one part is answered once the first card is done: its dialog is for the first)
+    const rest = (desk.ask.rest || []).map((one) => CHAT.card(Object.assign({}, row, {ask: one}), {stop: one.kind === "auth" && find("stop") ? actionButton(row, find("stop")) : null})).filter(Boolean);
+    return rest.length ? [first, ...rest].filter(Boolean) : first;
   }
 
   function otherCard(items, notes) {
@@ -1203,7 +1210,7 @@
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
     const cards = [...told];
-    if (asked) cards.push(asked);
+    if (asked) cards.push(...[].concat(asked));
     if (box) cards.push(box);
     cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told.length ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
     const finish = acceptCard();
@@ -2559,6 +2566,21 @@
       item.call ? callMark(item.call) : null,
       (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)])];
     const rowClass = (gate ? (item.decision === "held" ? "tr-held" : "tr-gate") : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "");
+    if (!gate && item.live && item.turn && typeof LIVE !== "undefined") {  // (C1) a call the board's stream holds: the row opens to it as the Live tab draws it, its input, output or diff
+      const key = item.at + "|" + item.tool;
+      const summary = h("summary", null, ...head, item.command ? h("span", {class: "tr-cmdline"}, item.command.split("\n")[0]) : null);
+      const box = h("details", {class: "tr-call tr-live", open: cmdOpen.has(key) ? "" : null}, summary);
+      const fill = () => {
+        if (box.querySelector(".lv-feed")) return;
+        const drawn = LIVE.draw([item.live], item.turn);
+        box.append(h("div", {class: "lv tr-lv"}, drawn));
+        const line = drawn.querySelector(".tc-line:not(.tc-static)");
+        if (line) line.click();  // opened at once: the row was opened to see it
+      };
+      summary.addEventListener("click", () => { if (box.open) cmdOpen.delete(key); else { cmdOpen.add(key); setTimeout(fill, 0); } });
+      if (box.open) setTimeout(fill, 0);
+      return h("li", {class: rowClass}, stamp, h("div", {class: "what"}, box, item.error ? h("div", {class: "sub"}, item.error) : null));
+    }
     if (!gate && item.command) {  // a call that went through (1.8.22): the start of its command under it, the whole of it when the row opens
       const key = item.at + "|" + item.tool;
       const summary = h("summary", null, ...head, h("span", {class: "tr-cmdline"}, item.command.split("\n")[0]));
@@ -2619,13 +2641,36 @@
       })), found.problems_cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: found.problems_cut})) : null);
   }
 
+  // (C1) Under a prompt the board's stream holds: the agent's last words, and the whole round as the chat showed it (its words, thoughts and every call, each opening to its input and output).
+  const roundsShown = new Set();
+  function roundOf(node) {
+    const reply = node.reply ? h("div", {class: "tr-reply"}, h("div", {class: "st-head"}, t("desk.trace.reply")), h("div", {class: "tr-reply-t"}, node.reply + (node.reply_cut ? " \u2026" : ""))) : null;
+    const place = h("div", {class: "tr-round"});
+    const open = h("button", {type: "button", class: "act tr-round-btn", "aria-expanded": "false"}, t("desk.trace.round"));
+    const show = () => {
+      open.disabled = true;
+      SERVE.post("/api/live", {task: desk.task, turn_items: node.turn}).then((answer) => {
+        const items = (answer && answer.turn_items && answer.turn_items.items) || [];
+        place.replaceChildren(items.length && typeof LIVE !== "undefined" ? h("div", {class: "lv tr-lv"}, LIVE.draw(items, node.turn)) : h("p", {class: "sub"}, t("desk.trace.round.none")));
+        open.disabled = false; open.textContent = t("desk.trace.round.hide"); open.setAttribute("aria-expanded", "true");
+      }, (error) => { open.disabled = false; place.replaceChildren(h("p", {class: "bad"}, (error && error.message) || String(error))); });
+    };
+    open.addEventListener("click", () => {
+      if (roundsShown.has(node.turn)) { roundsShown.delete(node.turn); place.replaceChildren(); open.textContent = t("desk.trace.round"); open.setAttribute("aria-expanded", "false"); return; }
+      roundsShown.add(node.turn); show();
+    });
+    if (roundsShown.has(node.turn)) show();
+    return h("div", {class: "tr-stream"}, reply, open, place);
+  }
+
   function promptNode(node, newest) {
     const chips = [
       node.seconds !== null && node.seconds !== undefined ? tag(clock(node.seconds)) : null, node.tool_calls ? tag(t("desk.trace.chip.tools", {n: node.tool_calls})) : null, node.subagents ? tag(t("desk.trace.chip.subagents", {n: node.subagents})) : null,
       node.asked ? tag(t("desk.trace.chip.asked", {n: node.asked}), "hot") : null, node.blocked ? tag(t("desk.trace.chip.blocked", {n: node.blocked}), "bad") : null, node.failed ? tag(t("desk.trace.chip.failed", {n: node.failed}), "bad") : null];
     const head = h("summary", null, h("span", {class: "tr-n"}, "#" + node.n), h("span", {class: "when sub"}, when(node.at, 5, 19)), h("span", {class: "tr-text", title: node.text}, node.text || t("desk.trace.prompt")), h("span", {class: "tr-chips"}, chips));
+    const rows = node.turn ? node.rows.map((row) => (row.live ? Object.assign({}, row, {turn: node.turn}) : row)) : node.rows;
     const box = h("details", {class: "tr-node" + (node.blocked || node.failed ? " bad" : ""), id: "tr-p-" + node.n, open: (traceOpen.has(node.n) ? traceOpen.get(node.n) : newest) ? "" : null}, head,
-      node.cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: node.cut})) : null, h("ol", {class: "timeline trace"}, node.rows.map(traceRow)));
+      node.cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: node.cut})) : null, h("ol", {class: "timeline trace"}, rows.map(traceRow)), node.turn ? roundOf(node) : null);
     head.addEventListener("click", () => traceOpen.set(node.n, !box.open));  // a click, not the `toggle` event: that one also fires when a node is drawn open
     return box;
   }

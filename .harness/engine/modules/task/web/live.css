@@ -284,3 +284,158 @@ html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
 .lv-life.err .lv-rb .ey,.lv-life.err .lv-rb .bulb{fill:var(--bad)}
 .fi-sa svg,.sa-panel .sa-f svg{flex:none;display:block;width:13px;height:13px}
 .fi-sa .sa-calls svg{width:12px;height:12px}
+/* The receipt of a round that ended (B6, prototype 1 pin 9): icons with their numbers on one line; the files below, each opens to its diff */
+.lv-feed>.rcpt{list-style:none;margin:10px 0 4px 23px;min-width:0}
+.rc-card{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.rc1{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:9px 14px;font-size:12.5px;color:var(--soft)}
+.rc-n{color:var(--ink);font-weight:550}
+.rc-st{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border-radius:5px}
+.rc-st svg{width:14px;height:14px;flex:none}
+.rc-st b{font-weight:550;color:var(--ink);font-variant-numeric:tabular-nums}
+.rc-st.hold,.rc-st.hold b{color:var(--hot)}
+.rc-st:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+.rc-sp{flex:1}
+.rc-pm{display:inline-flex;gap:6px;font:12px var(--mono)}
+.rcpt .add{color:var(--good)}.rcpt .del{color:var(--bad)}
+.rc-f{border-top:1px solid var(--line)}
+.rc-row{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;padding:6px 14px;border:0;border-top:1px solid var(--line);background:none;color:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.rc-f>.rc-row:first-child{border-top:0}
+.rc-row:hover{background:var(--hover)}
+.rc-row code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12.5px var(--mono)}
+.rc-row .add,.rc-row .del{font:12px var(--mono);flex:none}
+.rc-chev{display:inline-block;flex:none;color:var(--soft);transition:transform .15s}.rc-row[aria-expanded="true"] .rc-chev{transform:rotate(90deg)}
+.rc-new{flex:none;font-size:11px;color:var(--soft);border:1px solid var(--line);border-radius:9px;padding:0 6px}
+.rc-diff{padding:6px 14px 10px;min-width:0;overflow:auto}
+.rc-more{margin:0;padding:6px 14px;border-top:1px solid var(--line)}
+@media (max-width:480px){.lv-feed>.rcpt{margin-left:0}.rc1{gap:6px 12px}}
+/* A group of finished steps between two things said (B7): one line like a call's, its kinds with their counts; open, its steps follow it */
+.fi-group .dot{background:var(--card);border-color:var(--line2)}
+.gp-line .gp-n{font-weight:550;color:var(--ink)}
+.gp-k{display:inline-flex;align-items:center;gap:3px;font:12px var(--mono);color:var(--soft)}
+.gp-k svg{flex:none;width:13px;height:13px}
+.gp-pm{display:inline-flex;gap:6px;margin-left:4px;font:12px var(--mono)}
+.fi-group.is-open .tc-chev{transform:rotate(90deg)}
+.fi-group .fb{display:flex;flex-wrap:wrap;align-items:center;flex:1;min-width:0}
+/* B8: a decision of the person as a record on the line: a call they let go, a question they answered (one line that opens to every question and answer) */
+.fx-okby{display:inline-flex;align-items:center;gap:4px;font:12px var(--sans);color:var(--good)}
+.fx-okby svg{width:12px;height:12px;flex:none}
+.fi-ask .ask-q{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.fi-ask .ask-a{color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40ch}
+.fi-ask.is-wait .dot{background:var(--hot-dot);border-color:var(--hot-dot)}
+.fi-ask.is-wait .in,.fi-ask.is-wait .ask-go{color:var(--hot)}
+.fi-ask .fb{display:flex;flex-wrap:wrap;align-items:center;min-width:0}
+.ask-qa{flex:1 1 100%;margin:4px 0 2px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--hover)}
+.ask-dl{margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:2px}
+.ask-dl dt{font-size:12.5px;color:var(--soft)}
+.ask-dl dd{margin:0 0 6px;font-size:13.5px;color:var(--ink);overflow-wrap:anywhere}
+.tc-gate{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0 6px;padding:6px 10px;border-left:3px solid var(--hot);border-radius:6px;background:var(--hover);font-size:13px;color:var(--ink);overflow-wrap:anywhere}
+.tc-gate svg{flex:none;color:var(--hot)}
+/* B9: the person's words at the start of the round, three lines until opened; the title of the round that stays at the top once its start is scrolled away */
+.fi-me .fb{display:grid;gap:4px;min-width:0}
+.me-box{max-width:760px;padding:9px 13px;border:1px solid var(--line);border-radius:12px;background:var(--hover);min-width:0}
+.me-tx{font-size:14px;line-height:1.55;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.me-tx.me-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.me-files{margin-top:4px}
+.me-all{margin-top:6px}
+.lv-rbwrap{position:sticky;z-index:15;height:0}
+.lv-roundbar{position:absolute;left:0;right:0;top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;width:100%;box-sizing:border-box;margin:0;padding:8px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--soft);font:12.5px var(--sans);text-align:left;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.lv-roundbar .rb-n{font-weight:600;color:var(--ink);flex:none}
+.lv-roundbar .rb-t{flex:1 1 12em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.lv-roundbar .rb-s{display:inline-flex;gap:12px;flex:none}
+.rb-st{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.rb-st svg{width:14px;height:14px}.rb-st b{font-weight:550;color:var(--ink);font-variant-numeric:tabular-nums}
+/* B10: at the bottom of the window, above the reply buttons: how many wait for you and what, and Latest */
+.lv-wbwrap{position:sticky;bottom:78px;z-index:16;height:0}
+.lv-waitbar{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:10px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 8px 22px rgba(0,0,0,.3)}
+.wb-go{flex:none;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border:1px solid var(--hot-line);border-radius:999px;background:var(--hot-bg);color:var(--hot);font:600 13px var(--sans);cursor:pointer}
+.wb-l{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--soft)}
+.wb-latest{flex:none;margin-left:auto;padding:4px 12px;border:1px solid var(--line2);border-radius:999px;background:none;color:var(--ink);font:12.5px var(--sans);cursor:pointer}
+.wb-go[hidden],.wb-l[hidden],.wb-latest[hidden]{display:none}
+/* B11: the buttons under a long reply, and the reading view (the side panel of the subagents) */
+.lv-folds{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lv-folds:empty,.lv-folds:not(:has(:not([hidden]))){display:none}
+.lv-read svg{width:13px;height:13px;flex:none}
+.rd-scroll{padding:16px 22px 40px}
+.rd-body{font-size:15px;line-height:1.65;max-width:68ch}
+/* the reply buttons float over the bottom of the window: the end of the Live tab can be scrolled above them (UX round 2) */
+section.lv:not(.sa-panel):not(.tr-lv){padding-bottom:64px}
+.lv-life,.fi-need{scroll-margin-bottom:96px}
+/* B13-B16: a note of Copilot's own (a background command ended, the context was compacted); what it does now and what runs on in the background, on the line at the bottom */
+.note-line{display:flex;align-items:center;gap:8px;min-height:24px;font-size:12.5px;color:var(--soft)}
+.note-line .ti{display:inline-flex;flex:none}
+.note-tx{min-width:0;overflow-wrap:anywhere}
+.fi-note .dot{background:var(--card);border-color:var(--line)}
+.lt-doing{margin-left:6px;color:var(--soft);font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46ch}
+.lt-back{margin-left:auto;padding:1px 9px;border:1px solid var(--line2);border-radius:999px;font-size:12px;color:var(--ink);cursor:help;white-space:nowrap}
+.lv-life{flex-wrap:wrap}
+button.lt-back{background:none;font:12px var(--sans);cursor:pointer}
+.lt-blist{flex:1 1 100%;margin:6px 0 0;padding:0;list-style:none;display:grid;gap:4px}
+.lt-blist li{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px}
+.lt-bcmd{font:12px var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto}
+.lt-bname{min-width:0;flex:1 1 auto}
+/* after UX round 3: the card a line took you to glows once; narrow, the bar keeps its button and Latest */
+@keyframes lvflash{0%{box-shadow:0 0 0 0 var(--hot)}30%{box-shadow:0 0 0 4px var(--hot)}100%{box-shadow:0 0 0 0 transparent}}
+.lv-flash{animation:lvflash 1.5s ease-out;border-radius:12px}
+@media (max-width:560px){.wb-l{display:none!important}.lv-waitbar{gap:6px;padding:6px 8px}}
+/* B19, B20: the row over the round: show only some steps, and search the whole round */
+.lv-toolswrap{margin:2px 0 8px}
+.lv-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.lv-tools[hidden],.lv-find[hidden],.lv-find-where[hidden],.lv-filter-said[hidden]{display:none}
+.lv-tools-sp{flex:1}
+.lv-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--soft);font:12.5px var(--sans);cursor:pointer;white-space:nowrap}
+.lv-chip:hover:not(:disabled){color:var(--ink);background:var(--hover)}
+.lv-chip.on{border-color:var(--ink);color:var(--ink);background:var(--hover)}
+.lv-chip:disabled{opacity:.45;cursor:default}
+.lv-chip-n{font-weight:500;color:var(--soft);font-variant-numeric:tabular-nums}
+.lv-chip[data-filter="fail"] .lv-chip-n:not(:empty){color:var(--bad)}
+.lv-chip[data-filter="wait"] .lv-chip-n:not(:empty){color:var(--hot)}
+.lv-chip[data-filter="fail"]:disabled .lv-chip-n,.lv-chip[data-filter="wait"]:disabled .lv-chip-n{color:var(--soft)}
+.lv-filter-said{font-size:12px}
+.lv-findbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;border:1px solid var(--line2);border-radius:8px;background:transparent;color:var(--soft);cursor:pointer}
+.lv-findbtn:hover{color:var(--ink);background:var(--hover)}
+.lv-find{margin-top:8px}
+.lv-find-bar{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);min-width:0}
+.lv-find-bar:focus-within{border-color:var(--ink)}
+.lv-find-in{flex:1;min-width:60px;border:0;outline:0;background:transparent;color:var(--ink);font:13.5px var(--sans);padding:4px 0}
+.lv-find-n{flex:none;color:var(--soft);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.lv-find-n.bad{color:var(--bad)}
+.lv-find-b{flex:none;width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:var(--soft);font:15px var(--sans);cursor:pointer}
+.lv-find-b:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+.lv-find-b:disabled{opacity:.4;cursor:default}
+.lv-find-where{display:flex;flex-wrap:wrap;gap:2px 10px;margin:6px 2px 0;font-size:12px;color:var(--soft);min-width:0}
+.lv-find-w{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.lv-find-snip{font:12px var(--mono);overflow-wrap:anywhere;min-width:0}
+.lv-find-snip mark{background:rgba(255,180,0,.32);color:var(--ink);border-radius:3px;padding:0 1px}
+::highlight(lv-find){background-color:rgba(255,180,0,.3);color:inherit}
+::highlight(lv-find-now){background-color:rgba(255,150,0,.85);color:#111}
+.fi.lv-hid{padding:3px 0 3px 22px;font-size:12px;color:var(--soft)}
+.fi.lv-hid::before{content:"";position:absolute;left:1px;top:50%;width:7px;height:1px;background:var(--line2)}
+.fi.lv-dim .fb{opacity:.55}
+.fi.lv-dim .tx,.fi.lv-dim .me-tx{max-height:1.55em;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent)}
+.fi.lv-dim .lv-folds,.fi.lv-dim .me-all,.fi.lv-dim .me-files{display:none!important}
+.rb-filter{padding:1px 8px;border:1px solid var(--ink);border-radius:999px;color:var(--ink);font-size:11.5px}
+/* B18: since you last looked */
+.lv-since{display:block;padding:8px 0 10px;list-style:none}
+.lv-since-line{display:flex;align-items:center;gap:10px;color:var(--hot);font-size:12.5px;white-space:nowrap}
+.lv-since-line::before,.lv-since-line::after{content:"";flex:1;border-top:1px dashed var(--hot-line)}
+.lv-since-t{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lv-since-box{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px;padding:8px 12px;border:1px solid var(--hot-line);border-radius:10px;background:var(--hot-bg);font-size:12.5px;color:var(--ink)}
+.lv-since-s{display:flex;flex-wrap:wrap;gap:4px 14px;flex:1;min-width:0}
+.lv-since-n{font-variant-numeric:tabular-nums;white-space:nowrap}.lv-since-n.bad{color:var(--bad)}.lv-since-n.hot{color:var(--hot)}
+.lv-since-ok{flex:none;padding:3px 11px;border:1px solid var(--line2);border-radius:999px;background:var(--card);color:var(--ink);font:12.5px var(--sans);cursor:pointer}
+.lv-since-ok:hover{background:var(--hover)}
+/* B17: ask about this step */
+.tc-ask{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:2px 10px;border:1px solid var(--line2);border-radius:999px;background:var(--card);color:var(--ink);font:12px var(--sans);cursor:pointer;white-space:nowrap}
+.tc-ask:hover{background:var(--hover)}.tc-ask svg{width:13px;height:13px}
+.tc-askrow{display:flex;justify-content:flex-end;border-top:0!important;padding-bottom:0!important}
+.rp-quote{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;padding:7px 8px 7px 10px;border-left:3px solid var(--hot);border-radius:6px;background:var(--hover);font-size:12.5px;color:var(--soft);min-width:0}
+.rp-quote[hidden]{display:none}
+.rp-quote-m{flex:none;color:var(--hot)}
+.rp-quote-b{flex:1;min-width:0}
+.rp-quote-b b{display:block;color:var(--ink);font-weight:550;overflow-wrap:anywhere}
+.rp-quote-l{margin:4px 0 0;font:12px/1.45 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:6.5em;overflow:hidden}
+.rp-quote-x{flex:none;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;background:transparent;color:var(--soft);cursor:pointer}
+.rp-quote-x:hover{background:var(--card);color:var(--ink)}
+@media (max-width:560px){.lv-chip{padding:3px 8px}.lv-find-where{display:none}}
+.lv-toolswrap.is-finding{position:sticky;z-index:14;padding:6px 0 8px;background:var(--card);box-shadow:0 10px 12px -10px rgba(0,0,0,.35)}
+.lv-find-bar .lv-find-in{border:0!important;box-shadow:none!important;background:transparent!important;padding:4px 0!important;height:auto;min-height:0}
+.lv-find-in::-webkit-search-cancel-button{display:none}

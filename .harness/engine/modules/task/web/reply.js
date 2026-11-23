@@ -43,6 +43,24 @@ const REPLY = (function () {
     chip.addEventListener("click", () => language(lang));
     return chip;
   });
+  // B17: a quote of a step of the chat (Ask on an opened call, live.js): shown over the text, sent before it as a Markdown quote; × takes it away
+  const quoteBox = h("div", {class: "rp-quote", hidden: ""});
+  function paintQuote() {
+    const quote = mine.quote;
+    quoteBox.hidden = !quote;
+    if (!quote) { quoteBox.replaceChildren(); return; }
+    const drop = h("button", {type: "button", class: "rp-quote-x", title: t("desk.reply.quote.drop"), "aria-label": t("desk.reply.quote.drop")}, icon(["M4 4l8 8M12 4l-8 8"], 12));
+    drop.addEventListener("click", () => { mine.quote = null; paintQuote(); previewSoon(); box.focus(); });
+    const shown = quote.lines.slice(0, 4);
+    quoteBox.replaceChildren(h("span", {class: "rp-quote-m", "aria-hidden": "true"}, "\u275d"),
+      h("div", {class: "rp-quote-b"}, h("b", null, quote.title), shown.length ? h("pre", {class: "rp-quote-l"}, shown.join("\n")) : null, quote.lines.length > shown.length ? h("span", {class: "sub"}, t("desk.reply.quote.more", {n: quote.lines.length - shown.length})) : null), drop);
+  }
+  const quoted = (text) => {  // the message as the agent gets it: the quote first, then the person's words
+    const quote = mine.quote;
+    if (!quote) return text;
+    const lines = quote.lines.length ? ["> ```", ...quote.lines.map((line) => "> " + line.replace(/```/g, "`\u200b``")), "> ```"] : [];
+    return ["> " + quote.title, ...lines].join("\n") + "\n\n" + text;
+  };
   const settingsSlot = h("div", {class: "rp-set"});
   const draftsSlot = h("div", {class: "rp-dr"});
   const draftHead = h("summary", {title: t("desk.drafts.hint")}, t("desk.drafts.label"));
@@ -75,7 +93,7 @@ const REPLY = (function () {
   const head = h("div", {class: "rp-h", title: t("desk.reply.move")}, h("b", null, t("desk.reply.title")), close);
   const edges = ["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((edge) => h("div", {class: "rp-edge rp-" + edge, "data-edge": edge, "aria-hidden": "true"}));
   const panel = h("div", {class: "rp", role: "dialog", "aria-label": t("desk.reply.title"), hidden: ""}, head,
-    h("div", {class: "rp-scroll"}, box, files.tray,
+    h("div", {class: "rp-scroll"}, quoteBox, box, files.tray,
       skillRow, h("div", {class: "rp-lang"}, files.attach, files.picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
       settingsSlot, draftBox, whole, waiting, said), h("div", {class: "rp-f"}, hint, kbd, save, later, go), edges);
   const bar = h("div", {class: "rp-bar"}, pill, halt, back, again);
@@ -212,7 +230,7 @@ const REPLY = (function () {
     clearTimeout(mine.timer);
     if (!whole.open) return;
     mine.timer = setTimeout(() => {
-      SERVE.post("/api/send", {task: info.name, kind: "answer", lang: mine.lang, note: "", body: box.value, step: "preview"}).then((data) => { preview.textContent = data.result.text; }, (error) => { preview.textContent = (error && error.message) || ""; });
+      SERVE.post("/api/send", {task: info.name, kind: "answer", lang: mine.lang, note: "", body: quoted(box.value), step: "preview"}).then((data) => { preview.textContent = data.result.text; }, (error) => { preview.textContent = (error && error.message) || ""; });
     }, 250);
   }
 
@@ -253,8 +271,9 @@ const REPLY = (function () {
   }
 
   function send(queue) {
-    const text = box.value.trim();
+    const text = quoted(box.value.trim());
     const now = mode();
+    if (!box.value.trim()) return;  // a quote alone is not a message: the person says what they want of it
     if (!text || mine.busy || now.kind === "off" || files.reading() || (queue && now.kind !== "steer")) return;
     mine.busy = true;
     said.replaceChildren();
@@ -265,6 +284,8 @@ const REPLY = (function () {
     call.then(() => {
       mine.busy = false;
       box.value = "";
+      mine.quote = null;
+      paintQuote();
       files.clear();
       shut(false);
       sync();
@@ -370,6 +391,14 @@ const REPLY = (function () {
     },
     count(value) { info.count = value; sync(); },
     isOpen: () => mine.open,
+    // B17: a quote of a step to ask about: `{title, lines}`. The panel opens with it over the text; the person adds their words.
+    quote(found) {
+      mine.quote = found && typeof found.title === "string" ? {title: found.title.slice(0, 300), lines: (Array.isArray(found.lines) ? found.lines : []).map(String).slice(0, 40)} : null;
+      paintQuote();
+      open();
+      box.focus();
+      previewSoon();
+    },
     shown: () => info.show,
     open,
     restore,

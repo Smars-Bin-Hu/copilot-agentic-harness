@@ -43,7 +43,7 @@ USAGE_KEYS = ("inputTokens", "outputTokens", "cacheReadTokens")
 ENDS = {"chat/turnComplete": "complete", "chat/turnCancelled": "cancelled", "chat/error": "error"}
 STATES = ("complete", "cancelled", "error")
 WATCHED = frozenset(["chat/turnStarted", "chat/turnResume", "chat/responsePart", "chat/toolCallStart", "chat/toolCallConfirmed", "chat/toolCallComplete", "chat/toolCallResultConfirmed",
-                     "chat/truncated"] + list(ENDS))  # the actions after which a record can be due; the hundreds of deltas, reasoning and usage actions are not here
+                     "chat/truncated", "chat/inputRequested", "chat/inputCompleted"] + list(ENDS))  # the actions after which a record can be due; the hundreds of deltas, reasoning and usage actions are not here
 FINAL = ("completed", "failed", "cancelled")  # a tool call in one of these takes no second result
 
 
@@ -236,6 +236,8 @@ def take(cached: Dict[str, Any], chat: str, action: Dict[str, Any], sub: Optiona
         call = part.get("toolCall") if part.get("kind") == "toolCall" and isinstance(part.get("toolCall"), dict) else None
         if call is not None:
             ended = call.get("status") in FINAL
+        elif part.get("kind") == "inputRequest":  # B8: a question is final once it was answered (or the turn ended)
+            ended = "response" in part or ending
         else:
             ended = position < last or ending  # a text that is no longer the last is finished
         if ended:

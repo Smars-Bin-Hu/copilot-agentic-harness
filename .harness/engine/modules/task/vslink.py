@@ -50,6 +50,7 @@ CREATE_WAIT = 60.0  # a create makes the chat, sends, then waits for the host to
 REREAD_AFTER_ANSWER = 10.0  # seconds after a person answered in which a session that still says "input" is not read again for a missed item
 INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
 UNDO_WAIT = 12.0  # seconds a Withdraw waits for the turn it stopped to end
+ASK_REST = 3  # what the chat waits for past the first, each with a card of its own
 SUB_FOLLOW = 16  # chats of subagents followed for each bound chat, the newest: a safety cap, every subagent of a normal turn is followed (1.6.105: 3; B4a: 16)
 SLOW_LIMIT = 3  # 1.7.45: calls in a row the host did not answer in time before the connection is given up; one slow answer of a busy computer is not a lost VS Code
 SLOW_RETRY = 30.0  # seconds before a list the host did not answer in time is asked again
@@ -144,7 +145,7 @@ class Job:
 
 
 # "": any state: a setting of the chat holds from its next turn; a Withdraw stops a running turn first (1.6.99); Try again and taking back a queued message are checked by the thread
-NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "say": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": "", "super": ""}  # relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
+NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "say": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle", "relay": "", "super": "", "bgstop": ""}  # bgstop (B16): stop a shell that runs in the background; relay (1.8, autorun): the board wakes the agent or sends `/compact`; the chat must be idle or in error, which `_do` checks
 
 
 class VsLink:
@@ -288,7 +289,9 @@ class VsLink:
             found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root, cached.setdefault("memo", {}), have, number, {sub["call"] for sub in subs})  # a call with a subagent is whole: `sub` goes on it
             chatlive.attach_subs(found["items"], [(sub, self.chats.get(sub["chat"])) for sub in subs], self.root, cached["state"])
             # `queued`: the messages that go after the running turn; `retry`: the last turn ended in an error that Try again can run again (1.6.99)
-            return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"]))}
+            return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"])),
+                    "round": chatlive.round_facts(cached["state"]),  # B9: the live numbers of the title of the round
+                    "activity": cached["state"].get("activity") or "", "background": list(cached["state"].get("backgroundWork") or [])}  # B15, B16
 
     def older(self, task: str, turn: str, before: int, count: int = 60) -> Dict[str, Any]:
         """The steps of the turn `turn` that came before part `before` (the `before` of `live`), from the task's stream file: `{items, before}`, the newest `count` of them, oldest first. `before`: where
@@ -347,16 +350,142 @@ class VsLink:
                 return chatlive.detail(held, self.root)
             if sub:
                 found = next((item for item in self._sub_turns(task, sub, parent) if item["id"] == turn), None)
-            elif chat:
-                found = next((item for item in chatstream.read(self.root, task, chat)["turns"] if item["id"] == turn and not item.get("sub")), None)
-            else:
-                return {}
+            else:  # the bound chat's turns; a task that is not bound (closed, C1): a turn of any of its chats
+                found = next((item for item in chatstream.read(self.root, task, chat or None)["turns"] if item["id"] == turn and not item.get("sub")), None)
             for part in (found["parts"] if found else []):
                 if chatlive.part_id(part) == ident and isinstance(part.get("toolCall"), dict):
                     return chatlive.detail(part["toolCall"], self.root)
             return {}
         except Exception:  # a page's question must not break the link
             return {}
+
+    def receipt(self, task: str, turn: str) -> Dict[str, Any]:
+        """The receipt of turn `turn` of the task's chat, once it ended (B6): `chatlive.receipt` (calls, files with their lines and call ids) and `{turn, at, ms, ctx, credits}`. `at`: when it began;
+        `ms`: how long it took (the host's duration); `ctx`: `{from, to}`, the percent of the context window after the turn before and after this one (`from` is 0 for the chat's first turn,
+        None when not known); `credits`: what the session's total grew by in this turn, None when the host did not say for both. From memory when the turn is there whole; when its parts fell out
+        of memory (`dropped`) or it is gone, from the task's stream file (read after the lock is let go: there `credits` is None and `ctx` only when the window is known). A turn that runs, one
+        not found, any failure: `{}`. Kept per chat and turn: a turn that ended does not change. Never raises."""
+        try:
+            if not isinstance(turn, str) or not turn:
+                return {}
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                chat = str(binding["chat"]) if binding else ""
+                cached = self.chats.get(chat) if chat else None
+                if cached is None:
+                    return {}
+                kept = cached.setdefault("receipts", {})
+                if turn in kept:
+                    return dict(kept[turn])
+                state = cached["state"]
+                active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
+                if active and str(active.get("id") or "") == turn:
+                    return {}
+                turns = [one for one in state.get("turns") or [] if isinstance(one, dict)]
+                at = next((n for n, one in enumerate(turns) if str(one.get("id") or "") == turn), -1)
+                held = turns[at] if at >= 0 else None
+                before = turns[at - 1] if at > 0 else None
+                first = at == 0 and len(turns) == 1  # the memory keeps the last two turns: one alone is the chat's first
+                parts = [dict(part) for part in held.get("responseParts") or [] if isinstance(part, dict)] if held and not held.get("dropped") else None
+                limits = dict(self.limits)
+                state_copy = {"turns": [dict(one) for one in turns], "activeTurn": active}
+            usage = held.get("usage") if held else None
+            started, length = (held.get("startedAt"), held.get("duration")) if held else ("", None)
+            if parts is None:  # not whole in memory: the file has every part
+                found = next((one for one in chatstream.read(self.root, task, chat)["turns"] if one["id"] == turn and not one.get("sub")), None)
+                if found is None or not found.get("state"):
+                    return {}
+                parts = found["parts"]
+                usage = usage or found.get("usage")
+                started = started or found.get("at")
+                length = length if length is not None else found.get("duration")
+            out = chatlive.receipt(parts, self.root)
+            after = chatctx.percent_of(usage, state_copy, limits)
+            prior = chatctx.percent_of(before.get("usage"), state_copy, limits) if before else (0.0 if first else None)
+            spent_now = chatctx.session_total(usage)
+            spent_then = chatctx.session_total(before.get("usage")) if before else (0.0 if first else None)
+            out.update(turn=turn, at=str(started or ""), ms=length if isinstance(length, (int, float)) and not isinstance(length, bool) and length >= 0 else None,
+                       ctx={"from": prior, "to": after} if after is not None else None,
+                       credits=round(max(0.0, spent_now - spent_then), 2) if spent_now is not None and spent_then is not None else None)
+            with self.lock:
+                again = self.chats.get(chat)
+                if again is not None:
+                    store = again.setdefault("receipts", {})
+                    store[turn] = out
+                    while len(store) > 8:
+                        store.pop(next(iter(store)))
+            return dict(out)
+        except Exception:  # a page's question must not break the link
+            return {}
+
+    def turn_items(self, task: str, turn: str) -> Dict[str, Any]:
+        """(C1) The whole of one turn of the task's chats as Live items, for the Agent actions tab: `{items, turn}`. From the board's memory when the turn is there whole, else from the task's
+        stream file (any of its chats: the task need not be bound or open). Not found, any failure: `{items: [], turn}`. Never raises; the file is read after the lock is let go."""
+        nothing: Dict[str, Any] = {"items": [], "turn": turn if isinstance(turn, str) else ""}
+        try:
+            if not isinstance(turn, str) or not turn:
+                return nothing
+            with self.lock:
+                binding = self.bound.get(task) if self.ready else None
+                state = (self.chats.get(str(binding["chat"])) or {}).get("state") if binding else None
+                held = None
+                if isinstance(state, dict):
+                    held = next((dict(one) for one in chatlive.all_turns(state) if str(one.get("id") or "") == turn and not one.get("dropped") and one is not state.get("activeTurn")), None)
+                    marks = dict((self.chats.get(str(binding["chat"])) or {}).get("marks") or {})
+            if held is not None:
+                return {"items": chatlive.items_of(held, False, marks, self.root), "turn": turn}
+            found = next((one for one in chatstream.read(self.root, task)["turns"] if one["id"] == turn and not one.get("sub")), None)
+            if found is None:
+                return nothing
+            return {"items": chatlive.items_of(found, False, {}, self.root), "turn": turn}
+        except Exception:  # a page's question must not break the link
+            return nothing
+
+    def _whole_turn(self, task: str, turn: str) -> Optional[Dict[str, Any]]:
+        """Turn `turn` of the task's chats with every part, for a search (B20): from memory when it holds the turn whole; else the task's stream file (the bound chat, else any of the task's), with
+        the parts memory has and the file not yet (the newest of a turn that runs) after them. None when neither has it. The parts are copied under the lock; the file is read after it."""
+        with self.lock:
+            binding = self.bound.get(task) if self.ready else None
+            chat = str(binding["chat"]) if binding else ""
+            state = (self.chats.get(chat) or {}).get("state") if chat else None
+            held = None
+            if isinstance(state, dict):
+                one = next((one for one in chatlive.all_turns(state) if str(one.get("id") or "") == turn), None)
+                if one is not None:
+                    held = dict(one, responseParts=[dict(part) for part in one.get("responseParts") or [] if isinstance(part, dict)])
+        if held is not None and not held.get("dropped"):
+            return held
+        found = next((one for one in chatstream.read(self.root, task, chat or None)["turns"] if one["id"] == turn and not one.get("sub")), None)
+        if found is None:
+            return held
+        known = {chatlive.part_id(part) for part in found["parts"]}
+        extra = [part for part in (held or {}).get("responseParts") or [] if chatlive.part_id(part) and chatlive.part_id(part) not in known]
+        view = dict(found, parts=list(found["parts"]) + extra)
+        if held is not None and isinstance(held.get("message"), dict):
+            view["message"] = held["message"]
+        return view
+
+    def find(self, task: str, turn: str, query: str) -> Dict[str, Any]:
+        """(B20) Where `query` is in turn `turn` of the task's chat, every part of it, also those memory let go of: `chatlive.search` and `{turn}`. Not found, any failure: no hit. Never raises."""
+        nothing: Dict[str, Any] = {"hits": [], "more": False, "turn": turn if isinstance(turn, str) else ""}
+        try:
+            if not isinstance(turn, str) or not turn or not isinstance(query, str):
+                return nothing
+            whole = self._whole_turn(task, turn)
+            if whole is None:
+                return nothing
+            return dict(chatlive.search(whole, query, self.root), turn=turn)
+        except Exception:  # a page's question must not break the link
+            return nothing
+
+    def counts(self, task: str, turn: str, before: int) -> Dict[str, Any]:
+        """(B19) How many of the steps of turn `turn` before part `before` (those the page has not loaded) are in each filter: `chatlive.facets`, with `{turn, before}`. Those steps are over: they do
+        not change, so the page asks once per place. Never raises."""
+        try:
+            found = self.older(task, turn, before, 1000000) if isinstance(before, int) and not isinstance(before, bool) and before > 0 else {"items": []}
+            return dict(chatlive.facets(found["items"]), turn=turn, before=before)
+        except Exception:  # a page's question must not break the link
+            return dict(chatlive.facets([]), turn=turn, before=before)
 
     def sub(self, task: str, call: str, have: int = -1) -> Dict[str, Any]:
         """The whole chat of the subagent that tool call `call` of the task's chat started, for the side panel (B4a): `{call, title, st, items, turn, n, usage: {calls, ms?}}`. `items`: all the items of all the
@@ -654,11 +783,13 @@ class VsLink:
                 return None
             subs = self._sub_targets(binding)
             items = list((held["state"].get("inputNeeded") if held else None) or []) + self._sub_items(binding)  # 1.8: a confirmation in a running subagent's chat is the task's too
-            view, count = chatask.first_for(items, [binding["chat"]] + [item["chat"] for item in subs])
-            if view is None:
+            mine = chatask.all_for(items, [binding["chat"]] + [item["chat"] for item in subs])
+            if not mine:
                 return None
-            since = (held["seen"].get(view["id"]) if held else None) or self.sub_seen.setdefault(view["id"], utc_now())
-            return dict(view, count=count, since=since)
+            seen = lambda one: (held["seen"].get(one["id"]) if held else None) or self.sub_seen.setdefault(one["id"], utc_now())  # noqa: E731
+            view = mine[0]
+            # `rest`: the next ones (ASK_REST at most), each with its own buttons on the page: a call to allow must not wait behind a question (UX round 2 of the board chat)
+            return dict(view, count=len(mine), since=seen(view), rest=[dict(one, count=1, since=seen(one)) for one in mine[1:1 + ASK_REST]])
 
     def respond(self, kind: str, task: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Allow or deny a tool call (`confirm`), or answer a question (`answer`), on the thread. `payload`: {id, digest, tool_call_id | request_id, approved | answers}. Raises Refused
@@ -1506,6 +1637,13 @@ class VsLink:
                 held = {"state": ahp.trimmed(link.subscribe(chat)), "tool_at": ""}
                 with self.lock:
                     self.chats[chat] = held
+            if job.kind == "bgstop":  # B16: a shell the chat runs in the background, stopped by the host's own request (only a shell can be)
+                known = {str(item.get("id")) for item in held["state"].get("backgroundWork") or [] if isinstance(item, dict)}
+                if job.text not in known:
+                    raise Refused("ask-gone")
+                answer = link.call("vscode/stopBackgroundWork", {"chat": chat, "id": job.text}, timeout=pace.scaled(30))
+                job.result = {"chat": chat, "stopped": bool((answer or {}).get("stopped")) if isinstance(answer, dict) else False}
+                return
             if job.kind == "config":
                 action = {"type": "chat/configChanged", "config": dict(job.plan or {})}
                 link.dispatch(chat, action)

@@ -852,7 +852,13 @@ def slim(turn: Any) -> Any:
     if not isinstance(parts, list):
         return turn
     kept = [slim_part(part) for part in parts[-PARTS_KEEP:]]
-    return dict(turn, responseParts=kept, dropped=int(turn.get("dropped") or 0) + max(0, len(parts) - PARTS_KEEP))
+    gone = parts[:max(0, len(parts) - PARTS_KEEP)]
+    return dict(turn, responseParts=kept, dropped=int(turn.get("dropped") or 0) + len(gone), droppedCalls=int(turn.get("droppedCalls") or 0) + _calls_in(gone))
+
+
+def _calls_in(parts: List[Any]) -> int:
+    """How many tool calls are among `parts` (B9: a round counts the calls that fell out of memory too)."""
+    return sum(1 for part in parts if isinstance(part, dict) and part.get("kind") == "toolCall")
 
 
 UNBOUNDED = ("structuredContent", "resultMetadata")  # of a tool call in a snapshot: no limit on their size, and no page reads them
@@ -860,6 +866,11 @@ UNBOUNDED = ("structuredContent", "resultMetadata")  # of a tool call in a snaps
 
 def slim_part(part: Any) -> Any:
     """One part of a turn as the board keeps it: the result of a tool call cut by `bounded_content`, and without the fields of `UNBOUNDED` (`reduce_chat` never takes those either)."""
+    if isinstance(part, dict) and part.get("kind") == "inputRequest" and isinstance(part.get("request"), dict) and isinstance(part["request"].get("id"), str):  # B8: a question, bounded
+        kept_part = {"kind": "inputRequest", "request": input_kept(part["request"])}
+        if isinstance(part.get("response"), str):
+            kept_part["response"] = part["response"][:20]
+        return kept_part
     call = part.get("toolCall") if isinstance(part, dict) else None
     if not isinstance(call, dict) or not ("content" in call or any(key in call for key in UNBOUNDED)):
         return part
@@ -894,6 +905,11 @@ def trimmed(state: Dict[str, Any], keep: int = 2) -> Dict[str, Any]:
            "queuedMessages": [found for found in (pending(item) for item in state.get("queuedMessages") or []) if found]}
     if state.get("turnsNextCursor") is not None:
         out["turnsNextCursor"] = state["turnsNextCursor"]  # where the host goes on when older turns are asked for
+    if isinstance(state.get("activity"), str) and state["activity"].strip():
+        out["activity"] = state["activity"][:ACTIVITY_KEEP]
+    work = [background_kept(item) for item in state.get("backgroundWork") or [] if isinstance(item, dict) and isinstance(item.get("id"), str)]
+    if work:
+        out["backgroundWork"] = work[-BACKGROUND_KEEP:]
     return out
 
 
@@ -957,7 +973,7 @@ def _tool_call_step(call: Dict[str, Any], kind: str, action: Dict[str, Any]) -> 
             return False
         if action.get("approved"):
             call["status"] = "running"
-            call["confirmed"] = action.get("confirmed")
+            call["confirmed"] = action.get("confirmed") or "user-action"  # B8: a call that waited and was let go was let go by a person (the board's own yes names no reason)
             if action.get("editedToolInput") is not None and isinstance(call.get("toolInput"), str):
                 call["toolInput"] = action["editedToolInput"]
         else:
@@ -1047,6 +1063,17 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
     if kind == "chat/turnsLoaded":  # older turns were paged in: the board keeps only its last turns, so only the cursor is noted
         state["turnsNextCursor"] = action.get("turnsNextCursor")
         return
+    if kind == "chat/activityChanged":  # B15: what the host says it is doing (loading plugins, settings), or nothing
+        state["activity"] = action["activity"][:ACTIVITY_KEEP] if isinstance(action.get("activity"), str) and action["activity"].strip() else None
+        return
+    if kind == "chat/backgroundWorkSet" and isinstance(action.get("work"), dict) and isinstance(action["work"].get("id"), str):  # B16: a shell or subagent that runs on after its call
+        work = background_kept(action["work"])
+        listed = [item for item in state.get("backgroundWork") or [] if isinstance(item, dict) and item.get("id") != work["id"]]
+        state["backgroundWork"] = (listed + [work])[-BACKGROUND_KEEP:]
+        return
+    if kind == "chat/backgroundWorkRemoved":
+        state["backgroundWork"] = [item for item in state.get("backgroundWork") or [] if isinstance(item, dict) and item.get("id") != action.get("id")]
+        return
     if kind == "chat/turnStarted":
         state["activeTurn"] = {"id": action.get("turnId"), "startedAt": action.get("startedAt"), "message": action.get("message"), "responseParts": [], "usage": None}
         state["modifiedAt"] = action.get("startedAt") or state.get("modifiedAt")
@@ -1077,12 +1104,38 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         if _contributor(action.get("contributor")) is not None:
             call["contributor"] = _contributor(action["contributor"])
         parts.append({"kind": "toolCall", "toolCall": call})
+    elif kind == "chat/inputRequested" and isinstance(action.get("request"), dict) and isinstance(action["request"].get("id"), str):  # B8: a question of the agent is a part of the turn
+        request = input_kept(action["request"])
+        at = _open_input(parts, request["id"])
+        if at is None:
+            parts.append({"kind": "inputRequest", "request": request})
+        else:
+            parts[at] = {"kind": "inputRequest", "request": dict(request, answers=request.get("answers") or parts[at]["request"].get("answers"))}
+    elif kind == "chat/inputAnswerChanged":
+        at = _open_input(parts, action.get("requestId"))
+        if at is not None and isinstance(action.get("questionId"), str):
+            answers = dict(parts[at]["request"].get("answers") or {})
+            if action.get("answer") is None:
+                answers.pop(action["questionId"], None)
+            else:
+                answers[action["questionId"]] = _answer_kept(action["answer"])
+            parts[at]["request"]["answers"] = answers or None
+    elif kind == "chat/inputCompleted":
+        at = _open_input(parts, action.get("requestId"))
+        if at is not None:
+            given = action.get("answers") if isinstance(action.get("answers"), dict) else {}
+            answers = dict(parts[at]["request"].get("answers") or {}, **{str(key): _answer_kept(value) for key, value in list(given.items())[:INPUT_QUESTIONS]})
+            parts[at]["request"]["answers"] = answers or None
+            parts[at]["response"] = str(action.get("response") or "accept")[:20]
     elif kind.startswith("chat/toolCall"):
         for part in parts:
             call = part.get("toolCall") if isinstance(part, dict) and part.get("kind") == "toolCall" else None
             if isinstance(call, dict) and call.get("toolCallId") == action.get("toolCallId"):
                 _tool_call_action(call, kind, action)
     elif kind == "chat/usage" and isinstance(action.get("usage"), dict):
+        before, after = _compactions(active.get("usage")), _compactions(action["usage"])
+        if before is not None and after is not None and after > before:  # B14: the context was compacted (the host counts it in the usage; it sends nothing else): a part of the turn says so
+            parts.append({"kind": "compaction", "id": f"compact-{after}-{len(parts)}", "count": after, "before": _context_total(active.get("usage")), "after": _context_total(action["usage"])})
         active["usage"] = action["usage"]
     elif kind in ("chat/turnComplete", "chat/turnCancelled", "chat/error"):
         if kind == "chat/error" and isinstance(action.get("part"), dict):
@@ -1093,7 +1146,97 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         return
     if len(parts) > PARTS_KEEP + 20:  # cut in steps, not on every action
         active["dropped"] = int(active.get("dropped") or 0) + len(parts) - PARTS_KEEP
+        active["droppedCalls"] = int(active.get("droppedCalls") or 0) + _calls_in(parts[:len(parts) - PARTS_KEEP])
         del parts[:len(parts) - PARTS_KEEP]
+
+
+# --- what the chat does besides its turn (B13-B16) ---------------------------------------------------------------------------
+ACTIVITY_KEEP = 200
+BACKGROUND_KEEP = 20
+
+
+def background_kept(work: Dict[str, Any]) -> Dict[str, Any]:
+    """A shell or subagent that runs in the background, as a page reads it: kind, id, label, command (cut), startedAt."""
+    kept: Dict[str, Any] = {"id": work["id"][:200], "kind": str(work.get("kind") or "")[:20]}
+    for key, cap in (("label", 200), ("command", 400), ("startedAt", 40)):
+        if isinstance(work.get(key), str):
+            kept[key] = work[key][:cap]
+    return kept
+
+
+def _attribution(usage: Any) -> Dict[str, Any]:
+    meta = usage.get("_meta") if isinstance(usage, dict) and isinstance(usage.get("_meta"), dict) else {}
+    return meta["contextAttribution"] if isinstance(meta.get("contextAttribution"), dict) else {}
+
+
+def _compactions(usage: Any) -> Optional[int]:
+    """How many times the session's context was compacted, as the host counts it in a usage; None: it does not say."""
+    found = _attribution(usage).get("compactions")
+    if isinstance(found, list):
+        return len(found)
+    return found if isinstance(found, int) and not isinstance(found, bool) else None
+
+
+def _context_total(usage: Any) -> Optional[int]:
+    found = _attribution(usage).get("totalTokens")
+    if isinstance(found, (int, float)) and not isinstance(found, bool):
+        return int(found)
+    if isinstance(usage, dict) and isinstance(usage.get("inputTokens"), (int, float)) and not isinstance(usage.get("inputTokens"), bool):
+        return int(usage["inputTokens"])
+    return None
+
+
+# --- the questions of the agent (B8): a part of the turn, bounded ---------------------------------------------------------
+INPUT_TEXT = 4000  # characters of the message of a question, and of a free answer
+INPUT_QUESTIONS = 20
+INPUT_OPTIONS = 50
+
+
+def _short_text(value: Any, cap: int) -> Optional[str]:
+    return value[:cap] if isinstance(value, str) else None
+
+
+def _answer_kept(value: Any) -> Any:
+    """An answer as the host holds it (`{state, value: {kind, value}}` or plainer), with its texts cut and no deeper than it needs."""
+    if isinstance(value, str):
+        return value[:INPUT_TEXT]
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    if isinstance(value, list):
+        return [_answer_kept(item) for item in value[:INPUT_OPTIONS]]
+    if isinstance(value, dict):
+        return {str(key)[:60]: _answer_kept(item) for key, item in list(value.items())[:12]}
+    return None
+
+
+def input_kept(request: Dict[str, Any]) -> Dict[str, Any]:
+    """A question request kept to what a page reads: its id, message, the questions (id, title, message, kind, options' ids and labels) and the answers so far; every text cut."""
+    out: Dict[str, Any] = {"id": str(request.get("id"))[:200]}
+    for key in ("message", "title"):
+        if isinstance(request.get(key), str):
+            out[key] = request[key][:INPUT_TEXT]
+    questions = []
+    for question in (request.get("questions") or [])[:INPUT_QUESTIONS] if isinstance(request.get("questions"), list) else []:
+        if not isinstance(question, dict):
+            continue
+        kept = {key: _short_text(question.get(key), INPUT_TEXT if key == "message" else 400) for key in ("id", "title", "message", "kind") if isinstance(question.get(key), str)}
+        options = question.get("options") if isinstance(question.get("options"), list) else []
+        if options:
+            kept["options"] = [{"id": str(item.get("id"))[:100], "label": str(item.get("label") or "")[:200]} for item in options[:INPUT_OPTIONS] if isinstance(item, dict)]
+        questions.append(kept)
+    if questions:
+        out["questions"] = questions
+    if isinstance(request.get("answers"), dict) and request["answers"]:
+        out["answers"] = {str(key)[:200]: _answer_kept(value) for key, value in list(request["answers"].items())[:INPUT_QUESTIONS]}
+    return out
+
+
+def _open_input(parts: List[Any], ident: Any) -> Optional[int]:
+    """The index of the question part `ident` that has no response yet, as the host finds it."""
+    for at, part in enumerate(parts):
+        if isinstance(part, dict) and part.get("kind") == "inputRequest" and "response" not in part and isinstance(part.get("request"), dict) and part["request"].get("id") == ident:
+            return at
+    return None
 
 
 # --- what waits for a person (1.6, B75) --------------------------------------------------------------------------

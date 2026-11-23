@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, connections, launchenv, messages, reach, skillboard, skillcheck, skillgroups, standards, targets, toolpacks
+from core import config, connections, messages, reach, skillboard, skillcheck, skillgroups, standards, targets, toolpacks
 
 FIRST_LINE = 160
 NO_WORD = re.compile(r"\\.")

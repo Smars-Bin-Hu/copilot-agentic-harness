@@ -75,6 +75,74 @@ class WizardPolishTests(unittest.TestCase):
         self.assertIn("Save", TEXTS["en"]["wizard.y.lang.hint.save"])
         self.assertIn("harness.saved.you", you)
 
+    # --- walkthrough 2 (1.8.31) ---------------------------------------------------------------------------------------------------------------------------------------
+
+    def test_welcome_says_what_is_saved_for_the_repositories_not_what_was_found(self) -> None:  # w2 #3 #4
+        welcome = SCRIPT.split("parts.welcome")[1].split("parts.you")[0]
+        self.assertIn("chosenRepos()", welcome)
+        self.assertIn("wizard.l.repo.n", welcome)
+        self.assertIn("function chosenRepos", SCRIPT)
+        self.assertIn("row.picked || row.in_root", SCRIPT)
+        self.assertEqual(TEXTS["en"]["wizard.l.repo.v"], "None chosen \u00b7 {n} found")  # the orange dot has words that say it
+        self.assertEqual(TEXTS["en"]["wizard.l.repo.n"], "{n} repositories")
+        self.assertEqual(TEXTS["en"]["wizard.l.repo.n.one"], "1 repository")
+        for code in ("en", "zh"):
+            for key in ("wizard.l.repo.v", "wizard.l.repo.n", "wizard.l.repo.n.one"):
+                self.assertIn("{n}" if key != "wizard.l.repo.n.one" else "1", TEXTS[code][key])
+        self.assertNotIn('"pick"', welcome)  # no third kind: found-but-yours-to-choose is orange with its words
+
+    def test_the_minutes_on_welcome_come_from_the_pages_that_will_show(self) -> None:  # w2 #31
+        welcome = SCRIPT.split("parts.welcome")[1].split("parts.you")[0]
+        self.assertIn("c: minutes()", welcome)
+        self.assertNotIn("need > 1 ? 4 : 1", SCRIPT)
+        self.assertIn("[1, 2, 3, 4, 5].filter((page) => !fine(page)).length + 1", SCRIPT)
+
+    def test_the_knowledge_base_step_has_no_n_of_m_counter_and_a_grey_continue_says_why(self) -> None:  # w2 #6 #26
+        self.assertNotIn("wizard.k.eyebrow", SCRIPT)
+        for code in ("en", "zh"):
+            self.assertNotIn("wizard.k.eyebrow", TEXTS[code])
+            for key in ("wizard.k.why", "wizard.k.why.copy", "wizard.k.why.replace"):
+                self.assertTrue(TEXTS[code].get(key), (code, key))
+                self.assertIn(key, SCRIPT)
+        self.assertIn('eyebrowText = t("wizard.s.kb")', SCRIPT)
+        self.assertIn('t("wizard.step", {n: M.page, m: 6})', SCRIPT)  # the step counter stays
+
+    def test_the_review_gear_is_the_docks_gear_with_the_dot(self) -> None:  # w2 #20
+        dock = (WEB / "dock.js").read_text(encoding="utf-8")
+        paths = re.findall(r'"(M12 [^"]+)"', SCRIPT.split("const GEAR = [")[1].split("];")[0])
+        self.assertEqual(len(paths), 2)
+        for path in paths:
+            self.assertIn('"' + path + '"', dock)
+        self.assertNotIn("\\u2699", SCRIPT)
+        self.assertRegex(SHEET, r"\.wz-gear\{[^}]*width:2[4-9]px")
+        self.assertIn(".wz-gear svg{", SHEET)
+        self.assertIn(".wz-gear::after{", SHEET)
+
+    def test_every_review_row_has_a_value_with_its_unit(self) -> None:  # w2 #21
+        self.assertIn('t("wizard.v.cop.s", {name: row.detail})', SCRIPT)
+        self.assertIn("row.detail || t(\"wizard.v.ok\")", SCRIPT)
+        self.assertIn("signed in as", TEXTS["en"]["wizard.v.cop.s"])
+        self.assertEqual(TEXTS["en"]["wizard.v.prog.s"], "{n} of {total} found")
+        self.assertEqual(TEXTS["en"]["wizard.v.repo.s"], "{n} repositories")
+
+    def test_repository_lists_show_whole_rows_and_select_all_turns_into_select_none(self) -> None:  # w2 #27 #28
+        self.assertIn("function snap(scroller)", SCRIPT)
+        self.assertIn("snap(scroller)", SCRIPT.split("parts.repos")[1])
+        self.assertIn("everyOn()", SCRIPT)
+        self.assertEqual(TEXTS["en"]["wizard.r.none.all"], "Select none")
+        self.assertTrue(TEXTS["zh"].get("wizard.r.none.all"))
+        self.assertIn("scrollTop", SCRIPT.split("parts.repos")[1])  # a tick keeps the place in the list
+
+    def test_the_programs_lead_sentence_has_no_path_jargon(self) -> None:  # w2 #30
+        for code in ("en", "zh"):
+            self.assertNotIn("PATH", TEXTS[code]["wizard.p.sub"])
+        self.assertIn("where it was found", TEXTS["en"]["wizard.p.sub"])
+
+    def test_the_fake_download_moves_over_time(self) -> None:  # w2 #5, demo only
+        fake = SCRIPT.split("const ready = () =>")[1].split("const setup = {")[0]
+        self.assertIn("Date.now() - F.jobAt", fake)
+        self.assertNotIn("downloaded_mb: 312", fake)
+
 
 if __name__ == "__main__":
     unittest.main()

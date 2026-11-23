@@ -167,6 +167,37 @@ class WaitTests(AcceptCase):
         self.assertEqual(row["actions"][0]["command"], "", "the board only: no command in a terminal")
 
 
+class RedeliverTests(AcceptCase):
+    def blocked(self, result: Dict[str, Any]) -> bool:
+        return result.get("decision") == "block" or result.get("permissionDecision") == "deny"
+
+    def test_after_a_follow_up_the_agent_that_stops_without_delivering_is_told_once_to_deliver_again(self) -> None:
+        self.new(kind="rca")
+        self.deliver("--summary", SUMMARY)
+        self.stop()
+        self.prompt("one more question about the second finding")
+        first = self.hook(payload("Stop", SESSION))
+        self.assertTrue(self.blocked(first), "the delivery was taken away and nothing delivers again")
+        self.assertIn("task deliver", json.dumps(first))
+        self.deliver("--summary", SUMMARY)
+        self.stop()
+        self.assertEqual(self.data()["waiting"]["why"], "accept")
+
+    def test_no_reminder_without_an_earlier_delivery_or_when_it_delivered_again(self) -> None:
+        self.new(kind="rca")
+        self.assertFalse(self.blocked(self.hook(payload("Stop", SESSION))), "never delivered: no reminder")
+        self.deliver("--summary", SUMMARY)
+        self.assertFalse(self.blocked(self.hook(payload("Stop", SESSION))), "delivered in this prompt: no reminder")
+
+    def test_the_reminder_is_said_once_in_a_prompt(self) -> None:
+        self.new(kind="rca")
+        self.deliver("--summary", SUMMARY)
+        self.stop()
+        self.prompt("and one more")
+        self.assertTrue(self.blocked(self.hook(payload("Stop", SESSION))))
+        self.assertFalse(self.blocked(self.hook(payload("Stop", SESSION))), "the second Stop of the same prompt stops")
+
+
 class DeliveredWithAnOpenRequirementTests(AcceptCase):
     """C12 TB-01: a full test task delivered before its requirement was confirmed. The acceptance comes first; confirming the requirement tells the agent nothing and takes nothing away."""
 

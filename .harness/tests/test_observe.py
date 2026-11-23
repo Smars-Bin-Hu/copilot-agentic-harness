@@ -348,6 +348,17 @@ class RedactTests(unittest.TestCase):
         self.assertEqual(redact.text(line), line)
         self.assertIn("***", redact.text("key AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEf/aB3dE5gH7jK9mN1pQ3sT5uW7yZ9aB1cD3eF5gH7iJ9kL1mN3oP5qR7sT9uV"))
 
+    def test_a_hex_digest_stays_but_a_named_one_is_masked(self) -> None:
+        """1.8.31: a certificate thumbprint (40 hex) in `certutil -store -v My <thumbprint>` was shown as `***` on the board."""
+        from core import redact
+
+        sha1, sha256 = "5f04eccba3d7b440d959b1d476db3be73770dfba", "A" * 32 + "0123456789abcdef" * 2
+        for text in ("certutil -store -v My " + sha1, "commit " + sha1.upper() + " fixed", "sha256 " + sha256):
+            with self.subTest(text):
+                self.assertEqual(redact.text(text), text)
+        self.assertEqual(redact.text("token=" + sha1), "token=***")
+        self.assertIn("***", redact.text("key " + sha1 + "ab"))  # 42 characters: not a digest length
+
     def test_common_spellings_of_a_secret_are_masked(self) -> None:
         from core import redact
 

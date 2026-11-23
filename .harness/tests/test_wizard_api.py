@@ -634,7 +634,8 @@ class ReadyFieldsTests(HarnessTestCase):
             fresh.asked_at = fresh.clock()
             threading.Thread(target=fresh.keep_fresh, daemon=True).start()
             fresh.first.wait(5)
-        self.assertEqual((fresh.kept["button"]["kind"], fresh.kept["notes"]), ("check", []))
+        self.assertEqual((fresh.kept["button"]["kind"], fresh.kept["button"]["off"], fresh.kept["notes"]), ("doctor", False, []))  # a check that broke is shown, not a "Checking…" that never ends
+        self.assertIn("boom", fresh.kept["problems"]["required"][0]["why"])
         self.assertEqual(fresh.kept["checks"][0]["kind"], "run")
 
 

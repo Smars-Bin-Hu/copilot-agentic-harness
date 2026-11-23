@@ -16,7 +16,7 @@ MAX_ROWS = 300
 MAX_PICKS = 300
 ORDER = ("you", "programs", "copilot", "kb", "packs", "connections", "repos")
 LABELS = {"you": "setup.w.label.you", "programs": "setup.w.label.programs", "copilot": "setup.w.label.copilot", "kb": "setup.w.label.kb", "packs": "setup.w.label.packs", "connections": "setup.w.label.connections", "repos": "setup.w.label.repos"}
-LANGUAGE_NAMES = {"en": "English", "zh": "\u4e2d\u6587"}  # each language in its own words (the table of the messages is for a sentence, not for this)
+LANGUAGE_NAMES = {"en": "desk.send.lang.en", "zh": "desk.send.lang.name.zh"}  # each language in its own words: the same messages as the language tiles of the wizard page
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -153,7 +153,7 @@ def scan(root: Path, home: Optional[Path] = None) -> Dict[str, Any]:
 # --- summary: the list on the last page --------------------------------------------------------------------------------
 
 def language_name(code: str) -> str:
-    return LANGUAGE_NAMES.get(code, code)
+    return say(LANGUAGE_NAMES[code]) if code in LANGUAGE_NAMES else code
 
 
 def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> Dict[str, Any]:

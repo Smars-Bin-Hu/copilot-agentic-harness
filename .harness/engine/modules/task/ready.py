@@ -704,8 +704,9 @@ class Ready:
             try:
                 found = self.answer(True)
             except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
-                found = {"ready": False, "checks": [{"id": "doctor", "blocking": True, "group": "required", "kind": "run", "state": "fail", "why": "failed", "level": "red", "detail": short(f"{type(error).__name__}: {error}")}],
-                         "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": [], "optional": []}, "button": {"kind": "check", "label": messages.text("ready.btn.check"), "off": True, "code": "", "url": "", "left": None, "percent": None, "program": "", "download": "", "detail": "", "n": 0}, "notes": []}
+                broken = [{"id": "doctor", "blocking": True, "group": "required", "kind": "run", "state": "fail", "why": "failed", "level": "red", "detail": short(f"{type(error).__name__}: {error}")}]
+                found = {"ready": False, "checks": broken, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": self.required_problems(broken), "optional": []},
+                         "button": self.button(broken, False), "notes": []}  # the doctor button, with the error in its card: a check that broke is shown, never a "Checking…" that does not end
             spent = time.monotonic() - began
             if spent > SLOW_ANSWER:
                 parts = ", ".join(f"{name} {value:.1f}" for name, value in sorted((getattr(self, "took", {}) or {}).items(), key=lambda item: -item[1]) if value >= 0.1)

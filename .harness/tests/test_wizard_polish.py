@@ -143,6 +143,76 @@ class WizardPolishTests(unittest.TestCase):
         self.assertIn("Date.now() - F.jobAt", fake)
         self.assertNotIn("downloaded_mb: 312", fake)
 
+    # ---- 1.8.33: how the wizard moves (spec W1-W10, E6); everything goes through motion.js and robot.js
+    def test_the_shell_is_built_once_and_a_turn_changes_the_page_only(self) -> None:  # W1 W4
+        self.assertIn("function buildShell(root)", SCRIPT)
+        start = SCRIPT.split("  function start() {")[1]
+        self.assertLess(start.index("buildShell(root)"), start.index("load().then("))  # the top line, bar and robot are there before the data is read
+        render = SCRIPT.split("  function render() {")[1].split("  // W2:")[0]
+        for call in ("MOTION.glide(shell.foot, change)", "MOTION.turn(ghost && ghost.copy, content, dir)", "MOTION.ghost(node)", "MOTION.appear(content"):
+            self.assertIn(call, render + SCRIPT.split("function ghostOf")[1].split("function render")[0])
+        self.assertNotIn("put(root, el(\"div\", \"wz-top\"", render)  # no page rebuilds the whole frame
+        self.assertNotIn("wz-bot", SCRIPT + SHEET)  # the robot is drawn by robot.js only
+
+    def test_the_robot_is_the_shells_and_moves_with_the_bar(self) -> None:  # W2 W3 W6
+        self.assertIn("ROBOT.svg({glow: true})", SCRIPT)
+        self.assertIn("ROBOT.svg({head: true})", SCRIPT)
+        for kind in ('"hop"', '"cheer"'):
+            self.assertIn("ROBOT.act(", SCRIPT)
+            self.assertIn(kind, SCRIPT)
+        self.assertIn("MOTION.MS.micro", SCRIPT.split("async function walk")[1].split("// A copy")[0])  # several cells: 120 ms each
+        self.assertIn("arrived(i)", SCRIPT)  # the bar ticks a cell as the head reaches it
+        self.assertIn("const barState = (i, idx)", SCRIPT)
+        self.assertRegex(SHEET, r"\.wz-mate\{[^}]*pointer-events:none")  # the robot never blocks a button
+        self.assertIn(".wz-slot{", SHEET)
+        welcome = SCRIPT.split("parts.welcome = function")[1].split("parts.you =")[0]
+        self.assertNotIn("ROBOT.svg", welcome)  # the welcome page keeps a slot; the shell's robot stands in it
+
+    def test_a_step_done_hops_and_the_signed_in_card_stays(self) -> None:  # W7
+        self.assertIn("HOLD = 1500", SCRIPT)
+        self.assertGreaterEqual(int(re.search(r"const HOLD = (\d+)", SCRIPT).group(1)), 900)
+        copilot = SCRIPT.split("parts.copilot = function")[1].split("parts.kb =")[0]
+        self.assertIn("hopHead()", copilot)
+        self.assertIn("}, HOLD);", copilot)
+        programs = SCRIPT.split("parts.programs = function")[1].split("parts.copilot =")[0]
+        self.assertIn("hopHead()", programs)
+        self.assertIn("ROBOT.act(svg, \"hop\")", SCRIPT)
+
+    def test_a_burst_of_presses_moves_one_page_and_the_main_button_stays_one_node(self) -> None:  # W8
+        self.assertIn("MOTION.guard(", SCRIPT)
+        self.assertIn("if (!turning && !busy) pressed(go)", SCRIPT)
+        foot = SCRIPT.split("  function drawFoot() {")[1].split("\n  }\n")[0]
+        self.assertIn("shell.mainBtn", foot)  # the same node, so off to on is a fade
+        self.assertNotIn("put(shell.footRow", foot)
+        self.assertRegex(SHEET, r"\.wz \.wz-btn:active[^{]*\{transform:scale\(\.97\)\}")
+        self.assertRegex(SHEET, r"opacity var\(--m-show\)")  # off and on: 200 ms
+        self.assertIn("transform var(--m-micro)", SHEET)  # a press: 120 ms
+
+    def test_the_bar_fills_to_the_end_and_nothing_moves_in_lite_or_reduced_motion(self) -> None:  # W5, GOAL 11
+        self.assertIn(".wz-bars i.cur b.f{transform:scaleX(1)}", SHEET)
+        self.assertNotIn("--part", SHEET + SCRIPT)  # no half-filled part
+        self.assertIn("transition:transform var(--m-page) var(--m-in)", SHEET)
+        self.assertIn("html.lite .wz-bars b", SHEET)
+        self.assertIn("@media (prefers-reduced-motion:reduce){", SHEET.split("html.lite .wz .wz-btn")[1])
+        for token in ("left", "top", "width", "height"):
+            self.assertNotRegex(SHEET.split(".wz-bars b{")[1].split("}")[0], r"transition:[^;]*\b" + token + r"\b")  # only transform and opacity move
+
+    def test_confirm_cheers_and_leaves_through_the_veil_to_the_enter_screen(self) -> None:  # W9 W10
+        confirm = SCRIPT.split("const confirm = () =>")[1].split("const lacking")[0]
+        self.assertIn("return toEnter()", confirm)
+        enter = SCRIPT.split("function toEnter() {")[1].split("  // The foot.")[0]
+        self.assertLess(enter.index('"cheer"'), enter.index('MOTION.mark("from-wizard")'))
+        self.assertIn('veil.classList.add("enter-bg")', enter)
+        self.assertIn('MOTION.leave(() => location.assign("/"))', enter)
+        self.assertIn("ms: 120", enter)  # the page is gone in 120 ms, when the veil starts
+
+    def test_a_language_saved_in_you_loads_the_page_again_through_the_veil_with_three_dots(self) -> None:  # E6
+        you = SCRIPT.split("parts.you = function")[1].split("parts.programs =")[0]
+        self.assertIn("MOTION.leave(again, {content: thinking()})", you)
+        self.assertIn("holding = !FAKE && M.lang !== document.documentElement.lang", you)  # serve.js would reload at once otherwise
+        self.assertIn("SERVE.stay(() => holding)", SCRIPT)
+        self.assertEqual(SCRIPT.split("function thinking() {")[1].split("  }\n")[0].count('h("i", null)'), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

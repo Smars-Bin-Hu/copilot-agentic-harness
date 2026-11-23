@@ -17,6 +17,8 @@ body.wz-doc .unpaired-note{display:none}  /* an unpaired browser: the page says 
 .wz .wz-dot.ok{background:var(--good-dot)}.wz .wz-dot.hot{background:var(--hot-dot)}.wz .wz-dot.bad{background:var(--bad)}.wz .wz-dot.none{background:transparent;border:1.5px solid var(--line2)}
 .wz .wz-btn{height:44px;padding:0 24px;border-radius:22px;border:1px solid var(--line2);background:transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:14.5px;white-space:nowrap}
 .wz .wz-btn:hover{background:var(--hover)}
+.wz .wz-btn,.wz .wz-tile{transition:transform var(--m-micro) var(--m-in),opacity var(--m-show) var(--m-in),background-color var(--m-micro) var(--m-in)}  /* (1.8.33) W8: a press and the change between off and on */
+.wz .wz-btn:active,.wz .wz-tile:active{transform:scale(.97)}
 .wz .wz-btn.primary{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
 .wz .wz-btn.primary:hover{background:var(--btn-hover)}
 .wz .wz-btn.off,.wz .wz-btn:disabled{opacity:.38;pointer-events:none}
@@ -38,19 +40,43 @@ html.lite .wz .wz-spin,html.lite .wz .wz-btn.is-waiting::before{animation:none}@
 .wz-brand{display:flex;align-items:center;gap:10px;font:800 13px/1 "Avenir Next","Futura",var(--sans);letter-spacing:.32em;color:var(--soft)}
 .wz-brand::before{content:"";flex:none;width:24px;height:24px;background:var(--logo) center/contain no-repeat}  /* the same mark as the board header (1.8.32) */
 .wz-count{font:12px var(--mono);color:var(--faint);letter-spacing:.04em}
-.wz-prog{position:relative;z-index:2;width:min(720px,calc(100% - 64px));margin:26px auto 0;flex:none}
+.wz-prog{position:relative;z-index:2;width:min(720px,calc(100% - 64px));margin:40px auto 0;flex:none}  /* room above the bar for the small head (1.8.33) */
 .wz-bars{display:flex;gap:6px}
-.wz-bars i{flex:1;height:3px;border-radius:2px;background:var(--track);position:relative;overflow:hidden}
-.wz-bars i.done{background:var(--soft)}
-.wz-bars i.cur::after{content:"";position:absolute;inset:0;width:var(--part,50%);background:var(--ink)}
+.wz-bars i{flex:1;height:3px;border-radius:2px;background:var(--track);position:relative;overflow:hidden;display:block}
+.wz-bars b{position:absolute;inset:0;transform:scaleX(0);transform-origin:left;transition:transform var(--m-page) var(--m-in),opacity var(--m-show) var(--m-in)}  /* W5: the part fills to the end in 260 ms */
+.wz-bars b.f{background:var(--ink)}
+.wz-bars b.s{background:var(--hot-dot);opacity:0}
+.wz-bars i.cur b.f{transform:scaleX(1)}
+.wz-bars i.done b.f{transform:scaleX(1);opacity:.58}
+.wz-bars i.skip b.f{transform:scaleX(1);opacity:0}
+.wz-bars i.skip b.s{transform:scaleX(1);opacity:1}
 .wz-names{display:flex;gap:6px;margin-top:9px}
-.wz-names>span{flex:1;min-width:0;font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wz-names>span.done{color:var(--soft)}
+.wz-names>span{flex:1;min-width:0;font-size:11.5px;color:var(--faint);display:flex;align-items:center}
+.wz-nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wz-names>span.done,.wz-names>span.skip{color:var(--soft)}
 .wz-names>span.cur{color:var(--ink);font-weight:600}
-.wz-names .wz-tick{font-size:11px;margin-right:3px}
-.wz-bars i.skip{background:var(--hot-dot)}
-.wz-names>span.skip{color:var(--soft)}
-.wz .wz-names .wz-dot.wz-skip{width:6px;height:6px;margin:0 5px 1px 0;vertical-align:middle}
+.wz-mk{position:relative;flex:none;width:15px;height:12px}  /* the place of the tick or the dot is kept, so the name does not move when it comes */
+.wz-tk{position:absolute;left:0;top:0;width:12px;height:10px}
+.wz-tk i{position:absolute;height:1.7px;background:var(--good);border-radius:1px;transform-origin:0 50%;transform:var(--rot) scaleX(0);transition:transform 80ms var(--m-in)}  /* W5: the tick is drawn in 200 ms */
+.wz-tk i:nth-child(1){left:.5px;top:5.5px;width:4.2px;--rot:rotate(45deg)}
+.wz-tk i:nth-child(2){left:3.4px;top:8.2px;width:9px;--rot:rotate(-50deg);transition-duration:120ms;transition-delay:80ms}
+.wz-names>span.done .wz-tk i{transform:var(--rot) scaleX(1)}
+.wz .wz-mk .wz-skip{position:absolute;left:1px;top:3px;width:6px;height:6px;opacity:0;transform:scale(.6);transition:opacity var(--m-show) var(--m-in),transform var(--m-show) var(--m-in)}  /* a skipped part: the yellow dot pops in */
+.wz-names>span.skip .wz-skip{opacity:1;transform:none}
+html.lite .wz-bars b,html.lite .wz .wz-mk .wz-skip,html.lite .wz-tk i{transition:opacity var(--m-micro) linear}  /* Lite: no travel, at most a fade */
+html.lite .wz-tk i{transform:var(--rot) scaleX(1);opacity:0}html.lite .wz-names>span.done .wz-tk i{opacity:1}
+html.lite .wz .wz-btn,html.lite .wz .wz-tile{transition:opacity var(--m-micro) linear}html.lite .wz .wz-btn:active,html.lite .wz .wz-tile:active{transform:none}
+@media (prefers-reduced-motion:reduce){
+  .wz-bars b,.wz .wz-mk .wz-skip,.wz-tk i{transition:opacity var(--m-micro) linear}
+  .wz-tk i{transform:var(--rot) scaleX(1);opacity:0}.wz-names>span.done .wz-tk i{opacity:1}
+  .wz .wz-btn,.wz .wz-tile{transition:opacity var(--m-micro) linear}.wz .wz-btn:active,.wz .wz-tile:active{transform:none}
+}
+/* the robot (robot.js draws it; wizard.js moves it): the whole one over the welcome page's slot, the small head over the current part of the bar; it takes no pointer */
+.wz-mate{position:absolute;left:0;top:0;z-index:3;pointer-events:none;will-change:transform}
+.wz-mate.full{width:91px;height:96px}.wz-mate.head{width:30px;height:31px}
+.wz-mate svg{width:100%;height:100%}
+.wz-slot{width:91px;height:96px;margin:0 auto 26px}
+.m-think{display:flex;flex-direction:column;align-items:center;gap:12px}.m-think .robot{width:30px;height:31px}  /* E6: the small robot above the three dots of the veil */
 .wz-body{position:relative;z-index:2;flex:1;min-height:0;overflow:auto;display:flex;justify-content:center;padding:58px 32px 24px}
 .wz-page{width:min(600px,100%);min-width:0;margin:0 auto}
 .wz-eyebrow{font:600 11px var(--mono);letter-spacing:.14em;color:var(--faint);text-transform:uppercase;margin-bottom:12px}
@@ -63,14 +89,12 @@ html.lite .wz .wz-spin,html.lite .wz .wz-btn.is-waiting::before{animation:none}@
 .wz-job{position:relative;z-index:3;flex:none;align-self:center;max-width:calc(100% - 32px);margin:0 0 14px;display:flex;align-items:center;gap:10px;padding:6px 14px 6px 10px;border-radius:16px;background:var(--raise);border:1px solid var(--line);font-size:12px;color:var(--soft);white-space:nowrap}
 .wz-job .mini{width:90px;height:3px;border-radius:2px;background:var(--track);overflow:hidden;flex:none}
 .wz-job .mini i{display:block;height:100%;background:var(--hot-dot)}
-.wz-loading .wz-body{visibility:hidden}
 
 /* welcome */
 .wz-hello{text-align:center}
 .wz-hello .wz-page{width:min(640px,100%)}
 .wz-hello h1{font-size:40px}
 .wz-hello .wz-sub{margin:0 auto 34px}
-.wz-hello .wz-page .robot{height:96px;width:auto;margin:0 auto 26px}
 .wz-look{display:grid;grid-template-columns:1fr 1fr;gap:2px 28px;text-align:left;padding:18px 22px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
 .wz-it{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13.5px;min-width:0}
 .wz-it .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

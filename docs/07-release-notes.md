@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.30 (1.8.0 – 1.8.30, 2026-11-17 – 2026-11-23)
+## 1.8.31 (1.8.0 – 1.8.31, 2026-11-17 – 2026-11-23)
 
 ### Added
 
@@ -49,6 +49,8 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- A task you had talked to after its delivery never asked to be accepted again (1.8.31): your next message takes the delivery away, and only the agent's own `task deliver` brought *Accept and close* back, which a follow-up answer often skipped. When the agent stops in such a task without delivering again, it is told once to deliver again, unless it waits for your answer or the task is a development task whose promote is the acceptance.
+- Approve and Dismiss on a held call were refused with "the agent is at work" between the hold and the agent's wait, and after a wait ran out (1.8.31): a decision on a held call changes nothing under the agent's hands, so it no longer waits for the agent to stop. An agent that went on and has stopped since is woken with the decision. *Tell the agent to run it* is large only when the board could not reach the agent.
 - A board ended by the system (SIGTERM on macOS, the console window closed or Ctrl+Break on Windows) left its agent host running (1.8.30): it now stops the way a board stopped on purpose does, so its host stops too unless a chat is working.
 - A password saved again for a connection reached the agent host only after a restart of the computer, and a board restart kept the old host (1.8.29): the host restarts with the new one as soon as no chat is working.
 - The agent host kept running after the board was stopped, and a reinstall could find files of the old copy held (1.8.29): stopping the board (its power button, `harness task board --stop`, Ctrl+C) stops the host too, unless a chat works; `--stop` with no board running stops a host left behind. **Restart board** and an update keep the host, so chats go on.

@@ -466,6 +466,28 @@ def task_file_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     return Decision(block=True, reason=say("task.relay.reminder", task=data["task"]), facts={"kind": "task_file_not_updated"})
 
 
+def redeliver_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
+    """The task was delivered, the person went on talking (that took the delivery away), and the agent stops without delivering again: the task would show no "to accept" any more.
+    Said once in a prompt. Not for a development task with a target (its promote is the acceptance), not in autorun, not while the agent waits for an answer or the person's run."""
+    if isinstance(data.get("deliver"), dict) or data.get("autorun") or data.get("handoff"):
+        return None
+    if data.get("kind") in ("dev", "kb") and data.get("target_mode"):
+        return None
+    if (data.get("waiting") or {}).get("why") == "asking":
+        return None
+    events = data.get("events") or []
+    last = next((item for item in reversed(events) if item.get("what") == "deliver"), None)
+    if last is None or last.get("round") != data.get("round"):
+        return None
+    state = relay(ctx)
+    if state.get("redelivered"):
+        return None
+    state["redelivered"] = True
+    from . import task as task_ops
+
+    return Decision(block=True, reason=say("task.redeliver", task=data["task"], name=task_ops.name_of(data["task"])), facts={"kind": "task_redeliver"})
+
+
 def write_back_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     """The write-back is done and the task still has loose ends the agent leaves behind: steps of TODO.md not ticked, no COMMIT-MESSAGE.md for the person to copy.
     Said once in a session (never in autorun, which pushes the steps itself). Only the facts of the files are looked at."""
@@ -693,7 +715,7 @@ def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.stop_hook_active:
         mark_waiting(ctx, data, True)  # the second Stop of a block: this time the agent does stop
         return None
-    blocks: List[Decision] = [item for item in (review_stop(ctx, data), task_file_stop(ctx, data), write_back_stop(ctx, data)) if item is not None]
+    blocks: List[Decision] = [item for item in (review_stop(ctx, data), task_file_stop(ctx, data), write_back_stop(ctx, data), redeliver_stop(ctx, data)) if item is not None]
     if not blocks:  # an offer waits until nothing else is asked of the agent
         blocks = [item for item in (kb_offer_stop(ctx, data),) if item is not None]
     if not blocks:

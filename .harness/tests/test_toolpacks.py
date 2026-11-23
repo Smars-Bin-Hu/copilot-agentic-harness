@@ -2145,7 +2145,7 @@ class SigninsOnTheBoard(ProgramNeeds):
 
 
 class SamplePackTests(unittest.TestCase):
-    """(1.8.31) A sample pack (demotracker) says so in its toolpack.json; Settings does not list it while no knowledge base turns it on."""
+    """(1.8.32) A sample pack (demotracker) says so in its toolpack.json; Settings does not list it while no knowledge base turns it on."""
 
     HARNESS = Path(__file__).resolve().parents[1]
 

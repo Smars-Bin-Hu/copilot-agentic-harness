@@ -15,7 +15,7 @@ const SPACE = (function () {
     set(name, value) { memory[name] = value; try { localStorage.setItem(name, value); } catch (error) { /* kept in memory only */ } },
   };
   const MOTION = "harness.motion";  // "0": off. Anything else: on (the default).
-  const ASKED = "harness.slow.asked";  // the time (ms) "Not now" was pressed on the note about slow motion: not offered again for 30 days (1.8.31; before, a "1" for good)
+  const ASKED = "harness.slow.asked";  // the time (ms) "Not now" was pressed on the note about slow motion: not offered again for 30 days (1.8.32; before, a "1" for good)
   const SNOOZE = 30 * 24 * 3600 * 1000;
 
   // ---------- the stage ----------
@@ -123,8 +123,8 @@ const SPACE = (function () {
   }
   let note = null, asked = false;
   const snoozed = () => { const at = Number(keep.get(ASKED)); return at > 1 && Date.now() - at < SNOOZE && at <= Date.now() + 60000; };
-  // Not while the setup wizard runs or the Settings window is open (1.8.31): the note would sit on top of what the person is doing. The check goes on, so it may come later.
-  // Not on the first visit of this browser to the Enter screen either (1.8.31): enter.js sets `harness.enter.visited` once it is open, and this script loads first, so the key is read now.
+  // Not while the setup wizard runs or the Settings window is open (1.8.32): the note would sit on top of what the person is doing. The check goes on, so it may come later.
+  // Not on the first visit of this browser to the Enter screen either (1.8.32): enter.js sets `harness.enter.visited` once it is open, and this script loads first, so the key is read now.
   const firstVisit = (() => { try { return localStorage.getItem("harness.enter.visited") !== "1"; } catch (error) { return true; } })();
   const busy = () => document.body.classList.contains("wz-doc") || Boolean(document.querySelector(".wz-top")) || (typeof SETTINGS !== "undefined" && SETTINGS.isOpen());
   function offer() {
@@ -135,7 +135,7 @@ const SPACE = (function () {
     note = h("div", {class: "sp-slow", role: "status"}, h("p", null, t("board.space.slow")), h("div", {class: "row"}, no, go));
     document.body.append(note);
     const close = () => { note.remove(); note = null; };
-    // Settings or the wizard opens while the note is up (1.8.31): it goes away, and may be offered again later (not asked, not snoozed). A timer chain, not an interval.
+    // Settings or the wizard opens while the note is up (1.8.32): it goes away, and may be offered again later (not asked, not snoozed). A timer chain, not an interval.
     const watch = () => { if (!note) return; if (busy()) { close(); asked = false; return; } setTimeout(watch, 300); };
     setTimeout(watch, 300);
     go.addEventListener("click", () => { harnessTheme.setLite(true); close(); });

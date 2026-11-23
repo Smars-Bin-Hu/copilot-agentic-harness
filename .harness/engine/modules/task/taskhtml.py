@@ -21,7 +21,7 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   pet.js, super.js, super.css   the board only, a served page: the super agent view (1.8.1), with superhist.js for the earlier days, superdirect.js for the direct message of its chat, a messenger-like window of what waits for the person (`/api/super`) with the avatars of the tasks and a pet that walks over it (3D with bot3d.js, flat without WebGL); picked in the bar, never the default
   workbench.js, workbench.css   the board only, a served page: the full-screen workbench that holds the super agent view (the chat in the middle, the queue, panels, one card in Focus, the Task pane with the task page in an iframe)
   wbpanels.js, wbpanels.css     the board only, a served page: what the workbench draws in its places from the rows of the board (the tree of the agents that run, the Data panel, the picture of Focus, the hover card of a task, the entrance)
-  robot.js, robot.css     a served page only (1.8.31): the robot's one drawing (`ROBOT.svg()`, the whole robot or the head) and its base colours; enter.js and the wizard's welcome page use it
+  robot.js, robot.css     a served page only (1.8.32): the robot's one drawing (`ROBOT.svg()`, the whole robot or the head) and its base colours; enter.js and the wizard's welcome page use it
   enter.js, enter.css     a served page only: the Enter screen (wordmark, robot, hold to charge, the two blocks of `/api/ready`: Harness & Local required, From the company optional, and the VS Code button); a file on disk has none
   stop.js                 a served page only (1.8.11): the stop button at the top right (paired browsers; asks once, `POST /api/shutdown`), and the page that says the board has stopped and asks for nothing more
   readyui.js              a served page only: where a fix of the readiness answer leads (a section of Settings, the wizard, the knowledge base window, the Terminal) (1.7.38)
@@ -135,7 +135,7 @@ SHELL_CSS = "shell.css"  # the pages that have shell.js (the board and the task 
 
 CALLVIEW_CSS = "callview.css"  # the pages that have callview.js (the task page and the board) get the window of a held call before the task page shell
 DESK_CSS = "desk.css"  # the task page (desk.js) gets its shell last: the slim header, the info line, the tabs by function, the cards of waits
-ROBOT_CSS = "robot.css"  # the pages that have robot.js (the Enter screen, the wizard) get the robot's base colours before enter.css (1.8.31)
+ROBOT_CSS = "robot.css"  # the pages that have robot.js (the Enter screen, the wizard) get the robot's base colours before enter.css (1.8.32)
 ENTER_CSS = "enter.css"  # the served pages (enter.js) get the Enter screen after the shell
 REOPEN_CSS = "reopen.css"  # the served pages that have reopen.js get the card that says what a reopen will do, and the icon of a closed row
 ROUNDS_CSS = "rounds.css"  # the served task page (rounds.js) gets the earlier rounds of the chat

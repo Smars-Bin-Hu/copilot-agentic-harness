@@ -110,13 +110,13 @@ const MACHINE = (function () {
       make.textContent = t(state.bundle.path ? "machine.ca.again" : "machine.ca.make");
       make.className = "act" + (state.bundle.path ? "" : " hot");
       drop.hidden = !state.bundle.path;
-      const on = state.mcp.allowed === true;  // never set: the default, not allowed, shows as chosen (1.8.31)
+      const on = state.mcp.allowed === true;  // never set: the default, not allowed, shows as chosen (1.8.32)
       const chips = [["allowed", true], ["blocked", false]].map(([word, value]) => {
         const toggle = h("button", {type: "button", class: on === value ? "on" : "", "aria-pressed": String(on === value)}, t(value ? "machine.mcp.allowed" : "machine.mcp.blocked"));
         toggle.addEventListener("click", () => { if (on !== value) ask("mcp", {allowed: value}).then((next) => { paint(next); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
         return toggle;
       });
-      mcp.replaceChildren(...[h("span", {class: "seg2", role: "group"}, ...chips)  /* the two-way look of the theme choice (1.8.31) */, state.mcp.detected === "blocked" ? h("span", {class: "sub"}, " " + t("machine.mcp.detected")) : null].filter(Boolean));
+      mcp.replaceChildren(...[h("span", {class: "seg2", role: "group"}, ...chips)  /* the two-way look of the theme choice (1.8.32) */, state.mcp.detected === "blocked" ? h("span", {class: "sub"}, " " + t("machine.mcp.detected")) : null].filter(Boolean));
     };
     ask("state").then(paint, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); });
     make.addEventListener("click", () => {
@@ -179,7 +179,7 @@ const MACHINE = (function () {
     const list = addedBlock(ctx, added, change);
     const paint = () => ask("toolpacks").then((found) => {
       const rows = found.toolpacks;
-      const fact = rows.filter((row) => row.from === "harness" && (!row.sample || row.active)), own = rows.filter((row) => row.from === "company");  // a sample pack shows only once a knowledge base turns it on (1.8.31)
+      const fact = rows.filter((row) => row.from === "harness" && (!row.sample || row.active)), own = rows.filter((row) => row.from === "company");  // a sample pack shows only once a knowledge base turns it on (1.8.32)
       heads.shipped.textContent = " · " + t("machine.pack.shipped.n", {n: fact.length, used: fact.filter((row) => row.used).length});
       heads.company.textContent = own.length ? " · " + own.length : "";
       nokb.hidden = Boolean(found.company);

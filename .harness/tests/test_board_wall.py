@@ -466,7 +466,7 @@ class PageTests(unittest.TestCase):
         self.assertIn("4000", space)  # for a few seconds
         self.assertIn("role", space)
 
-    def test_the_slow_note_waits_for_the_second_visit_and_goes_when_settings_opens(self) -> None:  # 1.8.31 walk 2 #2
+    def test_the_slow_note_waits_for_the_second_visit_and_goes_when_settings_opens(self) -> None:  # 1.8.32 walk 2 #2
         space = source("space.js")
         self.assertIn('localStorage.getItem("harness.enter.visited") !== "1"', space)  # read when the script loads, before enter.js sets it
         self.assertIn("asked || note || firstVisit", space)
@@ -477,14 +477,14 @@ class PageTests(unittest.TestCase):
         self.assertIn("left:20px", rule)  # the dock column is at the right
         self.assertNotIn("right:", rule)
 
-    def test_the_mcp_choice_shows_the_chosen_one_filled_and_one_is_always_chosen(self) -> None:  # 1.8.31 walk 2 #17
+    def test_the_mcp_choice_shows_the_chosen_one_filled_and_one_is_always_chosen(self) -> None:  # 1.8.32 walk 2 #17
         machine = source("machine.js")
         self.assertIn("const on = state.mcp.allowed === true;", machine)  # never set: blocked, chosen
         self.assertIn('class: on === value ? "on" : ""', machine)
         css = source("settings.css")
         self.assertRegex(css, r"\.mc-mcp \.seg2 button\.on\{[^}]*background:var\(--btn\)")
 
-    def test_the_empty_knowledge_base_points_to_settings_not_to_the_setup(self) -> None:  # 1.8.31 walk 2 #19
+    def test_the_empty_knowledge_base_points_to_settings_not_to_the_setup(self) -> None:  # 1.8.32 walk 2 #19
         for language in ("en", "zh"):
             table = messages.table(language)
             for key in ("dock.kb.empty", "dock.kb.what.targets", "dock.kb.what.kb_repo"):
@@ -564,7 +564,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("const SERVE", page)
 
     def test_the_slow_motion_note_keeps_away_from_the_wizard_and_settings_and_is_snoozed_30_days(self) -> None:
-        """1.8.31 (A3): the note about slow motion is never offered while the setup wizard runs or the Settings window is open; "Not now" is kept 30 days; its words are about motion."""
+        """1.8.32 (A3): the note about slow motion is never offered while the setup wizard runs or the Settings window is open; "Not now" is kept 30 days; its words are about motion."""
         space = source("space.js")
         offer = space.split("function offer()")[1].split("// ---------- the switch")[0]
         self.assertIn("busy()", offer)
@@ -579,7 +579,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("computer", messages.table("en")["board.space.slow"])
         self.assertNotIn("电脑", messages.table("zh")["board.space.slow"])
 
-    def test_settings_texts_of_1_8_31(self) -> None:
+    def test_settings_texts_of_1_8_32(self) -> None:
         """#15: without a knowledge base the packs page does not claim the knowledge base turned them on; #30: the button says Make a bundle, MCP is a two-way choice like the theme."""
         en, zh = messages.table("en"), messages.table("zh")
         self.assertNotIn("Turned on by", en["settings.packs.nokb"])

@@ -1,4 +1,4 @@
-// The controls fixed to the browser window of the board and the task page: the search pill (top right) and the Cmd+K / Ctrl+K palette, the sliders button (bottom right) with the Appearance panel (1.8.31; the gear's Settings window is dock.js and settings.js),
+// The controls fixed to the browser window of the board and the task page: the search pill (top right) and the Cmd+K / Ctrl+K palette, the sliders button (bottom right) with the Appearance panel (1.8.32; the gear's Settings window is dock.js and settings.js),
 // and the one place that knows whether VS Code is linked (the banner under the header, the pill, the buttons).
 // They are built once and appended to <body>, outside #app: the redraw of a page (the 3 s poll) never touches them, so an open panel stays open.
 //
@@ -225,7 +225,7 @@ const SHELL = (function () {
     SERVE.post("/api/reboard", {}).then((data) => setTimeout(() => back(data.result.code, Date.now() + WAIT_BACK), 800), (error) => { fail(error.message || String(error)); go.disabled = false; go.textContent = label; });
   }
   function buildSettings() {
-    panel = h("div", {class: "setp", role: "dialog", "aria-label": t("board.shell.look"), hidden: "hidden"},  // Appearance (1.8.31): not the gear's Settings
+    panel = h("div", {class: "setp", role: "dialog", "aria-label": t("board.shell.look"), hidden: "hidden"},  // Appearance (1.8.32): not the gear's Settings
       h("h4", null, t("board.shell.look")),
       h("div", {class: "sp-row"}, h("span", null, t("board.shell.theme")), segment("theme", [["light", t("board.shell.light")], ["dark", t("board.shell.dark")]])),
       h("div", {class: "sp-row"}, h("span", null, t("board.shell.render")), segment("lite", [["false", t("board.shell.glass")], ["true", t("board.shell.lite")]])),
@@ -273,7 +273,7 @@ const SHELL = (function () {
   function buildFixed() {
     const pill = h("button", {type: "button", class: "sh-pill", "aria-label": t("board.shell.search") + " " + mod + " K", title: t("board.shell.search") + " (" + mod + " K)"}, icon("search"), h("span", null, t("board.shell.search")), h("kbd", null, mod + " K"));
     pill.addEventListener("click", () => (open() ? closePalette() : openPalette()));
-    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.look"), title: t("board.shell.look"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("sliders"));  // the sliders: Appearance, i.e. theme, rendering, wallpaper (1.8.31; the language is in Settings, You; the dock's Settings gear is above it)
+    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.look"), title: t("board.shell.look"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("sliders"));  // the sliders: Appearance, i.e. theme, rendering, wallpaper (1.8.32; the language is in Settings, You; the dock's Settings gear is above it)
     gear.addEventListener("click", () => (settingsOpen() ? closeSettings() : openSettings()));
     document.body.append(pill, gear);
   }

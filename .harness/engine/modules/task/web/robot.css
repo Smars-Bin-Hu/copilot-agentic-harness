@@ -1,4 +1,4 @@
-/* The robot drawn by robot.js outside the Enter screen (1.8.31): colours from the --robot-* tokens, eyes open and green. enter.css has its own, stronger rules for .en-bot (eyes shut until it wakes, the pointer, the sleep). */
+/* The robot drawn by robot.js outside the Enter screen (1.8.32): colours from the --robot-* tokens, eyes open and green. enter.css has its own, stronger rules for .en-bot (eyes shut until it wakes, the pointer, the sleep). */
 .robot{display:block;overflow:visible;height:auto}
 .robot .r-body,.robot .r-arm{fill:var(--robot-body);stroke:var(--robot-line);stroke-width:1.4}
 .robot .r-head{fill:var(--robot-head);stroke:var(--robot-line);stroke-width:1.4}

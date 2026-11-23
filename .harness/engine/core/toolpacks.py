@@ -4,7 +4,7 @@ The harness knows no tool pack. A tool pack brings what the harness already read
 
   toolpack.json   {"schema_version": 1, "name", "version", "harness": the lowest harness version it works with, "description",
                     "needs": {"programs": [...], "trust": [variables that name the CA bundle for its program]},
-                    "sample": true for a pack that only shows how one is made (1.8.31: Settings does not list it while no knowledge base turns it on)}
+                    "sample": true for a pack that only shows how one is made (1.8.32: Settings does not list it while no knowledge base turns it on)}
   kinds/*.json     kinds of server (core.servers): a ticket board is a "server" with an org and a project, reached by the tool's own sign-in
   systems.json     {"systems": {...}}: systems of the tools policy written by hand; layered after the company pack's, before tools.override.json
   skills/<name>-*  skills, copied to `.github/skills/` (Copilot finds them only there). Each starts with the tool pack's name, so two never clash

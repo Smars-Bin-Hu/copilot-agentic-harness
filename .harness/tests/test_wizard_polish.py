@@ -1,4 +1,4 @@
-"""1.8.31: the setup wizard's pages after the first new-colleague walk: rules that can be read in the page script, the sheet and the texts."""
+"""1.8.32: the setup wizard's pages after the first new-colleague walk: rules that can be read in the page script, the sheet and the texts."""
 from __future__ import annotations
 
 import json
@@ -75,7 +75,7 @@ class WizardPolishTests(unittest.TestCase):
         self.assertIn("Save", TEXTS["en"]["wizard.y.lang.hint.save"])
         self.assertIn("harness.saved.you", you)
 
-    # --- walkthrough 2 (1.8.31) ---------------------------------------------------------------------------------------------------------------------------------------
+    # --- walkthrough 2 (1.8.32) ---------------------------------------------------------------------------------------------------------------------------------------
 
     def test_welcome_says_what_is_saved_for_the_repositories_not_what_was_found(self) -> None:  # w2 #3 #4
         welcome = SCRIPT.split("parts.welcome")[1].split("parts.you")[0]

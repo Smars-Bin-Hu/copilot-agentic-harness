@@ -681,7 +681,7 @@ class PageTests(unittest.TestCase):
         self.assertIn("chk0.ready", code)
         self.assertNotIn("DATA.rows", code)  # status only, no task data
         self.assertNotIn("localStorage.getItem(SEEN", code)  # nothing that lets a person skip it: the only memory is the tab's own session
-        self.assertEqual(set(re.findall(r"localStorage\.\w+\((\w+)", code)), {"HINT_KEY"})  # (1.8.31) the one thing kept in the browser is that it has seen the screen, for the hint
+        self.assertEqual(set(re.findall(r"localStorage\.\w+\((\w+)", code)), {"HINT_KEY"})  # (1.8.32) the one thing kept in the browser is that it has seen the screen, for the hint
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
             self.assertIn(call, ("/api/ready", "/api/gh", "/api/host", "/api/reopen"))  # the one read, gh's web sign-in, the agent host's restart and the pair button (1.8.x), the paired browser only
 
@@ -705,7 +705,7 @@ class PageTests(unittest.TestCase):
 
 
 class FirstRunPolishTests(unittest.TestCase):
-    """1.8.31 (A2, A5, #38): a new copy lands on the wizard, the hint of hold to charge waits, a page loaded again has no opening."""
+    """1.8.32 (A2, A5, #38): a new copy lands on the wizard, the hint of hold to charge waits, a page loaded again has no opening."""
 
     def test_a_new_copy_is_opened_at_the_wizard_and_a_set_up_one_at_the_board(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -718,7 +718,7 @@ class FirstRunPolishTests(unittest.TestCase):
             self.assertEqual(boardserve.Board.page_address(fake, "http://127.0.0.1:1/", "abc"), "http://127.0.0.1:1/#pair=abc")
 
     def test_the_wizard_page_counts_for_the_launcher_and_the_page_tells_the_screen_it_is_new(self) -> None:
-        for text in ('board.look_at_page(True)  # (1.8.31) a new copy', '"fresh": self.is_fresh()'):
+        for text in ('board.look_at_page(True)  # (1.8.32) a new copy', '"fresh": self.is_fresh()'):
             self.assertIn(text, (Path(boardserve.__file__)).read_text(encoding="utf-8"))
         code, css = (WEB / "enter.js").read_text(encoding="utf-8"), (WEB / "enter.css").read_text(encoding="utf-8")
         self.assertIn('DATA.serve.fresh ? " fresh"', code)

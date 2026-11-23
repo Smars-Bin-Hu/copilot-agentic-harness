@@ -78,7 +78,7 @@ class PageAssetTests(unittest.TestCase):
         self.assertIn(taskhtml.asset_of(names[0])[0].decode("utf-8"), inline)
         self.assertIn(taskhtml.asset_of(names[2])[0].decode("utf-8"), inline)
 
-    def test_the_robot_is_one_drawing_loaded_before_enter_and_the_wizard(self) -> None:  # 1.8.31
+    def test_the_robot_is_one_drawing_loaded_before_enter_and_the_wizard(self) -> None:  # 1.8.32
         web = Path(taskhtml.__file__).resolve().parent / "web"
         info = {"name": "a", "task": "t"}
         for page in (taskhtml.desk_page(DESK, SERVE), taskhtml.setup_page(SERVE), taskhtml.board_page([], "now", 0, SERVE), taskhtml.task_page(info, 0, None, SERVE)):

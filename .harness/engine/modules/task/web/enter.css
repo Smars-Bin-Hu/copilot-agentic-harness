@@ -85,9 +85,9 @@ html.lite #en-fx{display:none}
 .en-legal{position:absolute;left:32px;bottom:20px;margin:0;font:11px/1.4 var(--mono);color:var(--en-cap);overflow-wrap:anywhere}
 .en-cap{font:500 11px/1.5 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--en-cap)}
 html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
-.en-hint{grid-column:3;justify-self:end;text-align:right;padding-right:56px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility 0s .3s}  /* (1.8.31) shown by enter.js after the pointer rested on the wordmark */
+.en-hint{grid-column:3;justify-self:end;text-align:right;padding-right:56px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility 0s .3s}  /* (1.8.32) shown by enter.js after the pointer rested on the wordmark */
 .en-hint.on{opacity:1;visibility:visible;transition:opacity .3s ease}
-#enter.fresh .en-foot{display:none}  /* (1.8.31) a copy that is not set up: only the wordmark until it goes to the wizard */
+#enter.fresh .en-foot{display:none}  /* (1.8.32) a copy that is not set up: only the wordmark until it goes to the wizard */
 .en-cta{grid-column:2;display:flex;flex-direction:column;align-items:center;gap:0;min-width:0;max-width:min(560px,calc(100vw - 48px))}
 .en-go{position:relative;overflow:hidden;box-sizing:border-box;font:600 16px var(--sans);display:inline-flex;align-items:center;justify-content:center;gap:12px;height:56px;min-width:280px;max-width:100%;padding:0 34px;border-radius:28px;border:1px solid transparent;cursor:pointer;color:var(--en-btn-ink);background:var(--en-btn);
  box-shadow:0 14px 34px rgba(0,0,0,.3);transition:transform .2s,box-shadow .2s}

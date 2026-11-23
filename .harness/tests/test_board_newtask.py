@@ -97,7 +97,7 @@ class EmptyBoardTests(unittest.TestCase):
         self.assertIn('typeof options.first === "function"', lobby)
         self.assertIn("!rows.length", lobby)
 
-    def test_the_empty_block_has_the_one_new_task_button_and_no_sample_or_lesson(self) -> None:  # 1.8.31
+    def test_the_empty_block_has_the_one_new_task_button_and_no_sample_or_lesson(self) -> None:  # 1.8.32
         board = source("board.js")
         block = board.split("function firstTask()")[1].split("// The pill that says")[0]
         self.assertIn("bigNewTask()", block)
@@ -156,7 +156,7 @@ class KeyAndLanguageTests(unittest.TestCase):
         for path in sorted(WEB.iterdir()):
             if path.is_file() and path.suffix != ".png":
                 self.assertFalse(HAN.search(path.read_text(encoding="utf-8")), path.name)
-        self.assertIn('t(code === "zh" ? "desk.send.lang.name.zh"', source("wizard.js"))  # 1.8.31: the language is picked in Settings, You (the wizard's page), no longer in the sliders panel
+        self.assertIn('t(code === "zh" ? "desk.send.lang.name.zh"', source("wizard.js"))  # 1.8.32: the language is picked in Settings, You (the wizard's page), no longer in the sliders panel
 
     def test_the_words_that_were_english_in_the_chinese_table_are_chinese_now(self) -> None:
         zh = messages.table("zh")

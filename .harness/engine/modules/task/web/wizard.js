@@ -109,7 +109,7 @@ const WIZARD = (function () {
     };
     const ready = () => {
       const line = copilot();
-      if (q("job", "1") === "1" && M.page >= 3) {  // the fake download moves (about 6 MB a second from 312, and stops before the end), so a picture taken later does not look frozen (1.8.31)
+      if (q("job", "1") === "1" && M.page >= 3) {  // the fake download moves (about 6 MB a second from 312, and stops before the end), so a picture taken later does not look frozen (1.8.32)
         F.jobAt = F.jobAt || Date.now();
         const lapse = (Date.now() - F.jobAt) / 1000, mb = Math.min(600, 312 + Math.floor(lapse * 6));
         line.host = {state: "preparing", seconds: 64 + Math.floor(lapse), downloaded_mb: mb, total_mb: 620, percent: Math.round(mb / 620 * 100)};
@@ -180,12 +180,12 @@ const WIZARD = (function () {
     4: () => Boolean(M.saved.repos || (M.scan && M.scan.rows.some((row) => row.picked))),
   };
   const fine = (page) => (known[page - 1] ? known[page - 1]() : false);
-  // (1.8.31) What the person chose, as saved: the rows the scan marks as chosen, plus what was saved in this visit; the Welcome page counts this, never the number found
+  // (1.8.32) What the person chose, as saved: the rows the scan marks as chosen, plus what was saved in this visit; the Welcome page counts this, never the number found
   function chosenRepos() {
     const rows = (M.scan && M.scan.rows) || [];
     return rows.filter((row) => row.picked || row.in_root || (M.saved.repos && M.picks && M.picks.has(row.path))).length;
   }
-  // (1.8.31) "about N min" for Welcome: one minute for each page that will really show (the pages already fine are skipped), and the review
+  // (1.8.32) "about N min" for Welcome: one minute for each page that will really show (the pages already fine are skipped), and the review
   const minutes = () => Math.max(1, [1, 2, 3, 4, 5].filter((page) => !fine(page)).length + 1);
   function nextFrom(page, step) {  // the next page that is not already fine; the review and the welcome are never skipped
     let at = page + step;
@@ -210,7 +210,7 @@ const WIZARD = (function () {
     const line = copilotLine();
     const host = line && line.host;
     shell.job.hidden = !host;
-    shell.job.title = host ? t("wizard.job.tip") : "";  // (1.8.31) what the download is, said on hover
+    shell.job.title = host ? t("wizard.job.tip") : "";  // (1.8.32) what the download is, said on hover
     if (!host) return;
     const bar = el("span", "mini", h("i", {style: "width:" + Math.max(3, Math.min(100, Number(host.percent) || 0)) + "%"}));
     put(shell.job, spin(), t("wizard.job.prep"), bar, el("span", "wz-mono", host.total_mb ? t("wizard.job.mb", {a: Math.round(host.downloaded_mb || 0), b: Math.round(host.total_mb)}) : host.percent !== undefined ? host.percent + "%" : ""));
@@ -241,18 +241,18 @@ const WIZARD = (function () {
     const rows = (M.progs && M.progs.rows) || [];
     const row = (id) => rows.find((item) => item.id === id) || {found: false, version: ""};
     const line = copilotLine();
-    const item = (label, value, kind) => el("div", "wz-it", dot(kind === "hot" ? "hot" : "ok"), el("span", "n", label), el("span", "v" + (kind === "hot" ? " hot" : ""), value));  // (1.8.31) hot = orange dot and words
+    const item = (label, value, kind) => el("div", "wz-it", dot(kind === "hot" ? "hot" : "ok"), el("span", "n", label), el("span", "v" + (kind === "hot" ? " hot" : ""), value));  // (1.8.32) hot = orange dot and words
     const prog = (id, key) => (row(id).found && !row(id).trouble && !row(id).blocked ? item(t(key), row(id).version || t("wizard.p.found"), "ok") : item(t(key), t("wizard.nf"), "hot"));
     const st = M.st;
     const signed = copilotSignedIn(line);
     const found = M.scan ? M.scan.rows.length : 0;
-    const chosen = chosenRepos();  // (1.8.31) the saved answer, not what was found
+    const chosen = chosenRepos();  // (1.8.32) the saved answer, not what was found
     const cells = [
       item(t("wizard.l.name"), st.name || t("wizard.notyet"), st.name ? "ok" : "hot"), item(t("wizard.l.lang"), langName(M.lang), "ok"),
       prog("python", "wizard.l.py"), prog("git", "wizard.l.git"), prog("vscode", "wizard.l.code"), prog("gh", "wizard.l.gh"),
       item(t("wizard.l.sign"), signed ? (line.login || t("wizard.p.found")) : t("wizard.notyet"), signed ? "ok" : "hot"),
       item(t("wizard.l.kb"), st.kb.here ? (st.kb.version || t("wizard.p.found")) : t("wizard.notyet"), st.kb.here ? "ok" : "hot"),
-      chosen ? item(t("wizard.l.repo"), t(chosen === 1 ? "wizard.l.repo.n.one" : "wizard.l.repo.n", {n: chosen}), "ok") : item(t("wizard.l.repo"), found ? t("wizard.l.repo.v", {n: found}) : t("wizard.nf"), "hot"),  // none chosen yet: orange, in words that say so (1.8.31)
+      chosen ? item(t("wizard.l.repo"), t(chosen === 1 ? "wizard.l.repo.n.one" : "wizard.l.repo.n", {n: chosen}), "ok") : item(t("wizard.l.repo"), found ? t("wizard.l.repo.v", {n: found}) : t("wizard.nf"), "hot"),  // none chosen yet: orange, in words that say so (1.8.32)
     ];
     const good = cells.filter((cell) => cell.querySelector(".wz-dot.ok")).length;
     const need = cells.length - good;
@@ -279,7 +279,7 @@ const WIZARD = (function () {
     const prefilled = Boolean(M.st && (M.st.name || M.st.name_git));  // "both are filled in" only when a name came with the page (saved, or from Git); the language always has one
     put(box, ...head(opts, "wizard.s.you", t("wizard.y.title"), t(prefilled ? "wizard.y.sub" : "wizard.y.sub.noname")),
       el("div", "wz-field", el("span", "cap", t("wizard.y.name")), name, M.st && M.st.name_git && M.name ? el("div", "hint", t("wizard.y.hint")) : null),  // "Taken from your Git settings" only when Git gave the name
-      el("div", "wz-field", el("span", "cap", t("wizard.y.lang")), tiles, el("div", "hint", t(opts.bare ? "wizard.y.lang.hint.save" : "wizard.y.lang.hint")), savedNote), said);  // the pick waits for Save (Settings) or Continue (the wizard) (1.8.31)
+      el("div", "wz-field", el("span", "cap", t("wizard.y.lang")), tiles, el("div", "hint", t(opts.bare ? "wizard.y.lang.hint.save" : "wizard.y.lang.hint")), savedNote), said);  // the pick waits for Save (Settings) or Continue (the wizard) (1.8.32)
     const commit = () => {
       said.hidden = true;
       return api.setup("save", {part: "you", name: M.name.trim(), language: M.lang}).then(() => {
@@ -372,12 +372,12 @@ const WIZARD = (function () {
       const signed = copilotSignedIn(line);
       if (!signed) sawOut = true;
       const sign = JSON.stringify([line.state, line.why, line.code, line.url, line.login, line.detail, line.last, starting]);
-      base = line.why === "signing-in" ? {left: line.left || 0, at: Date.now()} : null;  // (1.8.31) the count runs down by itself between two answers
+      base = line.why === "signing-in" ? {left: line.left || 0, at: Date.now()} : null;  // (1.8.32) the count runs down by itself between two answers
       if (waitText) waitText.textContent = t("wizard.c.wait", {t: clock(line.left || 0)});
       if (sign === shown) { opts.changed(); return; }
       shown = sign;
       if (signed) {
-        put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), el("div", "t2", ONLY || opts.bare ? "" : t("wizard.c.next")))));  // Settings (bare) only shows the state: no "Moving on", no step forward (1.8.31)
+        put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), el("div", "t2", ONLY || opts.bare ? "" : t("wizard.c.next")))));  // Settings (bare) only shows the state: no "Moving on", no step forward (1.8.32)
         if (sawOut && !ONLY && !opts.bare && q("hold", "") !== "1" && !advance) advance = setTimeout(() => { if (!stopped) opts.next(); }, 1500);
       } else if (line.why === "signing-in") {
         waitText = null;
@@ -420,7 +420,7 @@ const WIZARD = (function () {
     const sub = M.kbsub;
     const list = subs();
     const at = Math.max(0, list.indexOf(sub));
-    const eyebrowText = t("wizard.s.kb");  // (1.8.31) no "n of m": the bar above has the step, and the middle page comes only when a program is missing
+    const eyebrowText = t("wizard.s.kb");  // (1.8.32) no "n of m": the bar above has the step, and the middle page comes only when a program is missing
     const nextSub = () => { const rest = list.slice(at + 1); if (rest.length) { M.kbsub = rest[0]; opts.rerender(); } else opts.next(); };
     const prevSub = () => { if (at > 0) { M.kbsub = list[at - 1]; opts.rerender(); } else opts.back(); };
     let timer = 0, stopped = false;
@@ -528,7 +528,7 @@ const WIZARD = (function () {
     if (k.step === "done" && !M.extras) loadExtras().then(() => { if (!stopped) { opts.rerender(); } });
     return {stop, foot: () => (k.step === "done"
       ? {back: true, later: null, why: "", main: {label: t("wizard.cont"), go: nextSub}, backGo: prevSub}
-      : {back: true, later: k.step === "replace" ? null : later(t("wizard.k.skipnote")), why: t(k.step === "copy" ? "wizard.k.why.copy" : k.step === "replace" ? "wizard.k.why.replace" : "wizard.k.why"), main: {label: t("wizard.cont"), off: true, go: nextSub}, backGo: prevSub})};  // a grey Continue says why (1.8.31)
+      : {back: true, later: k.step === "replace" ? null : later(t("wizard.k.skipnote")), why: t(k.step === "copy" ? "wizard.k.why.copy" : k.step === "replace" ? "wizard.k.why.replace" : "wizard.k.why"), main: {label: t("wizard.cont"), off: true, go: nextSub}, backGo: prevSub})};  // a grey Continue says why (1.8.32)
   };
 
   function kbPrograms(box, opts, eyebrowText, nextSub, prevSub, stop) {
@@ -575,7 +575,7 @@ const WIZARD = (function () {
     const miss = () => packPrograms().filter((row) => !row.found || row.blocked);
     return {stop() { stopped = true; clearTimeout(timer); stop(); }, foot: () => {
       const rows = miss();
-      return {back: true, backGo: prevSub, later: rows.length ? {note: t("wizard.t.skipnote", {pack: forWho(rows[0]), program: rows[0].program})} : null, laterGo: nextSub, why: rows.length ? t("wizard.p.need", {name: rows[0].program}) : "", main: {label: t("wizard.cont"), off: rows.length > 0, go: nextSub}};  // the reason, as on the programs page; nothing to skip when nothing is missing (1.8.31)
+      return {back: true, backGo: prevSub, later: rows.length ? {note: t("wizard.t.skipnote", {pack: forWho(rows[0]), program: rows[0].program})} : null, laterGo: nextSub, why: rows.length ? t("wizard.p.need", {name: rows[0].program}) : "", main: {label: t("wizard.cont"), off: rows.length > 0, go: nextSub}};  // the reason, as on the programs page; nothing to skip when nothing is missing (1.8.32)
     }};
   }
 
@@ -605,10 +605,10 @@ const WIZARD = (function () {
     }
     put(box, ...head(opts, eyebrowText, t("wizard.n.title"), t("wizard.n.sub")), list);
     paint();
-    return {stop, foot: () => ({back: true, backGo: prevSub, later: packConnections().some((row) => !row.saved) ? {note: ""} : null, why: "", main: {label: t("wizard.cont"), go: nextSub}})};  // all signed in: nothing to skip (1.8.31)
+    return {stop, foot: () => ({back: true, backGo: prevSub, later: packConnections().some((row) => !row.saved) ? {note: ""} : null, why: "", main: {label: t("wizard.cont"), go: nextSub}})};  // all signed in: nothing to skip (1.8.32)
   }
 
-  // (1.8.31) The list shows whole rows only: its height is cut to the last row that fits in the height the sheet allows (a half row at the bottom looked broken; the fade says there is more)
+  // (1.8.32) The list shows whole rows only: its height is cut to the last row that fits in the height the sheet allows (a half row at the bottom looked broken; the fade says there is more)
   function snap(scroller) {
     scroller.style.maxHeight = "";
     if (!scroller.isConnected || scroller.scrollHeight <= scroller.clientHeight) return;
@@ -646,7 +646,7 @@ const WIZARD = (function () {
         item.addEventListener("keydown", (event) => { if (event.key === " " || isEnter(event)) { event.preventDefault(); flip(); } });
         return item;
       }));
-      const fade = el("div", "wz-fade", scroller);  // a soft edge at the bottom says there is more to scroll to; it goes at the end of the list (1.8.31)
+      const fade = el("div", "wz-fade", scroller);  // a soft edge at the bottom says there is more to scroll to; it goes at the end of the list (1.8.32)
       const edge = () => fade.classList.toggle("end", scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 4);
       scroller.addEventListener("scroll", edge);
       put(listBox, fade);
@@ -657,7 +657,7 @@ const WIZARD = (function () {
     filter.addEventListener("input", () => { M.filter = filter.value; paint(); });
     const choosable = () => visible().filter((row) => !row.in_root);
     const everyOn = () => { const list = choosable(); return list.length > 0 && list.every((row) => M.picks.has(row.path)); };
-    const all = link(t("wizard.r.all"), () => { const on = everyOn(); choosable().forEach((row) => (on ? M.picks.delete(row.path) : M.picks.add(row.path))); paint(); });  // all ticked: it becomes "Select none" and unticks (1.8.31)
+    const all = link(t("wizard.r.all"), () => { const on = everyOn(); choosable().forEach((row) => (on ? M.picks.delete(row.path) : M.picks.add(row.path))); paint(); });  // all ticked: it becomes "Select none" and unticks (1.8.32)
     const add = link("+ " + t("wizard.r.add"), () => {
       const taken = (path) => { api.setup("repo", {path, repos_root: "", singles: [...M.picks]}).then((found) => {
         const fresh = (found.kind === "repo" ? [{path: found.path, name: found.name}] : (found.repos || []).filter((row) => !row.held && !row.off)).filter((row) => !rows.some((have) => have.path === row.path));
@@ -672,11 +672,11 @@ const WIZARD = (function () {
     const commit = () => api.setup("save", {part: "repos", paths: [...M.picks], shown: rows.map((row) => row.path)}).then(() => { M.saved.repos = true; opts.next(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
     return {stop() {}, foot: () => {
       const n = M.picks.size;
-      return {back: true, later: {note: t("wizard.v.repo.e")}, why: "", main: {label: n ? t("wizard.r.cont", {n}) : t("wizard.cont"), off: !n, go: commit, minw: 160}};  // the same width with or without the number (1.8.31)
+      return {back: true, later: {note: t("wizard.v.repo.e")}, why: "", main: {label: n ? t("wizard.r.cont", {n}) : t("wizard.cont"), off: !n, go: commit, minw: 160}};  // the same width with or without the number (1.8.32)
     }};
   };
 
-  // (1.8.31) The gear of the dock's Settings button (dock.js draws the same two paths), with the yellow dot (wizard.css)
+  // (1.8.32) The gear of the dock's Settings button (dock.js draws the same two paths), with the yellow dot (wizard.css)
   const GEAR = ["M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6z", "M12 2.4l1.5 2.55 3-0.6 0.9 3 2.85 1.2-1.05 2.85 1.95 2.4-2.4 1.95 0.15 3-3 0.45-1.5 2.7L12 20.4l-2.4 1.5-1.5-2.7-3-0.45 0.15-3L3 13.35l1.95-2.4-1.05-2.85 2.85-1.2 0.9-3 3 0.6z"];
   function gearIcon() {
     const NS = "http://www.w3.org/2000/svg", wrap = el("span", "wz-gear"), svg = document.createElementNS(NS, "svg");
@@ -685,7 +685,7 @@ const WIZARD = (function () {
     wrap.append(svg);
     return wrap;
   }
-  // (1.8.31) Every "Set up" row is "label · value", with a unit where it is a count; the server's detail is used as it is, except where it is a bare name (the sign-in) or empty
+  // (1.8.32) Every "Set up" row is "label · value", with a unit where it is a count; the server's detail is used as it is, except where it is a bare name (the sign-in) or empty
   const valueText = (row) => (row.id === "copilot" && row.detail ? t("wizard.v.cop.s", {name: row.detail}) : row.detail || t("wizard.v.ok"));
   parts.review = function (box, opts) {
     const holder = el("div");
@@ -707,7 +707,7 @@ const WIZARD = (function () {
       opts.changed();
     }
     put(box, ...head(opts, "wizard.s.rev", t("wizard.v.title.check"), t("wizard.v.sub")), holder, said);
-    const title = box.querySelector("h1");  // "Ready to go" only when nothing is left to set up (1.8.31)
+    const title = box.querySelector("h1");  // "Ready to go" only when nothing is left to set up (1.8.32)
     api.setup("summary").then((found) => { summary = found; paint(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
     const confirm = () => { finishing = true; opts.changed(); said.hidden = true; return api.setup("finish").then(() => { try { sessionStorage.removeItem(KEEP); } catch (error) { /* nothing kept */ } leave(); }, (error) => { finishing = false; said.textContent = errorText(error); said.hidden = false; opts.changed(); }); };
     const lacking = () => (summary ? summary.rows.filter((row) => row.required && !row.done).map((row) => row.label) : []);  // what Confirm needs: the server refuses too (409)

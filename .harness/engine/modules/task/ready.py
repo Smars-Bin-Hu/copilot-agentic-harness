@@ -699,7 +699,7 @@ class Ready:
             return {"ready": False, "checks": checking, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": [], "optional": []}, "button": self.button(checking, False), "notes": []}
         out = copy.deepcopy(kept)
         if isinstance(out.get("button"), dict) and isinstance(out.get("checks"), list):
-            out["button"] = self.button(out["checks"], bool(out.get("ready")))  # (1.8.31) the label in the language of now: the kept answer may be from before a language change
+            out["button"] = self.button(out["checks"], bool(out.get("ready")))  # (1.8.32) the label in the language of now: the kept answer may be from before a language change
         if not paired:  # worked out for a paired browser: this one is not
             for line in out["checks"]:
                 if line["id"] == "paired":

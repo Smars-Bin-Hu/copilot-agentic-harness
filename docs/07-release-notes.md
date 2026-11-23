@@ -8,11 +8,11 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.31 (1.8.0 – 1.8.31, 2026-11-17 – 2026-11-23)
+## 1.8.32 (1.8.0 – 1.8.32, 2026-11-17 – 2026-11-23)
 
 ### Added
 
-- **A tool pack can be a sample** (1.8.31): `"sample": true` in its `toolpack.json`. Settings lists a sample only once a knowledge base turns it on, so a newcomer does not take it for a real tool. The factory `demotracker` is one.
+- **A tool pack can be a sample** (1.8.32): `"sample": true` in its `toolpack.json`. Settings lists a sample only once a knowledge base turns it on, so a newcomer does not take it for a real tool. The factory `demotracker` is one.
 
 - **A setup wizard for a new copy** (1.8.30): the page `/setup`, one thing on each page with a bar of six parts: You, Programs, Copilot, Knowledge base, Code repositories, Review. The name and language are filled in from Git. Programs lists Python, Git, VS Code and the GitHub CLI with where each was found (the agent's PATH plus the tool folders you add); a missing one has its download page and a box for its folder, and the page notices when it is installed. The short command `harness` is added for you. Copilot signs in with a one-time code. The knowledge base page takes a package or a folder and shows what it brought; the tool packs it turns on, the programs they need and the connections to sign in to follow. Without a knowledge base no tool pack can be chosen. The last page lists what is set up and what is not, with what each missing item costs, and **Set up now** for each.
 - **An Enter screen with one button** (1.8.30): a copy that is set up shows only HARNESS and one button. It is **Enter** when nothing blocks the work; otherwise it is the fix: **Sign in to Copilot**, **Preparing Copilot** with a percent, **Find GitHub CLI**, **Show problems**, **Start Copilot again**, **Pair this browser** or **Get set up**.
@@ -51,9 +51,9 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
-- The first-run screens, after two walkthroughs by a newcomer (1.8.31). The wizard shows the harness robot; it showed a placeholder box whose eyes slid into its corners. A new copy opens at the wizard, with no Enter screen that said *Checking* first. Settings, Copilot no longer says *Moving on…* or closes the window. Welcome counts the repositories you saved, and its minutes count the pages that will show. The knowledge base step has no second counter, and a grey **Continue** says why on every page. The review rows all have a value, and the repository lists show whole rows, with **Select none**. The note that offers Lite does not show on a first visit, goes away when Settings or the wizard opens, sits at the bottom left, and **Not now** keeps it away for 30 days. The hint *Hold to charge the light* waits for the pointer to rest on the word.
-- After a language switch the Enter screen stayed nearly empty for seconds on a slow computer (1.8.31): a page loaded again skips the opening, and the button speaks the new language at once.
-- Approve and Dismiss of a held call were refused with *the agent is at work* (1.8.31): they work while the agent works, since a decision is bound to what you saw. An agent that went on without its wait and has stopped is woken with the decision.
+- The first-run screens, after two walkthroughs by a newcomer (1.8.32). The wizard shows the harness robot; it showed a placeholder box whose eyes slid into its corners. A new copy opens at the wizard, with no Enter screen that said *Checking* first. Settings, Copilot no longer says *Moving on…* or closes the window. Welcome counts the repositories you saved, and its minutes count the pages that will show. The knowledge base step has no second counter, and a grey **Continue** says why on every page. The review rows all have a value, and the repository lists show whole rows, with **Select none**. The note that offers Lite does not show on a first visit, goes away when Settings or the wizard opens, sits at the bottom left, and **Not now** keeps it away for 30 days. The hint *Hold to charge the light* waits for the pointer to rest on the word.
+- After a language switch the Enter screen stayed nearly empty for seconds on a slow computer (1.8.32): a page loaded again skips the opening, and the button speaks the new language at once.
+- Approve and Dismiss of a held call were refused with *the agent is at work* (1.8.32): they work while the agent works, since a decision is bound to what you saw. An agent that went on without its wait and has stopped is woken with the decision.
 - A board ended by the system (SIGTERM on macOS, the console window closed or Ctrl+Break on Windows) left its agent host running (1.8.30): it now stops the way a board stopped on purpose does, so its host stops too unless a chat is working.
 - A password saved again for a connection reached the agent host only after a restart of the computer, and a board restart kept the old host (1.8.29): the host restarts with the new one as soon as no chat is working.
 - The agent host kept running after the board was stopped, and a reinstall could find files of the old copy held (1.8.29): stopping the board (its power button, `harness task board --stop`, Ctrl+C) stops the host too, unless a chat works; `--stop` with no board running stops a host left behind. **Restart board** and an update keep the host, so chats go on.
@@ -82,8 +82,8 @@ To see which version you have: `harness --version`.
 
 ### Retired
 
-- **Try the sample** and **Take the 20-minute lesson** on an empty board (1.8.31): the empty board has one **New task**. The first lesson is still in the help panel (**?**, **First lesson**).
-- **Language and Restart board in the sliders panel** (1.8.31): the panel is **Appearance** (theme, rendering, background). Set the language in Settings, You (it changes when you press **Save**); **Restart board** is in Settings, Advanced.
+- **Try the sample** and **Take the 20-minute lesson** on an empty board (1.8.32): the empty board has one **New task**. The first lesson is still in the help panel (**?**, **First lesson**).
+- **Language and Restart board in the sliders panel** (1.8.32): the panel is **Appearance** (theme, rendering, background). Set the language in Settings, You (it changes when you press **Save**); **Restart board** is in Settings, Advanced.
 - **The Get ready form** (`/setup` before; 1.8.30): the page with four cards is the wizard now, and the gear opens Settings. **Coming from an older copy?** moved to Settings, Advanced.
 - **The lists of the Enter screen** (1.8.30): its two blocks (*Harness & Local*, *From the company*), their yellow notes and the folded one-line view are gone. The screen has one button.
 - **The board's yellow block** (*Not fully ready for your company's tasks*, with **Hide**; 1.8.30): the dot on the gear replaces it. The red block, *The agent cannot work right now*, stays.

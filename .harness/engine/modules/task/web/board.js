@@ -551,7 +551,7 @@
     go.addEventListener("click", () => CHAT.create());
     return go;
   }
-  // The empty block (1.8.31): the title, the line, and the one New task button (the same label as the header's); no sample button, no lesson link.
+  // The empty block (1.8.32): the title, the line, and the one New task button (the same label as the header's); no sample button, no lesson link.
   function firstTask() {
     const go = bigNewTask(), served = Boolean(go);
     return h("div", {class: "first-task"}, h("h2", null, t(served ? "board.empty.title" : "board.empty.title.disk")),

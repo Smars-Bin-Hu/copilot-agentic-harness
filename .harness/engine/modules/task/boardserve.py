@@ -401,7 +401,7 @@ class Board:
         return {"actions": self.served, "refresh": refresh, "run_kinds": taskrun.kinds(), **found, "user": self.user_name(), "version": self.release(), "fresh": self.is_fresh()}
 
     def is_fresh(self) -> bool:
-        """(1.8.31) A copy that is not set up: the Enter screen, if it is shown at all, shows only the wordmark until it goes to the wizard."""
+        """(1.8.32) A copy that is not set up: the Enter screen, if it is shown at all, shows only the wordmark until it goes to the wizard."""
         try:
             return not core_setup.set_up(self.root)
         except Exception:  # noqa: BLE001 - unknown: not fresh, the Enter screen asks as before
@@ -430,7 +430,7 @@ class Board:
         return self.actions + [item for item in BUILTIN if item not in self.actions]
 
     def page_address(self, base: str, code: str) -> str:
-        """(1.8.31) The address the browser is opened at: a copy that is not set up lands on the wizard (the Enter screen would only say "Checking" and jump); a set-up copy on the board. The code is traded by serve.js on either page."""
+        """(1.8.32) The address the browser is opened at: a copy that is not set up lands on the wizard (the Enter screen would only say "Checking" and jump); a set-up copy on the board. The code is traded by serve.js on either page."""
         return f"{base}{'setup' if self.is_fresh() else ''}#pair={code}"
 
     def open_page(self) -> bool:
@@ -2163,7 +2163,7 @@ def handler_for(board: Board) -> type:
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
             if path == "/setup":
-                board.look_at_page(True)  # (1.8.31) a new copy is opened at the wizard: the launcher's flags turn from this page too
+                board.look_at_page(True)  # (1.8.32) a new copy is opened at the wizard: the launcher's flags turn from this page too
                 return self.send(200, taskhtml.setup_page(board.serve_info({}, 0), linked=True).encode("utf-8"), "text/html; charset=utf-8")
             if path in ("/", "/board.html") or path.startswith("/task/"):
                 if path in ("/", "/board.html"):

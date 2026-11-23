@@ -132,7 +132,7 @@ const SETTINGS = (function () {
           return null;
         }
         return ask("/api/machine", "toolpacks").then((found) => {
-          const rows = (found.toolpacks || []).filter((row) => row.from === "harness" && !row.sample);  // a sample pack (demotracker) is not a tool a newcomer has: not listed until a knowledge base turns it on (1.8.31)
+          const rows = (found.toolpacks || []).filter((row) => row.from === "harness" && !row.sample);  // a sample pack (demotracker) is not a tool a newcomer has: not listed until a knowledge base turns it on (1.8.32)
           const list = h("div", {class: "st-packlist"}, rows.map((row) => h("div", {class: "st-pack"}, h("span", {class: "st-pdot"}), h("b", null, row.name), h("span", {class: "tl-ver"}, row.version || ""), h("span", {class: "st-pdesc", title: row.description || ""}, row.description || ""))));
           env.inside([h("p", {class: "st-sub"}, t("tools.packs.lead")), h("p", {class: "st-note"}, t("settings.packs.nokb")), list]);
         });
@@ -145,7 +145,7 @@ const SETTINGS = (function () {
     }
 
     function networkSection(id, env) {
-      const made = MACHINE.localPanel(ctx, {bare: true});  // the window already says Network: the part does not say it again (1.8.31)
+      const made = MACHINE.localPanel(ctx, {bare: true});  // the window already says Network: the part does not say it again (1.8.32)
       env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body.filter((node) => node.dataset && node.dataset.part === "network")]);
     }
 
@@ -204,7 +204,7 @@ const SETTINGS = (function () {
     SERVE.call("/api/ready", {}, 8).then((data) => { if (typeof READY !== "undefined" && Array.isArray(data.checks)) READY.notes(data.notes); }, () => {});
   }
 
-  // Restart board (1.8.31: it was in the sliders panel, now Appearance): the same button and texts; SHELL.restartBoard waits for the new process and pairs again
+  // Restart board (1.8.32: it was in the sliders panel, now Appearance): the same button and texts; SHELL.restartBoard waits for the new process and pairs again
   function restartRow() {
     const said = h("div", {class: "sp-bad", role: "alert", hidden: "hidden"});
     const go = h("button", {type: "button", class: "wz-btn sm"}, t("board.shell.restart"));
@@ -254,5 +254,5 @@ const SETTINGS = (function () {
     if (kept.startsWith("settings") && typeof DATA !== "undefined" && DATA.serve) { sessionStorage.removeItem("harness.reopen"); setTimeout(() => open(kept.split(":")[1] || "you"), 0); }
   } catch (error) { /* then the window stays shut */ }
 
-  return {open, sections: SECTIONS, isOpen: () => Boolean(win)};  // isOpen: space.js keeps its slow-motion note away while the window is open (1.8.31)
+  return {open, sections: SECTIONS, isOpen: () => Boolean(win)};  // isOpen: space.js keeps its slow-motion note away while the window is open (1.8.32)
 })();

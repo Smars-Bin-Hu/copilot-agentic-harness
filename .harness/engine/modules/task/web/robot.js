@@ -1,4 +1,4 @@
-// The robot's one drawing (1.8.31): ROBOT.svg() returns its <svg>. enter.js draws the Enter screen's flat robot with it and the setup wizard's welcome page shows it; robot.css has the base colours.
+// The robot's one drawing (1.8.32): ROBOT.svg() returns its <svg>. enter.js draws the Enter screen's flat robot with it and the setup wizard's welcome page shows it; robot.css has the base colours.
 // The class names (r-arm, r-body, r-core, r-headg, r-ant, r-bulb, r-head, r-visor, r-eyes, r-eye) are what enter.css and enter.js animate. bot3d.js draws the same robot from distances.
 "use strict";
 

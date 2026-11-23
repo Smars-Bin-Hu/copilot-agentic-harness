@@ -24,9 +24,9 @@
   const seen = () => { try { return sessionStorage.getItem(SEEN) === "1"; } catch (error) { return memorySeen; } };
   const remember = () => { memorySeen = true; try { sessionStorage.setItem(SEEN, "1"); } catch (error) { /* shown again on the next page: nothing can be kept */ } };
   if (seen()) return;
-  // (1.8.31) A page loaded again (a language change, F5) has no opening: the wordmark and the button are there at once. The letters rise as SVG on the main thread, and on a slow one that took seconds.
+  // (1.8.32) A page loaded again (a language change, F5) has no opening: the wordmark and the button are there at once. The letters rise as SVG on the main thread, and on a slow one that took seconds.
   const reloaded = (() => { try { const nav = performance.getEntriesByType("navigation")[0]; return Boolean(nav && nav.type === "reload"); } catch (error) { return false; } })();
-  // (1.8.31) The hint is not for the first visit of this browser (the one right after the wizard); after that it shows when the pointer has rested on the wordmark for HINT_AFTER ms.
+  // (1.8.32) The hint is not for the first visit of this browser (the one right after the wizard); after that it shows when the pointer has rested on the wordmark for HINT_AFTER ms.
   const HINT_KEY = "harness.enter.visited", HINT_AFTER = 3000;
   const visited = (() => { try { return localStorage.getItem(HINT_KEY) === "1"; } catch (error) { return true; } })();  // no storage: the hint waits for the pointer, never shown unasked
 
@@ -74,7 +74,7 @@
     h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, legal, cta, hint));
   document.body.append(enter);
   const stage = enter.querySelector(".en-stage");
-  let open = true;  // (1.8.31) `fresh` (a copy that is not set up) shows only the wordmark until it goes to the wizard
+  let open = true;  // (1.8.32) `fresh` (a copy that is not set up) shows only the wordmark until it goes to the wizard
   let shown = !isTask;  // the screen is on view (a task page opened from a link keeps it hidden until it is known that it is needed)
 
   function buildWord() {
@@ -116,7 +116,7 @@
   const pose = {nx: 0, ny: 0, sleep: 1, arm: 0};
   let solid = null;
   function buildBot() {
-    const r = ROBOT.svg();  // the one drawing, robot.js (1.8.31)
+    const r = ROBOT.svg();  // the one drawing, robot.js (1.8.32)
     bot.append(r);
     if (still() || typeof BOT3D === "undefined") return;
     solid = BOT3D.make(bot);

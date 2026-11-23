@@ -548,8 +548,11 @@ const classes = new Set();
 const root = {classList: {toggle(name, on) { if (on) classes.add(name); else classes.delete(name); }}};
 const life = {hidden: false}, lifeLabel = {}, lifeSep = {hidden: false}, lifeRun = {hidden: false};
 let kind = "", label = "", clock = "";
-const setClass = (node, value) => { kind = value; }, setText = (node, value) => { label = value; };
+const setClass = (node, value) => { kind = value; }, setText = (node, value) => { if (node === lifeLabel) label = value; };  // lifeDoing and lifeBack (B15/B16) are set too
 const running = () => { clock = "run"; }, stopped = () => { clock = "stop"; };
+const lifeDoing = {hidden: false}, lifeBack = {hidden: false}, backList = {hidden: false, dataset: {}, replaceChildren() {}};  // B15/B16: what it does now, shells that run on
+const order = () => [], wordOf = () => "";
+st.full = new Map();
 """ + source + r"""
 const busy = {bound: true, state: "busy", started: "2026-11-08T10:00:00Z"};
 paintLife(busy);

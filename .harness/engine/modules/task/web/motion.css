@@ -1,0 +1,11 @@
+/* How the first-run screens move (1.8.33, motion.js): the durations and the two curves, and the veil a page fades to before it goes.
+   No move of the screens is longer than 300 ms; the robot's own moves (robot.js act) may be longer and never block a button. */
+:root{--m-micro:120ms;--m-show:200ms;--m-page:260ms;--m-window:280ms;--m-in:cubic-bezier(.2,.8,.2,1);--m-out:cubic-bezier(.4,0,1,1)}
+.m-veil{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:var(--bg);pointer-events:none}
+.m-veil.enter-bg{background:radial-gradient(120% 90% at 50% 38%,#1d1f24 0%,#0b0c0e 60%,#050506 100%)}
+.m-dots{display:flex;gap:6px}.m-dots i{width:6px;height:6px;border-radius:50%;background:var(--good-dot);opacity:.35;animation:m-think 900ms var(--m-in) infinite}
+.m-dots i:nth-child(2){animation-delay:150ms}.m-dots i:nth-child(3){animation-delay:300ms}
+@keyframes m-think{40%{opacity:1;transform:translateY(-3px)}}
+.m-spark{position:fixed;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:var(--good-dot);pointer-events:none;z-index:60}
+html.lite .m-dots i{animation:none;opacity:.7}
+@media (prefers-reduced-motion:reduce){.m-dots i{animation:none;opacity:.7}}

@@ -60,6 +60,7 @@ BUTTONS = {"pair": "ready.btn.pair", "setup": "ready.btn.setup", "program": "rea
            "wait": "ready.btn.wait", "check": "ready.btn.check", "enter": "ready.btn.enter"}  # the label of each kind of the middle button
 RED_FIX = {"signin": "signin", "refused": "signin", "no-gh": "get-gh"}  # the board's red block (readybar.js): the fix button of a Copilot line, by its reason
 KNOWN_FAIL = {"setup": ("new",), "paired": ("unpaired",), "doctor": ("failed", "errors", "stale"), "vscode": ("no-code", "off"), "copilot": ("no-gh", "gh-broken", "signin", "refused", "host-failed")}  # the reasons a failed required line can have that the button and the red block know; any other (`error`: the check itself broke) is shown, never left as "Checking…"
+WHAT = {"setup": "ready.what.setup", "paired": "ready.what.paired", "doctor": "ready.what.doctor", "vscode": "ready.what.vscode", "copilot": "ready.what.copilot"}  # the name of a required line, for the text of one that could not be checked
 PROGRAM_PAGES = {"vscode": "https://code.visualstudio.com/download", "gh": ghauth.DOWNLOAD_PAGE}
 
 
@@ -638,7 +639,7 @@ class Ready:
                 continue
             text, reason, fix = "", "", {}
             if self.unknown_fail(line):
-                text, reason = say("ready.r.error", what=say(f"ready.what.{key}")), say("ready.r.error.why", detail=line.get("detail") or why)
+                text, reason = say("ready.r.error", what=say(WHAT[key])), say("ready.r.error.why", detail=line.get("detail") or why)
                 fix = {"to": "doctor", "label": say("board.enter.doctor.again")}
             elif key == "setup":
                 text, reason, fix = say("ready.r.setup.new"), say("ready.r.setup.new.why"), {"to": "setup", "sec": "you", "label": say("ready.btn.setup")}

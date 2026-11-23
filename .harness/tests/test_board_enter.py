@@ -503,7 +503,7 @@ class ReadinessTests(TaskCase):
         self.assertEqual(found["button"]["kind"], "doctor")
         self.assertEqual(found["button"]["label"], messages.text("ready.btn.doctor.one"))
         problem = next(entry for entry in found["problems"]["required"] if entry["key"] == "vscode")
-        self.assertEqual(problem["text"], messages.text("ready.r.error", what="VS Code"))
+        self.assertEqual(problem["text"], messages.text("ready.r.error", what=messages.text("ready.what.vscode")))
         self.assertIn("the cache is gone", problem["why"])
         self.assertEqual(problem["fix"]["to"], "doctor")
 
@@ -513,7 +513,7 @@ class ReadinessTests(TaskCase):
         self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "error"))
         self.assertEqual(found["button"]["kind"], "doctor")
         problem = next(entry for entry in found["problems"]["required"] if entry["key"] == "copilot")
-        self.assertEqual(problem["text"], messages.text("ready.r.error", what="Copilot"))
+        self.assertEqual(problem["text"], messages.text("ready.r.error", what=messages.text("ready.what.copilot")))
         self.assertIn("the host table broke", problem["why"])
         self.assertNotIn("ready.r.copilot.error", problem["text"] + problem["why"])
 

@@ -187,7 +187,7 @@ class HomeTests(TaskCase):
         self.assertEqual((found["connections"]["to"], found["connections"]["tab"]), ("tools", "connections"))
         self.assertEqual((found["kb"]["to"], found["kb"]["tab"]), ("kb", "overview"))
         self.assertEqual((found["skills"]["to"], found["skills"]["tab"]), ("kb", "company"))
-        self.assertEqual((found["repos"]["to"], found["repos"]["sec"]), ("setup", "company"))
+        self.assertEqual((found["repos"]["to"], found["repos"]["sec"]), ("setup", "repos"))  # O4: Settings opens at Code repositories
 
 
 class CertificateAndRepositoriesTests(TaskCase):
@@ -218,7 +218,7 @@ class CertificateAndRepositoriesTests(TaskCase):
             self.assertIn(say("ready.repos", n=len([name for name in readyitems.targets.load(self.root).repos])), found["detail"])
         with mock.patch.object(readyitems.targets, "load", return_value=readyitems.targets.Targets(configured=False, repos={}, problems=[])):
             none = by_key(readyitems.items(self.root))["repos"]
-        self.assertEqual((none["state"], none["detail"], none["problems"][0]["text"], none["problems"][0]["fix"]["sec"]), ("yellow", say("ready.repos.none"), say("ready.p.repos"), "company"))
+        self.assertEqual((none["state"], none["detail"], none["problems"][0]["text"], none["problems"][0]["fix"]["sec"]), ("yellow", say("ready.repos.none"), say("ready.p.repos"), "repos"))
         broken = readyitems.targets.Targets(configured=True, repos={}, problems=["a folder is missing"])
         with mock.patch.object(readyitems.targets, "load", return_value=broken):
             bad = by_key(readyitems.items(self.root))["repos"]

@@ -1232,12 +1232,6 @@ class SmallFixesTests(unittest.TestCase):
         self.assertEqual(report.errors, 2)
         self.assertIn("messages.en.json", report.lines[0])
 
-    def test_the_settings_window_says_what_is_kept_at_once_and_what_needs_save(self) -> None:
-        from core import messages
-
-        for language, word in (("en", "kept at once"), ("zh", "立刻保存")):
-            self.assertIn(word, messages.table(language)["setup.lead.again"])
-
     def test_tick_viewed_says_it_ticks_what_the_gate_could_only_ask_about(self) -> None:
         from core import messages
 

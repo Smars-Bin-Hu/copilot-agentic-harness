@@ -222,7 +222,7 @@ SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsaf
 def setup_page(serve: Dict[str, Any], linked: bool = False) -> str:
     """The first-run setup wizard (O2), as the board server sends it. It has no Enter screen: it is where a new copy goes from there.
     settings.css is there for the pieces the folder picker and the connections panel (dock.js, servers.js) draw."""
-    return build("setup.html", ["common.js", "serve.js", "readyui.js", "dock.js", "servers.js", "wizard.js"], say("setup.title"), {"serve": serve, "wizard": True}, 0, ["page.css", "wizard.css", "settings.css"], linked)
+    return build("setup.html", ["common.js", "serve.js", "readyui.js", "dock.js", "term.js", "servers.js", "wizard.js"], say("setup.title"), {"serve": serve, "wizard": True}, 0, ["page.css", "wizard.css", "settings.css"], linked)
 
 
 def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None, linked: bool = False) -> str:

@@ -100,6 +100,7 @@ const WIZARD = (function () {
     const done = (value, wait) => new Promise((resolve) => setTimeout(() => resolve(JSON.parse(JSON.stringify(value === undefined ? {} : value))), wait || 40));
     const fail = (text) => new Promise((resolve, reject) => setTimeout(() => reject(new Error(text)), 40));
     const copilot = () => {
+      if (F.cop === "code" && !F.codeAt) F.codeAt = Date.now();  // the fake code runs down from its first look
       if (F.cop === "code") return {id: "copilot", state: "wait", why: "signing-in", code: "5F59-4EB2", url: "https://github.com/login/device", left: F.codeAt ? Math.max(0, 872 - Math.round((Date.now() - F.codeAt) / 1000)) : 872};
       if (F.cop === "done") return {id: "copilot", state: "ok", why: "ok", login: "alex", n: 25};
       if (q("cop", "") === "hostfailed") return {id: "copilot", state: "fail", why: "host-failed", detail: "it could not open its port", login: "alex"};  // ?cop=hostfailed | error: the lines that are not about the sign-in
@@ -198,6 +199,7 @@ const WIZARD = (function () {
     const line = copilotLine();
     const host = line && line.host;
     shell.job.hidden = !host;
+    shell.job.title = host ? t("wizard.job.tip") : "";  // (1.8.31) what the download is, said on hover
     if (!host) return;
     const bar = el("span", "mini", h("i", {style: "width:" + Math.max(3, Math.min(100, Number(host.percent) || 0)) + "%"}));
     put(shell.job, spin(), t("wizard.job.prep"), bar, el("span", "wz-mono", host.total_mb ? t("wizard.job.mb", {a: Math.round(host.downloaded_mb || 0), b: Math.round(host.total_mb)}) : host.percent !== undefined ? host.percent + "%" : ""));
@@ -228,7 +230,7 @@ const WIZARD = (function () {
     const rows = (M.progs && M.progs.rows) || [];
     const row = (id) => rows.find((item) => item.id === id) || {found: false, version: ""};
     const line = copilotLine();
-    const item = (label, value, kind) => el("div", "wz-it", dot(kind === "hot" ? "hot" : kind === "none" ? "none" : "ok"), el("span", "n", label), el("span", "v" + (kind === "hot" ? " hot" : ""), value));
+    const item = (label, value, kind) => el("div", "wz-it", dot(kind === "hot" || kind === "pick" ? "hot" : "ok"), el("span", "n", label), el("span", "v" + (kind === "hot" ? " hot" : ""), value));  // "pick": found, but yours to choose: the same orange dot as the others that need you (1.8.31)
     const prog = (id, key) => (row(id).found && !row(id).trouble && !row(id).blocked ? item(t(key), row(id).version || t("wizard.p.found"), "ok") : item(t(key), t("wizard.nf"), "hot"));
     const st = M.st;
     const signed = copilotSignedIn(line);
@@ -238,7 +240,7 @@ const WIZARD = (function () {
       prog("python", "wizard.l.py"), prog("git", "wizard.l.git"), prog("vscode", "wizard.l.code"), prog("gh", "wizard.l.gh"),
       item(t("wizard.l.sign"), signed ? (line.login || t("wizard.p.found")) : t("wizard.notyet"), signed ? "ok" : "hot"),
       item(t("wizard.l.kb"), st.kb.here ? (st.kb.version || t("wizard.p.found")) : t("wizard.notyet"), st.kb.here ? "ok" : "hot"),
-      item(t("wizard.l.repo"), repos ? t("wizard.l.repo.v", {n: repos}) : t("wizard.nf"), "none"),
+      item(t("wizard.l.repo"), repos ? t("wizard.l.repo.v", {n: repos}) : t("wizard.nf"), repos ? "pick" : "hot"),
     ];
     const good = cells.filter((cell) => cell.querySelector(".wz-dot.ok")).length;
     const need = cells.length - good;
@@ -251,6 +253,10 @@ const WIZARD = (function () {
   parts.you = function (box, opts) {
     const name = input("big", {maxlength: 100, autocomplete: "name", value: M.name, "aria-label": t("wizard.y.name")});
     const said = el("p", "wz-err"); said.hidden = true;
+    let kept = false;  // Settings: the page loaded again after a language was saved; it says so, the footer's note went with the old page
+    try { kept = Boolean(opts.bare) && Date.now() - Number(sessionStorage.getItem("harness.saved.you") || 0) < 8000; } catch (error) { /* no note */ }  // the section may be drawn twice while the window reopens: the mark is not taken away, it just gets old
+    const savedNote = el("p", "wz-saved", kept ? "\u2713 " + t("settings.saved") : "");
+    if (kept) setTimeout(() => { savedNote.textContent = ""; }, 4000);
     const tile = (code) => {
       const b = h("button", {type: "button", class: "wz-tile" + (M.lang === code ? " on" : ""), "aria-pressed": M.lang === code ? "true" : "false"}, h("span", null, langName(code)), el("span", "ring"));
       b.addEventListener("click", () => { M.lang = code; put(tiles, tile("en"), tile("zh")); });
@@ -261,7 +267,7 @@ const WIZARD = (function () {
     const prefilled = Boolean(M.st && (M.st.name || M.st.name_git));  // "both are filled in" only when a name came with the page (saved, or from Git); the language always has one
     put(box, ...head(opts, "wizard.s.you", t("wizard.y.title"), t(prefilled ? "wizard.y.sub" : "wizard.y.sub.noname")),
       el("div", "wz-field", el("span", "cap", t("wizard.y.name")), name, M.st && M.st.name_git && M.name ? el("div", "hint", t("wizard.y.hint")) : null),  // "Taken from your Git settings" only when Git gave the name
-      el("div", "wz-field", el("span", "cap", t("wizard.y.lang")), tiles, el("div", "hint", t("wizard.y.lang.hint"))), said);
+      el("div", "wz-field", el("span", "cap", t("wizard.y.lang")), tiles, el("div", "hint", t(opts.bare ? "wizard.y.lang.hint.save" : "wizard.y.lang.hint")), savedNote), said);  // the pick waits for Save (Settings) or Continue (the wizard) (1.8.31)
     const commit = () => {
       said.hidden = true;
       return api.setup("save", {part: "you", name: M.name.trim(), language: M.lang}).then(() => {
@@ -269,7 +275,7 @@ const WIZARD = (function () {
         if (M.st) { M.st.name = M.name.trim(); M.st.language = M.lang; }
         if (!FAKE && M.lang !== document.documentElement.lang) {  // the texts are in the old language: the page loads again, and comes back here
           try {
-            if (opts.bare) sessionStorage.setItem("harness.reopen", "settings:you");  // Settings: the window comes back at this section
+            if (opts.bare) { sessionStorage.setItem("harness.reopen", "settings:you"); sessionStorage.setItem("harness.saved.you", String(Date.now())); }  // Settings: the window comes back at this section, with its "Saved"
             else sessionStorage.setItem(KEEP, JSON.stringify({page: nextFrom(M.page, 1)}));
           } catch (error) { /* starts at the welcome */ }
           const link = new URL(location.href);
@@ -347,19 +353,20 @@ const WIZARD = (function () {
 
   parts.copilot = function (box, opts) {
     const body = el("div");
-    let timer = 0, stopped = false, shown = "", sawOut = false, advance = 0, starting = false, waitText = null;
+    let timer = 0, stopped = false, shown = "", sawOut = false, advance = 0, starting = false, waitText = null, ticker = 0, base = null;
     const said = el("p", "wz-err"); said.hidden = true;
     function paint() {
       const line = copilotLine() || {state: "wait", why: "starting"};
       const signed = copilotSignedIn(line);
       if (!signed) sawOut = true;
       const sign = JSON.stringify([line.state, line.why, line.code, line.url, line.login, line.detail, line.last, starting]);
+      base = line.why === "signing-in" ? {left: line.left || 0, at: Date.now()} : null;  // (1.8.31) the count runs down by itself between two answers
       if (waitText) waitText.textContent = t("wizard.c.wait", {t: clock(line.left || 0)});
       if (sign === shown) { opts.changed(); return; }
       shown = sign;
       if (signed) {
-        put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), el("div", "t2", ONLY ? "" : t("wizard.c.next")))));
-        if (sawOut && !ONLY && q("hold", "") !== "1" && !advance) advance = setTimeout(() => { if (!stopped) opts.next(); }, 1500);
+        put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), el("div", "t2", ONLY || opts.bare ? "" : t("wizard.c.next")))));  // Settings (bare) only shows the state: no "Moving on", no step forward (1.8.31)
+        if (sawOut && !ONLY && !opts.bare && q("hold", "") !== "1" && !advance) advance = setTimeout(() => { if (!stopped) opts.next(); }, 1500);
       } else if (line.why === "signing-in") {
         waitText = null;
         const copy = btn(t("wizard.c.copy"), "sm", () => copyCommand(copy, line.code));
@@ -390,7 +397,8 @@ const WIZARD = (function () {
     put(box, ...head(opts, "wizard.s.cop", t("wizard.c.title"), t("wizard.c.sub")), body, said);
     paint();
     timer = setTimeout(loop, 2000);
-    return {stop() { stopped = true; clearTimeout(timer); clearTimeout(advance); }, foot: () => {
+    ticker = setInterval(() => { if (waitText && base) waitText.textContent = t("wizard.c.wait", {t: clock(Math.max(0, base.left - Math.round((Date.now() - base.at) / 1000)))}); }, 1000);
+    return {stop() { stopped = true; clearTimeout(timer); clearTimeout(advance); clearInterval(ticker); }, foot: () => {
       const signed = copilotSignedIn(copilotLine());
       return {back: !ONLY, later: null, why: signed ? "" : t("wizard.c.need"), main: {label: ONLY ? t("wizard.done") : t("wizard.cont"), off: !signed, go: ONLY ? leave : opts.next}};
     }};
@@ -555,7 +563,7 @@ const WIZARD = (function () {
     const miss = () => packPrograms().filter((row) => !row.found || row.blocked);
     return {stop() { stopped = true; clearTimeout(timer); stop(); }, foot: () => {
       const rows = miss();
-      return {back: true, backGo: prevSub, later: {note: rows.length ? t("wizard.t.skipnote", {pack: forWho(rows[0]), program: rows[0].program}) : ""}, laterGo: nextSub, why: "", main: {label: t("wizard.cont"), off: rows.length > 0, go: nextSub}};
+      return {back: true, backGo: prevSub, later: rows.length ? {note: t("wizard.t.skipnote", {pack: forWho(rows[0]), program: rows[0].program})} : null, laterGo: nextSub, why: rows.length ? t("wizard.p.need", {name: rows[0].program}) : "", main: {label: t("wizard.cont"), off: rows.length > 0, go: nextSub}};  // the reason, as on the programs page; nothing to skip when nothing is missing (1.8.31)
     }};
   }
 
@@ -585,7 +593,7 @@ const WIZARD = (function () {
     }
     put(box, ...head(opts, eyebrowText, t("wizard.n.title"), t("wizard.n.sub")), list);
     paint();
-    return {stop, foot: () => ({back: true, backGo: prevSub, later: {note: ""}, why: "", main: {label: t("wizard.cont"), go: nextSub}})};
+    return {stop, foot: () => ({back: true, backGo: prevSub, later: packConnections().some((row) => !row.saved) ? {note: ""} : null, why: "", main: {label: t("wizard.cont"), go: nextSub}})};  // all signed in: nothing to skip (1.8.31)
   }
 
   parts.repos = function (box, opts) {
@@ -600,7 +608,7 @@ const WIZARD = (function () {
       all.hidden = !rows.length; filter.hidden = !rows.length;
       const shownRows = visible();
       if (!rows.length) { put(listBox, el("div", "wz-list", el("div", "wz-empty", t("wizard.r.none")))); count.textContent = ""; opts.changed(); return; }
-      put(listBox, el("div", "wz-list wz-scroll", ...shownRows.map((row) => {
+      const scroller = el("div", "wz-list wz-scroll", ...(shownRows.length ? [] : [el("div", "wz-empty", t("wizard.r.nomatch"))]), ...shownRows.map((row) => {
         const fixed = Boolean(row.in_root);  // found through the repositories folder: it stays while that folder is set, so the box cannot be unticked here
         const on = fixed || M.picks.has(row.path);
         const item = el("div", "wz-li wz-repo" + (fixed ? " fixed" : ""), el("span", "wz-box" + (on ? " on" : ""), on ? "\u2713" : ""), el("div", "wz-main", el("span", "wz-name", row.name), el("div", "wz-where", h("bdi", null, row.shown || row.path)), fixed ? el("div", "wz-where plain", t("wizard.r.inroot")) : null));
@@ -610,7 +618,12 @@ const WIZARD = (function () {
         item.addEventListener("click", flip);
         item.addEventListener("keydown", (event) => { if (event.key === " " || isEnter(event)) { event.preventDefault(); flip(); } });
         return item;
-      })));
+      }));
+      const fade = el("div", "wz-fade", scroller);  // a soft edge at the bottom says there is more to scroll to; it goes at the end of the list (1.8.31)
+      const edge = () => fade.classList.toggle("end", scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 4);
+      scroller.addEventListener("scroll", edge);
+      put(listBox, fade);
+      requestAnimationFrame(edge);
       count.textContent = t("wizard.r.found", {n: rows.length, places: scan.places.join(t("wizard.r.and"))});
       opts.changed();
     }
@@ -630,7 +643,7 @@ const WIZARD = (function () {
     const commit = () => api.setup("save", {part: "repos", paths: [...M.picks], shown: rows.map((row) => row.path)}).then(() => { M.saved.repos = true; opts.next(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
     return {stop() {}, foot: () => {
       const n = M.picks.size;
-      return {back: true, later: {note: t("wizard.v.repo.e")}, why: "", main: {label: n ? t("wizard.r.cont", {n}) : t("wizard.cont"), off: !n, go: commit}};
+      return {back: true, later: {note: t("wizard.v.repo.e")}, why: "", main: {label: n ? t("wizard.r.cont", {n}) : t("wizard.cont"), off: !n, go: commit, minw: 160}};  // the same width with or without the number (1.8.31)
     }};
   };
 
@@ -642,6 +655,7 @@ const WIZARD = (function () {
     function paint() {
       if (!summary) { put(holder, ); return; }
       const ok = summary.rows.filter((row) => row.done), no = summary.rows.filter((row) => !row.done);
+      if (title) title.textContent = t(no.length ? "wizard.v.title.check" : "wizard.v.title");
       const parts = [];
       if (ok.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.done")), el("div", "wz-donegrid", ok.map((row) => el("div", "wz-d", dot("ok"), h("b", null, row.label), el("span", "s", row.detail || ""))))));
       if (no.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.todo")), listOf(no.map((row) => {
@@ -652,7 +666,8 @@ const WIZARD = (function () {
       put(holder, ...parts);
       opts.changed();
     }
-    put(box, ...head(opts, "wizard.s.rev", t("wizard.v.title"), t("wizard.v.sub")), holder, said);
+    put(box, ...head(opts, "wizard.s.rev", t("wizard.v.title.check"), t("wizard.v.sub")), holder, said);
+    const title = box.querySelector("h1");  // "Ready to go" only when nothing is left to set up (1.8.31)
     api.setup("summary").then((found) => { summary = found; paint(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
     const confirm = () => { finishing = true; opts.changed(); said.hidden = true; return api.setup("finish").then(() => { try { sessionStorage.removeItem(KEEP); } catch (error) { /* nothing kept */ } leave(); }, (error) => { finishing = false; said.textContent = errorText(error); said.hidden = false; opts.changed(); }); };
     const lacking = () => (summary ? summary.rows.filter((row) => row.required && !row.done).map((row) => row.label) : []);  // what Confirm needs: the server refuses too (409)
@@ -700,6 +715,7 @@ const WIZARD = (function () {
     const later = foot.later ? link(t("wizard.skip"), foot.laterGo || (() => (M.fromReview ? forward() : go(nextFrom(M.page, 1)))), foot.later.note) : null;  // `laterGo`: a small page of the knowledge base goes on to the next small page, not past all of them
     const main = btn(foot.main.label + " \u2192", "primary" + (foot.main.off ? " off" : ""), () => { if (!foot.main.off) foot.main.go(); });
     if (foot.main.wide) main.style.minWidth = "200px";
+    else if (foot.main.minw) main.style.minWidth = foot.main.minw + "px";
     if (foot.main.off) main.setAttribute("aria-disabled", "true");
     put(shell.footRow, ...(foot.main.wide ? [el("span", "wz-grow"), main, el("span", "wz-grow")] : [back, el("span", "wz-grow"), foot.why ? el("span", "wz-why", foot.why) : null, later, main]));
   }

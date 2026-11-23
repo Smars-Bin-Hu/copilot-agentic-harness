@@ -1,5 +1,5 @@
 // The first-run setup wizard (O2): one page, one question, a bar of six parts on top. The server does the work (modules/task/boardserve.py `/api/setup` steps programs, folder,
-// scan, save, summary, finish, and the old ones); this page shows and sends. Needs common.js (h, t, clock, copyCommand), serve.js (SERVE), dock.js (DOCK: the folder picker), servers.js (SERVERS: the connections window).
+// scan, save, summary, finish, and the old ones); this page shows and sends. Needs common.js (h, t, clock, copyCommand), serve.js (SERVE), readyui.js (READY: dock.js reads it when it loads), dock.js (DOCK: the folder picker), servers.js (SERVERS: the connections window).
 // `?only=programs` and `?only=copilot` draw that one page with a Done button (the Enter screen's fix button). `?fake=1` answers every call from data in the contract's shape, so the page walks end to end with no server
 // work; more parameters pick a state for a picture: page, prog=missing|all|long, cop=idle|code|done, kb=empty|copy|done, kbsub, longname=1, job=0|1, lang, theme, hold=1 (no automatic step forward).
 // Each page's drawing is `WIZARD.parts.<page>(box, opts)`, so the Settings window can draw the same page without the steps (`opts.bare`: no title).
@@ -112,7 +112,7 @@ const WIZARD = (function () {
       folder: (body) => (!String(body.path || "").trim() || /bad$/.test(body.path) ? fail("No " + body.program + " in that folder.") : (F.ghFound = true, programs())),
       short: () => { F.ranHarness = true; return {done: true}; },
       scan: () => ({places: ["~/Developer", "~/source/repos"].slice(0, count ? 2 : 0), rows: F.repos, more: false}),
-      probe: (body) => ({ok: !/bad$/.test(body.path), why: /bad$/.test(body.path) ? "Nothing in it looks like a knowledge base." : "", version: "3.2.0"}),
+      probe: (body) => (/bad$/.test(body.path) ? {ok: false, why: "Nothing in it looks like a knowledge base."} : kbHere() && body.kind === "folder" ? {ok: false, full: true, why: "A knowledge base is in place already, and this folder has no history in common with it."} : {ok: true, why: "", version: "3.2.0"}),
       repo: (body) => ({kind: "repo", name: String(body.path).split(/[\\/]/).pop() || "extra", path: body.path}),
       save: (body) => {
         if (body.part === "kb") { F.kb = "copy"; F.copyAt = Date.now(); F.copyStatic = false; }
@@ -388,13 +388,18 @@ const WIZARD = (function () {
 
     const k = M.kb, drop = {over: false};
     const zone = el("div");
-    function startJob(path, mode) {
+    function startJob(path, mode, replace) {
       k.err = ""; k.step = "copy"; k.a = 0; k.b = 0; k.file = String(path).split(/[\\/]/).pop() || path;
       paint(); opts.changed();
       api.setup("probe", {kind: mode === "package" ? "package" : "folder", path}).then((probe) => {
-        if (!probe.ok) throw new Error(probe.why || "?");
-        return api.setup("save", {part: "kb", kb_mode: mode, kb_path: path, kb_replace: false});
-      }).then(follow, (error) => { k.step = "empty"; k.err = errorText(error); paint(); opts.changed(); });
+        if (probe.full && !replace) {  // a knowledge base is in place already: replacing (or updating) it is the person's choice, said first
+          k.step = "replace"; k.pending = {path, mode, why: probe.why || "", update: probe.update || null};
+          paint(); opts.changed();
+          return null;
+        }
+        if (!probe.ok && !(probe.full && replace)) throw new Error(probe.why || "?");
+        return api.setup("save", {part: "kb", kb_mode: mode, kb_path: path, kb_replace: Boolean(replace)}).then(follow);
+      }).catch((error) => { k.step = "empty"; k.err = errorText(error); paint(); opts.changed(); });
     }
     function follow() {
       if (stopped) return;
@@ -417,6 +422,15 @@ const WIZARD = (function () {
         dropBox.addEventListener("dragleave", () => dropBox.classList.remove("over"));
         dropBox.addEventListener("drop", (event) => { event.preventDefault(); dropBox.classList.remove("over"); k.err = t("wizard.k.nodrop"); paint(); });  // a browser gives no path of a dropped file
         put(zone, dropBox, el("div", "wz-under", t("wizard.k.skipnote")), k.err ? el("p", "wz-err", k.err) : null);
+      } else if (k.step === "replace") {
+        const kb = (M.st && M.st.kb) || {}, ask = k.pending || {};
+        const update = Boolean(ask.update && ask.update.state === "behind");  // a folder that is ahead of this copy updates it (what was changed here stays); any other replaces it (the old one is moved to a backup)
+        const stat = (n, label) => el("div", "wz-stat", el("div", "n", n), el("div", "l", label));
+        put(zone, el("div", "wz-kbcard wz-have", el("div", "wz-eyebrow", t("wizard.k.have")),
+          el("div", "wz-kbhead", h("span", {class: "wz-big-ok", style: "width:36px;height:36px;font-size:17px"}, "\u2713"), h("div", {style: "flex:1;min-width:0"}, el("div", "ttl", (kb.prefix || t("wizard.k.name")) + (kb.version ? " \u00b7 " + kb.version : "")), el("div", "meta", kb.path || ""))),
+          el("div", "wz-stats", stat(kb.domains || 0, t("wizard.k.dom")), stat(kb.domain_skills || 0, t("wizard.k.sk"))),
+          el("p", "wz-sub wz-hv", ask.why || ""), el("p", "wz-sub wz-hv", t(update ? "wizard.k.update.note" : "wizard.k.replace.note")),
+          el("div", "wz-choice", btn(t(update ? "wizard.k.update" : "wizard.k.replace"), "primary", () => startJob(ask.path, ask.mode, true)), link(t("wizard.k.keep"), () => { k.step = kb.here ? "done" : "empty"; k.pending = null; paint(); opts.changed(); }))));
       } else if (k.step === "copy") {
         put(zone, el("div", "wz-kbcard", el("div", "wz-kbhead", spin(), el("div", null, el("div", "ttl", k.file || ""), el("div", "meta", t("wizard.k.copying", {a: k.a, b: k.b || 3})))), el("div", "wz-meter", h("i", {style: "width:" + (k.b ? Math.round(100 * k.a / k.b) : 8) + "%"}))));
       } else {
@@ -436,7 +450,7 @@ const WIZARD = (function () {
     if (k.step === "done" && !M.extras) loadExtras().then(() => { if (!stopped) { opts.rerender(); } });
     return {stop, foot: () => (k.step === "done"
       ? {back: true, later: null, why: "", main: {label: t("wizard.cont"), go: nextSub}, backGo: prevSub}
-      : {back: true, later: later(t("wizard.k.skipnote")), why: "", main: {label: t("wizard.cont"), off: true, go: nextSub}, backGo: prevSub})};
+      : {back: true, later: k.step === "replace" ? null : later(t("wizard.k.skipnote")), why: "", main: {label: t("wizard.cont"), off: true, go: nextSub}, backGo: prevSub})};
   };
 
   function kbPrograms(box, opts, eyebrowText, nextSub, prevSub, stop) {
@@ -483,7 +497,7 @@ const WIZARD = (function () {
     const miss = () => packPrograms().filter((row) => !row.found || row.blocked);
     return {stop() { stopped = true; clearTimeout(timer); stop(); }, foot: () => {
       const rows = miss();
-      return {back: true, backGo: prevSub, later: {note: rows.length ? t("wizard.t.skipnote", {pack: forWho(rows[0]), program: rows[0].program}) : ""}, why: "", main: {label: t("wizard.cont"), off: rows.length > 0, go: nextSub}};
+      return {back: true, backGo: prevSub, later: {note: rows.length ? t("wizard.t.skipnote", {pack: forWho(rows[0]), program: rows[0].program}) : ""}, laterGo: nextSub, why: "", main: {label: t("wizard.cont"), off: rows.length > 0, go: nextSub}};
     }};
   }
 
@@ -621,7 +635,7 @@ const WIZARD = (function () {
     if (!ctl || !shell) return;
     const foot = ctl.foot();
     const back = foot.back ? btn("\u2190 " + t("wizard.back"), "", foot.backGo || backward) : null;
-    const later = foot.later ? link(t("wizard.skip"), () => (M.fromReview ? forward() : go(nextFrom(M.page, 1))), foot.later.note) : null;
+    const later = foot.later ? link(t("wizard.skip"), foot.laterGo || (() => (M.fromReview ? forward() : go(nextFrom(M.page, 1)))), foot.later.note) : null;  // `laterGo`: a small page of the knowledge base goes on to the next small page, not past all of them
     const main = btn(foot.main.label + " \u2192", "primary" + (foot.main.off ? " off" : ""), () => { if (!foot.main.off) foot.main.go(); });
     if (foot.main.wide) main.style.minWidth = "200px";
     if (foot.main.off) main.setAttribute("aria-disabled", "true");

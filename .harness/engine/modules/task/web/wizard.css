@@ -183,3 +183,8 @@ html.lite .wz .wz-spin,html.lite .wz .wz-btn.is-waiting::before{animation:none}@
   .wz-top{padding:18px 20px 0}
   .wz-foot .wz-why{flex-basis:100%;order:-1;text-align:left}
 }
+/* a knowledge base is in place already: the choice to replace (or update) it */
+.wz-have .wz-eyebrow{margin:0 0 12px}
+.wz-have .wz-stats{margin-top:16px;grid-template-columns:repeat(2,minmax(0,140px))}
+.wz-have .wz-hv{margin:14px 0 0;font-size:14px;line-height:1.5}
+.wz-choice{display:flex;align-items:center;flex-wrap:wrap;gap:12px 22px;margin-top:20px}

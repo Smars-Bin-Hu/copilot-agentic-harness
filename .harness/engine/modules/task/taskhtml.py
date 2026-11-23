@@ -189,7 +189,7 @@ def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, An
     serve: set when the board server sends the page (the Gate verdicts get buttons, and a link to save the page).
     Without it the page is a file: it shows the verdicts and has no calls to a server."""
     if serve is not None:
-        return build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh, linked=linked)
+        return build("task.html", ["common.js", "serve.js", "chat.js", "readyui.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "setup.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh, linked=linked)
     return build("task.html", ["common.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
 
 
@@ -221,7 +221,7 @@ SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsaf
 def setup_page(serve: Dict[str, Any], linked: bool = False) -> str:
     """The first-run setup wizard (O2), as the board server sends it. It has no Enter screen: it is where a new copy goes from there.
     setup.css stays for the pieces of the old form that the picker and the connections window still draw (dock.js, servers.js)."""
-    return build("setup.html", ["common.js", "serve.js", "dock.js", "servers.js", "wizard.js"], say("setup.title"), {"serve": serve, "wizard": True}, 0, ["page.css", "setup.css", "wizard.css"], linked)
+    return build("setup.html", ["common.js", "serve.js", "readyui.js", "dock.js", "servers.js", "wizard.js"], say("setup.title"), {"serve": serve, "wizard": True}, 0, ["page.css", "setup.css", "wizard.css"], linked)
 
 
 def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None, linked: bool = False) -> str:

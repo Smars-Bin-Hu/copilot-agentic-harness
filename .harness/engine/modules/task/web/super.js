@@ -1187,9 +1187,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       banner.hidden = !kind;
       if (!kind) { banner.replaceChildren(); return; }
       const text = kind === "sleep" ? t("super.banner.asleep") : kind === "tired" ? t("super.banner.tired", {spent: amount(talk.spent || 0), limit: amount(talk.limit || 0)}) : t("super.banner.none");
-      const open = kind === "sleep" ? h("button", {type: "button", class: "act"}, t("super.banner.open")) : null;
-      if (open) open.addEventListener("click", () => { open.disabled = true; SERVE.openVS().then(() => { setTimeout(() => { open.disabled = false; }, 1500); }, (error) => { open.disabled = false; SERVE.failed(error); }); });
-      banner.replaceChildren(...[h("span", null, text), open].filter(Boolean));
+      banner.replaceChildren(h("span", null, text));
     }
     // Today's Credits of the super agent, for its battery: what is left, and the numbers for the tooltip. Null when it has no limit.
     function costNow() {

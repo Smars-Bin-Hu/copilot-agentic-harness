@@ -1,4 +1,4 @@
-"""H5b: the board's agent host holds the identities the person chose (variables in its environment, a Windows account through netonly), as VS Code opened with identities did."""
+"""H5b, H6: the board's agent host holds every saved identity (variables in its environment, one Windows account through netonly, the main one the person picks)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 import unittest
 from typing import Any, List
+from unittest import mock
 
 from test_agenthost import Base
 from test_connections import ConnectionsCase
@@ -29,31 +30,41 @@ class ChooseTests(ConnectionsCase):
         connections.save(self.root, "db-dev", {"account": "me", "password": PASSWORD})
         connections.save(self.root, "db-win", {"account": "CORP\\svc", "password": PASSWORD})
 
-    def test_nothing_chosen_holds_nothing(self) -> None:
-        self.assertEqual(connections.host_identities(self.root), {"env": {}, "netonly": None, "mark": ""})
-        connections.choose(self.root, [])
-        self.assertEqual(connections.host_identities(self.root)["env"], {})
-
-    def test_variables_of_a_chosen_identity_go_to_the_host_and_the_mark_holds_no_secret(self) -> None:
-        planned = connections.choose(self.root, ["db-dev"])
-        self.assertEqual(planned["direct"], ["db-dev"])
+    def test_every_saved_identity_is_held_by_itself_and_the_mark_holds_no_secret(self) -> None:
+        """H6: nothing to tick: what is saved is held. The variables go to the host; no secret in the mark or the state file."""
         held = connections.host_identities(self.root)
         self.assertEqual(held["env"], {"FAKEDB_USER": "me", "FAKEDB_PASS": PASSWORD})
-        self.assertIsNone(held["netonly"])
+        self.assertEqual(connections.state(self.root)["direct"], ["db-dev", "db-win"])
         self.assertNotIn(PASSWORD, held["mark"])
+        connections.choose(self.root, "db-win")
         self.assertNotIn(PASSWORD, (self.root / connections.STATE_FILE).read_text(encoding="utf-8"))
 
-    def test_a_windows_account_is_the_hosts_account(self) -> None:
-        connections.choose(self.root, ["db-win", "db-dev"], "db-win")
-        held = connections.host_identities(self.root)
+    def test_a_windows_account_is_held_on_windows_only(self) -> None:
+        with mock.patch.object(netonly, "available", return_value=True):
+            held = connections.host_identities(self.root)
         self.assertEqual(held["netonly"], ("CORP\\svc", PASSWORD))
         self.assertIn("CORP\\\\svc", held["mark"])
         self.assertNotIn(PASSWORD, held["mark"])
+        with mock.patch.object(netonly, "available", return_value=False):
+            self.assertIsNone(connections.host_identities(self.root)["netonly"], "off Windows the host starts without it")
+
+    def test_two_windows_accounts_hold_the_main_one_and_wrap_the_other(self) -> None:
+        listed = json.loads((self.root / ".harness" / "policies" / "connections.company.json").read_text(encoding="utf-8"))["connections"]
+        listed["db-win2"] = {"type": "fakedb", "env": "ist", "auth": "win", "host": "db4", "port": "5000"}
+        self.company(listed)
+        connections.save(self.root, "db-win2", {"account": "CORP\\other", "password": PASSWORD})
+        now = connections.state(self.root)
+        self.assertEqual((now["accounts"], now["primary"], now["wrap"]), (["db-win", "db-win2"], "db-win", ["db-win2"]))
+        self.assertEqual(connections.identity_lacks(self.root), ["db-win2"])
+        now = connections.choose(self.root, "db-win2")
+        self.assertEqual((now["primary"], now["wrap"]), ("db-win2", ["db-win"]))
+        self.assertIn("harness as db-win --", next(one["call"] for one in connections.calls(self.root, every=True) if one["alias"] == "db-win"))
 
     def test_an_identity_forgotten_since_is_not_given(self) -> None:
-        connections.choose(self.root, ["db-dev"])
         connections.forget(self.root, "db-dev")
-        self.assertEqual(connections.host_identities(self.root)["env"], {})
+        connections.forget(self.root, "db-win")
+        self.assertEqual(connections.host_identities(self.root), {"env": {}, "netonly": None, "mark": ""})
+        self.assertEqual(connections.state(self.root), {})
 
 
 class HostTests(Base):

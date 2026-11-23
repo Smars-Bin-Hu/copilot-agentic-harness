@@ -269,7 +269,7 @@
         h("div", {class: "name-line"}, kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
           DATA.serve ? h("a", {href: "/task/" + encodeURIComponent(row.name), title: nameTip(row) || row.name}, shownName(row))
             : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/"), title: nameTip(row) || row.name}, shownName(row)) : h("span", {title: nameTip(row) || row.name}, shownName(row)),
-          DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null, Status.links(row.links)),  // a small link icon when the task is linked to tickets (1.7.38)
+          Status.links(row.links)),  // a small link icon when the task is linked to tickets (1.7.38)
         statusLine(row), meta(row)),
       h("td", {class: "state"}, state(row), lateTag(row), warnTag(row) ? [" ", warnTag(row)] : null),
       h("td", {class: "checks col-reviews"}, row.status === "new" ? "-" : checkDots(row)),

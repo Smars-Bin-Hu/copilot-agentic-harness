@@ -297,7 +297,7 @@ def connection_states(root: Path) -> List[Dict[str, Any]]:
         way = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
         tool = conn_core.tool_program(way) if way.get("identity") == "tool" else ""
         signed = conn_core.signed_in(saved, tool, str((raw.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")))  # the same answer as the Connections window: a program that keeps its own sign-in counts as signed when its last check got through (F1 M7)
-        states = [reach.UNKNOWN if line.get("why") == "vscode-env" else line["state"] for line in seen if line["system"] == alias]  # a VS Code started without this computer's settings says nothing of the sign-in: its own row says that
+        states = [line["state"] for line in seen if line["system"] == alias]  # the state of the sign-in: its own row says that
         passed = bool(states) and all(state == reach.OK for state in states) or (not states and signed)
         failed = any(state in (reach.DENIED, reach.FAILED) for state in states)
         state = "ok" if passed else "none" if not signed else "down" if failed else "untested"
@@ -333,14 +333,13 @@ def connections_item(root: Path) -> Dict[str, Any]:
     return out
 
 
-def identity_problem(lacks: List[str], known: bool = True) -> Dict[str, Any]:
-    """(1.7.38, C13 D3-3) The yellow note of the connections row: VS Code runs and was not started with the identity of these connections. Not a line of Required. The agent runs their calls with the saved identity,
-    and Restart VS Code with identities carries them. The board adds it (`ready.Ready.optional`) only while a VS Code is connected: with none, the VS Code line says what to do.
-    `known` False (F1 M8): there is no record of a start from the board, so it is not known whether VS Code carries them; the note says so instead of "lacks"."""
-    key = "ready.p.identity" if known else "ready.p.identity.unknown"
+def identity_problem(lacks: List[str], choosable: bool = False) -> Dict[str, Any]:
+    """(H6) The yellow note of the connections row: the agent host holds every saved identity it can, but not these (it holds another Windows account, or another value of the same variable):
+    the agent reaches them with `harness as`. Not a line of Required. `choosable`: several Windows accounts are saved, so the person may pick which one the host holds (the picker of servers.js)."""
     one = len(lacks) == 1
-    return {"key": "identity", "text": say(key + (".one" if one else ""), n=len(lacks), names=names_text(lacks)), "why": say("ready.p.identity.why" if known else "ready.p.identity.unknown.why"),
-            "short": say(key + ".short" + (".one" if one else ""), n=len(lacks), names=names_text(lacks)), "fix": {}, "names": lacks}
+    fix = {"to": "identities", "label": say("ready.vs.identities")} if choosable else {}
+    return {"key": "identity", "text": say("ready.p.identity" + (".one" if one else ""), n=len(lacks), names=names_text(lacks)), "why": say("ready.p.identity.why"),
+            "short": say("ready.p.identity.short" + (".one" if one else ""), n=len(lacks), names=names_text(lacks)), "fix": fix, "names": lacks}
 
 
 def connections_counted(root: Path) -> Dict[str, Any]:

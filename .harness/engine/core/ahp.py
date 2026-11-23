@@ -1,14 +1,14 @@
 """A small client for the Agent Host Protocol of VS Code (1.6, B71). Python standard library only.
 
-VS Code runs an agent host for its chats. `code agent endpoints` prints where it listens and the token to connect: a unix socket on
-macOS and Linux, a named pipe on Windows. The wire is a WebSocket (one HTTP upgrade, then masked text frames) that carries JSON-RPC 2.0.
+The board starts its own agent host (`code agent host`, 1.8.x: `core.agenthost`), which listens on a local TCP port with a token it was given.
+The wire is a WebSocket (one HTTP upgrade, then masked text frames) that carries JSON-RPC 2.0.
 Everything here comes from what was checked on a real VS Code (macOS, 1.144) and from reading its code.
 
 Rules this module keeps:
 - The token lives in the `Endpoint` object in memory only. It is never printed, logged, stored, or put in an error: `scrub` takes it out of any text.
 - `initialize` carries no `clientInfo`: the host then records the client as `vscode`, and the Agents window shows what we make.
 - `disposeSession` is never called. It deletes the chat's `events.jsonl`. There is no function for it here.
-- Starting `code` takes a second or more on a work PC (virus scan): `endpoints` is read by the one background thread of the board, seldom.
+- Starting `code` takes a second or more on a work PC (virus scan): it is run by the one background thread of the board, seldom.
 - A connection is used by one thread. It is not thread safe.
 """
 
@@ -29,7 +29,7 @@ import sys
 import threading
 import time
 import uuid
-from typing import Any, Callable, Deque, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote, unquote, urlparse
 from . import pace, procrun
 
@@ -190,28 +190,6 @@ class Endpoint:
         return self._token
 
 
-def parse_endpoints(text: str) -> List[Endpoint]:
-    """The editor endpoints of the output of `code agent endpoints`. An output that cannot be read is no endpoint at all."""
-    try:
-        found = json.loads(text).get("endpoints") or []
-    except (ValueError, AttributeError):
-        raise NotReady("cli-failed", "unreadable output") from None
-    out = []
-    for item in found if isinstance(found, list) else []:
-        try:
-            where = item["endpoint"]
-            if item.get("type") != "editor" or not where.get("path") or not item.get("connectionToken"):
-                continue
-            out.append(Endpoint(str(where.get("type") or ""), str(where["path"]), item.get("pid"), str(item.get("instanceId") or ""), str(item["connectionToken"])))
-        except (KeyError, TypeError, AttributeError):
-            continue
-    return out
-
-
-def read_endpoints(code: str) -> List[Endpoint]:
-    return parse_endpoints(run_code(code, ["agent", "endpoints"]))
-
-
 def scrub(text: Any, secret: str = "") -> str:
     """Text that may be shown: the token is taken out of it."""
     out = str(text)
@@ -298,13 +276,15 @@ class Decoder:
                 self.parts, self.first = b"", 0
 
 
-# --- transports: one socket or pipe, read with a wait ------------------------------------------------------------
+# --- transport: one socket, read with a wait ------------------------------------------------------------
 
-class Unix:
+class Tcp:
+    """The board's own standalone agent host (1.8.x, core.agenthost) listens on a local TCP port: `path` is `host:port`."""
+
     def __init__(self, path: str) -> None:
-        self.sock = socket.socket(socket.AF_UNIX)
+        host, _, port = path.rpartition(":")
+        self.sock = socket.create_connection((host.strip("[]") or "localhost", int(port)), timeout=call_timeout())
         self.sock.settimeout(call_timeout())
-        self.sock.connect(path)
 
     def wait(self, timeout: float) -> bool:
         return bool(select.select([self.sock], [], [], max(0.0, timeout))[0])
@@ -322,61 +302,10 @@ class Unix:
             pass
 
 
-class Pipe:
-    """A Windows named pipe, opened as a file. A read that waits would also hold up a write on the same handle, so a read is made only when `PeekNamedPipe` says bytes are there."""
-
-    def __init__(self, path: str) -> None:
-        self.file = open(path, "r+b", buffering=0)
-        self.handle = 0
-        if os.name == "nt":
-            import msvcrt
-
-            self.handle = msvcrt.get_osfhandle(self.file.fileno())
-
-    def available(self) -> int:
-        import ctypes
-        from ctypes import wintypes
-
-        count = wintypes.DWORD(0)
-        if not ctypes.windll.kernel32.PeekNamedPipe(wintypes.HANDLE(self.handle), None, 0, None, ctypes.byref(count), None):
-            raise ConnectionClosed("the pipe is closed")
-        return count.value
-
-    def wait(self, timeout: float) -> bool:
-        end = time.monotonic() + max(0.0, timeout)
-        while True:
-            if self.available():
-                return True
-            if time.monotonic() >= end:
-                return False
-            time.sleep(0.03)
-
-    def read(self) -> bytes:
-        return self.file.read(max(1, min(self.available(), 65536)))
-
-    def write(self, data: bytes) -> None:
-        self.file.write(data)
-
-    def close(self) -> None:
-        try:
-            self.file.close()
-        except OSError:
-            pass
-
-
-class Tcp(Unix):
-    """The board's own standalone agent host (1.8.x, core.agenthost) listens on a local TCP port: `path` is `host:port`."""
-
-    def __init__(self, path: str) -> None:  # noqa: super().__init__ is not called: the socket is made here
-        host, _, port = path.rpartition(":")
-        self.sock = socket.create_connection((host.strip("[]") or "localhost", int(port)), timeout=call_timeout())
-        self.sock.settimeout(call_timeout())
-
-
 def open_transport(endpoint: Endpoint) -> Any:
-    if endpoint.kind == "tcp":
-        return Tcp(endpoint.path)
-    return (Pipe if endpoint.path.startswith("\\\\") or endpoint.kind == "pipe" else Unix)(endpoint.path)
+    if endpoint.kind != "tcp":
+        raise NotReady("cli-failed", "only a TCP endpoint of the board's own agent host is known")
+    return Tcp(endpoint.path)
 
 
 # --- the connection --------------------------------------------------------------------------------------------

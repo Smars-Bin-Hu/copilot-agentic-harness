@@ -114,7 +114,6 @@
 .lb-head .kind-icon{flex:none}
 .lb-name{flex:1 1 auto;min-width:0;font-size:13.5px;font-weight:600;letter-spacing:-.005em;color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 a.lb-name:hover{text-decoration:underline;text-underline-offset:3px}
-.lb-head .vs-btn{flex:none;margin-left:0}
 .lb-state{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:7px}
 .lb-state .tag{max-width:100%}
 .lb-stats{display:flex;gap:0;margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}

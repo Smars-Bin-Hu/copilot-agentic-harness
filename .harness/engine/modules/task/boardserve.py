@@ -34,8 +34,8 @@ Who may do what:
 - Files, settings and taking back (1.6.22): `/api/send` and `/api/steer` take `attachments`; `/api/chatconfig` sets the mode and the tool permission of a chat; `/api/undo` takes the last message out of
   the chat (1.6.99: a turn that runs is stopped first). 1.6.99: `/api/queue` (with `attachments`) puts a message after the running turn, `/api/unqueue` takes one back, `/api/resume` runs a turn
   that ended in an error again. All are paired POSTs only.
-- VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code
-  `vscode.ready` is false: a request gets no error and no wait, and the Enter screen (`ready.py`) does not let a person in. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
+- The agent host (1.6, 1.8.x): one background thread (`vslink`) starts the board's own agent host (`core.agenthost`, no VS Code window), keeps a connection to its chats and a cache; a request
+  only reads the cache. While it is not connected `vscode.ready` is false: a request gets no error and no wait, and the Enter screen (`ready.py`) does not let a person in.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ from . import wallpaper
 from . import superbrain, superdirect, superfacts, superpreview, superroute, superview, taskreopen
 from . import accept, autorun, boardpairs, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
-from . import perfreview, reachcheck, vsrestart
+from . import perfreview, reachcheck
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -316,7 +316,7 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001 - a note must not break the window
         broken = []
     fault = {"file": broken[0]["file"], "problem": str(broken[0]["problem"])[:240], "text": say("connections.list_fault", file=broken[0]["file"], problem=str(broken[0]["problem"])[:240])} if broken else None  # 1.7.38 (C13 FR 3): the list cannot be read: the window says so, and does not call a saved sign-in left over
-    return {"connections": rows, "list_fault": fault, "signins": conn_core.signins(root), "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
+    return {"connections": rows, "list_fault": fault, "signins": conn_core.signins(root), "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "windows": os.name == "nt"}
 
 
 EMBEDDED = re.compile(r"\bElectron/\d")  # the user agent of VS Code's own browser (an Electron app); Chrome, Edge and Firefox never send it
@@ -365,8 +365,6 @@ class Board:
         self.brain = superbrain.Brain(root, self.link, self.rows, served=lambda: self.served)  # 1.8.1: the super agent chat (`/api/super/ask`, `/api/super/talk`)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
         self.ready.started = self.version.split(" ")[0]  # 1.8.23: the release number only (the stamp moves with any edit)
-        self.restarter = vsrestart.Restart(launchenv.vscode_running, self.open_vscode, gone=self.link.hurry, chats=lambda: self.other_chats([]))  # the VS Code button of the screen (1.7.38): quit, wait, open
-        self.ready.restart = self.restarter
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
         self.sweeping = threading.Event()  # set when the server stops: the thread that closes promoted tasks ends
@@ -633,17 +631,8 @@ class Board:
         print(say("serve.did", action="gh " + step, task="-"), flush=True)
         return {key: value for key, value in found.items() if key != "token"}
 
-    def open_vscode(self) -> None:
-        """Bring the VS Code window of this folder forward, started with this computer's settings; the connections are checked at once. Raises the reason when it cannot be asked (`/api/open`, and the end of a restart)."""
-        if not self.link.status().get("ready") and not launchenv.vscode_running():
-            launchenv.mark_started(self.root)  # this start has the settings: what an earlier one lacked no longer holds
-        asked = self.link.open_window()
-        if asked != "queued":
-            raise ValueError(say("serve.open.off") if asked == "off" else say("serve.open.no-cli"))
-        self.checker.start()  # the connections are checked at once, in VS Code's environment, so the Enter screen has a word within seconds (1.7.19)
-
     def working_tasks(self) -> List[str]:
-        """The names of the open tasks whose agent is at work now: the hook log says so and VS Code does not say its chat runs no turn (`idle`), or VS Code says the chat is busy. A restart of VS Code would stop them."""
+        """The names of the open tasks whose agent is at work now: the hook log says so and VS Code does not say its chat runs no turn (`idle`), or VS Code says the chat is busy. A restart of the agent host would stop them."""
         found: List[str] = []
         for task in tasks.folders(self.root):
             data = tasks.read(self.root, task)
@@ -656,8 +645,8 @@ class Board:
         return found
 
     def other_chats(self, working: List[str]) -> List[str]:
-        """The names of the chats VS Code lists as running or waiting for the person that `working_tasks` did not name: VS Code asks about each of them before it quits (`veto.chat`), a chat of a task or not, in any folder.
-        A chat of an open task is named by the task; any other by its title. Said before the restart, so the person is not first met by VS Code's own question."""
+        """The names of the chats the agent host lists as running or waiting for the person that `working_tasks` did not name, a chat of a task or not, in any folder.
+        A chat of an open task is named by the task; any other by its title. The host is restarted only while there is none (`apply_local`)."""
         found: List[str] = []
         for chat in self.link.running_chats():
             name = Path(chat["task"]).name if chat["task"] else chat["title"].strip() or say("restart.chat.untitled")
@@ -1271,7 +1260,7 @@ class Board:
 
     def servers(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Get ready, Servers (1.7.10). `step`: list, test, save (only what passed a test in the last 15 minutes, the same values), forget, share, plan, open
-        (VS Code with the chosen identities; refused while a VS Code of this folder is open: it could not take them). Never a password back to the page."""
+        (H6: the agent host holds every saved identity by itself; `open` picks its Windows account when several are saved, and restarts it once no chat works). Never a password back to the page."""
         import hashlib
 
         step = str(data.get("step", ""))
@@ -1316,14 +1305,15 @@ class Board:
             return conn_core.export(self.root)
         if step == "share":  # into the company pack: the server only, never the identity (knowledge base, Pack for colleagues)
             return conn_core.share(self.root, [str(item) for item in (data.get("aliases") or []) if isinstance(item, str)])
-        chosen = [str(item) for item in (data.get("chosen") or []) if isinstance(item, str)]
-        primary = str(data.get("primary") or "")
-        if step == "plan":
-            return conn_core.plan(self.root, chosen, primary)
-        if step == "open":  # H5b: the board's agent host holds the identities: the choice is kept, and the host is restarted with it once no chat works (`apply_local`)
-            if chosen and os.name != "nt" and conn_core.plan(self.root, chosen, primary)["primary"]:
-                raise ValueError(say("connections.netonly.windows"))
-            made = conn_core.choose(self.root, chosen, primary)
+        if step == "plan":  # H6: what the agent host holds now (every saved identity it can; one Windows account), or with `primary` as its Windows account
+            now = conn_core.state(self.root)
+            wanted = str(data.get("primary") or "")
+            if now and wanted in (now.get("accounts") or []):
+                planned = conn_core.plan(self.root, now["chosen"], wanted)
+                now.update(direct=planned["direct"], wrap=planned["wrap"], primary=planned["primary"])
+            return now
+        if step == "open":  # H6: the Windows account the agent host holds, when several are saved; the host restarts with it once no chat works (`apply_local`)
+            made = conn_core.choose(self.root, str(data.get("primary") or ""))
             host = self.apply_local()
             if host["state"] == "restarted":
                 self.checker.start()  # the connections are checked again, in the host's new environment
@@ -1419,8 +1409,8 @@ class Board:
         return dict(launchenv.state(self.root), vscode_open=bool(self.link.status().get("ready", False)), **({"agent_host": self.apply_local()} if changed else {}))
 
     def setup(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears while VS Code is open, the agent's terminals do not have it yet:
-        the Enter screen waits until VS Code was closed and came back."""
+        """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears, the agent host that runs does not have it on PATH yet:
+        it is marked stale and restarted once no chat works (H6)."""
         step = str(data.get("step", ""))
         if step == "probe":
             kind = str(data.get("kind") or "repos")
@@ -1458,14 +1448,12 @@ class Board:
         if step != "state":
             raise CommandError(say("serve.refused.request"))
         found = core_setup.status(self.root, self.short_now())
-        linked = bool(self.link.status().get("ready"))
         if not found["short"]["found"]:
             self.short_missing = True
         elif self.short_missing:
             self.short_missing = False
-            if linked:
-                self.ready.wait_reopen()
-        return dict(found, reopen=self.ready.still_reopen())
+            self.link.host_outdate()  # H6: the agent host started before the short command was on PATH; the sweep restarts it once no chat works (`apply_local`)
+        return found
 
     def skill(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """A one-click skill (`skillsend.py`): `step` preview or act. The message is made here, each time, from the skill name and the words."""
@@ -1499,7 +1487,6 @@ class Board:
         skillsend.record(self.root, str(data.get("skill")), "chat", done)
         if task:
             self.begin(task, "newchat", pre)
-        self.link.open_window()
         return {"sent": True}
 
     def restart(self) -> Dict[str, Any]:
@@ -2189,38 +2176,10 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"call": {}})
                 have = data.get("have")
                 return self.answer(200, {"live": board.link.live(task_name, str(data.get("rev", ""))[:300], have if isinstance(have, int) and not isinstance(have, bool) else -1)})
-            if path == "/api/open":  # bring the VS Code window of this folder forward: the thread of the link runs `code <folder>`; this answers at once
-                if not board.paired(self.token()):
-                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
-                if not data.get("anyway") and launchenv.extra(board.root) and launchenv.vscode_running() and launchenv.seen(board.root).get("ok") is not True:  # it is running and no chat found it started with the settings: starting it again gives it nothing (1.7.21); the person may still open it (`anyway`, 1.7.29)
-                    return self.answer(409, {"error": say("serve.open.running_env"), "running": True})
-                try:
-                    board.open_vscode()
-                except ValueError as error:
-                    return self.answer(409, {"error": str(error)})
-                return self.answer(200, {"result": {"queued": True}})
-            if path == "/api/restart":  # the VS Code button of the Enter screen (1.7.38): quit the normal way, wait, open again. The paired browser only; never a kill
-                if not board.paired(self.token()):
-                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
-                if str(data.get("step", "")) == "state":
-                    return self.answer(200, {"result": board.restarter.view()})
-                if os.environ.get("TERM_PROGRAM") == "vscode" or os.environ.get("VSCODE_IPC_HOOK_CLI"):  # this board runs in a terminal of VS Code: quitting VS Code would stop it
-                    return self.answer(409, {"error": say("restart.inside"), "inside": True})
-                names = [] if data.get("anyway") else board.working_tasks()
-                chats = [] if data.get("anyway") else board.other_chats(names)
-                if names or chats:
-                    return self.answer(409, {"error": say("restart.busy", names=", ".join(names + chats)), "busy": names, "chats": chats})
-                return self.answer(200, {"result": {"started": board.restarter.start(bool(data.get("open", True)))}})
             if path == "/api/reach":  # the Check button of the outside systems line: the board checks the connections now (the paired browser only)
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 return self.answer(200, {"result": {"started": board.checker.start()}})
-            if path == "/api/launch":  # Windows: start the company's launch script (it asks for the identity itself, then starts VS Code); the paired browser only (1.7.9)
-                if not board.paired(self.token()):
-                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
-                if not reach.run_launch(board.root):
-                    return self.answer(409, {"error": say("serve.launch.none")})
-                return self.answer(200, {"result": {"started": True}})
             if path == "/api/create":  # a chat in VS Code and a task the agent opens: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -2808,8 +2767,6 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
     sync_on_start(root)
-    if ready is None and getattr(link, "running", False) is None:
-        link.running = board.ready.vs_running.get  # 1.8.8: a VS Code window that is open but not reached yet is looked for every few seconds and told as getting ready (the tests keep their own)
     link.start()  # the thread only; the board does not wait for VS Code
     board.space.start()
     board.start_sweeper()  # a promoted task closes by itself, with no page open (1.7.38)
@@ -2822,7 +2779,6 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     serving = threading.Thread(target=server.serve_forever, name="board-serve", daemon=True)
     serving.start()  # 1.7.43: the page is answered as soon as the browser asks; before, the browser opened and waited until the terminal had said its lines
     if ready is None:
-        board.ready.vs_running.get()  # is any VS Code running: the button of the Enter screen says Open or Restart from the first answer
         threading.Thread(target=pace.measure_and_save, args=(root,), name="pace", daemon=True).start()  # 1.8.15: how slow this computer is, for every time limit after it
         board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104); 1.7.43: before the browser is asked to open, not after
 

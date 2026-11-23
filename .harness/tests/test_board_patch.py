@@ -303,43 +303,7 @@ class RefreshSettingTests(HarnessTestCase):
 
 
 @unittest.skipUnless(NODE, "node is not installed")
-class VsButtonTests(unittest.TestCase):
-    SCRIPT = r"""
-const assert = require("assert");
-global.t = (key) => key;
-global.h = (tag, attrs, ...kids) => ({tag, attrs: attrs || {}, kids: kids.flat(Infinity).filter((kid) => kid !== null && kid !== undefined), listeners: {}, addEventListener(name, fn) { this.listeners[name] = fn; }});
-global.document = {createElementNS: (ns, name) => ({ns, name, attrs: {}, kids: [], setAttribute(key, value) { this.attrs[key] = value; }, append(kid) { this.kids.push(kid); }})};
-global.post = () => Promise.resolve({});
-global.failed = () => {};
-"""
-
-    def run_cases(self, cases: str) -> None:
-        source = between((WEB / "serve.js").read_text(encoding="utf-8"), "  const VS_LOGO", "  // Once per page")
-        done = run_node(self.SCRIPT + source + cases)
-        self.assertEqual(done.returncode, 0, done.stderr)
-
-    def test_only_the_logo_is_drawn_and_only_a_missing_code_command_greys_it(self) -> None:
-        self.run_cases(r"""
-const grey = (chat) => vsButton(chat).attrs.disabled === "disabled";
-assert.strictEqual(grey({bound: false, why: "none"}), false, "VS Code not connected: still pressable");
-assert.strictEqual(grey({bound: false, why: "starting"}), false);
-assert.strictEqual(grey({bound: false, why: "lost"}), false);
-assert.strictEqual(grey({bound: false, why: "no-chat"}), false);
-assert.strictEqual(vsButton({bound: false, why: "no-chat"}).attrs.class, "vs-btn no-chat", "VS Code is there, this task has no chat");
-assert.strictEqual(vsButton({bound: false, why: "none"}).attrs.class, "vs-btn", "the link is down: that is another story");
-assert.strictEqual(vsButton({bound: true}).attrs.class, "vs-btn");
-assert.strictEqual(grey({bound: true}), false);
-assert.strictEqual(grey(undefined), false);
-assert.strictEqual(grey({bound: false, why: "no-cli"}), true, "no `code` command found");
-assert.strictEqual(grey({bound: false, why: "off"}), true);
-const button = vsButton({bound: false, why: "none"});
-assert.strictEqual(button.kids.length, 1, "no text beside the logo");
-assert.strictEqual(button.kids[0].name, "svg");
-assert.ok(button.kids[0].kids[0].attrs.d.startsWith("M23.15"), "the VS Code logo, drawn here");
-assert.strictEqual(button.attrs.title, "board.vs.open");
-assert.strictEqual(button.attrs["aria-label"], "board.vs.open");
-assert.strictEqual(vsButton({bound: false, why: "no-cli"}).attrs.title, "board.vs.why.no-cli");
-""")
+class ServeSourceTests(unittest.TestCase):
 
     def test_the_page_never_loads_the_logo_from_the_network(self) -> None:
         source = (WEB / "serve.js").read_text(encoding="utf-8")
@@ -659,9 +623,8 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('if (!desk.commit) parts.push(h("p", {class: "sub"}, t("desk.changes.promote.same")));', part)  # written back: nothing is left to approve
         self.assertIn('else if (plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote"))', part)
 
-    def test_a_task_with_no_chat_says_so_on_the_icon_and_the_pill(self) -> None:
-        serve, shell = (WEB / "serve.js").read_text(encoding="utf-8"), (WEB / "shell.js").read_text(encoding="utf-8")
-        self.assertIn('alone ? " no-chat" : ""', serve)
+    def test_a_task_with_no_chat_says_so_on_the_pill(self) -> None:
+        shell = (WEB / "shell.js").read_text(encoding="utf-8")
         self.assertIn('alone ? "board.vscode.nochat"', shell)
         self.assertIn("SHELL.vsPill(desk.vscode, chat)", (WEB / "desk.js").read_text(encoding="utf-8"))
 
@@ -725,7 +688,6 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('nodes.push(goOnButton(row.name))', (WEB / "board.js").read_text(encoding="utf-8"))
         self.assertIn('CHAT_ACTIONS.includes(item.action) && item.action !== "send"', common)
         self.assertIn("chat: desk.chat, ask: desk.ask", (WEB / "desk.js").read_text(encoding="utf-8"))
-        self.assertIn("link.hidden = !data || !data.bound;", (WEB / "live.js").read_text(encoding="utf-8"))
 
     def test_close_with_open_steps_goes_to_the_agent_and_results_are_sent(self) -> None:
         serve = (WEB / "serve.js").read_text(encoding="utf-8")

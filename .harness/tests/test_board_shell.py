@@ -76,7 +76,6 @@ class PageTests(unittest.TestCase):
 
     def test_the_pill_and_the_buttons_follow_the_one_state(self) -> None:
         css = source("shell.css")
-        self.assertIn("html.vs-down .vs-btn", css)
         self.assertIn("html.vs-down .act.chat-act", css)
         self.assertIn("chat-act", source("common.js"))
         self.assertNotIn("function vsPill", source("board.js"))  # one pill, in shell.js

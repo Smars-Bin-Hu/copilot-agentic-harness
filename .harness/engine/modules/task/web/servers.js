@@ -1,12 +1,11 @@
 // Connections & sign-ins (1.7.10, one window since 1.7.38): the connections of the company and the person's own, in one list, each with its sign-in (the account kept here, or the one a program keeps itself)
-// and a Test that says which step broke. And "Open VS Code with identities", where the person picks which identities this window holds.
+// and a Test that says which step broke. And the main Windows account of the board's agent host (`choose`, H6), when several are saved.
 // The server (`/api/connections`) never sends a password back: a saved one shows as a mark. Needs common.js (h, t), serve.js (SERVE).
 const SERVERS = (function () {
   const ask = (step, body) => SERVE.post("/api/connections", {step, ...(body || {})}).then((data) => data.result);
   const ENV_ORDER = ["dev", "ist", "qat", "prod"];
   const MARK = {ok: "✓", denied: "✗", down: "✗", failed: "✗", missing: "✗", mcp: "\u2192"};
   const keep = (key, value) => { try { localStorage.setItem("harness.servers." + key, JSON.stringify(value)); } catch (error) { /* a convenience only */ } };
-  const kept = (key, fallback) => { try { const found = localStorage.getItem("harness.servers." + key); return found ? JSON.parse(found) : fallback; } catch (error) { return fallback; } };
 
   const field = (caption, input) => h("label", {class: "sv-field"}, h("span", {class: "sv-cap"}, caption), input);  // a field keeps its name once it is filled
   function envChip(env) { return env === "none" ? null : h("span", {class: "sv-env sv-env-" + env}, env.toUpperCase()); }  // env none: no chip at all (the rule since 1.7.19)
@@ -361,79 +360,50 @@ const SERVERS = (function () {
       rows: found.connections.filter((row) => row.via !== "mcp" && (!row.type || row.known)).map((row) => ({alias: row.alias, saved: Boolean(row.signed), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || "", failed: Boolean(row.saved) && (row.reach === "denied" || row.reach === "failed")}))}));
   }
 
-  // The identities of the board's agent host (H5b; before, "Open VS Code with identities"): tick the identities it holds; those that cannot share it are reached through `harness as`, marked so.
-  // `before`: a function that closes the VS Code that runs (1.7.38, readyui.js `vsAct`); it runs after the person pressed the button, never before: a window that is cancelled changes nothing.
-  // `plain` (1.7.42): with no VS Code running, the window is the first step of Open; its "Open without identities" closes the window and opens VS Code without any.
-  function choose(opened, before, plain) {  // `opened`: what the page does once VS Code was started with the identities (the Enter screen waits for it, 1.7.19)
+  // The main Windows account of the board's agent host (H6). The host holds every saved identity by itself; a host holds one Windows account only, so when several are saved the person
+  // picks the one it holds, and the others go through `harness as` (marked so). `done`: what the page does once the choice is kept (the host restarts once no chat works).
+  function choose(done) {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const said = h("p", {class: "sub sv-plan"});
-    const running = h("p", {class: "bad sv-plan", hidden: ""}, t("connections.open.running"));  // its own line: the plan does not write over it
-    const closing = h("p", {class: "sub sv-plan", hidden: ""}, t("connections.open.restart.note"));  // with `before`: a VS Code that is open is closed first, the normal way
-    const go = h("button", {type: "button", class: "act hot", disabled: ""}, t(before ? "connections.open.restart" : "connections.open.go"));
+    const go = h("button", {type: "button", class: "act hot", disabled: ""}, t("connections.open.go"));
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-    const bare = plain ? h("button", {type: "button", class: "act"}, t("connections.open.plain")) : null;
-    const primaryNote = h("p", {class: "sub sv-plan", hidden: ""}, t("connections.primary.note"));  // (1.7.39) shown with the "window's account" choice: one Windows account per window, what `harness as` does for the others
-    const view = SERVE.dialog([h("h2", null, t("connections.open.title")), h("p", {class: "sub"}, t("connections.open.lead")), h("div", {class: "win-body"}, list, primaryNote, said, running, closing), h("div", {class: "row win-foot"}, go, bare, close)]);
+    const view = SERVE.dialog([h("h2", null, t("connections.open.title")), h("p", {class: "sub"}, t("connections.open.lead")), h("div", {class: "win-body"}, list, said), h("div", {class: "row win-foot"}, go, close)]);
     view.box.classList.add("wide", "sv-win");
-    let rows = [], picked = kept("chosen", null), primary = kept("primary", ""), found0 = null;
+    let rows = [], primary = "";
     const marks = {};
     const replan = () => {
-      const chosen = rows.filter((row) => picked.includes(row.alias)).map((row) => row.alias);
-      keep("chosen", picked); keep("primary", primary);
-      const blocked = false;  // H5b: the board's agent host takes the identities at its restart; a running one is never a reason to wait
-      go.disabled = !chosen.length || blocked || Boolean(go.dataset.busy);
-      go.title = blocked ? t("connections.open.running") : !chosen.length ? t("connections.open.none") : "";
-      if (!chosen.length) { Object.values(marks).forEach((node) => node.replaceChildren()); said.replaceChildren(); return; }
-      ask("plan", {chosen, primary}).then((plan) => {
+      go.disabled = !primary || Boolean(go.dataset.busy);
+      ask("plan", {primary}).then((plan) => {
         for (const row of rows) {
-          const node = marks[row.alias];
-          if (!picked.includes(row.alias) || found0.env_wrong) { node.replaceChildren(); continue; }  // a VS Code started without this computer's settings holds none of them: "in the window" would be false (1.7.24)
-          const wrapped = plan.wrap.includes(row.alias);
-          node.replaceChildren(h("span", {class: "sv-how " + (wrapped ? "wrap" : "direct"), title: wrapped ? t("connections.how.wrap.tip", {alias: row.alias}) : t("connections.how.direct.tip")}, wrapped ? t("connections.how.wrap") : t("connections.how.direct")));
+          const wrapped = (plan.wrap || []).includes(row.alias);
+          marks[row.alias].replaceChildren(h("span", {class: "sv-how " + (wrapped ? "wrap" : "direct"), title: wrapped ? t("connections.how.wrap.tip", {alias: row.alias}) : t("connections.how.direct.tip")}, wrapped ? t("connections.how.wrap") : t("connections.how.direct")));
         }
-        said.replaceChildren(plan.wrap.length ? t("connections.plan.wrap", {n: plan.wrap.length}) : "");
+        said.replaceChildren((plan.wrap || []).length ? t("connections.plan.wrap", {n: plan.wrap.length}) : "");
       });
     };
-    ask("list").then((found) => {
-      found0 = found;
-      rows = found.connections.filter((row) => row.saved).sort((a, b) => ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
-      if (picked === null) picked = rows.map((row) => row.alias);
-      picked = picked.filter((alias) => rows.some((row) => row.alias === alias));
-      const windowsAccounts = rows.filter((row) => row.identity === "netonly");
+    Promise.all([ask("list"), ask("plan", {})]).then(([found, now]) => {
+      const accounts = now.accounts || [];
+      rows = found.connections.filter((row) => row.saved && (now.chosen || []).includes(row.alias)).sort((a, b) => ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
+      primary = now.primary || accounts[0] || "";
       list.replaceChildren(...(rows.length ? rows.map((row) => {
-        const box = h("input", {type: "checkbox"});
-        box.checked = picked.includes(row.alias);
-        box.addEventListener("change", () => { picked = box.checked ? [...picked, row.alias] : picked.filter((alias) => alias !== row.alias); replan(); });
-        const star = row.identity === "netonly" && windowsAccounts.length > 1 ? h("input", {type: "radio", name: "sv-primary", title: t("connections.primary.tip")}) : null;
+        const star = accounts.includes(row.alias) ? h("input", {type: "radio", name: "sv-primary", title: t("connections.primary.tip")}) : null;
         if (star) { star.checked = primary === row.alias; star.addEventListener("change", () => { primary = row.alias; replan(); }); }
         marks[row.alias] = h("span", {class: "sv-mark"});
         return h("label", {class: "sv-line sv-pick", title: [row.label, row.type_label + " · " + row.auth_label, where(row)].filter(Boolean).join("\n")},
-          box, envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.account), star ? h("span", {class: "sv-primary"}, star, t("connections.primary")) : null, marks[row.alias]);
+          star || h("span", {class: "sv-nostar"}), envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.account), marks[row.alias]);
       }) : [h("p", {class: "sub"}, t("connections.open.nothing"))]));
-      primaryNote.hidden = windowsAccounts.length < 2;
-      running.hidden = true;
-      closing.hidden = !found.vscode_open;  // H5b: `vscode_open` is the board's link to its agent host: it runs, and restarts with the choice
       replan();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     go.addEventListener("click", () => {
       go.disabled = true; go.dataset.busy = "1";
-      if (bare) bare.disabled = true;  // VS Code is opening with the ticked identities: no second open
-      if (before) close.disabled = true;  // once VS Code is on its way out there is no way back
-      const free = () => { delete go.dataset.busy; close.disabled = false; if (bare) bare.disabled = false; go.disabled = !picked.length; };
-      (before ? before((view) => { if (typeof READY !== "undefined") said.replaceChildren(READY.restartNote(view)); }) : Promise.resolve()).then(() => ask("open", {chosen: picked, primary})).then((done) => {
-        said.replaceChildren(done.started ? t("connections.open.started", {n: done.direct.length + done.wrap.length}) : h("span", {class: "bad"}, done.why || ""));
-        if (done.started) { if (opened) opened(); close.disabled = false; setTimeout(view.close, 2500); } else free();
-      }, (error) => { said.replaceChildren(error && error.quiet ? "" : h("span", {class: "bad"}, (error && error.message) || String(error))); free(); });  // the person said no to the question about a working agent: VS Code was not touched
+      ask("open", {primary}).then((answer) => {
+        said.replaceChildren(answer.started ? t("connections.open.started", {n: (answer.direct || []).length}) : h("span", {class: "bad"}, answer.why || ""));
+        delete go.dataset.busy;
+        if (done) done();
+        if (answer.started) setTimeout(view.close, 2500); else go.disabled = false;
+      }, (error) => { said.replaceChildren(h("span", {class: "bad"}, (error && error.message) || String(error))); delete go.dataset.busy; go.disabled = false; });
     });
     close.addEventListener("click", view.close);
-    if (bare) bare.addEventListener("click", () => {  // H5b: no identities: the agent host restarts holding none
-      if (go.dataset.busy) return;
-      bare.disabled = true; go.disabled = true;
-      ask("open", {chosen: [], primary: ""}).then((done) => {
-        said.replaceChildren(done.started ? t("connections.open.started", {n: 0}) : h("span", {class: "bad"}, done.why || ""));
-        if (done.started) { if (opened) opened(); setTimeout(view.close, 2500); } else { bare.disabled = false; go.disabled = !picked.length; }
-      }, (error) => { said.replaceChildren(h("span", {class: "bad"}, (error && error.message) || String(error))); bare.disabled = false; go.disabled = !picked.length; });
-    });
   }
 
   return {open, connectionsPanel, choose, summary};

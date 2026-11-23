@@ -688,20 +688,6 @@ def widen(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _carried(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str]) -> bool:
-    """Must the identity of this connection be in the environment of the VS Code window (variables, or a Windows account the window holds)? A program that reads its own sign-in or token (`ado`: a `tool`
-    identity) needs nothing from the window, and neither does a connection with no identity saved. (1.7.38, C13 D3-3; one answer for `identity_lacks` and `calls`.)"""
-    how = delivery(kind, server)["identity"]
-    if how == "tool" or not identity:
-        return False
-    return how == "netonly" or bool(variables(kind, server, identity))
-
-
-def window_known(root: Path) -> bool:
-    """Is there a record of the last VS Code the board started (`state`)? Without it nobody knows what the window carries: a VS Code the person started by hand, or before the board's first start (1.7.38, F1 M8)."""
-    return bool(state(root))
-
-
 def serving(root: Path, system: Dict[str, Any]) -> List[str]:
     """The connections a system that is not a connection belongs to (1.7.38, C13 F2 U1): a tool pack's own system (`ado-web`, a web call to an Azure DevOps address) is reached with the identity of a connection of its type
     (`reach.also.type`), or else of the tool pack that wrote it. `[]` when it is no one's."""
@@ -716,25 +702,18 @@ def serving(root: Path, system: Dict[str, Any]) -> List[str]:
 
 def calls(root: Path, every: bool = False) -> List[Dict[str, Any]]:
     """How the agent reaches each server: `[{alias, env, call}]`, `call` being the server's test command (no password in it), with `harness as <alias> --`
-    before it when this window reaches the server through the prefix. Only the servers the window was opened with, when it was opened from the board. With `every` (1.7.38) the others
-    too, each with `away: True` and the prefix: `harness as` runs any connection that has a saved identity, whether or not the window was opened with it.
-    With no record of a start from the board (F1 M8) it is not known what the window carries: a connection whose identity must be in the window has `unknown: True` and the prefix too (it works either way),
-    and is never left out."""
-    known, env, opened = types(root), read_env(root), state(root)
-    wrapped, held = set(opened.get("wrap") or []), set(opened.get("direct") or []) | set(opened.get("wrap") or [])
+    before it when the agent host does not hold its identity (H6: it holds every saved one it can; a second Windows account goes through the prefix). `every` is kept for the callers: all are listed."""
+    known, env = types(root), read_env(root)
+    wrapped = set(state(root).get("wrap") or [])
     out = []
     for alias, server in listed(root).items():
         kind = known.get(str(server.get("type")))
         if not kind or kind.get("via") == "mcp" or type_problems(kind) or server.get("env") not in ENVS:
             continue
-        away = bool(held) and alias not in held
-        if away and not every:
-            continue
         identity = identity_of(env, alias, kind, server)
-        unsure = not opened and _carried(kind, server, identity)
         call = command(kind, server, identity, alias)
-        prefixed = alias in wrapped or away or unsure
-        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if prefixed else call, "how": (f"harness as {alias} -- " if prefixed else "") + call_line(kind, server, alias), **({"away": True} if away else {}), **({"unknown": True} if unsure else {})})
+        prefixed = alias in wrapped
+        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if prefixed else call, "how": (f"harness as {alias} -- " if prefixed else "") + call_line(kind, server, alias)})
     return out
 
 
@@ -803,19 +782,8 @@ FIND_LIMIT = 5
 
 
 def window_aliases(root: Path) -> List[str]:
-    """Every connection the agent may reach (1.7.38, C12 FB-3): the ones this window was opened with and the others, which work through `harness as`. Layer 0 (the kinds and counts at the start of
-    a chat) and layer 1 (`find`) both read this list, so they agree (C12 TB-07); `away_aliases` says which are not in the window."""
+    """Every connection the agent may reach (1.7.38, C12 FB-3). Layer 0 (the kinds and counts at the start of a chat) and layer 1 (`find`) both read this list, so they agree (C12 TB-07)."""
     return [one["alias"] for one in calls(root, every=True)]
-
-
-def unknown_aliases(root: Path) -> List[str]:
-    """The connections whose identity must be in the VS Code window when it is not known what the window carries (no record of a start from the board, F1 M8): they are reached with `harness as <alias> -- <command>`, which works either way."""
-    return [one["alias"] for one in calls(root, every=True) if one.get("unknown")]
-
-
-def away_aliases(root: Path) -> List[str]:
-    """The connections VS Code was not opened with (it was opened from the board, and these were left out, or signed in after): they are reached with `harness as <alias> -- <command>`."""
-    return [one["alias"] for one in calls(root, every=True) if one.get("away")]
 
 
 def find(root: Path, text: str, limit: int = FIND_LIMIT, aliases: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -1091,21 +1059,9 @@ def keep_untested(root: Path, alias: str, found: Dict[str, Any], given: Dict[str
 
 
 def identity_lacks(root: Path) -> List[str]:
-    """(1.7.38, C13 D3-3) The connections whose identity must be in the environment of the VS Code window (variables, or a Windows account the window holds) and that the window was not started with: it is
-    saved here, and the last start from the board did not carry it (`direct`) nor route it through `harness as` (`wrap`). Such a connection is no reason for VS Code to be "wrong": the agent reaches it
-    with `harness as`, and Restart with identities carries it. A connection whose program reads its own sign-in or token (`ado`: a `tool` identity, or a token the program reads itself) needs nothing from the window and
-    is not listed. Names, in the order of the list."""
-    opened = state(root)
-    held = set(opened.get("direct") or []) | set(opened.get("wrap") or [])
-    known, env = types(root), read_env(root)
-    out: List[str] = []
-    for alias, server in listed(root).items():
-        kind = known.get(str(server.get("type")))
-        if not kind or alias in held or kind.get("via") == "mcp" or not kind.get("cli") or type_problems(kind):
-            continue
-        if _carried(kind, server, identity_of(env, alias, kind, server)):
-            out.append(alias)
-    return out
+    """(H6) The connections whose saved identity the agent host cannot hold because it holds another Windows account (`state` "wrap"): the agent reaches them with `harness as`.
+    The person may pick which Windows account the host holds (`choose`). Names, in the order of the list."""
+    return list(state(root).get("wrap") or [])
 
 
 def forget_tool(root: Path, program: str) -> None:
@@ -1216,12 +1172,32 @@ def forget(root: Path, alias: str) -> None:
 # --- one window, several identities -----------------------------------------------------------------------------------------------------------------------
 
 def state(root: Path) -> Dict[str, Any]:
-    """The identities of the VS Code that was opened last from the board: `{at, direct, wrap, primary}`."""
-    try:
-        found = json.loads((root / STATE_FILE).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    """(H6) The identities the board's agent host holds, worked out from what is saved now: every saved identity it can hold (`window_held`), one Windows account
+    (the `primary` the person picked, else the first). `{chosen, direct, wrap, primary, accounts}`; `accounts`: the connections with a Windows account, one per account. Empty when none is saved."""
+    held = window_held(root)
+    if not held:
         return {}
-    return found if isinstance(found, dict) else {}
+    try:
+        kept = json.loads((root / STATE_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        kept = {}
+    primary = str(kept.get("primary") or "") if isinstance(kept, dict) else ""
+    planned = plan(root, held, primary if primary in held else "")
+    return {"chosen": held, "direct": planned["direct"], "wrap": planned["wrap"], "primary": planned["primary"], "accounts": windows_accounts(root, held)}
+
+
+def windows_accounts(root: Path, aliases: List[str]) -> List[str]:
+    """Of `aliases`, the first connection of each different Windows account (netonly), in order. More than one: the host can hold one of them only."""
+    servers, known, env = listed(root), types(root), read_env(root)
+    seen: Dict[str, str] = {}
+    for alias in aliases:
+        kind = known.get(str((servers.get(alias) or {}).get("type")))
+        if not kind or delivery(kind, servers[alias])["identity"] != "netonly":
+            continue
+        account = str(identity_of(env, alias, kind, servers[alias]).get("account") or "").lower()
+        if account and account not in seen:
+            seen[account] = alias
+    return list(seen.values())
 
 
 def window_held(root: Path) -> List[str]:
@@ -1271,58 +1247,29 @@ def plan(root: Path, chosen: List[str], primary: str = "") -> Dict[str, Any]:
     return {"direct": direct, "wrap": wrap, "missing": missing, "primary": next((alias for alias in direct if delivery(known[servers[alias]["type"]], servers[alias])["identity"] == "netonly"), "")}
 
 
-def launch(root: Path, chosen: List[str], primary: str, code_argv: List[str]) -> Dict[str, Any]:
-    """Open VS Code with the chosen identities and keep which are wrapped for its chat. The caller made sure no VS Code of this folder is open."""
-    planned = plan(root, chosen, primary)
-    servers, known, env = listed(root), types(root), read_env(root)
-    from . import launchenv  # it reads this module's .env
-
-    extra: Dict[str, str] = launchenv.extra(root)  # tool folders and the CA bundle (1.7.11)
-    for alias in planned["direct"]:
-        kind, server = known[servers[alias]["type"]], servers[alias]
-        extra.update(variables(kind, server, identity_of(env, alias, kind, server)))
+def choose(root: Path, primary: str = "") -> Dict[str, Any]:
+    """(H6) Keep which Windows account the board's agent host holds when several are saved (`primary`, a connection's name; "" for the first). Every other saved identity is held
+    by itself (`state`). The host gets it at its next start: the board restarts it once no chat works."""
     target = root / STATE_FILE
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps({"at": utc_now(), "direct": planned["direct"], "wrap": planned["wrap"], "primary": planned["primary"]}, indent=2), encoding="utf-8")
-    argv = (["cmd.exe", "/c", *code_argv] if os.name == "nt" and str(code_argv[0]).lower().endswith((".cmd", ".bat")) else code_argv)
-    if planned["primary"]:
-        identity = identity_of(env, planned["primary"], known[servers[planned["primary"]]["type"]])
-        try:
-            if not netonly.start(identity["account"], identity["password"], argv, root, extra):
-                return {**planned, "started": False, "why": say("connections.netonly.windows")}
-        except OSError as error:  # (1.7.39) Windows refused to start VS Code with the account: said in words, with its number
-            return {**planned, "started": False, "why": say("connections.netonly.failed", account=identity["account"], error=" ".join(str(error).split())[:200])}
-    else:
-        subprocess.Popen(argv, cwd=str(root), env={**os.environ, **extra}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,  # noqa: S603
-                         start_new_session=os.name != "nt", close_fds=True)
-    return {**planned, "started": True}
-
-
-def choose(root: Path, chosen: List[str], primary: str = "") -> Dict[str, Any]:
-    """H5b: keep which identities the board's agent host holds (the same plan as `launch`): the host gets them at its next start (`host_identities`). An empty choice holds none."""
-    planned = plan(root, chosen, primary) if chosen else {"direct": [], "wrap": [], "missing": [], "primary": ""}
-    target = root / STATE_FILE
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps({"at": utc_now(), "chosen": list(chosen), "direct": planned["direct"], "wrap": planned["wrap"], "primary": planned["primary"]}, indent=2), encoding="utf-8")
-    return planned
+    target.write_text(json.dumps({"at": utc_now(), "primary": str(primary or "")}, indent=2), encoding="utf-8")
+    return state(root)
 
 
 def host_identities(root: Path) -> Dict[str, Any]:
-    """H5b: what the board's agent host is started with for the identities chosen last (`choose`): `env` (the variables of those it holds itself), `netonly` ((account, password)
+    """H5b, H6: what the board's agent host is started with for the identities it holds (`state`: every saved one it can, one Windows account): `env` (the variables of those it holds itself), `netonly` ((account, password)
     of the Windows account it is started with, or None) and `mark` (which ones, never a secret: a change of the choice or of the account makes the running host stale).
     Planned again from what is saved now: an identity forgotten since is not given."""
-    kept = state(root)
-    chosen = [str(alias) for alias in kept.get("chosen") or []]
-    if not chosen:
+    planned = state(root)
+    if not planned:
         return {"env": {}, "netonly": None, "mark": ""}
-    planned = plan(root, chosen, str(kept.get("primary") or ""))
     servers, known, env = listed(root), types(root), read_env(root)
     variables_out: Dict[str, str] = {}
     for alias in planned["direct"]:
         kind, server = known[servers[alias]["type"]], servers[alias]
         variables_out.update(variables(kind, server, identity_of(env, alias, kind, server)))
     account: Optional[Tuple[str, str]] = None
-    if planned["primary"]:
+    if planned["primary"] and netonly.available():  # a Windows account is held on Windows only (netonly); elsewhere the host starts without it
         identity = identity_of(env, planned["primary"], known[servers[planned["primary"]]["type"]])
         if identity.get("account") and identity.get("password"):
             account = (str(identity["account"]), str(identity["password"]))

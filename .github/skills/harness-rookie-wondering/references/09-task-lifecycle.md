@@ -54,7 +54,7 @@ The board gives a task one state, the first that holds:
 | paused | You put it aside | `task resume`, or just talk to its session |
 | working | A session holds it, made a hook call in the last 5 minutes and has not stopped (even if the plan it just wrote already waits for you) | Nothing; every button is grey until it stops |
 | waiting for you | A plan, a write-back, a decision on checks, test results, a held call, work to accept (*to accept*) or a word after a stop is yours, and the agent has stopped or sits in its wait | Do it (the reason is on the tag) |
-| quiet | A session holds it, but 5 minutes with no call and no stop | Look at the VS Code window; if it is closed, open a session and name the task |
+| quiet | A session holds it, but 5 minutes with no call and no stop | A long step may run, or the agent host restarted; if so, open a session and name the task |
 | no session | Nothing waits for you and nothing holds it | Open a session and name the task, or close it |
 
 ### Closing is your acceptance

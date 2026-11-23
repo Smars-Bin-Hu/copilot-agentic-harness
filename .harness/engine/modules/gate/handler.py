@@ -21,7 +21,7 @@ import json
 import os
 import re
 
-from core import autorunfiles, calls, govern, launchenv, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
+from core import autorunfiles, calls, govern, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
 from core import systems as systems_mod
 from core.paths import board_serve_port
 from core.context import Context
@@ -602,8 +602,6 @@ def watch_reach(event: HookEvent, ctx: Context) -> None:
     """Can the agent reach each environment from VS Code (core.reach, 1.7.9)? The hook runs in VS Code's identity: at the start of a chat it starts the
     pack's probes in a process of their own (the chat does not wait); after a call of a listed system it reads what the terminal printed. Never stops anything."""
     try:
-        if event.event == "SessionStart":
-            launchenv.note_seen(ctx.root)  # the hook has the environment VS Code was started with (1.7.21)
         listed = ctx.policy("tools").get("systems") or {}
         if not listed or external.validate(listed):
             return
@@ -672,7 +670,7 @@ def owned_names(event: HookEvent, ctx: Context) -> set:
 
 
 def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any]]) -> Optional[Decision]:
-    """A server whose identity this window does not hold is reached through `harness as <alias> --` (1.7.10): a call without it, or with another alias, is refused with the line to run."""
+    """A server whose identity the agent host does not hold is reached through `harness as <alias> --` (1.7.10): a call without it, or with another alias, is refused with the line to run."""
     if not judged or judged["action"].zone in ("unpinned", "blocked"):
         return None
     alias = judged["action"].system
@@ -693,8 +691,8 @@ def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any
 
 
 def wrapped_context(ctx: Context) -> Optional[Decision]:
-    """At the start of a chat: one line with the kinds of connection and how many of each (1.7.38; before it listed every name), all of them (C12 FB-3), and which go through `harness as`:
-    the ones the window holds by the prefix, and how many the window was not opened with (they work through the prefix too; `harness connections find` marks them).
+    """At the start of a chat: one line with the kinds of connection and how many of each (1.7.38; before it listed every name), all of them (C12 FB-3), and which go through `harness as`
+    (H6: the agent host holds every saved identity it can; a second Windows account goes through the prefix).
     The connection a task needs is found with `harness connections find` (layer 1); its details come when a prompt names it (`named_servers`) or at the first call that reaches it (`first_reach`)."""
     try:
         found = connections.calls(ctx.root, every=True)
@@ -702,20 +700,8 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
         found = []
     wrapped = connections.state(ctx.root).get("wrap") or []
     parts = [rules.say("connections.kinds.context", kinds=connections.kind_counts(ctx.root, [one["alias"] for one in found]))] if found else []  # layer 0 (1.7.38): kinds and counts, not names
-    away = [one for one in found if one.get("away")]
-    if away:
-        parts.append(rules.say("connections.away.context", n=len(away)))
-    unsure = [one for one in found if one.get("unknown")]
-    if unsure:  # no record of a start from the board: it is not known what the window carries (F1 M8)
-        parts.append(rules.say("connections.unknown.context", n=len(unsure)))
     if wrapped:
         parts.append(rules.say("connections.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
-    try:
-        lacks = launchenv.seen(ctx.root)
-        if lacks.get("ok") is False and lacks.get("missing"):
-            parts.append(rules.say("reach.vscode_env.context", missing=", ".join(str(item) for item in lacks["missing"][:6])))
-    except Exception:  # noqa: BLE001
-        pass
     return Decision(context="\n".join(parts)) if parts else None
 
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import threading
 import time
 import unittest
 from unittest import mock
@@ -16,7 +15,7 @@ from test_ahp import FakeHost, TOKEN
 from test_boardserve import ServeCase
 
 from core import ahp, tasks
-from modules.task import boardserve, chatlink, chatstream, task as task_ops, tasklife, tasksub, vslink
+from modules.task import chatlink, chatstream, task as task_ops, tasklife, tasksub, vslink
 
 
 def until(check: Callable[[], Any], seconds: float = 10.0) -> Any:
@@ -675,108 +674,6 @@ class NotReadyTests(LinkCase):
         state["fail"] = False
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
 
-    def test_the_link_knows_the_process_of_the_host_it_is_connected_to_and_forgets_it_when_it_is_not(self) -> None:
-        """1.7.38 (Q2): the board reads the environment of that process before any chat."""
-        state = {"fail": True}
-        real = self.open_host
-
-        def opener() -> ahp.Connection:
-            if state["fail"]:
-                raise ahp.NotReady("none")
-            link = real()
-            link.pid = 4711  # `ahp.connect` sets it from the endpoint
-            return link
-
-        self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, backoff=ahp.Backoff(0.05, 0.1))
-        self.addCleanup(self.link.stop)
-        self.assertIsNone(self.link.host())
-        self.link.start()
-        self.assertTrue(until(lambda: self.link.status()["why"] == "none"))
-        self.assertIsNone(self.link.host(), "not connected: no process")
-        state["fail"] = False
-        self.assertTrue(until(lambda: self.link.status()["ready"]))
-        self.assertEqual(self.link.host(), 4711)
-
-    def test_opening_vs_code_from_the_board_makes_the_link_look_every_second_not_after_the_grown_wait(self) -> None:
-        """1.7.19: while no window was open the wait between two looks had grown (3, 6 ... 60 s): after Open VS Code the Enter screen stayed red up to a minute."""
-        state = {"fail": True, "calls": 0}
-        real = self.open_host
-
-        def opener() -> ahp.Connection:
-            state["calls"] += 1
-            if state["fail"]:
-                raise ahp.NotReady("none")
-            return real()
-
-        slow = ahp.Backoff(30.0, 60.0)
-        self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, backoff=slow)
-        self.addCleanup(self.link.stop)
-        self.link.start()
-        self.assertTrue(until(lambda: self.link.status()["why"] == "none"))
-        self.assertEqual(state["calls"], 1)  # then it waits 30 s
-        state["fail"] = False
-        self.link.hurry()
-        self.assertTrue(until(lambda: self.link.status()["ready"], 5), self.link.status())  # at once, not after the wait
-
-    def test_an_open_vs_code_window_makes_the_link_look_often_and_says_how_long_it_waited(self) -> None:
-        """1.8.8: VS Code opened by hand while the wait had grown: its host came a minute after the window, and the board said "not open" up to a minute after that."""
-        state = {"fail": True, "calls": 0, "window": False}
-        real = self.open_host
-
-        def opener() -> ahp.Connection:
-            state["calls"] += 1
-            if state["fail"]:
-                raise ahp.NotReady("none")
-            return real()
-
-        with mock.patch.object(vslink, "OPEN_EVERY", 0.2), mock.patch.object(vslink, "WINDOW_EVERY", 0.1):
-            self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, backoff=ahp.Backoff(30.0, 60.0), running=lambda: state["window"])
-            self.addCleanup(self.link.stop)
-            self.link.start()
-            self.assertTrue(until(lambda: self.link.status()["why"] == "none"))
-            time.sleep(0.6)
-            self.assertEqual(state["calls"], 1)  # no window: the grown wait (30 s) holds
-            self.assertNotIn("open_for", self.link.status())
-            state["window"] = True  # opened by hand: not by the board, so no hurry
-            self.assertTrue(until(lambda: state["calls"] >= 3, 3), state)  # the long wait ended, then a look every OPEN_EVERY
-            self.assertIn("open_for", self.link.status())
-            state["fail"] = False  # its host is up
-            self.assertTrue(until(lambda: self.link.status()["ready"], 3), self.link.status())
-            self.assertNotIn("open_for", self.link.status())
-            self.assertEqual(self.link.open_at, 0.0)
-
-    def test_a_window_is_seen_while_code_agent_endpoints_hangs(self) -> None:
-        """1.8.13: on a work computer `code agent endpoints` hung for minutes; the window was looked for only between two tries, so the Enter screen said "open VS Code" all that time."""
-        release = threading.Event()
-        state = {"window": False}
-
-        def opener() -> ahp.Connection:
-            release.wait(10)  # the hanging command
-            raise ahp.NotReady("none")
-
-        with mock.patch.object(vslink, "WATCH_EVERY", 0.05):
-            self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, running=lambda: state["window"])
-            self.addCleanup(release.set)
-            self.addCleanup(self.link.stop)
-            self.link.start()
-            time.sleep(0.2)
-            self.assertNotIn("open_for", self.link.status())
-            state["window"] = True  # VS Code opened while the first try still hangs
-            self.assertTrue(until(lambda: "open_for" in self.link.status(), 2), self.link.status())
-            self.assertEqual(self.link.status()["why"], "starting", "told as getting ready, not as no VS Code")
-            state["window"] = False
-            self.assertTrue(until(lambda: "open_for" not in self.link.status(), 2))
-
-    def test_a_window_probe_that_breaks_or_does_not_know_is_no_window(self) -> None:
-        def broken() -> bool:
-            raise OSError("no user32")
-
-        for probe in (broken, lambda: None, None):
-            link = vslink.VsLink(self.root, opener=self.open_host, running=probe)
-            self.assertFalse(link.window_open())
-            self.assertEqual(link.open_at, 0.0)
-            self.assertNotIn("open_for", link.status())
-
     def test_a_host_that_hangs_up_is_ready_again_after_the_wait(self) -> None:
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1))
@@ -789,7 +686,6 @@ class NotReadyTests(LinkCase):
         link.start()
         self.assertIsNone(link.thread)
         self.assertEqual(link.status(), {"ready": False, "bound": 0, "unbound": 0, "why": "off"})
-        self.assertEqual(link.open_window(), "off")
 
     def test_with_the_command_missing_the_link_waits_long_and_asks_nothing(self) -> None:
         def opener() -> ahp.Connection:
@@ -799,30 +695,6 @@ class NotReadyTests(LinkCase):
         self.addCleanup(link.stop)
         link.start()
         self.assertTrue(until(lambda: link.status()["why"] == "no-cli"))
-        self.assertEqual(link.open_window(), "no-cli")
-
-    def test_several_endpoints_pick_the_one_with_the_chats_of_this_folder_else_none(self) -> None:
-        def make(items: List[Dict[str, Any]]) -> Any:
-            host = FakeHost({"initialize": {}, "listSessions": {"items": items}})
-            self.addCleanup(host.close)
-            return host
-
-        folder = str(self.root)
-        hosts = {"a": make([summary("ahp-session:/1", "c", "/other")]), "b": make([summary("ahp-session:/2", "c", folder)]), "c": make([])}
-
-        def connect(endpoint: ahp.Endpoint) -> ahp.Connection:
-            link = ahp.Connection(hosts[endpoint.path].transport(), endpoint.token())
-            link.upgrade()
-            link.hello()
-            return link
-
-        endpoints = [ahp.Endpoint("socket", name, 1, name, TOKEN) for name in ("a", "b", "c")]
-        chosen = vslink.choose(endpoints, self.root, connect)
-        self.assertEqual(chosen.sessions()[0]["resource"], "ahp-session:/2")
-        with self.assertRaises(ahp.NotReady) as none:
-            vslink.choose([endpoints[0], endpoints[2]], self.root, connect)
-        self.assertEqual(none.exception.why, "many")
-
 
 class BoardCase(ServeCase):
     """The board server with a link to a fake host."""
@@ -862,36 +734,6 @@ class BoardLinkTests(BoardCase):
         self.assertEqual(desk["sub"]["text"], "All done.")
         self.assertEqual(desk["recent"], "All done.\nMore text.")
 
-    def test_open_needs_the_pairing_and_only_asks_the_thread(self) -> None:
-        self.assertEqual(self.request("POST", "/api/open", {}, header=False)[0], 403)
-        self.assertEqual(self.request("POST", "/api/open", {})[0], 403)  # the header is there, the browser is not paired
-        cookie = self.pair()
-        calls = []
-        self.vs.jobs.put = lambda job: calls.append(job)  # the thread would run `code <folder>`: not in a test
-        self.vs.why = "ok"
-        status, data, _ = self.request("POST", "/api/open", {}, cookie=cookie)
-        self.assertEqual((status, data["result"]), (200, {"queued": True}))
-        self.assertEqual(calls, ["open"])
-
-    def test_a_running_vscode_without_the_settings_is_refused_unless_the_person_opens_it_anyway(self) -> None:
-        from unittest import mock
-
-        cookie = self.pair()
-        calls = []
-        self.vs.jobs.put = lambda job: calls.append(job)
-        self.vs.why = "ok"
-        env = boardserve.launchenv
-        with mock.patch.object(env, "extra", return_value={"HARNESS_TOOL_PATH": "x"}), mock.patch.object(env, "vscode_running", return_value=True), mock.patch.object(env, "seen", return_value={}):
-            status, data, _ = self.request("POST", "/api/open", {}, cookie=cookie)
-            self.assertEqual((status, data.get("running")), (409, True))  # the page offers "I will quit it first" and "Open anyway" (1.7.29)
-            self.assertEqual(calls, [])
-            status, data, _ = self.request("POST", "/api/open", {"anyway": True}, cookie=cookie)
-            self.assertEqual((status, data["result"]), (200, {"queued": True}))
-            self.assertEqual(calls, ["open"])
-        with mock.patch.object(env, "extra", return_value={"HARNESS_TOOL_PATH": "x"}), mock.patch.object(env, "vscode_running", return_value=True), mock.patch.object(env, "seen", return_value={"ok": True}):
-            self.assertEqual(self.request("POST", "/api/open", {}, cookie=cookie)[0], 200)  # a chat found it started with the settings: nothing to ask
-
-
 class NoVsCodeTests(ServeCase):
     """The default link in the tests has no `code`: the board is what it was."""
 
@@ -901,10 +743,6 @@ class NoVsCodeTests(ServeCase):
         data = self.request("POST", "/api/board", {})[1]
         row = next(item for item in data["rows"] if item["name"] == "job1")
         self.assertEqual(row["chat"], {"bound": False, "why": "off"})
-        cookie = self.pair()
-        status, data, _ = self.request("POST", "/api/open", {}, cookie=cookie)
-        self.assertEqual(status, 409)
-        self.assertIn("VS Code", data["error"])
 
     def test_a_task_with_a_hook_log_shows_its_last_tool_call_under_its_name(self) -> None:
         log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{SESSION}.jsonl"

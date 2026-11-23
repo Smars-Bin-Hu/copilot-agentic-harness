@@ -64,7 +64,6 @@
 @keyframes vsbeat{0%,100%{opacity:1}50%{opacity:.35}}
 /* One state for the header pill, the VS Code button and the buttons that talk to the chat: VS Code is not linked. They stay pressable (the reason is in the dialog); they are dimmed. */
 .vs-pill:not(.on){color:var(--hot)}.vs-pill:not(.on) i{background:var(--hot-dot)}
-html.vs-down .vs-btn{filter:grayscale(1);opacity:.55}
 html.vs-down .act.chat-act{opacity:.55}
 
 /* ---------- Lite: no blur, no motion. Later blocks hang their own blur and motion on this class, not on another switch. ---------- */

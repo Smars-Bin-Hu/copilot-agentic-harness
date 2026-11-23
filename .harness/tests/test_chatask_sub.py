@@ -54,7 +54,8 @@ class SubagentAskTests(AskCase):
         with self.vs.lock:
             self.vs.chats[CHAT]["state"] = copy.deepcopy(self.state)
             self.vs.dirty = True
-        self.vs.hurry()
+        self.vs.backoff.reset()
+        self.vs.wake.set()  # look again now
         self.assertTrue(until(lambda: self.vs.ask_of(TASK) is not None), self.vs.chats.keys())
         ask = self.vs.ask_of(TASK)
         self.assertEqual((ask["kind"], ask["agent"], ask["tool"], ask["command"]), ("confirm", "worker", "bash", "ls -la"))
@@ -83,7 +84,8 @@ class SubagentAskTests(AskCase):
         self.test_a_confirmation_in_the_chat_of_a_running_subagent_shows_a_card_with_its_name()
         self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": CHAT, "action": {"type": "chat/toolCallComplete", "turnId": "main-turn", "toolCallId": "call-task", "result": {"success": True}}}})
         self.assertTrue(until(lambda: self.vs.ask_of(TASK) is None))
-        self.vs.hurry()
+        self.vs.backoff.reset()
+        self.vs.wake.set()  # look again now
         self.assertTrue(until(lambda: SUB not in self.vs.chats))
         self.assertTrue(any(message.get("method") == "unsubscribe" and message["params"]["channel"] == SUB for message in self.host.seen))
 

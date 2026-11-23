@@ -266,10 +266,10 @@ class PagesTests(unittest.TestCase):
         desk, serve = (web / "desk.js").read_text(encoding="utf-8"), (web / "serve.js").read_text(encoding="utf-8")
         for needle in ("/api/compact", "ctxBar", "ctxCard", "copyTitleButton"):
             self.assertIn(needle, desk)
-        self.assertIn("failed(error, chat && chat.title)", serve)
-        for key in ("desk.ctx.label", "desk.compact.go", "desk.chat.copy", "board.vs.open"):
+        self.assertIn("function failed(error, title)", serve)  # a failed action offers to copy the chat title
+        for key in ("desk.ctx.label", "desk.compact.go", "desk.chat.copy", "desk.chat.copy.hint"):
             self.assertIn(key, desk + serve)
-        self.assertTrue(messages.text("board.vs.open"))
+        self.assertTrue(messages.text("desk.chat.copy.hint"))
 
 
 if __name__ == "__main__":

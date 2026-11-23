@@ -148,7 +148,7 @@ class Ado:
             return self._header
         az = shutil.which("az")  # on Windows this is az.cmd; the arguments are plain words, no shell is used
         if not az:
-            raise Stop("az is not found: add its folder in Change the setup, Local, then open VS Code from the board")
+            raise Stop("az is not found: add its folder in Change the setup, Local; the board then restarts its agent host with it")
         done = subprocess.run([az, "account", "get-access-token", "--resource", RESOURCE, "--output", "json"], capture_output=True, text=True)
         token = ""
         try:
@@ -190,7 +190,7 @@ class Ado:
             raise Stop(f"Azure DevOps said {error.code}: {said[:400]}") from None
         except urllib.error.URLError as error:
             reason = str(error.reason)
-            hint = " (the CA bundle: Change the setup, Local; then open VS Code from the board)" if "CERTIFICATE" in reason.upper() else ""
+            hint = " (the CA bundle: Change the setup, Local; the board then restarts its agent host with it)" if "CERTIFICATE" in reason.upper() else ""
             raise Stop(f"cannot reach {self.conn['url']}: {reason[:300]}{hint}") from None
         if binary:
             return content

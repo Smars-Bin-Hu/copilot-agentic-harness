@@ -26,7 +26,6 @@ from test_connections import KIND, ConnectionsCase
 from test_gate_lists import SERVER, ListedCase
 
 import doctor
-from core import launchenv
 
 
 class BrokenPackTests(ListedCase):
@@ -598,7 +597,8 @@ class TestWithNoAnswerKeepsTheSignInTests(ConnectionsCase):
 
 
 class IdentityNoteTests(ConnectionsCase):
-    """D3-3: an identity that must be in the environment of VS Code is not in Required; while a VS Code is connected and was not started with it, a yellow note stands on the connections row (and its row of the hover table)."""
+    """D3-3, H6: the agent host holds every saved identity by itself. Only one it cannot hold (another value of the same variable, or a second Windows account) is a yellow note
+    on the connections row (and its row of the hover table), never a line of Required."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -615,26 +615,22 @@ class IdentityNoteTests(ConnectionsCase):
         entry = next(item for item in found["items"] if item["key"] == "connections")
         return [problem for problem in entry["problems"] if problem["key"] == "identity"]
 
-    def test_a_saved_identity_that_the_window_does_not_carry_is_a_yellow_note_not_a_required_line(self) -> None:
-        self.assertEqual(connections.identity_lacks(self.root), ["db-dev"])
+    def clash(self) -> None:
+        connections.save(self.root, "db-ist", {"account": "bob", "password": "other"})  # the same variables with other values: the host holds the first
+
+    def test_one_saved_identity_is_held_and_has_no_note(self) -> None:
+        self.assertEqual((connections.identity_lacks(self.root), self.note(self.check())), ([], []))
+
+    def test_an_identity_the_host_cannot_hold_is_a_yellow_note_not_a_required_line(self) -> None:
+        self.clash()
+        self.assertEqual(connections.identity_lacks(self.root), ["db-ist"])
         check = self.check()
         found = self.note(check)
         self.assertEqual(len(found), 1)
-        self.assertIn("db-dev", found[0]["short"])
-        self.assertIn(messages.text("ready.vs.identities"), found[0]["short"])
-        self.assertNotIn("identity", [problem["key"] for problem in readyitems.connections_counted(self.root)["problems"]], "the core row has no such note: the board adds it while a VS Code is connected")
-        self.assertEqual([item for item in check.required_problems([], {"kind": "open", "label": "x"}) if item["key"] == "identity"], [])
-
-    def test_with_no_vscode_connected_the_vscode_line_speaks_and_there_is_no_note(self) -> None:
-        self.assertEqual(self.note(self.check({"ready": False, "why": "none"})), [])
-
-    def test_a_window_the_board_started_with_it_or_that_goes_through_the_wrapper_has_no_note(self) -> None:
-        state = self.root / connections.STATE_FILE
-        state.parent.mkdir(parents=True, exist_ok=True)
-        state.write_text(json.dumps({"direct": ["db-dev"], "wrap": []}), encoding="utf-8")
-        self.assertEqual((connections.identity_lacks(self.root), self.note(self.check())), ([], []))
-        state.write_text(json.dumps({"direct": [], "wrap": ["db-dev"]}), encoding="utf-8")
-        self.assertEqual((connections.identity_lacks(self.root), self.note(self.check())), ([], []))
+        self.assertIn("db-ist", found[0]["short"])
+        self.assertEqual(found[0]["fix"], {}, "no second Windows account: nothing to choose")
+        self.assertNotIn("identity", [problem["key"] for problem in readyitems.connections_counted(self.root)["problems"]], "the core row has no such note: the board adds it")
+        self.assertEqual([item for item in check.required_problems([]) if item["key"] == "identity"], [])
 
     def test_nothing_saved_means_no_note_and_a_program_that_reads_its_own_sign_in_needs_none(self) -> None:
         connections.forget(self.root, "db-dev")
@@ -646,58 +642,13 @@ class IdentityNoteTests(ConnectionsCase):
     def test_the_hover_table_row_carries_the_note_only_for_that_connection(self) -> None:
         from core import reach
 
+        self.clash()
         check = self.check()
         systems = {"db-dev": {"toolpack": "testpack"}, "db-ist": {"toolpack": "testpack"}}
         raw = [{"system": "db-dev", "env": "dev", "state": reach.UNKNOWN, "at": ""}, {"system": "db-ist", "env": "ist", "state": reach.UNKNOWN, "at": ""}]
         rows = check.table(systems, raw)["rows"]
-        self.assertTrue(next(row for row in rows if row["system"] == "db-dev")["note"])
-        self.assertNotIn("note", next(row for row in rows if row["system"] == "db-ist"))
-
-
-class DoctorVsCodeSettingsTests(HarnessTestCase):
-    """TA-Q2: `harness doctor` warns when a VS Code that runs lacks this copy's settings, says what is missing and to use Restart VS Code on the board. The same check the board makes."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        (self.root / ".harness" / "tools-bin").mkdir(parents=True)
-        self.endpoints = [SimpleNamespace(pid=4242), SimpleNamespace(pid=4242), SimpleNamespace(pid=77)]
-
-    def want(self):
-        """This copy has one tool folder to carry (`tool_folders` is what both `needs` and `lacking` read)."""
-        return mock.patch.object(launchenv, "tool_folders", return_value=[str(self.root / "pack" / "bin")])
-
-    def test_a_window_without_the_tool_folder_is_listed_once_with_what_it_lacks(self) -> None:
-        env = lambda pid: {"PATH": "/usr/bin"} if pid == 4242 else {"PATH": str(self.root / "pack" / "bin")}  # noqa: E731
-        with self.want(), mock.patch.object(launchenv, "host_environ", side_effect=env):
-            found = launchenv.windows_without_settings(self.root, endpoints=lambda: self.endpoints)
-        self.assertEqual([(one["pid"], one["by"]) for one in found], [(4242, "env")])
-        self.assertTrue(found[0]["missing"][0].startswith("PATH "))
-
-    def test_a_window_that_cannot_be_judged_or_a_copy_with_nothing_to_carry_says_nothing(self) -> None:
-        with self.want(), mock.patch.object(launchenv, "host_environ", return_value=None), mock.patch.object(launchenv, "process_started", return_value=None):
-            self.assertEqual(launchenv.windows_without_settings(self.root, endpoints=lambda: self.endpoints), [])
-        self.assertEqual(launchenv.windows_without_settings(self.root, endpoints=lambda: self.endpoints), [], "no settings to carry: any VS Code will do")
-        with self.want():
-            self.assertEqual(launchenv.windows_without_settings(self.root, endpoints=lambda: (_ for _ in ()).throw(RuntimeError("no host"))), [])
-
-    def test_doctor_gives_one_warning_with_the_words_and_the_way_out(self) -> None:
-        report = doctor.Report()
-        found = [{"pid": 4242, "by": "env", "missing": [f"PATH {self.root / 'pack' / 'bin'}", "REQUESTS_CA_BUNDLE"]}]
-        with mock.patch.object(launchenv, "windows_without_settings", return_value=found):
-            doctor.check_vscode_settings(report, self.root)
-        self.assertEqual(len(report.lines), 1, report.lines)
-        self.assertTrue(report.lines[0].startswith("[WARN]"))
-        for word in ("pack/bin", messages.text("ready.vs.lacks.bundle"), "harness task board", messages.text("ready.vs.restart")):
-            self.assertIn(word, report.lines[0])
-        self.assertEqual(report.errors, 0)
-
-    def test_nothing_is_said_when_all_is_well_or_when_the_board_runs_doctor_itself(self) -> None:
-        report = doctor.Report()
-        with mock.patch.object(launchenv, "windows_without_settings", return_value=[]):
-            doctor.check_vscode_settings(report, self.root)
-        with mock.patch.object(launchenv, "windows_without_settings", return_value=[{"pid": 1, "by": "env", "missing": ["x"]}]), mock.patch.dict("os.environ", {doctor.TOPICS: "1"}):
-            doctor.check_vscode_settings(report, self.root)
-        self.assertEqual(report.lines, [])
+        self.assertTrue(next(row for row in rows if row["system"] == "db-ist")["note"])
+        self.assertNotIn("note", next(row for row in rows if row["system"] == "db-dev"))
 
 
 class LongOptionsAndReadCountTests(HarnessTestCase):

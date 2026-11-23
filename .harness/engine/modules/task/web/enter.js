@@ -2,9 +2,9 @@
 // A page on disk has none (no SERVE). The search and the settings are the global ones of shell.js; this screen adds nothing to the top but the greeting.
 //
 // Readiness: POST /api/ready every 3 s (a read; the server answers from caches and waits for nothing). Two blocks (1.7.38). Harness & Local is required: this copy is set up, this browser is paired, harness doctor has
-// no error, VS Code is open, Copilot is connected. Enter is allowed only when every one is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page.
+// no error, VS Code is installed, Copilot is signed in through gh (the board runs its own agent host). Enter is allowed only when every one is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page.
 // From the company is optional (knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories): never a gate, but what is missing is said here with a link to the place that
-// mends it, and again in the block of the board after Enter (readybar.js). The VS Code button is always beside Enter: Open, Open with identities, Restart, or Restart with identities (vsrestart.py).
+// mends it, and again in the block of the board after Enter (readybar.js). The button beside Enter is the fix of the VS Code or Copilot line (`action`: sign in, get gh, get VS Code), or none.
 // A check that cannot run shows as failed with its reason; a board that does not answer shows a line saying so and the screen goes on asking.
 //
 // Showing it: once for each tab session (sessionStorage, in try/catch), not on a poll, a reload of the board or a way back from a task. A task page opened from a link skips it only when everything
@@ -67,10 +67,9 @@
   const body = h("div", {class: "en-chk-body"}, head, list, errLine);  // the lines scroll here; the legal line below it stays in view (1.7.24)
   const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
   const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
-  const vsBtn = h("button", {type: "button", class: "en-vs", hidden: "hidden"}, t("board.enter.open"));  // always beside Enter: Open, Restart, or Restart with identities (1.7.38)
-  const vsNote = h("p", {class: "en-vsnote", role: "status", hidden: "hidden"});  // beside the VS Code button: what a restart is doing, or why it did not end (1.7.38, C11 T2-07)
+  const vsBtn = h("button", {type: "button", class: "en-vs", hidden: "hidden"});  // beside Enter: the fix of the VS Code or Copilot line (`action`), when there is one
   const card = h("div", {class: "en-card", role: "status", hidden: "hidden"});  // 1.8.x: above the buttons: gh's one-time code, the download of the agent host, or where gh is
-  const cta = h("div", {class: "en-cta"}, card, vsNote, vsBtn, go);
+  const cta = h("div", {class: "en-cta"}, card, vsBtn, go);
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
     h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, cta, hint));
@@ -336,8 +335,7 @@
   const OPT = ["kb", "instructions", "skills", "standards", "packs", "connections", "repos"];
   const GROUPS = [["required", REQ], ["optional", OPT]];
   const ORDER = GROUPS.flatMap((group) => group[1]);
-  const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, opened: 0, ready: false, restart: null, restarting: false, fail: ""};
-  const OPENED_FOR = 120000;  // ms in which a VS Code that was just opened is waited for, not blamed
+  const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, ready: false, fail: ""};
   const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
   const setClass = (node, cls) => { if (node.className !== cls) node.className = cls; };
   const slot = (i) => chk0.t0 && Date.now() - chk0.t0 >= FIRST + i * STEP;
@@ -350,11 +348,7 @@
   const rowOf = (id) => list.querySelector('li.row[data-id="' + id + '"]');
   const word = (key, vals, fallback) => (Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key, vals) : fallback || "");
   const langWord = () => { try { return new Intl.DisplayNames([root.lang], {type: "language"}).of(root.lang) || root.lang; } catch (error) { return root.lang; } };  // English, or the name of the language in itself
-  const recentlyOpened = () => chk0.opened && Date.now() - chk0.opened < OPENED_FOR;
-  const buttonKind = () => (chk0.last && chk0.last.vscode_button ? chk0.last.vscode_button.kind : "open");
-  const buttonWords = () => (chk0.last && chk0.last.vscode_button ? chk0.last.vscode_button.label : t("board.enter.open"));
   // A line of the first block -> {state, level, tag, note, soft, tip}: a short word on the line; the long words in the note under it only where the person must do something.
-  const ownHost = () => Boolean(chk0.last && chk0.last.action);  // 1.8.x: the board runs its own agent host: VS Code only has to be installed, Copilot is signed in through gh
   const CARDED = ["signing-in", "no-gh", "host-preparing"];  // their words are on the card above the buttons, not under the line
   function ghTip(c) {
     const lines = [];
@@ -380,32 +374,23 @@
     return {state: c.state, level: c.level, tag, note, soft: c.state === "wait", tip};
   }
   function reqView(c) {
-    if (ownHost() && (c.id === "vscode" || c.id === "copilot")) return ownView(c);
+    if (c.id === "vscode" || c.id === "copilot") return ownView(c);
     const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || ""), since: clock(c.since)};
     let state = c.state, level = c.level || "grey", tag = "", note = "", tip = "";
-    if (state === "fail" && id === "vscode" && c.why === "none" && recentlyOpened()) { state = "wait"; level = "yellow"; }
     if (state === "check") return {state, level: "grey", tag: "", note: "", soft: false, tip: ""};
     if (state === "ok") {
-      tag = id === "setup" ? [String(DATA.serve.user || "").trim(), langWord()].filter(Boolean).join(" · ") : id === "vscode" && c.env_wrong ? t("board.enter.d.vscode.noenv") : t("board.enter.d." + id + ".ok", vals);
-      if (id === "vscode" && c.env_wrong) note = t("board.enter.m.vscode.noenv");
+      tag = id === "setup" ? [String(DATA.serve.user || "").trim(), langWord()].filter(Boolean).join(" · ") : t("board.enter.d." + id + ".ok", vals);
       return {state, level, tag, note, soft: true, tip};
     }
-    if (state === "wait") tag = id === "copilot" ? t("board.enter.d.copilot.vscode") : id === "vscode" && c.why === "getting-ready" ? t("board.enter.d.vscode.getting-ready") : t("board.enter.tag.wait");  // 1.8.8: its window is open, its host not up yet
+    if (state === "wait") tag = t("board.enter.tag.wait");
     else if (id === "paired") tag = t("board.enter.d.paired.unpaired");
     else if (id === "doctor" && c.why === "stale") tag = t("board.enter.d.doctor.stale");  // 1.8.23: the folder holds a newer release than the board runs
     else if (id === "doctor") tag = c.why === "failed" ? t("board.enter.d.doctor.failed") : t(c.n === 1 ? "board.enter.d.doctor.errors.one" : "board.enter.d.doctor.errors", vals);
-    else if (id === "vscode") tag = c.why === "none" ? t("board.enter.d.vscode.none") : c.why === "env" ? t("board.enter.d.vscode.noenv") : c.why === "unseen" ? t("board.enter.d.vscode.unseen") : t("board.enter.d.vscode.stuck");
-    else if (id === "copilot") tag = c.why === "vscode" ? t("board.enter.d.copilot.vscode") : t("board.enter.d.copilot.fail");
     else tag = t("board.enter.tag.fail");
     if (id === "setup") note = word("board.enter.m.setup." + c.why, vals);
     else if (id === "paired") note = t("board.enter.m.paired.unpaired");
     else if (id === "doctor" && c.why === "stale") note = t("board.enter.m.doctor.stale", {started: c.started, now: c.now});
     else if (id === "doctor") note = word("board.enter.m.doctor." + c.why + (c.why === "errors" && c.n === 1 ? ".one" : ""), vals, plainWords(c.detail || ""));
-    else if (id === "vscode") note = c.why === "none" && recentlyOpened() ? t("board.enter.m.vscode.opened") : c.why === "none" ? t("board.enter.m.vscode.none", {button: buttonWords()})
-      : c.why === "no-host" ? t("board.enter.m.vscode.no-host", {since: clock(c.since), button: buttonWords()})  // 1.8.8: open for minutes, the board still not let in: Restart
-      : c.why === "env" || c.why === "unseen" ? t("board.enter.m.vscode." + c.why, {button: buttonWords()}) + (c.detail ? (root.lang === "zh" ? "" : " ") + t("board.enter.m.vscode.missing", {detail: plainWords(c.detail)}) : "")  // connected, but not started with this copy's settings (Q2)
-      : word("board.enter.m.vscode." + c.why, vals);
-    else if (id === "copilot" && c.why !== "vscode") note = word("board.enter.m.copilot." + c.why, vals);
     return {state, level, tag, note, soft: state === "wait", tip};
   }
   // An item of the second block -> {state, level, tag, notes: [{text, fix}], tip}. The note is what the problems of the row say, with a link each to where it is mended.
@@ -436,7 +421,7 @@
         h("td", {class: "sy-s " + row.state}, h("i", {class: "sy-d " + row.state}), t("board.enter.sys.state." + row.state)), h("td", {class: "sy-r"}, row.reason || "", row.note ? h("div", {class: "sy-warn"}, row.note) : null),
         h("td", {class: "sy-t"}, row.state === "unknown" ? t("board.enter.sys.never") : ago(row.at)), h("td", {class: "sy-p"}, first ? row.pack || "" : "")));
     }
-    return h("div", {class: "en-pop-in"}, h("table", null, h("thead", null, h("tr", null, ...head)), h("tbody", null, ...body)), c.env_wrong ? h("p", {class: "sy-off"}, t("board.enter.m.vscode.noenv")) : null, c.off ? h("p", {class: "sy-off"}, c.off.text) : null);  // VS Code without the settings of this copy: said once here, not in every row (RC-1); the connections whose tool pack is off are not in the table (1.7.38)
+    return h("div", {class: "en-pop-in"}, h("table", null, h("thead", null, h("tr", null, ...head)), h("tbody", null, ...body)), c.off ? h("p", {class: "sy-off"}, c.off.text) : null);  // VS Code without the settings of this copy: said once here, not in every row (RC-1); the connections whose tool pack is off are not in the table (1.7.38)
   }
   const fillPop = (c) => { pop.replaceChildren(popTable(c)); };
   function markScroll(c) {  // more rows than the window holds: it says so, and how many there are
@@ -497,8 +482,6 @@
   }
   const noNames = (li) => { const sy = li.querySelector(".sy"); if (sy) sy.remove(); };
 
-  // The words of a restart that is going on: the VS Code line says so, and the button waits.
-  function showRestart(view, willOpen) { chk0.restart = view; if (view.state === "done" && willOpen !== false) chk0.opened = Date.now(); render(); }
   // A required line that is still at work has a bar under it (1.7.43): doctor takes a minute and more on a work computer, and "checking" alone looked stuck. Doctor tells its steps:
   // the bar fills, the line says how far and how long, the hover names the step. Any other line waits for something it cannot count: the bar moves to and fro. `c` null: no bar.
   function busyBar(li, em, c) {
@@ -534,16 +517,9 @@
       if (!req && c && c.names && c.names.length) { setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setText(em, view.tag || (view.state === "check" ? "" : "—")); }
       busyBar(li, em, lit && req && (view.state === "check" || (view.state === "wait" && !(id === "copilot" && c.why === "vscode"))) ? c : null);
       const p = li.querySelector(".m");
-      const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), id === "vscode" ? [chk0.restart && chk0.restart.state, chk0.restart && chk0.restart.why, chk0.fail] : "", c && c.integrity, c && c.launch, root.lang]);
-      let note = view.note, soft = view.soft;
-      if (id === "vscode") {
-        const live = chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening");
-        const lost = chk0.restart && chk0.restart.state === "failed" && (view.state !== "ok" || (chk0.restart.since || 0) < 120);  // a VS Code that did not quit is still open: the failure is told for two minutes, and for as long as VS Code is not ok
-        const failed = Boolean(chk0.fail) || lost;
-        const said = failed ? (chk0.fail || READY.restartNote(chk0.restart)) : live ? READY.restartNote(chk0.restart) : "";
-        if (said) { note = said; soft = !failed; }
-      }
-      const has = Boolean(note) || Boolean((view.notes || []).length) || Boolean(!req && c && c.launch);
+      const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), c && c.integrity, root.lang]);
+      const note = view.note, soft = view.soft;
+      const has = Boolean(note) || Boolean((view.notes || []).length);
       if (has) {
         if (p.dataset.k !== keyNote) {
           p.dataset.k = keyNote;
@@ -554,7 +530,7 @@
             nodes.push(view.notes.map((n) => n.text).join(gap));
             const seen = new Set();
             const links = view.notes.map((n) => n.fix).filter((fix) => { if (!fix || !fix.to || seen.has(fix.label)) return false; seen.add(fix.label); return true; });
-            links.forEach((fix, index) => nodes.push(index ? " · " : gap, READY.link(fix, {done: () => poll(), onState: showRestart, opened: () => { chk0.opened = Date.now(); }, fail: (error) => { chk0.fail = error.message; render(); }}, fix.short || fix.label)));
+            links.forEach((fix, index) => nodes.push(index ? " · " : gap, READY.link(fix, {done: () => poll()}, fix.short || fix.label)));
           }
           if (id === "paired") nodes.push(" ", SERVE.pairControl());  // 1.8.11: one click opens the board paired in the default browser
           if (id === "doctor" && c && c.why === "stale" && typeof SHELL !== "undefined") {  // 1.8.23: one click to the new release; the restart accepts its guardrail files
@@ -564,7 +540,6 @@
           }
           else if (id === "doctor" && c && c.integrity) nodes.push(" ", READY.acceptButton(() => poll()));
           else if (id === "doctor" && c && c.state === "fail") nodes.push(" ", READY.link({to: "doctor"}, {done: () => poll()}, t("board.enter.doctor.again")));  // 1.7.45: run doctor now, not when its wait is over  // guardrail files not as accepted (1.7.39): the board accepts them after listing them
-          if (!req && c && c.launch) { const b = h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")); nodes.push(h("br"), t("board.enter.m.systems.launch"), h("br"), b); }
           p.replaceChildren(...nodes);
         }
         setClass(p, "m" + (soft ? " soft" : "") + ((req && view.state === "fail") || (!req && view.level === "red") ? " bad" : "")); if (p.hidden) p.hidden = false;  // a red row has a red note, not an amber one (F1 U1)
@@ -611,7 +586,7 @@
     setText(go.firstChild, chk0.setup ? t("board.enter.getready") : ready ? t("board.enter.go") : pending ? t("board.enter.checking") : t("board.enter.notready"));
     const k = go.querySelector("kbd").style, kd = ready ? "" : "none"; if (k.display !== kd) k.display = kd;
     go.classList.toggle("plain", !ready);  // no key beside the word: it stands in the middle
-    paintButton(ready, checks);
+    paintButton(ready);
     fitList();
     return ready;
   }
@@ -623,10 +598,8 @@
     const packs = (by("packs").names || []).length, signed = (by("connections").names || []).filter((x) => x.state === "ok").length;
     return [kb, packs ? t(packs === 1 ? "board.enter.fold.pack" : "board.enter.fold.packs", {n: packs}) : "", signed ? t("board.enter.fold.signed", {n: signed}) : ""].filter(Boolean).join(" · ");
   }
-  // The VS Code button: its words come from the server (Open, Restart, Restart with identities); it is the main button of the screen while VS Code is the line that is not ok.
   function paintOwn(ready) {  // 1.8.x: the button is the fix of the VS Code or Copilot line (sign in, get gh, get VS Code), or what goes on; none when all is well
     const act = chk0.last.action || {kind: "none"};
-    vsNote.hidden = true;
     vsBtn.hidden = act.kind === "none";
     setText(vsBtn, act.label || "");
     vsBtn.disabled = Boolean(act.off) || chk0.acting;
@@ -673,25 +646,10 @@
     }
     card.hidden = false;
   }
-  function paintButton(ready, checks) {
+  function paintButton(ready) {
     if (chk0.last && chk0.last.action) { paintOwn(ready); return; }
     card.hidden = true;
-    const live = Boolean(chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening"));
-    const going = chk0.restarting || live;
-    if (!chk0.last) { vsBtn.hidden = true; vsNote.hidden = true; return; }
-    const vs = checks.find((x) => x.id === "vscode");
-    const up = chk0.last.vscode_button && chk0.last.vscode_button.up;
-    const lost = Boolean(chk0.restart && chk0.restart.state === "failed" && ((vs && vs.state !== "ok") || (chk0.restart.since || 0) < 120));  // the same two minutes as the VS Code line
-    const failed = !live && (Boolean(chk0.fail) || lost);
-    const said = live ? READY.restartNote(chk0.restart) : failed ? (chk0.fail || READY.restartNote(chk0.restart)) : "";  // the label says Quitting only once the board is quitting: a question about a working agent comes first
-    setText(vsBtn, live ? t(chk0.restart.state === "opening" ? "board.enter.opening" : "board.enter.vs.quitting") : failed && !chk0.restarting ? t("board.enter.vs.again") : buttonWords());
-    setText(vsNote, said);
-    vsNote.hidden = !said;
-    vsNote.classList.toggle("bad", failed);
-    vsBtn.hidden = false;  // always there (the person decided, 1.7.38): Open, Restart, or Restart with identities
-    vsBtn.disabled = going;
-    vsBtn.classList.toggle("hot", !ready && !chk0.setup && Boolean(vs) && vs.state !== "ok");
-    vsBtn.title = going ? "" : t(up ? "board.enter.vs.restart.tip" : buttonKind() === "open-identities" ? "board.enter.vs.open-identities.tip" : "board.enter.vs.open.tip");
+    vsBtn.hidden = true;
   }
   function fitList() {  // a short window: the list scrolls inside the room under the wordmark instead of running into it
     const wr = svg.getBoundingClientRect();
@@ -712,7 +670,7 @@
   function poll() {
     if (!open || chk0.inflight || document.hidden) return;
     chk0.inflight = true;
-    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.error = ""; chk0.misses = 0; if (data.restart && !chk0.restarting) chk0.restart = data.restart; } else { chk0.error = "bad answer"; chk0.misses = (chk0.misses || 0) + 1; } },
+    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks)) { chk0.last = data; chk0.error = ""; chk0.misses = 0; } else { chk0.error = "bad answer"; chk0.misses = (chk0.misses || 0) + 1; } },
       (error) => { chk0.error = String(error.message || error).slice(0, 200); chk0.misses = (chk0.misses || 0) + 1; })
       .then(() => {
         chk0.inflight = false; settle();
@@ -771,25 +729,14 @@
     const to = item && ((item.home && item.home.to) ? item.home : item.fix);  // the row's own window; a note's link leads to the fix (1.7.38)
     if (to) READY.go(to, {done: () => poll()});
   });
-  list.addEventListener("click", (event) => {  // Windows: the company's launch script asks for the identity in a window of its own and starts VS Code with it (1.7.9)
-    const button = event.target.closest("[data-launch]");
-    if (!button || button.disabled) return;
-    button.disabled = true;
-    ask("/api/launch", {}).then(() => { button.textContent = t("board.enter.launched"); }, (error) => { button.disabled = false; button.textContent = error.message; });
-  });
-  // The VS Code button (1.7.38): Open when none runs, Restart when one does, Restart with identities when a sign-in a window holds is saved and its test passed; Open with identities when none runs and there is such a sign-in (1.7.42). The board asks VS Code to quit the normal way and waits; it never kills it.
+
+  // The button beside Enter (1.8.x): sign in through gh, or GitHub's or VS Code's own download page (the board downloads nothing).
   vsBtn.addEventListener("click", () => {
     if (vsBtn.disabled) return;
     const act = chk0.last && chk0.last.action;
-    if (act) {  // 1.8.x: sign in through gh, or GitHub's or VS Code's own download page (the board downloads nothing)
-      if (act.kind === "signin") { chk0.acting = true; render(); ask("/api/gh", {do: "login"}).then(() => {}, (error) => { chk0.fail = error.message || String(error); }).then(() => { chk0.acting = false; poll(); }); }
-      else if (act.url) window.open(act.url, "_blank", "noopener");
-      return;
-    }
-    chk0.fail = ""; chk0.restarting = true; render();
-    READY.vsAct(buttonKind(), {onState: showRestart, opened: () => { chk0.opened = Date.now(); setTimeout(poll, 1500); }})
-      .catch((error) => { if (!error.quiet) chk0.fail = error.message || String(error); })
-      .then(() => { chk0.restarting = false; poll(); render(); });
+    if (!act) return;
+    if (act.kind === "signin") { chk0.acting = true; render(); ask("/api/gh", {do: "login"}).then(() => {}, (error) => { chk0.fail = error.message || String(error); }).then(() => { chk0.acting = false; poll(); }); }
+    else if (act.url) window.open(act.url, "_blank", "noopener");
   });
   go.addEventListener("click", () => { tryEnter(); });
   document.addEventListener("keydown", (event) => {
@@ -798,7 +745,7 @@
     if (document.body.classList.contains("has-dialog")) return;  // a window opened from the dock over this screen owns the keys (1.7.32)
     if (["Shift", "Control", "Alt", "Meta", "Tab", "Escape", "CapsLock", "Dead", "Process"].includes(event.key) || /^F\d+$/.test(event.key)) return;
     const target = event.target;
-    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],.en-vs,.en-link,[data-launch]")) return;
+    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],.en-vs,.en-link")) return;
     if (document.querySelector(".dock-panel:not([hidden])")) return;  // the ? panel is open: its words are read, its text is typed in (1.7.34)
     if (target && target.closest && target.closest(".dock-btn") && (event.key === "Enter" || event.key === " ")) return;  // a dock button keeps its own Enter and Space; after its window closed, any other key goes in
     if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready

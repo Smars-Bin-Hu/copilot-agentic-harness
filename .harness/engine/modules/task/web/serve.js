@@ -421,89 +421,6 @@ const SERVE = (function () {
     input.focus();
   }
 
-  // The button that brings the VS Code window of this folder forward (the server runs `code <folder>`; no link to one chat exists). It shows only the logo; the words are its title and label.
-  // It can be pressed while VS Code is not linked (the command then opens the window). Grey only when no `code` command is found (or the link is switched off). `chat` is row.chat or desk.chat.
-  const VS_LOGO = "M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z";
-  function vsLogo() {
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("aria-hidden", "true");
-    const path = document.createElementNS(ns, "path");
-    path.setAttribute("d", VS_LOGO);
-    path.setAttribute("fill", "#2489ca");
-    svg.append(path);
-    return svg;
-  }
-  // Open VS Code. A VS Code that is already running cannot get this computer's settings (1.7.21): the server says so (409, `running`) and the person
-  // may still open it (1.7.29). A window that is closed another way (Esc, a click beside it) is the safe answer: not opened. `sender`: post, or a call with a deadline.
-  function openVS(sender) {
-    const go = sender || post;
-    return go("/api/open", {}).catch((error) => {
-      if (!(error && error.data && error.data.running)) throw error;
-      return new Promise((resolve, reject) => {
-        const quit = h("button", {type: "button", class: "act hot live"}, t("board.vs.quit_first"));
-        const anyway = h("button", {type: "button", class: "act", title: t("board.vs.anyway.tip")}, t("board.vs.anyway"));
-        const view = dialog([h("h2", null, t("board.vs.running")), h("p", null, t("board.vs.running.why")), h("div", {class: "row win-foot"}, quit, anyway)]);
-        let done = false;
-        const end = (then) => { if (done) return; done = true; clearInterval(watch); view.close(); then(); };
-        const no = () => reject(Object.assign(error, {quiet: true}));  // the person chose: no second window with the same words
-        const watch = setInterval(() => { if (!view.box.isConnected) end(no); }, 300);
-        quit.addEventListener("click", () => end(no));
-        anyway.addEventListener("click", () => end(() => go("/api/open", {anyway: true}).then(resolve, reject)));
-      });
-    });
-  }
-
-  // Restart VS Code (1.7.38): the board asks VS Code to quit the normal way (a file that is not saved is asked about by VS Code itself), waits until it has gone, and opens it again the way `openVS` does. Never a kill.
-  // The server says first, with 409 and `busy`, when the agent of a task is at work: the person chooses Restart anyway or Cancel. `open: false` only quits (the identities picker opens it then).
-  // `onState(view)`: the state of the restart as it goes (quitting, opening, done, failed). The promise ends with `done`; `failed` is an error whose `why` is a code (`still-open`, `no-command`) or the engine's words.
-  // `names`: the chats VS Code lists as running when it did not quit (`still-chat`).
-  const restartWhy = (why, names) => (Object.prototype.hasOwnProperty.call(TEXT, "board.vs.restart.why." + why) ? t("board.vs.restart.why." + why, {names: (names || []).join(", ")}) : String(why || ""));
-  function restartVS(options) {
-    const opts = options || {};
-    const go = opts.sender || post;
-    const ask = (anyway) => go("/api/restart", {open: opts.open !== false, anyway: anyway || undefined});
-    const follow = () => new Promise((resolve, reject) => {
-      const look = () => go("/api/restart", {step: "state"}).then((data) => {
-        const view = data.result || {};
-        if (opts.onState) opts.onState(view);
-        if (view.state === "done") resolve(view);
-        else if (view.state === "failed") reject(Object.assign(new Error(restartWhy(view.why, view.names)), {why: view.why, quiet: false}));
-        else setTimeout(look, 700);
-      }, reject);
-      look();
-    });
-    return ask(false).catch((error) => {
-      if (!(error && error.data && error.data.busy)) throw error;
-      return new Promise((resolve, reject) => {
-        const names = error.data.busy || [], chats = error.data.chats || [];  // tasks whose agent is at work; other chats of VS Code that run or wait for the person (VS Code asks about them itself when it quits)
-        const yes = h("button", {type: "button", class: "act hot live"}, t("board.vs.restart.anyway"));
-        const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-        const says = [names.length ? h("p", null, names.length === 1 ? t("board.vs.restart.busy.one", {name: names[0]}) : t("board.vs.restart.busy", {names: names.join(", ")})) : null,
-          chats.length ? h("p", null, chats.length === 1 ? t("board.vs.restart.chat.one", {name: chats[0]}) : t("board.vs.restart.chats", {names: chats.join(", ")})) : null, h("p", {class: "sub"}, t("board.vs.restart.busy.then"))].filter(Boolean);
-        const view = dialog([h("h2", null, t(names.length ? "board.vs.restart.busy.title" : "board.vs.restart.chat.title")), ...says, h("div", {class: "row win-foot"}, yes, no)]);
-        let done = false;
-        const end = (then) => { if (done) return; done = true; clearInterval(watch); view.close(); then(); };
-        const cancelled = () => reject(Object.assign(error, {quiet: true}));  // the person chose: nothing is said
-        const watch = setInterval(() => { if (!view.box.isConnected) end(cancelled); }, 300);
-        no.addEventListener("click", () => end(cancelled));
-        yes.addEventListener("click", () => end(() => ask(true).then(resolve, reject)));
-      });
-    }).then(follow);
-  }
-
-  function vsButton(chat) {
-    const why = chat && !chat.bound ? chat.why || "" : "";
-    const nothing = why === "no-cli" || why === "off", alone = ["no-chat", "no-session", "ambiguous"].includes(why);  // VS Code is there and this task has no chat: the window is all it can bring
-    const button = h("button", {type: "button", class: "vs-btn" + (alone ? " no-chat" : ""), disabled: nothing ? "disabled" : null, title: nothing ? t("board.vs.why." + why) : alone ? t("board.vs.nochat") : t("board.vs.open"), "aria-label": t("board.vs.open")}, vsLogo());
-    button.addEventListener("click", () => {
-      button.disabled = true;
-      openVS().then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; failed(error, chat && chat.title); });
-    });
-    return button;
-  }
-
   // Once per page: trade the pairing code of the address for a cookie, and ask whether this browser is paired.
   let paired = null;
   let refusal = "";  // why the code of the address was refused (used, old, wrong), until this browser is paired
@@ -574,5 +491,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner(true));
   }
 
-  return {call, read, file, stay, pairMark, pairControl, runs: (action) => serve.actions.includes(action), running, act, archive, start, banner, post, openVS, restartVS, restartWhy, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
+  return {call, read, file, stay, pairMark, pairControl, runs: (action) => serve.actions.includes(action), running, act, archive, start, banner, post, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
 })();

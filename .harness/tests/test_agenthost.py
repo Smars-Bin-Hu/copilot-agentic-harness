@@ -443,8 +443,6 @@ class VsLinkHostTest(unittest.TestCase):
 class OwnLink:
     """What `ready.Ready` reads of a link that runs the board's own agent host (1.8.x)."""
 
-    own_mode = True
-
     def __init__(self) -> None:
         self.installed_found = {"found": True, "version": "1.147.0", "off": False}
         self.host = {"state": "ready", "version": "1.147.0", "seconds": 6.0, "starts": 1}
@@ -607,7 +605,7 @@ class ReadyOwnHostTest(unittest.TestCase):
     def test_problems_for_the_red_block(self) -> None:
         self.gh = {"gh": "/opt/gh", "version": "2.105.0", "signed_in": False, "login": "", "why": "not-signed-in"}
         vscode, copilot, action = self.lines()
-        found = self.ready.required_problems([dict(vscode, id="vscode"), dict(copilot, id="copilot")], {"kind": "none", "label": ""})
+        found = self.ready.required_problems([dict(vscode, id="vscode"), dict(copilot, id="copilot")])
         self.assertEqual(len(found), 1)
         self.assertEqual((found[0]["key"], found[0]["fix"]["to"], found[0]["fix"]["kind"]), ("copilot", "copilot", "signin"))
 

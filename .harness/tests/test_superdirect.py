@@ -33,7 +33,6 @@ class DirectLink(vslink.VsLink):
         self.fail: Optional[BaseException] = None
         self.sent: List[Dict[str, Any]] = []
         self.made: List[Dict[str, Any]] = []
-        self.opened = 0
 
     def check(self, task: str, kind: str) -> str:
         if self.off:
@@ -60,10 +59,6 @@ class DirectLink(vslink.VsLink):
             raise self.fail
         self.made.append({"plan": plan, "text": text, "files": attachments})
         return {"session": "s2", "chat": "c2", "title": "new one", "initiator": "vscode"}
-
-    def open_window(self) -> str:
-        self.opened += 1
-        return "queued"
 
 
 class DirectCase(ServeCase):
@@ -130,7 +125,7 @@ class BranchTests(DirectCase):
         made = self.vs.made[0]
         self.assertEqual(made["plan"]["name"], task_ops.name_of(TASK))  # bound to the task at once
         self.assertEqual(made["text"], "/harness-my-task Go on with the task " + task_ops.name_of(TASK) + ".\n\ndo the thing")
-        self.assertEqual((self.vs.sent, self.vs.opened), ([], 0))  # the person stays in the super view: VS Code is not brought forward
+        self.assertEqual(self.vs.sent, [])  # the person stays in the super view
 
     def test_a_new_chat_is_wanted_while_the_old_one_is_idle_or_in_error(self) -> None:
         self.assertEqual(self.post({"text": "a", "new_chat": True})["how"], "new-chat")

@@ -9,7 +9,7 @@ import subprocess
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List
+from typing import Any, Dict
 from unittest import mock
 
 import support  # noqa: F401 - the engine on sys.path
@@ -588,69 +588,47 @@ class ToolIdentityIsOneAnswerTests(ConnectionsCase):
         self.assertTrue(self.row()["signed"])
         self.assertNotEqual(self.state(), "none", "Enter counted it as not signed in while the window showed it signed in")
 
-    def test_a_vscode_that_says_nothing_of_the_sign_in_does_not_unsign_it(self) -> None:
-        reach.record(self.root, "s-one:dev", reach.OK)
-        with mock.patch.object(reach, "view", return_value=[{"system": "s-one", "env": "dev", "state": reach.DENIED, "why": "vscode-env"}]):
-            self.assertNotEqual(self.state(), "none")
+    def test_a_sign_in_the_program_keeps_counts_only_when_kept_or_checked(self) -> None:
         self.assertTrue(connections.signed_in(False, "selfsign", reach.OK))
         self.assertFalse(connections.signed_in(False, "", reach.OK), "a sign-in that has to be typed counts only when it is kept")
         self.assertTrue(connections.signed_in(True, "", ""))
 
 
-class WindowNotKnownTests(English, FindCase):
-    """M8: with no record of a VS Code the board started, Enter does not say VS Code lacks the identities, and layer 0 and `harness connections find` do not take them as in the window: both say not known, and the
-    agent is told to use `harness as` for them (it works either way)."""
+class HostHoldsWhatIsSavedTests(English, FindCase):
+    """M8, H6: no record of a window is needed any more. Every saved identity the agent host can hold is held by it: nothing is "not known", nothing goes through `harness as` for that reason."""
 
     def setUp(self) -> None:
         super().setUp()
         for alias in ("orders-dev", "hr-dev"):
             connections.save(self.root, alias, {"account": "acme_user", "password": "x"})
 
-    def record(self, direct: List[str]) -> None:
-        path = self.root / connections.STATE_FILE
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"direct": direct, "wrap": []}), encoding="utf-8")
-
-    def test_without_a_record_the_window_is_not_known_and_the_connections_that_need_it_say_so(self) -> None:
-        self.assertFalse(connections.window_known(self.root))
-        self.assertEqual(connections.unknown_aliases(self.root), ["orders-dev", "hr-dev"])
+    def test_what_is_saved_is_held_and_no_call_is_wrapped(self) -> None:
+        now = connections.state(self.root)
+        self.assertEqual((now["chosen"], now["wrap"]), (["orders-dev", "hr-dev"], []))
         calls = {one["alias"]: one for one in connections.calls(self.root)}
-        self.assertTrue(calls["orders-dev"]["call"].startswith("harness as orders-dev -- "))
-        self.assertTrue(calls["orders-dev"]["unknown"])
-        self.assertNotIn("unknown", calls["ado"], "a program that keeps its own sign-in needs nothing from the window")
-        self.assertNotIn("harness as", calls["ado"]["call"])
-        self.assertEqual(connections.away_aliases(self.root), [])
+        self.assertFalse(any(one["call"].startswith("harness as ") for one in calls.values()))
+        self.assertFalse(any(key in one for one in calls.values() for key in ("unknown", "away")))
+        self.assertEqual(connections.identity_lacks(self.root), [])
 
-    def test_layer_0_and_find_tell_it_and_the_prompt_gets_the_prefix(self) -> None:
-        self.assertIn(messages.text("connections.unknown.context", n=2), self.start())
-        said = self.prompt("look at hr-dev please")
-        self.assertIn("harness as hr-dev --", said)
-        found = self.cli("connections", "find", "orders").stdout
-        self.assertIn(messages.text("connections.find.unknown", alias="orders-dev"), found)
+    def test_the_start_of_a_chat_the_prompt_and_find_say_nothing_of_a_window(self) -> None:
+        self.assertNotIn("harness as", self.start())
+        self.assertNotIn("harness as hr-dev --", self.prompt("look at hr-dev please"))
+        self.assertNotIn("harness as", self.cli("connections", "find", "orders").stdout)
 
-    def test_with_a_record_nothing_is_unknown(self) -> None:
-        self.record(["orders-dev"])
-        self.assertTrue(connections.window_known(self.root))
-        self.assertEqual(connections.unknown_aliases(self.root), [])
-        self.assertNotIn(messages.text("connections.unknown.context", n=1), self.start())
-        self.assertEqual(connections.identity_lacks(self.root), ["hr-dev"])
-
-    def test_enter_says_not_known_and_not_lacks_when_there_is_no_record(self) -> None:
-        none = readyitems.identity_problem(connections.identity_lacks(self.root), connections.window_known(self.root))
-        self.assertIn("No identities chosen for the agent host yet", none["short"])  # H5b: the identities are the agent host's
-        self.assertNotIn("lacks", none["short"])
-        self.assertNotIn("lacks", none["text"])
-        self.record([])
-        known = readyitems.identity_problem(connections.identity_lacks(self.root), connections.window_known(self.root))
-        self.assertIn("The agent host lacks the identity", known["short"])
+    def test_enter_names_the_connections_the_host_cannot_hold_and_offers_the_choice_only_for_several_windows_accounts(self) -> None:
+        only = readyitems.identity_problem(["hr-dev"])
+        self.assertIn("hr-dev one call at a time", only["short"])
+        self.assertEqual((only["key"], only["fix"]), ("identity", {}))
+        several = readyitems.identity_problem(["hr-dev"], True)
+        self.assertEqual(several["fix"]["to"], "identities")
 
 
 class PlainWordsAboutHarnessAsTests(unittest.TestCase):
     """L10: a hint for the person says in plain words that the agent runs those calls with the saved identity; only the text for the agent has the command `harness as`."""
 
-    PERSON = ("ready.p.identity.short", "ready.p.identity.short.one", "ready.p.identity.why", "ready.p.identity.unknown.short", "ready.p.identity.unknown.short.one", "ready.p.identity.unknown.why", "board.enter.sys.identity",
-              "board.enter.sys.identity.unknown", "connections.how.wrap.tip", "connections.plan.wrap", "connections.primary.tip")
-    AGENT = ("connections.unknown.context", "connections.find.unknown", "connections.away.context", "connections.find.away", "connections.wrap.context", "connections.named.wrap")
+    PERSON = ("connections.how.wrap.tip", "connections.plan.wrap", "ready.p.identity", "ready.p.identity.one", "ready.p.identity.short", "ready.p.identity.short.one", "ready.p.identity.why",
+              "board.enter.sys.identity", "connections.primary.tip", "connections.open.lead")
+    AGENT = ("connections.wrap.context", "connections.named.wrap")
 
     def test_no_hint_for_the_person_has_the_command(self) -> None:
         for language in ("en", "zh"):
@@ -664,7 +642,7 @@ class PlainWordsAboutHarnessAsTests(unittest.TestCase):
                 self.assertIn("harness as", messages.table(language)[key], (key, language))
 
     def test_every_new_message_has_both_languages(self) -> None:
-        both_languages(self, *self.PERSON, *self.AGENT, "ready.p.identity.unknown", "ready.p.identity.unknown.one")
+        both_languages(self, *self.PERSON, *self.AGENT)
 
 
 class BackgroundCheckTimeoutTests(English, ConnectionsCase):

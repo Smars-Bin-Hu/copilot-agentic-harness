@@ -373,7 +373,7 @@ class HeldIsNotRefusedTests(GateCase):
 
 
 class HoverTableTests(unittest.TestCase):
-    """RC-1: when VS Code lacks the settings of this copy every row says it was not checked, the reason is said once under the table, and a connection with no sign-in says so."""
+    """RC-1, H6: each row says its own state, and a connection with no sign-in says so. The sentence about VS Code lacking the settings is gone: the board runs its own host."""
 
     def test_each_row_says_its_own_state_and_none_repeats_the_reason(self) -> None:
         import tempfile
@@ -381,18 +381,17 @@ class HoverTableTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             check = ready.Ready(root, mock.Mock(), mock.Mock())
-            long = "VS Code does not have what this copy sets for the tools: PATH x. Commands of the tools may fail here. Quit VS Code completely, then open it again with the identities."
-            lines = [{"system": name, "env": env, "state": reach.DENIED, "why": "vscode-env", "at": "", "launch": long} for name, env in (("acme-dev", "dev"), ("acme-ist", "ist"), ("ado", "none"))]
+            lines = [{"system": name, "env": env, "state": reach.UNKNOWN if name == "acme-ist" else reach.DENIED, "why": "identity", "at": ""} for name, env in (("acme-dev", "dev"), ("acme-ist", "ist"), ("ado", "none"))]
             systems_in = {name: {"toolpack": "sqlserver"} for name in ("acme-dev", "acme-ist", "ado")}
             with mock.patch.object(ready.conn_core, "unsigned", return_value=["acme-ist"]), mock.patch.object(ready.conn_core, "listed", return_value={}), mock.patch.object(ready.conn_core, "types", return_value={}):
                 got = check.table(systems_in, lines)
             rows = {row["system"]: row for row in got["rows"]}
-            self.assertEqual((rows["acme-dev"]["state"], rows["acme-dev"]["reason"]), ("down", ""))
+            self.assertEqual((rows["acme-dev"]["state"], rows["acme-dev"]["reason"]), ("down", messages.text("desk.reach.why.identity")))
             self.assertEqual((rows["acme-ist"]["state"], rows["acme-ist"]["reason"]), ("unknown", messages.text("board.enter.cs.none")))
-            self.assertFalse(any("VS Code" in row["reason"] for row in got["rows"]), "the sentence is not in a row")
+            self.assertFalse(any("VS Code" in row["reason"] for row in got["rows"]), "no row talks about a VS Code window")
             self.assertEqual({item["name"]: item["state"] for item in got["names"]}, {"acme-dev": "down", "acme-ist": "unknown", "ado": "down"})
         js = (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "enter.js").read_text(encoding="utf-8")
-        self.assertIn('c.env_wrong ? h("p", {class: "sy-off"}, t("board.enter.m.vscode.noenv"))', js, "said once, under the table")
+        self.assertNotIn("env_wrong", js, "the board has no wrong-environment line under the table")
 
 
 if __name__ == "__main__":

@@ -130,7 +130,7 @@ def save_repos(root: Path, data: Dict[str, Any]) -> int:
 
 
 def save_advanced(root: Path, data: Dict[str, Any]) -> None:
-    """Settings, Advanced (O5): the skill prefix (user), the Python install command (tools) and the paths not to touch (target). The fields are checked as `setup.check` checks them; the name,
+    """Settings, Advanced (O5): the skill prefix (user, only when the request names it: 1.8.33), the Python install command (tools) and the paths not to touch (target). The fields are checked as `setup.check` checks them; the name,
     the language, the folder of repositories (`repos_root`) and the single repositories stay as they are, and nothing else runs (no sync, no doctor)."""
     wrong: List[str] = []
     prefix = str(data.get("skill_prefix") or "").strip()
@@ -154,7 +154,8 @@ def save_advanced(root: Path, data: Dict[str, Any]) -> None:
     if wrong:
         raise ValueError(" ".join(wrong))
     mark(root)
-    setup.write(root, "user", {"skill_prefix": prefix})
+    if "skill_prefix" in data:  # (1.8.33) Settings no longer has the field (the knowledge base sets the prefix): a save without it leaves the prefix as it is
+        setup.write(root, "user", {"skill_prefix": prefix})
     pick = {"repos_root": base, "singles": singles, "install_command": command}
     if "refused" in data:
         pick["refused"] = data["refused"]

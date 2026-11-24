@@ -6,10 +6,11 @@
 "use strict";
 
 const SETTINGS = (function () {
-  const SECTIONS = ["you", "programs", "copilot", "kb", "packs", "repos", "connections", "network", "adv"];
-  const LABELS = {you: "wizard.s.you", programs: "wizard.s.prog", copilot: "wizard.s.cop", kb: "wizard.s.kb", packs: "tools.packs.title", repos: "settings.s.repos", connections: "settings.s.connections", network: "machine.net.title", adv: "settings.s.adv"};
-  const ALIASES = {company: "kb", computer: "programs", setup: "you", local: "network", tools: "packs", advanced: "adv", repositories: "repos", prog: "programs", cop: "copilot", repo: "repos"};
-  const NOTE_SECTION = {kb: "kb", instructions: "kb", skills: "kb", standards: "kb", sync: "kb", packs: "packs", connections: "connections", connlist: "connections", identity: "connections", signin: "connections", down: "connections", held: "connections", cert: "network", repos: "repos"};
+  const SECTIONS = ["you", "programs", "copilot", "kb", "packs", "repos", "connections", "adv"];  // Network is a part of Advanced since 1.8.33 (`network` and `local` still open it)
+  const GROUPS = [["settings.g.harness", ["you", "programs", "copilot"]], ["settings.g.company", ["kb", "packs", "repos", "connections"]]];  // two groups under small headings, then Advanced alone (1.8.33)
+  const LABELS = {you: "wizard.s.you", programs: "wizard.s.prog", copilot: "wizard.s.cop", kb: "wizard.s.kb", packs: "tools.packs.title", repos: "settings.s.repos", connections: "settings.s.connections", adv: "settings.s.adv"};
+  const ALIASES = {company: "kb", computer: "programs", setup: "you", local: "adv", network: "adv", tools: "packs", advanced: "adv", repositories: "repos", prog: "programs", cop: "copilot", repo: "repos"};
+  const NOTE_SECTION = {kb: "kb", instructions: "kb", skills: "kb", standards: "kb", sync: "kb", packs: "packs", connections: "connections", connlist: "connections", identity: "connections", signin: "connections", down: "connections", held: "connections", cert: "adv", repos: "repos"};
   const ask = (path, step, body) => SERVE.post(path, {step, ...(body || {})}).then((data) => data.result);
   const put = (node, ...children) => node.replaceChildren(...children.flat(Infinity).filter((child) => child !== null && child !== undefined && child !== false));
   const errorText = (error) => String((error && error.message) || error || "");
@@ -84,7 +85,8 @@ const SETTINGS = (function () {
     const x = h("button", {type: "button", class: "st-x", "aria-label": t("board.new.close"), title: t("board.new.close")}, "✕");
     const body = h("div", {class: "st-body wz"});
     const pane = h("div", {class: "st-pane"}, h("div", {class: "st-head"}, heading, x), body);
-    const view = SERVE.dialog([h("div", {class: "st-side"}, h("h2", {class: "st-h"}, t("dock.setup")), nav), pane]);
+    const side = h("div", {class: "st-side"}, h("h2", {class: "st-h"}, t("dock.setup")), nav);
+    const view = SERVE.dialog([side, pane]);
     view.box.classList.add("st-win");
     const shade = view.box.parentNode;
     const vanish = grow(view.box, shade, gearOf());
@@ -103,7 +105,7 @@ const SETTINGS = (function () {
       });
       const sel = h("i", {class: "st-sel", "aria-hidden": "true"});  // the selected item's background: one block that glides to the item chosen (S2); in the narrow window the chips draw their own
       const place = (item) => { if (!item) return; Object.assign(sel.style, {left: item.node.offsetLeft + "px", top: item.node.offsetTop + "px", width: item.node.offsetWidth + "px", height: item.node.offsetHeight + "px"}); };
-      put(nav, sel, items.map((item) => [item.id === "adv" ? h("div", {class: "st-sep"}) : null, item.node]));
+      put(nav, sel, GROUPS.map(([key, ids]) => h("div", {class: "st-grp", role: "group", "aria-label": t(key)}, h("div", {class: "st-gh"}, t(key)), ids.map((id) => items.find((item) => item.id === id).node))), h("div", {class: "st-grp st-alone"}, items.find((item) => item.id === "adv").node));
       let current = null;
       const relayout = () => { if (closing) window.removeEventListener("resize", relayout); else if (current) place(items.find((item) => item.id === current)); };
       window.addEventListener("resize", relayout);
@@ -130,7 +132,7 @@ const SETTINGS = (function () {
       };
       // what machine.js and servers.js ask of their window: go to another section at a part
       const ctx = {
-        go: (sec, part, focus) => { const target = sec === "local" ? (part === "network" ? "network" : part === "mcp" ? "adv" : "packs") : sec; show(sectionOf(target), part, focus); },
+        go: (sec, part, focus) => { const target = sec === "local" ? (part === "network" || part === "mcp" ? "adv" : "packs") : sec; show(sectionOf(target), part, focus); },
         close: () => { view.close(); leave(); }, arrived: () => reveal(),
       };
       const saved = () => { changed = true; };
@@ -190,7 +192,7 @@ const SETTINGS = (function () {
           live, saved, refresh: () => { if (live()) refreshDots(); }, jump: (sec) => show(sec),
           inside: (nodes, stopper) => { if (!live()) { if (stopper) stopper(); return; } stop = stopper || null; arrive(nodes); },
         };
-        const draw = {you: wizardSection, programs: wizardSection, copilot: wizardSection, kb: wizardSection, repos: wizardSection, packs: packsSection, connections: connectionsSection, network: networkSection, adv: advancedSection}[id];
+        const draw = {you: wizardSection, programs: wizardSection, copilot: wizardSection, kb: wizardSection, repos: wizardSection, packs: packsSection, connections: connectionsSection, adv: advancedSection}[id];
         Promise.resolve(draw(id, env)).catch((error) => { if (live()) arrive([h("p", {class: "bad"}, errorText(error))]); });
       }
 
@@ -241,19 +243,13 @@ const SETTINGS = (function () {
         env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body, h("div", {class: "st-foot"}, ...made.foot)]);
       }
 
-      function networkSection(id, env) {
-        const made = MACHINE.localPanel(ctx, {bare: true});  // the window already says Network: the part does not say it again (1.8.32)
-        env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body.filter((node) => node.dataset && node.dataset.part === "network")]);
-      }
-
-      // Advanced: the Python install command, the paths not to touch, the skill prefix and the older copy go through `save` (part advanced), `refuse` and `older`; MCP is machine.js's switch
+      // Advanced: the Python install command, the paths not to touch, the older copy go through `save` (part advanced), `refuse` and `older`; MCP is machine.js's switch
       function advancedSection(id, env) {
         return ask("/api/setup", "state").then((state) => {
           const rules = state.rules.slice(), refused = [];
           const field = (caption, node, hint) => h("div", {class: "wz-field"}, h("span", {class: "cap"}, caption), node, hint ? h("div", {class: "hint"}, hint) : null);
           const literal = (text) => text.split("{package}").flatMap((part, i) => (i ? [h("code", null, "{package}"), part] : [part]));  // `{package}` is a placeholder the person types: it always shows as it is, in the code font
           const install = h("input", {type: "text", class: "wz-in mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph"), value: state.install_command || "", "aria-label": t("setup.install")});
-          const prefix = h("input", {type: "text", class: "wz-in mono st-short", maxlength: 31, autocomplete: "off", spellcheck: "false", value: state.skill_prefix || (state.kb && state.kb.prefix) || "", "aria-label": t("setup.prefix")});
           const path = h("input", {type: "text", class: "wz-in mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: state.example, "aria-label": t("setup.refused")});
           const add = h("button", {type: "button", class: "wz-btn sm", disabled: ""}, t("setup.refused.add"));
           const list = h("div", {class: "st-chips"}), said = h("p", {class: "wz-err"}), done = h("span", {class: "st-saved", role: "status"});
@@ -273,7 +269,7 @@ const SETTINGS = (function () {
           const save = h("button", {type: "button", class: "wz-btn primary"}, t("settings.save"));
           save.addEventListener("click", () => {
             said.hidden = true; done.textContent = ""; save.disabled = true;
-            const values = {part: "advanced", skill_prefix: prefix.value, install_command: install.value, refused, rules, stamp: state.stamp};  // three fields: no knowledge base sync and no doctor
+            const values = {part: "advanced", skill_prefix: state.skill_prefix || "",  /* the field is gone: the server writes the prefix on every Advanced save, so the one it holds goes back unchanged */ install_command: install.value, refused, rules, stamp: state.stamp};  // three fields: no knowledge base sync and no doctor
             ask("/api/setup", "save", values).then(() => {
               saved(); done.textContent = "✓ " + t("settings.saved");
               return ask("/api/setup", "state").then((now) => { state.stamp = now.stamp; refused.splice(0); rules.splice(0, rules.length, ...now.rules); paintRules(); });
@@ -281,19 +277,21 @@ const SETTINGS = (function () {
           });
           const older = h("button", {type: "button", class: "wz-btn sm"}, t("settings.adv.older.go"));
           older.addEventListener("click", () => olderDialog(saved));
-          const made = MACHINE.localPanel(ctx);
+          const made = MACHINE.localPanel(ctx, {stacked: true, title: t("settings.adv.net")});  // the Network part opens Advanced (1.8.33)
           env.inside([
+            made.body.find((node) => node.dataset && node.dataset.part === "network"), h("div", {class: "st-rule"}),
             field(t("setup.install"), install, literal(t("setup.install.example"))),
             field(t("setup.refused"), h("div", {class: "st-add"}, path, add), t("setup.refused.hint")), h("div", {class: "st-under"}, list), said,
-            field(t("setup.prefix"), prefix, t("setup.prefix.hint")),
             h("div", {class: "st-line"}, save, done),
             h("div", {class: "st-rule"}), made.body.find((node) => node.dataset && node.dataset.part === "mcp"),
-            h("div", {class: "st-rule"}), restartRow(),
             h("div", {class: "st-rule"}), field(t("setup.older.title"), h("div", null, older), t("setup.older.hint")),
           ]);
         });
       }
 
+      const foot = footOf(show);  // the account and Restart board, at the bottom of the left list
+      side.append(foot.node); foot.refresh();
+      const footTimer = setInterval(() => { if (!view.box.isConnected || closing) clearInterval(footTimer); else foot.refresh(); }, 10000);
       win = {view, show};
       show(...(queued || [first, given.part, given.focus]));
       refreshDots();
@@ -303,12 +301,44 @@ const SETTINGS = (function () {
     setTimeout(build, 0);
   }
 
-  // Restart board (1.8.32: it was in the sliders panel, now Appearance): the same button and texts; SHELL.restartBoard waits for the new process and pairs again
-  function restartRow() {
-    const said = h("div", {class: "sp-bad", role: "alert", hidden: "hidden"});
-    const go = h("button", {type: "button", class: "wz-btn sm"}, t("board.shell.restart"));
-    go.addEventListener("click", () => SHELL.restartBoard(go, (words) => { said.textContent = words; said.hidden = false; }));
-    return h("div", {class: "wz-field st-restart"}, h("span", {class: "cap"}, t("board.shell.restart.label")), h("div", null, go), h("div", {class: "hint"}, t("board.shell.restart.hint")), said);
+  // The foot of the left list (1.8.33): the GitHub account with Sign out, and Restart board. Both ask first (a window, as the prototype C-settings shows).
+  function confirmDialog(title, paragraphs, goLabel, act) {
+    const said = h("p", {class: "wz-err", role: "alert", hidden: ""});
+    const no = h("button", {type: "button", class: "wz-btn sm"}, t("board.serve.cancel"));
+    const go = h("button", {type: "button", class: "wz-btn sm primary"}, goLabel);
+    const dialog = SERVE.dialog([h("h2", null, title), ...paragraphs.map((text) => h("p", {class: "sub"}, text)), said, h("div", {class: "row"}, no, go)]);
+    dialog.box.classList.add("st-confirm", "wz");
+    no.addEventListener("click", dialog.close);
+    go.addEventListener("click", () => act(go, dialog, (words) => { said.textContent = words; said.hidden = false; }));
+    return dialog;
+  }
+  function restartAsk() {
+    confirmDialog(t("settings.restart.title"), [t("board.shell.restart.hint")], t("settings.restart.go"), (go, dialog, fail) => SHELL.restartBoard(go, fail));
+  }
+  function signOutAsk(done) {
+    confirmDialog(t("settings.out.title"), [t("settings.out.one"), t("settings.out.two")], t("settings.out.go"), (go, dialog, fail) => {
+      go.disabled = true;
+      SERVE.post("/api/gh", {do: "logout"}).then(() => { dialog.close(); done(); }, (error) => { fail(errorText(error)); go.disabled = false; });
+    });
+  }
+  function footOf(show) {
+    const login = h("b", {class: "st-login"}), line = h("span", {class: "st-wline"}), out = h("button", {type: "button", class: "st-link"}, t("settings.who.signout"));
+    const signin = h("button", {type: "button", class: "st-link"}, t("settings.who.signin"));
+    const mark = typeof PROGRAM_ICONS !== "undefined" ? PROGRAM_ICONS.svg("gh") : null;
+    const who = h("div", {class: "st-who"}, h("span", {class: "st-wmark"}, mark), h("div", {class: "st-wtext"}, login, h("div", {class: "st-wsub"}, line, " ", out, signin)));
+    const restart = h("button", {type: "button", class: "wz-btn sm st-restart"}, t("board.shell.restart"));
+    restart.addEventListener("click", restartAsk);
+    const paint = (check) => {
+      const on = Boolean(check && check.login);
+      login.textContent = on ? check.login : "";
+      line.textContent = t(on ? "settings.who.line" : "settings.who.none");
+      login.hidden = !on; out.hidden = !on; signin.hidden = on;
+    };
+    const refresh = () => SERVE.call("/api/ready", {}, 8).then((data) => paint(((data && data.checks) || []).find((one) => one.id === "copilot")), () => {});
+    out.addEventListener("click", () => signOutAsk(() => { paint(null); refresh(); }));
+    signin.addEventListener("click", () => show("copilot"));
+    paint(null);
+    return {node: h("div", {class: "st-foot2 wz"}, who, restart), refresh};
   }
 
   // Coming from an older copy: look at what would come over, then bring it (the step `older` of the old form)

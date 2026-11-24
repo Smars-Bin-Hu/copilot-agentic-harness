@@ -35,7 +35,8 @@ const WIZARD = (function () {
     path.setAttribute("d", GITHUB); svg.append(path);
     return svg;
   }
-  const programIcon = {python: "py", git: "git", vscode: "</>", gh: "gh", harness: "h"};
+  const programIcon = (id) => (typeof PROGRAM_ICONS !== "undefined" && PROGRAM_ICONS.svg(id)) || ({python: "py", git: "git", vscode: "</>", gh: "gh", harness: "h"})[id] || id.slice(0, 2);  // the program's own logo (programicons.js); the text badge if there is none
+  const programBadge = (id) => { const icon = programIcon(id); return el("span", "wz-ic" + (typeof icon === "string" ? "" : " pic"), icon); };
   const shortPath = (text) => String(text || "");
   const put = (node, ...children) => node.replaceChildren(...children.flat(Infinity).filter((child) => child !== null && child !== undefined && child !== false));  // replaceChildren would write a null as the word
   const errorText = (error) => String((error && error.message) || error || "");
@@ -337,7 +338,7 @@ const WIZARD = (function () {
         row.path ? where(row) : null, note ? el("div", "wz-where plain", note) : null, row.trouble === "fails" && row.why ? el("div", "wz-where plain", row.why) : null, harnessBad ? el("div", "wz-where plain", M.shortError) : null);
       const needsFix = !ok && !slow && row.id !== "harness";
       const again = harnessBad ? el("div", "wz-fix", el("div", "line", btn(t("wizard.p.again"), "sm primary", () => trySetShort()))) : null;
-      return el("div", "wz-li" + (needsFix || harnessBad ? " miss" : ""), el("span", "wz-ic", programIcon[row.id] || row.id.slice(0, 2)), main, state, needsFix ? fix(row) : again);
+      return el("div", "wz-li" + (needsFix || harnessBad ? " miss" : ""), programBadge(row.id), main, state, needsFix ? fix(row) : again);
     }
     function take(found) {
       const was = Boolean(M.progs && M.progs.all_found);

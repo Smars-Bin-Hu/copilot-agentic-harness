@@ -62,7 +62,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
-from core import agenthost, filecache, launchenv, pace
+from core import agenthost, filecache, ghauth, launchenv, pace
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
@@ -638,8 +638,13 @@ class Board:
         elif step == "folder":
             launchenv.add_folder(self.root, "gh", str(data.get("path") or ""))  # `which` finds gh.exe on Windows by itself
             found = {"state": "folder"}
+        elif step == "logout":  # Settings, Sign out (1.8.33): gh auth logout for github.com, then the host drops the token when no chat works
+            try:
+                found = self.link.sign_out()
+            except ghauth.GhError as error:
+                raise ValueError(str(error)) from None
         else:
-            raise ValueError("do: login, cancel or folder")
+            raise ValueError("do: login, cancel, folder or logout")
         self.ready.forget_gh()
         print(say("serve.did", action="gh " + step, task="-"), flush=True)
         return {key: value for key, value in found.items() if key != "token"}
@@ -2427,7 +2432,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": board.terminal.act(data)})
                 except CommandError as error:
                     return self.answer(409, {"error": str(error)})
-            if path == "/api/gh":  # 1.8.x: "Copilot signed in (gh)" on the Enter screen: {do: login | cancel | folder, path?}. It starts gh's web sign-in or names gh's folder: the paired browser only
+            if path == "/api/gh":  # 1.8.x: "Copilot signed in (gh)" on the Enter screen: {do: login | cancel | folder | logout, path?}. It starts gh's web sign-in or names gh's folder: the paired browser only
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

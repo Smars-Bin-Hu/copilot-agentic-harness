@@ -82,8 +82,9 @@ const MACHINE = (function () {
     const progs = h("div", {class: "tl-progs"});
     const host = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false"});
     const proxy = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("machine.proxy.none")});
-    const make = h("button", {type: "button", class: "act hot"}, t("machine.ca.make"));
-    const drop = h("button", {type: "button", class: "act danger"}, t("machine.ca.drop"));
+    const stacked = Boolean(opts && opts.stacked);  // Settings, Advanced (1.8.33): the heading, the bundle's state line, the fields, then the buttons on a line of their own in the look of the other secondary buttons
+    const make = h("button", {type: "button", class: stacked ? "wz-btn sm" : "act hot"}, t("machine.ca.make"));
+    const drop = h("button", {type: "button", class: stacked ? "wz-btn sm" : "act danger"}, t("machine.ca.drop"));
     const caState = h("span", {class: "tl-sumline"});
     const caSaid = h("span", {class: "sv-said"});
     const mcp = h("span", {class: "mc-mcp"});
@@ -91,7 +92,8 @@ const MACHINE = (function () {
     const proxyMark = h("span", {class: "sv-own", hidden: ""}, t("machine.recipe.mark"));
     const part = (key, title, ...nodes) => h("section", {class: "tl-part", "data-part": key}, h("h3", {class: "mc-h"}, title), ...nodes);
     const body = [part("programs", [t("machine.prog.title"), " ", info("machine.prog.tip")], progs, said),
-      part("network", [(opts && opts.bare) ? null : [t("machine.net.title"), " "], info("machine.ca.lead.short"), " ", caState], h("p", {class: "tl-gsub"}, t("machine.net.lead")), h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("div", {class: "sv-acts"}, make, drop, caSaid)),
+      stacked ? part("network", opts.title || t("machine.net.title"), h("div", {class: "st-bundle"}, caState), h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("p", {class: "tl-gsub"}, t("machine.net.lead")), h("div", {class: "st-bacts"}, make, drop), h("div", {class: "sv-acts"}, caSaid))
+      : part("network", [(opts && opts.bare) ? null : [t("machine.net.title"), " "], info("machine.ca.lead.short"), " ", caState], h("p", {class: "tl-gsub"}, t("machine.net.lead")), h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("div", {class: "sv-acts"}, make, drop, caSaid)),
       part("mcp", ["MCP ", info("machine.mcp.tip")], mcp, h("p", {class: "tl-gsub"}, t("machine.mcp.when")))];
     const paint = (state) => {
       progs.replaceChildren(...programsBlock(state, (next) => { paint(next); }, said));
@@ -108,7 +110,7 @@ const MACHINE = (function () {
       }
       caState.replaceChildren(...bundleState(state));
       make.textContent = t(state.bundle.path ? "machine.ca.again" : "machine.ca.make");
-      make.className = "act" + (state.bundle.path ? "" : " hot");
+      make.className = stacked ? "wz-btn sm" : "act" + (state.bundle.path ? "" : " hot");
       drop.hidden = !state.bundle.path;
       const on = state.mcp.allowed === true;  // never set: the default, not allowed, shows as chosen (1.8.32)
       const chips = [["allowed", true], ["blocked", false]].map(([word, value]) => {

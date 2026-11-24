@@ -228,3 +228,41 @@ class WizardPolishTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProgramIconsTest(unittest.TestCase):
+    """1.8.34: each program of the wizard's rows shows its own logo, drawn in programicons.js; every page that loads wizard.js loads it first."""
+
+    def test_five_programs_have_an_icon_and_the_file_loads_first(self):
+        icons = (WEB / "programicons.js").read_text(encoding="utf-8")
+        for pid in ("python", "git", "vscode", "gh", "harness"):
+            self.assertRegex(icons, r"\b%s\(\) \{" % pid)
+        self.assertIn("ROBOT.svg({head: true})", icons)
+        self.assertIn("PROGRAM_ICONS.svg(id)", SCRIPT)
+        html = (WEB.parent / "taskhtml.py").read_text(encoding="utf-8")
+        lists = re.findall(r"\[[^\[\]]*\"wizard\.js\"[^\[\]]*\]", html)
+        self.assertGreaterEqual(len(lists), 4)
+        for one in lists:
+            self.assertLess(one.index('"programicons.js"'), one.index('"wizard.js"'))
+            if '"robot.js"' in one:
+                self.assertLess(one.index('"robot.js"'), one.index('"programicons.js"'))
+
+
+class SettingsGroupsTest(unittest.TestCase):
+    """1.8.33: Settings' left list sits under three headings; every section keeps its id; the Skill prefix field is gone from Advanced."""
+
+    def test_groups_cover_every_section_once_and_prefix_field_is_gone(self):
+        code = (WEB / "settings.js").read_text(encoding="utf-8")
+        groups = re.search(r"const GROUPS = (\[.*\]);", code).group(1)
+        ids = re.findall(r'"([a-z]+)"', re.sub(r'"settings\.g\.[a-z]+"', "", groups))
+        sections = re.search(r"const SECTIONS = \[(.*?)\]", code).group(1)
+        self.assertEqual(sorted(ids + ["adv"]), sorted(re.findall(r'"([a-z]+)"', sections)))  # Advanced stands alone, under no heading
+        self.assertNotIn('"network"', sections)  # Network is the first part of Advanced; `network` and `local` are aliases of it
+        self.assertIn('local: "adv", network: "adv"', code)
+        self.assertEqual(len(ids), len(set(ids)))
+        for lang in ("en", "zh"):
+            texts = json.loads((Path(taskhtml.__file__).resolve().parents[2] / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
+            for key in ("harness", "company"):
+                self.assertTrue(texts["settings.g." + key])
+            self.assertNotIn("setup.prefix", texts)
+        self.assertNotIn("setup.prefix", code)

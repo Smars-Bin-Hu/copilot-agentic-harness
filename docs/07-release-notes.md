@@ -8,13 +8,14 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.34 (1.8.0 – 1.8.34, 2026-11-17 – 2026-11-23)
+## 1.8.35 (1.8.0 – 1.8.35, 2026-11-17 – 2026-11-23)
 
 ### Added
 
 - **Motion in the first run** (1.8.34): pages turn, the bar fills and draws its ticks and yellow dots, and the robot's head walks the bar: it hops over the steps already done and when a step is done, cheers at Confirm, and flies on as the Enter screen's robot. The wordmark appears whole; Enter to the board in two short steps; Settings grows out of the gear, its sections fade over, and grey bars stand in while one loads. Transform and opacity only, no move over 300 ms but the robot's own; Lite and reduced motion keep short fades only.
 - **The programs' own icons** (1.8.34): the Programs page shows Python, Git, VS Code and the GitHub mark; the harness command is the robot's head.
 - **The certificate bundle made by itself** (1.8.34): when the knowledge base brings a recipe (`company/tools/computer.json`) and this computer has no bundle, the harness makes it in the background. The guide shows a line while it works; Review has **Try again** when it failed, and the gear gets a dot.
+- **The Copilot page in Settings says how Copilot is** (1.8.35): one line under the name: the GitHub CLI version, the agent host (ready, preparing with a percent, starting, stopped) and the number of models; the paths, versions and the last start's time on hover. **Sign out** sits on the card too. When the agent host stopped, or is still starting after twice this computer's last start (90 s at least), **Start Copilot again** appears; nothing is stopped before it is pressed.
 - **The GitHub account in Settings** (1.8.34): the bottom left of Settings shows who is signed in, with **Sign out** (it signs the GitHub CLI out on this computer, after a confirm), **Walk the setup guide again** and **Restart board**.
 
 - **Walk the setup guide again** (1.8.33): the bottom left of Settings opens the whole setup guide (`/setup`) once more, page by page. The copy stays set up: leaving the guide halfway changes nothing.

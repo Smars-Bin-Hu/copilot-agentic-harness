@@ -28,7 +28,7 @@ from core import ahp, config, copilot_events
 from core.paths import runtime_dir, utc_now
 from core.state import atomic_write
 
-from . import autorun_spend, superact, superroute, superview, vslink
+from . import autorun_spend, superact, superbrief, superroute, superview, vslink
 
 MARKER = "/harness-super"  # the same as `modules/gate/superagent.MARKER`: the gate knows the chat by its first message
 AGENT_FILE = ".github/agents/super.agent.md"
@@ -123,8 +123,35 @@ def closed_line(names: List[str]) -> str:
     return line + ", ".join(shown)
 
 
-def digest(view: Dict[str, Any], at: str = "", closed: Optional[List[str]] = None) -> str:
-    """The text the agent is given about the tasks, from `superview.build`: a head, then one line for each open task, the ones that wait for the person first (longest wait first). At most DIGEST_CHARS."""
+def marks_of(row: Any) -> str:
+    """The extra marks of a task's digest line, from its board row; each is left out when the row has nothing for it: ` | paused`, ` | chat: none|idle|working|error`, ` | autorun`, ` | checks n`, ` | todo d/t`, ` | links a,b`."""
+    if not isinstance(row, dict):
+        return ""
+    out = ""
+    if row.get("paused_since"):
+        out += " | paused"
+    chat = row.get("chat")
+    if isinstance(chat, dict):
+        state = "none" if not chat.get("bound") else {"busy": "working"}.get(str(chat.get("state") or ""), str(chat.get("state") or "idle"))
+        out += f" | chat: {clip(state, 12)}"
+    if row.get("autorun"):
+        out += " | autorun"
+    checks = row.get("checks")
+    if isinstance(checks, dict) and isinstance(checks.get("n"), int) and not isinstance(checks.get("n"), bool) and checks["n"] > 0:
+        out += f" | checks {checks['n']}"
+    todo = row.get("todo")
+    if isinstance(todo, dict) and isinstance(todo.get("total"), int) and todo["total"] > 0:
+        out += f" | todo {todo.get('done') or 0}/{todo['total']}"
+    refs = [clip(item.get("ref"), 40) for item in row.get("links") or [] if isinstance(item, dict) and item.get("ref")] if isinstance(row.get("links"), list) else []
+    if refs:
+        out += " | links " + ",".join(refs[:3]) + (f",+{len(refs) - 3}" if len(refs) > 3 else "")
+    return out
+
+
+def digest(view: Dict[str, Any], at: str = "", closed: Optional[List[str]] = None, rows: Optional[List[Dict[str, Any]]] = None) -> str:
+    """The text the agent is given about the tasks, from `superview.build`: a head, then one line for each open task, the ones that wait for the person first (longest wait first). At most DIGEST_CHARS.
+    `rows` (the board's rows): each line gets the marks of `marks_of`."""
+    by_name = {superview.name_of(row): row for row in rows or [] if isinstance(row, dict) and row.get("task")}
     status, mates, items = view.get("status") or {}, view.get("mates") or [], view.get("items") or []
     by_task = {item["task"]: item for item in items}
     order = [mate for item in items for mate in mates if mate["task"] == item["task"]]
@@ -138,6 +165,7 @@ def digest(view: Dict[str, Any], at: str = "", closed: Optional[List[str]] = Non
         line = f"- {clip(mate['task'], CLIP_NAME)} ({clip(mate.get('kind'), 20)}): {STATES.get(mate['state'], mate['state'])}"
         if item:
             line += f" | waits for: {item['why']}" + (f" - {clip(item['title'], CLIP_TITLE)}" if item.get("title") else "") + (f" | {how_long(item.get('waited_s'))}" if how_long(item.get("waited_s")) else "")
+        line += marks_of(by_name.get(mate["task"]))
         rest = len(order) - index - 1
         if size + len(line) + 1 + (len(f"(+{rest} more tasks not shown)") + 1 if rest else 0) > DIGEST_CHARS:
             lines.append(f"(+{len(order) - index} more tasks not shown)")
@@ -428,7 +456,7 @@ class Brain:
             return {"ok": False, "why": "empty"}
         if len(words) > MAX_TEXT:
             return {"ok": False, "why": "long"}
-        return self.turn("ask", "Person asks: " + words, words)
+        return self.turn("ask", "Person asks: " + words, words, words)
 
     def route(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """A question to one task's chat, read only (1.8.2): `{task, text, lang}`. `{ok: true, id, state}` or `{ok: false, why}`; see `superroute`."""
@@ -438,7 +466,14 @@ class Brain:
         """A request for the short summary (the morning one, or when the person presses for it)."""
         return self.turn("summary", SUMMARY_ASK, SUMMARY_SHOWN)
 
-    def turn(self, kind: str, request: str, shown: str) -> Dict[str, Any]:
+    def briefs(self, found: Dict[str, Any], view: Dict[str, Any], words: str) -> str:
+        """The briefs of the tasks that get one (`superbrief.chosen`: the ones the words name, and the top waiting one; for the summary only that one). Empty text when none."""
+        rows = found.get("rows") if isinstance(found, dict) else None
+        items = view.get("items") or []
+        chosen = superbrief.chosen(words, rows or [], str(items[0]["task"]) if items else "", only_waiting=not words)
+        return "\n\n".join(f"Brief of {superview.name_of(row)}:\n{superbrief.brief(self.root, row)}" for row in chosen)
+
+    def turn(self, kind: str, request: str, shown: str, words: str = "") -> Dict[str, Any]:
         with self.lock:
             rec = self.load()
             if self.sync(rec):
@@ -456,7 +491,11 @@ class Brain:
             except Exception:  # noqa: BLE001 - no digest, no turn
                 return {"ok": False, "why": "error"}
             self.sending = True
-        message = f"{MARKER}\n{digest(view, self.now().strftime('%H:%M'), closed)}\n\n{request}"
+        try:
+            more = self.briefs(found, view, words)
+        except Exception:  # noqa: BLE001 - a brief must never stop a turn
+            more = ""
+        message = f"{MARKER}\n{digest(view, self.now().strftime('%H:%M'), closed, found.get('rows'))}\n\n" + (more + "\n\n" if more else "") + request
         done: Dict[str, Any] = {}
         why = ""
         try:

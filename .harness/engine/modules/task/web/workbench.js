@@ -73,7 +73,7 @@ const WORKBENCH = (function () {
       },
       target() { const on = sv.querySelector(".sa-team .sa-mate.on[data-task]"); return on ? on.dataset.task || "" : ""; },
     };
-    const panels2 = WBPANELS.create(Object.assign({rows: rowsOf}, bridgeCalls));  // the drawing of the panels
+    const panels2 = WBPANELS.create(Object.assign({rows: rowsOf, more: options.more}, bridgeCalls));  // the drawing of the panels
     let mode = store.get("mode", "wb") === "focus" ? "focus" : "wb";
     let fold = {q: false, t: false, d: false, p: false};  // a folded panel is only its head line; a side with both folded is a rail
     try { const saved = JSON.parse(store.get("fold", "{}")); for (const key of PANELS) if (typeof saved[key] === "boolean") fold[key] = saved[key]; } catch (error) { /* the default */ }

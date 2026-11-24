@@ -2616,7 +2616,8 @@ def handler_for(board: Board) -> type:
                             said = superroute.said_of(board.link, paths[item["task"]])  # the agent's last words, from what the link holds
                             if said:
                                 item["said"] = said
-                    view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.17: the recently closed tasks the board still shows, to open again with `/api/super/send`
+                    view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.17: the closed tasks the board lists (the newest `closed_shown`), to open again with `/api/super/send`
+                    view["closed_more"] = int(result.get("hidden") or 0)  # the older closed tasks the board does not list: the Closed button says "N+"
                     view["making"] = result.get("making") or []  # 1.8.5: chats the board made whose task is not there yet
                     return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows

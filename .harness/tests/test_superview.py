@@ -28,13 +28,18 @@ def result(*rows: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class ClosedListTests(unittest.TestCase):
-    def test_closed_tasks_newest_first_at_most_twelve(self) -> None:
+    def test_closed_tasks_newest_first(self) -> None:
         rows = [row(f"c{index:02d}", status="closed", kind="dev", title=f"T{index}", closed_at=f"2026-11-{index + 1:02d}T00:00:00+00:00") for index in range(15)] + [row("open-one"), row("odd", status="new")]
         found = superview.closed_of(rows)
-        self.assertEqual(len(found), 12)
+        self.assertEqual(len(found), 15)
         self.assertEqual([item["task"] for item in found][:3], ["c14", "c13", "c12"])
         self.assertEqual(found[0], {"task": "c14", "kind": "dev", "closed_at": "2026-11-15T00:00:00+00:00", "title": "T14", "reopen": None})
         self.assertEqual(superview.closed_of(rows, 2)[1]["task"], "c13")
+
+    def test_all_closed_rows_the_board_lists_are_listed(self) -> None:
+        for count in (27, 50):  # the board lists at most `closed_shown` (50) closed rows; the menu lists all of them
+            rows = [row(f"c{index:02d}", status="closed", closed_at=f"2026-10-{index % 28 + 1:02d}T{index // 28:02d}:00:00+00:00") for index in range(count)]
+            self.assertEqual(len(superview.closed_of(rows)), count)
 
     def test_without_closed_at_the_update_time_stands_in_and_bad_input_is_empty(self) -> None:
         found = superview.closed_of([row("a", status="closed", updated_at="2026-11-02T00:00:00+00:00"), row("b", status="closed", updated_at="2026-11-03T00:00:00+00:00"), "x", None, {"status": "closed"}])
@@ -221,6 +226,7 @@ class RouteTests(ServeCase):
 
     def test_the_route_lists_the_closed_tasks(self) -> None:
         self.assertEqual(self.request("POST", "/api/super", {})[1]["closed"], [])
+        self.assertEqual(self.request("POST", "/api/super", {})[1]["closed_more"], 0)  # the board leaves none out
         with task_ops.locked(self.root, TASK) as data:
             data["status"] = "closed"
             data["title"] = "A title"

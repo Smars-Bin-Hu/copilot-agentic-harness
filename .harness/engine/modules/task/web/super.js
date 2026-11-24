@@ -109,7 +109,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     foldLine.addEventListener("click", () => setFold(false, true));
     drawFold();
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
-    let teamSig = "", bannerSig = "", mates = [], making = [], closedList = [], localThink = 0, failed = "";
+    let teamSig = "", bannerSig = "", mates = [], making = [], closedList = [], closedMore = 0, localThink = 0, failed = "";
     let pollTimer = 0, patrolToken = 0, noticeBusy = false, chain = Promise.resolve(), lastMate = "";
     let pointing = null, holdUntil = 0;  // the item the pet showed on a click (a second click soon after opens its task); the pet stays put until holdUntil
     let watchers = 0;  // the pop-out window is one: while it is open the data keeps coming, shown or not
@@ -179,10 +179,11 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const modeKey = (info) => (!info ? "" : info.mode === "refused" ? (info.why === "checks" ? "checks" : "partial") : info.mode === "new" || info.mode === "same" ? info.mode : "");
     const modeLine = (info) => { const key = modeKey(info); return key === "new" ? t("super.reopen.line.new", {n: Number(info.next_round) || (Number(info.round) || 1) + 1}) : key === "same" ? t("super.reopen.line.same") : MODE_WHY[key] ? t(MODE_WHY[key]) : ""; };
     const modeTag = (info) => { const key = modeKey(info); return key ? h("span", {class: "sa-mtag " + MODES[key][0], title: modeLine(info)}, t(MODES[key][1])) : null; };
-    function drawTeam(list, creating, shut) {
+    function drawTeam(list, creating, shut, more) {
       mates = list; making = creating || [];
       if (shut) closedList = shut;
-      const sig = JSON.stringify([list, making, closedList]) + "|" + filter;
+      closedMore = Number(more) > 0 ? Number(more) : 0;
+      const sig = JSON.stringify([list, making, closedList, closedMore]) + "|" + filter;
       if (sig === teamSig) return;
       teamSig = sig;
       if (filter && !list.some((mate) => mate.task === filter) && !isClosed(filter)) filter = "";
@@ -198,9 +199,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       // One avatar for each task the board is still making: a spinner and its name; not a filter, no menu.
       const makes = making.map((one) => h("span", {class: "sa-mk", "data-making": one.name, title: makingTip(one)},
         h("span", {class: "sa-ring"}, makingInfo(one).stage === "refused" || makingInfo(one).stage === "lost" ? h("span", {class: "mk-dot", "aria-hidden": "true"}) : spinner("sa-spin")), h("span", {class: "sa-nm"}, one.name), h("span", {class: "sa-mkst"}, makingMarks(one, true))));
-      const shutList = closedOnly();
-      const closedBtn = shutList.length ? h("button", {type: "button", class: "sa-closed" + (isClosed(filter) ? " on" : ""), "aria-haspopup": "true", "aria-expanded": closedMenuNode ? "true" : "false", title: t("super.closed.tip", {n: shutList.length}), "aria-label": t("super.closed.tip", {n: shutList.length})},
-        h("span", {class: "sa-ring", "aria-hidden": "true"}, h("span", {class: "sa-clico"}, "\u25A4")), h("span", {class: "sa-nm"}, t("super.closed", {n: shutList.length}))) : null;
+      const shutList = closedOnly(), shutN = shutList.length + (closedMore ? "+" : "");
+      const closedBtn = shutList.length ? h("button", {type: "button", class: "sa-closed" + (isClosed(filter) ? " on" : ""), "aria-haspopup": "true", "aria-expanded": closedMenuNode ? "true" : "false", title: t("super.closed.tip", {n: shutN}), "aria-label": t("super.closed.tip", {n: shutN})},
+        h("span", {class: "sa-ring", "aria-hidden": "true"}, h("span", {class: "sa-clico"}, "\u25A4")), h("span", {class: "sa-nm"}, t("super.closed", {n: shutN}))) : null;
       team.replaceChildren(all, ...nodes, ...makes, ...(closedBtn ? [closedBtn] : []));
       actModes();
     }
@@ -399,7 +400,36 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     // The card is drawn again in place when its proposals change (the server checks them at every poll); words typed in a Send box stay.
     const ACT = new Map();  // message id -> {box, sig, list, drafts, pressed, done}
     const ACT_ALL = ["archive", "pause", "resume", "close", "review set"];  // "Do all" only for what needs no code and no dialog of its own
-    const ACT_WHY = {open: "super.act.why.open", checks: "super.act.why.checks", unknown: "super.act.why.unknown", state: "super.act.why.state", kind: "super.act.why.kind", n: "super.act.why.n", text: "super.act.why.text", paused: "super.act.why.paused", closed: "super.act.why.closed", empty: "super.act.why.empty", long: "super.act.why.long", name: "super.act.why.name", taken: "super.act.why.taken", bad: "super.act.why.bad"};
+    const ACT_WHY = {open: "super.act.why.open", checks: "super.act.why.checks", unknown: "super.act.why.unknown", state: "super.act.why.state", kind: "super.act.why.kind", n: "super.act.why.n", text: "super.act.why.text", paused: "super.act.why.paused", closed: "super.act.why.closed", empty: "super.act.why.empty", long: "super.act.why.long", name: "super.act.why.name", taken: "super.act.why.taken", bad: "super.act.why.bad", ref: "super.act.why.ref", title: "super.act.why.title"};
+    // The actions of 1.8.37 the page runs with the endpoint of the task page's own button: label, and the call (`call(one)` gives a promise).
+    const NEW_ACT = {compact: "super.act.compact", retry: "super.act.retry", rename: "super.act.rename", "autorun off": "super.act.autorun.off", "task link": "super.act.link", "dismiss action": "super.act.dismiss"};
+    const actLabel = (one) => (one.action === "dismiss action" && heldCodes(one.task).length > 1 ? t("super.act.dismiss.many", {n: heldCodes(one.task).length}) : t(NEW_ACT[one.action], {title: one.title || "", ref: one.ref || ""}));
+    const STEP_WORD = {resume: "super.act.step.resume", "new-chat": "super.act.step.new-chat", send: "super.act.step.send"};  // written out: a search for a key finds its place
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    // The held calls of a task as the super view lists them (each has a code): "dismiss action" dismisses each, as the task page's Dismiss does with no reason.
+    const heldCodes = (task) => ((data && data.items) || []).filter((item) => item.task === task && item.why === "outbox").flatMap((item) => callsOf(item).map((one) => one.code));
+    function actCall(one) {
+      const task = one.task;
+      if (one.action === "compact") return SERVE.post("/api/compact", {task});
+      if (one.action === "retry") return SERVE.post("/api/resume", {task});
+      if (one.action === "rename") return SERVE.post("/api/title", {task, title: one.title});
+      if (one.action === "autorun off") return SERVE.post("/api/autorun/stop", {task});
+      if (one.action === "task link") return SERVE.post("/api/act", {action: "task link", task, env: one.ref, runner: "on", step: "act"});
+      const codes = heldCodes(task);
+      if (!codes.length) return Promise.reject(new Error(t("super.act.dismiss.none")));
+      return codes.reduce((chain, code) => chain.then(() => SERVE.post("/api/act", {action: "dismiss action", task, step: "act", code, reason: "", note: ""})), Promise.resolve());
+    }
+    // The resume of a send chain: the board's own call, then wait (15 s at most) until the row is not paused any more.
+    async function resumeStep(task) {
+      try { await SERVE.post("/api/act", {action: "resume", task, step: "act"}); } catch (error) { return {ok: false, text: (error && error.message) || String(error)}; }
+      SERVE.done(); poll();
+      for (let tries = 0; tries < 30; tries++) {
+        const row = (rowsOf() || []).find((one) => one.name === task || one.task === task);
+        if (row && !row.paused_since) return {ok: true};
+        await sleep(500);
+      }
+      return {ok: false, text: t("super.act.why.resume.timeout")};
+    }
     const actSig = (list) => JSON.stringify(list || []);
     const actWhat = (one) => (one.kind === "send" ? t("super.act.send.to", {task: one.task})
       : one.kind === "reopen" ? t("super.act.reopen.to", {task: one.task})
@@ -407,6 +437,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       : one.action === "review set" ? t("super.act.set.what", {task: one.task, n: one.n})
       : one.action === "steer" ? t("super.act.steer.what", {task: one.task})
       : one.action === "stop" ? t("super.act.stop.what", {task: one.task})
+      : NEW_ACT[one.action] ? actLabel(one) + " \u00b7 " + one.task
       : t("board.action." + String(one.action).replace(" ", "-")) + " · " + one.task);
     const actBad = (error) => SERVE.reasons((error && error.message) || String(error));
     function actRow(state, one, at) {
@@ -434,7 +465,14 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         const options = SUPERDIRECT.menu(box, sv, (task) => shut || isClosed(task));
         options.bind(one.task);
         options.presetChecks(state.picked.has(at) ? state.picked.get(at) : shut && Number.isInteger(one.checks) ? one.checks : "");  // the card holds its own checks: the box's are not its
-        const go = h("button", {type: "button", class: "act hot live"}, t(shut ? "super.act.reopen.go" : "super.act.send.go"));
+        state.chain = state.chain || new Map();  // chain of a send card: {steps, mark: {step: run|done|fail}, fail, text}; it lives in the state so a redraw in the middle (the check gives other steps once it resumed) keeps it
+        const chain = shut ? null : state.chain.get(at);
+        const plan = chain ? chain.steps : !shut && Array.isArray(one.steps) && one.steps.length > 1 ? one.steps : null;
+        const running = Boolean(chain && !chain.fail);
+        const go = h("button", {type: "button", class: "act hot live"}, t(shut ? "super.act.reopen.go" : chain && chain.fail ? "super.act.again" : running ? "super.act.running" : plan && plan.includes("resume") ? "super.act.resume.send" : "super.act.send.go"));
+        const alt = plan && !chain && plan.includes("resume") && !plan.includes("new-chat") ? h("button", {type: "button", class: "act live", title: t("super.act.newchat.instead.tip")}, t("super.act.newchat.instead")) : null;  // a chat is bound: the same chain, with a new chat
+        const stepsLine = plan ? h("div", {class: "sa-steps"}, t("super.act.steps"), ...plan.flatMap((step, i) => { const m = chain && chain.mark[step]; return [i ? " \u2192 " : " ", h("span", {class: "sa-step" + (m ? " " + m : "")}, (m === "done" ? "\u2713 " : m === "fail" ? "\u2715 " : m === "run" ? "\u2026 " : "") + t(STEP_WORD[step]))]; })) : null;
+        if (running) { go.disabled = true; box.disabled = true; }
         const only = shut ? h("button", {type: "button", class: "act live", title: t("super.reopen.only.tip")}, t("super.reopen.only")) : null;  // 1.8.21: only the person's click opens the task with no chat
         const modeBox = shut ? h("div", {class: "sa-rmbox"}) : null;
         // 1.8.21: the mode of the reopen, above the message: what it will be before the person presses (or, with checks above 0, that it is checks after the close and not a reopen)
@@ -457,7 +495,37 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         };
         options.onchange = drawMode;
         drawMode();
-        go.addEventListener("click", async () => {
+        // Press: the steps in order. Resume (then wait until the task is not paused), then the send, which makes the chat too when New chat is a step (`/api/super/send` with `new_chat`). The first failure stops the chain; Try again goes on from there.
+        const runChain = async (steps, again) => {
+          const text = box.value.trim();
+          if (!text || options.reading()) return;
+          const values = options.values();
+          const now = again || {steps, mark: {}, fail: null, text: ""};
+          now.fail = null; now.text = ""; state.chain.set(at, now);
+          const failed = (step, why) => { now.mark[step] = "fail"; now.fail = step; now.text = why; actDraw(state); emit(); };
+          for (const step of now.steps) {
+            if (now.mark[step] === "done" || step === "new-chat") continue;  // new-chat is made by the send
+            const fresh = step === "send" && now.steps.includes("new-chat");
+            now.mark[step] = "run"; if (fresh) now.mark["new-chat"] = "run";
+            actDraw(state); emit();
+            if (step === "resume") {
+              const result = await resumeStep(one.task);
+              if (!result.ok) return failed(step, result.text);
+              now.mark[step] = "done";
+            } else {
+              const result = await directSend(one.task, text, {...values, ...(fresh ? {new_chat: true} : {})}, true, false);
+              if (!result.ok && result.why === "paused" && now.steps.includes("resume")) delete now.mark.resume;  // paused again since the resume: Try again resumes again
+              if (!result.ok) { const bad = SUPERDIRECT.whyText(result.why, result.error); return fresh && !String(result.why).startsWith("text") ? (delete now.mark.send, failed("new-chat", bad)) : failed(step, bad); }
+              state.chain.delete(at);
+              state.done.set(at, SUPERDIRECT.howWord(result.how, result) + " \u00b7 " + stamp()); actDraw(state); emit(); return;
+            }
+          }
+        };
+        if (plan) {
+          go.addEventListener("click", () => runChain(plan, chain && chain.fail ? chain : null));
+          if (alt) alt.addEventListener("click", () => runChain(["resume", "new-chat", "send"], null));
+        }
+        else go.addEventListener("click", async () => {
           const text = box.value.trim();
           if ((!text && !shut) || options.reading()) return;
           go.disabled = true; said.replaceChildren();
@@ -474,7 +542,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
           drawMode();
           said.replaceChildren(...actBad(result.error));
         });
-        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat"}, actWhat(one)), taskLink(one.task)), modeBox, h("div", {class: "sa-reply"}, box, options.button, go, only), options.tray, said);
+        if (chain && chain.fail) said.replaceChildren(...(chain.fail === "resume" ? SERVE.reasons(chain.text) : [chain.text]));
+        return h("div", {class: "sa-actrow"}, h("div", {class: "sa-acthead"}, h("span", {class: "sa-actwhat", title: actWhat(one)}, actWhat(one)), taskLink(one.task)), stepsLine, modeBox, h("div", {class: "sa-reply"}, box, options.button, go, alt, only), options.tray, said);
       }
       let button;
       if (one.action === "review set") {
@@ -486,6 +555,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       } else if (one.action === "stop") {
         button = h("button", {type: "button", class: "act hot live"}, t("super.act.stop"));
         button.addEventListener("click", () => post(button, () => mateStop(one.task)));
+      } else if (NEW_ACT[one.action]) {
+        button = h("button", {type: "button", class: "act hot live", title: actLabel(one)}, actLabel(one));
+        button.addEventListener("click", () => post(button, () => actCall(one).then((result) => { SERVE.done(); poll(); return result; })));
       } else {
         button = actionButton(rowFor(one.task), {action: one.action});
         button.addEventListener("click", () => state.pressed.set(at, stamp()));  // the board's button does the work (and asks its code or dialog); the next check shows the result
@@ -1474,7 +1546,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       if (shown) fit();  // the board's banner above the view may have gone (hidden by the person): the view takes the room it left
       data = result;
       talk = spoken && typeof spoken === "object" && spoken.state ? spoken : null;
-      drawTeam(result.mates || [], result.making, Array.isArray(result.closed) ? result.closed : []);
+      drawTeam(result.mates || [], result.making, Array.isArray(result.closed) ? result.closed : [], result.closed_more);
       if (talk && talk.state !== "thinking" && localThink && Date.now() - localThink > 4000) localThink = 0;  // the server is done (a message, or nothing to say)
       routeMerge(talk ? talk.messages : [], talk ? talk.asks : []);
       reconcile(result.items || []);

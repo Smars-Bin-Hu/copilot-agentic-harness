@@ -129,8 +129,47 @@ class DigestTests(unittest.TestCase):
         self.assertLess(len(line), 250)
         self.assertIn("…", line)
 
+    def test_the_marks_paused_with_and_without_a_chat_autorun_checks_todo_links(self) -> None:
+        rows = result(row("a-task", paused_since="2026-11-20T10:00:00+00:00", paused_by="person", chat={"bound": True, "state": "idle"}),
+                      row("b-task", paused_since="2026-11-20T10:00:00+00:00", chat={"bound": False, "why": "x"}),
+                      row("c-task", state="working", autorun=True, checks={"n": 2}, todo={"done": 1, "total": 4}, links=[{"ref": "wi:1"}, {"ref": "wi:2"}], chat={"bound": True, "state": "busy"}),
+                      row("d-task", chat={"bound": True, "state": "error"}, checks={"n": 0}, todo={"done": 0, "total": 0}))
+        lines = {line.split(" ")[1]: line for line in superbrain.digest(superview.build(rows), rows=rows["rows"]).splitlines()[1:]}
+        self.assertTrue(lines["a-task"].endswith(": idle | paused | chat: idle"))
+        self.assertTrue(lines["b-task"].endswith(": idle | paused | chat: none"))
+        self.assertTrue(lines["c-task"].endswith(": working | chat: working | autorun | checks 2 | todo 1/4 | links wi:1,wi:2"))
+        self.assertTrue(lines["d-task"].endswith(": idle | chat: error"))  # no checks, no todo: nothing written
+
+    def test_a_row_with_nothing_extra_has_the_old_line_and_the_limit_holds(self) -> None:
+        self.assertEqual(superbrain.digest(superview.build(result(row("x"))), rows=[row("x")]).splitlines()[1], "- x (work): idle")
+        big = many(300)
+        for one in big["rows"]:
+            one.update(autorun=True, checks={"n": 3}, todo={"done": 1, "total": 9}, chat={"bound": True, "state": "idle"}, links=[{"ref": "wi:" + "9" * 30}])
+        self.assertLessEqual(len(superbrain.digest(superview.build(big), rows=big["rows"])), superbrain.DIGEST_CHARS)
+
 
 class ChatTests(BrainCase):
+    def task_files(self, name: str, **files: str) -> None:
+        folder = self.root / name
+        folder.mkdir(parents=True, exist_ok=True)
+        for file, text in files.items():
+            (folder / file).write_text(text, encoding="utf-8")
+
+    def test_the_brief_of_a_named_task_comes_after_the_digest_and_before_the_words(self) -> None:
+        name = self.rows["rows"][2]["task"]
+        self.task_files(name, **{"TASK.md": "- **Status**: in progress\n"})
+        self.assertEqual(self.brain.ask(f"look at {name}"), {"ok": True})
+        text = self.link.sent[0]["text"]
+        self.assertIn(f"Brief of {name}:\nstatus: in progress", text)
+        self.assertLess(text.index("Open tasks: 4"), text.index("Brief of "))
+        self.assertTrue(text.endswith(f"Person asks: look at {name}"))
+        self.assertLessEqual(text.count("Brief of "), 2)  # the named one, and the top waiting one
+
+    def test_the_summary_has_only_the_top_waiting_brief(self) -> None:
+        self.assertEqual(self.brain.summary(), {"ok": True})
+        text = self.link.sent[0]["text"]
+        self.assertEqual(text.count("Brief of "), 1)
+        self.assertLess(text.index("Brief of "), text.index(superbrain.SUMMARY_ASK))
     def test_the_message_starts_with_the_mark_and_carries_the_digest_and_the_words(self) -> None:
         self.assertEqual(self.brain.ask("  what first?  "), {"ok": True})
         sent = self.link.sent[0]

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.8.39",
-  "released": "2026-11-23",
+  "version": "1.8.40",
+  "released": "2026-11-24",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -121,6 +121,7 @@
         ".github/skills/harness-task-report/",
         ".github/skills/harness-agent-performance-review/",
         ".github/skills/harness-task-archive/",
+        ".github/skills/harness-super-read/",
         ".github/skills/harness-rookie-quick-start/",
         ".github/skills/generic-impact-analysis/",
         ".github/skills/generic-capture-knowledge/",
@@ -156,6 +157,7 @@
         ".harness/tests/test_actbehind.py",
         ".harness/tests/test_headclear.py",
         ".harness/tests/test_superbrain.py",
+        ".harness/tests/test_superbrief.py",
         ".harness/tests/test_superact.py",
         ".harness/tests/test_superroute.py",
         ".harness/tests/test_superdirect.py",

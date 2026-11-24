@@ -94,7 +94,7 @@ class SplitTests(BrainCase):
         self.assertEqual([item["ok"] for item in first], [True, True])
         self.rows = result(row("alpha", paused_since="2026-11-01T00:00:00+00:00", state="paused", actions=[{"action": "resume", "command": "x"}]))
         later = self.brain.talk()["messages"][-1]["proposals"]
-        self.assertEqual([(item["ok"], item.get("why")) for item in later], [(False, "state"), (False, "paused")])
+        self.assertEqual([(item["ok"], item.get("why")) for item in later], [(False, "state"), (True, None)])
         self.rows = result()
         self.assertEqual([item["why"] for item in self.brain.talk()["messages"][-1]["proposals"]], ["unknown", "unknown"])
 
@@ -161,7 +161,6 @@ class InvalidTests(BrainCase):
 
     def test_send(self) -> None:
         self.assertEqual(self.why({"kind": "send", "task": "ghost", "text": "x"}), "unknown")
-        self.assertEqual(self.why({"kind": "send", "task": "rest", "text": "x"}), "paused")
         self.assertEqual(self.why({"kind": "send", "task": "done", "text": "x"}), "closed")
         self.assertEqual(self.why({"kind": "send", "task": "alpha", "text": "  "}), "empty")
         self.assertEqual(self.why({"kind": "send", "task": "alpha"}), "empty")
@@ -205,3 +204,78 @@ class InvalidTests(BrainCase):
         for item in ("text", 5, None, [], {}, {"kind": "run", "task": "alpha"}, {"kind": 3}):
             self.assertEqual(one(item), {"kind": "bad", "ok": False, "why": "bad"})
         self.assertEqual(superact.check([{"kind": "send"}], None, SERVED)[0]["why"], "bad")
+
+
+class SendStepsTests(BrainCase):
+    def send(self, row_: Dict[str, Any], **more: Any) -> Dict[str, Any]:
+        return superact.check([dict({"kind": "send", "task": row_["task"], "text": "go on"}, **more)], [row_], SERVED)[0]
+
+    def test_paused_without_chat_resumes_and_opens_a_chat(self) -> None:
+        found = self.send(row("p", paused_since="2026-11-01T00:00:00+00:00", state="paused"))
+        self.assertEqual((found["ok"], found["steps"], found["new_chat"]), (True, ["resume", "new-chat", "send"], True))
+        found = self.send(row("p", paused_since="2026-11-01T00:00:00+00:00", chat={"bound": False}))
+        self.assertEqual(found["steps"], ["resume", "new-chat", "send"])
+
+    def test_paused_with_chat_resumes_and_sends_into_it(self) -> None:
+        found = self.send(row("p", paused_since="2026-11-01T00:00:00+00:00", chat={"bound": True, "state": "idle"}))
+        self.assertEqual((found["steps"], found["new_chat"]), (["resume", "send"], False))
+
+    def test_not_paused_idle_chat_only_sends(self) -> None:
+        found = self.send(row("q", chat={"bound": True, "state": "idle"}))
+        self.assertEqual((found["steps"], found["new_chat"]), (["send"], False))
+
+    def test_new_chat_flag_and_no_chat(self) -> None:
+        self.assertEqual(self.send(row("q", chat={"bound": True, "state": "idle"}), new_chat=True)["steps"], ["new-chat", "send"])
+        self.assertEqual(self.send(row("q"))["steps"], ["new-chat", "send"])
+        self.assertEqual(self.send(row("p", paused_since="x", chat={"bound": True}), new_chat=True)["steps"], ["resume", "new-chat", "send"])
+
+    def test_closed_empty_and_long_are_still_refused(self) -> None:
+        self.assertEqual(self.send(row("c", status="closed"))["why"], "closed")
+        self.assertEqual(self.send(row("q"), text=" ")["why"], "empty")
+
+
+class StateActionTests(BrainCase):
+    def act(self, row_: Dict[str, Any], action: str, **more: Any) -> Dict[str, Any]:
+        return superact.check([dict({"kind": "action", "task": row_["task"], "action": action}, **more)], [row_], SERVED)[0]
+
+    def test_compact(self) -> None:
+        self.assertTrue(self.act(row("a", chat={"bound": True, "state": "idle"}), "compact")["ok"])
+        for chat in ({"bound": True, "state": "busy"}, {"bound": False, "state": "idle"}, {}, None):
+            self.assertEqual(self.act(row("a", chat=chat), "compact")["why"], "state")
+        self.assertFalse(self.act(row("a", status="closed", chat={"bound": True, "state": "idle"}), "compact")["ok"])
+
+    def test_retry(self) -> None:
+        err = {"bound": True, "state": "error", "error": {"message": "x", "resumable": True}}
+        self.assertTrue(self.act(row("a", chat=err), "retry")["ok"])
+        self.assertFalse(self.act(row("a", chat=dict(err, error={"message": "x", "resumable": False})), "retry")["ok"])
+        self.assertFalse(self.act(row("a", chat={"bound": True, "state": "idle"}), "retry")["ok"])
+        self.assertFalse(self.act(row("a", chat={"bound": True, "state": "error"}), "retry")["ok"])
+        self.assertFalse(self.act(row("a", status="closed", chat=err), "retry")["ok"])
+
+    def test_rename_works_on_open_and_closed_tasks(self) -> None:
+        self.assertEqual(self.act(row("a"), "rename", title=" New name ")["title"], "New name")
+        self.assertTrue(self.act(row("a", status="closed"), "rename", title="t")["ok"])
+        for title in ("", "  ", "x" * 201, 5, None):
+            self.assertEqual(self.act(row("a"), "rename", title=title)["why"], "title")
+        self.assertTrue(self.act(row("a"), "rename", title="x" * 200)["ok"])
+
+    def test_autorun_off(self) -> None:
+        self.assertTrue(self.act(row("a", autorun=True), "autorun off")["ok"])
+        for value in (False, None, "on"):
+            self.assertFalse(self.act(row("a", autorun=value), "autorun off")["ok"])
+        self.assertFalse(self.act(row("a"), "autorun off")["ok"])
+        self.assertFalse(self.act(row("a", status="closed", autorun=True), "autorun off")["ok"])
+
+    def test_task_link(self) -> None:
+        found = self.act(row("a", actions=[]), "task link", ref=" ado:299807 ")
+        self.assertEqual((found["ok"], found["ref"]), (True, "ado:299807"))
+        for ref in ("", "a b", "ABC-123", "Ado:1", "ado:" + "x" * 65, "ado:a b", 7, None):
+            self.assertEqual(self.act(row("a"), "task link", ref=ref)["why"], "ref")
+        self.assertFalse(self.act(row("a", status="closed"), "task link", ref="ado:1")["ok"])
+
+    def test_dismiss_action_needs_held_calls(self) -> None:
+        self.assertTrue(self.act(row("a", **{"super": {"calls": [{"code": "c1"}]}}), "dismiss action")["ok"])
+        self.assertTrue(self.act(row("a", why="outbox"), "dismiss action")["ok"])
+        self.assertFalse(self.act(row("a", **{"super": {"calls": []}}), "dismiss action")["ok"])
+        self.assertFalse(self.act(row("a"), "dismiss action")["ok"])
+        self.assertFalse(self.act(row("a", status="closed", **{"super": {"calls": [{"code": "c1"}]}}), "dismiss action")["ok"])

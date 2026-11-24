@@ -203,6 +203,7 @@ const WBPANELS = (function () {
 
   function create(options) {
     const rowsOf = options.rows || (() => []);
+    const moreOf = typeof options.more === "function" ? options.more : () => 0;  // the older closed tasks the board does not list: the chip says "N+"
     const pickTask = typeof options.pick === "function" ? options.pick : null;  // a click on an avatar: target that task for a direct message
     const menuTask = typeof options.menu === "function" ? options.menu : null;  // a right click or a long press on an avatar of the bridge
     const closedChip = typeof options.closed === "function" ? options.closed : null;  // a click on "Closed N"
@@ -212,7 +213,7 @@ const WBPANELS = (function () {
     const sigs = {tree: "", data: "", scene: "", bridge: ""};
     const fold = {work: true, err: true, wait: false, idle: false};  // the groups of the tree that are open
     const opened = {look: false, pipe: false, time: false, spend: false};  // the blocks of Data that show their whole list
-    let models = [], byName = new Map(), closedN = 0, closedBy = {}, timer = 0, root = null, current = null, rootNode = null, lastVis = null, pop = null, popSpec = null, frame = 0;
+    let closedMoreN = 0, models = [], byName = new Map(), closedN = 0, closedBy = {}, timer = 0, root = null, current = null, rootNode = null, lastVis = null, pop = null, popSpec = null, frame = 0;
 
     // ---- the avatar of a task: a round robot, the ring is its state, the eyes its own colour ----
     function avatar(info, size) {
@@ -379,7 +380,7 @@ const WBPANELS = (function () {
     }
     function planSig(plan, W, H, big, quiet, down) {
       const one = (item) => { const info = item.info; return [info.name, info.shown, info.kind, info.subsN, info.subs.map((sub) => sub.type + sub.n).join(","), info.gate ? info.gate.n : 0].join("~"); };
-      return [W, H, big, quiet, down, targetOf(), plan.grouped, closedN, plan.groups.map((group) => group.kind + group.more + ":" + group.list.length + ":" + group.show.map(one).join("|")).join("/")].join("#");
+      return [W, H, big, quiet, down, targetOf(), plan.grouped, closedN, closedMoreN, plan.groups.map((group) => group.kind + group.more + ":" + group.list.length + ":" + group.show.map(one).join("|")).join("/")].join("#");
     }
     function sceneSVG(plan, W, H, big, quiet, down) {
       const nodes = [];
@@ -480,7 +481,7 @@ const WBPANELS = (function () {
       const content = Math.max(H, Math.ceil(bottom + 10));  // a picture that needs more height than the place has is drawn smaller, never cut
       return el("svg", {viewBox: "0 0 " + W + " " + content, preserveAspectRatio: "xMidYMin meet", role: "group", "aria-label": t("super.wb.bridge.label"), class: "wbp-svg" + (down ? " wbp-dim" : "")}, out);
     }
-    const bridgeChip = () => (closedN > 0 && closedChip ? h("button", {type: "button", class: "wbp-closed", "data-wbp-closed": "", title: t("super.wb.bridge.closed.tip")}, "▤ " + t("super.wb.bridge.closed", {n: closedN})) : null);
+    const bridgeChip = () => (closedN > 0 && closedChip ? h("button", {type: "button", class: "wbp-closed", "data-wbp-closed": "", title: t("super.wb.bridge.closed.tip")}, "▤ " + t("super.wb.bridge.closed", {n: closedN + (closedMoreN ? "+" : "")})) : null);
     function paintBridge(node, key, big, vis) {
       const W = node.clientWidth, H = node.clientHeight || (vis.tall ? 160 : 190);
       if (W < 120) return;  // not laid out (hidden): drawn when it is
@@ -568,6 +569,7 @@ const WBPANELS = (function () {
       const all = rowsOf() || [];
       const open = all.filter((row) => row && row.status === "open");
       closedN = all.reduce((sum, row) => sum + (row && row.status === "closed" ? 1 : 0), 0);
+      closedMoreN = Number(moreOf()) > 0 ? 1 : 0;
       closedBy = {};
       for (const row of all) if (row && row.status === "closed") { const lane = laneOf(String(row.kind || "")); closedBy[lane] = (closedBy[lane] || 0) + 1; }
       models = open.map(infoOf);

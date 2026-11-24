@@ -313,9 +313,17 @@ a.sa-task:hover{text-decoration:underline}
 .sa-acthd{font-size:12px;opacity:.7}
 .sa-actrow{display:flex;flex-direction:column;gap:4px;min-width:0}
 .sa-acthead{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
-.sa-actwhat{font-weight:600}
+.sa-actwhat{font-weight:600;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-acthead .sa-task{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-actrow{max-width:100%;overflow-wrap:anywhere}
+.sa-actrow .sa-reply{flex-wrap:wrap}
+.sa-steps{font-size:12px;opacity:.85;overflow-wrap:anywhere}
+.sa-step.done{color:var(--good-dot,inherit)}
+.sa-step.run{font-weight:600}
+.sa-step.fail{color:var(--bad,#b3261e);font-weight:600}
 .sa-actkind{font-size:12px;opacity:.7}
 .sa-acttext{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;opacity:.85;max-height:7.5em;overflow:auto}
+.sa-actrow button.act{display:inline-block;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}  /* a long title or ref in a label ("Rename to ...") is cut, never past the card */
 .sa-actrow.done{opacity:.65}
 .sa-actrow.no{flex-direction:row;flex-wrap:wrap;gap:6px;opacity:.75}
 .sa-actwhy{font-size:13px;overflow-wrap:anywhere}

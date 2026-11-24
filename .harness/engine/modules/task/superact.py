@@ -4,12 +4,14 @@
   check   `check(raw_items, rows, served_actions) -> [proposal]`: each item checked against the rows of the board as they are now. A proposal is `{kind, task, ..., ok, why?}`; what is not ok has a `why` and no button.
           `rows`: the `rows` of `BoardServer.rows()`; `served_actions`: what the board server runs (None: not known, `review set` is then judged by the row alone).
           `kind` `action`: ok when the task is a row of the board and the board offers the action for that row now (its `actions`), or `review set` (open task, `n` 0-9), or `steer` / `stop` (open task that works).
-          `kind` `send`: ok for an open task that is not paused, with or without a chat (1.8.4: `/api/super/send` makes a new chat then); the text up to 10000 characters. `kind` `reopen` (1.8.17): `{task, text, checks?}`, ok for a task that is closed and still on the board (an open one is `why: open`: use `send`); `checks` 0-9, else `why: checks`. `kind` `new`: ok for a free, valid folder name. Anything else is `{kind: bad, ok: false, why: bad}`.
+          `kind` `action` judged from the row state, not from its `actions`: `compact` (open, bound chat, idle), `retry` (open, chat in error that can be resumed), `rename` (`title` 1-200 characters; open or closed), `autorun off` (open, `row["autorun"]` is true), `task link` (open; `ref` is `<type>:<id>`, as the task page takes it), `dismiss action` (open; held calls in `row["super"]["calls"]` or `waiting_why` outbox).
+          `kind` `send`: ok for an open task, paused or not, with or without a chat; the text up to 10000 characters. It carries `steps`, what the card does in order, and `new_chat` (true when `new-chat` is a step): `resume` (paused), `new-chat` (no bound chat, or `new_chat` true), `send`. `/api/super/send` still refuses a paused task: the card resumes first. `kind` `reopen` (1.8.17): `{task, text, checks?}`, ok for a task that is closed and still on the board (an open one is `why: open`: use `send`); `checks` 0-9, else `why: checks`. `kind` `new`: ok for a free, valid folder name. Anything else is `{kind: bad, ok: false, why: bad}`.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import superview, tasklife
@@ -22,7 +24,10 @@ MAX_SEND = 10000  # characters of a `send` proposal: it goes to `/api/super/send
 MAX_BLOCK = 40000  # characters of one block: more is one bad item, not parsed
 TASK_KINDS = ("qa", "rca", "design", "dev", "test", "kb", "other")
 BOARD_ACTIONS = {"confirm-req", "approve-plan", "approve-promote", "recover", "review extend", "review waive", "approve-action", "send", "answer", "accept", "review dismiss", "review set",
-                 "autorun on", "pause", "resume", "close", "archive", "confirm", "question", "steer", "stop", "dismiss action", "task allow", "task link", "test runner"}
+                 "autorun on", "pause", "resume", "close", "archive", "confirm", "question", "steer", "stop", "dismiss action", "task allow", "task link", "test runner",
+                 "compact", "retry", "rename", "autorun off"}
+MAX_TITLE = 200
+LINK_FORM = re.compile(r"^[a-z][a-z0-9]{0,15}:[A-Za-z0-9._#/-]{1,64}$")
 BAD = {"kind": "bad", "ok": False, "why": "bad"}
 
 
@@ -94,9 +99,63 @@ def action_of(item: Dict[str, Any], rows: List[Dict[str, Any]], served: Optional
         if not text or len(text) > MAX_TEXT:
             return dict(out, why="text")
         return dict(out, text=text, ok=True)
+    if action in STATE_ACTIONS:
+        return STATE_ACTIONS[action](out, item, row)
     if not any(isinstance(one, dict) and one.get("action") == action for one in row.get("actions") or []):
         return dict(out, why="state")
     return dict(out, ok=True)
+
+
+def chat_of(row: Dict[str, Any]) -> Dict[str, Any]:
+    chat = row.get("chat")
+    return chat if isinstance(chat, dict) else {}
+
+
+def compact_of(out: Dict[str, Any], item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    chat = chat_of(row)
+    if row.get("status") == "open" and chat.get("bound") is True and chat.get("state") == "idle":
+        return dict(out, ok=True)
+    return dict(out, why="state")
+
+
+def retry_of(out: Dict[str, Any], item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    chat = chat_of(row)
+    error = chat.get("error")
+    if row.get("status") == "open" and chat.get("bound") is True and chat.get("state") == "error" and isinstance(error, dict) and error.get("resumable") is not False:
+        return dict(out, ok=True)
+    return dict(out, why="state")
+
+
+def rename_of(out: Dict[str, Any], item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    title = words(item, "title")
+    if not 1 <= len(title) <= MAX_TITLE:
+        return dict(out, why="title")
+    return dict(out, title=title, ok=True)
+
+
+def autorun_off_of(out: Dict[str, Any], item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    # `row["autorun"]` is a bool: True when the task's autorun state is "on" (tasklife.task_row)
+    return dict(out, ok=True) if row.get("status") == "open" and row.get("autorun") is True else dict(out, why="state")
+
+
+def link_of(out: Dict[str, Any], item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    if row.get("status") != "open":
+        return dict(out, why="state")
+    ref = words(item, "ref")
+    if not LINK_FORM.match(ref):  # the form the task page takes (`desk.js` LINK_FORM): `<type>:<id>`
+        return dict(out, why="ref")
+    return dict(out, ref=ref, ok=True)
+
+
+def dismiss_of(out: Dict[str, Any], item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    found = row.get("super")
+    calls = found.get("calls") if isinstance(found, dict) else None
+    if row.get("status") == "open" and ((isinstance(calls, list) and calls) or row.get("waiting_why") == "outbox"):
+        return dict(out, ok=True)
+    return dict(out, why="state")
+
+
+STATE_ACTIONS = {"compact": compact_of, "retry": retry_of, "rename": rename_of, "autorun off": autorun_off_of, "task link": link_of, "dismiss action": dismiss_of}
 
 
 def send_of(item: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -108,13 +167,13 @@ def send_of(item: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         return dict(out, why="unknown")
     if row.get("status") != "open":
         return dict(out, why="closed")
-    if row.get("paused_since"):
-        return dict(out, why="paused")
     if not text:
         return dict(out, why="empty")
     if len(text) > MAX_SEND:
         return dict(out, why="long")
-    return dict(out, ok=True)
+    fresh = item.get("new_chat") is True or chat_of(row).get("bound") is not True
+    steps = (["resume"] if row.get("paused_since") else []) + (["new-chat"] if fresh else []) + ["send"]
+    return dict(out, steps=steps, new_chat=fresh, ok=True)
 
 
 def reopen_of(item: Dict[str, Any], rows: List[Dict[str, Any]], max_checks: int = 9) -> Dict[str, Any]:

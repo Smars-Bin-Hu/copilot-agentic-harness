@@ -144,7 +144,7 @@ class WorkbenchDeckTests(unittest.TestCase):
 
     def test_the_bridge_gets_its_four_calls_and_its_container(self) -> None:
         script = source("workbench.js")
-        self.assertIn("WBPANELS.create(Object.assign({rows: rowsOf}, bridgeCalls))", script)
+        self.assertIn("WBPANELS.create(Object.assign({rows: rowsOf, more: options.more}, bridgeCalls))", script)  # 1.8.40: `more`, the closed tasks the board does not list
         for call in ("pick(task)", "menu(task, x, y)", "closed(x, y)", "target()"):
             self.assertIn(call, script)
         for needle in ('"contextmenu"', ".sa-team .sa-mate[data-task]", ".sa-team .sa-closed", ".sa-team .sa-mate.on[data-task]", "if (panels2.bridge) bridge.append(panels2.bridge)", "bridge: mode === \"wb\""):

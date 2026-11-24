@@ -120,12 +120,9 @@ def build(result: Dict[str, Any], age_up: Optional[int] = None) -> Dict[str, Any
     return {"status": status, "mates": mates, "items": items}
 
 
-CLOSED_LISTED = 12  # the recently closed tasks the super view lists (1.8.17): the board's own rows hold them (`closed_shown`)
-
-
-def closed_of(rows: Any, limit: int = CLOSED_LISTED) -> List[Dict[str, Any]]:
-    """The closed tasks of the board's rows, newest first (by `closed_at`, else `updated_at`), at most `limit`: `{task, kind, closed_at, title}`. A pure function; what is not a row is left out."""
+def closed_of(rows: Any, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    """The closed tasks of the board's rows, newest first (by `closed_at`, else `updated_at`): `{task, kind, closed_at, title}`. The rows hold at most `closed_shown` of them (the board cuts them), so the list is as long as the board's own; `limit` only cuts it more. A pure function; what is not a row is left out."""
     found = [row for row in rows if isinstance(row, dict) and row.get("status") == "closed" and row.get("task")] if isinstance(rows, list) else []
     found.sort(key=lambda row: str(row.get("closed_at") or row.get("updated_at") or ""), reverse=True)
     return [{"task": name_of(row), "kind": str(row.get("kind") or ""), "closed_at": str(row.get("closed_at") or row.get("updated_at") or ""), "title": str(row.get("title") or ""),
-             "reopen": row.get("reopen") if isinstance(row.get("reopen"), dict) else None} for row in found[:limit]]  # 1.8.21: the mode mark of the Closed list
+             "reopen": row.get("reopen") if isinstance(row.get("reopen"), dict) else None} for row in (found if limit is None else found[:limit])]  # 1.8.21: the mode mark of the Closed list

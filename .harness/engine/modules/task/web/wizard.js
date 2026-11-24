@@ -419,20 +419,58 @@ const WIZARD = (function () {
     }};
   };
 
+  // (1.8.35) Settings > Copilot (bare): the one line under the name, its hover, and whether the agent host needs a push. It reads what `/api/ready`'s copilot check holds.
+  const HOST_SLOW = 90;  // seconds a start may take before it counts as stuck and "Start Copilot again" shows
+  function copilotStatus(line) {
+    const why = line.why, host = line.host || {};
+    const stuck = why === "host-starting" && Number(host.seconds) >= HOST_SLOW;
+    const hostText = why === "ok" ? t("wizard.c.st.ok")
+      : why === "host-preparing" ? (host.percent !== undefined && host.percent !== null ? t("wizard.c.st.prep", {p: Math.round(Number(host.percent) || 0)}) : t("wizard.c.st.starting"))
+      : why === "host-failed" ? t("wizard.c.st.failed") : stuck ? t("wizard.c.st.slow") : why === "connecting" ? t("wizard.c.st.connecting")
+      : why === "models" ? t("wizard.c.st.waitmodels") : t("wizard.c.st.starting");
+    const via = line.gh_version ? t("wizard.c.st.via", {v: line.gh_version}) : t("wizard.c.st.via0");
+    const n = Number(line.n) || 0;
+    const tips = [line.gh ? t("wizard.c.st.tip.gh", {path: line.gh}) : "", line.gh_version ? t("wizard.c.st.tip.ghv", {v: line.gh_version}) : "",
+      line.host_version ? t("wizard.c.st.tip.host", {v: line.host_version}) : "", line.host_seconds ? t("wizard.c.st.tip.secs", {s: Math.round(line.host_seconds)}) : ""].filter(Boolean);
+    const failed = why === "host-failed";
+    return {text: [via, hostText, n ? t(n === 1 ? "wizard.c.st.model.one" : "wizard.c.st.model.many", {n}) : ""].filter(Boolean).join(" \u00b7 "), tips,
+      kind: why === "ok" ? "ok" : failed ? "bad" : stuck ? "hot" : "none", restart: failed || stuck};
+  }
+
   parts.copilot = function (box, opts) {
     const body = el("div");
-    let timer = 0, stopped = false, shown = "", sawOut = false, advance = 0, starting = false, waitText = null, ticker = 0, base = null;
+    let timer = 0, stopped = false, shown = "", sawOut = false, advance = 0, starting = false, waitText = null, ticker = 0, base = null, hadRestart = false;
     const said = el("p", "wz-err"); said.hidden = true;
+    function restartHost(act) {  // the existing restart, as the Enter screen's button does (one place for the failed page and the Settings card, 1.8.35)
+      act.disabled = true; said.hidden = true;
+      return api.host({do: "restart"}).then((found) => { if (found && found.state === "waiting") { said.textContent = t("wizard.c.host.waiting"); said.hidden = false; } return tick(); }, (error) => { said.textContent = errorText(error); said.hidden = false; }).then(() => { act.disabled = false; });
+    }
+    function statusCard(line) {  // (1.8.35) Settings > Copilot: the name, one status line (details on hover), Sign out, and Start Copilot again only when the host is stuck or failed
+      const st = copilotStatus(line);
+      const lineBox = el("div", "t2 wz-st", dot(st.kind), el("span", null, st.text));
+      if (st.tips.length && typeof Status !== "undefined" && Status.card) Status.card(lineBox, () => ({sig: st.tips.join("|"), build: () => el("div", "st-list", st.tips.map((tip) => el("div", null, tip)))}), st.text);  // details on the app's hover card
+      else lineBox.title = st.tips.join("\n");
+      const acts = el("div", "wz-sacts");
+      if (typeof SETTINGS !== "undefined" && SETTINGS.signOut) acts.append(link(t("settings.who.signout"), () => SETTINGS.signOut(tick)));
+      let again = null;
+      if (st.restart) { again = btn(t("wizard.c.st.restart"), "sm primary", () => restartHost(again)); acts.append(again); }
+      put(body, el("div", "wz-signed", el("span", "wz-big-ok" + (st.kind === "ok" ? "" : " warn"), st.kind === "bad" ? "!" : "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), lineBox), acts),
+        line.why === "host-failed" ? el("p", "wz-err", t("wizard.c.hostfail", {why: line.detail || "-"})) : null);
+      if (again && !hadRestart) MOTION.appear(again, {y: 4, ms: MOTION.MS.show});
+      hadRestart = Boolean(again);
+    }
     function paint() {
       const line = copilotLine() || {state: "wait", why: "starting"};
       const signed = copilotSignedIn(line);
       if (!signed) sawOut = true;
-      const sign = JSON.stringify([line.state, line.why, line.code, line.url, line.login, line.detail, line.last, starting]);
+      const sign = JSON.stringify([line.state, line.why, line.code, line.url, line.login, line.detail, line.last, starting, opts.bare && copilotStatus(line), opts.bare && line.host && line.host.percent]);
       base = line.why === "signing-in" ? {left: line.left || 0, at: Date.now()} : null;  // (1.8.32) the count runs down by itself between two answers
       if (waitText) waitText.textContent = t("wizard.c.wait", {t: clock(line.left || 0)});
       if (sign === shown) { opts.changed(); return; }
       shown = sign;
-      if (signed) {
+      const bareHost = opts.bare && line.why === "host-failed" && line.login;  // (1.8.35) Settings: a stopped host keeps the account card, with Start Copilot again
+      if (signed || bareHost) {
+        if (opts.bare && !ONLY) { statusCard(line); opts.changed(); return; }
         put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), el("div", "t2", ONLY || opts.bare ? "" : t("wizard.c.next")))));  // Settings (bare) only shows the state: no "Moving on", no step forward (1.8.32)
         if (sawOut && !ONLY && !opts.bare && !advance) hopHead();  // (1.8.34) W7: a step done: the head hops twice and the bulb lights
         if (sawOut && !ONLY && !opts.bare && q("hold", "") !== "1" && !advance) advance = setTimeout(() => { if (!stopped) opts.next(); }, HOLD);  // the card stays 1500 ms, never less than 900 (W7)
@@ -448,7 +486,7 @@ const WIZARD = (function () {
       } else if (line.why === "host-failed" || line.why === "error") {  // not about the sign-in: the reason, and the one thing a person can do (never the sign-in button)
         const act = line.why === "error"
           ? btn(t("wizard.c.again"), "primary", () => { act.disabled = true; said.hidden = true; tick().then(() => { act.disabled = false; }); })
-          : btn(t("wizard.c.restart"), "primary", () => { act.disabled = true; said.hidden = true; api.host({do: "restart"}).then((found) => { if (found && found.state === "waiting") { said.textContent = t("wizard.c.host.waiting"); said.hidden = false; } return tick(); }, (error) => { said.textContent = errorText(error); said.hidden = false; }).then(() => { act.disabled = false; }); });
+          : btn(t("wizard.c.restart"), "primary", () => restartHost(act));
         put(body, el("p", "wz-err", t(line.why === "error" ? "wizard.c.error" : "wizard.c.hostfail", {why: line.detail || "-"})), el("div", "wz-cp", act));
       } else if (line.why === "no-gh" || line.why === "gh-broken") {
         put(body, el("p", "wz-err", t("wizard.c.nogh")), link(t("wizard.s.prog") + " \u2192", () => opts.jump(2)));

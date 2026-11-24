@@ -17,6 +17,7 @@ const SETTINGS = (function () {
   const sectionOf = (name) => { const key = ALIASES[name] || name; return SECTIONS.includes(key) ? key : "you"; };
 
   let win = null;  // the window that is open: {view, show}
+  let footNow = null;  // the foot of the left list that is open: Sign out from the Copilot page asks it to read the account again (1.8.35)
 
   // ------------------------------------------------------------------------------------------------ how it moves (1.8.34, motion.js; nothing here moves under Lite or the system's reduced motion but a fade)
   // The window grows out of the gear it was opened with (scale .96 to 1 and opacity, 280 ms; the shade 200 ms) and leaves the same way (200 ms); opened from elsewhere (a fix button, the palette): from its centre.
@@ -289,7 +290,7 @@ const SETTINGS = (function () {
         });
       }
 
-      const foot = footOf(show);  // the account and Restart board, at the bottom of the left list
+      const foot = footOf(show); footNow = foot;  // the account and Restart board, at the bottom of the left list
       side.append(foot.node); foot.refresh();
       const footTimer = setInterval(() => { if (!view.box.isConnected || closing) clearInterval(footTimer); else foot.refresh(); }, 10000);
       win = {view, show};
@@ -386,5 +387,7 @@ const SETTINGS = (function () {
     if (kept.startsWith("settings") && typeof DATA !== "undefined" && DATA.serve) { sessionStorage.removeItem("harness.reopen"); setTimeout(() => open(kept.split(":")[1] || "you"), 0); }
   } catch (error) { /* then the window stays shut */ }
 
-  return {open, sections: SECTIONS, isOpen: () => Boolean(win)};  // isOpen: space.js keeps its slow-motion note away while the window is open (1.8.32)
+  // (1.8.35) The Copilot page's Sign out is the foot's: the same window and request; `done` runs after it, and the foot reads the account again.
+  const signOut = (done) => signOutAsk(() => { if (done) done(); if (footNow) footNow.refresh(); });
+  return {open, signOut, sections: SECTIONS, isOpen: () => Boolean(win)};  // isOpen: space.js keeps its slow-motion note away while the window is open (1.8.32)
 })();

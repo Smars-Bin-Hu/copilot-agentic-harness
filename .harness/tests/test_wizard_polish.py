@@ -14,7 +14,7 @@ CORE = Path(taskhtml.__file__).resolve().parents[2] / "core"
 SCRIPT = (WEB / "wizard.js").read_text(encoding="utf-8")
 SHEET = (WEB / "wizard.css").read_text(encoding="utf-8")
 TEXTS = {code: json.loads((CORE / f"messages.{code}.json").read_text(encoding="utf-8")) for code in ("en", "zh")}
-NEW = ("wizard.job.tip", "wizard.v.title.check", "wizard.r.nomatch", "wizard.y.lang.hint.save")
+NEW = ("wizard.job.tip", "wizard.c.st.restart", "wizard.c.st.ok", "wizard.c.st.prep", "wizard.v.title.check", "wizard.r.nomatch", "wizard.y.lang.hint.save")
 
 
 class WizardPolishTests(unittest.TestCase):
@@ -224,6 +224,24 @@ class WizardPolishTests(unittest.TestCase):
         self.assertIn("holding = !FAKE && M.lang !== document.documentElement.lang", you)  # serve.js would reload at once otherwise
         self.assertIn("SERVE.stay(() => holding)", SCRIPT)
         self.assertEqual(SCRIPT.split("function thinking() {")[1].split("  }\n")[0].count('h("i", null)'), 3)
+
+
+    def test_the_bare_copilot_page_has_a_status_line_and_two_actions(self) -> None:  # 1.8.35: built from the copilot check; Sign out is Settings' own, Start Copilot again only for a failed or stuck host
+        status = SCRIPT[SCRIPT.index("function copilotStatus"):SCRIPT.index("parts.copilot = ")]
+        for field in ("line.gh_version", "line.host_version", "line.host_seconds", "line.gh", "line.n", "host.percent", "host.seconds"):
+            self.assertIn(field, status)
+        self.assertIn('why === "host-failed"', status)
+        self.assertIn('why === "host-starting"', status)
+        card = SCRIPT[SCRIPT.index("function statusCard"):SCRIPT.index("function paint()")]
+        self.assertIn("SETTINGS.signOut(tick)", card)
+        self.assertIn("if (st.restart)", card)
+        self.assertIn('wizard.c.st.restart', card)
+        self.assertIn("MOTION.appear(again", card)
+        self.assertIn('api.host({do: "restart"})', SCRIPT)
+        self.assertIn("opts.bare && !ONLY", SCRIPT)
+        settings = (WEB / "settings.js").read_text(encoding="utf-8")
+        self.assertRegex(settings, r"const signOut = \(done\) => signOutAsk\(")
+        self.assertRegex(settings, r"return \{open, signOut,")
 
 
 if __name__ == "__main__":

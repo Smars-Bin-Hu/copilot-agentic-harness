@@ -160,6 +160,8 @@ html.lite .wz-cert .mini.ind i{animation:none}@media (prefers-reduced-motion:red
 .wz-codebox .waiting{margin-top:18px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--soft)}
 .wz-signed{display:flex;align-items:center;gap:16px;padding:22px 24px;border:1px solid var(--line);border-radius:16px;background:var(--card);width:100%}
 .wz-big-ok{width:44px;height:44px;border-radius:50%;background:var(--good-bg);color:var(--good);display:grid;place-items:center;font-size:22px;font-weight:700;flex:none}
+.wz-big-ok.warn{background:var(--line);color:var(--soft)}
+.wz-signed .wz-st{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.wz-signed .wz-sacts{margin-left:auto;display:flex;align-items:center;gap:14px;flex:none}  /* Settings > Copilot: the status line and the two actions (1.8.35) */
 .wz-signed .t1{font-weight:650;font-size:17px;overflow-wrap:anywhere}.wz-signed .t2{color:var(--faint);font-size:13px;margin-top:2px}
 
 .wz-saved{margin:10px 0 0;font-size:13px;color:var(--good)}.wz-saved:empty{display:none}  /* Settings > You: "Saved" after the page loaded again for a new language (1.8.32) */

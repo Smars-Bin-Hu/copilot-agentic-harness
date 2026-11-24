@@ -47,6 +47,8 @@ class MotionTests(unittest.TestCase):
             code = source(name)
             for frames in re.findall(r"\[\{[^\]]*\}\]", code):
                 keys = set(re.findall(r"\b([a-zA-Z]+):", frames)) - {"offset"}
+                if name == "motion.js" and keys == {"color"} and "ink()" in frames:
+                    continue  # 1.8.46: the swap's words fade by their colour, painted by the page, never left to the compositor
                 self.assertTrue(keys <= {"transform", "opacity"}, (name, frames, keys))
 
     def test_a_page_turn_never_shows_two_pages_at_once(self) -> None:
@@ -63,6 +65,10 @@ class MotionTests(unittest.TestCase):
         self.assertIn("Promise.race([out, late(SWAP_LATE)])", body)
         self.assertIn("late(SWAP_LATE)]).then(() => { if (el._motionSwap === turnNo) clear(el); })", body)
         self.assertIn("clear(el);\n      change();", body)  # the old move is gone before the new words are written
+        # 1.8.46: still blank at 1.8.45 with the key beside it in view: an opacity move left to the compositor can outlive its cancel. The words fade by colour.
+        self.assertNotIn("opacity", body)
+        self.assertIn('[{color: ink()}, {color: "transparent"}]', body)
+        self.assertIn('[{color: "transparent"}, {color: ink()}]', body)
 
     def test_the_robots_moves_wait_for_motion_and_still(self) -> None:
         code = source("robot.js")

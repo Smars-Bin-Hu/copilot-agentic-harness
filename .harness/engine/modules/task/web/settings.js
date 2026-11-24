@@ -7,6 +7,7 @@
 
 const SETTINGS = (function () {
   const SECTIONS = ["you", "programs", "copilot", "kb", "packs", "repos", "connections", "network", "adv"];
+  const GROUPS = [["settings.g.harness", ["you", "programs", "copilot"]], ["settings.g.company", ["kb", "packs", "repos", "connections"]], ["settings.g.computer", ["network", "adv"]]];  // the left list under three small headings (1.8.33); the ids are the same
   const LABELS = {you: "wizard.s.you", programs: "wizard.s.prog", copilot: "wizard.s.cop", kb: "wizard.s.kb", packs: "tools.packs.title", repos: "settings.s.repos", connections: "settings.s.connections", network: "machine.net.title", adv: "settings.s.adv"};
   const ALIASES = {company: "kb", computer: "programs", setup: "you", local: "network", tools: "packs", advanced: "adv", repositories: "repos", prog: "programs", cop: "copilot", repo: "repos"};
   const NOTE_SECTION = {kb: "kb", instructions: "kb", skills: "kb", standards: "kb", sync: "kb", packs: "packs", connections: "connections", connlist: "connections", identity: "connections", signin: "connections", down: "connections", held: "connections", cert: "network", repos: "repos"};
@@ -103,7 +104,7 @@ const SETTINGS = (function () {
       });
       const sel = h("i", {class: "st-sel", "aria-hidden": "true"});  // the selected item's background: one block that glides to the item chosen (S2); in the narrow window the chips draw their own
       const place = (item) => { if (!item) return; Object.assign(sel.style, {left: item.node.offsetLeft + "px", top: item.node.offsetTop + "px", width: item.node.offsetWidth + "px", height: item.node.offsetHeight + "px"}); };
-      put(nav, sel, items.map((item) => [item.id === "adv" ? h("div", {class: "st-sep"}) : null, item.node]));
+      put(nav, sel, GROUPS.map(([key, ids]) => h("div", {class: "st-grp", role: "group", "aria-label": t(key)}, h("div", {class: "st-gh"}, t(key)), ids.map((id) => items.find((item) => item.id === id).node))));
       let current = null;
       const relayout = () => { if (closing) window.removeEventListener("resize", relayout); else if (current) place(items.find((item) => item.id === current)); };
       window.addEventListener("resize", relayout);
@@ -246,14 +247,13 @@ const SETTINGS = (function () {
         env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body.filter((node) => node.dataset && node.dataset.part === "network")]);
       }
 
-      // Advanced: the Python install command, the paths not to touch, the skill prefix and the older copy go through `save` (part advanced), `refuse` and `older`; MCP is machine.js's switch
+      // Advanced: the Python install command, the paths not to touch, the older copy go through `save` (part advanced), `refuse` and `older`; MCP is machine.js's switch
       function advancedSection(id, env) {
         return ask("/api/setup", "state").then((state) => {
           const rules = state.rules.slice(), refused = [];
           const field = (caption, node, hint) => h("div", {class: "wz-field"}, h("span", {class: "cap"}, caption), node, hint ? h("div", {class: "hint"}, hint) : null);
           const literal = (text) => text.split("{package}").flatMap((part, i) => (i ? [h("code", null, "{package}"), part] : [part]));  // `{package}` is a placeholder the person types: it always shows as it is, in the code font
           const install = h("input", {type: "text", class: "wz-in mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph"), value: state.install_command || "", "aria-label": t("setup.install")});
-          const prefix = h("input", {type: "text", class: "wz-in mono st-short", maxlength: 31, autocomplete: "off", spellcheck: "false", value: state.skill_prefix || (state.kb && state.kb.prefix) || "", "aria-label": t("setup.prefix")});
           const path = h("input", {type: "text", class: "wz-in mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: state.example, "aria-label": t("setup.refused")});
           const add = h("button", {type: "button", class: "wz-btn sm", disabled: ""}, t("setup.refused.add"));
           const list = h("div", {class: "st-chips"}), said = h("p", {class: "wz-err"}), done = h("span", {class: "st-saved", role: "status"});
@@ -273,7 +273,7 @@ const SETTINGS = (function () {
           const save = h("button", {type: "button", class: "wz-btn primary"}, t("settings.save"));
           save.addEventListener("click", () => {
             said.hidden = true; done.textContent = ""; save.disabled = true;
-            const values = {part: "advanced", skill_prefix: prefix.value, install_command: install.value, refused, rules, stamp: state.stamp};  // three fields: no knowledge base sync and no doctor
+            const values = {part: "advanced", skill_prefix: state.skill_prefix || "",  /* the field is gone: the server writes the prefix on every Advanced save, so the one it holds goes back unchanged */ install_command: install.value, refused, rules, stamp: state.stamp};  // three fields: no knowledge base sync and no doctor
             ask("/api/setup", "save", values).then(() => {
               saved(); done.textContent = "✓ " + t("settings.saved");
               return ask("/api/setup", "state").then((now) => { state.stamp = now.stamp; refused.splice(0); rules.splice(0, rules.length, ...now.rules); paintRules(); });
@@ -285,7 +285,6 @@ const SETTINGS = (function () {
           env.inside([
             field(t("setup.install"), install, literal(t("setup.install.example"))),
             field(t("setup.refused"), h("div", {class: "st-add"}, path, add), t("setup.refused.hint")), h("div", {class: "st-under"}, list), said,
-            field(t("setup.prefix"), prefix, t("setup.prefix.hint")),
             h("div", {class: "st-line"}, save, done),
             h("div", {class: "st-rule"}), made.body.find((node) => node.dataset && node.dataset.part === "mcp"),
             h("div", {class: "st-rule"}), restartRow(),

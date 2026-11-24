@@ -246,3 +246,21 @@ class ProgramIconsTest(unittest.TestCase):
             self.assertLess(one.index('"programicons.js"'), one.index('"wizard.js"'))
             if '"robot.js"' in one:
                 self.assertLess(one.index('"robot.js"'), one.index('"programicons.js"'))
+
+
+class SettingsGroupsTest(unittest.TestCase):
+    """1.8.33: Settings' left list sits under three headings; every section keeps its id; the Skill prefix field is gone from Advanced."""
+
+    def test_groups_cover_every_section_once_and_prefix_field_is_gone(self):
+        code = (WEB / "settings.js").read_text(encoding="utf-8")
+        groups = re.search(r"const GROUPS = (\[.*\]);", code).group(1)
+        ids = re.findall(r'"([a-z]+)"', re.sub(r'"settings\.g\.[a-z]+"', "", groups))
+        sections = re.search(r"const SECTIONS = \[(.*?)\]", code).group(1)
+        self.assertEqual(sorted(ids), sorted(re.findall(r'"([a-z]+)"', sections)))
+        self.assertEqual(len(ids), len(set(ids)))
+        for lang in ("en", "zh"):
+            texts = json.loads((Path(taskhtml.__file__).resolve().parents[2] / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
+            for key in ("harness", "company", "computer"):
+                self.assertTrue(texts["settings.g." + key])
+            self.assertNotIn("setup.prefix", texts)
+        self.assertNotIn("setup.prefix", code)

@@ -194,3 +194,79 @@ python "$env:TEMP\trace_check2.py" <任务名> 2
 
 - **E**：每一轮 `turn yes`、`items` 有几十个、`stream_round: ok`，那服务器是对的，问题在页面（或者看板进程是旧版本，重启看板后再看一次）。`ERROR` 带出异常，`None` 表示服务器给了退回的样子。
 - **F**：每个 prompt 的 `turn`；tool 行里 `with live` 和 `with command` 各有几个；`hook names` 和 `stream names` 对照，看哪些名字两边不一样。
+
+---
+
+## 第三部分（第二部分发回以后加的）
+
+第二部分的结果：现在服务器点开 14:47:36 这一轮，能拿到全部 36 项（E），可截图的时候页面只显示了文字。stream 里同一轮有两份记录，开始时间差 19–39 秒（14:47:17 和 14:47:36，15:11:54 和 15:12:33）。猜测：截图时只有早的那一份，和 Copilot 记的时间差超过 5 秒，配不上；晚的那一份是后来补写的。
+
+### 6. 先看一眼页面
+
+不重启看板，在 Live 顶部 Earlier rounds 里重新点开 14:47:36 那一行。拍照：现在是一个个调用，还是只有文字和一行 `Tools: …`？
+
+### 7. 写下第三个脚本
+
+```powershell
+@'
+# Part 3: the turns of the task's stream, which chat and id each has, and when its parts were seen. No text of the chat.
+# Run in the harness folder:  python trace_check3.py <task>
+import json
+import sys
+import time
+from pathlib import Path
+
+root = Path.cwd()
+sys.path.insert(0, str(root / ".harness" / "engine"))
+from core import copilot_events  # noqa: E402
+from modules.task import chatstream  # noqa: E402
+
+S = copilot_events.seconds
+task = sys.argv[1].replace("\\", "/").strip("/")
+if "/" not in task:
+    task = ".workspace/sandbox/tasks/" + task
+
+
+def hm(x):
+    return time.strftime("%m-%d %H:%M:%S", time.localtime(x)) if x else "-"
+
+
+path = chatstream.stream_file(root, task)
+print("G stream", path.stat().st_size, "bytes, modified", hm(path.stat().st_mtime))
+chats = {}
+lines = []
+with open(path, encoding="utf-8") as handle:
+    for number, line in enumerate(handle, 1):
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if rec.get("k") == "turn":
+            chat = str(rec.get("chat"))
+            chats.setdefault(chat, "C%d" % (len(chats) + 1))
+            lines.append((number, chats[chat], str(rec.get("turn"))[-8:], rec.get("at"), bool(rec.get("sub"))))
+for chat, name in chats.items():
+    print("  ", name, "=", chat[:12] + "…" + chat[-10:])
+print("  line | chat | turn id | startedAt | sub")
+for number, name, ident, at, sub in lines:
+    print("  %5d | %s | %s | %s | %s" % (number, name, ident, hm(S(at)), sub))
+print("H first and last part seen, per turn")
+for turn in chatstream.read(root, task)["turns"]:
+    stamps = [p.get("t0") for p in turn.get("parts") or [] if p.get("t0")]
+    print("  ", chats.get(turn["chat"], "?"), turn["id"][-8:], "| at", hm(S(turn.get("at"))), "| parts", len(turn.get("parts") or []),
+          "| seen", hm(min(stamps) / 1000) if stamps else "-", "→", hm(max(stamps) / 1000) if stamps else "-")
+'@ | Set-Content -Encoding UTF8 "$env:TEMP\trace_check3.py"
+```
+
+### 8. 运行并发回
+
+```powershell
+python "$env:TEMP\trace_check3.py" <任务名>
+```
+
+整段输出拍照发回。
+
+### 怎么读（给 Claude）
+
+- **G**：stream 里每个 `turn` 记录在第几行、属于哪个 chat（C1、C2……）、id、startedAt。同一轮的两份记录在不同的 chat 里：两个 chat 各是谁（VS Code 的、看板自己 host 的）；行号说明谁先写进文件。
+- **H**：每一轮的步骤实际是什么时候看到的。早的那份如果「seen」是 14:47 前后，说明它是边跑边记的；晚的那份 seen 是 `-` 或者很晚，说明是后来补写的。

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.8.36",
+  "version": "1.8.37",
   "released": "2026-11-23",
   "copyright": "Smars Hu",
   "contributors": [
@@ -151,6 +151,7 @@
         ".harness/tests/test_superview.py",
         ".harness/tests/test_companion.py",
         ".harness/tests/test_workbench.py",
+        ".harness/tests/test_taskwin.py",
         ".harness/tests/test_callview.py",
         ".harness/tests/test_actbehind.py",
         ".harness/tests/test_headclear.py",

@@ -599,6 +599,30 @@ class SaveTests(HarnessTestCase):
             job.start_kb(self.root, {"kb_mode": "folder", "kb_path": str(self.root / "nothing-here")})
         self.assertFalse(job.view()["running"])
 
+    def kb_with_skills(self, word: str) -> None:
+        company_dir = self.root / "knowledge-base" / targets.COMPANY_DIR
+        (company_dir / "skills" / f"{word}-check").mkdir(parents=True)
+        (self.root / "knowledge-base" / "README.md").write_text("# KB\n", encoding="utf-8")
+        (company_dir / "company.json").write_text(json.dumps({"skill_prefix": word}), encoding="utf-8")
+        (company_dir / "skills" / f"{word}-check" / "SKILL.md").write_text(f"---\nname: {word}-check\ndescription: 'Check the nightly loads. Use when asked about last night. Keywords: nightly.'\n---\n\n# Check\n\nRead the jobs.\n", encoding="utf-8")
+
+    def test_a_new_copy_takes_the_word_of_the_knowledge_base_before_its_first_sync(self) -> None:  # (1.8.37) a colleague's first setup with a package of company skills stopped at sync: "skill_prefix is not set"
+        self.kb_with_skills("fern")
+        ran = {name: step for name, step in setupjob.steps(self.root, {"kb_mode": "none"})}
+        ran["git"]()
+        ran["sync"]()
+        self.assertEqual(read_user(self.root).get("skill_prefix"), "fern")
+        self.assertTrue((self.root / ".github" / "skills" / "fern-check" / "SKILL.md").is_file())
+
+    def test_a_word_the_person_set_is_never_replaced_by_the_knowledge_base(self) -> None:
+        self.kb_with_skills("fern")
+        write_user(self.root, skill_prefix="mine")
+        ran = {name: step for name, step in setupjob.steps(self.root, {"kb_mode": "none"})}
+        ran["git"]()
+        with self.assertRaises(ValueError):  # the sync says the two words differ; the person decides
+            ran["sync"]()
+        self.assertEqual(read_user(self.root).get("skill_prefix"), "mine")
+
 
 class SummaryTests(HarnessTestCase):
     PROGRAMS = {"rows": [{"id": "python", "required": True, "found": True, "blocked": ""}, {"id": "gh", "required": True, "found": False, "blocked": ""}, {"id": "harness", "required": False, "found": False, "blocked": ""}], "all_found": False}

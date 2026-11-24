@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 
-from core import company, messages, paths, setup, targets
+from core import company, messages, paths, setup, skillcheck, targets
 
 from . import kbsetup
 
@@ -117,6 +117,11 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
         return say("setup.kb.git", branch=found["branch"])
 
     def synced() -> str:
+        folder = targets.company_folder(root)
+        if folder is not None and not skillcheck.company_prefix(root):  # (1.8.37) a new copy has no word yet: take the content's own, as the dock's Use button does; a word already set stays
+            word = skillcheck.usable(company.wanted_prefix(folder))
+            if word:
+                setup.write(root, "user", {"skill_prefix": word})
         found = company.sync_after(root, remove=True)  # Save asks for the same sync as Sync now: what left the knowledge base is taken back too (into the backup), not left for a second press
         if found is None:
             return say("setup.kb.nosync")

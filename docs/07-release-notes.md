@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.36 (1.8.0 – 1.8.36, 2026-11-17 – 2026-11-23)
+## 1.8.37 (1.8.0 – 1.8.37, 2026-11-17 – 2026-11-24)
 
 ### Added
 
@@ -60,6 +60,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- The setup guide stopped at sync when the knowledge base brings its own skills (1.8.37): a new copy with no skill prefix now takes the knowledge base's own, as **Use** in the dock does. A prefix you set yourself is never replaced.
 - After Confirm the Enter screen showed a grey *Checking…* for seconds while doctor ran again (1.8.34): a clean answer is kept while doctor runs in the background.
 - The 3D robot's feet stood in the letters of the Enter screen's wordmark (1.8.34): it floats 8 px above them.
 

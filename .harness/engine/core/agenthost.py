@@ -56,6 +56,19 @@ def folder(root: Path) -> Path:
     return paths.runtime_dir(root) / "agent-host"
 
 
+def took_file(root: Path) -> Path:
+    """(1.8.35) How long the last start took that downloaded nothing: `{seconds}`. Kept across boards, so a slow computer's Settings waits longer before it offers Start Copilot again."""
+    return folder(root) / "start-took.json"
+
+
+def last_took(root: Path) -> float:
+    try:
+        value = json.loads(took_file(root).read_text(encoding="utf-8")).get("seconds")
+        return float(value) if isinstance(value, (int, float)) and 0 < value < 3600 else 0.0
+    except (OSError, ValueError, AttributeError):
+        return 0.0
+
+
 def record_file(root: Path) -> Path:
     """What the board knows of the host it started: `{pid, port, version, started}`. The token is in its own file, never here."""
     return folder(root) / "host.json"
@@ -181,6 +194,7 @@ class Host:
         self.commit = ""
         self.started_at = 0.0
         self.ready_at = 0.0
+        self.prepared = False  # (1.8.35) this start downloaded the server package: its time says nothing about the next start
         self.starts = 0
         self.adopted = False
         self.given = ""  # env_mark of what the running host was started with ("" before a start, or a host adopted from an older record)
@@ -194,6 +208,9 @@ class Host:
         with self.lock:
             out: Dict[str, Any] = {"state": self.state, "why": self.why, "version": self.version, "pid": self.pid or None, "port": self.port or None,
                                    "starts": self.starts, "adopted": self.adopted}
+            took = last_took(self.root)
+            if took:
+                out["last_took"] = took  # (1.8.35) the last start without a download, on this computer
             if self.started_at:
                 out["seconds"] = round((self.ready_at or self.clock()) - self.started_at, 1)
             if self.state == "preparing":
@@ -218,6 +235,12 @@ class Host:
             return list(self.lines)[-count:]
 
     # --- start, adopt, stop ---------------------------------------------------------------------------------------------------
+
+    def _write_took(self, seconds: float) -> None:
+        try:
+            took_file(self.root).write_text(json.dumps({"seconds": round(seconds, 1), "at": paths.utc_now()}), encoding="utf-8")
+        except OSError:
+            pass  # only a hint for the page
 
     def _write_record(self) -> None:
         try:
@@ -327,7 +350,7 @@ class Host:
             self.process, self.pid, self.port, self._token = process, process.pid, 0, token
             self.given, self.outdated = self._mark(given, held), False
             self.state, self.why, self.version, self.commit, self.adopted = "starting", "", "", "", False
-            self.started_at, self.ready_at = self.clock(), 0.0
+            self.started_at, self.ready_at, self.prepared = self.clock(), 0.0, False
             self.starts += 1
             self.lines.clear()
             self.ready_event.clear()
@@ -358,13 +381,15 @@ class Host:
                 self.lines.append(line)
                 found = DOWNLOADING.search(line)
                 if found and self.state == "starting":
-                    self.state, self.commit = "preparing", found.group(1)
+                    self.state, self.commit, self.prepared = "preparing", found.group(1), True
                 found = VERSION.search(line)
                 if found:
                     self.version = found.group(1)
                 found = READY.search(line)
                 if found and self.state in ("starting", "preparing"):
                     self.port, self.state, self.ready_at = int(found.group(2)), "ready", self.clock()
+                    if not self.prepared:
+                        self._write_took(self.ready_at - self.started_at)
                     self._write_record()  # before anyone hears it is ready: a board started next may adopt it at once
                     self.ready_event.set()
         code = process.wait()

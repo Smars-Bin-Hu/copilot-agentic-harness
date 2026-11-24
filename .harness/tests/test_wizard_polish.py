@@ -232,6 +232,7 @@ class WizardPolishTests(unittest.TestCase):
             self.assertIn(field, status)
         self.assertIn('why === "host-failed"', status)
         self.assertIn('why === "host-starting"', status)
+        self.assertIn("Math.max(HOST_SLOW, 2 * (Number(line.host_last) || 0))", SCRIPT)  # a slow computer waits twice its last start, 90 s at least
         card = SCRIPT[SCRIPT.index("function statusCard"):SCRIPT.index("function paint()")]
         self.assertIn("SETTINGS.signOut(tick)", card)
         self.assertIn("if (st.restart)", card)

@@ -335,7 +335,7 @@ class Ready:
             if login.get("state") in ("failed", "expired", "cancelled"):
                 out.update(last=login["state"], detail=short(login.get("why", "")))  # how the sign-in the page started ended
             return out
-        about = {"login": gh["login"], "gh": gh["gh"], "gh_version": gh["version"], "host_version": host.get("version", ""), "host_seconds": host.get("seconds"), "host_starts": host.get("starts")}
+        about = {"login": gh["login"], "gh": gh["gh"], "gh_version": gh["version"], "host_version": host.get("version", ""), "host_seconds": host.get("seconds"), "host_last": host.get("last_took"), "host_starts": host.get("starts")}
         state = host.get("state")
         if state in ("stopped", "starting"):
             return {"state": "wait", "why": "host-starting", **about}

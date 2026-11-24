@@ -152,6 +152,27 @@ class StartTest(Base):
         host.wait_ready(10)
         self.assertEqual(host.status()["state"], "ready")
 
+    def test_a_start_without_a_download_is_kept_for_the_next_board(self) -> None:  # 1.8.35: Settings > Copilot waits twice this long before it offers Start Copilot again
+        ticks = iter(range(10 ** 6))
+        host = self.host(clock=lambda: float(next(ticks)))  # each look at the clock is one second later
+        host.start()
+        host.wait_ready(10)
+        took = json.loads(agenthost.took_file(self.root).read_text(encoding="utf-8"))["seconds"]
+        self.assertGreater(took, 0)
+        self.assertEqual(agenthost.last_took(self.root), took)
+        self.assertEqual(self.host().status()["last_took"], took)  # a new board reads it from the file
+
+    def test_a_start_with_a_download_is_not_kept(self) -> None:
+        host = self.host("download")
+        host.start()
+        self.wait_for(host, "preparing")
+        self.go.write_text("go", encoding="utf-8")
+        host.wait_ready(10)
+        self.assertFalse(agenthost.took_file(self.root).exists())
+        self.assertNotIn("last_took", host.status())
+        agenthost.took_file(self.root).write_text("not json", encoding="utf-8")
+        self.assertEqual(agenthost.last_took(self.root), 0.0)
+
     def test_a_host_that_ends_before_ready_failed(self) -> None:
         host = self.host("fail")
         host.start()

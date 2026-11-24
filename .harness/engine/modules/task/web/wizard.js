@@ -420,10 +420,11 @@ const WIZARD = (function () {
   };
 
   // (1.8.35) Settings > Copilot (bare): the one line under the name, its hover, and whether the agent host needs a push. It reads what `/api/ready`'s copilot check holds.
-  const HOST_SLOW = 90;  // seconds a start may take before it counts as stuck and "Start Copilot again" shows
+  const HOST_SLOW = 90;  // seconds a start may take before "Start Copilot again" shows; on a slow computer twice its last start, if that is longer
+  const slowAfter = (line) => Math.max(HOST_SLOW, 2 * (Number(line.host_last) || 0));  // host_last: the last start with no download on this computer; nothing stops here, the start goes on and the button is only offered
   function copilotStatus(line) {
     const why = line.why, host = line.host || {};
-    const stuck = why === "host-starting" && Number(host.seconds) >= HOST_SLOW;
+    const stuck = why === "host-starting" && Number(host.seconds) >= slowAfter(line);
     const hostText = why === "ok" ? t("wizard.c.st.ok")
       : why === "host-preparing" ? (host.percent !== undefined && host.percent !== null ? t("wizard.c.st.prep", {p: Math.round(Number(host.percent) || 0)}) : t("wizard.c.st.starting"))
       : why === "host-failed" ? t("wizard.c.st.failed") : stuck ? t("wizard.c.st.slow") : why === "connecting" ? t("wizard.c.st.connecting")

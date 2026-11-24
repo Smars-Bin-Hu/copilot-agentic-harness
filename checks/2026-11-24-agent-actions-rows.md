@@ -147,3 +147,12 @@ python "$env:TEMP\rows_check.py" <任务名> 17:32 3
 - **C**：被拦行的命令和原因里各有几个 `\`、`` ` ``、`"`。命令里 `\ x1` 而原因里 `\ x0`：gate 写原因时丢的。两边都有：页面显示时丢的。
 - **D**：Copilot 记录里同一段时间的调用。看 17:33:18–21 那几次的 `toolName`、`success` 和错误开头：`success False` 加一个错误，说明是失败的编辑，应该显示成红色「失败 + 原因」，而不是 `stopped`；同名但 `argument keys` 不同，说明是另一种编辑工具。
 - **E**：整个任务里每种工具的行数（all），配上 stream 的（live），有目标可显示的（target），有命令的（command），有路径的（paths），标成 stopped 的。`live` 远小于 `all` 的工具，就需要别的来源（Copilot 记录或 hook 日志）补内容。
+
+---
+
+## 结果（2026-11-24 发回）
+
+- **三个 `stopped` 的 Edit 都成功了。** Copilot 在 17:32:57 同时发出 7 个 `edit`，7 个都 `success True`。hook 一个一个跑：7 个 Pre 在 17:33:18–25（比 Copilot 晚 21–28 秒），7 个 Post 在 17:33:30–17:34:24，每个都带路径。错在 Agent actions 把 Post 配给 Pre 的方式：同名的调用，开始时间相差超过 3 秒（`SAME_CALL_S`）就不再算同一批，早的三个被丢下，没配上结束，于是成了 `stopped`。修法放在 1.8.47。
+- **反斜杠**：hook 日志里命令有 1 个 `\`，原因里有 2 个。页面把原因当纯文本显示，不会吃掉它，所以丢的是原因开头 gate 自己拼出来的那段：gate 把命令拆成词再用空格拼回去，引号和 `\` 都没了。修法放在 1.8.47。
+- **覆盖面**：Bash 31 行里 29 行配上了 stream，Edit 12 行里 9 行，Grep 1/1，skill 2/1，而且 skill 配上的那一行也没有目标。所以 stream 是主要来源，skill 名和没配上的行要从 Copilot 记录和 hook 日志补。
+- Copilot 记录里工具名是 `powershell`、`edit`（参数 `path, old_str, new_str`），hook 里是 `Bash`、`Edit`。

@@ -1521,7 +1521,7 @@ class Board:
             core_wizard.refuse_finish(self.root, self.programs(), line)  # ValueError: what is still missing (409)
             core_wizard.finish(self.root)
             self.ready.setup_now_done()  # the kept answer must not send the page back to the wizard
-            self.ready.doctor_again()  # the first doctor of a set-up copy; the page does not wait for it
+            self.ready.doctor_after_setup()  # (1.8.33) the first doctor of a set-up copy runs in the background and the page does not wait for it (doctor_again made the line "check" for seconds)
             print(say("serve.did", action="setup finish", task="-"), flush=True)
             return {"ok": True}
         part = str(data.get("part") or "")

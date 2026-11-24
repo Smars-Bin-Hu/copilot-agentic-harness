@@ -29,6 +29,9 @@
   // (1.8.32) The hint is not for the first visit of this browser (the one right after the wizard); after that it shows when the pointer has rested on the wordmark for HINT_AFTER ms.
   // (1.8.33) Coming from the wizard (it marked "from-wizard" and left through the dark veil): the entrance of W10 plays once; a reload has none.
   const fromWizard = !reloaded && typeof MOTION !== "undefined" && MOTION.taken("from-wizard");
+  // (1.8.33, W10) Where the robot starts when the wizard hands over: the wizard leaves its robot head (a 30 px wide box) on the veil, its centre at the middle of the top and `y` px from the top. This robot (the whole one)
+  // starts scaled so that its head is that box, with only its head showing, and flies to its place. One constant: change it here.
+  const FLY = {x: .5, y: 35.5, head: 30};
   const HINT_KEY = "harness.enter.visited", HINT_AFTER = 3000;
   const visited = (() => { try { return localStorage.getItem(HINT_KEY) === "1"; } catch (error) { return true; } })();  // no storage: the hint waits for the pointer, never shown unasked
 
@@ -115,7 +118,7 @@
   }
 
   // ---------- the robot: it floats over the N, the middle of the screen. No legs, no shadow ----------
-  const MIDDLE = 3, CLEAR = 8, TOP_PAD = 12, FEET = .0145, FEET_3D = -.09;  // (1.8.33, E3) the letter; the clear space between the robot's feet and the top of the letters; half the stroke above a letter's box; where the feet sit under the anchor, of the height: the flat drawing's and the 3D one's (it has more room under its feet)
+  const MIDDLE = 3, CLEAR = 8, TOP_PAD = 12, FEET = .0145, FEET_3D = .026;  // (1.8.33, E3) the letter; the clear space between the robot's feet and the top of the letters; half the stroke above a letter's box; where the feet sit under the anchor, of the height: the flat drawing's and the 3D one's (it has more room under its feet)
   const pose = {nx: 0, ny: 0, sleep: 1, arm: 0, flash: 0, calm: 0};  // flash: the light of E4 (3D); calm: no blink until then
   let solid = null;
   function buildBot() {
@@ -417,7 +420,7 @@
     const first = label0.text === null, before = label0.kind, change = kind !== before;
     label0.text = text; label0.kind = kind;
     const write = () => setText(label, label0.text);
-    if (first || !change || !shown || opening || still() || typeof MOTION === "undefined") { write(); return; }
+    if (first || !change || !shown || opening || enter.classList.contains("waiting") || still() || typeof MOTION === "undefined") { write(); return; }
     const was = go.offsetWidth, min = parseFloat(getComputedStyle(go).minWidth) || 0;
     label0.moving = true;
     const settle = () => { if (label0.moving) { label0.moving = false; label0.look(); } };
@@ -483,6 +486,7 @@
   function settle() {  // after each answer
     if (!open) return;
     const ready = render();
+    if ((chk0.last && view().kind !== "check") || chk0.error) releaseButton();  // a board still saying `check` (a cold doctor) keeps the dots
     if (!shown) {  // a task page opened from a link: skip when ready, show when something needs the person, wait a moment while it is only checking
       if (ready) { finish(true); return; }
       const needs = chk0.last && !["enter", "wait", "check"].includes(view().kind);
@@ -506,6 +510,7 @@
     else if (play && reloaded && typeof MOTION !== "undefined") MOTION.play(enter, [{opacity: 0}, {opacity: 1}], {ms: 160});  // (E6) a page loaded again (a language change) comes in from the colour the old one went to, not from a flash
     if (!visited) { try { localStorage.setItem(HINT_KEY, "1"); } catch (error) { /* seen again as the first time: no harm */ } }
     placeBot(); render(); loop();
+    if (still()) wake();  // (1.8.33) nothing moves under still(): the robot is simply awake, its head is not seen turning up at 1.5 s
     setTimeout(placeBot, 60); setTimeout(() => { if (open && shown) wake(); }, 1500);
     try { enter.focus({preventScroll: true}); } catch (error) { /* no focus */ }
   }
@@ -518,8 +523,11 @@
     const moves = word.map((pair) => MOTION.play(pair[0], [{opacity: 0, transform: "translateY(10px)"}, {opacity: pair[1].opacity, transform: "none"}], {ms: 300, delay: at}));
     if (name) moves.push(MOTION.play(hi, [{opacity: 0}, {opacity: 1}], {ms: 300, delay: at}));
     if (fromWizard) {
-      const b = bot.getBoundingClientRect(), dx = innerWidth / 2 - (b.left + b.width / 2), dy = 30 - (b.top + b.height / 2);
-      moves.push(MOTION.play(bot, [{opacity: 0, translate: dx + "px " + dy + "px", scale: .25}, {opacity: 1, offset: .25}, {opacity: 1, translate: "0 0", scale: 1}], {ms: 500}));
+      // The head of the drawing is 58 of its 100 units wide, its centre 50 across and 30.5 down (of 106). The box is scaled about its origin, which (with the CSS translate(-50%,-91%)) is at (left + w, top + 1.41 h).
+      const b = bot.getBoundingClientRect(), k = FLY.head / 58 * 100 / b.width, ox = b.left + b.width, oy = b.top + 1.41 * b.height;
+      const px = b.left + b.width / 2, py = b.top + b.height * 30.5 / 106;
+      const dx = innerWidth * FLY.x - (ox + k * (px - ox)), dy = FLY.y - (oy + k * (py - oy));
+      moves.push(MOTION.play(bot, [{translate: dx + "px " + dy + "px", scale: k, clipPath: "inset(0 0 43.5% 0)"}, {offset: .4, clipPath: "inset(0 0 43.5% 0)"}, {translate: "0 0", scale: 1, clipPath: "inset(0 0 0% 0)"}], {ms: 500}));
       const cover = h("div", {class: "m-veil enter-bg", "aria-hidden": "true"});
       Object.assign(cover.style, {position: "absolute", zIndex: "0"});
       enter.prepend(cover);
@@ -528,7 +536,24 @@
       moves.push(MOTION.play(bot, [{opacity: 0, translate: "0 -16px"}, {opacity: 1, translate: "0 0"}], {ms: 300}));
     }
     moves.push(MOTION.play(enter.querySelector(".en-foot"), [{opacity: 0}, {opacity: 1}], {ms: 200, delay: fromWizard ? 450 : 300}));
+    if (fromWizard) holdButton();
     return Promise.all(moves).then(() => undefined);
+  }
+  // (1.8.33, W10) After the wizard the button is not shown until the board has answered (a grey "Checking" is the first thing a newcomer would see); three dots stand in its place when that takes over a second.
+  // Its real label then comes in with a short fade. An answer that is still `check`, or does not come, lets it show anyway after 6 s; an error at once.
+  let waitDots = null, heldAt = 0;
+  function holdButton() {
+    heldAt = performance.now();
+    enter.classList.add("waiting");
+    waitDots = h("div", {class: "en-wait m-dots", "aria-hidden": "true"}, h("i"), h("i"), h("i"));
+    setTimeout(() => { if (enter.classList.contains("waiting") && waitDots) enter.querySelector(".en-foot").append(waitDots); }, 1000);
+    setTimeout(releaseButton, 6000);
+  }
+  function releaseButton() {
+    if (!enter.classList.contains("waiting")) return;
+    enter.classList.remove("waiting");
+    if (waitDots) { waitDots.remove(); waitDots = null; }
+    if (typeof MOTION !== "undefined") MOTION.play(cta, [{opacity: 0}, {opacity: 1}], {ms: 200, delay: Math.max(0, 650 - (performance.now() - heldAt))});
   }
   function finish(quick) {  // the screen goes; the page under it was never held back
     if (!open) return;

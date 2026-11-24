@@ -112,7 +112,8 @@ class ReadinessTests(TaskCase):
     def test_everything_in_place_is_ready_and_the_lines_come_in_the_order_of_the_screen(self) -> None:
         found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 1, "unbound": 0, "why": "ok"}), clean))
         self.assertTrue(found["ready"])
-        self.assertEqual([entry["id"] for entry in found["checks"]], ["setup", "paired", "doctor", "vscode", "copilot"])
+        self.assertEqual([entry["id"] for entry in found["checks"]], ["setup", "paired", "doctor", "copilot"])  # 1.8.33: four lines
+        self.assertEqual(ready.Ready.REQUIRED, ("setup", "paired", "doctor", "copilot"))
         self.assertEqual({entry["blocking"] for entry in found["checks"]}, {True})  # 1.7.38: every line of Harness & Local blocks
         self.assertEqual({entry["group"] for entry in found["checks"]}, {"required"})
         self.assertEqual([entry["key"] for entry in found["optional"]["items"]], ["kb", "instructions", "skills", "standards", "packs", "connections", "repos"])  # From the company, in the order of the screen
@@ -401,11 +402,14 @@ class ReadinessTests(TaskCase):
     def test_vscode_and_copilot_lines_follow_the_agent_host(self) -> None:
         """H6: VS Code only has to be installed; Copilot waits while the host starts or the link connects, and is ok once the host lists a model."""
         found = settled(ready.Ready(self.root, StubLink(UP, installed=False), clean))
-        self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"], line(found, "copilot")["why"]), ("fail", "no-code", "vscode"))
-        self.assertEqual([(entry["key"], entry["fix"]["kind"]) for entry in found["problems"]["required"]], [("vscode", "get-vscode")])  # Copilot waiting for it is no problem of its own
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "no-code"))  # 1.8.33: VS Code missing is the Copilot line failing
+        self.assertEqual([entry["id"] for entry in found["checks"]], ["setup", "paired", "doctor", "copilot"])
+        self.assertEqual([(entry["key"], entry["fix"]["kind"]) for entry in found["problems"]["required"]], [("copilot", "get-vscode")])
+        self.assertEqual((found["button"]["kind"], found["button"]["program"], found["button"]["download"]), ("program", "VS Code", ready.PROGRAM_PAGES["vscode"]))
+        self.assertFalse(found["ready"])
         for host, why in (("starting", "host-starting"), ("preparing", "host-preparing")):
             found = settled(ready.Ready(self.root, StubLink(UP, host=host), clean))
-            self.assertEqual((line(found, "vscode")["state"], line(found, "copilot")["state"], line(found, "copilot")["why"]), ("ok", "wait", why))
+            self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("wait", why))
         down = {"ready": False, "bound": 0, "unbound": 0, "why": "lost"}
         found = settled(ready.Ready(self.root, StubLink(down), clean))
         self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"], found["ready"]), ("wait", "connecting", False))
@@ -441,9 +445,9 @@ class ReadinessTests(TaskCase):
         check = ready.Ready(self.root, StubLink(UP, installed=False), boom)
         found = settled(check)
         self.assertFalse(found["ready"])  # VS Code not installed, Copilot waiting, doctor red: all of them stop the way in
-        self.assertEqual([entry["id"] for entry in found["checks"] if entry["blocking"]], ["setup", "paired", "doctor", "vscode", "copilot"])
-        self.assertEqual((line(found, "doctor")["level"], line(found, "vscode")["level"], line(found, "copilot")["level"]), ("red", "red", "yellow"))
-        self.assertEqual([entry["key"] for entry in found["problems"]["required"]], ["doctor", "vscode"])
+        self.assertEqual([entry["id"] for entry in found["checks"] if entry["blocking"]], ["setup", "paired", "doctor", "copilot"])
+        self.assertEqual((line(found, "doctor")["level"], line(found, "copilot")["level"]), ("red", "red"))
+        self.assertEqual([entry["key"] for entry in found["problems"]["required"]], ["doctor", "copilot"])
         self.assertFalse(settled(check, paired=False)["ready"])  # and so does the pairing
         self.assertEqual(line(settled(check, paired=False), "paired")["level"], "red")
         self.assertTrue(settled(ready.Ready(self.root, StubLink(UP), clean))["ready"])
@@ -490,9 +494,21 @@ class ReadinessTests(TaskCase):
                 raise OSError("the cache is gone")
 
         found = settled(ready.Ready(self.root, Broken({}), clean))
-        self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), ("fail", "error"))
-        self.assertIn("the cache is gone", line(found, "vscode")["detail"])
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "error"))  # the VS Code probe runs inside the Copilot line (1.8.33)
+        self.assertIn("the cache is gone", line(found, "copilot")["detail"])
         self.assertFalse(found["ready"])
+
+    def test_a_copy_set_up_without_the_wizard_and_without_vscode_is_not_ready_for_enter(self) -> None:
+        """1.8.33: the Enter screen has no VS Code line; an older copy (set up by hand) or VS Code removed later is still caught, by the Copilot line."""
+        (self.root / ".harness" / "policies").mkdir(parents=True, exist_ok=True)
+        (self.root / ".harness" / "policies" / "target.override.json").write_text("{}", encoding="utf-8")  # the older marker of a copy that is set up
+        self.assertTrue(ready.setup_done(self.root))
+        found = settled(ready.Ready(self.root, StubLink(UP, installed=False), clean))
+        self.assertEqual(line(found, "setup")["state"], "ok")
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "no-code"))
+        self.assertFalse(found["ready"])
+        self.assertEqual((found["button"]["kind"], found["button"]["program"]), ("program", "VS Code"))
+        self.assertTrue(settled(ready.Ready(self.root, StubLink(UP), clean))["ready"])  # the same copy with VS Code is ready
 
     def test_a_vscode_check_that_errors_gives_the_doctor_button_and_a_real_text_never_a_dead_checking(self) -> None:
         class Broken(StubLink):
@@ -502,8 +518,8 @@ class ReadinessTests(TaskCase):
         found = settled(ready.Ready(self.root, Broken({}), clean))
         self.assertEqual(found["button"]["kind"], "doctor")
         self.assertEqual(found["button"]["label"], messages.text("ready.btn.doctor.one"))
-        problem = next(entry for entry in found["problems"]["required"] if entry["key"] == "vscode")
-        self.assertEqual(problem["text"], messages.text("ready.r.error", what=messages.text("ready.what.vscode")))
+        problem = next(entry for entry in found["problems"]["required"] if entry["key"] == "copilot")
+        self.assertEqual(problem["text"], messages.text("ready.r.error", what=messages.text("ready.what.copilot")))
         self.assertIn("the cache is gone", problem["why"])
         self.assertEqual(problem["fix"]["to"], "doctor")
 
@@ -619,13 +635,13 @@ class FakeHostReadinessTests(TaskCase):
     def test_a_host_that_lists_an_allowed_model_is_ready_for_copilot(self) -> None:
         link = self.make([{"id": "gpt-x", "policyState": "enabled"}, {"id": "off-one", "policyState": "disabled"}])
         found = settled(ready.Ready(self.root, link, clean))
-        self.assertEqual((line(found, "vscode")["state"], line(found, "copilot")["state"], line(found, "copilot")["n"]), ("ok", "ok", 1))
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["n"]), ("ok", 1))
         self.assertTrue(found["ready"])
 
     def test_a_host_with_no_allowed_model_waits_for_one(self) -> None:
         link = self.make([{"id": "off-one", "policyState": "disabled"}])
         found = settled(ready.Ready(self.root, link, clean))
-        self.assertEqual((line(found, "vscode")["state"], line(found, "copilot")["state"], line(found, "copilot")["why"]), ("ok", "wait", "models"))
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("wait", "models"))
 
 class ServedReadTests(ServeCase):
     def test_ready_is_a_read_with_the_headers_of_the_other_reads_and_tells_a_browser_that_is_not_paired(self) -> None:
@@ -639,7 +655,7 @@ class ServedReadTests(ServeCase):
         status, data, _ = self.request("POST", "/api/ready", {})
         self.assertEqual(status, 200)
         self.assertEqual(line(data, "paired")["state"], "fail")
-        self.assertEqual(line(data, "vscode")["why"], "off")  # the tests switch the link off
+        self.assertEqual(line(data, "copilot")["why"], "off")  # the tests switch the link off
         self.assertFalse(data["ready"])
         self.assertNotIn("token", json.dumps(data).lower())
         status, data, _ = self.request("POST", "/api/ready", {}, cookie=self.pair())

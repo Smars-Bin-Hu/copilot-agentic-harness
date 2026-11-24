@@ -34,7 +34,7 @@ const READYBAR = (function () {
     shownKey = sig;
     wrap.replaceChildren(...(required.length ? [red(required)] : []));
     wrap.hidden = !required.length;
-    document.documentElement.classList.toggle("rd-red", required.some((problem) => problem.key === "vscode" || problem.key === "copilot"));  // the red block says it: the VS Code banner of shell.js would say the same twice
+    document.documentElement.classList.toggle("rd-red", required.some((problem) => problem.key === "copilot"));  // the red block says it: the VS Code banner of shell.js would say the same twice
   }
 
   function poll(now) {

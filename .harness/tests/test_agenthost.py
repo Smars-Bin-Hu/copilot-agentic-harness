@@ -589,7 +589,7 @@ class ReadyOwnHostTest(unittest.TestCase):
     def lines(self) -> tuple:
         vscode = self.ready.vscode()
         copilot = self.ready.copilot(vscode)
-        checks = [{"id": "setup", "state": "ok"}, {"id": "paired", "state": "ok"}, {"id": "doctor", "state": "ok"}, dict(vscode, id="vscode"), dict(copilot, id="copilot")]
+        checks = [{"id": "setup", "state": "ok"}, {"id": "paired", "state": "ok"}, {"id": "doctor", "state": "ok"}, dict(copilot, id="copilot")]
         return vscode, copilot, self.ready.button(checks, all(line["state"] == "ok" for line in checks))  # the middle button of the Enter screen
 
     def test_all_well(self) -> None:
@@ -602,7 +602,7 @@ class ReadyOwnHostTest(unittest.TestCase):
         self.link.installed_found = {"found": False, "version": "", "off": False}
         vscode, copilot, action = self.lines()
         self.assertEqual((vscode["state"], vscode["why"]), ("fail", "no-code"))
-        self.assertEqual(copilot["why"], "vscode")
+        self.assertEqual((copilot["state"], copilot["why"]), ("fail", "no-code"))  # 1.8.33: the Copilot line holds the VS Code check
         self.assertEqual((action["kind"], action["program"], action["download"]), ("program", "VS Code", self.ready_module.PROGRAM_PAGES["vscode"]))
 
     def test_no_gh(self) -> None:
@@ -692,7 +692,7 @@ class ReadyOwnHostTest(unittest.TestCase):
     def test_problems_for_the_red_block(self) -> None:
         self.gh = {"gh": "/opt/gh", "version": "2.105.0", "signed_in": False, "login": "", "why": "not-signed-in"}
         vscode, copilot, action = self.lines()
-        found = self.ready.required_problems([dict(vscode, id="vscode"), dict(copilot, id="copilot")])
+        found = self.ready.required_problems([dict(copilot, id="copilot")])
         self.assertEqual(len(found), 1)
         self.assertEqual((found[0]["key"], found[0]["fix"]["to"], found[0]["fix"]["kind"]), ("copilot", "copilot", "signin"))
 

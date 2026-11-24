@@ -783,7 +783,7 @@ class ReadyFieldsTests(HarnessTestCase):
 
     def test_every_line_has_a_kind_and_every_item_is_a_thing_to_set_up_with_an_effect_when_it_is_not_ok(self) -> None:
         found = settled(self.check())
-        self.assertEqual({line["id"]: line["kind"] for line in found["checks"]}, {"setup": "setup", "paired": "run", "doctor": "run", "vscode": "run", "copilot": "run"})
+        self.assertEqual({line["id"]: line["kind"] for line in found["checks"]}, {"setup": "setup", "paired": "run", "doctor": "run", "copilot": "run"})
         self.assertEqual({entry["kind"] for entry in found["optional"]["items"]}, {"setup"})
         for entry in found["optional"]["items"]:
             self.assertEqual(entry["state"] == "ok", "effect" not in entry, entry["key"])
@@ -816,11 +816,11 @@ class ReadyFieldsTests(HarnessTestCase):
 
     # --- the middle button: BUTTONS in the order of the table -------------------------------------------------
 
-    def lines(self, setup_state: str = "ok", paired: str = "ok", doctor: Any = ("ok", "ok"), vscode: Any = ("ok", "ok"), copilot: Any = ("ok", "ok"), extra: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-        """The five lines as `answer` makes them; `extra` adds fields to a line by its id."""
+    def lines(self, setup_state: str = "ok", paired: str = "ok", doctor: Any = ("ok", "ok"), copilot: Any = ("ok", "ok"), extra: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+        """The four lines as `answer` makes them; `extra` adds fields to a line by its id."""
         more = extra or {}
-        given = {"setup": (setup_state, "new" if setup_state == "fail" else "ok"), "paired": (paired, "unpaired" if paired == "fail" else "ok"), "doctor": doctor, "vscode": vscode, "copilot": copilot}
-        return [dict({"id": name, "state": given[name][0], "why": given[name][1]}, **more.get(name, {})) for name in ("setup", "paired", "doctor", "vscode", "copilot")]
+        given = {"setup": (setup_state, "new" if setup_state == "fail" else "ok"), "paired": (paired, "unpaired" if paired == "fail" else "ok"), "doctor": doctor, "copilot": copilot}
+        return [dict({"id": name, "state": given[name][0], "why": given[name][1]}, **more.get(name, {})) for name in ("setup", "paired", "doctor", "copilot")]
 
     def button(self, lines: List[Dict[str, Any]], is_ready: bool = False) -> Dict[str, Any]:
         return self.check().button(lines, is_ready)
@@ -830,8 +830,8 @@ class ReadyFieldsTests(HarnessTestCase):
         cases = [
             ("pair", self.lines(paired="fail"), "Pair this browser", False),
             ("setup", self.lines(setup_state="fail"), "Get set up", False),
-            ("program", self.lines(vscode=("fail", "no-code")), "Find VS Code", False),
-            ("program", self.lines(vscode=("fail", "off")), "Find VS Code", False),
+            ("program", self.lines(copilot=("fail", "no-code")), "Find VS Code", False),
+            ("program", self.lines(copilot=("fail", "off")), "Find VS Code", False),
             ("program", self.lines(copilot=("fail", "no-gh")), "Find GitHub CLI", False),
             ("program", self.lines(copilot=("fail", "gh-broken")), "Find GitHub CLI", False),
             ("doctor", self.lines(doctor=("fail", "errors"), extra={"doctor": {"n": 3}}), "Show 3 problems", False),
@@ -843,7 +843,7 @@ class ReadyFieldsTests(HarnessTestCase):
             ("wait", self.lines(copilot=("wait", "host-starting")), "Starting Copilot\u2026", True),
             ("wait", self.lines(copilot=("wait", "connecting")), "Starting Copilot\u2026", True),
             ("wait", self.lines(copilot=("wait", "models")), "Starting Copilot\u2026", True),
-            ("wait", self.lines(vscode=("wait", "x")), "Starting Copilot\u2026", True),
+            ("wait", self.lines(copilot=("wait", "vscode")), "Starting Copilot\u2026", True),
             ("check", self.lines(doctor=("check", "running")), "Checking\u2026", True),
             ("enter", self.lines(), "Enter", False),
         ]
@@ -854,7 +854,7 @@ class ReadyFieldsTests(HarnessTestCase):
         self.assertEqual(sorted({kind for kind, *_rest in cases}), sorted(ready.BUTTONS))  # every kind of the table is tried
 
     def test_the_fields_of_the_kinds_that_carry_something(self) -> None:
-        found = self.button(self.lines(vscode=("fail", "no-code")))
+        found = self.button(self.lines(copilot=("fail", "no-code")))
         self.assertEqual((found["program"], found["download"]), ("VS Code", "https://code.visualstudio.com/download"))
         found = self.button(self.lines(copilot=("fail", "gh-broken"), extra={"copilot": {"detail": "cannot-run"}}))
         self.assertEqual((found["program"], found["download"], found["detail"]), ("GitHub CLI", "https://cli.github.com/", "cannot-run"))
@@ -868,11 +868,11 @@ class ReadyFieldsTests(HarnessTestCase):
         self.assertEqual(found["detail"], "port was taken")
 
     def test_the_first_that_holds_wins_in_the_order_of_the_table(self) -> None:
-        everything = self.lines(paired="fail", setup_state="fail", doctor=("fail", "errors"), vscode=("fail", "no-code"), copilot=("fail", "signin"))
+        everything = self.lines(paired="fail", setup_state="fail", doctor=("fail", "errors"), copilot=("fail", "no-code"))
         order = []
-        for drop in ("paired", "setup", "vscode", "doctor"):
+        for drop in ("paired", "setup", "copilot", "doctor"):
             order.append(self.button(everything)["kind"])
-            everything = [dict(line, state="ok", why="ok") if line["id"] == drop else line for line in everything]
+            everything = [(dict(line, why="signin") if drop == "copilot" else dict(line, state="ok", why="ok")) if line["id"] == drop else line for line in everything]  # VS Code mended: Copilot goes on to its sign-in
         order.append(self.button(everything)["kind"])
         self.assertEqual(order, ["pair", "setup", "program", "doctor", "signin"])
         self.assertEqual(self.button(self.lines(copilot=("fail", "signin"), extra={"copilot": {"host": {"percent": 5}}}))["kind"], "signin")  # the host's bar rides along a sign-in; the sign-in comes first

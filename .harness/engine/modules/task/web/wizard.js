@@ -703,7 +703,7 @@ const WIZARD = (function () {
       const ok = summary.rows.filter((row) => row.done), no = summary.rows.filter((row) => !row.done);
       if (title) title.textContent = t(no.length ? "wizard.v.title.check" : "wizard.v.title");
       const parts = [];
-      if (ok.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.done")), el("div", "wz-donegrid", ok.map((row) => el("div", "wz-d", dot("ok"), h("b", null, row.label), el("span", "s", valueText(row)))))));
+      if (ok.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.done")), el("div", "wz-donegrid", ok.map((row) => el("div", "wz-d", dot("ok"), h("b", null, row.label), h("span", {class: "s", title: valueText(row)}, valueText(row)))))));
       if (no.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.todo")), listOf(no.map((row) => {
         const set = btn(t("wizard.v.set"), "sm", () => { M.fromReview = true; const spot = where[row.id] || [2]; go(spot[0], spot[1] || 0); });
         return el("div", "wz-li wz-rv", dot("hot"), el("div", "wz-main", el("div", "t", row.label), el("div", "eff", row.effect || "")), set);
@@ -798,7 +798,7 @@ const WIZARD = (function () {
     let prev = headAt(a);
     for (let i = a + step; mine === run; i += step) {
       const next = headAt(i), top = Math.min(prev.y, next.y) - 6;
-      await MOTION.play(shell.head, many ? [{transform: at(prev.x, prev.y)}, {transform: at((prev.x + next.x) / 2, top), offset: .5}, {transform: at(next.x, next.y)}] : [{transform: at(prev.x, prev.y)}, {transform: at(next.x, next.y)}], {ms: many ? MOTION.MS.micro : MOTION.MS.page, fill: "forwards"});
+      await MOTION.play(shell.head, many ? [{transform: at(prev.x, prev.y)}, {transform: at((prev.x + next.x) / 2, top), offset: .5}, {transform: at(next.x, next.y)}] : [{transform: at(prev.x, prev.y)}, {transform: at(next.x, next.y)}], {ms: many ? MOTION.MS.micro : 100, fill: "forwards"});
       if (mine !== run) return;
       if (arrived) arrived(i);
       if (i === b) return;
@@ -806,30 +806,18 @@ const WIZARD = (function () {
     }
   }
 
-  // A copy of the page that is leaving, for it to move out while the real one has already changed. It sits in the same sheet rules as the page (a wrapper that draws no box of its own).
-  function ghostOf(node, hello) {
-    const copy = MOTION.ghost(node);
-    if (!copy) return null;
-    const wrap = el("div", "wz-page" + (hello ? " wz-hello" : ""));
-    wrap.style.display = "contents";
-    copy.style.zIndex = "2";
-    shell.root.append(wrap);
-    wrap.append(copy);
-    const was = node.querySelectorAll("input"), now = copy.querySelectorAll("input");
-    was.forEach((input, i) => { if (now[i]) now[i].value = input.value; });  // what was typed is only a property, a copy would show the first value
-    return {copy, wrap};
-  }
-
+  // A page turn is in two steps that never overlap (W4): the old page is gone in 100 ms (and the head has landed, W6); only then the new page, the foot, the count and the bar change, all at once,
+  // and the new page comes in over 180 ms. So no frame, however late it is drawn, shows two pages or the foot of one under the other.
   function render() {
     if (ctl && ctl.stop) ctl.stop();
     ctl = null;
     const root = shell.root, first = !drawn, mine = ++run;
     const dir = first ? 0 : M.page !== drawn.page ? (M.page > drawn.page ? 1 : -1) : M.kbsub !== drawn.sub ? (M.kbsub > drawn.sub ? 1 : -1) : 0;  // forward, back, or the same page again
     const from = first ? M.page : drawn.page, name = PAGES[M.page];
-    const old = shell.content, content = el("div", "wz-pg");
-    const ghost = dir ? ghostOf(old, root.classList.contains("wz-hello")) : null;
-    const wasHello = shell.full && from === 0 ? fullAt() : null;  // where the whole robot stands now, before the page changes
-    const change = () => {
+    const old = shell.content;
+    const change = () => {  // the new page, the foot, the count: one moment
+      const content = el("div", "wz-pg");
+      shell.body.scrollTop = 0;  // before the swap: the layout is still clean, and nothing is forced after it
       old.replaceWith(content);
       shell.content = content;
       root.classList.toggle("wz-hello", name === "welcome");
@@ -838,7 +826,6 @@ const WIZARD = (function () {
       drawn = {page: M.page, sub: M.kbsub};
       drawFoot();
       paintJob();
-      shell.body.scrollTop = 0;
     };
     if (!dir) {  // the first page, or the same page drawn again (a state that changed): no turn
       change();
@@ -846,38 +833,39 @@ const WIZARD = (function () {
         void root.offsetWidth;  // the bar was there before: its fill is a move from empty
         paintBar(wanted());
         settle();
-        MOTION.appear(content, {ms: MOTION.MS.show});
+        MOTION.appear(shell.content, {ms: MOTION.MS.show});
         MOTION.appear(shell.foot, {ms: MOTION.MS.show});
         for (const mate of [shell.full, shell.head]) if (mate && !mate.hidden) MOTION.play(mate, [{opacity: 0}, {opacity: 1}], {ms: MOTION.MS.show});
-        if (M.page === 0) welcomeLife(content);
+        if (M.page === 0) welcomeLife(shell.content);
       }
       if (ctl.focus) ctl.focus();
       return;
     }
     turning = true;
-    const slide = MOTION.glide(shell.foot, change);  // the foot goes where the new page's height puts it
-    const spot = shell.full ? (M.page === 0 ? fullAt() : headAt(M.page - 1)) : null;  // measured now, before the new page starts to move in
-    const states = wanted();
-    if (shell.bars.length) {
-      if (dir > 0 && from > 0 && M.page - from > 1) {  // W6: the pages already fine are skipped; the head hops cell by cell and ticks each one it passes
-        const stage = states.slice();
-        for (let i = from; i < M.page; i++) stage[i] = shell.state[i];
-        paintBar(stage);
-      } else paintBar(states);
-    }
-    const turn = MOTION.turn(ghost && ghost.copy, content, dir);
-    if (shell.full) {
+    const slide = dir * 24, final = wanted(), hello = from === 0, home = M.page === 0, there = M.page - 1;
+    const moves = Boolean(shell.full) && M.page !== from;
+    const wasFull = moves && hello ? fullAt() : null, wasHead = moves && !hello ? headAt(from - 1) : null;  // where the robot stands now
+    const many = moves && !hello && !home && Math.abs(there - (from - 1)) > 1;  // pages skipped: the page stays while the head hops, then it turns
+    const leaves = () => MOTION.play(old, [{opacity: 1, transform: "none"}, {opacity: 0, transform: "translateX(" + (-slide) + "px)"}], {ms: 100, ease: MOTION.OUT, fill: "forwards"});
+    const out = many ? null : leaves();
+    let flight = Promise.resolve();
+    if (moves) {
       shell.moving = true;
       rest();
-      const arrived = (i) => { const part = shell.state.slice(); part[i] = states[i]; if (i === M.page - 2) part[M.page - 1] = states[M.page - 1]; paintBar(part); };
-      const travel = M.page === from ? Promise.resolve() : from === 0 && spot ? fly(wasHello, spot, false) : M.page === 0 && spot ? fly(headAt(from - 1), spot, true) : walk(from - 1, M.page - 1, mine, arrived);
-      travel.then(() => { if (mine === run) { rest(); shell.moving = false; paintBar(states); settle(); } });
+      if (hello) flight = fly(wasFull, headAt(there), false);  // W3: the whole robot becomes the head while the page turns (it does not hold the page)
+      else if (!home) flight = walk(from - 1, there, mine, (i) => { if (i !== there) { const part = shell.state.slice(); part[i] = final[i]; paintBar(part); } });  // W6: each cell ticked as the head passes
     }
-    Promise.all([turn, slide]).then(() => {
-      if (ghost) ghost.wrap.remove();
-      if (mine === run) { turning = false; if (ctl && ctl.focus && !root.contains(document.activeElement)) ctl.focus(); }
+    const land = () => { if (moves && mine === run) { rest(); shell.moving = false; settle(); } };
+    (many ? flight.then(leaves) : hello || home ? out : Promise.all([out, flight])).then(() => {  // the old page is gone, and the head has landed (W6)
+      if (mine !== run) return;
+      const fit = MOTION.glide(shell.foot, change);  // the foot goes where the new page's height puts it
+      paintBar(final);
+      if (moves && home) flight = fly(wasHead, fullAt(), true);  // measured before the new page starts to move in
+      const came = MOTION.play(shell.content, [{opacity: 0, transform: "translateX(" + slide + "px)"}, {opacity: 1, transform: "none"}], {ms: 180});
+      Promise.all([came, fit]).then(() => { if (mine === run) { turning = false; if (ctl && ctl.focus && !root.contains(document.activeElement)) ctl.focus(); } });
+      flight.then(land);
     });
-    setTimeout(() => { if (mine === run) turning = false; }, 900);  // a safety: a turn that never reports does not hold the buttons
+    setTimeout(() => { if (mine === run) turning = false; }, 1500);  // a safety: a turn that never reports does not hold the buttons
   }
 
   // W2: the welcome page's one blink and its list coming in row by row, 30 ms apart
@@ -894,16 +882,30 @@ const WIZARD = (function () {
     return el("div", "m-think", mark, el("div", "m-dots", h("i", null), h("i", null), h("i", null)));
   }
 
-  // W9 and the wizard's half of W10: the head jumps and sparks fly, the page fades out (120 ms), then the veil takes the Enter screen's background and the page goes to "/", where the Enter
-  // screen plays the rest (the mark says it came from here). The veil is motion.js's, with the Enter screen's backdrop (`cls: "enter-bg"`, light or dark).
+  // W9 and the wizard's half of W10: the veil (the Enter screen's backdrop) starts with the page's fade, so no frame shows only the header. The head is lifted onto the veil, jumps, and goes to
+  // HAND: the top centre of the viewport, where the Enter screen's robot starts. The page goes on when the head has landed; if the next page is slow, three dots appear under the head.
+  const HAND = {w: 30, h: 31, top: 20, dots: 10};  // the head is 30 x 31 px, centred, its top edge 20 px from the top of the viewport; the dots sit 10 px under it
   function toEnter() {
     if (!shell) return Promise.resolve(leave());
-    ROBOT.act(headSvg(), "cheer");
-    const fades = [shell.content, shell.foot].map((node) => MOTION.play(node, [{opacity: 1}, {opacity: 0}], {ms: 120, ease: MOTION.OUT, fill: "forwards"}));
-    return Promise.all(fades).then(() => {
-      MOTION.mark("from-wizard");
-      return MOTION.leave(() => location.assign("/"), {cls: "enter-bg"});
-    });
+    const mate = shell.head, svg = headSvg();
+    MOTION.mark("from-wizard");
+    let landed = Promise.resolve();
+    if (mate && svg) {
+      const box = mate.getBoundingClientRect(), x = Math.round(window.innerWidth / 2 - HAND.w / 2), y = HAND.top;
+      document.body.append(mate);
+      mate.classList.add("lifted");  // above the veil (wizard.css)
+      mate.style.transform = at(x, y);
+      landed = MOTION.play(mate, [{transform: at(box.left, box.top)}, {transform: at(x, y)}], {ms: 300, fill: "forwards"});  // nothing under reduced motion or Lite: it stands there
+      ROBOT.act(svg, "cheer");
+    }
+    setTimeout(() => {
+      const dots = el("div", "m-dots wz-wait", h("i", null), h("i", null), h("i", null));
+      dots.style.top = HAND.top + HAND.h + HAND.dots + "px";
+      document.body.append(dots);
+      MOTION.appear(dots, {ms: MOTION.MS.show});
+    }, 400);
+    for (const node of [shell.content, shell.foot]) MOTION.play(node, [{opacity: 1}, {opacity: 0}], {ms: 120, ease: MOTION.OUT, fill: "forwards"});
+    return MOTION.leave(() => landed.then(() => location.assign("/")), {cls: "enter-bg"});
   }
 
   // The foot. Its main button stays the same node from page to page, so a change between off and on is a fade (W8), and a press (Continue, Back, Skip) is answered once: a burst of clicks

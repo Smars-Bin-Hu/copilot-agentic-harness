@@ -8,10 +8,11 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.41 (1.8.0 – 1.8.41, 2026-11-17 – 2026-11-24)
+## 1.8.42 (1.8.0 – 1.8.42, 2026-11-17 – 2026-11-24)
 
 ### Added
 
+- **A connection of your own on PROD** (1.8.42): Settings > Connections lets you choose PROD for a connection you add yourself (it was DEV, IST and QAT only; a PROD connection came only from the knowledge base). The agent only reads there: the gate runs a read and refuses every write, run and drop, and a PROD connection is never opened for a task. Use a read-only account there all the same.
 - **The super agent can do what a task page does** (1.8.40): it sees which tasks are paused and which have no chat, and proposes a card for it. **Resume and send** on a paused task resumes it, opens a new chat when it has none (or when you ask for one; **New chat instead** when it has one) and gives it your words, each step ticked; a step that fails stops there with the reason and **Try again**. A card that only resumes sends nothing. New cards: **Compact chat**, **Try again** after a chat error, **Rename**, **Autorun off**, **Link a ticket** (`<type>:<id>`) and **Dismiss held call**. The super agent no longer sends you to VS Code to type a command.
 - **The super agent knows why a task stopped** (1.8.40): for a task you name (its first 4 letters are enough when they fit one task) and the one that waits longest, the board adds a short brief from its `TASK.md`, its newest `LOG.md` entry, its open question and its chat; when that is not enough it reads those files itself (skill `harness-super-read`), a few lines at most.
 - **An account menu at the top right** (1.8.39): the round avatar with your initials opens one menu: who you are and the GitHub account Copilot uses, this month's credits (click for Settings > Copilot), **Settings** (with the setup items you skipped listed under it), **Theme** light or dark, **More appearance…**, **Walk the setup guide again**, the version, **Restart board** and **Stop board…**. A ring around the avatar shows the credits left (amber under 10%, red when used up); an amber dot means setup items were skipped. A hint points at it once. The arrow keys, Home, End, Esc and Tab work in it.

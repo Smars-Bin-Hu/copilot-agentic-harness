@@ -105,6 +105,19 @@ class GateViewTests(ConnectionsCase):
         self.assertEqual(external.decide(system, "dev", "write"), "allow")
         self.assertEqual(external.decide(system, "prod", "write"), "deny")
 
+    def test_a_prod_connection_of_ones_own_only_reads_and_is_never_opened(self) -> None:
+        from core import systems as systems_mod
+        pack = Path(__file__).resolve().parents[1] / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
+        put_type(self.root, json.loads(pack.read_text(encoding="utf-8")), pack="sqlserver")
+        connections.save(self.root, "mine-prod", {"account": "reader", "password": "x"}, own={"type": "sqlserver", "env": "prod", "auth": "sql", "host": "sql-prod.example.local", "port": "1433"})  # 1.8.40: the board's form takes PROD
+        systems = config.load_policy(self.root, "tools")["systems"]
+        self.assertEqual(systems["mine-prod"]["env"], "prod")
+        decided = lambda line: [(a.system, a.verb, d) for a, d in external.classify(line, systems)]  # noqa: E731
+        self.assertEqual(decided('sqlcmd -S sql-prod.example.local,1433 -Q "SELECT 1"'), [("mine-prod", "read", "allow")])
+        self.assertEqual(decided('sqlcmd -S sql-prod.example.local,1433 -Q "UPDATE t SET a=1 WHERE id=2"')[0][2], "deny")
+        self.assertEqual(decided('sqlcmd -S sql-prod.example.local,1433 -Q "DROP TABLE t"')[0][2], "deny")
+        self.assertEqual(systems_mod.open_scope(systems["mine-prod"], "prod"), "no")
+
 
 class TestOfTheWayInTests(ConnectionsCase):
     def test_ok_with_the_account_the_kind_catches_denied_down_and_missing(self) -> None:

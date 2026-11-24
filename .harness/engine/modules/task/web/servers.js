@@ -110,7 +110,7 @@ const SERVERS = (function () {
     if (!names.length) return h("p", {class: "sub"}, t("connections.own.nokind"));
     const kind = h("select", {class: "su-in", required: ""}, h("option", {value: ""}, t("connections.own.env.pick")), names.map((name) => h("option", {value: name}, kinds[name].label)));  // no kind chosen for you (1.7.38)
     const alias = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("connections.own.alias")});
-    const env = h("select", {class: "su-in", required: ""}, h("option", {value: ""}, t("connections.own.env.pick")), ["dev", "ist", "qat"].map((name) => h("option", {value: name}, name.toUpperCase())), h("option", {value: "none"}, t("connections.env.none")));  // no environment chosen for you: a wrong one is easy to miss
+    const env = h("select", {class: "su-in", required: ""}, h("option", {value: ""}, t("connections.own.env.pick")), ["dev", "ist", "qat", "prod"].map((name) => h("option", {value: name}, name.toUpperCase())), h("option", {value: "none"}, t("connections.env.none")));  // no environment chosen for you: a wrong one is easy to miss
     const envField = field(t("connections.own.env"), env);  // hidden until a kind is chosen, and for a kind that says it has no environment
     let envSet = false;  // the environment is "none" because the kind says so, not because the person chose it
     const auth = h("select", {class: "su-in"});
@@ -139,7 +139,7 @@ const SERVERS = (function () {
     kind.addEventListener("change", draw);
     auth.addEventListener("change", drawIdentity);
     draw();
-    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), envField, authField), h("p", {class: "sub"}, t("connections.own.env.prod")), field(t("connections.own.about"), about), fields, rest);  // why there is no PROD (1.7.38)
+    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), envField, authField), h("p", {class: "sub"}, t("connections.own.env.prod")), field(t("connections.own.about"), about), fields, rest);  // what PROD means here: reads only (1.8.40)
   }
 
   // One connection (1.7.38): name, type, where it points (the environment chip, or `org · project`), whether the company or the person added it, the sign-in (a dot and the account), Sign in and Test.

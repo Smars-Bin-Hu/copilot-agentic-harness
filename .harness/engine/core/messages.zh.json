@@ -4515,7 +4515,7 @@
   "connections.state.nopack.tip": "这个连接的 tool pack 没开，所以这里没有登录和测试。gate 仍按 tool pack 的规则判断它的调用：读直接过，写要等你批准，删除一律拒绝。",
   "connections.state.listfault": "工具包清单读不出来；gate 仍在守着它",
   "connections.state.listfault.tip": "公司的工具包清单（{file}）读不出来：{problem} 没法说这个连接的工具包有没有开。修好之前这里不能登录也不能测试，gate 把每个出厂包的程序都当作开着来守。",
-  "connections.own.env.prod": "这里没有 PROD：prod 连接只来自公司知识库，agent 在那里只能读。",
+  "connections.own.env.prod": "在 PROD 上 agent 只能读：gate 放行读，写、执行和删除一律拒绝，PROD 连接也不能为任务打开。那里仍请用只读账号。",
   "task.step.allow_conn": "用户为这个任务打开了这些连接：{names}。在它们上面的写和执行不再逐条等批；destroy 只在工具包类型允许的地方放行（SQL Server 示例：DEV、IST 上删表）。拿到的结果记成证据再引用。",
   "task.allow.conn.on": "{name} 已为这个任务打开：agent 在它上面的写和执行不再逐条等批，直到你关掉它（`harness task allow --conn {name} --off`）或任务关闭。destroy 只在工具包类型允许的地方放行（SQL Server 示例：DEV、IST 上删表）。每条调用都在日志里。",
   "task.allow.conn.off": "{name} 已为这个任务关闭：在它上面的写或执行又要等你批准。",

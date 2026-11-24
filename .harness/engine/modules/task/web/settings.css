@@ -130,6 +130,7 @@ textarea.su-in{resize:vertical}
 .sv-env-dev{background:var(--good-bg);color:var(--good)}
 .sv-env-ist{background:var(--hot-bg);color:var(--hot)}
 .sv-env-qat{background:var(--track);color:var(--ink)}
+.sv-env-prod{background:var(--bad-bg);color:var(--bad)}
 .sv-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:0 0 8px}
 .sv-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .sv-said{font-size:12.5px}

@@ -4515,7 +4515,7 @@
   "connections.state.nopack.tip": "The tool pack of this connection is off, so there is no sign-in or test here. The gate still judges its calls by the rules of the pack: a read runs, a write is held for you, a destroy is refused.",
   "connections.state.listfault": "the list of tool packs cannot be read; the gate still guards it",
   "connections.state.listfault.tip": "The company's list of tool packs ({file}) cannot be read: {problem} Nobody can say whether the tool pack of this connection is on. Until it is fixed there is no sign-in or test here, and the gate guards the programs of every factory pack as if it were on.",
-  "connections.own.env.prod": "No PROD here: a prod connection comes only from the company's knowledge base, and the agent only reads there.",
+  "connections.own.env.prod": "On PROD the agent only reads: the gate runs a read and refuses every write, run and drop, and a PROD connection is never opened for a task. Use a read-only account there all the same.",
   "task.step.allow_conn": " The user opened these connections for this task: {names}. A write or a run on them goes through with no further approval; a destroy passes only where the tool pack's type lets it (the SQL Server sample: a table drop on DEV and IST). Cite what you get as evidence.",
   "task.allow.conn.on": "{name} is open for this task: the agent's writes and runs on it go through with no further approval, until you close it (`harness task allow --conn {name} --off`) or the task closes. A destroy passes only where the tool pack's type lets it (the SQL Server sample: a table drop on DEV and IST). Every call is in the log.",
   "task.allow.conn.off": "{name} is closed for this task: a write or a run on it waits for you again.",

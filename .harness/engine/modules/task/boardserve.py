@@ -1331,7 +1331,7 @@ class Board:
             own = {key: str(value) for key, value in own.items() if key in conn_core.OWN_FIELDS or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}
             if not conn_core.ALIAS.match(alias) or alias in conn_core.company_connections(config.policy_or_empty(self.root, conn_core.POLICY)):
                 raise ValueError(say("connections.alias.bad", alias=alias))
-            if own.get("env") not in ("dev", "ist", "qat", "none"):
+            if own.get("env") not in ("dev", "ist", "qat", "prod", "none"):  # prod too (1.8.40): the gate lets only reads run there, whatever the account may do
                 raise ValueError(say("connections.own.env.none"))
         stamp = hashlib.sha256(json.dumps([alias, given, own], sort_keys=True).encode("utf-8")).hexdigest()
         if step == "list":

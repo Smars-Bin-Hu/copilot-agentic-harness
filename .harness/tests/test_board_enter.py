@@ -112,7 +112,7 @@ class ReadinessTests(TaskCase):
     def test_everything_in_place_is_ready_and_the_lines_come_in_the_order_of_the_screen(self) -> None:
         found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 1, "unbound": 0, "why": "ok"}), clean))
         self.assertTrue(found["ready"])
-        self.assertEqual([entry["id"] for entry in found["checks"]], ["setup", "paired", "doctor", "copilot"])  # 1.8.33: four lines
+        self.assertEqual([entry["id"] for entry in found["checks"]], ["setup", "paired", "doctor", "copilot"])  # 1.8.34: four lines
         self.assertEqual(ready.Ready.REQUIRED, ("setup", "paired", "doctor", "copilot"))
         self.assertEqual({entry["blocking"] for entry in found["checks"]}, {True})  # 1.7.38: every line of Harness & Local blocks
         self.assertEqual({entry["group"] for entry in found["checks"]}, {"required"})
@@ -247,7 +247,7 @@ class ReadinessTests(TaskCase):
         self.assertIsNone(check.stale(), "a test without a board never says so")
 
     def test_after_confirm_doctor_runs_again_but_the_line_keeps_its_answer(self) -> None:
-        """1.8.33: the first doctor after the wizard runs in the background; the page does not get a grey `check` for seconds (Check again, by the person, still does)."""
+        """1.8.34: the first doctor after the wizard runs in the background; the page does not get a grey `check` for seconds (Check again, by the person, still does)."""
         runs: List[int] = []
         now = [1000.0]
         gate = threading.Event()
@@ -440,7 +440,7 @@ class ReadinessTests(TaskCase):
     def test_vscode_and_copilot_lines_follow_the_agent_host(self) -> None:
         """H6: VS Code only has to be installed; Copilot waits while the host starts or the link connects, and is ok once the host lists a model."""
         found = settled(ready.Ready(self.root, StubLink(UP, installed=False), clean))
-        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "no-code"))  # 1.8.33: VS Code missing is the Copilot line failing
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "no-code"))  # 1.8.34: VS Code missing is the Copilot line failing
         self.assertEqual([entry["id"] for entry in found["checks"]], ["setup", "paired", "doctor", "copilot"])
         self.assertEqual([(entry["key"], entry["fix"]["kind"]) for entry in found["problems"]["required"]], [("copilot", "get-vscode")])
         self.assertEqual((found["button"]["kind"], found["button"]["program"], found["button"]["download"]), ("program", "VS Code", ready.PROGRAM_PAGES["vscode"]))
@@ -532,12 +532,12 @@ class ReadinessTests(TaskCase):
                 raise OSError("the cache is gone")
 
         found = settled(ready.Ready(self.root, Broken({}), clean))
-        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "error"))  # the VS Code probe runs inside the Copilot line (1.8.33)
+        self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("fail", "error"))  # the VS Code probe runs inside the Copilot line (1.8.34)
         self.assertIn("the cache is gone", line(found, "copilot")["detail"])
         self.assertFalse(found["ready"])
 
     def test_a_copy_set_up_without_the_wizard_and_without_vscode_is_not_ready_for_enter(self) -> None:
-        """1.8.33: the Enter screen has no VS Code line; an older copy (set up by hand) or VS Code removed later is still caught, by the Copilot line."""
+        """1.8.34: the Enter screen has no VS Code line; an older copy (set up by hand) or VS Code removed later is still caught, by the Copilot line."""
         (self.root / ".harness" / "policies").mkdir(parents=True, exist_ok=True)
         (self.root / ".harness" / "policies" / "target.override.json").write_text("{}", encoding="utf-8")  # the older marker of a copy that is set up
         self.assertTrue(ready.setup_done(self.root))
@@ -790,7 +790,7 @@ class FirstRunPolishTests(unittest.TestCase):
     def test_a_page_loaded_again_has_no_opening(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")
         self.assertIn('nav.type === "reload"', code)
-        self.assertIn("if (play && !reloaded)", code)  # (1.8.33) the guard of the opening: a reload has none (the opening itself is still under MOTION)
+        self.assertIn("if (play && !reloaded)", code)  # (1.8.34) the guard of the opening: a reload has none (the opening itself is still under MOTION)
 
     def test_the_label_of_a_kept_answer_is_made_again_in_the_language_of_now(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -899,7 +899,7 @@ class PaceInCallTests(unittest.TestCase):
 
 
 class EnterMotionTests(unittest.TestCase):
-    """1.8.33 (E1-E6, W10): the opening, the robot's place, the button's label, the way to the board, the entrance from the wizard. Everything goes through MOTION and ROBOT.act."""
+    """1.8.34 (E1-E6, W10): the opening, the robot's place, the button's label, the way to the board, the entrance from the wizard. Everything goes through MOTION and ROBOT.act."""
 
     def setUp(self) -> None:
         self.code = (WEB / "enter.js").read_text(encoding="utf-8")

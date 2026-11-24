@@ -27,9 +27,9 @@
   // (1.8.32) A page loaded again (a language change, F5) has no opening: the wordmark and the button are there at once. The letters rise as SVG on the main thread, and on a slow one that took seconds.
   const reloaded = (() => { try { const nav = performance.getEntriesByType("navigation")[0]; return Boolean(nav && nav.type === "reload"); } catch (error) { return false; } })();
   // (1.8.32) The hint is not for the first visit of this browser (the one right after the wizard); after that it shows when the pointer has rested on the wordmark for HINT_AFTER ms.
-  // (1.8.33) Coming from the wizard (it marked "from-wizard" and left through the dark veil): the entrance of W10 plays once; a reload has none.
+  // (1.8.34) Coming from the wizard (it marked "from-wizard" and left through the dark veil): the entrance of W10 plays once; a reload has none.
   const fromWizard = !reloaded && typeof MOTION !== "undefined" && MOTION.taken("from-wizard");
-  // (1.8.33, W10) Where the robot starts when the wizard hands over: the wizard leaves its robot head (a 30 px wide box) on the veil, its centre at the middle of the top and `y` px from the top. This robot (the whole one)
+  // (1.8.34, W10) Where the robot starts when the wizard hands over: the wizard leaves its robot head (a 30 px wide box) on the veil, its centre at the middle of the top and `y` px from the top. This robot (the whole one)
   // starts scaled so that its head is that box, with only its head showing, and flies to its place. One constant: change it here.
   const FLY = {x: .5, y: 35.5, head: 30};
   const HINT_KEY = "harness.enter.visited", HINT_AFTER = 3000;
@@ -79,7 +79,7 @@
     h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, legal, cta, hint));
   document.body.append(enter);
   const stage = enter.querySelector(".en-stage");
-  let opening = false;  // (1.8.33) the opening is playing: the label is written, not swapped
+  let opening = false;  // (1.8.34) the opening is playing: the label is written, not swapped
   let open = true;  // (1.8.32) `fresh` (a copy that is not set up) shows only the wordmark until it goes to the wizard
   let shown = !isTask;  // the screen is on view (a task page opened from a link keeps it hidden until it is known that it is needed)
 
@@ -118,7 +118,7 @@
   }
 
   // ---------- the robot: it floats over the N, the middle of the screen. No legs, no shadow ----------
-  const MIDDLE = 3, CLEAR = 8, TOP_PAD = 12, FEET = .0145, FEET_3D = .026;  // (1.8.33, E3) the letter; the clear space between the robot's feet and the top of the letters; half the stroke above a letter's box; where the feet sit under the anchor, of the height: the flat drawing's and the 3D one's (it has more room under its feet)
+  const MIDDLE = 3, CLEAR = 8, TOP_PAD = 12, FEET = .0145, FEET_3D = .026;  // (1.8.34, E3) the letter; the clear space between the robot's feet and the top of the letters; half the stroke above a letter's box; where the feet sit under the anchor, of the height: the flat drawing's and the 3D one's (it has more room under its feet)
   const pose = {nx: 0, ny: 0, sleep: 1, arm: 0, flash: 0, calm: 0};  // flash: the light of E4 (3D); calm: no blink until then
   let solid = null;
   function buildBot() {
@@ -403,7 +403,7 @@
     if (kind === "code") paintCode(b); else paintDoctor();
     card.hidden = false;
   }
-  // (1.8.33, E4) The label of the button changes with MOTION.swap when the kind of the button changes (the old out in 100 ms, the new in over 160 ms, never both); a new percent or time inside one kind
+  // (1.8.34, E4) The label of the button changes with MOTION.swap when the kind of the button changes (the old out in 100 ms, the new in over 160 ms, never both); a new percent or time inside one kind
   // is written in place. The width glides (260 ms) only when a label is longer than the minimum width. When it becomes Enter after a fix, the robot's eyes and bulb light up once and do not blink that second.
   const label0 = {kind: "", text: null, moving: false, look: null};
   function becomeEnter() {
@@ -510,11 +510,11 @@
     else if (play && reloaded && typeof MOTION !== "undefined") MOTION.play(enter, [{opacity: 0}, {opacity: 1}], {ms: 160});  // (E6) a page loaded again (a language change) comes in from the colour the old one went to, not from a flash
     if (!visited) { try { localStorage.setItem(HINT_KEY, "1"); } catch (error) { /* seen again as the first time: no harm */ } }
     placeBot(); render(); loop();
-    if (still()) wake();  // (1.8.33) nothing moves under still(): the robot is simply awake, its head is not seen turning up at 1.5 s
+    if (still()) wake();  // (1.8.34) nothing moves under still(): the robot is simply awake, its head is not seen turning up at 1.5 s
     setTimeout(placeBot, 60); setTimeout(() => { if (open && shown) wake(); }, 1500);
     try { enter.focus({preventScroll: true}); } catch (error) { /* no focus */ }
   }
-  // (1.8.33) E1 and W10. The wordmark is one picture that appears whole (opacity and rise of its own group, 300 ms, no letter apart from the others), the robot lands with it, the button is last. Nothing
+  // (1.8.34) E1 and W10. The wordmark is one picture that appears whole (opacity and rise of its own group, 300 ms, no letter apart from the others), the robot lands with it, the button is last. Nothing
   // here runs per frame on the main thread, so a slow computer plays the same opening. From the wizard (W10): the robot flies in from the top centre, small, to its place (500 ms) and grows; the
   // wordmark comes whole when it is halfway (300 ms), the button last (200 ms); the background first stays the Enter background (the veil the wizard left through) and gives way to the real one.
   function begin() {
@@ -539,7 +539,7 @@
     if (fromWizard) holdButton();
     return Promise.all(moves).then(() => undefined);
   }
-  // (1.8.33, W10) After the wizard the button is not shown until the board has answered (a grey "Checking" is the first thing a newcomer would see); three dots stand in its place when that takes over a second.
+  // (1.8.34, W10) After the wizard the button is not shown until the board has answered (a grey "Checking" is the first thing a newcomer would see); three dots stand in its place when that takes over a second.
   // Its real label then comes in with a short fade. An answer that is still `check`, or does not come, lets it show anyway after 6 s; an error at once.
   let waitDots = null, heldAt = 0;
   function holdButton() {
@@ -562,7 +562,7 @@
     app.inert = false;
     if (typeof SPACE !== "undefined") { SPACE.hosted = null; SPACE.onTilt = null; SPACE.set(SPACE.tx / 2, SPACE.ty / 2); }
     stage.style.transform = "";
-    // (1.8.33, E5) Two moves, never at once: Enter fades out and grows to 1.02 in 120 ms, then the board comes in over 120 ms (the page under it stays hidden until then).
+    // (1.8.34, E5) Two moves, never at once: Enter fades out and grows to 1.02 in 120 ms, then the board comes in over 120 ms (the page under it stays hidden until then).
     const gone = () => { enter.remove(); root.classList.remove("en-open"); };
     if (quick || typeof MOTION === "undefined") { gone(); return; }
     enter.classList.add("out");

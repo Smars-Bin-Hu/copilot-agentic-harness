@@ -1,7 +1,7 @@
 """What the Enter screen of the board asks (`/api/ready`, 1.6 B86): is everything the board needs in place? One line for each check, as data; the page says it in words.
 
 Two blocks (1.7.38, block B).
-- REQUIRED, Harness & Local: this copy is set up, this browser is paired, `harness doctor` has no error, Copilot is connected (1.8.33: four lines; VS Code is read inside the Copilot line, not as a line of its own). Every line must be ok before Enter is on:
+- REQUIRED, Harness & Local: this copy is set up, this browser is paired, `harness doctor` has no error, Copilot is connected (1.8.34: four lines; VS Code is read inside the Copilot line, not as a line of its own). Every line must be ok before Enter is on:
   without one the harness cannot work here. They are `checks`, each with `group: "required"` and `blocking: true`, and a `level` for its dot: ok, grey, yellow, red.
 - OPTIONAL, from the company: knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories (`core/readyitems.py`). They never block. `optional` holds the items and the
   `problems` to look at; each problem has the place that mends it.
@@ -191,7 +191,7 @@ def run_doctor(root: Path, timeout: Optional[float] = None, progress: Optional[C
 
 
 class Ready:
-    REQUIRED = ("setup", "paired", "doctor", "copilot")  # Harness & Local: every one must be ok before Enter (1.7.38; 1.8.33: VS Code is no line of its own, the Copilot line holds it)
+    REQUIRED = ("setup", "paired", "doctor", "copilot")  # Harness & Local: every one must be ok before Enter (1.7.38; 1.8.34: VS Code is no line of its own, the Copilot line holds it)
 
     def __init__(self, root: Path, link: Any, doctor: Optional[Callable[[Path], Dict[str, Any]]] = None, clock: Callable[[], float] = time.monotonic, checker: Any = None) -> None:
         self.root = root
@@ -215,7 +215,7 @@ class Ready:
         self.asked_again = False  # 1.8.13: the running doctor was asked for by Check again: its line shows the bar, not the old answer
         self.optional_kept: Any = None  # (what the items read, when, the answer)
         self.checker = checker or reachcheck.Checker(root)  # the board's own look at the connections (1.7.19)
-        self.bundle = bundlejob.Auto(root)  # (1.8.33) the board puts its own here; the state of the certificate bundle that is made in the background
+        self.bundle = bundlejob.Auto(root)  # (1.8.34) the board puts its own here; the state of the certificate bundle that is made in the background
         self.gh_kept: Optional[Any] = None  # 1.8.x: (what `ghauth.check` said, when, the sign-in state then)
 
     # --- doctor: once, off the request thread ----------------------------------------------------------------------
@@ -311,7 +311,7 @@ class Ready:
     def copilot(self, vscode: Dict[str, Any]) -> Dict[str, Any]:
         """1.8.x: "Copilot signed in (gh)". Three things: gh is found, gh is signed in, the host has models once it got gh's token. `host` rides along while the agent host
         is being prepared (the download of a first start), whatever the rest says, so the page can show its progress beside a sign-in."""
-        if vscode["state"] == "fail":  # 1.8.33: VS Code missing or switched off (`no-code`, `off`) is the Copilot line failing; its button is the VS Code download
+        if vscode["state"] == "fail":  # 1.8.34: VS Code missing or switched off (`no-code`, `off`) is the Copilot line failing; its button is the VS Code download
             return {"state": "fail", "why": vscode["why"], "download": vscode.get("download") or VSCODE_PAGE}
         if vscode["state"] != "ok":
             return {"state": "wait", "why": "vscode"}
@@ -442,7 +442,7 @@ class Ready:
         return True
 
     def doctor_after_setup(self) -> None:
-        """Confirm of the wizard (1.8.33): doctor runs again. When the last answer was clean, the line keeps it meanwhile (no bar, `asked_again` stays off), so the page after Confirm shows its real button at once instead of
+        """Confirm of the wizard (1.8.34): doctor runs again. When the last answer was clean, the line keeps it meanwhile (no bar, `asked_again` stays off), so the page after Confirm shows its real button at once instead of
         a grey "Checking" for the 2 to 5 s a cold doctor takes; what the new run finds shows at the next poll. When the last answer had errors (or none yet), the line says `check` as before: an old problem is not shown
         for seconds and then taken back."""
         with self.lock:
@@ -593,7 +593,7 @@ class Ready:
                     entry["state"] = "yellow" if entry.get("state") != "red" else "red"
         problems = readyitems.problems(listed)
         notes_out = self.notes(gaps, listed)
-        if readyitems.certificate_missing(self.root) and self.bundle.view()["state"] != "making":  # (1.8.33) the bundle the recipe asks for is not there (not made, or the make failed): its own dot, to Settings
+        if readyitems.certificate_missing(self.root) and self.bundle.view()["state"] != "making":  # (1.8.34) the bundle the recipe asks for is not there (not made, or the make failed): its own dot, to Settings
             notes_out = [*notes_out, {"key": "cert", "text": messages.text("ready.note.cert"), "effect": messages.text("ready.effect.cert")}]
         if base.get("error"):  # the items could not be read: that is a note of its own, never a gear with no dot as if everything were set up
             said = messages.text("ready.note.read")
@@ -713,7 +713,7 @@ class Ready:
             checking = [{"id": name, "blocking": True, "group": "required", "kind": "setup" if name == "setup" else "run", "state": "check", "why": "running", "level": "grey"} for name in self.REQUIRED]
             return {"ready": False, "checks": checking, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": [], "optional": []}, "button": self.button(checking, False), "notes": []}
         out = copy.deepcopy(kept)
-        out["bundle"] = self.bundle.view()  # (1.8.33) live, not from the kept answer: the wizard's line follows it
+        out["bundle"] = self.bundle.view()  # (1.8.34) live, not from the kept answer: the wizard's line follows it
         if isinstance(out.get("button"), dict) and isinstance(out.get("checks"), list):
             out["button"] = self.button(out["checks"], bool(out.get("ready")))  # (1.8.32) the label in the language of now: the kept answer may be from before a language change
         if not paired:  # worked out for a paired browser: this one is not
@@ -774,7 +774,7 @@ class Ready:
         add("setup", lambda: {"state": "fail", "why": "new"} if not setup_done(self.root) else {"state": "ok", "why": "ok"})
         add("paired", lambda: {"state": "ok", "why": "ok"} if paired else {"state": "fail", "why": "unpaired"})
         add("doctor", self.doctor_line)
-        add("copilot", lambda: self.copilot(self.vscode()))  # 1.8.33: the VS Code probe runs inside the Copilot line
+        add("copilot", lambda: self.copilot(self.vscode()))  # 1.8.34: the VS Code probe runs inside the Copilot line
         began = time.monotonic()
         try:
             self.checker.maybe()  # the board asks the connections itself: the screen need not wait for a chat

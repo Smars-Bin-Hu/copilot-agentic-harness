@@ -616,7 +616,7 @@ class ReadyOwnHostTest(unittest.TestCase):
         self.link.installed_found = {"found": False, "version": "", "off": False}
         vscode, copilot, action = self.lines()
         self.assertEqual((vscode["state"], vscode["why"]), ("fail", "no-code"))
-        self.assertEqual((copilot["state"], copilot["why"]), ("fail", "no-code"))  # 1.8.33: the Copilot line holds the VS Code check
+        self.assertEqual((copilot["state"], copilot["why"]), ("fail", "no-code"))  # 1.8.34: the Copilot line holds the VS Code check
         self.assertEqual((action["kind"], action["program"], action["download"]), ("program", "VS Code", self.ready_module.PROGRAM_PAGES["vscode"]))
 
     def test_no_gh(self) -> None:

@@ -6,8 +6,8 @@
 "use strict";
 
 const SETTINGS = (function () {
-  const SECTIONS = ["you", "programs", "copilot", "kb", "packs", "repos", "connections", "adv"];  // Network is a part of Advanced since 1.8.33 (`network` and `local` still open it)
-  const GROUPS = [["settings.g.harness", ["you", "programs", "copilot"]], ["settings.g.company", ["kb", "packs", "repos", "connections"]]];  // two groups under small headings, then Advanced alone (1.8.33)
+  const SECTIONS = ["you", "programs", "copilot", "kb", "packs", "repos", "connections", "adv"];  // Network is a part of Advanced since 1.8.34 (`network` and `local` still open it)
+  const GROUPS = [["settings.g.harness", ["you", "programs", "copilot"]], ["settings.g.company", ["kb", "packs", "repos", "connections"]]];  // two groups under small headings, then Advanced alone (1.8.34)
   const LABELS = {you: "wizard.s.you", programs: "wizard.s.prog", copilot: "wizard.s.cop", kb: "wizard.s.kb", packs: "tools.packs.title", repos: "settings.s.repos", connections: "settings.s.connections", adv: "settings.s.adv"};
   const ALIASES = {company: "kb", computer: "programs", setup: "you", local: "adv", network: "adv", tools: "packs", advanced: "adv", repositories: "repos", prog: "programs", cop: "copilot", repo: "repos"};
   const NOTE_SECTION = {kb: "kb", instructions: "kb", skills: "kb", standards: "kb", sync: "kb", packs: "packs", connections: "connections", connlist: "connections", identity: "connections", signin: "connections", down: "connections", held: "connections", cert: "adv", repos: "repos"};
@@ -18,7 +18,7 @@ const SETTINGS = (function () {
 
   let win = null;  // the window that is open: {view, show}
 
-  // ------------------------------------------------------------------------------------------------ how it moves (1.8.33, motion.js; nothing here moves under Lite or the system's reduced motion but a fade)
+  // ------------------------------------------------------------------------------------------------ how it moves (1.8.34, motion.js; nothing here moves under Lite or the system's reduced motion but a fade)
   // The window grows out of the gear it was opened with (scale .96 to 1 and opacity, 280 ms; the shade 200 ms) and leaves the same way (200 ms); opened from elsewhere (a fix button, the palette): from its centre.
   let lastDown = {node: null, at: 0};
   document.addEventListener("pointerdown", (event) => { lastDown = {node: event.target, at: performance.now()}; }, true);
@@ -95,7 +95,7 @@ const SETTINGS = (function () {
     closer.observe(document.body, {childList: true});
     let queued = null;
     win = {view, show: (...asked) => { queued = asked; }};  // asked for before the rest is built: it goes to the section asked last
-    const build = () => {  // the rest of the window is built in a task of its own: one task would be over 100 ms at 4x CPU (GOAL 12) (1.8.33)
+    const build = () => {  // the rest of the window is built in a task of its own: one task would be over 100 ms at 4x CPU (GOAL 12) (1.8.34)
       if (closing) { if (win && win.view === view) win = null; if (given.done) given.done(); return; }
       const items = SECTIONS.map((id) => {
         const mark = h("i", {class: "st-dot", hidden: ""});
@@ -277,7 +277,7 @@ const SETTINGS = (function () {
           });
           const older = h("button", {type: "button", class: "wz-btn sm"}, t("settings.adv.older.go"));
           older.addEventListener("click", () => olderDialog(saved));
-          const made = MACHINE.localPanel(ctx, {stacked: true, title: t("settings.adv.net")});  // the Network part opens Advanced (1.8.33)
+          const made = MACHINE.localPanel(ctx, {stacked: true, title: t("settings.adv.net")});  // the Network part opens Advanced (1.8.34)
           env.inside([
             made.body.find((node) => node.dataset && node.dataset.part === "network"), h("div", {class: "st-rule"}),
             field(t("setup.install"), install, literal(t("setup.install.example"))),
@@ -301,7 +301,7 @@ const SETTINGS = (function () {
     setTimeout(build, 0);
   }
 
-  // The foot of the left list (1.8.33): the GitHub account with Sign out, and Restart board. Both ask first (a window, as the prototype C-settings shows).
+  // The foot of the left list (1.8.34): the GitHub account with Sign out, and Restart board. Both ask first (a window, as the prototype C-settings shows).
   function confirmDialog(title, paragraphs, goLabel, act) {
     const said = h("p", {class: "wz-err", role: "alert", hidden: ""});
     const no = h("button", {type: "button", class: "wz-btn sm"}, t("board.serve.cancel"));

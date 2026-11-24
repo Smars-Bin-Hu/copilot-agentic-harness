@@ -142,7 +142,7 @@ class Job:
         self.running = False
         self.done = False
         self.total = 0
-        self.on_done: Any = None  # (1.8.33) called once when a run ends well: the board makes the certificate bundle then (`bundlejob`)
+        self.on_done: Any = None  # (1.8.34) called once when a run ends well: the board makes the certificate bundle then (`bundlejob`)
         self.lock = threading.Lock()
 
     def view(self) -> Dict[str, Any]:

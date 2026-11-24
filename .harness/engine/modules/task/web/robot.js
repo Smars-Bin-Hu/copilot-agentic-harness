@@ -22,7 +22,7 @@ const ROBOT = (function () {
     return r;
   }
 
-  // act(robot, kind) (1.8.33): the robot's own moves, through motion.js; nothing under MOTION.still(). They may be longer than 300 ms and never block a
+  // act(robot, kind) (1.8.34): the robot's own moves, through motion.js; nothing under MOTION.still(). They may be longer than 300 ms and never block a
   // button (the drawing takes no pointer). "hop": a step done, two small hops and the bulb (W7); "glow": eyes and bulb light up once (E4); "cheer": a jump
   // and eight green sparks (W9). `robot` is the <svg> or the element that holds it.
   function act(robot, kind) {

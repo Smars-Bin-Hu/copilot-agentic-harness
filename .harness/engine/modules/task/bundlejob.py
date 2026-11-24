@@ -1,4 +1,4 @@
-"""The certificate bundle, made by the harness itself (1.8.33).
+"""The certificate bundle, made by the harness itself (1.8.34).
 
 The knowledge base brings only the recipe (`company/tools/computer.json`, a `ca_bundle` with a host and a proxy); the bundle is made on this computer (`launchenv.make`).
 It is made in the background, once: after a knowledge base comes in (`kick(fresh=True)`) and when the board starts (`kick()`), never in a loop. A failure is kept for this run

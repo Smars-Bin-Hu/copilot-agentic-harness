@@ -1,4 +1,4 @@
-"""1.8.33: how the first-run screens move. motion.js is the one place (MOTION), robot.js has the robot's own moves (ROBOT.act), motion.css the durations.
+"""1.8.34: how the first-run screens move. motion.js is the one place (MOTION), robot.js has the robot's own moves (ROBOT.act), motion.css the durations.
 
 The rules of the goal (`.local` goal 1.8.x-first-run-polish, items 10-11): no move of the screens over 300 ms, only transform and opacity, nothing under Lite or
 the system's reduced motion but a short fade, a burst of clicks moves one page. A browser test is the walkthrough's; these check the code holds the rules."""

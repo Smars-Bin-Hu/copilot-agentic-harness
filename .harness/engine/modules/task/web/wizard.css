@@ -17,7 +17,7 @@ body.wz-doc .unpaired-note{display:none}  /* an unpaired browser: the page says 
 .wz .wz-dot.ok{background:var(--good-dot)}.wz .wz-dot.hot{background:var(--hot-dot)}.wz .wz-dot.bad{background:var(--bad)}.wz .wz-dot.none{background:transparent;border:1.5px solid var(--line2)}
 .wz .wz-btn{height:44px;padding:0 24px;border-radius:22px;border:1px solid var(--line2);background:transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:14.5px;white-space:nowrap}
 .wz .wz-btn:hover{background:var(--hover)}
-.wz .wz-btn,.wz .wz-tile{transition:transform var(--m-micro) var(--m-in),opacity var(--m-show) var(--m-in),background-color var(--m-micro) var(--m-in)}  /* (1.8.33) W8: a press and the change between off and on */
+.wz .wz-btn,.wz .wz-tile{transition:transform var(--m-micro) var(--m-in),opacity var(--m-show) var(--m-in),background-color var(--m-micro) var(--m-in)}  /* (1.8.34) W8: a press and the change between off and on */
 .wz .wz-btn:active,.wz .wz-tile:active{transform:scale(.97)}
 .wz .wz-btn.primary{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
 .wz .wz-btn.primary:hover{background:var(--btn-hover)}
@@ -40,7 +40,7 @@ html.lite .wz .wz-spin,html.lite .wz .wz-btn.is-waiting::before{animation:none}@
 .wz-brand{display:flex;align-items:center;gap:10px;font:800 13px/1 "Avenir Next","Futura",var(--sans);letter-spacing:.32em;color:var(--soft)}
 .wz-brand::before{content:"";flex:none;width:24px;height:24px;background:var(--logo) center/contain no-repeat}  /* the same mark as the board header (1.8.32) */
 .wz-count{font:12px var(--mono);color:var(--faint);letter-spacing:.04em}
-.wz-prog{position:relative;z-index:2;width:min(720px,calc(100% - 64px));margin:40px auto 0;flex:none}  /* room above the bar for the small head (1.8.33) */
+.wz-prog{position:relative;z-index:2;width:min(720px,calc(100% - 64px));margin:40px auto 0;flex:none}  /* room above the bar for the small head (1.8.34) */
 .wz-bars{display:flex;gap:6px}
 .wz-bars i{flex:1;height:3px;border-radius:2px;background:var(--track);position:relative;overflow:hidden;display:block}
 .wz-bars b{position:absolute;inset:0;transform:scaleX(0);transform-origin:left;transition:transform var(--m-page) var(--m-in),opacity var(--m-show) var(--m-in)}  /* W5: the part fills to the end in 260 ms */

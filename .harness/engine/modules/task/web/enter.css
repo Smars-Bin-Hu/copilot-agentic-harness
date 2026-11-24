@@ -5,7 +5,7 @@
 #enter{position:fixed;inset:0;z-index:100;overflow:hidden;color:var(--en-ink);background:transparent;font-family:var(--sans)}
 #enter[hidden]{display:none}
 #enter.pending{opacity:0;visibility:hidden;pointer-events:none;transition:none}
-#enter.out{pointer-events:none}  /* (1.8.33, E5) it leaves by MOTION (120 ms) */
+#enter.out{pointer-events:none}  /* (1.8.34, E5) it leaves by MOTION (120 ms) */
 html.en-open{overflow:hidden}
 html.en-open main{visibility:hidden}
 html.en-open body{height:100vh;overflow:hidden}  /* the page under the screen is not a page to scroll: no scroll height of its own (1.7.28) */
@@ -50,7 +50,7 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 .en-bot .r-arm{transform-box:fill-box;transform-origin:50% 8%}
 .en-bot.awake{--c:var(--good-dot)}
 .en-bot.awake .r-eye{transform:none;animation:enblink 5s infinite}
-.en-bot.glowing .r-eye{animation:none}  /* (1.8.33, E4) no blink while it lights up */
+.en-bot.glowing .r-eye{animation:none}  /* (1.8.34, E4) no blink while it lights up */
 .en-bot.awake .r-bulb{opacity:1}
 .en-bot.awake .r-headg{transform:rotate(var(--tilt));transition:transform .15s}
 .en-bot.you .r-arm.r-r{transform:rotate(-150deg);animation:enwave .8s ease-in-out infinite alternate}
@@ -65,7 +65,7 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
  box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;margin-top:-6px}
 .en-say.on{opacity:1}
 
-/* the opening (1.8.33, E1 and W10) is played by enter.js through MOTION: the wordmark whole, the robot, the button; nothing is animated letter by letter */
+/* the opening (1.8.34, E1 and W10) is played by enter.js through MOTION: the wordmark whole, the robot, the button; nothing is animated letter by letter */
 @keyframes enspin{to{transform:rotate(360deg)}}
 @keyframes enbeat{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes enpulse{0%{box-shadow:0 0 0 0 var(--good-line)}70%,100%{box-shadow:0 0 0 7px transparent}}
@@ -83,7 +83,7 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 .en-hint{grid-column:3;justify-self:end;text-align:right;padding-right:56px;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility 0s .3s}  /* (1.8.32) shown by enter.js after the pointer rested on the wordmark */
 .en-hint.on{opacity:1;visibility:visible;transition:opacity .3s ease}
 #enter.fresh .en-foot{display:none}  /* (1.8.32) a copy that is not set up: only the wordmark until it goes to the wizard */
-#enter.waiting .en-cta{visibility:hidden}  /* (1.8.33, W10) after the wizard: no grey Checking button before the first answer */
+#enter.waiting .en-cta{visibility:hidden}  /* (1.8.34, W10) after the wizard: no grey Checking button before the first answer */
 .en-wait{grid-column:2;grid-row:1;align-self:end;height:56px;display:flex;align-items:center;justify-content:center}
 .en-cta{grid-column:2;display:flex;flex-direction:column;align-items:center;gap:0;min-width:0;max-width:min(560px,calc(100vw - 48px))}
 .en-go{position:relative;overflow:hidden;box-sizing:border-box;font:600 16px var(--sans);display:inline-flex;align-items:center;justify-content:center;gap:12px;height:56px;min-width:280px;max-width:100%;padding:0 34px;border-radius:28px;border:1px solid transparent;cursor:pointer;color:var(--en-btn-ink);background:var(--en-btn);

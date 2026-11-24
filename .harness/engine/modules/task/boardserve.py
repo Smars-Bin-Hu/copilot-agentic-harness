@@ -332,7 +332,7 @@ class Board:
         self.terminal = boardterm.Terminal(root)
         self.short_missing = False
         self.setup_job = setupjob.Job()
-        self.bundle_job = bundlejob.Auto(root, after=lambda: self.apply_local())  # (1.8.33) the bundle the recipe asks for is made here, not by a press
+        self.bundle_job = bundlejob.Auto(root, after=lambda: self.apply_local())  # (1.8.34) the bundle the recipe asks for is made here, not by a press
         self.setup_job.on_done = lambda: self.bundle_job.kick(True)
         self.tested: Dict[str, Any] = {}  # alias -> (the values that passed a test, when): Servers saves only those (1.7.10)
         self.short_kept: Optional[Dict[str, Any]] = None
@@ -641,7 +641,7 @@ class Board:
         elif step == "folder":
             launchenv.add_folder(self.root, "gh", str(data.get("path") or ""))  # `which` finds gh.exe on Windows by itself
             found = {"state": "folder"}
-        elif step == "logout":  # Settings, Sign out (1.8.33): gh auth logout for github.com, then the host drops the token when no chat works
+        elif step == "logout":  # Settings, Sign out (1.8.34): gh auth logout for github.com, then the host drops the token when no chat works
             try:
                 found = self.link.sign_out()
             except ghauth.GhError as error:
@@ -1521,7 +1521,7 @@ class Board:
             return self.programs()
         if step == "scan":
             return core_wizard.scan(self.root)
-        if step == "bundle":  # (1.8.33) "Try again" on Review: make the bundle again now, in the background (a failure of this run does not stop it)
+        if step == "bundle":  # (1.8.34) "Try again" on Review: make the bundle again now, in the background (a failure of this run does not stop it)
             self.bundle_job.kick(True)
             return self.bundle_job.view()
         if step == "summary":
@@ -1532,7 +1532,7 @@ class Board:
             core_wizard.refuse_finish(self.root, self.programs(), line)  # ValueError: what is still missing (409)
             core_wizard.finish(self.root)
             self.ready.setup_now_done()  # the kept answer must not send the page back to the wizard
-            self.ready.doctor_after_setup()  # (1.8.33) the first doctor of a set-up copy runs in the background and the page does not wait for it (doctor_again made the line "check" for seconds)
+            self.ready.doctor_after_setup()  # (1.8.34) the first doctor of a set-up copy runs in the background and the page does not wait for it (doctor_again made the line "check" for seconds)
             print(say("serve.did", action="setup finish", task="-"), flush=True)
             return {"ok": True}
         part = str(data.get("part") or "")
@@ -2943,7 +2943,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     serving.start()  # 1.7.43: the page is answered as soon as the browser asks; before, the browser opened and waited until the terminal had said its lines
     if ready is None:
         threading.Thread(target=pace.measure_and_save, args=(root,), name="pace", daemon=True).start()  # 1.8.15: how slow this computer is, for every time limit after it
-        board.bundle_job.kick()  # (1.8.33) the recipe is there and the bundle is not: made in the background, once
+        board.bundle_job.kick()  # (1.8.34) the recipe is there and the bundle is not: made in the background, once
         board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104); 1.7.43: before the browser is asked to open, not after
 
     def button(action: str) -> str:  # the first line names the buttons as the board shows them (1.7.22), not as the command words

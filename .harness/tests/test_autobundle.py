@@ -1,4 +1,4 @@
-"""1.8.33: the certificate bundle is made by the board itself: the recipe is brought, the bundle is made in the background, once; the wizard says so and Review and the gear say when it was not made."""
+"""1.8.34: the certificate bundle is made by the board itself: the recipe is brought, the bundle is made in the background, once; the wizard says so and Review and the gear say when it was not made."""
 from __future__ import annotations
 
 import json

@@ -533,7 +533,7 @@ class SaveTests(HarnessTestCase):
         self.assertNotIn("install_command", setup.kept(self.root, "tools")["python"])
         self.assertEqual(len(setup.status(self.root, {"found": "/x"})["rules"]), 1)
 
-    def test_advanced_without_the_prefix_leaves_the_company_prefix(self) -> None:  # 1.8.33: Settings has no prefix field; the knowledge base sets it
+    def test_advanced_without_the_prefix_leaves_the_company_prefix(self) -> None:  # 1.8.34: Settings has no prefix field; the knowledge base sets it
         wizard.save_advanced(self.root, {"skill_prefix": "acme"})
         wizard.save_advanced(self.root, {"install_command": "pip install {package}"})
         self.assertEqual(read_user(self.root)["skill_prefix"], "acme")

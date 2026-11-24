@@ -2,7 +2,7 @@
 // scan, save, summary, finish, and the old ones); this page shows and sends. Needs common.js (h, t, clock, copyCommand), serve.js (SERVE), readyui.js (READY: dock.js reads it when it loads), dock.js (DOCK: the folder picker), servers.js (SERVERS: the connections window).
 // `?only=programs` and `?only=copilot` draw that one page with a Done button (the Enter screen's fix button). `?fake=1` answers every call from data in the contract's shape, so the page walks end to end with no server
 // work; more parameters pick a state for a picture: page, prog=missing|all|long, cop=idle|code|done, kb=empty|copy|done, kbsub, longname=1, job=0|1, lang, theme, hold=1 (no automatic step forward).
-// (1.8.33) How it moves: the shell (top line, bar, robot, foot) is built once; a page turn, the bar, the robot and the foot go through motion.js and robot.js (see the shell section). Settings draws none of it.
+// (1.8.34) How it moves: the shell (top line, bar, robot, foot) is built once; a page turn, the bar, the robot and the foot go through motion.js and robot.js (see the shell section). Settings draws none of it.
 // Each page's drawing is `WIZARD.parts.<page>(box, opts)`, so the Settings window can draw the same page without the steps (`opts.bare`: no title).
 "use strict";
 
@@ -120,7 +120,7 @@ const WIZARD = (function () {
       }
       return {ready: false, checks: [line], bundle: bundle()};
     };
-    // (1.8.33) the fake certificate bundle: making for a few seconds from the first look, then made; ?bundle=fail: it fails; ?bundle=hold: it stays making; ?bundle=off: no recipe
+    // (1.8.34) the fake certificate bundle: making for a few seconds from the first look, then made; ?bundle=fail: it fails; ?bundle=hold: it stays making; ?bundle=off: no recipe
     const bundle = () => {
       const how = q("bundle", "");
       if (how === "off") return {state: "idle", why: "", made: "", age: null};
@@ -222,7 +222,7 @@ const WIZARD = (function () {
   // ------------------------------------------------------------------------------------------------ copilot's line of /api/ready
   const copilotLine = () => ((M.ready && M.ready.checks) || []).find((line) => line.id === "copilot") || null;
   const copilotSignedIn = (line) => Boolean(line) && (line.state === "ok" || ["host-starting", "host-preparing", "connecting", "models"].includes(line.why));
-  // (1.8.33) The room under the page is the lines that show (none, one or two; two sit side by side when they fit): the page above gives or takes it with the foot gliding (200 ms), never a jump
+  // (1.8.34) The room under the page is the lines that show (none, one or two; two sit side by side when they fit): the page above gives or takes it with the foot gliding (200 ms), never a jump
   function fitLines() {
     if (!shell || !shell.lines) return;
     const none = ![shell.job, shell.cert].some((node) => !node.hidden);
@@ -239,7 +239,7 @@ const WIZARD = (function () {
     const bar = el("span", "mini", h("i", {style: "width:" + Math.max(3, Math.min(100, Number(host.percent) || 0)) + "%"}));
     put(shell.job, spin(), t("wizard.job.prep"), bar, el("span", "wz-mono", host.total_mb ? t("wizard.job.mb", {a: Math.round(host.downloaded_mb || 0), b: Math.round(host.total_mb)}) : host.percent !== undefined ? host.percent + "%" : ""));
   }
-  // (1.8.33) The certificate bundle: a line while the board makes it ("making"), a tick that goes by itself when it is made (only for a bundle made a moment ago, once); nothing when it failed (Review says so).
+  // (1.8.34) The certificate bundle: a line while the board makes it ("making"), a tick that goes by itself when it is made (only for a bundle made a moment ago, once); nothing when it failed (Review says so).
   let certTimer = 0, certLeave = 0, certShown = "";
   function paintCert() {
     if (!shell || !shell.cert) return;
@@ -335,7 +335,7 @@ const WIZARD = (function () {
       el("div", "wz-field", el("span", "cap", t("wizard.y.lang")), tiles, el("div", "hint", t(opts.bare ? "wizard.y.lang.hint.save" : "wizard.y.lang.hint")), savedNote), said);  // the pick waits for Save (Settings) or Continue (the wizard) (1.8.32)
     const commit = () => {
       said.hidden = true;
-      holding = !FAKE && M.lang !== document.documentElement.lang;  // (1.8.33) serve.js would load the page again the moment the save answers; this page does it itself, after the veil (E6)
+      holding = !FAKE && M.lang !== document.documentElement.lang;  // (1.8.34) serve.js would load the page again the moment the save answers; this page does it itself, after the veil (E6)
       return api.setup("save", {part: "you", name: M.name.trim(), language: M.lang}).then(() => {
         M.saved.you = true;
         if (M.st) { M.st.name = M.name.trim(); M.st.language = M.lang; }
@@ -346,7 +346,7 @@ const WIZARD = (function () {
           } catch (error) { /* starts at the welcome */ }
           const link = new URL(location.href);
           const again = () => { if (link.searchParams.has("page")) { link.searchParams.delete("page"); location.replace(link.toString()); } else location.reload(); };  // a `?page=` in the address would win over the page kept: one Continue must go on
-          return MOTION.leave(again, {content: thinking()});  // (1.8.33) E6: the page fades to its own colour with a small robot thinking, so the new language comes out of it, not out of black
+          return MOTION.leave(again, {content: thinking()});  // (1.8.34) E6: the page fades to its own colour with a small robot thinking, so the new language comes out of it, not out of black
         }
         opts.next();
       }, (error) => { holding = false; said.textContent = errorText(error); said.hidden = false; });
@@ -393,7 +393,7 @@ const WIZARD = (function () {
     function take(found) {
       const was = Boolean(M.progs && M.progs.all_found);
       M.progs = found;
-      if (!was && found.all_found && !opts.bare && !ONLY) hopHead();  // (1.8.33) W7: the last program was found while the page was open
+      if (!was && found.all_found && !opts.bare && !ONLY) hopHead();  // (1.8.34) W7: the last program was found while the page was open
       const sign = JSON.stringify([found.rows.map((row) => [row.id, row.found, row.path, row.blocked, row.version, row.trouble, row.why]), M.shortBusy, M.shortError]);
       if (sign !== shown) { shown = sign; put(list, ...found.rows.map(paintRow)); }
       opts.changed();
@@ -434,7 +434,7 @@ const WIZARD = (function () {
       shown = sign;
       if (signed) {
         put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), el("div", "t2", ONLY || opts.bare ? "" : t("wizard.c.next")))));  // Settings (bare) only shows the state: no "Moving on", no step forward (1.8.32)
-        if (sawOut && !ONLY && !opts.bare && !advance) hopHead();  // (1.8.33) W7: a step done: the head hops twice and the bulb lights
+        if (sawOut && !ONLY && !opts.bare && !advance) hopHead();  // (1.8.34) W7: a step done: the head hops twice and the bulb lights
         if (sawOut && !ONLY && !opts.bare && q("hold", "") !== "1" && !advance) advance = setTimeout(() => { if (!stopped) opts.next(); }, HOLD);  // the card stays 1500 ms, never less than 900 (W7)
       } else if (line.why === "signing-in") {
         waitText = null;
@@ -744,7 +744,7 @@ const WIZARD = (function () {
   }
   // (1.8.32) Every "Set up" row is "label · value", with a unit where it is a count; the server's detail is used as it is, except where it is a bare name (the sign-in) or empty
   const valueText = (row) => (row.id === "copilot" && row.detail ? t("wizard.v.cop.s", {name: row.detail}) : row.detail || t("wizard.v.ok"));
-  // (1.8.33) The certificate bundle row: where Settings exists its button opens Advanced; on this page (no Settings yet) it is "Try again": the board makes the bundle again now, the line below shows it,
+  // (1.8.34) The certificate bundle row: where Settings exists its button opens Advanced; on this page (no Settings yet) it is "Try again": the board makes the bundle again now, the line below shows it,
   // and the row follows what it says (a tick when made, the reason when it fails again)
   let retrying = false;
   function toSettings(section) { SETTINGS.open(section); }
@@ -786,7 +786,7 @@ const WIZARD = (function () {
     return {stop() {}, foot: () => { const need = lacking(); return {back: true, later: null, why: need.length ? t("wizard.v.need", {what: need.join(", ")}) : "", main: {label: t("wizard.v.go"), off: !summary || finishing || need.length > 0, go: confirm}}; }};
   };
 
-  // ------------------------------------------------------------------------------------------------ the shell: top line, bar, page, foot, robot (1.8.33)
+  // ------------------------------------------------------------------------------------------------ the shell: top line, bar, page, foot, robot (1.8.34)
   // Built once, when the page opens (W1): a turn changes only the page (W4), the bar (W5), the robot (W3, W6) and the foot's place. All of it goes through motion.js and robot.js:
   // transform and opacity, nothing in Lite or under reduced motion, and no move blocks a button. In Settings (`opts.bare`) none of this exists: there is no shell there.
   const BOT = {fw: 91, fh: 96, hw: 30, hh: 31, k: 1.76, hx: 45.3, hy: 33.5};  // the whole robot, the small head, how much bigger the head of the whole robot is, the middle of that head
@@ -801,8 +801,8 @@ const WIZARD = (function () {
     const names = alone ? [] : SEGMENTS.map((key) => h("span", null, el("span", "wz-mk", el("span", "wz-tk", h("i", null), h("i", null)), dot("hot wz-skip")), el("span", "wz-nm", t(key))));
     const content = el("div", "wz-pg"), footRow = el("div", "wz-row"), foot = el("div", "wz-foot", footRow);
     const job = el("div", "wz-job"); job.hidden = true;
-    const cert = el("div", "wz-job wz-cert"); cert.hidden = true;  // (1.8.33) the certificate bundle the board makes in the background
-    const lines = el("div", "wz-lines none", job, cert);  // (1.8.33) the lines of what runs in the background: in the page's flow under the page, so none sits over its buttons; the room is the lines shown
+    const cert = el("div", "wz-job wz-cert"); cert.hidden = true;  // (1.8.34) the certificate bundle the board makes in the background
+    const lines = el("div", "wz-lines none", job, cert);  // (1.8.34) the lines of what runs in the background: in the page's flow under the page, so none sits over its buttons; the room is the lines shown
     const full = alone ? null : el("div", "wz-mate full", ROBOT.svg({glow: true})), head = alone ? null : el("div", "wz-mate head", ROBOT.svg({head: true}));
     if (full) { full.hidden = true; head.hidden = true; }
     const body = el("div", "wz-body", el("div", "wz-page", content, foot));
@@ -1038,7 +1038,7 @@ const WIZARD = (function () {
     const theme = q("theme", "");
     if (FAKE && (theme === "light" || theme === "dark")) document.documentElement.setAttribute("data-theme", theme);
     api = FAKE ? fakeApi() : realApi();
-    buildShell(root);  // (1.8.33) W1: the top line, the bar and the robot's place are there at once; the page fades in when what it shows has been read
+    buildShell(root);  // (1.8.34) W1: the top line, the bar and the robot's place are there at once; the page fades in when what it shows has been read
     load().then(() => {
       if (M.unpaired) { unpairedPage(root); return null; }
       let page = Number(q("page", "")) ;

@@ -143,7 +143,7 @@ class WizardPolishTests(unittest.TestCase):
         self.assertIn("Date.now() - F.jobAt", fake)
         self.assertNotIn("downloaded_mb: 312", fake)
 
-    # ---- 1.8.33: how the wizard moves (spec W1-W10, E6); everything goes through motion.js and robot.js
+    # ---- 1.8.34: how the wizard moves (spec W1-W10, E6); everything goes through motion.js and robot.js
     def test_the_shell_is_built_once_and_a_turn_changes_the_page_only(self) -> None:  # W1 W4
         self.assertIn("function buildShell(root)", SCRIPT)
         start = SCRIPT.split("  function start() {")[1]
@@ -249,7 +249,7 @@ class ProgramIconsTest(unittest.TestCase):
 
 
 class SettingsGroupsTest(unittest.TestCase):
-    """1.8.33: Settings' left list sits under three headings; every section keeps its id; the Skill prefix field is gone from Advanced."""
+    """1.8.34: Settings' left list sits under three headings; every section keeps its id; the Skill prefix field is gone from Advanced."""
 
     def test_groups_cover_every_section_once_and_prefix_field_is_gone(self):
         code = (WEB / "settings.js").read_text(encoding="utf-8")

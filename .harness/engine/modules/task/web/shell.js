@@ -253,7 +253,7 @@ const SHELL = (function () {
   }
   let leaving = false;  // the panel is on its way out (S4): it counts as closed at once, and is hidden when the move ends
   const settingsOpen = () => Boolean(panel) && !panel.hidden && !leaving;
-  const PANEL_SHRINK = "scale(.96)";  // the panel grows out of its button and goes back into it, 200 ms (1.8.33, motion.js; nothing but a fade under Lite and the system's reduced motion)
+  const PANEL_SHRINK = "scale(.96)";  // the panel grows out of its button and goes back into it, 200 ms (1.8.34, motion.js; nothing but a fade under Lite and the system's reduced motion)
   function openSettings() {
     if (open()) closePalette(true);
     if (!panel) buildSettings();

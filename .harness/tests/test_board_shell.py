@@ -113,7 +113,7 @@ class PageTests(unittest.TestCase):
             self.assertNotIn("board.shell.lang", table)
         settings = source("settings.js")
         advanced = settings.split("function advancedSection")[1].split("const foot = footOf")[0]
-        self.assertNotIn("restart", advanced.lower())  # 1.8.33: Restart board is at the bottom left of the window, not in Advanced
+        self.assertNotIn("restart", advanced.lower())  # 1.8.34: Restart board is at the bottom left of the window, not in Advanced
         self.assertIn("function footOf", settings)
         self.assertIn("SHELL.restartBoard(", settings)
         self.assertIn('t("board.shell.restart")', settings)
@@ -189,7 +189,7 @@ class LanguageTests(ServeCase):
 
 
 class MotionRulesTests(unittest.TestCase):
-    """1.8.33, the motion of the Settings window and the Appearance panel (goal 1.8.x-first-run-polish, S1-S4): the code holds the rules; the moving is the walkthrough's."""
+    """1.8.34, the motion of the Settings window and the Appearance panel (goal 1.8.x-first-run-polish, S1-S4): the code holds the rules; the moving is the walkthrough's."""
 
     def test_settings_grows_out_of_the_gear_and_leaves_the_same_way(self) -> None:
         code = source("settings.js")

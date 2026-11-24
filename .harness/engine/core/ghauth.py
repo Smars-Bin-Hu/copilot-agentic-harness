@@ -160,7 +160,7 @@ def token(gh: str, extra: Optional[Dict[str, str]] = None) -> str:
 
 
 def logout(gh: str, extra: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-    """Sign gh out of github.com (the person asked, 1.8.33): `gh auth logout --hostname github.com --user <the signed-in login>`, with no terminal and no prompt (`--user` names the account, so gh asks nothing).
+    """Sign gh out of github.com (the person asked, 1.8.34): `gh auth logout --hostname github.com --user <the signed-in login>`, with no terminal and no prompt (`--user` names the account, so gh asks nothing).
     gh removes its stored token for that account; any other program that uses gh's sign-in is signed out too. Returns `{done, login}`. `GhError("not-signed-in")` when gh is not signed in;
     `GhError("cannot-run")` when gh refuses (for example the sign-in comes from the environment variable GH_TOKEN, which gh cannot remove). Nothing secret is read or returned."""
     state = status(gh, extra)

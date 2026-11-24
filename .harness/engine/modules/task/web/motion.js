@@ -1,4 +1,4 @@
-// How the first-run screens move (1.8.33): the wizard, the Enter screen, Settings and the Appearance panel use these and nothing else. The durations and
+// How the first-run screens move (1.8.34): the wizard, the Enter screen, Settings and the Appearance panel use these and nothing else. The durations and
 // curves are the tokens of tokens.css (--m-*); every move is transform and opacity only, played with the Web Animations API, so a slow computer keeps it
 // smooth. still() (Lite, or the system's reduced motion): no move at all, at most a fade of 120 ms. The convention: the caller puts the page in its new
 // state and MOTION plays the way into it (the frames end where the page already is), so a move cut short or skipped leaves the page right.

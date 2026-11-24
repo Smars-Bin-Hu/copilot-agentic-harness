@@ -917,7 +917,7 @@ class VsLink:
         return login.status()
 
     def sign_out(self) -> Dict[str, Any]:
-        """The person signed out (1.8.33): gh signs out of github.com (`ghauth.logout`), and the agent host, which holds the token in its memory, is marked outdated: the board starts it again once no chat
+        """The person signed out (1.8.34): gh signs out of github.com (`ghauth.logout`), and the agent host, which holds the token in its memory, is marked outdated: the board starts it again once no chat
         works (`host_outdate`), and the new host finds gh not signed in. A turn that runs now is not stopped. `{done, login}`; `ghauth.GhError` when gh is missing or refuses."""
         gh = ghauth.find_gh(ghauth.folders_of(self.root))
         if not gh:

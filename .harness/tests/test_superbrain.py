@@ -16,7 +16,7 @@ from unittest import mock
 import support  # noqa: F401 - puts the engine on the path
 from core import ahp, copilot_events, schema
 from modules.gate import superagent
-from modules.task import policy, superbrain, superview, vslink
+from modules.task import policy, superbrain, superroute, superview, vslink
 from test_ahp import FakeHost, TOKEN
 from test_boardserve import ServeCase
 from test_superview import result, row
@@ -401,7 +401,7 @@ class TalkTests(BrainCase):
         self.assertEqual([(item["role"], item["text"]) for item in growing], [("you", "what waits?"), ("agent", "Plan of task-001")])
         self.link.finish("Plan of task-001 first.")
         talk = self.brain.talk()
-        self.assertEqual(set(talk), {"state", "spent", "limit", "base", "extra", "messages", "asks"})
+        self.assertEqual(set(talk), {"state", "spent", "limit", "base", "extra", "messages", "asks", "says"})
         self.assertEqual([(item["id"], item["role"], item["text"]) for item in talk["messages"]], [("turn-1:you", "you", "what waits?"), ("turn-1:agent", "agent", "Plan of task-001 first.")])
         self.assertTrue(all(item["at"] for item in talk["messages"]))
         self.assertEqual((talk["state"], talk["limit"]), ("idle", 50.0))
@@ -447,6 +447,22 @@ class HistoryTests(BrainCase):
         self.assertEqual((found["ok"], found["archived"], found["spent"]), (True, False, 0.24))
         self.assertEqual([(item["role"], item["text"]) for item in found["messages"]], [("you", "what waits?"), ("agent", "Plan of task-001 first.")])
         self.assertEqual(self.brain.history()["days"][0]["day"], day)  # read again: still one day, not kept twice
+
+    def test_what_a_task_said_is_kept_once_and_read_back_on_the_next_day(self) -> None:
+        say = {"id": "job1|stopped|t0", "task": "job1", "why": "stopped", "text": "Where did the import go?", "at": "2026-11-24T10:00:00Z"}
+        self.brain.note_says([say, {"id": "", "task": "job1", "why": "stopped", "text": "x", "at": ""}, {"id": "y", "task": "job1", "why": "stopped", "text": "", "at": ""}])  # no id, no words: not kept
+        self.brain.note_says([dict(say, text="changed")])  # the same wait: kept once, as first said
+        self.assertEqual(self.brain.talk()["says"], [say])
+        day = self.when.date().isoformat()
+        self.when = self.when + timedelta(days=1)
+        self.assertEqual(self.brain.talk()["says"], [])
+        self.assertEqual(self.brain.history(), {"days": [{"day": day, "turns": 1, "spent": 0, "archived": False}]})  # a day with only a task's words is kept
+        self.assertEqual(self.brain.history_day(day)["says"], [say])
+
+    def test_a_day_keeps_its_newest_says(self) -> None:
+        self.brain.note_says([{"id": f"w{n}", "task": "job1", "why": "stopped", "text": "t", "at": ""} for n in range(superroute.MAX_SAYS + 5)])
+        found = self.brain.talk()["says"]
+        self.assertEqual((len(found), found[0]["id"]), (superroute.MAX_SAYS, "w5"))
 
     def test_a_day_with_nothing_said_is_not_kept(self) -> None:
         self.brain.talk()

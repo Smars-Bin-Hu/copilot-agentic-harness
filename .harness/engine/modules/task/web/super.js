@@ -101,7 +101,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const doneHead = h("summary", {title: t("super.done.tip")});
     const doneBox = h("details", {class: "sa-qdone", hidden: ""}, doneHead, doneList);
     const queue = h("div", {class: "sa-queue", hidden: ""}, queueList, doneBox);
-    const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => linked(text)) : null;  // the earlier days (superhist.js)
+    const hist = typeof SUPERHIST !== "undefined" ? SUPERHIST.create(streamWrap, (text) => rich(text)) : null;  // the earlier days (superhist.js)
     sv.append(h("div", {class: "sa-head"}, h("div", {class: "sa-who"}, h("div", {class: "sa-name"}, t("super.name")), lineEl), costEl, hist ? hist.button : null, popUp), team, filterEl, banner,
       h("div", {class: "sa-body"}, queue, streamWrap), quick, h("div", {class: "sa-input"}, complete, direct.tray, to, box));
 
@@ -643,7 +643,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     const mainOf = (item) => (questionOf(item) ? questionOf(item).message : summaryOf(item) || (item.why === "error" ? item.detail || item.title : asksPerson(item) ? item.detail : said(item) || item.title));
     const fullOf = (item) => (questionOf(item) ? questionOf(item).message : asksPerson(item) ? item.detail : "");
     const clampable = (item) => asksPerson(item) || prose(item);
-    const saidLong = (item) => String(said(item)).split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 60)), 0) > 8;
+    // 1.8.43: the card shows two lines of the task's last words, as plain text; the whole words are the task's line in the chat (`says`, drawn by sayBuild). `sumOf`: the words without Markdown marks, on one line.
+    const sumOf = (text) => String(text || "").replace(/```[\s\S]*?```/g, " ").replace(/\*\*|__|`/g, "").replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, "$1").replace(/^[ \t]*(#+|[-*+]|\d+\.)[ \t]+/gm, "").split(/\s+/).join(" ").trim();
+    const hasSay = (item) => Boolean(item && item.said) && ["stopped", "accept", "cancelled"].includes(item.why);
 
     // One item of the board: who it comes from, what it is, its buttons. Its buttons are drawn again only when the row of the task changed what they would be.
     function sigFor(item) {
@@ -846,7 +848,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const goes = buttons.filter((node) => node.classList && node.classList.contains("sa-call")).map((node) => node.querySelector(".sa-callgo")).filter(Boolean);
       entry.acts.classList.toggle("sa-calls", goes.length > 0);
       if (goes.length) goes[goes.length - 1].append(open);  // a held call: "Open task" sits in the row of its buttons, not on a line of its own
-      entry.acts.replaceChildren(...buttons, ...(goes.length ? [] : [open]));
+      const toChat = hasSay(entry.item) ? h("button", {type: "button", class: "act" + (entry.item.why === "stopped" ? " hot" : ""), title: t("super.say.tip")}, t(entry.item.why === "stopped" ? "super.say.reply" : "super.say.show")) : null;
+      if (toChat) toChat.addEventListener("click", () => showSay(entry.item));
+      entry.acts.replaceChildren(...(toChat ? [toChat] : []), ...buttons, ...(goes.length ? [] : [open]));
       entry.sig = sigOf(entry);
     }
     function drawWaited(entry) {
@@ -951,14 +955,17 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       what.title = fullOf(item) || (item.why === "accept" && item.deliver && item.deliver.at ? t("super.accept.at", {at: when(item.deliver.at, 0, 16)}) : "");
       if (callsOf(item).length) what.hidden = true;  // the held calls under it show the command, with its code
       if (prose(item)) what.classList.add("prose");
-      if (said(item)) what.replaceChildren(...linked(said(item)));
-      let saidMore = null;
-      if (said(item)) what.classList.add("said");
-      if (said(item) && saidLong(item)) { saidMore = h("button", {type: "button", class: "sa-askmore"}, t("super.more")); saidMore.addEventListener("click", () => { what.classList.add("open"); saidMore.hidden = true; }); }
-      if (clampable(item) || saidLong(item)) {  // the question or command itself is the message: a few lines, the rest on a click
+      if (said(item)) {  // two lines; a click shows the whole words in the task's thread
+        what.textContent = sumOf(said(item));
+        what.classList.add("sa-sum");
+        what.tabIndex = 0;
+        what.title = t("super.say.tip");
+        what.addEventListener("click", () => showSay(entry.item));
+        what.addEventListener("keydown", (event) => { if (isEnter(event)) { event.preventDefault(); showSay(entry.item); } });
+      } else if (clampable(item)) {  // the question or command itself is the message: a few lines, the rest on a click
         what.classList.add("ask");
         what.tabIndex = 0;
-        const flip = () => { what.classList.toggle("open"); if (saidMore) saidMore.hidden = what.classList.contains("open"); };
+        const flip = () => what.classList.toggle("open");
         what.addEventListener("click", flip);
         what.addEventListener("keydown", (event) => { if (isEnter(event)) { event.preventDefault(); flip(); } });
       }
@@ -968,9 +975,9 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const more = !asksPerson(item) && !["error", "stuck", "accept"].includes(item.why) && item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
       const node = h("div", {class: "sa-row item" + (item.why === "error" ? " err" : ""), "data-task": item.task, "data-id": item.id},
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
-        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task, undefined, undefined, item), why, waited), what, xtra, saidMore, note, more, acts));
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task, undefined, undefined, item), why, waited), what, xtra, note, more, acts));
       const entry = {item, node, acts, waited, what, note, why, xtra, xsig: "", sig: "", clicked: ""};
-      if (item.why === "stopped" || SAYS(item)) node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
+      if (SAYS(item)) node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
       const preview = previewBox(item);
       if (preview) node.querySelector(".sa-bub").insertBefore(preview, acts);
       drawExtra(entry);
@@ -1029,7 +1036,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         entry.item = item;
         entry.why.textContent = whyText(item);
         drawExtra(entry);
-        if (entry.what.textContent !== mainOf(item)) { if (said(item)) entry.what.replaceChildren(...linked(said(item))); else entry.what.textContent = mainOf(item); entry.what.title = fullOf(item); }
+        const text = said(item) ? sumOf(said(item)) : mainOf(item);
+        if (entry.what.textContent !== text) { entry.what.textContent = text; if (!said(item)) entry.what.title = fullOf(item); }
         drawWaited(entry);
         if (entry.sig !== sigOf(entry)) drawActs(entry);
       }
@@ -1495,18 +1503,64 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       entry.more.hidden = !(long && !entry.open);
     }
     // The messages and the asks in one time order: an ask lands among the messages by its time.
-    function routeMerge(messages, asks) {
-      const fresh = (asks || []).filter((item) => item && item.id && !ROUTE_ASKS.has(item.id)).sort((a, b) => String(a.at).localeCompare(String(b.at)));
-      for (const item of fresh) {
+    // 1.8.43: what the tasks said when they stopped (`says`) lands the same way, as a line of the task's thread (sayBuild).
+    function routeMerge(messages, asks, says) {
+      const freshAsks = (asks || []).filter((item) => item && item.id && !ROUTE_ASKS.has(item.id)).map((item) => ({item, say: false}));
+      const freshSays = (says || []).filter((item) => item && item.id && !SAYS_SHOWN.has(item.id)).map((item) => ({item, say: true}));
+      const fresh = [...freshAsks, ...freshSays].sort((a, b) => String(a.item.at).localeCompare(String(b.item.at)));
+      for (const {item, say} of fresh) {
         mergeTalk((messages || []).filter((message) => message && !seenTalk.has(message.id) && String(message.at || "") <= String(item.at || "")));
-        const entry = routeBuild(item);
-        ROUTE_ASKS.set(item.id, entry);
-        chatRows.push(entry.node);
-        add(entry.node, true);
+        let node;
+        if (say) { const entry = sayBuild(item); SAYS_SHOWN.set(item.id, entry); node = entry.node; }
+        else { const entry = routeBuild(item); ROUTE_ASKS.set(item.id, entry); node = entry.node; }
+        chatRows.push(node);
+        add(node, !say);  // a task's words do not pull the chat down while the person reads higher up (the pill says there is more)
         foldChat();
       }
       mergeTalk(messages || []);
       for (const item of asks || []) { const entry = item && ROUTE_ASKS.get(item.id); if (entry) routeDraw(entry, item); }
+      for (const entry of SAYS_SHOWN.values()) sayDraw(entry);
+    }
+    // A task's last words in its thread: its avatar, its name, what it waited for and when, and the words (rich). While its wait is open the line says it waits for you;
+    // once the wait is gone it turns grey and says how it ended ("answered" for a stop, "done" for the rest).
+    const SAYS_SHOWN = new Map();  // wait id -> {say, node, tag, waiting}
+    const SAY_FOLD = 20;
+    function sayBuild(item) {
+      const kind = (mates.find((mate) => mate.task === item.task) || {}).kind;
+      const tag = h("span", {class: "sa-ttag"});
+      const node = h("div", {class: "sa-row sayrow", "data-task": item.task, "data-say": item.id},
+        h("span", {class: "sa-mini hot"}, PET.face("you", kind, 0)),
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task, undefined, undefined, mates.find((mate) => mate.task === item.task)), tag, item.at ? h("span", {class: "sa-when", title: when(item.at, 0, 19)}, when(item.at, 11, 16)) : null),
+          h("div", {class: "sa-text"}, ...rich(item.text))));
+      if (routeEstimate(item.text) > SAY_FOLD) {  // a long message folds after SAY_FOLD lines; "Show more" opens it in place
+        const body = node.querySelector(".sa-text"), more = h("button", {type: "button", class: "sa-askmore"}, t("super.more"));
+        body.classList.add("sa-sayclip");
+        more.addEventListener("click", () => { body.classList.remove("sa-sayclip"); more.remove(); });
+        node.querySelector(".sa-bub").append(more);
+      }
+      return {say: item, node, tag, waiting: null};
+    }
+    function sayDraw(entry) {
+      const waiting = Boolean(data && (data.items || []).some((item) => item.id === entry.say.id));
+      if (waiting === entry.waiting) return;
+      entry.waiting = waiting;
+      entry.node.classList.toggle("settled", !waiting);
+      const what = whyText({why: entry.say.why});
+      entry.tag.textContent = waiting ? t("super.say.waits", {what}) : t(entry.say.why === "stopped" ? "super.say.answered" : "super.say.done", {what});
+    }
+    // "Reply in chat" (or a click on the card's two lines): the task's thread, its line in view for a moment, and the input ready for the task.
+    function showSay(item) {
+      setFold(false, false);
+      stream.dispatchEvent(new CustomEvent("sa-showchat", {bubbles: true}));  // the Workbench closes a panel that covers the chat (Tall: the Queue sheet)
+      if (filter !== item.task) setFilter(item.task);
+      const entry = SAYS_SHOWN.get(item.id);
+      if (entry) {
+        entry.node.classList.remove("sa-flash"); void entry.node.offsetWidth; entry.node.classList.add("sa-flash");
+        entry.node.scrollIntoView({block: "nearest"});
+        const bub = entry.node.querySelector(".sa-bub");
+        if (bub && bub.offsetHeight > stream.clientHeight) entry.node.scrollIntoView({block: "start"});
+      }
+      if (item.why === "stopped") field.focus();
     }
     // "@" completion: the open task names, filtered as the person types; ArrowUp/ArrowDown move, Enter or Tab pick, Esc closes, a click picks.
     const label = (task) => String((mates.find((mate) => mate.task === task) || closedOnly().find((one) => one.task === task) || {}).label || (closedOnly().find((one) => one.task === task) || {}).title || "");
@@ -1548,7 +1602,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       talk = spoken && typeof spoken === "object" && spoken.state ? spoken : null;
       drawTeam(result.mates || [], result.making, Array.isArray(result.closed) ? result.closed : [], result.closed_more);
       if (talk && talk.state !== "thinking" && localThink && Date.now() - localThink > 4000) localThink = 0;  // the server is done (a message, or nothing to say)
-      routeMerge(talk ? talk.messages : [], talk ? talk.asks : []);
+      routeMerge(talk ? talk.messages : [], talk ? talk.asks : [], talk ? talk.says : []);
       reconcile(result.items || []);
       drawOrbit();
       applyFilter();

@@ -367,6 +367,7 @@ const WORKBENCH = (function () {
     focusBtn.addEventListener("click", () => setMode(mode === "focus" ? "wb" : "focus"));
     back.addEventListener("click", () => { minimized = true; closePop(); if (options.back) options.back(); });
     closeLayer.addEventListener("click", () => closePanel("p"));
+    document.addEventListener("sa-showchat", () => { if (open && !wideNow() && sheet) closePanel(sheet); });  // 1.8.43: "Reply in chat" on a card of the Queue sheet: the sheet goes, the chat is in view
     addEventListener("resize", () => { if (open && isTall() !== tall) layout(); else if (open) sizes(); });
     document.addEventListener("keydown", (event) => { if (open && event.key === "Escape" && !wideNow() && taskOn) { event.preventDefault(); closePanel("p"); } });
     right.addEventListener("click", (event) => { if (event.target === right && mode === "focus" && !tall && taskOn) closePanel("p"); });  // a click outside the window of Focus

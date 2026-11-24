@@ -206,7 +206,7 @@ class Brain:
     # -- the file --
 
     def fresh(self) -> Dict[str, Any]:
-        return {"day": self.now().date().isoformat(), "session": "", "chat": "", "sdk": "", "exchanges": [], "asks": [], "turn_nano": {}, "cost": {"session": "", "pos": 0, "nano": 0}, "prior_nano": 0, "extra": 0.0, "recharges": []}
+        return {"day": self.now().date().isoformat(), "session": "", "chat": "", "sdk": "", "exchanges": [], "asks": [], "says": [], "turn_nano": {}, "cost": {"session": "", "pos": 0, "nano": 0}, "prior_nano": 0, "extra": 0.0, "recharges": []}
 
     def load(self) -> Dict[str, Any]:
         """The record of today. A file of another day, or one that cannot be read, gives a new one (no chat: the next turn makes it)."""
@@ -225,6 +225,7 @@ class Brain:
         base = self.fresh()
         base.update({key: found[key] for key in base if key in found})
         base["asks"] = [item for item in base["asks"] if superroute.valid(item)] if isinstance(base["asks"], list) else []
+        base["says"] = [item for item in base["says"] if superroute.valid_say(item)] if isinstance(base["says"], list) else []
         base["extra"] = self.extra_of(base)
         base["recharges"] = [item for item in base["recharges"] if isinstance(item, dict)] if isinstance(base["recharges"], list) else []
         return base
@@ -254,13 +255,14 @@ class Brain:
         """Put a day that ended into the history (an empty day is not kept). False when it could not be written: `super.json` then stays as it is, and the next load tries again."""
         exchanges = [item for item in rec.get("exchanges") or [] if isinstance(item, dict) and item.get("turn")]
         asks = [superroute.public(item) for item in rec.get("asks") or [] if superroute.valid(item)]
-        if not exchanges and not asks:
+        says = [dict(item) for item in rec.get("says") or [] if superroute.valid_say(item)]
+        if not exchanges and not asks and not says:
             return True
         day = str(rec["day"])
         if (history_dir(self.root, True) / f"{day}.json").exists():
             return True  # kept before and archived since
         record = {"day": day, "spent": round(self.spent(rec), 3),
-                  "exchanges": [{key: item.get(key) for key in ("turn", "kind", "you", "you_at", "agent", "agent_at", "end")} for item in exchanges], "asks": asks}
+                  "exchanges": [{key: item.get(key) for key in ("turn", "kind", "you", "you_at", "agent", "agent_at", "end")} for item in exchanges], "asks": asks, "says": says}
         try:
             atomic_write(history_dir(self.root) / f"{day}.json", record)
         except OSError:
@@ -357,7 +359,21 @@ class Brain:
             messages = self.shown(messages_of(rec["exchanges"], self.partial), True)
             ready = bool(self.link.status().get("ready"))
             state = "asleep" if not ready else "thinking" if self.running(rec) else "tired" if spent >= limit else "idle"
-            return {"state": state, "spent": round(spent, 3), "limit": limit, "base": base, "extra": extra, "messages": messages, "asks": [superroute.public(item) for item in rec["asks"]]}
+            return {"state": state, "spent": round(spent, 3), "limit": limit, "base": base, "extra": extra, "messages": messages, "asks": [superroute.public(item) for item in rec["asks"]], "says": list(rec["says"])}
+
+    def note_says(self, found: List[Dict[str, Any]]) -> None:
+        """Keep what tasks said when they stopped (1.8.43): one entry per wait (`id` is the wait's item id), in today's record, so the task's thread in the chat and the history show it.
+        An entry already kept is not written again; the day keeps its newest `MAX_SAYS`."""
+        fresh = [item for item in found if superroute.valid_say(item)]
+        if not fresh:
+            return
+        with self.lock:
+            rec = self.load()
+            have = {item["id"] for item in rec["says"]}
+            new = [item for item in fresh if item["id"] not in have]
+            if new:
+                rec["says"] = (rec["says"] + new)[-superroute.MAX_SAYS:]
+                self.save(rec)
 
     def shown(self, messages: List[Dict[str, Any]], proposals: bool) -> List[Dict[str, Any]]:
         """The agent's messages as the person sees them: the proposal block is cut out of `text`; with `proposals`, a message that had a block gets `proposals`, checked against the rows of this moment."""
@@ -392,7 +408,7 @@ class Brain:
                 for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
                     found = self.read_day(path)
                     if found:
-                        days.append({"day": found["day"], "turns": len(found["exchanges"]) + len(found["asks"]), "spent": found.get("spent") or 0, "archived": archived})
+                        days.append({"day": found["day"], "turns": len(found["exchanges"]) + len(found["asks"]) + len(found["says"]), "spent": found.get("spent") or 0, "archived": archived})
             days.sort(key=lambda one: one["day"], reverse=True)
             return {"days": days}
 
@@ -405,6 +421,7 @@ class Brain:
             return None
         found["exchanges"] = [item for item in found["exchanges"] if isinstance(item, dict) and item.get("turn") and isinstance(item.get("you"), str)]
         found["asks"] = [item for item in found.get("asks") or [] if superroute.valid(item)] if isinstance(found.get("asks"), list) else []
+        found["says"] = [item for item in found.get("says") or [] if superroute.valid_say(item)] if isinstance(found.get("says"), list) else []
         return found
 
     def where(self, day: str) -> Optional[Path]:
@@ -423,7 +440,7 @@ class Brain:
             found = self.read_day(path) if path else None
             if not found:
                 return {"ok": False, "why": "missing"}
-            return {"ok": True, "day": day, "spent": found.get("spent") or 0, "archived": path.parent.name == "archived", "messages": self.shown(messages_of(found["exchanges"]), False), "asks": [superroute.public(item) for item in found["asks"]]}
+            return {"ok": True, "day": day, "spent": found.get("spent") or 0, "archived": path.parent.name == "archived", "messages": self.shown(messages_of(found["exchanges"]), False), "asks": [superroute.public(item) for item in found["asks"]], "says": found["says"]}
 
     def history_act(self, day: Any, action: Any) -> Dict[str, Any]:
         """Archive an earlier day (hidden from the list), restore it, or delete it for good. `{ok: true}`, or `{ok: false, why: missing | today | action | error}`."""

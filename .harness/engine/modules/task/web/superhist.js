@@ -4,7 +4,7 @@
 "use strict";
 
 const SUPERHIST = (function () {
-  // `wrap`: the box of the messages, which the panel covers; `linked(text)`: the agent's words with task names as links (super.js). Returns {button, close}.
+  // `wrap`: the box of the messages, which the panel covers; `linked(text)`: the words as the chat draws them (super.js `rich`: bold, code, links, task names as links; 1.8.43, was task names only). Returns {button, close}.
   function create(wrap, linked) {
     const button = h("button", {type: "button", class: "sa-pop sa-histbtn", title: t("super.hist.open"), "aria-label": t("super.hist.open")}, "◷");
     const title = h("b", {class: "sa-hist-title"});
@@ -75,7 +75,15 @@ const SUPERHIST = (function () {
       if (mine !== token) return;
       if (!answer.ok) { body.replaceChildren(h("div", {class: "sa-hist-empty"}, t("super.hist.gone"))); return; }
       title.textContent = dayName(day) + " · " + t("super.hist.spent", {n: amount(answer.spent || 0)});
-      body.replaceChildren(...(answer.messages || []).map((message) => (message.role === "you"
+      const SAY_WHY = {stopped: "super.why.stopped", accept: "super.why.accept", cancelled: "super.why.cancelled"};  // written out: a search for a key finds its place
+      // 1.8.43: what the tasks said when they stopped (`says`) is read back among the messages, by its time, grey (its wait is over)
+      const says = (answer.says || []).filter((one) => one && one.id).map((one) => ({...one, role: "say"}));
+      const all = [...(answer.messages || []), ...says].sort((x, y) => String(x.at || "").localeCompare(String(y.at || "")));
+      body.replaceChildren(...all.map((message) => (message.role === "say"
+        ? h("div", {class: "sa-row sayrow settled", "data-task": message.task}, h("span", {class: "sa-mini hot"}, PET.face("you", "", 0)),
+          h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, h("span", {class: "sa-task"}, message.task), h("span", {class: "sa-ttag"}, t(SAY_WHY[message.why] || "super.why.other")), message.at ? h("span", {class: "sa-when"}, when(message.at, 11, 16)) : null),
+            h("div", {class: "sa-text"}, linked(message.text))))
+        : message.role === "you"
         ? h("div", {class: "sa-row me"}, h("div", {class: "sa-bub", title: message.at ? when(message.at, 11, 16) : null}, message.kind === "summary" ? t("super.quick.summary") : message.text))
         : h("div", {class: "sa-row"}, h("span", {class: "sa-mini boss"}, PET.face("calm", "", 0, true)),
           h("div", {class: "sa-bub agent"}, h("div", {class: "sa-fw"}, h("b", null, t("super.name")), message.at ? h("span", {class: "sa-when"}, when(message.at, 11, 16)) : null),

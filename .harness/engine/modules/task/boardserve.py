@@ -2611,11 +2611,14 @@ def handler_for(board: Board) -> type:
                     superfacts.put(board.root, result.get("rows") or [])  # 1.8.4: held calls, the question, the delivery, an error or a stuck chat: put on the rows, so `build` stays a pure function
                     view = superview.build(result, tasklife.age_up_limit(board.root))  # 1.8.4: an old wait moves up one group
                     paths = {superview.name_of(row): str(row["task"]) for row in result.get("rows") or []}
+                    says = []
                     for item in view["items"]:
                         if item["why"] in ("stopped", "accept", "cancelled") and item["task"] in paths:
-                            said = superroute.said_of(board.link, paths[item["task"]])  # the agent's last words, from what the link holds
+                            said = superroute.said_of(board.link, paths[item["task"]], superroute.MAX_SAY)  # the agent's last words, from what the link holds
                             if said:
-                                item["said"] = said
+                                item["said"] = superroute.cut(said, superroute.MAX_SAID)  # the card's two lines
+                                says.append({"id": item["id"], "task": item["task"], "why": item["why"], "text": said, "at": str(item.get("since") or "") or utc_now()})
+                    board.brain.note_says(says)  # 1.8.43: the whole words go to the task's thread in the chat, once per wait
                     view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.17: the closed tasks the board lists (the newest `closed_shown`), to open again with `/api/super/send`
                     view["closed_more"] = int(result.get("hidden") or 0)  # the older closed tasks the board does not list: the Closed button says "N+"
                     view["making"] = result.get("making") or []  # 1.8.5: chats the board made whose task is not there yet

@@ -199,6 +199,15 @@ class SaidTests(RouteCase):
         said = superroute.said_of(self.vs, TASK)
         self.assertEqual(len(said), superroute.MAX_SAID)
         self.assertTrue(said.endswith("…"))
+        self.assertEqual(len(superroute.said_of(self.vs, TASK, superroute.MAX_SAY)), 3000)  # the thread keeps the whole words
+
+    def test_only_the_final_message_not_the_progress_lines(self) -> None:
+        parts = [{"kind": "markdown", "content": "The gate holds this read."}, {"kind": "toolCall"}, {"kind": "markdown", "content": "I'll run it again."}, {"kind": "reasoning", "content": "hm"},
+                 {"kind": "markdown", "content": "Now update LOG.md."}, {"kind": "toolCall"}, {"kind": "markdown", "content": "The new fields are not there."}, {"kind": "systemNotification"}, {"kind": "markdown", "content": "Do you know where?"}]
+        self.vs.chats[CHAT]["state"]["turns"] = [{"id": "t1", "state": "complete", "responseParts": parts}]
+        self.assertEqual(superroute.said_of(self.vs, TASK), "The new fields are not there.\nDo you know where?")
+        self.vs.chats[CHAT]["state"]["turns"][0]["responseParts"] = [{"kind": "markdown", "content": "Last words."}, {"kind": "toolCall"}]  # ended on a tool call: its last text block
+        self.assertEqual(superroute.said_of(self.vs, TASK), "Last words.")
 
     def test_a_chat_the_link_does_not_know_says_nothing(self) -> None:
         self.assertEqual(superroute.said_of(self.vs, ".workspace/sandbox/tasks/other"), "")
@@ -211,6 +220,9 @@ class SaidTests(RouteCase):
         with mock.patch.object(boardserve.Board, "rows", return_value=rows):
             items = self.request("POST", "/api/super", {})[1]["items"]
             self.assertEqual([(item["task"], item["why"], item.get("said")) for item in items], [("other", "plan", None), ("job1", "stopped", "Shall I go on?")])  # only a stopped, accepted or cancelled wait has the words
+            self.request("POST", "/api/super", {})  # polled again: the words stay one line of the task's thread
+            says = self.talk()["says"]
+            self.assertEqual([(one["id"], one["task"], one["why"], one["text"]) for one in says], [(items[1]["id"], "job1", "stopped", "Shall I go on?")])
             self.vs.chats.clear()  # the link does not know the chat now
             item = self.request("POST", "/api/super", {})[1]["items"][1]
         self.assertEqual(item["why"], "stopped")

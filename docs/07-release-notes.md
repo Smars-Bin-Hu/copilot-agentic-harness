@@ -8,10 +8,11 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.42 (1.8.0 – 1.8.42, 2026-11-17 – 2026-11-24)
+## 1.8.43 (1.8.0 – 1.8.43, 2026-11-17 – 2026-11-24)
 
 ### Added
 
+- **What a task said goes into its thread in the super agent chat** (1.8.43): when a task stops, delivers or is cancelled, its card under **Waiting for you** shows two lines of what it said, **Reply in chat** (or **Show in chat**) and **Open task**; the whole message is a line of the task's thread in the chat, with the task's avatar, kept in the day's history. **Reply in chat** opens the task's thread with the line in view and the input ready for the task. The line turns grey once the wait is over (**answered** for a stop). A message longer than 20 lines folds behind **Show more**. The card has no reply box any more: you answer in the chat.
 - **A connection of your own on PROD** (1.8.42): Settings > Connections lets you choose PROD for a connection you add yourself (it was DEV, IST and QAT only; a PROD connection came only from the knowledge base). The agent only reads there: the gate runs a read and refuses every write, run and drop, and a PROD connection is never opened for a task. Use a read-only account there all the same.
 - **The super agent can do what a task page does** (1.8.40): it sees which tasks are paused and which have no chat, and proposes a card for it. **Resume and send** on a paused task resumes it, opens a new chat when it has none (or when you ask for one; **New chat instead** when it has one) and gives it your words, each step ticked; a step that fails stops there with the reason and **Try again**. A card that only resumes sends nothing. New cards: **Compact chat**, **Try again** after a chat error, **Rename**, **Autorun off**, **Link a ticket** (`<type>:<id>`) and **Dismiss held call**. The super agent no longer sends you to VS Code to type a command.
 - **The super agent knows why a task stopped** (1.8.40): for a task you name (its first 4 letters are enough when they fit one task) and the one that waits longest, the board adds a short brief from its `TASK.md`, its newest `LOG.md` entry, its open question and its chat; when that is not enough it reads those files itself (skill `harness-super-read`), a few lines at most.
@@ -65,6 +66,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- The super agent's card of a stopped task showed the agent's notes from the middle of its turn ("I'll run it again…", "Now update LOG.md…") with its reply (1.8.43): it shows only the reply, the last message after its last tool call, as the task page does. The super agent's history shows **bold**, `code` and links as the chat does (it showed the marks).
 - `Code` in the agent's replies and in the task's documents did not stand out from the words around it (1.8.41): it is a violet chip now, in the light and the dark theme; a code block keeps its own colours.
 - A section of Settings you switched to could stay as grey bars (1.8.41; since 1.8.33): a section whose data took longer than a moment never showed. It shows now, and each section waits only for what it shows: Programs and Copilot no longer wait for the scan of your code repository folders (slow on a work computer), and a read with no answer in time says so with **Try again**.
 - The Closed list of the super agent showed at most 12 tasks while its button counted them all (1.8.40): it lists every closed task the board lists (the newest 50 by default); with more, both say **50+**.
@@ -105,6 +107,7 @@ To see which version you have: `harness --version`.
 
 ### Retired
 
+- **The reply box on the super agent's card of a stopped task** (1.8.43): press **Reply in chat** and write in the chat's input; the words go to the task as before.
 - **The Settings gear, the Appearance sliders, the house and the stop button** (1.8.39): Settings, Appearance and Stop board are in the account menu at the top right; the robot and the name at the top left of the board go to the Enter screen. Only **?** and the knowledge base stay at the bottom right.
 - **Network and the third group of Settings** (1.8.34): Settings has two groups, Harness (You, Programs, Copilot) and Company (Knowledge base, Tool packs, Code repositories, Connections), then Advanced, which opens with Network (proxy and certificates). Restart board is at the bottom left.
 - **Skill prefix in Settings** (1.8.34): the company's knowledge base sets it.

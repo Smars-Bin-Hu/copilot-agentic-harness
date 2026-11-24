@@ -147,6 +147,23 @@ def text_of(turn: Dict[str, Any]) -> str:
     return "\n".join(str(part.get("content") or "").strip() for part in turn.get("responseParts") or [] if isinstance(part, dict) and part.get("kind") == "markdown" and str(part.get("content") or "").strip())
 
 
+BREAKS = ("toolCall", "reasoning", "inputRequest")  # parts that end a text block on the task page; the last block is the reply the person reads
+
+
+def last_text_of(turn: Dict[str, Any]) -> str:
+    """The agent's final message in a turn: the text parts after its last tool call, thought or question (the progress lines before them are not the reply)."""
+    blocks: List[List[str]] = [[]]
+    for part in turn.get("responseParts") or []:
+        if not isinstance(part, dict):
+            continue
+        if part.get("kind") in BREAKS:
+            if blocks[-1]:
+                blocks.append([])
+        elif part.get("kind") == "markdown" and str(part.get("content") or "").strip():
+            blocks[-1].append(str(part["content"]).strip())
+    return "\n".join(next((block for block in reversed(blocks) if block), []))
+
+
 def message_text(turn: Dict[str, Any]) -> str:
     message = turn.get("message")
     return str(message.get("text") or "") if isinstance(message, dict) else ""
@@ -203,16 +220,28 @@ def read(brain: Any, rec: Dict[str, Any]) -> bool:
     return changed
 
 
-MAX_SAID = 1200  # characters of the agent's last words sent to the page
+MAX_SAID = 1200  # characters of the agent's last words on a card (the card shows two lines of them)
+MAX_SAY = 20000  # characters of the agent's last words kept in the task's thread
+MAX_SAYS = 200  # entries of `says` a day keeps
+SAY_KEYS = ("id", "task", "why", "text", "at")
 
 
-def said_of(link: Any, task: str) -> str:
-    """The agent's last words in the task's chat: the text parts of the last ended turn, from what the link holds (no call to the host), cut to `MAX_SAID`; an empty string when the link does not know the chat."""
+def valid_say(entry: Any) -> bool:
+    """An entry of `says`: what a task said when it stopped, `{id, task, why, text, at}` (`id`: the wait's item id; `task`: the short name)."""
+    return isinstance(entry, dict) and all(isinstance(entry.get(key), str) for key in SAY_KEYS) and bool(entry["id"]) and bool(entry["text"])
+
+
+def cut(words: str, limit: int) -> str:
+    return words if len(words) <= limit else words[: limit - 1].rstrip() + "…"
+
+
+def said_of(link: Any, task: str, limit: int = MAX_SAID) -> str:
+    """The agent's last words in the task's chat: the final message of the last ended turn (as the task page shows it), from what the link holds (no call to the host), cut to `limit`; an empty string when the link does not know the chat."""
     snapshot = chat_state(link, task)
     if not snapshot:
         return ""
     for turn in reversed(snapshot["turns"]):
-        words = text_of(turn)
+        words = last_text_of(turn)
         if words:
-            return words if len(words) <= MAX_SAID else words[: MAX_SAID - 1].rstrip() + "…"
+            return cut(words, limit)
     return ""

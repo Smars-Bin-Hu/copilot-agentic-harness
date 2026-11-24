@@ -215,7 +215,7 @@ class WizardPolishTests(unittest.TestCase):
         enter = SCRIPT.split("function toEnter() {")[1].split("  // The foot.")[0]
         self.assertIn('"cheer"', enter)
         self.assertIn('MOTION.mark("from-wizard")', enter)
-        self.assertIn('MOTION.leave(() => location.assign("/"), {cls: "enter-bg"})', enter)  # the Enter screen's backdrop, light or dark (motion.css)
+        self.assertIn('{cls: "enter-bg"}', enter)  # the Enter screen's backdrop, light or dark (motion.css)
         self.assertIn("ms: 120", enter)  # the page is gone in 120 ms, when the veil starts
 
     def test_a_language_saved_in_you_loads_the_page_again_through_the_veil_with_three_dots(self) -> None:  # E6

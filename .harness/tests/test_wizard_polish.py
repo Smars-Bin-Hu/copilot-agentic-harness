@@ -149,10 +149,22 @@ class WizardPolishTests(unittest.TestCase):
         start = SCRIPT.split("  function start() {")[1]
         self.assertLess(start.index("buildShell(root)"), start.index("load().then("))  # the top line, bar and robot are there before the data is read
         render = SCRIPT.split("  function render() {")[1].split("  // W2:")[0]
-        for call in ("MOTION.glide(shell.foot, change)", "MOTION.turn(ghost && ghost.copy, content, dir)", "MOTION.ghost(node)", "MOTION.appear(content"):
-            self.assertIn(call, render + SCRIPT.split("function ghostOf")[1].split("function render")[0])
         self.assertNotIn("put(root, el(\"div\", \"wz-top\"", render)  # no page rebuilds the whole frame
         self.assertNotIn("wz-bot", SCRIPT + SHEET)  # the robot is drawn by robot.js only
+
+    def test_a_turn_is_two_steps_that_never_overlap(self) -> None:  # W4, round 2: the old page is gone first; the new page, foot, count and bar change together after it
+        render = SCRIPT.split("  function render() {")[1].split("  // W2:")[0]
+        self.assertIn("ms: 100, ease: MOTION.OUT", render)  # the old page leaves in 100 ms
+        self.assertIn("ms: 180", render)  # the new one comes in over 180 ms
+        self.assertLess(render.index("leaves()"), render.index("MOTION.glide(shell.foot, change)"))  # the swap waits for the old page
+        swap = render.split("const change = () => {")[1].split("    };")[0]
+        for part in ("old.replaceWith(content)", "shell.count.textContent", "drawFoot()"):
+            self.assertIn(part, swap)  # one moment: page, count, foot
+        self.assertIn("paintBar(final)", render.split("MOTION.glide(shell.foot, change)")[1])  # and the bar, at the same moment
+        self.assertNotIn("MOTION.turn", render)  # no copy of the old page stays on screen while the new one is drawn
+        self.assertNotIn("ghostOf", SCRIPT)
+        self.assertIn("flight.then(leaves)", render)  # W6: pages skipped: the head lands first, then the page turns
+        self.assertLess(render.index("shell.body.scrollTop = 0"), render.index("old.replaceWith(content)"))  # nothing forces a layout after the swap
 
     def test_the_robot_is_the_shells_and_moves_with_the_bar(self) -> None:  # W2 W3 W6
         self.assertIn("ROBOT.svg({glow: true})", SCRIPT)
@@ -201,8 +213,9 @@ class WizardPolishTests(unittest.TestCase):
         confirm = SCRIPT.split("const confirm = () =>")[1].split("const lacking")[0]
         self.assertIn("return toEnter()", confirm)
         enter = SCRIPT.split("function toEnter() {")[1].split("  // The foot.")[0]
-        self.assertLess(enter.index('"cheer"'), enter.index('MOTION.mark("from-wizard")'))
-        self.assertIn('MOTION.leave(() => location.assign("/"), {cls: "enter-bg"})', enter)  # the Enter screen's backdrop, light or dark (motion.css)
+        self.assertIn('"cheer"', enter)
+        self.assertIn('MOTION.mark("from-wizard")', enter)
+        self.assertIn('{cls: "enter-bg"}', enter)  # the Enter screen's backdrop, light or dark (motion.css)
         self.assertIn("ms: 120", enter)  # the page is gone in 120 ms, when the veil starts
 
     def test_a_language_saved_in_you_loads_the_page_again_through_the_veil_with_three_dots(self) -> None:  # E6

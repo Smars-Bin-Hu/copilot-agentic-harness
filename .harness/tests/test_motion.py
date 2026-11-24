@@ -54,6 +54,16 @@ class MotionTests(unittest.TestCase):
         self.assertIn("{ms: 100, ease: OUT, fill: \"forwards\"}", code)  # the old page is gone in 100 ms ...
         self.assertIn("{ms: 200, delay: 60}", code)  # ... and the new one starts at 60 ms, over 200 ms: done at 260 ms
 
+    def test_a_swap_never_leaves_its_label_hidden(self) -> None:
+        # 1.8.44: the Enter button showed no label on a work PC until a reload; a browser that stopped playing frames held the fade-out's end (opacity 0)
+        # or the fade-in's start. The change is written after SWAP_LATE ms whatever the frames do, and the swap's moves are taken off when they should be over.
+        code = source("motion.js")
+        body = code.split("function swap(el, change) {")[1].split("\n  }\n")[0]
+        self.assertIn("const SWAP_LATE = 400;", code)
+        self.assertIn("Promise.race([out, late(SWAP_LATE)])", body)
+        self.assertIn("late(SWAP_LATE)]).then(() => { if (el._motionSwap === turnNo) clear(el); })", body)
+        self.assertIn("clear(el);\n      change();", body)  # the old move is gone before the new words are written
+
     def test_the_robots_moves_wait_for_motion_and_still(self) -> None:
         code = source("robot.js")
         self.assertIn("function act(robot, kind)", code)

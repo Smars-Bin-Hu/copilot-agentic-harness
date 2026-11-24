@@ -64,15 +64,21 @@ const MOTION = (function () {
 
   // swap(el, change): a label or a small part changes (E4): the old fades out in 100 ms, `change()` runs, the new fades in over 160 ms; never both at once.
   // A second swap while one runs takes over (the last change wins).
+  // 1.8.44: a browser that does not play the frames (a busy or covered window) could leave the label at opacity 0 (the fade-out holds its end, the fade-in waits
+  // at its start): the change is written after SWAP_LATE ms whatever the frames do, and every move of the swap is taken off once it should be over.
+  const SWAP_LATE = 400;
+  const clear = (el) => { for (const running of el.getAnimations ? el.getAnimations() : []) running.cancel(); };
+  const late = (wait) => new Promise((resolve) => setTimeout(resolve, wait));
   function swap(el, change) {
     if (!el) { change(); return Promise.resolve(); }
     if (still()) { change(); return Promise.resolve(); }
     const turnNo = (el._motionSwap = (el._motionSwap || 0) + 1);
-    return play(el, [{opacity: 1}, {opacity: 0}], {ms: 100, ease: OUT, fill: "forwards"}).then(() => {
+    const out = play(el, [{opacity: 1}, {opacity: 0}], {ms: 100, ease: OUT, fill: "forwards"});
+    return Promise.race([out, late(SWAP_LATE)]).then(() => {
       if (el._motionSwap !== turnNo) return undefined;
-      for (const running of el.getAnimations ? el.getAnimations() : []) running.cancel();
+      clear(el);
       change();
-      return play(el, [{opacity: 0}, {opacity: 1}], {ms: 160});
+      return Promise.race([play(el, [{opacity: 0}, {opacity: 1}], {ms: 160}), late(SWAP_LATE)]).then(() => { if (el._motionSwap === turnNo) clear(el); });
     });
   }
 

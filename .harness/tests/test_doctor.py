@@ -386,7 +386,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("[OK]    Hook 最近一次被调用", result.stdout)
         self.assertIn("[OK]    最近的会话是 Copilot（SDK）会话", result.stdout)
-        self.assertIn("[OK]    gate 最近 3 次调用：一般 30 毫秒，最慢 40 毫秒（超时是 30 秒）", result.stdout)
+        self.assertIn("[OK]    gate 最近 3 次调用：一般 30 毫秒，最慢 40 毫秒（超时是 120 秒）", result.stdout)
 
     def test_a_hook_that_was_last_called_long_ago_is_a_warning(self) -> None:
         self.write_log([self.call(days_ago=9)])
@@ -396,10 +396,10 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("Reload Window", result.stdout)
 
     def test_a_gate_close_to_the_timeout_is_a_warning_because_a_timeout_lets_the_call_through(self) -> None:
-        self.write_log([self.call(ms=25), self.call(ms=16000)])
+        self.write_log([self.call(ms=25), self.call(ms=61000)])
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("最慢 16000 毫秒", result.stdout)
+        self.assertIn("最慢 61000 毫秒", result.stdout)
         self.assertIn("超时的调用会被直接放行", result.stdout)
 
     def test_the_gate_is_measured_against_the_timeout_of_the_hook_config(self) -> None:
@@ -411,6 +411,53 @@ class DoctorTests(unittest.TestCase):
         self.write_log([self.call(ms=3000)])
         result = self.doctor()
         self.assertIn("（超时是 5 秒）。离超时太近", result.stdout)
+
+    def test_a_hook_timeout_under_the_least_is_an_error_because_a_timeout_lets_the_call_through(self) -> None:
+        def change(data: dict) -> None:
+            for entry in data["hooks"]["PreToolUse"]:
+                entry["timeout"] = entry["timeoutSec"] = 30
+
+        self.edit_json(".github/hooks/harness.json", change)
+        result = self.doctor()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("超时是 30 秒，至少要 120 秒", result.stdout)
+
+    def test_the_shipped_hook_config_waits_long_enough(self) -> None:
+        result = self.doctor()
+        self.assertNotIn("至少要 120 秒", result.stdout)
+
+    def copilot_record(self, rows: list, session: str = "s1") -> Path:
+        home = self.root / "copilot-home"
+        folder = home / "session-state" / session
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "events.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return home
+
+    @staticmethod
+    def hook_end(kind: str, seconds: int = 0) -> dict:
+        data = {"hookInvocationId": "h", "hookType": kind, "success": not seconds}
+        if seconds:
+            data["error"] = {"message": f"HookTimeoutError: Hook command timed out after {seconds} seconds: python .harness/engine/launch.py"}
+        return {"type": "hook.end", "data": data, "timestamp": "2026-11-24T17:00:00.000Z"}
+
+    def test_hooks_copilot_stopped_waiting_for_are_an_error_with_the_calls_that_ran_ungated(self) -> None:
+        self.write_log([self.call()])
+        home = self.copilot_record([self.hook_end("preToolUse", 120), self.hook_end("preToolUse", 120), self.hook_end("postToolUse", 120), self.hook_end("preToolUse")])
+        result = self.doctor(COPILOT_HOME=str(home))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("在 120 秒超时后不再等 Hook：postToolUse 1, preToolUse 2。有 2 个调用没经过 gate", result.stdout)
+
+    def test_timeouts_under_an_older_shorter_limit_are_a_warning(self) -> None:
+        self.write_log([self.call()])
+        home = self.copilot_record([self.hook_end("preToolUse", 30)])
+        result = self.doctor(COPILOT_HOME=str(home))
+        self.assertIn("[WARN]  最近 1 个会话里，有 Hook 在以前较短的超时下被放弃：preToolUse 1", result.stdout)
+
+    def test_no_timeout_in_the_record_is_ok(self) -> None:
+        self.write_log([self.call()])
+        home = self.copilot_record([self.hook_end("preToolUse")])
+        result = self.doctor(COPILOT_HOME=str(home))
+        self.assertIn("最近 1 个会话里没有 Hook 超时（超时 120 秒", result.stdout)
 
     def test_a_local_session_is_a_warning(self) -> None:
         self.write_log([self.call(engine="legacy")])

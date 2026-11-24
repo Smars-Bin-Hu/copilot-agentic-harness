@@ -39,6 +39,9 @@ RECENT_LOG_FILES = 20  # the hook self-check reads only the newest session logs
 STALE_HOOK_DAYS = 7
 SLOW_GATE_SHARE = 0.5  # of the PreToolUse timeout: the SDK engine lets a call through when the hook times out
 DEFAULT_HOOK_TIMEOUT = 30
+MIN_HOOK_TIMEOUT = 120  # (1.8.48) seconds: Copilot lets a call through when its hook times out, and a work PC measured hooks up to 111 s (2026-11-24); a lower timeout is an error
+TIMEOUT_SESSIONS = 5  # the newest sessions whose Copilot record is read for hooks that timed out
+TIMED_OUT = re.compile(r"timed out after (\d+) seconds", re.I)
 
 
 TOPICS = "HARNESS_DOCTOR_TOPICS"  # the board's own run (1.7.38): a warning about the company's content (knowledge base, standards, repositories) says so, `[WARN:company]`; one about its copies `[WARN:copies]`; a person's run prints `[WARN]` as always
@@ -160,6 +163,54 @@ def check_hook_activity(report: Report, root: Path, registry: Dict[str, Any]) ->
         report.ok(text)
 
 
+def check_hook_timeouts(report: Report, root: Path) -> None:
+    """(1.8.48) The hooks Copilot stopped waiting for, from its own record of the newest sessions (`hook.end` with `HookTimeoutError`). A preToolUse hook that timed out is a call
+    the gate never judged: Copilot ran it. The hook log cannot show this: a hook that was given up on still writes its line, later. Timeouts under an older, shorter limit are
+    a warning (they were before the limit was raised); under the limit of today's config, an error. Needs `report.copilot_events`."""
+    try:
+        if not (config.policy_or_empty(root, "task").get("report") or {}).get("copilot_events", True):
+            return
+        from core import copilot_events
+        limit = hook_timeout(root)
+        sessions = [path.stem for surface, path in sorted(session_files(root), key=lambda item: item[1].stat().st_mtime, reverse=True) if surface == "vscode"]
+        counts: Dict[str, int] = {}
+        older: Dict[str, int] = {}
+        read = 0
+        for session in sessions:
+            if read >= TIMEOUT_SESSIONS:
+                break
+            path = copilot_events.events_path(session)
+            if path is None:
+                continue
+            read += 1
+            with path.open(encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    if '"hook.end"' not in line or "imed out" not in line:
+                        continue
+                    try:
+                        data = json.loads(line).get("data") or {}
+                    except ValueError:
+                        continue
+                    error = data.get("error")
+                    found = TIMED_OUT.search(str(error.get("message") if isinstance(error, dict) else error or ""))
+                    if data.get("success") is False and found:
+                        kind = str(data.get("hookType") or "?")
+                        bucket = counts if float(found.group(1)) >= limit else older
+                        bucket[kind] = bucket.get(kind, 0) + 1
+    except Exception as error:  # noqa: BLE001 - a record that cannot be read is said, not taken for none
+        report.warn(say("doctor.hook.timeouts_unreadable", error=" ".join(str(error).split())[:200]))
+        return
+    if not read:
+        return
+    shown = lambda found: ", ".join(f"{kind} {count}" for kind, count in sorted(found.items()))  # noqa: E731
+    if counts:
+        report.error(say("doctor.hook.timeouts", sessions=read, seconds=f"{limit:.0f}", counts=shown(counts), gate=counts.get("preToolUse", 0)))
+    elif older:
+        report.warn(say("doctor.hook.timeouts_older", sessions=read, seconds=f"{limit:.0f}", counts=shown(older)))
+    else:
+        report.ok(say("doctor.hook.timeouts_none", sessions=read, seconds=f"{limit:.0f}"))
+
+
 def launcher_files(root: Path) -> List[Path]:
     return [root / ".harness" / "bin" / name for name in ("harness", "harness.cmd")]
 
@@ -237,6 +288,9 @@ def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> N
         for event, entries in hooks.items():
             configured.add(next((name for name, key in CONFIG_KEYS.items() if key == event), event))
             for entry in entries:
+                limit = entry.get("timeoutSec") or entry.get("timeout")
+                if not isinstance(limit, (int, float)) or isinstance(limit, bool) or limit < MIN_HOOK_TIMEOUT:
+                    report.error(say("doctor.hookcfg.timeout_low", name=path.name, event=event, seconds=limit if limit is not None else "-", least=MIN_HOOK_TIMEOUT))
                 commands = [entry[key] for key in COMMAND_KEYS if isinstance(entry.get(key), str)]
                 if not commands or any(HOOK_ENTRY not in command for command in commands):
                     report.error(say("doctor.hookcfg.wrong_entry", name=path.name, event=event, entry=HOOK_ENTRY))
@@ -1034,6 +1088,8 @@ def run(root: Path, accept: bool = False) -> int:
     check_messages(report)
     tick('check_hook_activity')
     check_hook_activity(report, root, registry)
+    tick('check_hook_timeouts')
+    check_hook_timeouts(report, root)
     tick('check_agents')
     check_agents(report, root)
     tick('check_logs')

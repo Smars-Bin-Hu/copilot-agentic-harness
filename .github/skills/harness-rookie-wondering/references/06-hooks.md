@@ -41,7 +41,7 @@ The whole reason of a refusal is shown to the agent and to the user. So **a refu
 | --- | --- |
 | The hook refuses normally | It is stopped, and the reason is shown. This works under default, Allow all and Autopilot |
 | The hook itself cannot start (Python is not found) | It counts as a refusal: no tool can be used, and the screen only says `hook errored` |
-| The hook times out (this repository sets 30 seconds) | It counts as a pass, with no notice at all |
+| The hook times out (this repository sets 120 seconds) | It counts as a pass, with no notice at all |
 
 So: when the hook itself fails (a broken setting, a parse error), **local work goes on** and the error goes to `hook-errors.jsonl`: the hook runs on every tool call, and hurting normal work costs more than missing a stop. A call to a program of a tool pack is refused instead; it does not pass when the gate cannot judge it (rule: `AGENTS.md`, Core limits). `harness doctor` really runs Python once and reports the slowest recent gate call; it warns when that is too close to the timeout.
 

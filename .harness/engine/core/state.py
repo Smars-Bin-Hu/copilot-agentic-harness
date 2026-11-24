@@ -28,7 +28,7 @@ from .paths import state_dir, utc_now
 SCHEMA_VERSION = 3
 # How long a call waits for a lock before it gives up (the hook then refuses the call: it could not decide). A hook holds the session lock while
 # every module decides, which takes seconds on a slow computer (a work PC scans each file read): 7 s refused calls queued behind three others
-# (2026-11-17). It stays well under the hook timeout (30 s in .github/hooks/harness.json), which also pays the start of the process.
+# (2026-11-17). It stays well under the hook timeout (120 s in .github/hooks/harness.json since 1.8.48: a work PC measured hooks up to 111 s, and Copilot lets a call through when its hook times out), which also pays the start of the process.
 LOCK_TIMEOUT_SECONDS = 20.0
 # The lock files: one per locked path, named by a hash of it, so no lock file lies next to the data (a task folder, the outbox).
 LOCK_DIR_NAME = "copilot-harness-locks"

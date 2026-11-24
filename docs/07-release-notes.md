@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.47 (1.8.0 – 1.8.47, 2026-11-17 – 2026-11-24)
+## 1.8.48 (1.8.0 – 1.8.48, 2026-11-17 – 2026-11-24)
 
 ### Added
 
@@ -66,6 +66,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- **A call could run without the gate on a slow computer** (1.8.48). Copilot waits for each hook for the time set in `.github/hooks/harness.json`, and when the hook does not answer in time it runs the call anyway. That time was 30 seconds; on a work computer with an antivirus, hooks took 4–8 seconds as a rule and up to 111 seconds, and about 6 in 100 checks before a call ran out of time. The time is now 120 seconds for every hook. `harness doctor` says it is an error when a hook's time is under 120 seconds, and reads Copilot's own record of the last 5 sessions: a hook Copilot stopped waiting for is an error, with the number of calls that ran without the gate. Making the hook itself faster comes next.
 - The super agent's line of a task that delivered again could show the task's previous reply, not the new one (1.8.47; since 1.8.43). The hook marks the wait before Copilot ends the turn, 3–13 seconds earlier on a work computer, and the last ended turn was then the one before. The reply is now taken only once the turn has ended, and a line already shown takes the new words.
 - **Waiting for you** showed a task that stopped some seconds after its task page did (1.8.47): the super agent looked every 5 seconds. It now takes a light look at the chats every 1.5 seconds, from the board's memory with no file read, and when a turn starts or ends it looks at the tasks at once and every 2.5 seconds for 15 seconds.
 - On a slow computer, the Agent actions tab showed a terminal call with no command and could not open most calls, and a round opened from **Earlier rounds** showed only the agent's words (1.8.45). A call was matched by its name and a few seconds: the harness and Copilot name one call differently (`Bash` and `powershell`, `Read` and `view`, `Write` and `create`), and on a work computer the hook ends 3–13 seconds after the call starts and a turn starts up to a minute before Copilot writes your message. Calls are now matched by their kind and order, and a round by its words. The performance review matches the gate's answers the same way.

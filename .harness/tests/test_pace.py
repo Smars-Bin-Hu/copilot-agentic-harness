@@ -93,7 +93,7 @@ class GuardrailsTests(unittest.TestCase):
             self.assertNotIn("pace.", text.replace("space.", ""), path.name)
         hooks = json.loads((engine.parents[1] / ".github" / "hooks" / "harness.json").read_text(encoding="utf-8"))
         limits = {entry.get("timeoutSec", entry.get("timeout")) for group in hooks.get("hooks", {}).values() for entry in (group if isinstance(group, list) else [group]) if isinstance(entry, dict)}
-        self.assertEqual(limits - {None}, {30})
+        self.assertEqual(limits - {None}, {120})
 
 
 if __name__ == "__main__":

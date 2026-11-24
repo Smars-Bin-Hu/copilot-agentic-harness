@@ -9,8 +9,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ],
     "UserPromptSubmit": [
@@ -21,8 +21,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ],
     "userPromptTransformed": [
@@ -33,8 +33,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ],
     "PreToolUse": [
@@ -45,8 +45,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ],
     "PostToolUse": [
@@ -57,8 +57,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ],
     "PostToolUseFailure": [
@@ -69,8 +69,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ],
     "SubagentStart": [
@@ -81,8 +81,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ],
     "SubagentStop": [
@@ -93,8 +93,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ],
     "Stop": [
@@ -105,8 +105,8 @@
         "bash": "python3 .harness/engine/launch.py",
         "powershell": "python .harness/engine/launch.py",
         "cwd": ".",
-        "timeout": 30,
-        "timeoutSec": 30
+        "timeout": 120,
+        "timeoutSec": 120
       }
     ]
   }

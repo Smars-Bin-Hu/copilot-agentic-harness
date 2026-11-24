@@ -283,4 +283,4 @@ textarea.su-in{resize:vertical}
 }
 
 /* (1.8.34) with Settings open the board's fixed buttons (search, the dock, Appearance) fade away under the shade instead of staying lit; they come back as the window leaves */
-body.st-open .sh-pill,body.st-open .sh-gear,body.st-open .dock-btn{opacity:0;pointer-events:none;transition:opacity 200ms var(--m-out)}
+body.st-open .sh-pill,body.st-open .hd-menu,body.st-open .dock-btn{opacity:0;pointer-events:none;transition:opacity 200ms var(--m-out)}

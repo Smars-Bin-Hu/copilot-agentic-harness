@@ -103,7 +103,7 @@ class WorkbenchDeckTests(unittest.TestCase):
         style = source("workbench.css")
         rule = re.search(r"html\.wb-lock :is\(([^)]*)\)\{display:none!important\}", style)
         self.assertIsNotNone(rule)
-        for name in (".sh-pill", ".sh-gear", ".dock-btn", ".hd-acct", ".term-toggle"):
+        for name in (".sh-pill", ".hd-menu", ".dock-btn", ".hd-acct", ".term-toggle"):
             self.assertIn(name, rule.group(1))
         for gone in ("--wb-corner", "margin-right:64px", "right:80px"):
             self.assertNotIn(gone, style)  # the room kept for the board's buttons is gone

@@ -6,7 +6,7 @@ The harness itself holds no business content. To plug it into a company environm
 
 Double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows) and a new copy opens the **setup wizard**: one thing on each page (you, the programs, Copilot, the knowledge base, the code repositories, a review). A copy that is set up opens the Enter screen, and the gear opens **Settings** (see [Quickstart](01-quickstart.md#1-the-short-command-required)). If the double-click is blocked, run `sh .harness/bin/harness task board` (Windows: `.harness\bin\harness.cmd task board`). A copy has one board: starting another (on any port) tells the port of the one that runs and opens it.
 
-To change the setup later, press the **gear** at the bottom right of the board: **Settings** opens, with a page for each part. A dot on the gear (hover it to read the items) and a yellow dot on a page mark what is not set up yet.
+To change the setup later, open the account menu (your avatar at the top right of the board) and press **Settings**, with a page for each part. A dot on the avatar (the menu lists the items) and a yellow dot on a page mark what is not set up yet.
 
 **Code repositories.** Add one git repository, or a folder and tick the repositories in it. A folder with all of them ticked becomes `repos_root`, so repositories added to it later count too; there is one such folder. Anything else is written one by one as `repos.<name>.path`. Two repositories cannot share a name.
 

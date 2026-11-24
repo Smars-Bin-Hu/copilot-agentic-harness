@@ -91,7 +91,7 @@ class TaskWindowTests(unittest.TestCase):
         self.assertIn("frames.setShown(false)", body)
         style = source("taskwin.css")
         rule = re.search(r"html\.tw-full :is\(([^)]*)\)\{display:none!important\}", style)
-        for name in (".sh-pill", ".sh-gear", ".dock-btn", ".hd-acct"):
+        for name in (".sh-pill", ".hd-menu", ".dock-btn", ".hd-acct"):
             self.assertIn(name, rule.group(1))
         self.assertIn("html.wb-lock .tw,html.wb-lock .tw-strip,html.en-open .tw,html.en-open .tw-strip", style)  # the workbench and the Enter screen have the screen to themselves
 
@@ -103,7 +103,7 @@ class TaskWindowTests(unittest.TestCase):
         style = source("taskwin.css")
         self.assertIn("html.tw-split:not(.tw-tall):not(.en-open) body{margin-right:var(--tw-sp)}", style)
         moved = re.search(r"html\.tw-split:not\(\.tw-tall\):not\(\.en-open\) :is\(([^)]*)\)\{margin-right:var\(--tw-sp\)\}", style).group(1)
-        for name in (".sh-pill", ".hd-acct", ".sh-gear", ".dock-btn"):
+        for name in (".sh-pill", ".hd-acct", ".hd-menu", ".dock-btn"):
             self.assertIn(name, moved)  # the fixed controls stay on the board's side
         self.assertNotIn(",.term-toggle", moved)  # the board's Terminal button sits in the account pill: a margin on it would stretch the pill
 
@@ -124,8 +124,8 @@ class TaskWindowTests(unittest.TestCase):
         self.assertIn('"_top"', desk)  # anything else still opens at the top
         self.assertIn("window.EMBED_HOST = win.host", source("board.js"))
 
-    def test_a_framed_page_does_not_poll_for_the_gear_or_the_terminal(self) -> None:
-        self.assertIn('document.documentElement.classList.contains("embed") ||', source("dock.js"))
+    def test_a_framed_page_does_not_poll_for_the_account_menu_or_the_terminal(self) -> None:
+        self.assertEqual(source("topmenu.js").count('document.documentElement.classList.contains("embed")'), 2)  # the setup dot and the credits (1.8.39: the gear's dot moved there)
         self.assertIn('unseen() || document.documentElement.classList.contains("embed")', source("term.js"))
 
 

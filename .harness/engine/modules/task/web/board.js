@@ -8,6 +8,19 @@
 // for the rows every few seconds and draws them again, keeping what the person typed.
 "use strict";
 
+// (1.8.39) The robot and the name at the top left: on a served board they go back to the Enter screen (the house of the dock before). A saved page keeps a plain title.
+function homeMark() {
+  const mark = h("h1", null, t("board.brand"));
+  if (!DATA.serve || typeof DOCK === "undefined") return mark;
+  mark.classList.add("lb-home");
+  mark.setAttribute("role", "link");
+  mark.setAttribute("tabindex", "0");
+  mark.setAttribute("title", t("dock.home"));
+  mark.addEventListener("click", () => DOCK.enterScreen());
+  mark.addEventListener("keydown", (event) => { if (isEnter(event) || event.key === " ") { event.preventDefault(); DOCK.enterScreen(); } });
+  return mark;
+}
+
 (function () {
   let rows = DATA.rows;
   let making = DATA.making || [];  // 1.8.5: tasks whose chat the board made and whose agent has not made the task yet: [{name, kind, since}]
@@ -638,7 +651,7 @@
   }
 
   app.replaceChildren(
-    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), ...(typeof READYBAR !== "undefined" ? [READYBAR.node()] : []), SHELL.banner(), said,
+    h("div", {class: "lb-top"}, h("div", null, homeMark(), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), ...(typeof READYBAR !== "undefined" ? [READYBAR.node()] : []), SHELL.banner(), said,
     elsewhereBox, kpis, controls, lobby.node, ...(superView ? [superView.node] : []),
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint"), DATA.serve ? null : " ", DATA.serve ? null : stampNote), copyright());

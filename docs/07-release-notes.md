@@ -8,10 +8,11 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.38 (1.8.0 – 1.8.38, 2026-11-17 – 2026-11-24)
+## 1.8.39 (1.8.0 – 1.8.39, 2026-11-17 – 2026-11-24)
 
 ### Added
 
+- **An account menu at the top right** (1.8.39): the round avatar with your initials opens one menu: who you are and the GitHub account Copilot uses, this month's credits (click for Settings > Copilot), **Settings** (with the setup items you skipped listed under it), **Theme** light or dark, **More appearance…**, **Walk the setup guide again**, the version, **Restart board** and **Stop board…**. A ring around the avatar shows the credits left (amber under 10%, red when used up); an amber dot means setup items were skipped. A hint points at it once. The arrow keys, Home, End, Esc and Tab work in it.
 - **Your Copilot credits in Settings** (1.8.38): the Copilot page shows this month's premium credits as a bar, with used, total, what is left and the reset day (amber when under 10% is left or over the limit, red when used up). Hover the numbers for the plan, the organization and enterprise that give the seat, the seat's start, whether use over the limit is allowed, when it was read, and **Refresh**. **Policy** on the status line has a dot: amber when your organization switched off Copilot CLI, MCP or Chat, with what that breaks in the harness. **N models** opens a table: each model's price class and context window, and the models your organization switched off. Read with the GitHub CLI at most every 5 minutes; when it cannot be read, nothing of it shows.
 - **Tasks open next to the board** (1.8.36): a click on a task in Lobby or List splits the screen: the board keeps the left side (the top on a screen taller than wide) and the task page takes the other; drag the line between them to change the share. **Float over the board** (⧉) turns it into a window you drag by its bar and size by its bottom right corner; ◫ splits again. Each task is a tab; switching is instant. **Maximize** fills the screen; **Minimize** puts it in a strip at the bottom; **Open in its own browser tab** is at the top right. Cmd, Ctrl or Shift and the middle button still open a browser tab. Only the tab on screen asks the board for news; at most six pages stay loaded (an older one unloads and reloads when picked); a task the pointer rests on is loaded ahead. After a reload the tabs come back in the strip and load when picked. The super agent workbench's Task pane uses the same tabs. Settings says Copilot is signed in the same way in its left column and on its Copilot page.
 - **Motion in the first run** (1.8.34): pages turn, the bar fills and draws its ticks and yellow dots, and the robot's head walks the bar: it hops over the steps already done and when a step is done, cheers at Confirm, and flies on as the Enter screen's robot. The wordmark appears whole; Enter to the board in two short steps; Settings grows out of the gear, its sections fade over, and grey bars stand in while one loads. Transform and opacity only, no move over 300 ms but the robot's own; Lite and reduced motion keep short fades only.
@@ -98,6 +99,7 @@ To see which version you have: `harness --version`.
 
 ### Retired
 
+- **The Settings gear, the Appearance sliders, the house and the stop button** (1.8.39): Settings, Appearance and Stop board are in the account menu at the top right; the robot and the name at the top left of the board go to the Enter screen. Only **?** and the knowledge base stay at the bottom right.
 - **Network and the third group of Settings** (1.8.34): Settings has two groups, Harness (You, Programs, Copilot) and Company (Knowledge base, Tool packs, Code repositories, Connections), then Advanced, which opens with Network (proxy and certificates). Restart board is at the bottom left.
 - **Skill prefix in Settings** (1.8.34): the company's knowledge base sets it.
 - **VS Code as a required line of the Enter screen** (1.8.34): four required lines; the Copilot line holds the VS Code check, and the button is still **Find VS Code** when it is missing.

@@ -1,6 +1,6 @@
 // The top right of every served page (1.8.17, the person's choice of two prototypes): one row, one height. The search pill stays as it is; next to it a pill with the
-// greeting, the Terminal toggle (moved in from term.js) and the stop button. The stop button is quiet grey, soft red on hover or while its window is open, and shown to a
-// paired browser only. A click opens a card (Cancel has the focus, so a stray Enter stops nothing); Stop board posts `/api/shutdown`; a card says it is stopping, or that it
+// Terminal toggle (moved in from term.js) and the avatar of the account menu (topmenu.js, 1.8.39), whose Stop board opens the card below; a page without the menu has the greeting and the stop button. The stop button is quiet grey, soft red on hover or while its window is open, and shown to a
+// The stop is for a paired browser only. It opens a card (Cancel has the focus, so a stray Enter stops nothing); Stop board posts `/api/shutdown`; a card says it is stopping, or that it
 // did not stop, with Try again. After the stop every timer, request and redraw ends and the page is one calm screen: the robot asleep, how to start it again.
 "use strict";
 
@@ -117,16 +117,20 @@ const STOP = (function () {
   function mount() {
     if (typeof SERVE === "undefined") return;
     const name = typeof DATA !== "undefined" && DATA && DATA.serve && typeof DATA.serve.user === "string" ? DATA.serve.user.trim() : "";
-    const button = h("button", {type: "button", class: "hd-ib hd-stop", "aria-label": t("board.stop.tip"), "aria-haspopup": "dialog", "aria-expanded": "false", hidden: ""}, icon("power"), h("span", {class: "hd-tip", role: "tooltip"}, t("board.stop.tip")));
-    button.addEventListener("click", () => { if (button.getAttribute("aria-expanded") !== "true") card(button); });
     const toggle = document.querySelector(".term-toggle");  // term.js made it: it moves into the pill
+    // (1.8.39) The pill: the Terminal toggle and the avatar of the account menu (topmenu.js), which holds the greeting, Settings and Stop board. A page without the menu keeps the greeting and the stop button.
+    const menu = typeof TOPMENU !== "undefined" && typeof ACCT !== "undefined";
+    const button = menu ? TOPMENU.avatar(name) : h("button", {type: "button", class: "hd-ib hd-stop", "aria-label": t("board.stop.tip"), "aria-haspopup": "dialog", "aria-expanded": "false", hidden: ""}, icon("power"), h("span", {class: "hd-tip", role: "tooltip"}, t("board.stop.tip")));
+    if (!menu) button.addEventListener("click", () => { if (button.getAttribute("aria-expanded") !== "true") card(button); });
     const parts = [];
-    if (name) parts.push(h("span", {class: "hd-hi", title: t("board.enter.hi") + name}, t("board.enter.hi"), h("b", null, name)));
+    if (name && !menu) parts.push(h("span", {class: "hd-hi", title: t("board.enter.hi") + name}, t("board.enter.hi"), h("b", null, name)));
     if (toggle) parts.push(parts.length ? h("i", {class: "hd-sep"}) : null, toggle);
     const sepStop = h("i", {class: "hd-sep", hidden: ""});
+    if (menu) sepStop.hidden = !toggle;
     parts.push(sepStop, button);
-    const pill = h("div", {class: "hd-acct" + (name ? " named" : "")}, parts);
-    if (!name && !toggle) pill.hidden = true;
+    const pill = h("div", {class: "hd-acct" + (name && !menu ? " named" : "") + (menu ? " menu" : "")}, parts);
+    if (!name && !toggle && !menu) pill.hidden = true;
+    if (menu) TOPMENU.mount(button, {name, stop: (anchor) => { if (!document.querySelector(".sd-scrim")) card(anchor); }});
     document.body.append(pill);
     const root = document.documentElement;
     root.classList.add("has-hd");
@@ -150,8 +154,11 @@ const STOP = (function () {
     place();
     if (window.ResizeObserver) { const watch = new ResizeObserver(place); watch.observe(pill); watch.observe(document.body); }  // the body: a header drawn later, a window of another width
     SERVE.ready.then(() => SERVE.call("/api/status", {}, 8)).then((data) => {
-      button.hidden = !data.paired;
-      sepStop.hidden = !data.paired || !(name || toggle);
+      if (menu) TOPMENU.setPaired(data.paired);
+      else {
+        button.hidden = !data.paired;
+        sepStop.hidden = !data.paired || !(name || toggle);
+      }
       if (data.paired) pill.hidden = false;
       place();
     }, () => {});

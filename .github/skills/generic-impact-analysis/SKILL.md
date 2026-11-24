@@ -25,7 +25,7 @@ A target repository cannot be run, so a missed reference fails nothing and shows
 ## Prerequisites
 
 - A task is open (`harness-my-task`) and `REQ.md` says what changes.
-- Target repositories are set up: `harness target list` shows them. If not, tell the user to set them up in Settings on the board (the gear), Code repositories.
+- Target repositories are set up: `harness target list` shows them. If not, tell the user to set them up in Settings on the board (the account menu at the top right), Code repositories.
 
 ## Step-by-Step Workflows
 
@@ -52,7 +52,7 @@ A target repository cannot be run, so a missed reference fails nothing and shows
 
 | Issue | Solution |
 |-------|----------|
-| The command says no target repository is set up | `target.override.json` is missing. The user sets it up in Settings on the board (the gear), Code repositories |
+| The command says no target repository is set up | `target.override.json` is missing. The user sets it up in Settings on the board (the account menu at the top right), Code repositories |
 | Far too many hits | The name is too common. Use `table.column` or `--exact`, or search a more specific name |
 | `truncated` in the result | More lines matched than were read. Search a longer or more exact name |
 | A repository is missing from the result | It has no local branch named in `base_ref`; the `notes` say so |

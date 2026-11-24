@@ -274,7 +274,7 @@ li .tr-call>summary:hover .tr-cmdline{color:var(--ink)}li .tr-call[open] .tr-cmd
 .wc-dt-b{padding:8px 10px;border-radius:7px;background:var(--bg);font-size:12.5px;line-height:1.5;color:var(--soft);overflow-wrap:anywhere}.wc-dt-b p{margin:0 0 4px}
 .wc-other{display:grid;gap:4px;margin-top:4px}.wc-raw{margin:0;padding:6px 8px;border-radius:6px;background:var(--bg);font:11.5px/16px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:14em;overflow:auto}
 /* Embed mode (`?embed=1`, class `embed` on <html> from theme.js): the task page inside the board's workbench frame. The frame has its own tabs with the name; the fixed buttons, the wallpaper and the banner are the board's, not the frame's. */
-html.embed .sh-pill,html.embed .sh-gear,html.embed .setp,html.embed .dock-btn,html.embed .term-toggle,html.embed .hd-acct,html.embed #sp,html.embed .vs-banner,html.embed .tk-back,html.embed .tk-stage,html.embed .tk-checks,html.embed .tk-ctx,html.embed .tk-tools .vs-pill{display:none!important}
+html.embed .sh-pill,html.embed .hd-menu,html.embed .setp,html.embed .dock-btn,html.embed .term-toggle,html.embed .hd-acct,html.embed #sp,html.embed .vs-banner,html.embed .tk-back,html.embed .tk-stage,html.embed .tk-checks,html.embed .tk-ctx,html.embed .tk-tools .vs-pill{display:none!important}
 html.embed body{background:var(--bg)}
 html.embed main{max-width:none;padding:0 12px 28px}
 html.embed .tk-head{min-height:34px;margin:0 -12px;padding:4px 12px;gap:8px}

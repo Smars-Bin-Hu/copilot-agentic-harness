@@ -32,6 +32,7 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   page.css, lobby.css     where things go, shared / the board's lobby
   common.js               helpers shared by both pages
   programicons.js   a served page only (1.8.34): the logos of the programs in the wizard's rows (`PROGRAM_ICONS.svg(id)`), loaded before wizard.js
+  topmenu.js              a served page only (1.8.39): the account menu at the top right (`TOPMENU`): the avatar stop.js puts in its pill, the menu, the one-time hint; loaded before stop.js
   acct.js                 a served page only (1.8.38): the Copilot account's words and small nodes (`ACCT`: credits, the organization's switches), for Settings > Copilot and the account menu; loaded before wizard.js
   settings.js, settings.css, wizard.js   a served page only (the board, the task page): the Settings window the gear opens (O4): the wizard's pages drawn bare, and the panels of machine.js and servers.js
   tools.js                a served page only: where a Tools tab leads (a section of Settings) and the facts of Settings (1.7.17, three windows 1.7.38)
@@ -65,7 +66,7 @@ from core.paths import cli_command
 
 WEB = Path(__file__).resolve().parent / "web"
 MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--ICON-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*THEME*/", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
-TEXT_PREFIXES = ("settings.", "report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.", "setup.", "wizard.", "acct.", "dock.", "term.", "connections.", "machine.", "tools.", "super.", "waits.", "send.refused.", "serve.refused.request")  # waits. (1.8.5): starting, error, being created, display name, on every page
+TEXT_PREFIXES = ("settings.", "report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.", "setup.", "wizard.", "acct.", "menu.", "dock.", "term.", "connections.", "machine.", "tools.", "super.", "waits.", "send.refused.", "serve.refused.request")  # waits. (1.8.5): starting, error, being created, display name, on every page
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -198,7 +199,7 @@ def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, An
     serve: set when the board server sends the page (the Gate verdicts get buttons, and a link to save the page).
     Without it the page is a file: it shows the verdicts and has no calls to a server."""
     if serve is not None:
-        return build("task.html", ["common.js", "serve.js", "motion.js", "chat.js", "readyui.js", "dock.js", "term.js", "acct.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "robot.js", "programicons.js", "wizard.js", "settings.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh, linked=linked)
+        return build("task.html", ["common.js", "serve.js", "motion.js", "chat.js", "readyui.js", "dock.js", "term.js", "acct.js", "topmenu.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "robot.js", "programicons.js", "wizard.js", "settings.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh, linked=linked)
     return build("task.html", ["common.js", "perf.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
 
 
@@ -217,7 +218,7 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
-    scripts = ["common.js", "serve.js", "motion.js", "chat.js", "reopen.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "robot.js", "readyui.js", "enter.js", "dock.js", "term.js", "acct.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "programicons.js", "wizard.js", "settings.js", "readybar.js", "autorun.js", "highlight.js", "stmts.js", "callview.js", "pet.js", "companion.js", "superhist.js", "superdirect.js", "super.js", "wbpanels.js", "taskframes.js", "taskwin.js", "workbench.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
+    scripts = ["common.js", "serve.js", "motion.js", "chat.js", "reopen.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "robot.js", "readyui.js", "enter.js", "dock.js", "term.js", "acct.js", "topmenu.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "programicons.js", "wizard.js", "settings.js", "readybar.js", "autorun.js", "highlight.js", "stmts.js", "callview.js", "pet.js", "companion.js", "superhist.js", "superdirect.js", "super.js", "wbpanels.js", "taskframes.js", "taskwin.js", "workbench.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
     return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css", *(["highlight.css", "stmts.css"] if serve else [])], linked)
 
 
@@ -237,6 +238,6 @@ def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None, link
     """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
     Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
     if serve is not None:
-        return build("desk.html", ["common.js", "serve.js", "motion.js", "chat.js", "reopen.js", "status.js", "highlight.js", "stmts.js", "callview.js", "batch.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "robot.js", "readyui.js", "enter.js", "dock.js", "term.js", "acct.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "programicons.js", "wizard.js", "settings.js", "live.js", "reply.js", "run.js", "rounds.js", "autorun.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES, linked=linked)
+        return build("desk.html", ["common.js", "serve.js", "motion.js", "chat.js", "reopen.js", "status.js", "highlight.js", "stmts.js", "callview.js", "batch.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "robot.js", "readyui.js", "enter.js", "dock.js", "term.js", "acct.js", "topmenu.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "programicons.js", "wizard.js", "settings.js", "live.js", "reply.js", "run.js", "rounds.js", "autorun.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES, linked=linked)
     page = build("desk.html", ["common.js", "status.js", "highlight.js", "stmts.js", "callview.js", "diffview.js", "space.js", "wall.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

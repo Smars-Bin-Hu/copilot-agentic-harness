@@ -3,7 +3,7 @@
    Wide deck: panels left | chat under the bridge | panels right, two bars to resize. Focus: chat | picture, one card at the bottom right. Tall (a window taller than wide): everything stacks downward. */
 html.wb-lock{overflow:hidden}
 /* no board chrome while the deck is open: the round buttons, the search and account pill (with the terminal and stop buttons) and the terminal. Hidden, not removed: the board has them again when the deck leaves. */
-html.wb-lock :is(.sh-pill,.sh-gear,.dock-btn,.dock-panel,.hd-acct,.term-toggle,.term){display:none!important}
+html.wb-lock :is(.sh-pill,.hd-menu,.hm-coach,.dock-btn,.dock-panel,.hd-acct,.term-toggle,.term){display:none!important}
 .wb-root{--wb-lw:var(--wb-lwu,clamp(260px,21vw,340px));--wb-rw:var(--wb-rwu,clamp(320px,31vw,560px));--wb-glass:rgba(16,19,21,.84);--wb-acc:var(--good-dot);--wb-accdim:rgba(62,207,142,.16);
   --wbp-id0:#7cc4ff;--wbp-id1:#f59ad0;--wbp-id2:#b8f27c;--wbp-id3:#ffd166;--wbp-id4:#c6a5ff;--wbp-id5:#6ee7d8;--wbp-id6:#ff9f7a;--wbp-id7:#d0d4dc;
   position:fixed;inset:0;z-index:100;display:grid;grid-template-rows:38px minmax(0,1fr);color:var(--ink);font-size:14px;line-height:1.45;overflow:hidden;

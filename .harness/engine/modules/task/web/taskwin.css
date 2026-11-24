@@ -34,7 +34,7 @@
 .tw-chip.on{background:var(--track);color:var(--ink);font-weight:600;box-shadow:inset 0 0 0 1px var(--line2)}
 .tw-strip .tw-b{border-radius:50%}
 html.wb-lock .tw,html.wb-lock .tw-strip,html.en-open .tw,html.en-open .tw-strip,html.en-open .tw-div{display:none!important}  /* the workbench and the Enter screen (enter.js `en-open`) have the screen to themselves */
-html.tw-full :is(.sh-pill,.sh-gear,.dock-btn,.dock-panel,.hd-acct,.term-toggle){display:none!important}  /* the window fills the screen: the fixed controls would cover its bar (taskwin.js `full`) */
+html.tw-full :is(.sh-pill,.hd-menu,.hm-coach,.dock-btn,.dock-panel,.hd-acct,.term-toggle){display:none!important}  /* the window fills the screen: the fixed controls would cover its bar (taskwin.js `full`) */
 /* Split (taskwin.js `layout`): the window takes the right side (a tall screen: the bottom) at --tw-sp; the board keeps the rest. The board's fixed controls move with it:
    a margin on a fixed box that has right (or bottom) set moves it by that much, so one rule moves them all without knowing their places. */
 .tw.split{left:auto!important;top:0!important;right:0!important;bottom:0!important;width:var(--tw-sp)!important;height:auto!important;border-radius:0;border:0;border-left:1px solid var(--line2);box-shadow:none}
@@ -49,9 +49,9 @@ html.tw-tall .tw-div::after{left:50%;top:4px;width:44px;height:2px;margin:0 0 0 
 .tw-div[hidden]{display:none}
 html.tw-split:not(.tw-tall):not(.en-open) body{margin-right:var(--tw-sp)}
 html.tw-split.tw-tall:not(.en-open) body::after{content:"";display:block;height:var(--tw-sp)}
-html.tw-split:not(.tw-tall):not(.en-open) :is(.sh-pill,.hd-acct,body>.term-toggle,.term,.sh-gear,.dock-btn,.dock-panel,.run-panel,.stopped-note,.unpaired-note){margin-right:var(--tw-sp)}
+html.tw-split:not(.tw-tall):not(.en-open) :is(.sh-pill,.hd-acct,body>.term-toggle,.term,.hd-menu,.hm-coach,.dock-btn,.dock-panel,.run-panel,.stopped-note,.unpaired-note){margin-right:var(--tw-sp)}
 html.tw-split:not(.tw-tall):not(.en-open) :is(.rp,.rp-bar){margin-left:calc(var(--tw-sp) / -2)}
-html.tw-split.tw-tall:not(.en-open) :is(.sh-gear,.dock-btn,.dock-panel,.run-panel,.rp,.rp-bar,.sp-slow){margin-bottom:var(--tw-sp)}
+html.tw-split.tw-tall:not(.en-open) :is(.dock-btn,.dock-panel,.run-panel,.rp,.rp-bar,.sp-slow){margin-bottom:var(--tw-sp)}
 @media (max-width:699px){
   .tw-mode{display:none}
   .tw{inset:0!important;width:auto!important;height:auto!important;border-radius:0;border:0}

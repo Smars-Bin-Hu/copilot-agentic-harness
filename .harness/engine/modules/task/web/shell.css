@@ -6,11 +6,8 @@
 .sh-pill{position:fixed;top:14px;right:16px;z-index:160;display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 8px 0 11px;border-radius:999px;border:1px solid var(--line2);background:var(--card);
  font:inherit;font-size:13px;color:var(--soft);cursor:pointer;box-shadow:var(--shadow)}
 .sh-pill:hover,.sh-pill:focus-visible{color:var(--ink);border-color:var(--ink)}
-.sh-pill svg,.pal-in svg,.pal-i svg,.sh-gear svg{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.sh-pill svg,.pal-in svg,.pal-i svg{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
 .sh-pill svg{width:15px;height:15px;stroke-width:1.5;flex:none}
-.sh-gear{position:fixed;right:20px;bottom:20px;z-index:160;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;padding:0;border:1px solid var(--line2);background:var(--card);color:var(--soft);cursor:pointer;box-shadow:var(--shadow)}
-.sh-gear svg{width:20px;height:20px;stroke-width:1.3}
-.sh-gear:hover,.sh-gear:focus-visible,.sh-gear[aria-expanded="true"]{color:var(--ink);border-color:var(--ink)}
 .sh-pill kbd,.pal kbd{font:500 10.5px/1 var(--mono);padding:3px 5px;border-radius:5px;background:var(--kbd);color:var(--soft);border:1px solid var(--line)}
 
 /* The fixed controls live in a right gutter. Where the page would run under them the content moves left (the header, the numbers, the list, the tabs all stay clear). */
@@ -44,10 +41,10 @@
 .pal-ft span{display:inline-flex;align-items:center;gap:6px}.pal-ft .grow{flex:1}
 
 /* ---------- the settings panel ---------- */
-.setp{position:fixed;right:20px;bottom:74px;z-index:170;width:344px;max-width:calc(100vw - 40px);max-height:calc(100vh - 110px);overflow:auto;padding:16px;border-radius:18px;color:var(--ink);background:var(--pop);border:1px solid var(--glass-line);
+.setp{position:fixed;right:16px;top:56px;z-index:170;width:344px;max-width:calc(100vw - 40px);max-height:calc(100vh - 72px);overflow:auto;padding:16px;border-radius:18px;color:var(--ink);background:var(--pop);border:1px solid var(--glass-line);
  box-shadow:var(--glass-hi),var(--glass-shadow)}
 .setp[hidden]{display:none}
-.setp{transform-origin:calc(100% - 22px) calc(100% + 32px)}  /* the sliders button: 22 px in from the right edge, 32 px below the bottom edge (1.8.34) */
+.setp{transform-origin:calc(100% - 30px) -24px}  /* (1.8.39) under the account menu's avatar, top right */
 .setp h4{margin:0 0 12px;font-size:13px;font-weight:600}
 .sp-row>span{min-width:0;overflow-wrap:anywhere}.sp-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;font-size:13px}
 .sp-note{margin:2px 0 6px;font-size:11.5px;line-height:1.45;color:var(--soft)}

@@ -1,4 +1,4 @@
-// The controls fixed to the browser window of the board and the task page: the search pill (top right) and the Cmd+K / Ctrl+K palette, the sliders button (bottom right) with the Appearance panel (1.8.32; the gear's Settings window is dock.js and settings.js),
+// The controls fixed to the browser window of the board and the task page: the search pill (top right) and the Cmd+K / Ctrl+K palette, the Appearance panel (1.8.32; opened from the account menu since 1.8.39, topmenu.js; Settings is settings.js),
 // and the one place that knows whether VS Code is linked (the banner under the header, the pill, the buttons).
 // They are built once and appended to <body>, outside #app: the redraw of a page (the 3 s poll) never touches them, so an open panel stays open.
 //
@@ -203,7 +203,7 @@ const SHELL = (function () {
   }
 
   // ---------- settings ----------
-  let panel = null, gear = null;
+  let panel = null, opener = null;  // (1.8.39) the Appearance panel has no button of its own: the account menu (topmenu.js) opens it, and focus goes back there
   function segment(key, options) {
     const seg = h("div", {class: "seg2", role: "group", "data-key": key});
     for (const [value, label] of options) seg.append(h("button", {type: "button", "data-v": value, "aria-pressed": "false"}, label));
@@ -254,8 +254,9 @@ const SHELL = (function () {
   let leaving = false;  // the panel is on its way out (S4): it counts as closed at once, and is hidden when the move ends
   const settingsOpen = () => Boolean(panel) && !panel.hidden && !leaving;
   const PANEL_SHRINK = "scale(.96)";  // the panel grows out of its button and goes back into it, 200 ms (1.8.34, motion.js; nothing but a fade under Lite and the system's reduced motion)
-  function openSettings() {
+  function openSettings(from) {
     if (open()) closePalette(true);
+    opener = from || null;
     if (!panel) buildSettings();
     syncSettings();
     if (typeof MOTION !== "undefined") for (const running of panel.getAnimations ? panel.getAnimations() : []) running.cancel();
@@ -263,15 +264,15 @@ const SHELL = (function () {
     panel.inert = false;
     panel.hidden = false;
     if (typeof MOTION !== "undefined") MOTION.play(panel, [{opacity: 0, transform: PANEL_SHRINK}, {opacity: 1, transform: "none"}], {ms: MOTION.MS.show});
-    gear.setAttribute("aria-expanded", "true");
+    if (opener) opener.setAttribute("aria-expanded", "true");
     if (typeof WALL !== "undefined") WALL.opened();
     const first = panel.querySelector("button.on") || panel.querySelector("button");
     if (first) first.focus({preventScroll: true});
   }
-  function closeSettings(focusGear) {
+  function closeSettings(focusBack) {
     if (!settingsOpen()) return;
-    gear.setAttribute("aria-expanded", "false");
-    if (focusGear) gear.focus();
+    if (opener) opener.setAttribute("aria-expanded", "false");
+    if (focusBack && opener && opener.isConnected) opener.focus();
     if (typeof MOTION === "undefined") { panel.hidden = true; return; }
     leaving = true;
     panel.inert = true;
@@ -288,9 +289,7 @@ const SHELL = (function () {
   function buildFixed() {
     const pill = h("button", {type: "button", class: "sh-pill", "aria-label": t("board.shell.search") + " " + mod + " K", title: t("board.shell.search") + " (" + mod + " K)"}, icon("search"), h("span", null, t("board.shell.search")), h("kbd", null, mod + " K"));
     pill.addEventListener("click", () => (open() ? closePalette() : openPalette()));
-    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.look"), title: t("board.shell.look"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("sliders"));  // the sliders: Appearance, i.e. theme, rendering, wallpaper (1.8.32; the language is in Settings, You; the dock's Settings gear is above it)
-    gear.addEventListener("click", () => (settingsOpen() ? closeSettings() : openSettings()));
-    document.body.append(pill, gear);
+    document.body.append(pill);  // (1.8.39) the sliders button is gone: Appearance is in the account menu (topmenu.js)
   }
 
   document.addEventListener("keydown", (event) => {
@@ -311,7 +310,7 @@ const SHELL = (function () {
     if (settingsOpen() && event.key === "Escape") { event.preventDefault(); closeSettings(true); }
   });
   document.addEventListener("mousedown", (event) => {
-    if (settingsOpen() && !panel.contains(event.target) && !gear.contains(event.target)) closeSettings();
+    if (settingsOpen() && !panel.contains(event.target) && !(opener && opener.contains(event.target))) closeSettings();
   });
 
   // ---------- VS Code: one state ----------

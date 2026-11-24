@@ -60,7 +60,7 @@ class PageTests(unittest.TestCase):
         css = source("shell.css")
         self.assertRegex(css, r"@media \(max-width:1480px\)\{main,main\.wide\{margin-left:20px;margin-right:152px;max-width:none\}\}")
         self.assertRegex(css, r"\.sh-pill\{position:fixed;top:14px;right:16px")
-        self.assertRegex(css, r"\.sh-gear\{position:fixed;right:20px;bottom:20px")
+        self.assertNotIn(".sh-gear", css)  # (1.8.39) Appearance opens from the account menu
 
     def test_the_banner_is_in_the_page_flow_and_covers_nothing(self) -> None:
         css = source("shell.css")
@@ -106,7 +106,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("board.shell.gear", panel)
         for word in ("lang", "restart", "/api/language"):
             self.assertNotIn(word, panel, word)
-        self.assertIn('"aria-label": t("board.shell.look"), title: t("board.shell.look")', shell)  # the button itself
+        self.assertIn('t("menu.look"), "sliders", () => SHELL.openSettings(button)', source("topmenu.js"))  # (1.8.39) the account menu opens it
         for language, word in (("en", "Appearance"), ("zh", "外观")):
             table = messages.table(language)
             self.assertEqual(table["board.shell.look"], word)
@@ -196,7 +196,7 @@ class MotionRulesTests(unittest.TestCase):
         self.assertIn("scale(.96)", code)
         self.assertIn("MOTION.MS.window", code)  # in: 280 ms, the shade 200 ms
         self.assertIn("transformOrigin", code)
-        self.assertIn('".dock-setup"', code)  # the origin is the gear; opened from elsewhere, the centre
+        self.assertIn('".hd-av"', code)  # the origin is the account menu's avatar (1.8.39; the gear before); opened from elsewhere, the centre
         self.assertIn("new MutationObserver", code)  # every way of closing ends in the one move out
         self.assertIn("shade.inert = true", code)
         self.assertIn("MOTION.OUT", code)
@@ -216,7 +216,7 @@ class MotionRulesTests(unittest.TestCase):
         code, css = source("settings.js"), source("settings.css")
         self.assertIn('classList.add("st-open")', code)
         self.assertIn('classList.remove("st-open")', code)
-        self.assertIn("body.st-open .sh-pill,body.st-open .sh-gear,body.st-open .dock-btn{opacity:0;pointer-events:none", css)
+        self.assertIn("body.st-open .sh-pill,body.st-open .hd-menu,body.st-open .dock-btn{opacity:0;pointer-events:none", css)
         self.assertIn("setTimeout(build, 0);", code)  # the window first, its parts in a task of their own (GOAL 12)
         self.assertRegex(source("shell.css"), r"\.setp\{[^}]*background:var\(--pop\);")  # opaque, light and dark
 
@@ -238,7 +238,7 @@ class MotionRulesTests(unittest.TestCase):
         self.assertIn("MOTION.play(panel, [{opacity: 1, transform: \"none\"}, {opacity: 0, transform: PANEL_SHRINK}]", code)
         self.assertIn("const settingsOpen = () => Boolean(panel) && !panel.hidden && !leaving;", code)  # closed at once, hidden when the move ends
         self.assertIn('const PANEL_SHRINK = "scale(.96)"', code)
-        self.assertRegex(source("shell.css"), r"\.setp\{transform-origin:calc\(100% - 22px\) calc\(100% \+ 32px\)\}")
+        self.assertRegex(source("shell.css"), r"\.setp\{transform-origin:calc\(100% - 30px\) -24px\}")  # (1.8.39) under the account menu's avatar
 
     def test_only_transform_and_opacity_move_and_nothing_is_over_300_ms(self) -> None:
         for name in ("settings.js", "shell.js"):

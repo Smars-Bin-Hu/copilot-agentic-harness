@@ -356,12 +356,14 @@ class ProbeCacheTests(HarnessTestCase):
 
 
 class PageScriptsTests(unittest.TestCase):
-    def test_dock_reads_READY_when_it_loads_so_every_page_that_loads_dock_loads_readyui_first(self) -> None:
+    def test_the_account_menu_reads_READY_so_every_page_that_has_it_loads_readyui_first(self) -> None:
         from modules.task import taskhtml
-        pages = {"setup": taskhtml.setup_page({"actions": [], "refresh": 3}), "task": taskhtml.task_page({"name": "a", "title": "a"}, 3, serve={"actions": [], "refresh": 3})}
+        pages = {"task": taskhtml.task_page({"name": "a", "title": "a"}, 3, serve={"actions": [], "refresh": 3}), "board": taskhtml.board_page([], "now", 3, serve={"actions": [], "refresh": 3})}
         for name, page in pages.items():
             self.assertIn("const READY =", page, name)
-            self.assertLess(page.index("const READY ="), page.index("function notesDot"), name)
+            self.assertLess(page.index("const READY ="), page.index("const TOPMENU ="), name)  # the dot of skipped setup items moved from the gear to the avatar (1.8.39)
+            self.assertLess(page.index("const ACCT ="), page.index("const TOPMENU ="), name)
+            self.assertLess(page.index("const TOPMENU ="), page.index("const STOP ="), name)  # stop.js puts the avatar in its pill
 
     def test_the_pages_with_the_gear_load_settings_after_the_wizard_parts_and_the_panels_it_draws(self) -> None:
         from modules.task import taskhtml

@@ -23,8 +23,8 @@ const SETTINGS = (function () {
   // The window grows out of the gear it was opened with (scale .96 to 1 and opacity, 280 ms; the shade 200 ms) and leaves the same way (200 ms); opened from elsewhere (a fix button, the palette): from its centre.
   let lastDown = {node: null, at: 0};
   document.addEventListener("pointerdown", (event) => { lastDown = {node: event.target, at: performance.now()}; }, true);
-  const gearOf = () => {  // the gear (dock.js) when the person pressed or focused it just now, else null
-    const gear = document.querySelector(".dock-setup");
+  const gearOf = () => {  // the avatar of the account menu (topmenu.js, 1.8.39; the gear before) when the person pressed or focused it just now, else null
+    const gear = document.querySelector(".hd-av");
     if (!gear || !gear.isConnected) return null;
     const pressed = lastDown.node && gear.contains(lastDown.node) && performance.now() - lastDown.at < 800;
     return pressed || gear.contains(document.activeElement) ? gear : null;
@@ -389,5 +389,5 @@ const SETTINGS = (function () {
 
   // (1.8.35) The Copilot page's Sign out is the foot's: the same window and request; `done` runs after it, and the foot reads the account again.
   const signOut = (done) => signOutAsk(() => { if (done) done(); if (footNow) footNow.refresh(); });
-  return {open, signOut, sections: SECTIONS, isOpen: () => Boolean(win)};  // isOpen: space.js keeps its slow-motion note away while the window is open (1.8.32)
+  return {open, signOut, restart: restartAsk, sections: SECTIONS, isOpen: () => Boolean(win)};  // restart: the account menu's Restart board asks the same way (1.8.39)  // isOpen: space.js keeps its slow-motion note away while the window is open (1.8.32)
 })();

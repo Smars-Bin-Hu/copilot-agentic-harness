@@ -1,4 +1,4 @@
-// The buttons at the bottom right (1.6.61): the question mark and the one-click chats. The gear is shell.js's. The book opens the knowledge base window, the sliders the setup, the house the Enter screen.
+// The buttons at the bottom right (1.6.61): the question mark and the one-click chats, and the book that opens the knowledge base window. Settings, Appearance and Stop are in the account menu (topmenu.js), the way home is the logo (1.8.39); setupWindow and enterScreen stay here for them.
 // DOCK.start asks with the whole message in view and the model it goes with (CHAT.modelPick, 1.6.101), sends, and brings VS Code forward. Needs common.js (h, t), serve.js (SERVE), chat.js (CHAT).
 const DOCK = (function () {
   const BOOK = "https://smarshu.com/book/";
@@ -523,54 +523,10 @@ const DOCK = (function () {
       return node;
     };
     const kb = icon("dock-book", t("dock.kb"), ["M12 6.5C10.2 5 7.5 4.5 3.5 4.5v14c4 0 6.7.5 8.5 2 1.8-1.5 4.5-2 8.5-2v-14c-4 0-6.7.5-8.5 2z", "M12 6.5v14"], kbWindow);
-    const setup = icon("dock-setup", t("dock.setup"), ["M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6z", "M12 2.4l1.5 2.55 3-0.6 0.9 3 2.85 1.2-1.05 2.85 1.95 2.4-2.4 1.95 0.15 3-3 0.45-1.5 2.7L12 20.4l-2.4 1.5-1.5-2.7-3-0.45 0.15-3L3 13.35l1.95-2.4-1.05-2.85 2.85-1.2 0.9-3 3 0.6z"], () => setupWindow());  // the gear: Settings (1.7.35; the board's own panel below it has the sliders)
-    const home = icon("dock-home", t("dock.home"), ["M3.5 11.5 12 4.5l8.5 7M6 9.5V20h12V9.5M10 20v-5.5h4V20"], enterScreen);
     kb.append(h("span", {class: "dock-count", title: t("dock.kb.badge"), hidden: ""}));
-    document.body.append(panel, button, kb, setup, home);
-    notesDot(setup);
+    document.body.append(panel, button, kb);  // (1.8.39) Settings, its dot and the house moved: the account menu at the top right (topmenu.js), the logo at the top left
     watchStale();
     watchCompany();
-  }
-
-  // The dot on the gear (O3): the setup items that were skipped (`notes` of /api/ready, handed in by the Enter screen and the board's block, see readyui.js). Hover or focus: one line for each, the item, then what it means for the person.
-  function notesDot(gear) {
-    const dot = h("i", {class: "dock-dot", hidden: ""});
-    const tip = h("div", {class: "dock-tip", role: "tooltip", hidden: ""});
-    gear.append(dot);
-    document.body.append(tip);
-    const place = () => {  // never over the Enter screen's button or its line (`.en-cta`): above the gear, else beside it, else narrower on the free side; always inside the viewport
-      tip.style.maxWidth = "";
-      const r = gear.getBoundingClientRect(), cta = document.documentElement.classList.contains("en-open") ? document.querySelector(".en-cta") : null, hold = cta ? cta.getBoundingClientRect() : null;
-      const hits = (x, y, w, hgt) => Boolean(hold && hold.width && x < hold.right + 8 && x + w > hold.left - 8 && y < hold.bottom + 8 && y + hgt > hold.top - 8);
-      const put = (x, y, w) => { tip.style.top = y + "px"; tip.style.right = Math.max(8, innerWidth - x - w) + "px"; };
-      const tries = (w, hgt) => [[Math.max(8, Math.min(innerWidth - w - 8, r.right - w)), r.top - hgt - 10], [Math.max(8, r.left - w - 10), Math.max(8, Math.min(innerHeight - hgt - 8, r.top + r.height / 2 - hgt / 2))]];
-      let w = tip.offsetWidth, hgt = tip.offsetHeight;
-      const pick = tries(w, hgt).find(([x, y]) => y >= 8 && !hits(x, y, w, hgt));
-      if (pick) return put(pick[0], pick[1], w);
-      const free = hold ? innerWidth - 8 - (hold.right + 12) : 0;  // the room right of the button
-      if (free >= 160) {
-        tip.style.maxWidth = free + "px"; w = tip.offsetWidth; hgt = tip.offsetHeight;
-        const x = innerWidth - 8 - w, y = Math.max(8, r.top - hgt - 10);
-        if (!hits(x, y, w, hgt)) return put(x, y, w);
-      }
-      const [x, y] = tries(w, hgt)[1]; put(x, Math.max(8, y), w);  // no room that keeps clear: beside the gear, inside the screen
-    };
-    const show = () => { if (dot.hidden) return; tip.hidden = false; place(); };
-    const hide = () => { tip.hidden = true; };
-    gear.addEventListener("mouseenter", show); gear.addEventListener("focus", show); gear.addEventListener("mouseleave", hide); gear.addEventListener("blur", hide);
-    document.addEventListener("keydown", (event) => { if (event.key === "Escape") hide(); });
-    if (typeof READY === "undefined") return;  // a page that does not load readyui.js has no dot
-    READY.onNotes((list) => {
-      dot.hidden = !list.length;
-      gear.title = list.length ? "" : t("dock.setup");  // the hover below says it; a second bubble beside it would cover it
-      gear.classList.toggle("has-notes", Boolean(list.length));
-      gear.setAttribute("aria-label", t("dock.setup") + (list.length ? " \u00b7 " + t("board.enter.notes.title") : ""));
-      tip.replaceChildren(h("div", {class: "dock-tip-t"}, t("board.enter.notes.title")), ...list.map((note) => h("div", {class: "dock-tip-i"}, h("i", {class: "dock-tip-d"}), h("span", null, h("b", null, note.text), note.effect ? h("em", null, note.effect) : null))));
-      if (!list.length) hide(); else if (!tip.hidden) place();
-    });
-    // a page that has no block of the board (the task page) asks for itself, slowly, and not while the Enter screen does; a page in a frame of the board has no gear (desk.css html.embed) and asks nothing (1.8.36)
-    const ask = () => { if (document.hidden || document.documentElement.classList.contains("en-open") || document.documentElement.classList.contains("embed") || typeof READYBAR !== "undefined" || typeof SERVE === "undefined") return; SERVE.call("/api/ready", {}, 8).then((data) => { if (Array.isArray(data.checks)) READY.notes(data.notes); }, () => {}); };
-    setTimeout(ask, 1500); setInterval(ask, 8000);
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();

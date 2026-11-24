@@ -1,12 +1,11 @@
-/* The buttons at the bottom right (dock.js). The gear is at 20px; one step up from it each. Not on the Enter screen. */
-.dock-btn{position:fixed;right:20px;bottom:72px;z-index:150;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;padding:0;border:1px solid var(--line2);background:var(--card);color:var(--soft);font:600 17px var(--sans);cursor:pointer}.dock-btn:hover{color:var(--ink)}
-html.en-open .dock-home{display:none}  /* the Enter screen is where the house goes (1.7.32) */
+/* The buttons at the bottom right (dock.js): ? at 20px, the knowledge base one step up (1.8.39: Settings, Appearance and the house moved to the account menu and the logo). */
+.dock-btn{position:fixed;right:20px;bottom:20px;z-index:150;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;padding:0;border:1px solid var(--line2);background:var(--card);color:var(--soft);font:600 17px var(--sans);cursor:pointer}.dock-btn:hover{color:var(--ink)}
 .dock-panel{position:fixed;right:76px;bottom:20px;z-index:161;box-sizing:border-box;width:min(380px,calc(100vw - 92px));padding:14px;border:1px solid var(--line2);border-radius:14px;background:var(--card);box-shadow:var(--shadow)}.dock-panel[hidden]{display:none}.dock-panel h3{margin:0 0 10px;font-size:14px}
 .dock-line{display:flex;gap:8px;margin-top:8px;min-width:0}.dock-panel .su-in{flex:1;box-sizing:border-box;min-width:0;padding:6px 9px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
 @media (max-width:480px){.dock-panel{right:8px;left:8px;width:auto;bottom:min(280px,calc(100vh - 240px))}}
 .dialog:focus{outline:none}.dialog.dock-window{max-width:760px}.dock-list{flex:0 1 auto;min-height:120px;max-height:60vh;overflow:auto;margin:8px 0}.dock-list h3{margin:12px 0 4px;font-size:13px;color:var(--soft)}
 .dock-skill{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}.dock-about{flex:1;min-width:0}.dock-about p{margin:2px 0 0;overflow-wrap:anywhere}.dock-about .code{margin:6px 0 0}.dock-about b{margin-right:8px;overflow-wrap:anywhere}
-.dock-book{bottom:124px}.dock-setup{bottom:176px}.dock-home{bottom:228px}.dock-icon svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.dialog.kb-window{max-width:min(1200px,calc(100vw - 32px));height:min(760px,calc(100vh - 32px))}.kb-window>.kb-body{flex:1 1 auto;max-height:none;min-height:0}.dock-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.dock-book{bottom:72px}.dock-icon svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.dialog.kb-window{max-width:min(1200px,calc(100vw - 32px));height:min(760px,calc(100vh - 32px))}.kb-window>.kb-body{flex:1 1 auto;max-height:none;min-height:0}.dock-tabs{display:flex;gap:6px;flex-wrap:wrap}
 .dock-list h4{margin:10px 0 2px;font-size:12px;font-weight:600;color:var(--soft)}.dock-skill a.act{text-decoration:none}
 .kb-bar{flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.kb-alarm{flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin:8px 0 0;overflow-wrap:anywhere}.kb-alarm[hidden]{display:none}.kb-bar .dock-tabs{flex:1;min-width:0}.kb-age{font-size:12px}.kb-name{overflow-wrap:anywhere}.kb-near{margin-top:8px}.kb-near h3{overflow-wrap:anywhere}.kb-near-list{margin:4px 0 8px;padding-left:18px}.kb-near-list li{margin:2px 0;overflow-wrap:anywhere}.first-link.kb-id{display:inline;margin:0;font:12.5px/1.5 var(--mono);text-align:left;overflow-wrap:anywhere;text-decoration:none}.first-link.kb-id:hover{color:var(--ink)}.kb-problem{margin-top:10px}.kb-problem ul{margin:4px 0;padding-left:18px}.kb-problem li,.kb-problem b{overflow-wrap:anywhere}.kb-window .kb-body{min-height:300px}.kb-body .dock-line{align-items:center}.kb-body .dock-line .code{margin:0}.kb-body .bad{color:var(--bad)}
 .kb-steps{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));margin:12px 0 14px;padding:0;list-style:none}.kb-steps li{position:relative;padding:18px 8px 0 0;color:var(--soft);font-size:11.5px;line-height:1.3;overflow-wrap:anywhere}.kb-steps li::before{content:"";position:absolute;left:0;top:3px;width:11px;height:11px;box-sizing:border-box;border:1px solid var(--line2);border-radius:50%;background:var(--card)}.kb-steps li::after{content:"";position:absolute;left:15px;right:4px;top:8px;height:1px;background:var(--line2)}.kb-steps li:last-child::after{display:none}.kb-steps li.done::before{border-color:var(--good-dot);background:var(--good-dot)}.kb-steps li.here{color:var(--ink);font-weight:600}.kb-steps li.here::before{border-color:var(--run);background:var(--run)}
@@ -86,7 +85,7 @@ body.has-dialog .hd-acct{visibility:hidden}
 
 .kb-servers{flex:none;display:flex;align-items:center;gap:6px;margin-top:10px;overflow-x:auto;white-space:nowrap;padding-bottom:2px}.kb-servers[hidden]{display:none}.kb-sv-head{font-size:12px;color:var(--soft);margin-right:2px}.kb-sv{display:inline-flex;align-items:center;gap:5px;flex:none;padding:2px 8px;border:1px solid var(--line2);border-radius:999px;font:12px var(--mono)}.kb-sv em{font-style:normal;font-size:10.5px;color:var(--soft)}.kb-sv-dot{width:7px;height:7px;border-radius:50%;background:var(--soft)}.kb-sv.own .kb-sv-dot{background:none;border:1.5px solid var(--hot)}.kb-sv-up{border:0;background:none;color:var(--hot);padding:0 0 0 2px;font-size:13px;line-height:1;cursor:pointer}.kb-sv-up:hover{color:var(--ink)}.kb-sv-win{max-width:min(460px,calc(100vw - 32px))}.kb-sv-lines{margin:8px 0;padding-left:18px;max-height:240px;overflow:auto}.kb-sv-lines code{overflow-wrap:anywhere}
 /* A narrow window has no gutter: the buttons lie in a row along the bottom edge, where the page keeps room for them (shell.css), not in a column over the content. */
-@media (max-width:900px){.dock-btn{bottom:20px}.dock-ask{right:76px}.dock-book{right:132px}.dock-setup{right:188px}.dock-home{right:244px}}
+@media (max-width:900px){.dock-btn{bottom:20px}.dock-book{right:76px}}
 /* The Enter screen keeps the gear (theme, wallpaper, language) under the dock column, as every page does (1.7.35). */
 
 /* 1.7.38: no knowledge base in place; the files Pack for colleagues says are not committed */
@@ -98,10 +97,44 @@ body.has-dialog .hd-acct{visibility:hidden}
 /* 1.7.38: narrow window: a domain name is never cut in the middle of a word, and the table scrolls sideways instead; the button of a row keeps its words on one line */
 .kb-table .kb-name{overflow-wrap:normal;word-break:normal;min-width:6.5em}.kb-table th{white-space:nowrap}.kb-table{width:max-content;min-width:100%}.kb-table .kb-do .act{white-space:nowrap}
 @media (max-width:600px){.kb-table th,.kb-table td{padding-right:6px}.kb-bar-line{width:44px}.kb-table .kb-name{min-width:5em}}  /* 560 px: the last column (Learn) fits and is not cut off (1.7.38) */
-/* the dot on the gear and its hover (dock.js, notesDot): the setup items that were skipped */
-.dock-dot{position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:var(--hot-dot);border:2px solid var(--bg);pointer-events:none}.dock-dot[hidden]{display:none}
-.dock-tip{position:fixed;z-index:420;box-sizing:border-box;max-width:min(340px,calc(100vw - 80px));padding:10px 12px;border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--soft);font:12.5px/1.4 var(--sans);text-align:left;box-shadow:0 14px 40px rgba(0,0,0,.28);pointer-events:none}.dock-tip[hidden]{display:none}
-.dock-tip-t{margin:0 0 6px;color:var(--ink);font-weight:600}
-.dock-tip-i{display:flex;align-items:flex-start;gap:8px;margin-top:5px;min-width:0}.dock-tip-i span{min-width:0;overflow-wrap:anywhere}
-.dock-tip-i b{display:block;color:var(--ink);font-weight:500}.dock-tip-i em{display:block;font-style:normal;color:var(--soft);font-size:12px}
-.dock-tip-d{flex:none;width:8px;height:8px;margin-top:5px;border-radius:50%;background:var(--hot-dot)}
+
+/* (1.8.39) The account menu (topmenu.js): the avatar in the pill, its ring of Copilot credits left (ink; amber low or over; red used up; none when unread or unlimited), the dot of
+   skipped setup items, the menu under it, and the one-time hint. Colour means state only. */
+.hd-acct.menu{padding:0 3px}.hd-acct.menu>.hd-sep{margin:0 3px}
+.hd-av{position:relative;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;color:var(--card)}
+.hd-av:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.hd-av .hd-in{width:20px;height:20px;border-radius:50%;background:var(--ink);display:grid;place-items:center;font:700 9.5px/1 var(--sans);letter-spacing:.02em;overflow:hidden}
+.hd-av .hd-in.none{background:var(--track);color:var(--soft)}.hd-av .hd-in svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+.hd-av .hd-ring{position:absolute;inset:0;border-radius:50%;display:none;background:conic-gradient(var(--ink) calc(var(--left,0) * 1%),var(--track) 0);
+ -webkit-mask:radial-gradient(circle,transparent 12px,#000 12.5px);mask:radial-gradient(circle,transparent 12px,#000 12.5px)}
+.hd-av.ring .hd-ring{display:block}.hd-av.low .hd-ring{background:conic-gradient(var(--hot-dot) calc(var(--left,0) * 1%),var(--track) 0)}.hd-av.out .hd-ring{background:var(--bad)}
+.hd-av:hover .hd-in,.hd-av[aria-expanded="true"] .hd-in{box-shadow:0 0 0 2px var(--hover)}
+.hd-av .hd-dot{position:absolute;top:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:var(--hot-dot);border:2px solid var(--card)}.hd-av .hd-dot[hidden]{display:none}
+.hd-menu{position:fixed;top:56px;right:16px;z-index:1210;box-sizing:border-box;width:300px;max-width:calc(100vw - 24px);max-height:calc(100vh - 72px);overflow:auto;padding:6px;border:1px solid var(--line2);border-radius:14px;background:var(--pop);box-shadow:var(--shadow),0 10px 34px rgba(0,0,0,.14);font:13px var(--sans);color:var(--ink)}
+.hd-menu[hidden]{display:none}
+.hm-who{display:flex;gap:10px;align-items:center;padding:10px 10px 8px;min-width:0}
+.hm-big{flex:none;width:38px;height:38px;border-radius:50%;background:var(--ink);color:var(--card);display:grid;place-items:center;font:700 14px var(--sans)}.hm-big svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.5}
+.hm-wt{min-width:0}.hm-wt b{display:block;font-size:14px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm-wt small{display:block;color:var(--soft);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm-cd{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--line2);margin:0 4px 0 1px;vertical-align:1px}.hm-cd.on{background:var(--good-dot)}.hm-cd.bad{background:var(--hot-dot)}
+.hm-cr{display:block;width:calc(100% - 8px);margin:2px 4px 6px;padding:9px 8px;border:0;border-radius:10px;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.hm-cr:hover,.hm-cr:focus-visible{background:var(--hover);outline:none}
+.hm-cap{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--soft)}.hm-cap b{color:var(--ink);font-weight:600}
+.hm-cr .acct-bar{height:5px;border-radius:3px;background:var(--track);margin:6px 0 5px;overflow:hidden}.hm-cr .acct-bar i{display:block;height:100%;background:var(--ink)}
+.hm-cr .acct-bar.low i{background:var(--hot-dot)}.hm-cr .acct-bar.out i{background:var(--bad)}
+.hm-n{display:block;font-size:12px;color:var(--soft);font-variant-numeric:tabular-nums}.hm-n .acct-over{color:var(--hot);font-weight:600}.hm-n .acct-out{color:var(--bad);font-weight:600}
+.hm-hr{height:1px;background:var(--line);margin:4px 6px}
+.hm-i{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;padding:7px 10px;border:0;border-radius:8px;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer;min-height:34px}
+.hm-i:hover,.hm-i:focus-visible{background:var(--hover);outline:none}.hm-i.hm-row{cursor:default}.hm-i.hm-row:hover{background:none}
+.hm-i svg{flex:none;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--soft)}.hm-noi{width:17px;flex:none}
+.hm-t{flex:1;min-width:0;overflow-wrap:anywhere}.hm-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--hot-dot)}
+.hm-notes{margin:0 10px 6px 37px;font-size:12px}.hm-note{display:flex;gap:8px;align-items:flex-start;margin-top:4px}.hm-note>i{flex:none;width:6px;height:6px;margin-top:6px;border-radius:50%;background:var(--hot-dot)}
+.hm-note span{min-width:0;overflow-wrap:anywhere}
+.hm-seg{flex:none;display:inline-flex;padding:2px;border-radius:999px;border:1px solid var(--line2)}
+.hm-seg button{border:0;background:none;padding:2px 10px;border-radius:999px;font:inherit;font-size:12px;color:var(--soft);cursor:pointer}.hm-seg button.on{background:var(--ink);color:var(--card)}
+.hm-seg button:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.hm-ver{padding:6px 10px 6px 37px;font-size:12px;color:var(--soft)}
+.hm-coach{position:fixed;top:58px;right:16px;z-index:1205;box-sizing:border-box;width:260px;max-width:calc(100vw - 24px);padding:12px 14px;border-radius:12px;background:var(--ink);color:var(--card);font:12.5px/1.45 var(--sans);display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.hm-coach b{font-size:13px}.hm-coach::before{content:"";position:absolute;top:-6px;right:20px;width:12px;height:12px;background:var(--ink);transform:rotate(45deg)}
+.hm-ok{margin-top:6px;padding:3px 12px;border:0;border-radius:999px;background:var(--card);color:var(--ink);font:600 12px var(--sans);cursor:pointer}
+html.en-open .hm-coach,html.embed .hd-menu,html.embed .hm-coach{display:none}

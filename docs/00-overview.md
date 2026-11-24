@@ -85,7 +85,7 @@ The **Lobby / List** switch in the header changes to the list: one line per task
 
 A third button, **Super agent**, shows what waits for you across all open tasks as short messages with the board's own buttons, a strip of task avatars that filter them, and a small robot that walks over the view. It is never the default view. [More](02-features.md#the-super-agent-view).
 
-The sliders button at the bottom right opens **Appearance**: light or dark, **Glass** or **Lite** (for a slow computer), and a background of your own pictures (kept on your computer, never shipped) with a slow 3D feel. The language is in the gear's **Settings**, under **You**. `Cmd+K` / `Ctrl+K` searches tasks, views and tabs. [More](02-features.md#look-and-settings).
+**More appearance…** in the account menu at the top right opens **Appearance**: light or dark, **Glass** or **Lite** (for a slow computer), and a background of your own pictures (kept on your computer, never shipped) with a slow 3D feel. The language is in the gear's **Settings**, under **You**. `Cmd+K` / `Ctrl+K` searches tasks, views and tabs. [More](02-features.md#look-and-settings).
 
 ![The list: what each task waits for and since when, the working time, the checks, and a button for the next move](images/board-list.png)
 

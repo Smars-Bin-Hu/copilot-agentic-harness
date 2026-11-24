@@ -38,6 +38,11 @@ FAKE = textwrap.dedent('''
         if mode == "signed-out":
             print("no oauth token found for github.com", file=sys.stderr); sys.exit(1)
         print("%s")
+    elif args[:2] == ["auth", "logout"]:
+        with open(os.environ["FAKE_ARGS"], "w") as out:
+            out.write(" ".join(args))
+        if mode == "logout-fails":
+            print("cannot remove a token from GH_TOKEN", file=sys.stderr); sys.exit(1)
     elif args[:2] == ["auth", "login"]:
         with open(os.environ["FAKE_ARGS"], "w") as out:
             out.write(" ".join(args))
@@ -106,6 +111,19 @@ class FakeGhTest(unittest.TestCase):
         found = ghauth.check(find=lambda folders: None)
         self.assertEqual(found["why"], "no-gh")
         self.assertEqual(found["download"], ghauth.DOWNLOAD_PAGE)
+
+    def test_logout_names_the_account_and_asks_nothing(self) -> None:
+        self.assertEqual(ghauth.logout(str(self.gh), self.extra), {"done": True, "login": "alex"})
+        self.assertEqual(self.args.read_text(), "auth logout --hostname github.com --user alex")
+
+    def test_logout_when_not_signed_in_or_refused(self) -> None:
+        with self.assertRaises(ghauth.GhError) as caught:
+            ghauth.logout(str(self.gh), self.mode("signed-out"))
+        self.assertEqual(caught.exception.why, "not-signed-in")
+        self.assertFalse(self.args.exists())
+        with self.assertRaises(ghauth.GhError) as caught:
+            ghauth.logout(str(self.gh), self.mode("logout-fails"))
+        self.assertIn("GH_TOKEN", str(caught.exception))
 
     def wait(self, login: ghauth.Login, state: str, limit: float = 10.0) -> dict:
         end = time.monotonic() + limit

@@ -15,6 +15,7 @@
 /* the three groups of the list (1.8.33): a small heading over each group's items */
 .st-win .st-grp{display:flex;flex-direction:column;gap:2px}
 .st-win .st-grp+.st-grp{margin-top:16px}
+.st-win .st-alone{margin-top:14px;padding-top:10px;border-top:1px solid var(--line)}  /* Advanced stands alone under a thin rule, no heading (1.8.33) */
 .st-win .st-gh{margin:0 0 4px 12px;font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);opacity:.75}
 @media (min-width:901px){.st-win .st-i.on,.st-win .st-i.on:hover{background:transparent}}
 /* grey bars while a section loads (S3): opacity only; still under Lite and the system's reduced motion */
@@ -54,13 +55,32 @@ html.lite .st-win .st-sk{animation:none}
 /* the panels of machine.js and servers.js, drawn in the window: no dialog of their own around them */
 .st-win .tl-part{margin-top:0}
 /* narrow: the sections become a row of chips that wraps */
+/* the foot of the left list (1.8.33): the GitHub account with Sign out, and Restart board; it stays at the bottom of the window */
+.st-win .st-foot2{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.st-win .st-who{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.st-win .st-wmark{flex:none;width:24px;height:24px;display:grid;place-items:center;margin-top:2px}
+.st-win .st-wmark .pi{width:22px;height:22px;color:var(--ink)}
+.st-win .st-wtext{min-width:0;font-size:12.5px;line-height:1.45}
+.st-win .st-login{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-win .st-wsub{color:var(--soft)}
+.st-win .st-link{border:0;background:transparent;padding:0;font:inherit;color:var(--soft);text-decoration:underline;cursor:pointer}
+.st-win .st-link:hover{color:var(--ink)}
+.st-win .st-link[hidden],.st-win .st-login[hidden]{display:none}
+.st-win .st-restart{width:100%}
+.st-win .st-bundle{margin:0 0 10px}
+.st-win .st-bacts{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;margin:0 0 8px}
+.st-win .st-bacts .wz-btn{white-space:nowrap}
+.st-confirm{max-width:420px}
+.st-confirm .row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 @media (max-width:900px){
   .dialog.st-win{flex-direction:column;width:calc(100% - 24px);height:calc(100vh - 24px);max-height:none}
   .st-win .st-side{flex:0 0 auto;border-right:0;border-bottom:1px solid var(--line);padding:18px 18px 12px}
   .st-win .st-h{margin:0 0 12px}
   .st-win .st-nav{gap:10px}
   .st-win .st-grp{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px}
-  .st-win .st-grp+.st-grp{margin-top:0}
+  .st-win .st-grp+.st-grp,.st-win .st-alone{margin-top:0;padding-top:0;border-top:0}
+  .st-win .st-foot2{margin-top:12px;padding-top:12px;flex-direction:row;align-items:center;flex-wrap:wrap;justify-content:space-between}
+  .st-win .st-restart{width:auto}
   .st-win .st-gh{margin:0 2px 0 0;min-width:96px}
   .st-win .st-i{width:auto;min-height:34px;padding:0 14px;border:1px solid var(--line2);border-radius:999px;font-size:13.5px}
   .st-win .st-i.on{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}

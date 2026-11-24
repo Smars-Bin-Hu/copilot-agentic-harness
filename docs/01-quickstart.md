@@ -35,7 +35,7 @@ The **Enter screen** of a copy that is set up shows only the word HARNESS, the r
 
 The board keeps its agent host up by itself: when you change the network (tool folders, CA bundle, proxy) or a saved identity in **Settings**, it restarts the host as soon as no chat is working, and says who it waits for. After Enter, the top of the board shows a red block, *The agent cannot work right now*, when a required thing fails later (gh signed out, say), with the button that mends it; it cannot be hidden.
 
-**Settings** (the gear) has the same pages as the wizard, without the steps: **You**, **Programs**, **Copilot**, **Knowledge base**, **Tool packs**, **Code repositories**, **Connections**, **Network** and **Advanced**. A yellow dot on a page says something of it is not set up.
+**Settings** (the gear) has the same pages as the wizard, without the steps, in two groups: **Harness** (**You**, **Programs**, **Copilot**) and **Company** (**Knowledge base**, **Tool packs**, **Code repositories**, **Connections**), then **Advanced** alone (Network, the Python install command, paths not to touch, MCP, bringing settings from an older copy). At the bottom left are the GitHub account (with **Sign out**) and **Restart board**. A yellow dot on a page says something of it is not set up.
 
 The launchers are in `.harness/bin/`: `harness` on macOS/Linux, `harness.cmd` on Windows. There is one thing to do: get it on PATH.
 

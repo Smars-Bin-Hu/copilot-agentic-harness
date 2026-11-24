@@ -521,6 +521,20 @@ class VsLinkHostTest(unittest.TestCase):
         self.assertIsNone(self.link.own)
         self.assertEqual(self.link.host_state()["state"], "off")
 
+    def test_sign_out_runs_gh_logout_and_marks_the_host_outdated(self) -> None:
+        patch = self.mock.patch
+        with patch.object(self.vslink.ghauth, "find_gh", return_value="/fake/gh"), patch.object(self.vslink.ghauth, "logout", return_value={"done": True, "login": "alex"}) as out, patch.object(self.link, "host_outdate") as outdate:
+            found = self.link.sign_out()
+        self.assertEqual(found, {"done": True, "login": "alex"})
+        self.assertEqual(out.call_args[0][0], "/fake/gh")
+        outdate.assert_called_once()
+        self.assertEqual(self.link.signin_state()["state"], "signed-out")
+
+    def test_sign_out_without_gh(self) -> None:
+        with self.assertRaises(self.vslink.ghauth.GhError) as caught:
+            self.link.sign_out()  # HARNESS_GH=off
+        self.assertEqual(caught.exception.why, "no-gh")
+
     def test_login_without_gh(self) -> None:
         found = self.link.begin_login()  # HARNESS_GH=off
         self.assertEqual(found["state"], "no-gh")

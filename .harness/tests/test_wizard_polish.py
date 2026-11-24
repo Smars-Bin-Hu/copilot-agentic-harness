@@ -256,11 +256,13 @@ class SettingsGroupsTest(unittest.TestCase):
         groups = re.search(r"const GROUPS = (\[.*\]);", code).group(1)
         ids = re.findall(r'"([a-z]+)"', re.sub(r'"settings\.g\.[a-z]+"', "", groups))
         sections = re.search(r"const SECTIONS = \[(.*?)\]", code).group(1)
-        self.assertEqual(sorted(ids), sorted(re.findall(r'"([a-z]+)"', sections)))
+        self.assertEqual(sorted(ids + ["adv"]), sorted(re.findall(r'"([a-z]+)"', sections)))  # Advanced stands alone, under no heading
+        self.assertNotIn('"network"', sections)  # Network is the first part of Advanced; `network` and `local` are aliases of it
+        self.assertIn('local: "adv", network: "adv"', code)
         self.assertEqual(len(ids), len(set(ids)))
         for lang in ("en", "zh"):
             texts = json.loads((Path(taskhtml.__file__).resolve().parents[2] / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
-            for key in ("harness", "company", "computer"):
+            for key in ("harness", "company"):
                 self.assertTrue(texts["settings.g." + key])
             self.assertNotIn("setup.prefix", texts)
         self.assertNotIn("setup.prefix", code)

@@ -112,8 +112,9 @@ class PageTests(unittest.TestCase):
             self.assertEqual(table["board.shell.look"], word)
             self.assertNotIn("board.shell.lang", table)
         settings = source("settings.js")
-        advanced = settings.split("function advancedSection")[1].split("win = {view, show}")[0]
-        self.assertIn("restartRow()", advanced)
+        advanced = settings.split("function advancedSection")[1].split("const foot = footOf")[0]
+        self.assertNotIn("restart", advanced.lower())  # 1.8.33: Restart board is at the bottom left of the window, not in Advanced
+        self.assertIn("function footOf", settings)
         self.assertIn("SHELL.restartBoard(", settings)
         self.assertIn('t("board.shell.restart")', settings)
 

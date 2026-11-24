@@ -8,15 +8,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from . import messages, readyitems, setup, targets
+from . import launchenv, messages, readyitems, setup, targets
 
 MARK = "setup_wizard"
 PLACES = ("Developer", "source/repos", "git", "repos", "code", "projects")  # under the home folder; one level deep, a folder with `.git` in it is a repository
 MAX_ROWS = 300
 MAX_PICKS = 300
 SIGNED_WAITS = ("host-starting", "host-preparing", "connecting", "models")  # Copilot lines that wait for the agent host: gh is signed in already (the page's `copilotSignedIn` says the same)
-ORDER = ("you", "programs", "copilot", "kb", "packs", "connections", "repos")
-LABELS = {"you": "setup.w.label.you", "programs": "setup.w.label.programs", "copilot": "setup.w.label.copilot", "kb": "setup.w.label.kb", "packs": "setup.w.label.packs", "connections": "setup.w.label.connections", "repos": "setup.w.label.repos"}
+ORDER = ("you", "programs", "copilot", "kb", "packs", "connections", "bundle", "repos")
+LABELS = {"you": "setup.w.label.you", "programs": "setup.w.label.programs", "copilot": "setup.w.label.copilot", "kb": "setup.w.label.kb", "packs": "setup.w.label.packs", "connections": "setup.w.label.connections", "bundle": "setup.w.label.bundle", "repos": "setup.w.label.repos"}
 REQUIRED = ("you", "programs", "copilot")  # what Confirm needs: name and language, the programs (Python, Git, VS Code, GitHub CLI), the Copilot sign-in
 LANGUAGE_NAMES = {"en": "desk.send.lang.en", "zh": "desk.send.lang.name.zh"}  # each language in its own words: the same messages as the language tiles of the wizard page
 
@@ -256,9 +256,9 @@ def refuse_finish(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any])
         raise ValueError(say("setup.w.finish.need", what=", ".join(lacking)))
 
 
-def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> Dict[str, Any]:
+def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any], bundle: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """`{rows}`: one row for each thing the wizard asked, `{id, done, label, detail, effect}`, in ORDER. Tool packs and connections show only when there is something of the kind.
-    `programs` is the answer of the step `programs`, `copilot` the Copilot line of `/api/ready`. `effect`: what is lost while it is not done; empty when done."""
+    `programs` is the answer of the step `programs`, `copilot` the Copilot line of `/api/ready`, `bundle` the state of the certificate bundle job (`bundlejob`). `effect`: what is lost while it is not done; empty when done."""
     items = {entry["key"]: entry for entry in readyitems.items(root)}
     kept = setup.kept(root, "user")
     name = str(kept.get("name") or "")
@@ -283,6 +283,10 @@ def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any]) -> Di
         add("packs", items["packs"]["state"] == "ok", str(items["packs"].get("detail") or ""), say("ready.effect.packs"))
     if kb.get("found") and (items.get("connections") or {}).get("names"):
         add("connections", items["connections"]["state"] == "ok", str(items["connections"].get("detail") or ""), say("ready.effect.connections"))
+    if launchenv.recipe(root).get("host") or launchenv.recipe(root).get("proxy"):  # (1.8.33) the recipe asks for a certificate bundle: a row once it is there, or when it is not and no make is under way
+        made = launchenv.bundle_path(root) is not None
+        if made or (bundle or {}).get("state") != "making":
+            add("bundle", made, "", say("setup.w.bundle.effect"))
     repos = items.get("repos") or {}
     add("repos", repos.get("state") == "ok", str(repos.get("detail") or "") if repos.get("state") == "ok" else "", say("ready.effect.repos"))
     return {"rows": sorted(out, key=lambda row: ORDER.index(row["id"]))}

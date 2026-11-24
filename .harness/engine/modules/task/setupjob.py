@@ -142,6 +142,7 @@ class Job:
         self.running = False
         self.done = False
         self.total = 0
+        self.on_done: Any = None  # (1.8.33) called once when a run ends well: the board makes the certificate bundle then (`bundlejob`)
         self.lock = threading.Lock()
 
     def view(self) -> Dict[str, Any]:
@@ -181,6 +182,11 @@ class Job:
                 break
         with self.lock:
             self.running, self.done = False, good
+        if good and self.on_done:
+            try:
+                self.on_done()
+            except Exception:  # noqa: BLE001 - never a failure of the import
+                pass
 
 
 def ahead(root: Path, data: Dict[str, Any]) -> None:

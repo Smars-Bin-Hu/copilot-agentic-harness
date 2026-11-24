@@ -70,7 +70,7 @@ from core import company, programs as core_programs, reinstall, setup as core_se
 
 from . import chatrounds, testrecord
 from . import kbview
-from . import setupjob
+from . import bundlejob, setupjob
 from . import taskfileedit
 from . import skillsend
 from . import taskrun
@@ -332,6 +332,8 @@ class Board:
         self.terminal = boardterm.Terminal(root)
         self.short_missing = False
         self.setup_job = setupjob.Job()
+        self.bundle_job = bundlejob.Auto(root, after=lambda: self.apply_local())  # (1.8.33) the bundle the recipe asks for is made here, not by a press
+        self.setup_job.on_done = lambda: self.bundle_job.kick(True)
         self.tested: Dict[str, Any] = {}  # alias -> (the values that passed a test, when): Servers saves only those (1.7.10)
         self.short_kept: Optional[Dict[str, Any]] = None
         self.short_at = 0.0
@@ -366,6 +368,7 @@ class Board:
         self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
         self.brain = superbrain.Brain(root, self.link, self.rows, served=lambda: self.served)  # 1.8.1: the super agent chat (`/api/super/ask`, `/api/super/talk`)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
+        self.ready.bundle = self.bundle_job
         self.ready.started = self.version.split(" ")[0]  # 1.8.23: the release number only (the stamp moves with any edit)
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
@@ -1485,7 +1488,7 @@ class Board:
             raise CommandError(say("serve.refused.request"))
         found = core_setup.status(self.root, self.short_now())
         self.note_short(found["short"])
-        return found
+        return dict(found, bundle=self.bundle_job.view())
 
     def note_short(self, short: Dict[str, Any]) -> None:
         if not short["found"]:
@@ -1515,7 +1518,7 @@ class Board:
             return core_wizard.scan(self.root)
         if step == "summary":
             line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})
-            return core_wizard.summary(self.root, self.programs(), line)
+            return core_wizard.summary(self.root, self.programs(), line, self.bundle_job.view())
         if step == "finish":
             line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})  # the board's last answer: gh is not run again in this request
             core_wizard.refuse_finish(self.root, self.programs(), line)  # ValueError: what is still missing (409)
@@ -2932,6 +2935,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     serving.start()  # 1.7.43: the page is answered as soon as the browser asks; before, the browser opened and waited until the terminal had said its lines
     if ready is None:
         threading.Thread(target=pace.measure_and_save, args=(root,), name="pace", daemon=True).start()  # 1.8.15: how slow this computer is, for every time limit after it
+        board.bundle_job.kick()  # (1.8.33) the recipe is there and the bundle is not: made in the background, once
         board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104); 1.7.43: before the browser is asked to open, not after
 
     def button(action: str) -> str:  # the first line names the buttons as the board shows them (1.7.22), not as the command words

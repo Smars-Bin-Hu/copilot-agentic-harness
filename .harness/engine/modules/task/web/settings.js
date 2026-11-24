@@ -30,15 +30,18 @@ const SETTINGS = (function () {
   const moves = () => typeof MOTION !== "undefined";
   const cut = (node) => { for (const running of (node.getAnimations ? node.getAnimations() : [])) running.cancel(); };
   const SHRINK = "scale(.96)";
+  const LEAVE = 100, ARRIVE = 160;  // a section out in 100 ms and in over 160 ms, the selection glides as long as the content comes in: no pane is empty for longer than a frame
   // grow(box, shade, gear): the way in; returns the way out for the same window
   function grow(box, shade, gear) {
     if (!moves()) return () => {};
+    document.body.classList.add("st-open");
     const at = box.getBoundingClientRect(), from = gear ? gear.getBoundingClientRect() : null;
     box.style.transformOrigin = (from ? from.left + from.width / 2 - at.left : at.width / 2) + "px " + (from ? from.top + from.height / 2 - at.top : at.height / 2) + "px";
     MOTION.play(box, [{opacity: 0, transform: SHRINK}, {opacity: 1, transform: "none"}], {ms: MOTION.MS.window});
     MOTION.play(shade, [{opacity: 0}, {opacity: 1}], {ms: MOTION.MS.show});
     return () => {  // the window is gone from the page (X, Esc, a click beside it, a close from outside): its shade comes back, inert, for 200 ms, and fades
       cut(box); cut(shade);
+      document.body.classList.remove("st-open");
       document.body.append(shade);
       shade.inert = true;
       shade.style.pointerEvents = "none";
@@ -88,210 +91,216 @@ const SETTINGS = (function () {
     let closing = false;
     const closer = new MutationObserver(() => { if (shade.isConnected || closing) return; closing = true; closer.disconnect(); vanish(); });  // any way of closing removes the shade: one place to move it out
     closer.observe(document.body, {childList: true});
-    const items = SECTIONS.map((id) => {
-      const mark = h("i", {class: "st-dot", hidden: ""});
-      const node = h("button", {type: "button", class: "st-i", "data-sec": id}, h("span", {class: "st-n"}, t(LABELS[id])), mark);
-      node.addEventListener("click", () => show(id));
-      return {id, node, mark};
-    });
-    const sel = h("i", {class: "st-sel", "aria-hidden": "true"});  // the selected item's background: one block that glides to the item chosen (S2); in the narrow window the chips draw their own
-    const place = (item) => { if (!item) return; Object.assign(sel.style, {left: item.node.offsetLeft + "px", top: item.node.offsetTop + "px", width: item.node.offsetWidth + "px", height: item.node.offsetHeight + "px"}); };
-    put(nav, sel, items.map((item) => [item.id === "adv" ? h("div", {class: "st-sep"}) : null, item.node]));
-    let current = null;
-    const relayout = () => { if (closing) window.removeEventListener("resize", relayout); else if (current) place(items.find((item) => item.id === current)); };
-    window.addEventListener("resize", relayout);
-    const refreshDots = () => {
-      dots = dotsOf(typeof READY !== "undefined" ? READY.current() : [], hold);
-      items.forEach((item) => { const on = dots.has(item.id); item.mark.hidden = !on; item.node.classList.toggle("hot", on); });
-    };
-    if (typeof READY !== "undefined") READY.onNotes(() => { if (win && win.view === view) refreshDots(); });
-    const stopPart = () => { if (stop) { try { stop(); } catch (error) { /* a part that is gone */ } stop = null; } };
-    let left = false, watch = 0;
-    const leave = () => { if (left) return; left = true; clearInterval(watch); stopPart(); if (win && win.view === view) win = null; if (changed) location.reload(); else if (given.done) given.done(); };  // once: the X, a close from outside and the watch below all end here; the name, the knowledge base or the repositories changed: the page reads them again
-    x.addEventListener("click", () => { view.close(); leave(); });
-    watch = setInterval(() => { if (!view.box.isConnected || closing) leave(); }, 300);  // the dialog closes itself on Escape
-
-    // what to scroll to once the section has drawn (a part or a row): asked again as it fills in, for a few seconds
-    let want = null, until = 0;
-    const reveal = () => {
-      if (!want || Date.now() > until) { want = null; return; }
-      const row = want.focus ? [...body.querySelectorAll("[data-focus]")].find((node) => node.dataset.focus === want.focus) : null;
-      const node = row || (want.part ? body.querySelector('[data-part="' + want.part + '"]') : null);
-      if (!node) return;
-      pane.scrollTop = Math.max(0, node.getBoundingClientRect().top - body.getBoundingClientRect().top - 4);
-      if (row) { row.classList.remove("tl-flash"); void row.offsetWidth; row.classList.add("tl-flash"); want = null; }
-    };
-    // what machine.js and servers.js ask of their window: go to another section at a part
-    const ctx = {
-      go: (sec, part, focus) => { const target = sec === "local" ? (part === "network" ? "network" : part === "mcp" ? "adv" : "packs") : sec; show(sectionOf(target), part, focus); },
-      close: () => { view.close(); leave(); }, arrived: () => reveal(),
-    };
-    const saved = () => { changed = true; };
-
-    // The section area (S2, S3): the old section fades out (120 ms), the new one rises 8 px and fades in (200 ms); while it loads, grey bars stand in. One section is on screen at a time: a burst of
-    // clicks shares the one fade out and only the last click lands.
-    let fading = null;
-    const fadeOut = () => {
-      if (fading) return fading;
-      if (!body.firstChild || !moves()) return Promise.resolve();
-      const from = Number(getComputedStyle(body).opacity);
-      const frames = [{opacity: Number.isFinite(from) ? from : 1}, {opacity: 0}];
-      cut(body); cut(heading);
-      const run = Promise.all([body, heading].map((node) => MOTION.play(node, frames, {ms: MOTION.MS.micro, ease: MOTION.OUT, fill: "forwards"}))).then(() => { fading = null; });
-      fading = run;
-      return run;
-    };
-    const leaveBars = () => {  // the grey bars go (120 ms) before the section comes in: the title stays
-      const from = Number(getComputedStyle(body).opacity);
-      cut(body);
-      return MOTION.play(body, [{opacity: Number.isFinite(from) ? from : 1}, {opacity: 0}], {ms: MOTION.MS.micro, ease: MOTION.OUT, fill: "forwards"});
-    };
-    const rise = () => { if (!moves()) return; cut(body); cut(heading); MOTION.appear(body, {y: 8}); MOTION.appear(heading); };
-
-    function show(id, part, focus) {
-      stopPart();
-      const mine = ++token;
-      want = part || focus ? {part, focus} : null; until = Date.now() + 4000;
-      const target = items.find((item) => item.id === id);
-      const select = () => {
-        items.forEach((item) => { item.node.classList.toggle("on", item.id === id); item.node.setAttribute("aria-current", item.id === id ? "page" : "false"); });
-        place(target);
+    let queued = null;
+    win = {view, show: (...asked) => { queued = asked; }};  // asked for before the rest is built: it goes to the section asked last
+    const build = () => {  // the rest of the window is built in a task of its own: one task would be over 100 ms at 4x CPU (GOAL 12) (1.8.33)
+      if (closing) { if (win && win.view === view) win = null; if (given.done) given.done(); return; }
+      const items = SECTIONS.map((id) => {
+        const mark = h("i", {class: "st-dot", hidden: ""});
+        const node = h("button", {type: "button", class: "st-i", "data-sec": id}, h("span", {class: "st-n"}, t(LABELS[id])), mark);
+        node.addEventListener("click", () => show(id));
+        return {id, node, mark};
+      });
+      const sel = h("i", {class: "st-sel", "aria-hidden": "true"});  // the selected item's background: one block that glides to the item chosen (S2); in the narrow window the chips draw their own
+      const place = (item) => { if (!item) return; Object.assign(sel.style, {left: item.node.offsetLeft + "px", top: item.node.offsetTop + "px", width: item.node.offsetWidth + "px", height: item.node.offsetHeight + "px"}); };
+      put(nav, sel, items.map((item) => [item.id === "adv" ? h("div", {class: "st-sep"}) : null, item.node]));
+      let current = null;
+      const relayout = () => { if (closing) window.removeEventListener("resize", relayout); else if (current) place(items.find((item) => item.id === current)); };
+      window.addEventListener("resize", relayout);
+      const refreshDots = () => {
+        dots = dotsOf(typeof READY !== "undefined" ? READY.current() : [], hold);
+        items.forEach((item) => { const on = dots.has(item.id); item.mark.hidden = !on; item.node.classList.toggle("hot", on); });
       };
-      if (current && moves()) MOTION.glide(sel, select, MOTION.MS.show); else select();
-      current = id;
-      const first = !body.firstChild;
-      let ready = null, parted = false, onSkeleton = false, skeletonAt = 0;
-      const arrive = (nodes) => {  // the section has drawn (or failed): in once the old one has left; over the grey bars with a fade of their own
-        if (!parted) { ready = {nodes}; return; }
-        if (!onSkeleton) { put(body, nodes); reveal(); return; }
-        const land = () => { if (mine !== token) return; onSkeleton = false; cut(body); put(body, nodes); if (moves()) MOTION.appear(body, {y: 8}); reveal(); };
-        if (first || performance.now() - skeletonAt < 120 || !moves()) land();  // the window's own opening covers the first one else leaveBars().then(land);
+      if (typeof READY !== "undefined") READY.onNotes(() => { if (win && win.view === view) refreshDots(); });
+      const stopPart = () => { if (stop) { try { stop(); } catch (error) { /* a part that is gone */ } stop = null; } };
+      let left = false, watch = 0;
+      const leave = () => { if (left) return; left = true; clearInterval(watch); stopPart(); if (win && win.view === view) win = null; if (changed) location.reload(); else if (given.done) given.done(); };  // once: the X, a close from outside and the watch below all end here; the name, the knowledge base or the repositories changed: the page reads them again
+      x.addEventListener("click", () => { view.close(); leave(); });
+      watch = setInterval(() => { if (!view.box.isConnected || closing) leave(); }, 300);  // the dialog closes itself on Escape
+
+      // what to scroll to once the section has drawn (a part or a row): asked again as it fills in, for a few seconds
+      let want = null, until = 0;
+      const reveal = () => {
+        if (!want || Date.now() > until) { want = null; return; }
+        const row = want.focus ? [...body.querySelectorAll("[data-focus]")].find((node) => node.dataset.focus === want.focus) : null;
+        const node = row || (want.part ? body.querySelector('[data-part="' + want.part + '"]') : null);
+        if (!node) return;
+        pane.scrollTop = Math.max(0, node.getBoundingClientRect().top - body.getBoundingClientRect().top - 4);
+        if (row) { row.classList.remove("tl-flash"); void row.offsetWidth; row.classList.add("tl-flash"); want = null; }
       };
-      fadeOut().then(() => {
-        if (mine !== token) return;
-        parted = true;
-        heading.textContent = t(LABELS[id]);
-        body.className = "st-body wz st-sec-" + id;
-        pane.scrollTop = 0;
+      // what machine.js and servers.js ask of their window: go to another section at a part
+      const ctx = {
+        go: (sec, part, focus) => { const target = sec === "local" ? (part === "network" ? "network" : part === "mcp" ? "adv" : "packs") : sec; show(sectionOf(target), part, focus); },
+        close: () => { view.close(); leave(); }, arrived: () => reveal(),
+      };
+      const saved = () => { changed = true; };
+
+      // The section area (S2, S3): the old section fades out (120 ms), the new one rises 8 px and fades in (200 ms); while it loads, grey bars stand in. One section is on screen at a time: a burst of
+      // clicks shares the one fade out and only the last click lands.
+      let fading = null;
+      const fadeOut = () => {
+        if (fading) return fading;
+        if (!body.firstChild || !moves()) return Promise.resolve();
+        const from = Number(getComputedStyle(body).opacity);
+        const frames = [{opacity: Number.isFinite(from) ? from : 1}, {opacity: 0}];
         cut(body); cut(heading);
-        if (ready) put(body, ready.nodes); else { put(body, skeleton(id)); onSkeleton = true; skeletonAt = performance.now(); }
-        if (!first) rise();
-        if (ready) reveal();
-      });
-      const live = () => mine === token && win && win.view === view;
-      const env = {
-        live, saved, refresh: () => { if (live()) refreshDots(); }, jump: (sec) => show(sec),
-        inside: (nodes, stopper) => { if (!live()) { if (stopper) stopper(); return; } stop = stopper || null; arrive(nodes); },
+        const run = Promise.all([body, heading].map((node) => MOTION.play(node, frames, {ms: LEAVE, ease: MOTION.OUT, fill: "forwards"}))).then(() => { fading = null; });
+        fading = run;
+        return run;
       };
-      const draw = {you: wizardSection, programs: wizardSection, copilot: wizardSection, kb: wizardSection, repos: wizardSection, packs: packsSection, connections: connectionsSection, network: networkSection, adv: advancedSection}[id];
-      Promise.resolve(draw(id, env)).catch((error) => { if (live()) arrive([h("p", {class: "bad"}, errorText(error))]); });
-    }
+      const leaveBars = () => {  // the grey bars go (120 ms) before the section comes in: the title stays
+        const from = Number(getComputedStyle(body).opacity);
+        cut(body);
+        return MOTION.play(body, [{opacity: Number.isFinite(from) ? from : 1}, {opacity: 0}], {ms: LEAVE, ease: MOTION.OUT, fill: "forwards"});
+      };
+      const rise = () => { if (!moves()) return; cut(body); cut(heading); MOTION.appear(body, {y: 8, ms: ARRIVE}); MOTION.appear(heading, {ms: ARRIVE}); };
 
-    // the sections that are pages of the wizard: prepared (read again), drawn bare, with a Save of their own where the page saves
-    function wizardSection(id, env) {
-      return WIZARD.prepare().then(() => {
-        hold = true;
-        if (!env.live()) return;
-        const holder = h("div"), foot = h("div", {class: "st-foot"}), said = h("span", {class: "st-saved", role: "status"});
-        let ctl = null, timer = 0;
-        const savedNote = () => { said.textContent = "✓ " + t("settings.saved"); saved(); clearTimeout(timer); timer = setTimeout(() => { said.textContent = ""; }, 4000); env.refresh(); };
-        const footer = () => {
-          if (!ctl || !["you", "repos"].includes(id)) return;
-          const main = ctl.foot().main, off = id === "you" && main.off;
-          const button = h("button", {type: "button", class: "wz-btn primary" + (off ? " off" : "")}, t("settings.save"));
-          button.addEventListener("click", () => { if (!off) main.go(); });  // the repositories may be saved with none: the page's own button wants one
-          put(foot, button, said);
+      function show(id, part, focus) {
+        stopPart();
+        const mine = ++token;
+        want = part || focus ? {part, focus} : null; until = Date.now() + 4000;
+        const target = items.find((item) => item.id === id);
+        const select = () => {
+          items.forEach((item) => { item.node.classList.toggle("on", item.id === id); item.node.setAttribute("aria-current", item.id === id ? "page" : "false"); });
+          place(target);
         };
-        const draw = () => {
-          if (ctl && ctl.stop) ctl.stop();
-          ctl = WIZARD.mount(id, holder, {changed: footer, rerender: () => { if (env.live()) draw(); }, saved: savedNote, jump: (n) => env.jump(n === 2 ? "programs" : n === 3 ? "copilot" : "you")});
-          footer();
+        if (current && moves()) MOTION.glide(sel, select, ARRIVE); else select();
+        current = id;
+        const first = !body.firstChild;
+        let ready = null, parted = false, onSkeleton = false, skeletonAt = 0;
+        const arrive = (nodes) => {  // the section has drawn (or failed): in once the old one has left; over the grey bars with a fade of their own
+          if (!parted) { ready = {nodes}; return; }
+          if (!onSkeleton) { put(body, nodes); reveal(); return; }
+          const land = () => { if (mine !== token) return; onSkeleton = false; cut(body); put(body, nodes); if (moves()) MOTION.appear(body, {y: 8, ms: ARRIVE}); reveal(); };
+          if (first || performance.now() - skeletonAt < 120 || !moves()) land();  // the window's own opening covers the first one else leaveBars().then(land);
         };
-        draw();
-        env.inside([id === "repos" ? h("p", {class: "st-sub"}, t("settings.repos.sub")) : null, holder, foot], () => { if (ctl && ctl.stop) ctl.stop(); clearTimeout(timer); });
-        env.refresh();
-      });
-    }
-
-    // Tool packs: with a knowledge base, the window of machine.js (and the programs the packs need); without one the factory packs are listed grey, and say who turns them on
-    function packsSection(id, env) {
-      return ask("/api/setup", "state").then((state) => {
-        if (state.kb && state.kb.here) {
-          const packs = MACHINE.packsPanel(ctx), local = MACHINE.localPanel(ctx);
-          env.inside([h("p", {class: "st-sub"}, packs.sub), ...packs.body, ...local.body.filter((node) => node.dataset && node.dataset.part === "programs")]);
-          return null;
-        }
-        return ask("/api/machine", "toolpacks").then((found) => {
-          const rows = (found.toolpacks || []).filter((row) => row.from === "harness" && !row.sample);  // a sample pack (demotracker) is not a tool a newcomer has: not listed until a knowledge base turns it on (1.8.32)
-          const list = h("div", {class: "st-packlist"}, rows.map((row) => h("div", {class: "st-pack"}, h("span", {class: "st-pdot"}), h("b", null, row.name), h("span", {class: "tl-ver"}, row.version || ""), h("span", {class: "st-pdesc", title: row.description || ""}, row.description || ""))));
-          env.inside([h("p", {class: "st-sub"}, t("tools.packs.lead")), h("p", {class: "st-note"}, t("settings.packs.nokb")), list]);
+        fadeOut().then(() => {
+          if (mine !== token) return;
+          parted = true;
+          heading.textContent = t(LABELS[id]);
+          body.className = "st-body wz st-sec-" + id;
+          pane.scrollTop = 0;
+          cut(body); cut(heading);
+          if (ready) put(body, ready.nodes); else { put(body, skeleton(id)); onSkeleton = true; skeletonAt = performance.now(); }
+          if (!first) rise();
+          if (ready) reveal();
         });
-      });
-    }
-
-    function connectionsSection(id, env) {
-      const made = SERVERS.connectionsPanel(ctx);
-      env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body, h("div", {class: "st-foot"}, ...made.foot)]);
-    }
-
-    function networkSection(id, env) {
-      const made = MACHINE.localPanel(ctx, {bare: true});  // the window already says Network: the part does not say it again (1.8.32)
-      env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body.filter((node) => node.dataset && node.dataset.part === "network")]);
-    }
-
-    // Advanced: the Python install command, the paths not to touch, the skill prefix and the older copy go through `save` (part advanced), `refuse` and `older`; MCP is machine.js's switch
-    function advancedSection(id, env) {
-      return ask("/api/setup", "state").then((state) => {
-        const rules = state.rules.slice(), refused = [];
-        const field = (caption, node, hint) => h("div", {class: "wz-field"}, h("span", {class: "cap"}, caption), node, hint ? h("div", {class: "hint"}, hint) : null);
-        const literal = (text) => text.split("{package}").flatMap((part, i) => (i ? [h("code", null, "{package}"), part] : [part]));  // `{package}` is a placeholder the person types: it always shows as it is, in the code font
-        const install = h("input", {type: "text", class: "wz-in mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph"), value: state.install_command || "", "aria-label": t("setup.install")});
-        const prefix = h("input", {type: "text", class: "wz-in mono st-short", maxlength: 31, autocomplete: "off", spellcheck: "false", value: state.skill_prefix || (state.kb && state.kb.prefix) || "", "aria-label": t("setup.prefix")});
-        const path = h("input", {type: "text", class: "wz-in mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: state.example, "aria-label": t("setup.refused")});
-        const add = h("button", {type: "button", class: "wz-btn sm", disabled: ""}, t("setup.refused.add"));
-        const list = h("div", {class: "st-chips"}), said = h("p", {class: "wz-err"}), done = h("span", {class: "st-saved", role: "status"});
-        said.hidden = true;
-        const paintRules = () => {
-          const chip = (text, off) => { const b = h("button", {type: "button", class: "st-cx", "aria-label": t("setup.refused.remove"), title: t("setup.refused.remove")}, "×"); b.addEventListener("click", () => { off(); paintRules(); }); return h("span", {class: "st-chip"}, h("code", null, text), b); };
-          put(list, rules.map((rule) => chip(rule.repo + ": " + rule.rule, () => { rules.splice(rules.indexOf(rule), 1); })), refused.map((one) => chip(one, () => { refused.splice(refused.indexOf(one), 1); })));
+        const live = () => mine === token && win && win.view === view;
+        const env = {
+          live, saved, refresh: () => { if (live()) refreshDots(); }, jump: (sec) => show(sec),
+          inside: (nodes, stopper) => { if (!live()) { if (stopper) stopper(); return; } stop = stopper || null; arrive(nodes); },
         };
-        const addPath = () => {
-          if (!path.value.trim()) return;
-          ask("/api/setup", "refuse", {repos_root: state.repos_root, singles: state.singles, path: path.value}).then((found) => { said.hidden = true; path.value = ""; add.disabled = true; if (!refused.includes(found.path)) refused.push(found.path); paintRules(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
-        };
-        path.addEventListener("input", () => { add.disabled = !path.value.trim(); });
-        path.addEventListener("keydown", (event) => { if (isEnter(event)) addPath(); });
-        add.addEventListener("click", addPath);
-        paintRules();
-        const save = h("button", {type: "button", class: "wz-btn primary"}, t("settings.save"));
-        save.addEventListener("click", () => {
-          said.hidden = true; done.textContent = ""; save.disabled = true;
-          const values = {part: "advanced", skill_prefix: prefix.value, install_command: install.value, refused, rules, stamp: state.stamp};  // three fields: no knowledge base sync and no doctor
-          ask("/api/setup", "save", values).then(() => {
-            saved(); done.textContent = "✓ " + t("settings.saved");
-            return ask("/api/setup", "state").then((now) => { state.stamp = now.stamp; refused.splice(0); rules.splice(0, rules.length, ...now.rules); paintRules(); });
-          }).catch((error) => { said.textContent = errorText(error); said.hidden = false; }).then(() => { save.disabled = false; });
+        const draw = {you: wizardSection, programs: wizardSection, copilot: wizardSection, kb: wizardSection, repos: wizardSection, packs: packsSection, connections: connectionsSection, network: networkSection, adv: advancedSection}[id];
+        Promise.resolve(draw(id, env)).catch((error) => { if (live()) arrive([h("p", {class: "bad"}, errorText(error))]); });
+      }
+
+      // the sections that are pages of the wizard: prepared (read again), drawn bare, with a Save of their own where the page saves
+      function wizardSection(id, env) {
+        return WIZARD.prepare().then(() => {
+          hold = true;
+          if (!env.live()) return;
+          const holder = h("div"), foot = h("div", {class: "st-foot"}), said = h("span", {class: "st-saved", role: "status"});
+          let ctl = null, timer = 0;
+          const savedNote = () => { said.textContent = "✓ " + t("settings.saved"); saved(); clearTimeout(timer); timer = setTimeout(() => { said.textContent = ""; }, 4000); env.refresh(); };
+          const footer = () => {
+            if (!ctl || !["you", "repos"].includes(id)) return;
+            const main = ctl.foot().main, off = id === "you" && main.off;
+            const button = h("button", {type: "button", class: "wz-btn primary" + (off ? " off" : "")}, t("settings.save"));
+            button.addEventListener("click", () => { if (!off) main.go(); });  // the repositories may be saved with none: the page's own button wants one
+            put(foot, button, said);
+          };
+          const draw = () => {
+            if (ctl && ctl.stop) ctl.stop();
+            ctl = WIZARD.mount(id, holder, {changed: footer, rerender: () => { if (env.live()) draw(); }, saved: savedNote, jump: (n) => env.jump(n === 2 ? "programs" : n === 3 ? "copilot" : "you")});
+            footer();
+          };
+          draw();
+          env.inside([id === "repos" ? h("p", {class: "st-sub"}, t("settings.repos.sub")) : null, holder, foot], () => { if (ctl && ctl.stop) ctl.stop(); clearTimeout(timer); });
+          env.refresh();
         });
-        const older = h("button", {type: "button", class: "wz-btn sm"}, t("settings.adv.older.go"));
-        older.addEventListener("click", () => olderDialog(saved));
-        const made = MACHINE.localPanel(ctx);
-        env.inside([
-          field(t("setup.install"), install, literal(t("setup.install.example"))),
-          field(t("setup.refused"), h("div", {class: "st-add"}, path, add), t("setup.refused.hint")), h("div", {class: "st-under"}, list), said,
-          field(t("setup.prefix"), prefix, t("setup.prefix.hint")),
-          h("div", {class: "st-line"}, save, done),
-          h("div", {class: "st-rule"}), made.body.find((node) => node.dataset && node.dataset.part === "mcp"),
-          h("div", {class: "st-rule"}), restartRow(),
-          h("div", {class: "st-rule"}), field(t("setup.older.title"), h("div", null, older), t("setup.older.hint")),
-        ]);
-      });
-    }
+      }
 
-    win = {view, show};
-    show(first, given.part, given.focus);
-    refreshDots();
-    // the notes may not be known yet (a page that has no block of the board asks slowly): ask once now
-    SERVE.call("/api/ready", {}, 8).then((data) => { if (typeof READY !== "undefined" && Array.isArray(data.checks)) READY.notes(data.notes); }, () => {});
+      // Tool packs: with a knowledge base, the window of machine.js (and the programs the packs need); without one the factory packs are listed grey, and say who turns them on
+      function packsSection(id, env) {
+        return ask("/api/setup", "state").then((state) => {
+          if (state.kb && state.kb.here) {
+            const packs = MACHINE.packsPanel(ctx), local = MACHINE.localPanel(ctx);
+            env.inside([h("p", {class: "st-sub"}, packs.sub), ...packs.body, ...local.body.filter((node) => node.dataset && node.dataset.part === "programs")]);
+            return null;
+          }
+          return ask("/api/machine", "toolpacks").then((found) => {
+            const rows = (found.toolpacks || []).filter((row) => row.from === "harness" && !row.sample);  // a sample pack (demotracker) is not a tool a newcomer has: not listed until a knowledge base turns it on (1.8.32)
+            const list = h("div", {class: "st-packlist"}, rows.map((row) => h("div", {class: "st-pack"}, h("span", {class: "st-pdot"}), h("b", null, row.name), h("span", {class: "tl-ver"}, row.version || ""), h("span", {class: "st-pdesc", title: row.description || ""}, row.description || ""))));
+            env.inside([h("p", {class: "st-sub"}, t("tools.packs.lead")), h("p", {class: "st-note"}, t("settings.packs.nokb")), list]);
+          });
+        });
+      }
+
+      function connectionsSection(id, env) {
+        const made = SERVERS.connectionsPanel(ctx);
+        env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body, h("div", {class: "st-foot"}, ...made.foot)]);
+      }
+
+      function networkSection(id, env) {
+        const made = MACHINE.localPanel(ctx, {bare: true});  // the window already says Network: the part does not say it again (1.8.32)
+        env.inside([h("p", {class: "st-sub"}, made.sub), ...made.body.filter((node) => node.dataset && node.dataset.part === "network")]);
+      }
+
+      // Advanced: the Python install command, the paths not to touch, the skill prefix and the older copy go through `save` (part advanced), `refuse` and `older`; MCP is machine.js's switch
+      function advancedSection(id, env) {
+        return ask("/api/setup", "state").then((state) => {
+          const rules = state.rules.slice(), refused = [];
+          const field = (caption, node, hint) => h("div", {class: "wz-field"}, h("span", {class: "cap"}, caption), node, hint ? h("div", {class: "hint"}, hint) : null);
+          const literal = (text) => text.split("{package}").flatMap((part, i) => (i ? [h("code", null, "{package}"), part] : [part]));  // `{package}` is a placeholder the person types: it always shows as it is, in the code font
+          const install = h("input", {type: "text", class: "wz-in mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph"), value: state.install_command || "", "aria-label": t("setup.install")});
+          const prefix = h("input", {type: "text", class: "wz-in mono st-short", maxlength: 31, autocomplete: "off", spellcheck: "false", value: state.skill_prefix || (state.kb && state.kb.prefix) || "", "aria-label": t("setup.prefix")});
+          const path = h("input", {type: "text", class: "wz-in mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: state.example, "aria-label": t("setup.refused")});
+          const add = h("button", {type: "button", class: "wz-btn sm", disabled: ""}, t("setup.refused.add"));
+          const list = h("div", {class: "st-chips"}), said = h("p", {class: "wz-err"}), done = h("span", {class: "st-saved", role: "status"});
+          said.hidden = true;
+          const paintRules = () => {
+            const chip = (text, off) => { const b = h("button", {type: "button", class: "st-cx", "aria-label": t("setup.refused.remove"), title: t("setup.refused.remove")}, "×"); b.addEventListener("click", () => { off(); paintRules(); }); return h("span", {class: "st-chip"}, h("code", null, text), b); };
+            put(list, rules.map((rule) => chip(rule.repo + ": " + rule.rule, () => { rules.splice(rules.indexOf(rule), 1); })), refused.map((one) => chip(one, () => { refused.splice(refused.indexOf(one), 1); })));
+          };
+          const addPath = () => {
+            if (!path.value.trim()) return;
+            ask("/api/setup", "refuse", {repos_root: state.repos_root, singles: state.singles, path: path.value}).then((found) => { said.hidden = true; path.value = ""; add.disabled = true; if (!refused.includes(found.path)) refused.push(found.path); paintRules(); }, (error) => { said.textContent = errorText(error); said.hidden = false; });
+          };
+          path.addEventListener("input", () => { add.disabled = !path.value.trim(); });
+          path.addEventListener("keydown", (event) => { if (isEnter(event)) addPath(); });
+          add.addEventListener("click", addPath);
+          paintRules();
+          const save = h("button", {type: "button", class: "wz-btn primary"}, t("settings.save"));
+          save.addEventListener("click", () => {
+            said.hidden = true; done.textContent = ""; save.disabled = true;
+            const values = {part: "advanced", skill_prefix: prefix.value, install_command: install.value, refused, rules, stamp: state.stamp};  // three fields: no knowledge base sync and no doctor
+            ask("/api/setup", "save", values).then(() => {
+              saved(); done.textContent = "✓ " + t("settings.saved");
+              return ask("/api/setup", "state").then((now) => { state.stamp = now.stamp; refused.splice(0); rules.splice(0, rules.length, ...now.rules); paintRules(); });
+            }).catch((error) => { said.textContent = errorText(error); said.hidden = false; }).then(() => { save.disabled = false; });
+          });
+          const older = h("button", {type: "button", class: "wz-btn sm"}, t("settings.adv.older.go"));
+          older.addEventListener("click", () => olderDialog(saved));
+          const made = MACHINE.localPanel(ctx);
+          env.inside([
+            field(t("setup.install"), install, literal(t("setup.install.example"))),
+            field(t("setup.refused"), h("div", {class: "st-add"}, path, add), t("setup.refused.hint")), h("div", {class: "st-under"}, list), said,
+            field(t("setup.prefix"), prefix, t("setup.prefix.hint")),
+            h("div", {class: "st-line"}, save, done),
+            h("div", {class: "st-rule"}), made.body.find((node) => node.dataset && node.dataset.part === "mcp"),
+            h("div", {class: "st-rule"}), restartRow(),
+            h("div", {class: "st-rule"}), field(t("setup.older.title"), h("div", null, older), t("setup.older.hint")),
+          ]);
+        });
+      }
+
+      win = {view, show};
+      show(...(queued || [first, given.part, given.focus]));
+      refreshDots();
+      // the notes may not be known yet (a page that has no block of the board asks slowly): ask once now
+      SERVE.call("/api/ready", {}, 8).then((data) => { if (typeof READY !== "undefined" && Array.isArray(data.checks)) READY.notes(data.notes); }, () => {});
+    };
+    setTimeout(build, 0);
   }
 
   // Restart board (1.8.32: it was in the sliders panel, now Appearance): the same button and texts; SHELL.restartBoard waits for the new process and pairs again

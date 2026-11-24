@@ -44,7 +44,7 @@
 .pal-ft span{display:inline-flex;align-items:center;gap:6px}.pal-ft .grow{flex:1}
 
 /* ---------- the settings panel ---------- */
-.setp{position:fixed;right:20px;bottom:74px;z-index:170;width:344px;max-width:calc(100vw - 40px);max-height:calc(100vh - 110px);overflow:auto;padding:16px;border-radius:18px;color:var(--ink);background:var(--over);border:1px solid var(--glass-line);
+.setp{position:fixed;right:20px;bottom:74px;z-index:170;width:344px;max-width:calc(100vw - 40px);max-height:calc(100vh - 110px);overflow:auto;padding:16px;border-radius:18px;color:var(--ink);background:var(--pop);border:1px solid var(--glass-line);
  box-shadow:var(--glass-hi),var(--glass-shadow)}
 .setp[hidden]{display:none}
 .setp{transform-origin:calc(100% - 22px) calc(100% + 32px)}  /* the sliders button: 22 px in from the right edge, 32 px below the bottom edge (1.8.33) */

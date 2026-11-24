@@ -15,9 +15,9 @@
 @media (min-width:901px){.st-win .st-i.on,.st-win .st-i.on:hover{background:transparent}}
 /* grey bars while a section loads (S3): opacity only; still under Lite and the system's reduced motion */
 .st-win .st-skel{display:flex;flex-direction:column;gap:12px}
-.st-win .st-sk{max-width:100%;border-radius:10px;background:var(--track);animation:st-pulse 1.1s ease-in-out infinite alternate}
+.st-win .st-sk{max-width:100%;border-radius:10px;background:var(--track);box-shadow:inset 0 0 0 1px var(--line);animation:st-pulse 1.1s ease-in-out infinite alternate}  /* an outline too: on the light card the bars alone were nearly white */
 .st-win .st-sk.sub,.st-win .st-sk.label{border-radius:6px}
-@keyframes st-pulse{from{opacity:.45}to{opacity:1}}
+@keyframes st-pulse{from{opacity:.7}to{opacity:1}}
 html.lite .st-win .st-sk{animation:none}
 @media (prefers-reduced-motion:reduce){.st-win .st-sk{animation:none}}
 .st-win .st-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -255,3 +255,6 @@ textarea.su-in{resize:vertical}
 .su-send-facts{grid-template-columns:minmax(0,1fr)}
 .su-send-facts dd{margin-bottom:4px}
 }
+
+/* (1.8.33) with Settings open the board's fixed buttons (search, the dock, Appearance) fade away under the shade instead of staying lit; they come back as the window leaves */
+body.st-open .sh-pill,body.st-open .sh-gear,body.st-open .dock-btn{opacity:0;pointer-events:none;transition:opacity 200ms var(--m-out)}

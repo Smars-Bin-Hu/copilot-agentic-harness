@@ -202,14 +202,22 @@ class MotionRulesTests(unittest.TestCase):
 
     def test_a_section_switch_fades_out_then_rises_in_and_the_selection_glides(self) -> None:
         code = source("settings.js")
-        self.assertIn("MOTION.MS.micro", code)  # out: 120 ms
-        self.assertIn("MOTION.appear(body, {y: 8})", code)  # in: 8 px up, 200 ms
-        self.assertIn("MOTION.glide(sel, select, MOTION.MS.show)", code)
+        self.assertIn("const LEAVE = 100, ARRIVE = 160;", code)  # out 100 ms, in 160 ms
+        self.assertIn("MOTION.appear(body, {y: 8, ms: ARRIVE})", code)  # in: 8 px up
+        self.assertIn("MOTION.glide(sel, select, ARRIVE)", code)
         self.assertIn("if (fading) return fading;", code)  # a burst of clicks shares one fade out ...
         self.assertIn("if (mine !== token) return;", code)  # ... and only the last click lands
         css = source("settings.css")
         self.assertRegex(css, r"@media \(min-width:901px\)\{\.st-win \.st-i\.on,\.st-win \.st-i\.on:hover\{background:transparent\}\}")
         self.assertIn(".st-sel{display:none}", css.replace(" ", ""))  # the narrow window's chips draw their own selection
+
+    def test_settings_sits_over_the_fixed_buttons_and_is_built_in_two_tasks(self) -> None:
+        code, css = source("settings.js"), source("settings.css")
+        self.assertIn('classList.add("st-open")', code)
+        self.assertIn('classList.remove("st-open")', code)
+        self.assertIn("body.st-open .sh-pill,body.st-open .sh-gear,body.st-open .dock-btn{opacity:0;pointer-events:none", css)
+        self.assertIn("setTimeout(build, 0);", code)  # the window first, its parts in a task of their own (GOAL 12)
+        self.assertRegex(source("shell.css"), r"\.setp\{[^}]*background:var\(--pop\);")  # opaque, light and dark
 
     def test_a_loading_section_shows_grey_bars_not_only_a_spinner_and_keeps_its_error_text(self) -> None:
         code = source("settings.js")

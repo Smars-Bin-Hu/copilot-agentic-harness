@@ -179,6 +179,7 @@ class VsLink:
         self.sess: Dict[str, Dict[str, Any]] = {}  # session resource of a bound chat -> {channel, state (trimmed: inputNeeded), seen: {item id: when first seen}}
         self.limits: Dict[str, Dict[str, int]] = {}  # model id -> what decides its context window, every model the host lists (for the context meter)
         self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
+        self.models_off: List[Dict[str, str]] = []  # (1.8.38) what the organization's policy keeps out (`ahp.models_off`), for Settings > Copilot
         self.list_asked = 0.0  # 1.8.7: when the list in place was asked for
         self.gates: Dict[str, threading.RLock] = {}  # 1.8.7: one per task: what is sent to a task's chat goes one at a time, whichever lane sends it
         self.just_sent: Dict[str, Tuple[str, float, str]] = {}  # 1.8.7: chat -> (the turn the board started, when, its session); gone when VS Code says anything new of it
@@ -618,6 +619,14 @@ class VsLink:
         with self.lock:
             return [dict(item) for item in self.models] if self.ready else []
 
+    def model_table(self) -> Dict[str, Any]:
+        """(1.8.38) Settings > Copilot, "N models" opened: `{on: [{name, price, window}], off: [{name, price}]}`. Empty when the link is not up."""
+        with self.lock:
+            if not self.ready:
+                return {"on": [], "off": []}
+            on = [{"name": item.get("name") or item.get("id"), "price": item.get("price") or "", "window": (self.limits.get(item.get("id")) or {}).get("window")} for item in self.models]
+            return {"on": on, "off": [{"name": item["name"], "price": item["price"]} for item in self.models_off]}
+
     def running_chats(self) -> List[Dict[str, str]]:
         """The chats VS Code would ask about when it quits (`veto.chat`): the host lists them as running or as waiting for the person, in any folder, not only the chats of tasks. From the cache; empty when the link is not up.
         `{title, state (busy | input), task}`: `task` is the folder of the open task the chat is bound to, else empty."""
@@ -1013,6 +1022,7 @@ class VsLink:
                     self.unbound.clear()
                     self.sdk.clear()
                     self.models = []
+                    self.models_off = []
                     self.scanned.clear()
                     self.read_at.clear()
                     self.listed_at = 0.0
@@ -1043,14 +1053,14 @@ class VsLink:
         """The models of the host, read from its root state once and then with every new list. One read, then we let go of the channel."""
         try:
             root_state = link.subscribe("ahp-root:/")
-            found, limits = ahp.models_of(root_state), ahp.limits_of(root_state)
+            found, limits, off = ahp.models_of(root_state), ahp.limits_of(root_state), ahp.models_off(root_state)
             link.unsubscribe("ahp-root:/")
         except ahp.ConnectionClosed:
             raise
         except ahp.AhpError:
             return
         with self.lock:
-            self.models, self.limits = found, limits
+            self.models, self.limits, self.models_off = found, limits, off
 
     def _list(self, link: ahp.Connection) -> None:
         asked = time.monotonic()

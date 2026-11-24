@@ -829,7 +829,7 @@ class ServeLiveTests(base.BoardCase):
 class PageFilesTests(unittest.TestCase):
     def test_the_stream_and_the_reply_panel_are_in_the_served_task_page_only(self) -> None:
         code = Path(taskhtml.__file__).read_text(encoding="utf-8")
-        self.assertIn('"shell.js", "bot3d.js", "robot.js", "readyui.js", "enter.js", "dock.js", "term.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "programicons.js", "wizard.js", "settings.js", "live.js", "reply.js", "run.js", "rounds.js", "autorun.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}', code)
+        self.assertIn('"shell.js", "bot3d.js", "robot.js", "readyui.js", "enter.js", "dock.js", "term.js", "acct.js", "stop.js", "kbatlas.js", "companytab.js", "servers.js", "machine.js", "tools.js", "programicons.js", "wizard.js", "settings.js", "live.js", "reply.js", "run.js", "rounds.js", "autorun.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}', code)
         saved = code.split('page = build("desk.html"')[1].split("\n")[0]
         self.assertNotIn("live.js", saved)  # a saved copy has none: it asks the network for nothing
         self.assertIn('*([LIVE_CSS] if "live.js" in scripts else [])', code)
@@ -1014,8 +1014,8 @@ class PageFilesTests(unittest.TestCase):
         css = source("live.css")
         self.assertIn(".tk-foot{padding-bottom:120px}", css)
         self.assertRegex(css, r"\.rp-bar\{position:fixed;left:50%;bottom:22px")
-        gear = re.search(r"\.sh-gear\{[^}]*\}", source("shell.css")).group(0)
-        self.assertIn("right:20px", gear)  # the gear is at the right, the pill at the middle; the search is at the top
+        dock = re.search(r"\.dock-btn\{[^}]*\}", source("dock.css")).group(0)
+        self.assertIn("right:20px", dock)  # the dock's buttons are at the right, the pill at the middle; the search and the account menu are at the top
         self.assertIn("prefers-reduced-motion:reduce", css)
         self.assertIn("html.lite", css)
 

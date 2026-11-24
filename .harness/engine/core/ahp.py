@@ -685,6 +685,20 @@ def models_of(root_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def models_off(root_state: Dict[str, Any]) -> List[Dict[str, str]]:
+    """(1.8.38) The models Copilot lists that the organization's policy keeps out (`policyState` set and not `enabled`): `{id, name, price}`, for Settings > Copilot.
+    A model with no policyState is in neither list (`models_of` does not offer it, and nothing says it was switched off)."""
+    out: List[Dict[str, str]] = []
+    for agent in root_state.get("agents") or []:
+        if not isinstance(agent, dict) or agent.get("provider") != LOCAL_PROVIDER:
+            continue
+        for model in agent.get("models") or []:
+            if not isinstance(model, dict) or not model.get("id") or not isinstance(model.get("policyState"), str) or model["policyState"] == "enabled":
+                continue
+            out.append({"id": str(model["id"]), "name": str(model.get("name") or model["id"]), "price": str((model.get("_meta") or {}).get("priceCategory") or "")})
+    return out
+
+
 def model_choice(model: Dict[str, Any], level: str = "", size: Any = 0) -> Dict[str, Any]:
     """A model of `models_of` with a level and a context size (`contextSize`), in the shape of `message.model`."""
     key = (model.get("thinking") or {}).get("key") or "thinkingLevel"

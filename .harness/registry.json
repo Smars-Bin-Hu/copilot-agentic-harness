@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.8.37",
+  "version": "1.8.38",
   "released": "2026-11-23",
   "copyright": "Smars Hu",
   "contributors": [
@@ -194,6 +194,7 @@
         ".harness/tests/test_ahp.py",
         ".harness/tests/test_agenthost.py",
         ".harness/tests/test_ghauth.py",
+        ".harness/tests/test_copilotacct.py",
         ".harness/tests/test_hostidentities.py",
         ".harness/tests/data/ahp_turn_1147.jsonl",
         ".harness/tests/test_chatnew.py",

@@ -51,6 +51,20 @@ const WIZARD = (function () {
   let holding = false;  // a language was written and this page is about to load again: serve.js waits (E6)
   if (typeof SERVE !== "undefined" && SERVE.stay) SERVE.stay(() => holding);
 
+  // (1.8.38) The fake answer of `/api/copilot-account` for one shape (?acct=). Names are made up.
+  function fakeAccount(kind) {
+    if (kind === "none" || kind === "reading") return {state: kind, models: {on: [], off: []}};
+    const credits = kind === "unlimited" ? {unlimited: true} : kind === "over" ? {unlimited: false, total: 300, used: 342, left: 0, over: 42, over_ok: true}
+      : kind === "out" ? {unlimited: false, total: 300, used: 300, left: 0, over: 0, over_ok: false} : kind === "low" ? {unlimited: false, total: 1500, used: 1380, left: 120, over: 0, over_ok: false}
+      : {unlimited: false, total: 1500, used: 697, left: 802.1, over: 0, over_ok: false};
+    const org = kind === "org" || kind === "over" || kind === "policy";
+    const on = [["Copilot Fusion", "", 200000], ["Example Model Large", "high", 1000000], ["Example Model Small", "low", 128000], ["Example Model Medium", "medium", 400000]].map(([name, price, window]) => ({name, price, window}));
+    return {state: "ok", read_at: Date.now() / 1000 - 130, reading: false, account: {plan: org ? "business" : "individual", since: "2026-03-03T10:00:00-05:00", resets: "2026-12-01T00:00:00.000Z",
+      orgs: org ? ["example-data-platform-engineering-and-analytics-organization"] : [], enterprises: org ? ["example-enterprise"] : [], credits,
+      switches: {cli_enabled: true, is_mcp_enabled: kind !== "policy", chat_enabled: true, cloud_sessions_enabled: kind !== "policy"}},
+      models: {on, off: org ? [{name: "Example Model Preview", price: "high"}, {name: "Example Model Old", price: "low"}] : []}};
+  }
+
   // ------------------------------------------------------------------------------------------------ the calls: real, or fake
   function realApi() {
     const call = (path, body, seconds) => SERVE.call(path, body, seconds);
@@ -62,6 +76,7 @@ const WIZARD = (function () {
       machinePoll: (step, body) => call("/api/machine", {step, ...(body || {})}, 12).then((data) => data.result),
       gh: (body) => send("/api/gh", body),
       host: (body) => send("/api/host", body),
+      account: (fresh) => call("/api/copilot-account", fresh ? {fresh: true} : {}, 8),  // (1.8.38) Settings > Copilot: credits, seat, switches, models
       ready: () => call("/api/ready", {}, 8),
       language: (language) => SERVE.post("/api/language", {language}, true),
     };
@@ -183,6 +198,7 @@ const WIZARD = (function () {
       },
       host: (body) => done(body.do === "restart" && q("busy", "") === "1" ? {state: "waiting", busy: ["fix-the-tests", "write-notes"]} : {state: "restarted", busy: []}),
       ready: () => done(ready(), 20),
+      account: () => done(fakeAccount(q("acct", "ok")), 20),  // ?acct=ok | unlimited | over | out | low | policy | org | none | reading
       language: (language) => { F.lang = language; return done({language}); },
       fake: F,
     };
@@ -434,28 +450,61 @@ const WIZARD = (function () {
     const tips = [line.gh ? t("wizard.c.st.tip.gh", {path: line.gh}) : "", line.gh_version ? t("wizard.c.st.tip.ghv", {v: line.gh_version}) : "",
       line.host_version ? t("wizard.c.st.tip.host", {v: line.host_version}) : "", line.host_seconds ? t("wizard.c.st.tip.secs", {s: Math.round(line.host_seconds)}) : ""].filter(Boolean);
     const failed = why === "host-failed";
-    return {text: [via, hostText, n ? t(n === 1 ? "wizard.c.st.model.one" : "wizard.c.st.model.many", {n}) : ""].filter(Boolean).join(" \u00b7 "), tips,
+    const models = n ? t(n === 1 ? "wizard.c.st.model.one" : "wizard.c.st.model.many", {n}) : "";
+    return {text: [via, hostText, models].filter(Boolean).join(" \u00b7 "), head: [via, hostText].join(" \u00b7 "), models, tips,
       kind: why === "ok" ? "ok" : failed ? "bad" : stuck ? "hot" : "none", restart: failed || stuck};
   }
 
   parts.copilot = function (box, opts) {
     const body = el("div");
     let timer = 0, stopped = false, shown = "", sawOut = false, advance = 0, starting = false, waitText = null, ticker = 0, base = null, hadRestart = false;
+    let acct = null, acctTimer = 0, acctAsked = false, openModels = false;  // (1.8.38) Settings > Copilot: `/api/copilot-account` (core/copilotacct.py), and whether "N models" is open
+    function loadAcct(fresh) {  // the board keeps what gh said for 5 minutes, so asking every 30 s costs nothing; while the first read runs, every 2 s
+      clearTimeout(acctTimer);
+      return api.account(fresh).then((found) => found || {state: "none"}, () => ({state: "none"})).then((found) => {
+        if (stopped) return;
+        acct = found; paint();
+        acctTimer = setTimeout(() => loadAcct(false), found.state === "reading" || found.reading ? 2000 : 30000);
+      });
+    }
     const said = el("p", "wz-err"); said.hidden = true;
     function restartHost(act) {  // the existing restart, as the Enter screen's button does (one place for the failed page and the Settings card, 1.8.35)
       act.disabled = true; said.hidden = true;
       return api.host({do: "restart"}).then((found) => { if (found && found.state === "waiting") { said.textContent = t("wizard.c.host.waiting"); said.hidden = false; } return tick(); }, (error) => { said.textContent = errorText(error); said.hidden = false; }).then(() => { act.disabled = false; });
     }
+    const hover = (node, sig, build, label) => { if (typeof Status !== "undefined" && Status.card) Status.card(node, () => ({sig, build}), label); return node; };
+    const window_ = (value) => (!(value > 0) ? "" : value >= 1000000 ? Math.round(value / 100000) / 10 + " M" : Math.round(value / 1000) + " K");
+    function modelTable(table) {  // (1.8.38) "N models" opened: what the host lists, then what the organization switched off
+      const rows = (list, off) => list.map((item) => h("tr", off ? {class: "off"} : null, h("td", null, item.name), h("td", null, item.price || "-"), h("td", null, off ? "" : window_(item.window) || "-")));
+      return el("div", "acct-models",
+        h("table", null, h("thead", null, h("tr", null, h("th", null, t("acct.m.name")), h("th", null, t("acct.m.price")), h("th", null, t("acct.m.window")))), h("tbody", null, rows(table.on, false))),
+        table.off.length ? el("div", "acct-offh", t("acct.m.off", {n: table.off.length})) : null,
+        table.off.length ? h("table", {class: "off"}, h("tbody", null, rows(table.off, true))) : null);
+    }
     function statusCard(line) {  // (1.8.35) Settings > Copilot: the name, one status line (details on hover), Sign out, and Start Copilot again only when the host is stuck or failed
       const st = copilotStatus(line);
-      const lineBox = el("div", "t2 wz-st", dot(st.kind), el("span", null, st.text));
-      if (st.tips.length && typeof Status !== "undefined" && Status.card) Status.card(lineBox, () => ({sig: st.tips.join("|"), build: () => el("div", "st-list", st.tips.map((tip) => el("div", null, tip)))}), st.text);  // details on the app's hover card
-      else lineBox.title = st.tips.join("\n");
+      const found = acct && acct.state === "ok" && acct.account ? acct : null;  // (1.8.38) credits, seat, switches: shown only when read
+      const table = acct && acct.models && ((acct.models.on || []).length || (acct.models.off || []).length) ? acct.models : null;
+      const textBox = el("span", null, st.models ? st.head : st.text);
+      const lineBox = el("div", "t2 wz-st", dot(st.kind), textBox);
+      if (st.tips.length) hover(textBox, st.tips.join("|"), () => el("div", "st-list", st.tips.map((tip) => el("div", null, tip))), st.text);  // details on the app's hover card
+      if (st.tips.length && (typeof Status === "undefined" || !Status.card)) textBox.title = st.tips.join("\n");
+      if (st.models) {
+        const toggle = table ? h("button", {type: "button", class: "wz-link acct-mlink", "aria-expanded": String(openModels)}, st.models + (openModels ? " \u25b4" : " \u25be")) : el("span", null, st.models);
+        if (table) toggle.addEventListener("click", () => { openModels = !openModels; shown = ""; paint(); });
+        lineBox.append(el("span", "acct-sep", "\u00b7"), toggle);
+      }
+      const rules = found ? ACCT.policy(found.account) : null;
+      if (rules) lineBox.append(el("span", "acct-sep", "\u00b7"), hover(el("span", "acct-pol", t("acct.sw.short"), h("i", {class: "acct-pd " + rules.kind})), JSON.stringify(found.account.switches), () => ACCT.policy(found.account).node, t("acct.sw.title") + (rules.off.length ? ": " + rules.off.map((key) => t("acct.sw." + key)).join(", ") : "")));
+      const credits = found && found.account.credits;
+      const nums = credits ? hover(el("div", "acct-n", ...ACCT.line(found.account)), String(found.read_at) + String(found.reading), () => ACCT.details(found, () => loadAcct(true)), ACCT.short(found.account)) : null;
+      const block = credits ? el("div", "acct-q", el("div", "acct-cap", h("b", null, t("acct.title")), h("span", null, t("acct.month"))), ACCT.bar(credits), nums) : null;
       const acts = el("div", "wz-sacts");
       if (typeof SETTINGS !== "undefined" && SETTINGS.signOut) acts.append(link(t("settings.who.signout"), () => SETTINGS.signOut(tick)));
       let again = null;
       if (st.restart) { again = btn(t("wizard.c.st.restart"), "sm primary", () => restartHost(again)); acts.append(again); }
-      put(body, el("div", "wz-signed", el("span", "wz-big-ok" + (st.kind === "ok" ? "" : " warn"), st.kind === "bad" ? "!" : "\u2713"), el("div", null, el("div", "t1", (line.login ? t("wizard.c.done", {u: line.login}) : t("wizard.c.done.anon"))), lineBox), acts),
+      put(body, el("div", "wz-signed acct", el("span", "wz-big-ok" + (st.kind === "ok" ? "" : " warn"), st.kind === "bad" ? "!" : "\u2713"), el("div", "acct-who", el("div", "t1", (line.login ? t("wizard.c.done", {u: line.login}) : t("wizard.c.done.anon"))), lineBox), acts,
+        block, openModels && table ? modelTable(table) : null),
         line.why === "host-failed" ? el("p", "wz-err", t("wizard.c.hostfail", {why: line.detail || "-"})) : null);
       if (again && !hadRestart) MOTION.appear(again, {y: 4, ms: MOTION.MS.show});
       hadRestart = Boolean(again);
@@ -464,7 +513,9 @@ const WIZARD = (function () {
       const line = copilotLine() || {state: "wait", why: "starting"};
       const signed = copilotSignedIn(line);
       if (!signed) sawOut = true;
-      const sign = JSON.stringify([line.state, line.why, line.code, line.url, line.login, line.detail, line.last, starting, opts.bare && copilotStatus(line), opts.bare && line.host && line.host.percent]);
+      if (!signed && acctAsked) { acctAsked = false; acct = null; clearTimeout(acctTimer); }  // signed out: what was read was about that account
+      if (opts.bare && !ONLY && signed && !acctAsked) { acctAsked = true; loadAcct(false); }  // (1.8.38) the account is read once the card shows a person
+      const sign = JSON.stringify([line.state, line.why, line.code, line.url, line.login, line.detail, line.last, starting, opts.bare && copilotStatus(line), opts.bare && line.host && line.host.percent, opts.bare && acct, openModels]);
       base = line.why === "signing-in" ? {left: line.left || 0, at: Date.now()} : null;  // (1.8.32) the count runs down by itself between two answers
       if (waitText) waitText.textContent = t("wizard.c.wait", {t: clock(line.left || 0)});
       if (sign === shown) { opts.changed(); return; }
@@ -506,7 +557,7 @@ const WIZARD = (function () {
     paint();
     timer = setTimeout(loop, 2000);
     ticker = setInterval(() => { if (waitText && base) waitText.textContent = t("wizard.c.wait", {t: clock(Math.max(0, base.left - Math.round((Date.now() - base.at) / 1000)))}); }, 1000);
-    return {stop() { stopped = true; clearTimeout(timer); clearTimeout(advance); clearInterval(ticker); }, foot: () => {
+    return {stop() { stopped = true; clearTimeout(timer); clearTimeout(advance); clearInterval(ticker); clearTimeout(acctTimer); }, foot: () => {
       const signed = copilotSignedIn(copilotLine());
       return {back: !ONLY, later: null, why: signed ? "" : t("wizard.c.need"), main: {label: ONLY ? t("wizard.done") : t("wizard.cont"), off: !signed, go: ONLY ? leave : opts.next}};
     }};

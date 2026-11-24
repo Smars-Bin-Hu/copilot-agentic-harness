@@ -62,7 +62,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
-from core import agenthost, filecache, ghauth, launchenv, pace
+from core import agenthost, copilotacct, filecache, ghauth, launchenv, pace
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
@@ -368,6 +368,7 @@ class Board:
         self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
         self.brain = superbrain.Brain(root, self.link, self.rows, served=lambda: self.served)  # 1.8.1: the super agent chat (`/api/super/ask`, `/api/super/talk`)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
+        self.account = copilotacct.Keeper(lambda: copilotacct.fetch(root, launchenv.extra(root)))  # (1.8.38) Settings > Copilot: credits, seat, switches; gh is asked only when a page wants it
         self.ready.bundle = self.bundle_job
         self.ready.started = self.version.split(" ")[0]  # 1.8.23: the release number only (the stamp moves with any edit)
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
@@ -649,8 +650,17 @@ class Board:
         else:
             raise ValueError("do: login, cancel, folder or logout")
         self.ready.forget_gh()
+        if step in ("login", "logout"):
+            self.account.forget()  # what was read is about the account before
         print(say("serve.did", action="gh " + step, task="-"), flush=True)
         return {key: value for key, value in found.items() if key != "token"}
+
+    def copilot_account(self, fresh: bool = False) -> Dict[str, Any]:
+        """(1.8.38) `/api/copilot-account`: what `copilotacct` last read (`state`: ok, reading, none) and the host's models (`models`: on, off). Never waits for gh."""
+        found = self.account.latest(fresh)
+        table = getattr(self.link, "model_table", None)
+        found["models"] = table() if callable(table) else {"on": [], "off": []}
+        return found
 
     def host(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """O1, `/api/host`: `{do: "restart"}` starts the agent host again (the Enter button of a host that failed). Only while no chat works: a restart stops a running turn. `{state: restarted | waiting, busy}`."""
@@ -2445,6 +2455,10 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": board.gh(data)})
                 except ValueError as error:  # a folder without gh in it: said on the page
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/copilot-account":  # (1.8.38) Settings > Copilot and the account menu: credits, seat, switches, models. The paired browser only: it is about the person
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                return self.answer(200, board.copilot_account(data.get("fresh") is True))
             if path == "/api/host":  # O1: restart the board's own agent host (the Enter button `restart-host`): the paired browser only
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

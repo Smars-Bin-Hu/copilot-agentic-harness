@@ -58,6 +58,7 @@ html.lite .st-win .st-sk{animation:none}
 /* the foot of the left list (1.8.34): the GitHub account with Sign out, and Restart board; it stays at the bottom of the window */
 .st-win .st-foot2{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
 .st-win .st-who{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.st-win .st-walk{display:flex;align-items:center;gap:8px;padding:0;border:0;background:transparent;color:var(--soft);font:inherit;font-size:13px;text-align:left;cursor:pointer}.st-win .st-walk:hover{color:var(--ink)}.st-win .st-walk-i{font-size:14px}  /* (1.8.33) Walk the setup guide again, in the foot (1.8.34) */
 .st-win .st-wmark{flex:none;width:24px;height:24px;display:grid;place-items:center;margin-top:2px}
 .st-win .st-wmark .pi{width:22px;height:22px;color:var(--ink)}
 .st-win .st-wtext{min-width:0;font-size:12.5px;line-height:1.45}

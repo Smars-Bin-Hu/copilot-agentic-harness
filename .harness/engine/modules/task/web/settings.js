@@ -338,7 +338,10 @@ const SETTINGS = (function () {
     out.addEventListener("click", () => signOutAsk(() => { paint(null); refresh(); }));
     signin.addEventListener("click", () => show("copilot"));
     paint(null);
-    return {node: h("div", {class: "st-foot2 wz"}, who, restart), refresh};
+    // (1.8.33) the whole setup guide again, step by step: /setup draws it for a copy that is set up too, and a copy that is set up stays so (wizard.mark), so leaving it halfway changes nothing
+    const walk = h("button", {type: "button", class: "st-walk"}, h("span", {class: "st-walk-i", "aria-hidden": "true"}, "\u21bb"), h("span", null, t("settings.walk")));
+    walk.addEventListener("click", () => location.assign("/setup"));  // no reload first: what Settings saved is on disk, the wizard reads it
+    return {node: h("div", {class: "st-foot2 wz"}, who, walk, restart), refresh};  // the account, the guide again, Restart board (1.8.34)
   }
 
   // Coming from an older copy: look at what would come over, then bring it (the step `older` of the old form)

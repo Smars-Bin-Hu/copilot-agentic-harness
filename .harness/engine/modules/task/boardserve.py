@@ -2605,6 +2605,11 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, result)
                 except Exception as error:  # noqa: BLE001 - the panel shows the refusal
                     return self.answer(500, {"error": str(error)})
+            if path == "/api/super/pulse":  # 1.8.47: a mark of the bound chats from memory, asked often; the page runs its full /api/super poll when the mark changes
+                try:
+                    return self.answer(200, {"pulse": board.link.pulse()})
+                except Exception as error:  # noqa: BLE001 - the page keeps its 5 s poll
+                    return self.answer(500, {"error": str(error)})
             if path == "/api/super":  # the super agent view (1.8.1): what waits for the person across the open tasks, from the same rows as /api/board; a read, with the same checks
                 try:
                     result = board.rows()

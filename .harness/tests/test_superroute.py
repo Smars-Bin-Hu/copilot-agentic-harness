@@ -209,6 +209,29 @@ class SaidTests(RouteCase):
         self.vs.chats[CHAT]["state"]["turns"][0]["responseParts"] = [{"kind": "markdown", "content": "Last words."}, {"kind": "toolCall"}]  # ended on a tool call: its last text block
         self.assertEqual(superroute.said_of(self.vs, TASK), "Last words.")
 
+    def test_nothing_while_a_turn_runs(self) -> None:
+        # 1.8.47 (work PC): the Stop hook marks the wait before the host ends the turn; the last ended turn is then the one before, and its words were shown as the new reply
+        self.vs.chats[CHAT]["state"]["turns"] = [{"id": "t1", "state": "complete", "responseParts": [{"kind": "markdown", "content": "Old reply."}]}]
+        self.vs.chats[CHAT]["state"]["activeTurn"] = {"id": "t2", "responseParts": [{"kind": "markdown", "content": "New reply."}]}
+        self.assertEqual(superroute.said_of(self.vs, TASK), "")
+        self.vs.chats[CHAT]["state"]["turns"].append(self.vs.chats[CHAT]["state"].pop("activeTurn"))
+        self.assertEqual(superroute.said_of(self.vs, TASK), "New reply.")
+
+    def test_the_pulse_moves_when_a_turn_starts_or_ends_not_on_each_word(self) -> None:
+        state = self.vs.chats[CHAT]["state"]
+        state["turns"] = [{"id": "t1", "state": "complete", "responseParts": []}]
+        first = self.vs.pulse()
+        state["activeTurn"] = {"id": "t2", "responseParts": [{"kind": "markdown", "content": "a"}]}
+        running = self.vs.pulse()
+        self.assertNotEqual(first, running)
+        state["activeTurn"]["responseParts"].append({"kind": "markdown", "content": "b"})
+        self.assertEqual(self.vs.pulse(), running)  # more words: no full poll
+        state["turns"].append(state.pop("activeTurn"))
+        self.assertNotIn(self.vs.pulse(), (first, running))
+        self.vs.ready = False
+        self.assertTrue(self.vs.pulse().startswith("x:"))
+        self.vs.ready = True
+
     def test_a_chat_the_link_does_not_know_says_nothing(self) -> None:
         self.assertEqual(superroute.said_of(self.vs, ".workspace/sandbox/tasks/other"), "")
         self.vs.ready = False

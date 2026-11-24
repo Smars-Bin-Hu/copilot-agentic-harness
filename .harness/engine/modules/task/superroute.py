@@ -236,9 +236,10 @@ def cut(words: str, limit: int) -> str:
 
 
 def said_of(link: Any, task: str, limit: int = MAX_SAID) -> str:
-    """The agent's last words in the task's chat: the final message of the last ended turn (as the task page shows it), from what the link holds (no call to the host), cut to `limit`; an empty string when the link does not know the chat."""
+    """The agent's last words in the task's chat: the final message of the last ended turn (as the task page shows it), from what the link holds (no call to the host), cut to `limit`; an empty string when the link does not know the chat.
+    1.8.47: also empty while a turn runs. The Stop hook marks the wait before the host ends the turn (3-13 s on a slow computer), and the last ended turn is then the one before: its words were shown as new."""
     snapshot = chat_state(link, task)
-    if not snapshot:
+    if not snapshot or snapshot["activeTurn"]:
         return ""
     for turn in reversed(snapshot["turns"]):
         words = last_text_of(turn)

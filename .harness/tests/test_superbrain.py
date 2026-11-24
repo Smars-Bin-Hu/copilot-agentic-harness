@@ -451,8 +451,11 @@ class HistoryTests(BrainCase):
     def test_what_a_task_said_is_kept_once_and_read_back_on_the_next_day(self) -> None:
         say = {"id": "job1|stopped|t0", "task": "job1", "why": "stopped", "text": "Where did the import go?", "at": "2026-11-24T10:00:00Z"}
         self.brain.note_says([say, {"id": "", "task": "job1", "why": "stopped", "text": "x", "at": ""}, {"id": "y", "task": "job1", "why": "stopped", "text": "", "at": ""}])  # no id, no words: not kept
-        self.brain.note_says([dict(say, text="changed")])  # the same wait: kept once, as first said
+        self.brain.note_says([say])  # the same wait again: kept once
         self.assertEqual(self.brain.talk()["says"], [say])
+        self.brain.note_says([dict(say, text="changed")])  # 1.8.47: the same wait with new words (the link caught up on the turn): the words change, the entry stays one
+        self.assertEqual(self.brain.talk()["says"], [dict(say, text="changed")])
+        self.brain.note_says([say])
         day = self.when.date().isoformat()
         self.when = self.when + timedelta(days=1)
         self.assertEqual(self.brain.talk()["says"], [])

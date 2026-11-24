@@ -110,6 +110,8 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     drawFold();
     let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], making = [], closedList = [], closedMore = 0, localThink = 0, failed = "";
+    const PULSE_MS = 1500, PULSE_POLL_MS = 2500, PULSE_QUICK_MS = 15000;
+    let pulseTimer = 0, pulseLast = "", pulseQuick = 0, pulseOff = 0;
     let pollTimer = 0, patrolToken = 0, noticeBusy = false, chain = Promise.resolve(), lastMate = "";
     let pointing = null, holdUntil = 0;  // the item the pet showed on a click (a second click soon after opens its task); the pet stays put until holdUntil
     let watchers = 0;  // the pop-out window is one: while it is open the data keeps coming, shown or not
@@ -1519,6 +1521,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       }
       mergeTalk(messages || []);
       for (const item of asks || []) { const entry = item && ROUTE_ASKS.get(item.id); if (entry) routeDraw(entry, item); }
+      for (const item of says || []) { const entry = item && SAYS_SHOWN.get(item.id); if (entry && entry.say.text !== item.text) sayText(entry, item); }  // 1.8.47: the words of a wait can be caught up later
       for (const entry of SAYS_SHOWN.values()) sayDraw(entry);
     }
     // A task's last words in its thread: its avatar, its name, what it waited for and when, and the words (rich). While its wait is open the line says it waits for you;
@@ -1532,13 +1535,25 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         h("span", {class: "sa-mini hot"}, PET.face("you", kind, 0)),
         h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task, undefined, undefined, mates.find((mate) => mate.task === item.task)), tag, item.at ? h("span", {class: "sa-when", title: when(item.at, 0, 19)}, when(item.at, 11, 16)) : null),
           h("div", {class: "sa-text"}, ...rich(item.text))));
-      if (routeEstimate(item.text) > SAY_FOLD) {  // a long message folds after SAY_FOLD lines; "Show more" opens it in place
-        const body = node.querySelector(".sa-text"), more = h("button", {type: "button", class: "sa-askmore"}, t("super.more"));
+      const entry = {say: item, node, tag, waiting: null};
+      sayFold(entry);
+      return entry;
+    }
+    function sayFold(entry) {
+      const old = entry.node.querySelector(".sa-askmore"), body = entry.node.querySelector(".sa-text");
+      if (old) old.remove();
+      body.classList.remove("sa-sayclip");
+      if (routeEstimate(entry.say.text) > SAY_FOLD) {  // a long message folds after SAY_FOLD lines; "Show more" opens it in place
+        const more = h("button", {type: "button", class: "sa-askmore"}, t("super.more"));
         body.classList.add("sa-sayclip");
         more.addEventListener("click", () => { body.classList.remove("sa-sayclip"); more.remove(); });
-        node.querySelector(".sa-bub").append(more);
+        entry.node.querySelector(".sa-bub").append(more);
       }
-      return {say: item, node, tag, waiting: null};
+    }
+    function sayText(entry, item) {
+      entry.say = item;
+      entry.node.querySelector(".sa-text").replaceChildren(...rich(item.text));
+      sayFold(entry);
     }
     function sayDraw(entry) {
       const waiting = Boolean(data && (data.items || []).some((item) => item.id === entry.say.id));
@@ -1632,8 +1647,27 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     function schedule() {
       clearTimeout(pollTimer);
       if (!live()) return;
-      const delay = document.hidden && !watchers ? 30000 : thinkingNow() ? 1500 : Math.max(3, Number(DATA.serve && DATA.serve.refresh) || 5) * 1000;
+      const quick = thinkingNow() || Date.now() < pulseQuick;
+      const delay = document.hidden && !watchers ? 30000 : quick ? (thinkingNow() ? 1500 : PULSE_POLL_MS) : Math.max(3, Number(DATA.serve && DATA.serve.refresh) || 5) * 1000;
       pollTimer = setTimeout(() => poll().then(schedule, schedule), delay);
+      pulseSchedule();
+    }
+    // 1.8.47: a light look at the chats between the full polls (`/api/super/pulse`: from the server's memory, no file read). When a chat starts or ends a turn, the full poll runs at once,
+    // then every PULSE_POLL_MS for PULSE_QUICK_MS: the Stop hook marks the wait only after its own checks (3-13 s on a slow computer). The 5 s poll stays as it was.
+    function pulseSchedule() {
+      clearTimeout(pulseTimer);
+      if (!live() || document.hidden || Date.now() < pulseOff) return;
+      pulseTimer = setTimeout(pulseLook, PULSE_MS);
+    }
+    function pulseLook() {
+      if (!live() || document.hidden || SERVE.busy()) { pulseSchedule(); return; }
+      SERVE.post("/api/super/pulse", {}).then((answer) => {
+        const mark = String((answer && answer.pulse) || "");
+        const moved = Boolean(pulseLast) && mark !== pulseLast;
+        pulseLast = mark;
+        if (moved) { pulseQuick = Date.now() + PULSE_QUICK_MS; poll().then(schedule, schedule); }
+        else pulseSchedule();
+      }, () => { pulseOff = Date.now() + 60000; });  // an older board has no pulse: the 5 s poll alone, look again in a minute
     }
     document.addEventListener("visibilitychange", () => { if (live() && !document.hidden) poll().then(schedule, schedule); });
     addEventListener("resize", () => {
@@ -1665,7 +1699,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       shown = false;
       mateMenuClose(false);
       sv.hidden = true;
-      if (!watchers) clearTimeout(pollTimer);
+      if (!watchers) { clearTimeout(pollTimer); clearTimeout(pulseTimer); }
       patrolToken++;
       if (pet) pet.run(false);
     }
@@ -1717,7 +1751,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     function watch(on) {
       watchers = Math.max(0, watchers + (on ? 1 : -1));
       if (on && watchers === 1 && !shown) poll().then(schedule, schedule);
-      if (!watchers && !shown) clearTimeout(pollTimer);
+      if (!watchers && !shown) { clearTimeout(pollTimer); clearTimeout(pulseTimer); }
     }
     // The pop-out's calls (companion.js): the same pieces as the view, never a copy of them.
     const replyFor = (item) => { const entry = item && (item.why === "stopped" || SAYS(item)) ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };

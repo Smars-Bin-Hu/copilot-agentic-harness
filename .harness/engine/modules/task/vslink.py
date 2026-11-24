@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import datetime
+import hashlib
 import queue
 import threading
 import time
@@ -781,6 +782,20 @@ class VsLink:
         if job.error is not None:
             raise job.error
         return job.result
+
+    def pulse(self) -> str:
+        """1.8.47: a short mark of where the bound chats are, from memory only (no file, no call to the host): per task, the chat's state and how many turns ended. The super view asks for it
+        often and runs its full poll only when it changes, so the wait of a task that just stopped shows soon without reading every task each second. Token by token output does not change it."""
+        with self.lock:
+            if not self.ready:
+                return "x:" + self.why
+            parts = []
+            for task in sorted(self.bound):
+                binding = self.bound[task]
+                cached = self.chats.get(binding["chat"]) or {}
+                state = cached.get("state") if isinstance(cached.get("state"), dict) else {}
+                parts.append(f"{task}:{chat_state(self.sessions.get(binding['session']) or {}, cached)}:{len(state.get('turns') or [])}:{1 if state.get('activeTurn') else 0}")
+            return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
     def ask_of(self, task: str) -> Optional[Dict[str, Any]]:
         """What the chat of this task waits for a person to answer, from the cache: the oldest tool confirmation or question (`chatask.shown`, plus `count` of them and `since`). None: nothing, or the

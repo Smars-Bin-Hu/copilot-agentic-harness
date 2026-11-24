@@ -363,16 +363,25 @@ class Brain:
 
     def note_says(self, found: List[Dict[str, Any]]) -> None:
         """Keep what tasks said when they stopped (1.8.43): one entry per wait (`id` is the wait's item id), in today's record, so the task's thread in the chat and the history show it.
-        An entry already kept is not written again; the day keeps its newest `MAX_SAYS`."""
+        1.8.47: an entry whose words changed takes the new words (the link can catch up on a turn after the wait began); the day keeps its newest `MAX_SAYS`."""
         fresh = [item for item in found if superroute.valid_say(item)]
         if not fresh:
             return
         with self.lock:
             rec = self.load()
-            have = {item["id"] for item in rec["says"]}
-            new = [item for item in fresh if item["id"] not in have]
-            if new:
-                rec["says"] = (rec["says"] + new)[-superroute.MAX_SAYS:]
+            have = {item["id"]: item for item in rec["says"]}
+            changed = False
+            for item in fresh:
+                kept = have.get(item["id"])
+                if kept is None:
+                    rec["says"].append(item)
+                    have[item["id"]] = item
+                    changed = True
+                elif kept["text"] != item["text"]:
+                    kept["text"] = item["text"]
+                    changed = True
+            if changed:
+                rec["says"] = rec["says"][-superroute.MAX_SAYS:]
                 self.save(rec)
 
     def shown(self, messages: List[Dict[str, Any]], proposals: bool) -> List[Dict[str, Any]]:

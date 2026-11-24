@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.46 (1.8.0 – 1.8.46, 2026-11-17 – 2026-11-24)
+## 1.8.47 (1.8.0 – 1.8.47, 2026-11-17 – 2026-11-24)
 
 ### Added
 
@@ -66,6 +66,8 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- The super agent's line of a task that delivered again could show the task's previous reply, not the new one (1.8.47; since 1.8.43). The hook marks the wait before Copilot ends the turn, 3–13 seconds earlier on a work computer, and the last ended turn was then the one before. The reply is now taken only once the turn has ended, and a line already shown takes the new words.
+- **Waiting for you** showed a task that stopped some seconds after its task page did (1.8.47): the super agent looked every 5 seconds. It now takes a light look at the chats every 1.5 seconds, from the board's memory with no file read, and when a turn starts or ends it looks at the tasks at once and every 2.5 seconds for 15 seconds.
 - On a slow computer, the Agent actions tab showed a terminal call with no command and could not open most calls, and a round opened from **Earlier rounds** showed only the agent's words (1.8.45). A call was matched by its name and a few seconds: the harness and Copilot name one call differently (`Bash` and `powershell`, `Read` and `view`, `Write` and `create`), and on a work computer the hook ends 3–13 seconds after the call starts and a turn starts up to a minute before Copilot writes your message. Calls are now matched by their kind and order, and a round by its words. The performance review matches the gate's answers the same way.
 - The button of the Enter screen could show no words until a reload (1.8.44, 1.8.46; since 1.8.34), only its ↵ key. 1.8.44 wrote the new words within half a second whatever the browser does; on a work computer they still did not show. The words now fade by their colour instead of their opacity, so the page draws them itself and no graphics card or remote desktop can keep the old, faded frame on screen.
 - The super agent's card of a stopped task showed the agent's notes from the middle of its turn ("I'll run it again…", "Now update LOG.md…") with its reply (1.8.43): it shows only the reply, the last message after its last tool call, as the task page does. The super agent's history shows **bold**, `code` and links as the chat does (it showed the marks).

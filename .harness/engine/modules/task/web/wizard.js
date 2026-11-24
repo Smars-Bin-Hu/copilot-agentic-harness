@@ -118,10 +118,21 @@ const WIZARD = (function () {
         const lapse = (Date.now() - F.jobAt) / 1000, mb = Math.min(600, 312 + Math.floor(lapse * 6));
         line.host = {state: "preparing", seconds: 64 + Math.floor(lapse), downloaded_mb: mb, total_mb: 620, percent: Math.round(mb / 620 * 100)};
       }
-      return {ready: false, checks: [line]};
+      return {ready: false, checks: [line], bundle: bundle()};
+    };
+    // (1.8.33) the fake certificate bundle: making for a few seconds from the first look, then made; ?bundle=fail: it fails; ?bundle=hold: it stays making; ?bundle=off: no recipe
+    const bundle = () => {
+      const how = q("bundle", "");
+      if (how === "off") return {state: "idle", why: "", made: "", age: null};
+      const failing = how === "fail" || (how === "failonce" && !F.tries);  // ?bundle=failonce: it fails until "Try again" is pressed
+      F.bundleAt = F.bundleAt || Date.now() - (q("bundlewait", "") === "0" ? 7000 : 0);  // ?bundlewait=0: it was made (or failed) already when the page opens
+      const lapse = (Date.now() - F.bundleAt) / 1000;
+      if (how === "hold" || lapse < 6) return {state: "making", why: "", made: "", age: null};
+      return failing ? {state: "failed", why: "the chain the proxy sends has no root the system trusts", made: "", age: null} : {state: "made", why: "", made: "now", age: Math.max(0, lapse - 6)};
     };
     const setup = {
       state, programs: () => programs(),
+      bundle: () => { F.tries = (F.tries || 0) + 1; F.bundleAt = Date.now(); return bundle(); },  // "Try again": made again from now, for a few seconds
       folder: (body) => (!String(body.path || "").trim() || /bad$/.test(body.path) ? fail("No " + body.program + " in that folder.") : (F.ghFound = true, programs())),
       short: () => { F.shortTries = (F.shortTries || 0) + 1; if (q("short", "") === "fail" && F.shortTries < 2) throw new Error("Could not write the short command: permission denied for /usr/local/bin"); F.ranHarness = true; return {done: true}; },  // ?short=fail: the first try fails
       scan: () => ({places: ["~/Developer", "~/source/repos"].slice(0, count ? 2 : 0), rows: F.repos, more: false}),
@@ -148,6 +159,8 @@ const WIZARD = (function () {
           out.push({id: "packs", done: F.sqlcmd, label: t("wizard.v.sq"), detail: "", effect: t("wizard.v.sq.e")});
           out.push({id: "connections", done: F.signed, label: t("wizard.v.cn"), detail: "", effect: t("wizard.v.cn.e")});
         }
+        const cert = bundle();
+        if (cert.state === "failed" || cert.state === "made") out.push({id: "bundle", done: cert.state === "made", label: t("wizard.v.cert"), detail: "", effect: cert.state === "made" ? "" : t("wizard.v.cert.e") + " (" + cert.why + ")"});
         out.push({id: "repos", done: F.savedRepos.length > 0, label: t("wizard.v.repo"), detail: t(F.savedRepos.length === 1 ? "wizard.v.repo.s.one" : "wizard.v.repo.s", {n: F.savedRepos.length}), effect: t("wizard.v.repo.e")});
         return {rows: out};
       },
@@ -209,18 +222,55 @@ const WIZARD = (function () {
   // ------------------------------------------------------------------------------------------------ copilot's line of /api/ready
   const copilotLine = () => ((M.ready && M.ready.checks) || []).find((line) => line.id === "copilot") || null;
   const copilotSignedIn = (line) => Boolean(line) && (line.state === "ok" || ["host-starting", "host-preparing", "connecting", "models"].includes(line.why));
+  // (1.8.33) The room under the page is the lines that show (none, one or two; two sit side by side when they fit): the page above gives or takes it with the foot gliding (200 ms), never a jump
+  function fitLines() {
+    if (!shell || !shell.lines) return;
+    const none = ![shell.job, shell.cert].some((node) => !node.hidden);
+    if (shell.lines.classList.contains("none") !== none) MOTION.glide([shell.foot], () => shell.lines.classList.toggle("none", none), MOTION.MS.show);
+  }
   function paintJob() {
     if (!shell) return;
     const line = copilotLine();
     const host = line && line.host;
-    shell.job.hidden = !host;
+    if (shell.job.hidden === Boolean(host)) { shell.job.hidden = !host; if (host) MOTION.appear(shell.job, {y: 6, ms: MOTION.MS.show}); }
+    fitLines();
     shell.job.title = host ? t("wizard.job.tip") : "";  // (1.8.32) what the download is, said on hover
     if (!host) return;
     const bar = el("span", "mini", h("i", {style: "width:" + Math.max(3, Math.min(100, Number(host.percent) || 0)) + "%"}));
     put(shell.job, spin(), t("wizard.job.prep"), bar, el("span", "wz-mono", host.total_mb ? t("wizard.job.mb", {a: Math.round(host.downloaded_mb || 0), b: Math.round(host.total_mb)}) : host.percent !== undefined ? host.percent + "%" : ""));
   }
+  // (1.8.33) The certificate bundle: a line while the board makes it ("making"), a tick that goes by itself when it is made (only for a bundle made a moment ago, once); nothing when it failed (Review says so).
+  let certTimer = 0, certLeave = 0, certShown = "";
+  function paintCert() {
+    if (!shell || !shell.cert) return;
+    const b = (M.ready && M.ready.bundle) || {state: "idle"};
+    const show = (kind) => {
+      if (certShown === kind) return;
+      certShown = kind;
+      clearTimeout(certLeave);
+      const fresh = shell.cert.hidden;
+      shell.cert.hidden = false;
+      fitLines();
+      shell.cert.title = t("wizard.cert.tip");
+      put(shell.cert, kind === "making" ? [spin(), t("wizard.cert.making"), el("span", "mini ind", h("i"))] : [dot("ok"), t("wizard.cert.made")]);
+      if (fresh) MOTION.appear(shell.cert, {y: 6, ms: MOTION.MS.show});
+    };
+    const hide = () => {
+      if (!certShown) return;
+      certShown = "";
+      MOTION.play(shell.cert, [{opacity: 1}, {opacity: 0}], {ms: MOTION.MS.micro, ease: MOTION.OUT, fill: "forwards"}).then(() => { if (!certShown) { shell.cert.hidden = true; shell.cert.getAnimations().forEach((move) => move.cancel()); fitLines(); } });
+    };
+    if (b.state === "making") {
+      show("making");
+      if (!certTimer) certTimer = setTimeout(() => { certTimer = 0; pollReady(); }, 1500);  // it comes by itself: look again soon, not in 5 s
+    } else if (b.state === "made" && b.age !== null && b.age !== undefined && b.age < 30 && !M.certTicked) {
+      M.certTicked = true;
+      show("made");
+      certLeave = setTimeout(hide, 3000);
+    } else if (certShown === "making") hide();
+  }
   function pollReady() {
-    return api.ready().then((found) => { M.ready = found; paintJob(); return found; }, () => null);
+    return api.ready().then((found) => { M.ready = found; paintJob(); paintCert(); return found; }, () => null);
   }
 
   // ------------------------------------------------------------------------------------------------ the kb's extra pages: programs of the packs, connections
@@ -694,11 +744,26 @@ const WIZARD = (function () {
   }
   // (1.8.32) Every "Set up" row is "label · value", with a unit where it is a count; the server's detail is used as it is, except where it is a bare name (the sign-in) or empty
   const valueText = (row) => (row.id === "copilot" && row.detail ? t("wizard.v.cop.s", {name: row.detail}) : row.detail || t("wizard.v.ok"));
+  // (1.8.33) The certificate bundle row: where Settings exists its button opens Advanced; on this page (no Settings yet) it is "Try again": the board makes the bundle again now, the line below shows it,
+  // and the row follows what it says (a tick when made, the reason when it fails again)
+  let retrying = false;
+  function toSettings(section) { SETTINGS.open(section); }
   parts.review = function (box, opts) {
     const holder = el("div");
     let summary = null, finishing = false;
     const where = {you: [1], programs: [2], copilot: [3], kb: [4, 0], packs: [4, 1], connections: [4, 2], repos: [5]};
     const said = el("p", "wz-err"); said.hidden = true;
+    function again(button) {
+      if (typeof SETTINGS !== "undefined") { toSettings("network"); return; }
+      if (retrying) return;
+      retrying = true;
+      button.classList.add("is-waiting");
+      const look = (left) => pollReady().then((found) => {
+        if ((found && found.bundle && found.bundle.state !== "making") || left <= 0) return api.setup("summary").then((fresh) => { summary = fresh; retrying = false; paint(); });
+        return new Promise((go) => setTimeout(go, 1200)).then(() => look(left - 1));
+      });
+      api.setup("bundle").then(() => { M.certTicked = false; return look(100); }).catch((error) => { retrying = false; button.classList.remove("is-waiting"); said.textContent = errorText(error); said.hidden = false; });
+    }
     function paint() {
       if (!summary) { put(holder, ); return; }
       const ok = summary.rows.filter((row) => row.done), no = summary.rows.filter((row) => !row.done);
@@ -706,7 +771,7 @@ const WIZARD = (function () {
       const parts = [];
       if (ok.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.done")), el("div", "wz-donegrid", ok.map((row) => el("div", "wz-d", dot("ok"), h("b", null, row.label), h("span", {class: "s", title: valueText(row)}, valueText(row)))))));
       if (no.length) parts.push(el("div", "wz-grp", h("h4", null, t("wizard.v.todo")), listOf(no.map((row) => {
-        const set = btn(t("wizard.v.set"), "sm", () => { M.fromReview = true; const spot = where[row.id] || [2]; go(spot[0], spot[1] || 0); });
+        const set = btn(t(row.id === "bundle" && typeof SETTINGS === "undefined" ? "wizard.v.retry" : "wizard.v.set"), "sm", () => { if (row.id === "bundle") { again(set); return; } M.fromReview = true; const spot = where[row.id] || [2]; go(spot[0], spot[1] || 0); });
         return el("div", "wz-li wz-rv", dot("hot"), el("div", "wz-main", el("div", "t", row.label), el("div", "eff", row.effect || "")), set);
       }))));
       if (no.length) parts.push(el("div", "wz-later", gearIcon(), t("wizard.v.later")));
@@ -736,12 +801,14 @@ const WIZARD = (function () {
     const names = alone ? [] : SEGMENTS.map((key) => h("span", null, el("span", "wz-mk", el("span", "wz-tk", h("i", null), h("i", null)), dot("hot wz-skip")), el("span", "wz-nm", t(key))));
     const content = el("div", "wz-pg"), footRow = el("div", "wz-row"), foot = el("div", "wz-foot", footRow);
     const job = el("div", "wz-job"); job.hidden = true;
+    const cert = el("div", "wz-job wz-cert"); cert.hidden = true;  // (1.8.33) the certificate bundle the board makes in the background
+    const lines = el("div", "wz-lines none", job, cert);  // (1.8.33) the lines of what runs in the background: in the page's flow under the page, so none sits over its buttons; the room is the lines shown
     const full = alone ? null : el("div", "wz-mate full", ROBOT.svg({glow: true})), head = alone ? null : el("div", "wz-mate head", ROBOT.svg({head: true}));
     if (full) { full.hidden = true; head.hidden = true; }
     const body = el("div", "wz-body", el("div", "wz-page", content, foot));
     root.className = "wz";
-    put(root, el("div", "wz-top", el("div", "wz-brand", "HARNESS"), count), alone ? null : el("div", "wz-prog", el("div", "wz-bars", bars), el("div", "wz-names", names)), body, job, full, head);
-    shell = {root, count, bars, names, state: SEGMENTS.map(() => null), body, content, foot, footRow, job, full, head, mainBtn: null, mainGo: null, moving: false};
+    put(root, el("div", "wz-top", el("div", "wz-brand", "HARNESS"), count), alone ? null : el("div", "wz-prog", el("div", "wz-bars", bars), el("div", "wz-names", names)), body, lines, full, head);
+    shell = {root, count, bars, names, state: SEGMENTS.map(() => null), body, content, foot, footRow, job, cert, lines, full, head, mainBtn: null, mainGo: null, moving: false};
     if (!alone) { window.addEventListener("resize", settle); body.addEventListener("scroll", settle); }
   }
 

@@ -34,7 +34,7 @@ from core import config, ghauth, launchenv, messages, pace, readyitems, shortcmd
 from core import connections as conn_core
 from core import reach, setup as setup_core, systems as outside
 
-from . import reachcheck
+from . import bundlejob, reachcheck
 from core import procrun
 
 LINES = 6  # errors of doctor shown at the end of the setup
@@ -215,6 +215,7 @@ class Ready:
         self.asked_again = False  # 1.8.13: the running doctor was asked for by Check again: its line shows the bar, not the old answer
         self.optional_kept: Any = None  # (what the items read, when, the answer)
         self.checker = checker or reachcheck.Checker(root)  # the board's own look at the connections (1.7.19)
+        self.bundle = bundlejob.Auto(root)  # (1.8.33) the board puts its own here; the state of the certificate bundle that is made in the background
         self.gh_kept: Optional[Any] = None  # 1.8.x: (what `ghauth.check` said, when, the sign-in state then)
 
     # --- doctor: once, off the request thread ----------------------------------------------------------------------
@@ -592,6 +593,8 @@ class Ready:
                     entry["state"] = "yellow" if entry.get("state") != "red" else "red"
         problems = readyitems.problems(listed)
         notes_out = self.notes(gaps, listed)
+        if readyitems.certificate_missing(self.root) and self.bundle.view()["state"] != "making":  # (1.8.33) the bundle the recipe asks for is not there (not made, or the make failed): its own dot, to Settings
+            notes_out = [*notes_out, {"key": "cert", "text": messages.text("ready.note.cert"), "effect": messages.text("ready.effect.cert")}]
         if base.get("error"):  # the items could not be read: that is a note of its own, never a gear with no dot as if everything were set up
             said = messages.text("ready.note.read")
             problems = [*problems, {"key": "read", "kind": "note", "text": said, "why": base["error"], "short": said, "fix": {}}]
@@ -710,6 +713,7 @@ class Ready:
             checking = [{"id": name, "blocking": True, "group": "required", "kind": "setup" if name == "setup" else "run", "state": "check", "why": "running", "level": "grey"} for name in self.REQUIRED]
             return {"ready": False, "checks": checking, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": [], "optional": []}, "button": self.button(checking, False), "notes": []}
         out = copy.deepcopy(kept)
+        out["bundle"] = self.bundle.view()  # (1.8.33) live, not from the kept answer: the wizard's line follows it
         if isinstance(out.get("button"), dict) and isinstance(out.get("checks"), list):
             out["button"] = self.button(out["checks"], bool(out.get("ready")))  # (1.8.32) the label in the language of now: the kept answer may be from before a language change
         if not paired:  # worked out for a paired browser: this one is not

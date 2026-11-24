@@ -727,7 +727,7 @@ class BoardSteps(ServeCase):
         self.assertNotIn("setup_done", read_user(self.root))
         every = {"rows": [{"id": "python", "required": True, "found": True, "blocked": ""}], "all_found": True}
         with mock.patch.object(boardserve.Board, "programs", return_value=every), mock.patch.object(ready.Ready, "latest", return_value={"checks": [{"id": "copilot", "state": "ok", "login": "a"}]}), \
-                mock.patch.object(ready.Ready, "doctor_again", return_value=True) as again:
+                mock.patch.object(ready.Ready, "doctor_after_setup", return_value=None) as again:
             status, data, _ = self.post("finish")
         self.assertEqual((status, data["result"]), (200, {"ok": True}))
         again.assert_called_once()

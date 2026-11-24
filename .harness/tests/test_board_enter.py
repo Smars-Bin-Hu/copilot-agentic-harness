@@ -245,6 +245,44 @@ class ReadinessTests(TaskCase):
         check.started = ""
         self.assertIsNone(check.stale(), "a test without a board never says so")
 
+    def test_after_confirm_doctor_runs_again_but_the_line_keeps_its_answer(self) -> None:
+        """1.8.33: the first doctor after the wizard runs in the background; the page does not get a grey `check` for seconds (Check again, by the person, still does)."""
+        runs: List[int] = []
+        now = [1000.0]
+        gate = threading.Event()
+
+        def doctor(_root: Path) -> Dict[str, Any]:
+            runs.append(1)
+            if len(runs) == 2:
+                gate.wait(5)
+            return {"errors": 0, "first": "", "failed": ""}
+
+        check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), doctor, clock=lambda: now[0])
+        settled(check)
+        check.doctor_after_setup()
+        self.assertTrue(until(lambda: len(runs) == 2))
+        self.assertNotEqual(check.doctor_line()["state"], "check")  # the old answer stands while the new run goes
+        gate.set()
+        self.assertTrue(until(lambda: not check.running))
+
+    def test_after_confirm_a_doctor_that_found_errors_is_not_kept_on_the_line(self) -> None:
+        runs: List[int] = []
+        gate = threading.Event()
+
+        def doctor(_root: Path) -> Dict[str, Any]:
+            runs.append(1)
+            if len(runs) == 2:
+                gate.wait(5)
+            return {"errors": 1, "first": "x", "failed": ""}
+
+        check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), doctor, clock=lambda: 1000.0)
+        settled(check)
+        check.doctor_after_setup()
+        self.assertTrue(until(lambda: len(runs) == 2))
+        self.assertEqual(check.doctor_line()["state"], "check")  # the old error is not shown for seconds and then taken back
+        gate.set()
+        self.assertTrue(until(lambda: not check.running))
+
     def test_check_again_runs_doctor_now_and_not_twice_at_once(self) -> None:
         now, runs, gate = [100.0], [], threading.Event()
 
@@ -864,7 +902,7 @@ class EnterMotionTests(unittest.TestCase):
     def test_the_robot_rests_eight_pixels_over_the_letters_and_the_opening_does_not_move_it(self) -> None:
         self.assertIn("CLEAR = 8", self.code)
         self.assertIn("new DOMMatrixReadOnly(tr).m42", self.code)  # placed for where the wordmark rests, not where the opening has lifted it
-        self.assertIn("FEET_3D", self.code)
+        self.assertIn("FEET_3D = .026", self.code)  # measured on the silhouette (a magenta backdrop), flat and 3D, at 1440, 1280 and 820
         self.assertNotIn("FLOAT", self.code)
 
     def test_the_label_is_swapped_when_the_kind_changes_and_written_in_place_inside_a_kind(self) -> None:
@@ -893,9 +931,21 @@ class EnterMotionTests(unittest.TestCase):
         self.assertIn("MOTION.play(enter, [{opacity: 0}, {opacity: 1}], {ms: 160})", self.code)  # E6
         body = self.code[self.code.index("function begin()"):self.code.index("function finish(")]
         self.assertIn("ms: 500", body)  # the robot flies in from the top centre
-        self.assertIn("scale: .25", body)
+        self.assertIn("scale: k", body)  # small: its head is the wizard's head box (FLY)
         self.assertIn("m-veil enter-bg", body)  # the background is the Enter background first
         self.assertIn("delay: at", body)  # the wordmark when the robot is halfway
+
+    def test_after_the_wizard_the_button_waits_for_the_first_answer_and_the_robot_starts_at_the_wizards_head(self) -> None:
+        self.assertIn("const FLY = {x: .5, y: 35.5, head: 30};", self.code)  # the one constant: the wizard's head, a 30 px box centred at the middle of the top, 35.5 px down
+        self.assertIn('enter.classList.add("waiting")', self.code)
+        self.assertIn("#enter.waiting .en-cta{visibility:hidden}", self.css)  # no grey Checking button before the first answer
+        self.assertIn('view().kind !== "check") || chk0.error) releaseButton()', self.code)
+        self.assertIn("}, 1000);", self.code[self.code.index("function holdButton"):self.code.index("function releaseButton")])  # the dots after a second
+        self.assertIn("setTimeout(releaseButton, 6000)", self.code)
+        self.assertIn('enter.classList.contains("waiting")', self.code[self.code.index("function paintLabel("):self.code.index("function render()")])  # the label is written, not swapped, while it waits
+
+    def test_under_still_the_robot_is_simply_awake(self) -> None:
+        self.assertIn("if (still()) wake();", self.code)  # no head turning up at 1.5 s under reduced motion or Lite
 
     def test_no_move_is_longer_than_300_ms_but_the_robots_and_nothing_per_frame(self) -> None:
         body = self.code[self.code.index("function begin()"):self.code.index("function finish(")]

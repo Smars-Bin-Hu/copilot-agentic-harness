@@ -438,6 +438,19 @@ class Ready:
         self.start_doctor()
         return True
 
+    def doctor_after_setup(self) -> None:
+        """Confirm of the wizard (1.8.33): doctor runs again. When the last answer was clean, the line keeps it meanwhile (no bar, `asked_again` stays off), so the page after Confirm shows its real button at once instead of
+        a grey "Checking" for the 2 to 5 s a cold doctor takes; what the new run finds shows at the next poll. When the last answer had errors (or none yet), the line says `check` as before: an old problem is not shown
+        for seconds and then taken back."""
+        with self.lock:
+            found = self.found
+            clean = found is not None and not found.get("errors") and not found.get("failed")
+        if clean:
+            self.drop_doctor()
+            self.start_doctor()
+        else:
+            self.doctor_again()
+
     def drop_optional(self) -> None:
         """What the optional items said is old (a sync was done, F3 FB1-b): the next question reads them again at once, so a yellow note that a sync mended is gone on the poll that follows it, not when the kept answer runs out."""
         with self.lock:

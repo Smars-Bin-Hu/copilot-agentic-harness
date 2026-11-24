@@ -752,8 +752,10 @@ class WalkThroughTests(unittest.TestCase):
     def test_a_long_path_in_what_the_agent_says_stays_and_a_key_with_slashes_goes(self) -> None:
         for path in (".workspace/sandbox/tasks/t-e2e-real-agent", "DEV/sales-repo/src/orders_load_daily_final_version_two"):
             self.assertEqual(redact.text("see " + path), "see " + path)
-        for key in ("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "x/" + "f" * 40 + "/y", "a2V5a2V5a2V5a2V5a2V5/a2V5a2V5a2V5a2V5a2V5/a2V5", "abcdef0123456789abcdef0123456789abcdef01"):
+        for key in ("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "x/" + "f" * 40 + "/y", "a2V5a2V5a2V5a2V5a2V5/a2V5a2V5a2V5a2V5a2V5/a2V5"):
             self.assertEqual(redact.text(key), redact.MASK, key)
+        # (1.8.32, 7c0a3328) a bare 40 or 64 hex digest (a certificate thumbprint, a commit) is shown: the agent's reply must be able to name it
+        self.assertEqual(redact.text("abcdef0123456789abcdef0123456789abcdef01"), "abcdef0123456789abcdef0123456789abcdef01")
 
     def test_the_rest_of_the_page_follows_when_the_chat_starts_or_stops_waiting(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")

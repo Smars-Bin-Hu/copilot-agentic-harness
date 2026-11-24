@@ -2141,7 +2141,8 @@ class SigninsOnTheBoard(ProgramNeeds):
         for word in ("orphanRow", '"forget-tool"', "connections.shared.with", "machine.signins.orphan", "connections.own.add", "layersBox", "connectionsPanel"):
             self.assertIn(word, servers, word)
         self.assertNotIn("toolRow", servers, "no row for a tool: a connection whose way in is the tool's sign-in has its own Sign in (1.7.38)")
-        self.assertIn("machine.net.title", setup)  # the Settings window names its Network section
+        self.assertIn('t("settings.adv.net")', setup)  # (1.8.34) Network is a part of Advanced: the Settings window names it there
+        self.assertIn('network: "adv"', setup)  # ... and the old way in (`network`) opens Advanced
 
 
 class SamplePackTests(unittest.TestCase):

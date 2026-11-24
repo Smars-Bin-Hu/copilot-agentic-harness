@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.8.33-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.8.34-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -47,7 +47,7 @@ All pictures are from a made-up team's tasks, on the real board.
 <table>
 <tr>
 <td width="50%"><a href="docs/images/enter.png"><img alt="The Enter screen: the robot over the word HARNESS, one Enter button, and a dot on the gear whose hover says what is not set up yet" src="docs/images/enter.png"></a><br><sub><b>Start.</b> Double-click Start Harness. The screen has one button: Enter, or the fix when something blocks the work. A dot on the gear lists what you skipped.</sub></td>
-<td width="50%"><a href="docs/images/setup.png"><img alt="The setup wizard on its Programs page, with the board logo top left and a terminal button top right: a progress bar of six parts, Python, Git and VS Code found, the GitHub CLI not found with a download link and a box for its folder" src="docs/images/setup.png"></a><br><sub><b>Set up.</b> A wizard in the browser: one thing on each page. No agent runs.</sub></td>
+<td width="50%"><a href="docs/images/setup.png"><img alt="The setup wizard on its Programs page, with the board logo top left and a terminal button top right: a progress bar of six parts with the robot's head over the current one, each program with its own logo, Python, Git and VS Code found, the GitHub CLI not found with a download link and a box for its folder, and at the bottom a line that says the certificate bundle is being made" src="docs/images/setup.png"></a><br><sub><b>Set up.</b> A wizard in the browser: one thing on each page. No agent runs.</sub></td>
 </tr>
 <tr>
 <td width="50%"><a href="docs/images/how-can-i-help.png"><img alt="The question mark panel on the board: ask, the course, the first lesson, everything you can ask for" src="docs/images/how-can-i-help.png"></a><br><sub><b>How can I help?</b> Ask, start a lesson, or see every skill.</sub></td>
@@ -66,7 +66,7 @@ All pictures are from a made-up team's tasks, on the real board.
 <td width="50%"><a href="docs/images/report.png"><img alt="The task analysis: working time, waiting time, prompts, Credits, key points and the Agent Performance Review" src="docs/images/report.png"></a><br><sub><b>Where the time went.</b> Working and waiting, every prompt, Credits, the checks.</sub></td>
 </tr>
 <tr>
-<td width="50%"><a href="docs/images/tools.png"><img alt="Settings on Tool packs: ado and sqlserver, both used by the company, each with its connection type, skills and the program it needs; the sample pack is not listed" src="docs/images/tools.png"></a><br><sub><b>Settings: Tool packs.</b> The outside systems the agent can work with, and what each brings.</sub></td>
+<td width="50%"><a href="docs/images/tools.png"><img alt="Settings on Tool packs: the list on the left in two groups, Harness and Company, then Advanced, and at the bottom left the GitHub account with Sign out, Walk the setup guide again and Restart board; on the right ado and sqlserver, both used by the company, each with its connection type, skills and the program it needs; the sample pack is not listed" src="docs/images/tools.png"></a><br><sub><b>Settings: Tool packs.</b> The outside systems the agent can work with, and what each brings.</sub></td>
 <td width="50%"><a href="docs/images/held-write.png"><img alt="A task page with an outside call waiting for approval: a write to orders-dev on DEV, the statement that will run, a code to type, Approve and Do not approve" src="docs/images/held-write.png"></a><br><sub><b>A write waits for you.</b> The system, the environment and the exact statement. The agent waits for your answer.</sub></td>
 </tr>
 <tr>
@@ -235,4 +235,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.8.33 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.8.34 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

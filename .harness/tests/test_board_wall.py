@@ -589,7 +589,7 @@ class PageTests(unittest.TestCase):
         machine = source("machine.js")
         self.assertIn('h("span", {class: "seg2", role: "group"}, ...chips)', machine)
         self.assertIn("bare", machine)
-        self.assertIn("localPanel(ctx, {bare: true})", source("settings.js"))
+        self.assertIn('localPanel(ctx, {stacked: true, title: t("settings.adv.net")})', source("settings.js"))  # (1.8.34) the Network part of Advanced, stacked
 
 
 if __name__ == "__main__":

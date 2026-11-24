@@ -108,3 +108,89 @@ python "$env:TEMP\trace_check.py" <任务名> 3
 - **B**：`stream bytes -1` 表示文件不存在；后面列最近几轮的开始时间、part 数、调用数。看板没连着 chat 时跑的轮次、而且之后补写也没成功，就不在这里。
 - **C**：`from copilot` 或 `stream`；每一轮离它最近的 stream 轮次和时间差 `gap`；`matched NO` 而 gap 在几秒到几十秒，说明是 5 秒容差太紧；没有 nearest turn，说明 stream 里没有这一轮。
 - **D**：每个会话的 `events.jsonl` 在不在；最近 12 条命令和离它最近的 hook 调用的时间差。大多数 gap 超过 3 秒，说明是 3 秒容差太紧（hook 在公司电脑上慢）。
+
+---
+
+## 第二部分（第一部分的结果发回以后加的）
+
+第一部分的结果：
+- stream 里有这几轮，Copilot 的轮次和 stream 的轮次时间差 0.0 秒，都能配上（C）。所以「整轮只有文字」不是缺数据。
+- 公司电脑上 hook 记下的时间比 Copilot 记的晚 3–13 秒（D；Mac 上是 0.1 秒），超出了 3 秒容差，Bash 命令配不上。
+- hook 里叫 `Bash`，Copilot 里叫 `powershell`：按名字配调用的地方也配不上。
+
+这一部分看：点开一轮时服务器拿到了什么，Agent actions 的每一行配上了什么。
+
+### 4. 写下第二个脚本
+
+```powershell
+@'
+# Part 2: what the Agent actions tree and the Earlier rounds answer get for the last rounds. Times, names and counts only.
+# Run in the harness folder:  python trace_check2.py <task> [N]
+import sys
+import time
+import traceback
+from collections import Counter
+from pathlib import Path
+
+root = Path.cwd()
+sys.path.insert(0, str(root / ".harness" / "engine"))
+from core import copilot_events, tasks  # noqa: E402
+from modules.task import chatlive, chatrounds, chatstream, tasktrace  # noqa: E402
+
+S = copilot_events.seconds
+task = sys.argv[1].replace("\\", "/").strip("/")
+if "/" not in task:
+    task = ".workspace/sandbox/tasks/" + task
+last = int(sys.argv[2]) if len(sys.argv) > 2 else 2
+
+
+def hm(x):
+    return time.strftime("%m-%d %H:%M:%S", time.localtime(x)) if x else "-"
+
+
+data = tasks.read(root, task)
+turns = [t for t in chatstream.read(root, task)["turns"] if not t.get("sub")]
+
+print("E Earlier rounds: what a click on a round gets")
+for n, item in list(enumerate(chatrounds.rounds_of(root, task)))[-last:]:
+    found = chatrounds.one(root, task, n)
+    try:
+        turn = chatstream.turn_of_round(turns, found.get("at"), found.get("prompt"))
+        items = chatlive.items_of(turn, False, {}, root) if turn is not None else None
+        kinds = Counter(i.get("k") for i in items or [])
+        print("  round", n, hm(S(found.get("at"))), "| turn", "yes" if turn else "NO", "| items", None if items is None else len(items), dict(kinds))
+    except Exception:  # noqa: BLE001
+        print("  round", n, "ERROR")
+        print(traceback.format_exc()[-1500:])
+    print("    stream_round:", "None" if chatrounds.stream_round(root, task, found) is None else "ok")
+
+print("F Agent actions tree")
+try:
+    tree = tasktrace.tree(root, task, data)
+except Exception:  # noqa: BLE001
+    print(traceback.format_exc()[-1500:])
+    sys.exit(1)
+for node in tree["prompts"][:last]:
+    rows = [r for r in node["rows"] if r.get("kind") == "tool"]
+    print("  #%s" % node["n"], hm(S(node["at"])), "| turn", "yes" if node.get("turn") else "NO", "| tool rows", len(rows), "| cut", node.get("cut"))
+    print("    hook names :", dict(Counter(str(r.get("tool")) for r in rows)))
+    print("    with live  :", sum(1 for r in rows if r.get("live")), "| with command:", sum(1 for r in rows if r.get("command")))
+    turn = next((t for t in turns if t.get("id") == node.get("turn")), None)
+    if turn is not None:
+        names = [str((p.get("toolCall") or {}).get("toolName")) for p in turn.get("parts") or [] if p.get("kind") == "toolCall"]
+        print("    stream names:", dict(Counter(names)))
+'@ | Set-Content -Encoding UTF8 "$env:TEMP\trace_check2.py"
+```
+
+### 5. 运行并发回
+
+```powershell
+python "$env:TEMP\trace_check2.py" <任务名> 2
+```
+
+整段输出拍照发回。
+
+### 怎么读（给 Claude）
+
+- **E**：每一轮 `turn yes`、`items` 有几十个、`stream_round: ok`，那服务器是对的，问题在页面（或者看板进程是旧版本，重启看板后再看一次）。`ERROR` 带出异常，`None` 表示服务器给了退回的样子。
+- **F**：每个 prompt 的 `turn`；tool 行里 `with live` 和 `with command` 各有几个；`hook names` 和 `stream names` 对照，看哪些名字两边不一样。

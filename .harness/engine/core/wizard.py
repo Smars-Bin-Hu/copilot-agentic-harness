@@ -286,7 +286,8 @@ def summary(root: Path, programs: Dict[str, Any], copilot: Dict[str, Any], bundl
     if launchenv.recipe(root).get("host") or launchenv.recipe(root).get("proxy"):  # (1.8.33) the recipe asks for a certificate bundle: a row once it is there, or when it is not and no make is under way
         made = launchenv.bundle_path(root) is not None
         if made or (bundle or {}).get("state") != "making":
-            add("bundle", made, "", say("setup.w.bundle.effect"))
+            why = str((bundle or {}).get("why") or "")
+            add("bundle", made, "", say("setup.w.bundle.effect") + (f" ({why})" if why and (bundle or {}).get("state") == "failed" else ""))
     repos = items.get("repos") or {}
     add("repos", repos.get("state") == "ok", str(repos.get("detail") or "") if repos.get("state") == "ok" else "", say("ready.effect.repos"))
     return {"rows": sorted(out, key=lambda row: ORDER.index(row["id"]))}

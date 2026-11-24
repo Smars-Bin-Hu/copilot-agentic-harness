@@ -3078,6 +3078,7 @@
   "wizard.v.repo": "Code repositories",
   "wizard.v.cert": "Certificate bundle",
   "wizard.v.cert.e": "Tools behind the company proxy may fail to connect. It can be made later in Settings, Advanced.",
+  "wizard.v.retry": "Try again",
   "wizard.v.repo.e": "New tasks have no repository to work in.",
   "wizard.v.repo.s": "{n} repositories",
   "wizard.v.repo.s.one": "1 repository",

@@ -132,6 +132,23 @@ class AutoBundleTests(TaskCase):
         made_file(self.root)
         self.assertTrue(rows("made")["bundle"]["done"])
 
+    def test_the_review_step_bundle_asks_for_another_try_and_a_failure_shows_its_reason(self) -> None:
+        from modules.task import boardserve
+
+        self.recipe()
+        board = boardserve.Board(self.root, False, 0, [])
+        with mock.patch.object(launchenv, "make", return_value={"ok": False, "why": "no root"}) as make:
+            board.bundle_job.kick()
+            board.bundle_job.thread.join(5)
+            board.setup({"step": "bundle"})
+            board.bundle_job.thread.join(5)
+            self.assertEqual(make.call_count, 2)  # a failure of this run does not stop a press on Try again
+            found = board.setup({"step": "bundle"})
+            self.assertIn(found["state"], ("making", "failed"))
+            board.bundle_job.thread.join(5)
+        rows = {row["id"]: row for row in board.setup({"step": "summary"})["rows"]}
+        self.assertIn("no root", rows["bundle"]["effect"])
+
     def test_no_recipe_no_row(self) -> None:
         self.assertNotIn("bundle", [row["id"] for row in wizard.summary(self.root, {"rows": []}, {}, {"state": "failed"})["rows"]])
 
@@ -140,11 +157,16 @@ class WizardPageTests(unittest.TestCase):
     def test_the_line_the_tick_and_the_review_row_are_in_the_page_script(self) -> None:
         for needle in ("wz-cert", "paintCert", "wizard.cert.making", "wizard.cert.made", 'row.id === "bundle"', "MOTION.appear(shell.cert", "bundle=fail", 'q("bundle"'):
             self.assertIn(needle, SCRIPT, needle)
-        self.assertIn('toSettings("network")', SCRIPT)
+        self.assertIn('toSettings("network")', SCRIPT)  # where Settings exists
+        self.assertIn('"wizard.v.retry"', SCRIPT)  # on the wizard page the button is "Try again", never a way out to "/"
+        self.assertNotIn('"harness.reopen", "settings:" + section', SCRIPT)
+        self.assertIn('api.setup("bundle")', SCRIPT)
+        self.assertIn("function fitLines", SCRIPT)
+        self.assertIn(".wz-lines", SHEET)
         self.assertIn(".wz-cert", SHEET)
 
     def test_the_texts_exist_in_both_languages(self) -> None:
-        for key in ("wizard.cert.making", "wizard.cert.made", "wizard.cert.tip", "wizard.v.cert", "wizard.v.cert.e", "setup.w.label.bundle", "setup.w.bundle.effect", "ready.note.cert", "ready.effect.cert"):
+        for key in ("wizard.cert.making", "wizard.cert.made", "wizard.cert.tip", "wizard.v.cert", "wizard.v.cert.e", "wizard.v.retry", "setup.w.label.bundle", "setup.w.bundle.effect", "ready.note.cert", "ready.effect.cert"):
             for code in ("en", "zh"):
                 self.assertTrue(TEXTS[code].get(key), (code, key))
         self.assertEqual(TEXTS["en"]["wizard.cert.making"], "Making the certificate bundle for the company network")

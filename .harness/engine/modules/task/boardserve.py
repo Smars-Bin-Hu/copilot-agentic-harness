@@ -1482,7 +1482,7 @@ class Board:
             return {"done": True}
         if step == "older":
             return reinstall.run(self.root, str(data.get("path", "")), bool(data.get("apply")), True if data.get("apply") else None)
-        if step in ("programs", "folder", "scan", "save", "summary", "finish"):  # the first-run wizard (O1)
+        if step in ("programs", "folder", "scan", "save", "summary", "finish", "bundle"):  # the first-run wizard (O1)
             return self.wizard(step, data)
         if step != "state":
             raise CommandError(say("serve.refused.request"))
@@ -1516,6 +1516,9 @@ class Board:
             return self.programs()
         if step == "scan":
             return core_wizard.scan(self.root)
+        if step == "bundle":  # (1.8.33) "Try again" on Review: make the bundle again now, in the background (a failure of this run does not stop it)
+            self.bundle_job.kick(True)
+            return self.bundle_job.view()
         if step == "summary":
             line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})
             return core_wizard.summary(self.root, self.programs(), line, self.bundle_job.view())

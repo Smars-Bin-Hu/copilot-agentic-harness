@@ -3078,6 +3078,7 @@
   "wizard.v.repo": "代码仓库",
   "wizard.v.cert": "证书包",
   "wizard.v.cert.e": "公司代理后面的工具可能连不上。以后可以在设置的“高级”里生成。",
+  "wizard.v.retry": "再试一次",
   "wizard.v.repo.e": "新任务没有可以动的代码仓库。",
   "wizard.v.repo.s": "{n} 个代码仓库",
   "wizard.v.repo.s.one": "1 个代码仓库",

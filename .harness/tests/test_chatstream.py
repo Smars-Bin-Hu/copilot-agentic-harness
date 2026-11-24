@@ -444,10 +444,30 @@ class FileTests(StreamCase):
         self.assertEqual(pick("2026-01-01T10:00:01.500Z", "first job"), "a")
         self.assertEqual(pick("2026-01-01T10:00:02.000Z", "something else"), "b")  # none starts like it: the nearest in time (a subagent's turn never counts)
         self.assertIsNone(pick("2026-01-01T10:30:00.000Z", "first job"))  # more than 5 seconds from any
-        self.assertIsNone(pick("2026-01-01T10:00:08.500Z", "second job please"))
+        self.assertEqual(pick("2026-01-01T10:00:08.500Z", "second job please"), "b")  # 1.8.43: the turn may start well before Copilot writes the message (a slow PC)
+        self.assertIsNone(pick("2026-01-01T10:00:08.500Z", "something else"))  # other words: only a turn within 5 seconds
+        self.assertIsNone(pick("2026-01-01T09:59:50.000Z", "first job"))  # a turn never starts more than 5 seconds after its round
         self.assertIsNone(pick(None, "x"))
         self.assertIsNone(pick("not a time", "x"))
         self.assertIsNone(chatstream.turn_of_round([], "2026-01-01T10:00:00.000Z", "x"))
+
+    def test_a_round_on_a_slow_pc_gets_its_turn_and_either_record_of_a_round_written_twice(self) -> None:
+        """Seen on a work PC, 2026-11-24: the board saw each turn start 19-74 s before Copilot wrote the person's message; after a restart the host gave the
+        finished turns new ids at Copilot's times, and the board wrote them again. Each round gets one of its own two turns, never the turn before it."""
+        def turn(ident: str, at: str, text: str) -> Dict[str, Any]:
+            return {"id": ident, "at": at, "text": text, "sub": None, "parts": []}
+
+        turns = [turn("live1", "2026-11-24T06:28:02.000Z", "Go on with the task"), turn("live2", "2026-11-24T06:47:17.000Z", "Check the import"),
+                 turn("live3", "2026-11-24T07:11:54.000Z", "Regarding the rename"), turn("again1", "2026-11-24T06:29:16.000Z", "Go on with the task"),
+                 turn("again2", "2026-11-24T06:47:36.000Z", "Check the import"), turn("again3", "2026-11-24T07:12:33.000Z", "Regarding the rename")]
+        pick = lambda at, prompt: (chatstream.turn_of_round(turns, at, prompt) or {}).get("id")  # noqa: E731
+        self.assertEqual(pick("2026-11-24T06:29:16.000Z", "Go on with the task"), "again1")
+        self.assertEqual(pick("2026-11-24T06:47:36.000Z", "Check the import"), "again2")
+        live_only = turns[:3]
+        self.assertEqual((chatstream.turn_of_round(live_only, "2026-11-24T06:29:16.000Z", "Go on with the task") or {}).get("id"), "live1")  # 74 s before
+        self.assertEqual((chatstream.turn_of_round(live_only, "2026-11-24T06:47:36.000Z", "Check the import") or {}).get("id"), "live2")
+        self.assertEqual((chatstream.turn_of_round(live_only, "2026-11-24T07:12:33.000Z", "Regarding the rename") or {}).get("id"), "live3")
+        self.assertIsNone(chatstream.turn_of_round(live_only[:1], "2026-11-24T06:47:36.000Z", "Check the import"))  # the stream lacks this round: not the one before it
         self.assertIsNone(chatstream.turn_of_round("nope", "2026-01-01T10:00:00.000Z", "x"))  # type: ignore[arg-type]
 
     def test_the_file_name_is_the_stream_of_the_task(self) -> None:

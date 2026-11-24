@@ -32,7 +32,7 @@ from core import copilot_events, messages, redact, render, tasks
 from core.logs import read_session
 from core.paths import cli_command, utc_now
 
-from . import common
+from . import callmatch, common
 
 VERSION = 2
 NANO = copilot_events.NANO
@@ -44,7 +44,6 @@ THOUGHT_CHARS = 2000
 PROMPT_CHARS = 4000
 CONTEXT_CHARS = 20000  # one piece of context
 PLATFORM_CHARS = 200000  # Copilot's system prompt: long, once per session
-SAME_CALL_S = 4.0  # a hook line and a Copilot call that start this close together are the same call
 SIMILAR = 0.6  # word overlap of two commands that are the same try
 RETRY_WITHIN = 3  # calls after a failure looked at for the same try
 SLOW_S = 120.0
@@ -305,23 +304,11 @@ def join_gate(root: Path, surface: str, session: str, calls: List[Dict[str, Any]
     """Put the gate's decision of the hook log on the calls of this session: refused, held (it waits for the person), asked (VS Code asked the person); the rule and the system."""
     rows = [row for row in read_session(root, surface, session) if row.get("event") == "PreToolUse"]
     mine = [call for call in calls if call["session"] == session]
-    pairs: List[Tuple[float, int, int]] = []  # (how far apart, hook line, call): the closest pairs are taken first
-    for index, row in enumerate(rows):
-        at = copilot_events.seconds(row.get("at"))
-        if at is None:
-            continue
-        target = row.get("target") if isinstance(row.get("target"), dict) else {}
-        for number, call in enumerate(mine):
-            if str(row.get("tool_name") or "").lower() != call["tool"].lower() or abs(at - call["at"]) > SAME_CALL_S:
-                continue
-            same = target.get("command") and similar(str(target["command"]), call["args"]) > 0.8
-            pairs.append((abs(at - call["at"]) - (10.0 if same else 0.0), index, number))
-    rows_used, calls_used = set(), set()
-    for _score, index, number in sorted(pairs):
-        if index in rows_used or number in calls_used:
-            continue
-        rows_used.add(index)
-        calls_used.add(number)
+    rows = sorted((row for row in rows if copilot_events.seconds(row.get("at")) is not None), key=lambda row: copilot_events.seconds(row.get("at")) or 0.0)
+    mine.sort(key=lambda call: call["at"])
+    # by family and order (1.8.43): the hook line comes seconds after its call on a slow PC, so the closest pair in time is not the same call
+    pairs = callmatch.pair([(copilot_events.seconds(row.get("at")), row.get("tool_name")) for row in rows], [(call["at"], call["tool"]) for call in mine])
+    for index, number in sorted(pairs.items()):
         row, call = rows[index], mine[number]
         external = row.get("external") if isinstance(row.get("external"), dict) else {}
         decision = str(row.get("decision") or "allow")

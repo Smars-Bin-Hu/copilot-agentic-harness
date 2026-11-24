@@ -260,7 +260,8 @@ def take(cached: Dict[str, Any], chat: str, action: Dict[str, Any], sub: Optiona
     return out
 
 
-ROUND_WITHIN = 5.0  # seconds between the time of a round (Copilot's record) and the start of its turn (the board's)
+ROUND_WITHIN = 5.0  # seconds a turn may start after the time of its round (Copilot's record)
+ROUND_LEAD = 300.0  # and before it: the host starts the turn, then the hooks of the prompt run, then Copilot writes the message. A work PC: 19-74 s (2026-11-24); a Mac: under a second
 
 
 def _starts_alike(one: str, other: str) -> bool:
@@ -269,8 +270,10 @@ def _starts_alike(one: str, other: str) -> bool:
 
 
 def turn_of_round(turns: List[Dict[str, Any]], at: Any, prompt: Any) -> Optional[Dict[str, Any]]:
-    """The turn of the main chat (no `sub`) that is the round which began at `at` with `prompt` (Copilot's record, `chatrounds`): the turns whose start is within `ROUND_WITHIN` seconds of `at`;
-    when several fit, the one whose text starts like the prompt (else the nearest in time). None: no turn fits, or a time is not known. Pure."""
+    """The turn of the main chat (no `sub`) that is the round which began at `at` with `prompt` (Copilot's record, `chatrounds`): the turns that start from `ROUND_LEAD` seconds before `at`
+    to `ROUND_WITHIN` after it whose text starts like the prompt (1.8.43: on a slow PC the turn starts up to a minute before Copilot writes the message), else one within
+    `ROUND_WITHIN` seconds either way; the nearest in time.
+    Two turns of one round (the host gave the round a new id after a restart and the board wrote it again) are both right. None: no turn fits, or a time is not known. Pure."""
     when = copilot_events.seconds(at)
     if when is None:
         return None
@@ -279,15 +282,14 @@ def turn_of_round(turns: List[Dict[str, Any]], at: Any, prompt: Any) -> Optional
         if not isinstance(turn, dict) or turn.get("sub"):
             continue
         began = copilot_events.seconds(turn.get("at"))
-        if began is not None and abs(began - when) <= ROUND_WITHIN:
+        if began is not None and -ROUND_LEAD <= began - when <= ROUND_WITHIN:
             fits.append((abs(began - when), turn))
     if not fits:
         return None
-    if len(fits) > 1:
-        head = " ".join(str(prompt or "").split())[:40]
-        same = [item for item in fits if _starts_alike(head, " ".join(str(item[1].get("text") or "").split())[:40])]
-        fits = same or fits
-    return min(fits, key=lambda item: item[0])[1]
+    head = " ".join(str(prompt or "").split())[:40]
+    same = [item for item in fits if _starts_alike(head, " ".join(str(item[1].get("text") or "").split())[:40])]
+    fits = same or [item for item in fits if item[0] <= ROUND_WITHIN]  # words that do not match: only a turn this close in time (a round the stream lacks must not get the one before it)
+    return min(fits, key=lambda item: item[0])[1] if fits else None
 
 
 def backfill(full_state: Any, chat: str, have: Any, sub: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:

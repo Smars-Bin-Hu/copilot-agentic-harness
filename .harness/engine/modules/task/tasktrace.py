@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import calls, config, copilot_events, redact
 from core.logs import read_tail, session_log_path
 
-from . import common, taskinsight
+from . import callmatch, common, taskinsight
 
 TAIL_BYTES = 768 * 1024
 SHOWN = 300  # the newest entries; `cut` says how many older ones are left out
@@ -267,13 +267,14 @@ def settle(node: Dict[str, Any], item: Dict[str, Any], stopped_at: Optional[floa
     Or the turn was stopped, or a newer prompt came: the call will not end. Only the newest prompt can have a call that really runs."""
     moment = copilot_events.seconds
     refused = list(item.get("refused") or [])
-    for row in node["rows"]:
-        if row["kind"] != "tool" or row.get("ok") is not None:
-            continue
+    open_rows = [row for row in node["rows"] if row["kind"] == "tool" and row.get("ok") is None]
+    # a refused call of Copilot's record and its hook line: by family and order, as `with_commands` (1.8.43); a record without the name (older) by time alone
+    pairs = callmatch.pair([(moment(row["at"]), row.get("tool") if all(call.get("name") for call in refused) else "") for row in open_rows],
+                           [(call.get("at"), call.get("name") or "") for call in refused])
+    for index, row in enumerate(open_rows):
         at = moment(row["at"])
-        found = next((call for call in refused if at is not None and abs(call["at"] - at) <= SAME_CALL_S), None)
+        found = refused[pairs[index]] if index in pairs else None
         if found is not None:
-            refused.remove(found)
             row.update(ok=False, seconds=found["seconds"] or row.get("seconds"), error=_clip(found["error"]))
         elif item.get("until") or (stopped_at is not None and at is not None and at <= stopped_at):
             row["stopped"] = True
@@ -288,19 +289,19 @@ def _one(text: str) -> str:
 
 def with_commands(node: Dict[str, Any], started: List[Dict[str, Any]], outside: List[Dict[str, Any]]) -> None:
     """(1.8.22) The command of each call of a prompt that went through, from Copilot's record (the harness's log keeps none: only a call that was refused or held); and for a call
-    to an outside system, what the gate noted of it (`calls.jsonl`): `call` {system, env, verb, how, code}. A call is matched by its start, within SAME_CALL_S, the same tool first."""
+    to an outside system, what the gate noted of it (`calls.jsonl`): `call` {system, env, verb, how, code}. A call is matched by family and order (`callmatch.pair`, 1.8.43: by name and
+    3 seconds it missed on a slow PC). Call it for the prompts oldest first: a command taken is removed from `started`, and one from before the prompt is not offered."""
     moment = copilot_events.seconds
-    left = [dict(item, t=moment(item.get("at")) if not isinstance(item.get("at"), (int, float)) else float(item["at"])) for item in started]
-    for row in node["rows"]:
-        if row["kind"] != "tool" or row.get("command"):
-            continue
-        at = moment(row["at"])
-        near = [item for item in left if at is not None and item["t"] is not None and abs(item["t"] - at) <= SAME_CALL_S]
-        found = min(near, key=lambda item: (item["name"].lower() != str(row.get("tool") or "").lower(), abs(item["t"] - at)), default=None)
-        if found is None:
-            continue
-        left.remove(found)
+    when = lambda item: float(item["at"]) if isinstance(item.get("at"), (int, float)) else moment(item.get("at"))  # noqa: E731
+    begin = moment(node.get("at"))
+    rows = [row for row in node["rows"] if row["kind"] == "tool" and not row.get("command") and not row.get("source")]  # a subagent's calls are not in the main record
+    pool = [item for item in started if begin is None or (when(item) or 0.0) >= begin - callmatch.HOOK_EARLY_S]
+    pairs = callmatch.pair([(moment(row["at"]), row.get("tool")) for row in rows], [(when(item), item.get("name")) for item in pool])
+    for index, number in pairs.items():
+        row, found = rows[index], pool[number]
+        started.remove(found)
         row["command"] = _clip(found["command"], COMMAND_CHARS)
+        at = moment(row["at"]) or 0.0
         said = _one(found["command"])
         call = next((item for item in outside if _one(item.get("command")) == said and abs((moment(item.get("at")) or 0.0) - at) <= 60), None)
         if call is not None:
@@ -314,7 +315,7 @@ REPLY_CHARS = 1500  # of the agent's last words in a prompt, shown under it (C1)
 def with_stream(root: Path, task: str, nodes: List[Dict[str, Any]]) -> None:
     """(C1) What the board kept of the task's chats (`.task/stream.jsonl`, `chatstream`) put on the prompts: each prompt whose turn the stream holds (matched by its start, `turn_of_round`) gets `turn`
     (its id: the page opens the whole round from it), `reply` (the agent's last words, cut to REPLY_CHARS; `reply_cut`), the prompt's own words when Copilot's record gave none, and on each tool row
-    of the hook log the call of that turn it was (`call_id`, by tool name in order) with `live`, the line the Live tab draws for it (a call opens to its input and output from there), and the
+    of the hook log the call of that turn it was (`call_id`, by family and order: `callmatch.pair`) with `live`, the line the Live tab draws for it (a call opens to its input and output from there), and the
     command when the record gave none. Works with Copilot's record gone. Never raises: the stream is an extra."""
     try:
         from . import chatlive, chatstream
@@ -336,17 +337,12 @@ def with_stream(root: Path, task: str, nodes: List[Dict[str, Any]]) -> None:
                 text = str(said[-1]["content"])
                 node["reply"] = redact.text(text[:REPLY_CHARS])
                 node["reply_cut"] = len(text) > REPLY_CHARS
-            calls = [part["toolCall"] for part in turn["parts"] if part.get("kind") == "toolCall" and isinstance(part.get("toolCall"), dict)]
-            used: set = set()
-            for row in node["rows"]:
-                if row.get("kind") != "tool" or row.get("source"):
-                    continue
-                name = str(row.get("tool") or "").lower()
-                at = next((index for index, call in enumerate(calls) if index not in used and str(call.get("toolName") or "").lower() == name), None)
-                if at is None:
-                    continue
-                used.add(at)
-                call = calls[at]
+            parts = [part for part in turn["parts"] if part.get("kind") == "toolCall" and isinstance(part.get("toolCall"), dict)]
+            rows = [row for row in node["rows"] if row.get("kind") == "tool" and not row.get("source")]
+            seen = lambda part: part["t0"] / 1000.0 if isinstance(part.get("t0"), (int, float)) and part["t0"] > 0 else None  # noqa: E731 - when the board saw the call; a turn written later has none
+            pairs = callmatch.pair([(copilot_events.seconds(row.get("at")), row.get("tool")) for row in rows], [(seen(part), part["toolCall"].get("toolName")) for part in parts])  # by family and order (1.8.43)
+            for index, number in sorted(pairs.items()):
+                row, call = rows[index], parts[number]["toolCall"]
                 ident = str(call.get("toolCallId") or "")
                 if not ident:
                     continue

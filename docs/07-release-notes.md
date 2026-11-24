@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.44 (1.8.0 – 1.8.44, 2026-11-17 – 2026-11-24)
+## 1.8.45 (1.8.0 – 1.8.45, 2026-11-17 – 2026-11-24)
 
 ### Added
 
@@ -66,6 +66,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- On a slow computer, the Agent actions tab showed a terminal call with no command and could not open most calls, and a round opened from **Earlier rounds** showed only the agent's words (1.8.45). A call was matched by its name and a few seconds: the harness and Copilot name one call differently (`Bash` and `powershell`, `Read` and `view`, `Write` and `create`), and on a work computer the hook ends 3–13 seconds after the call starts and a turn starts up to a minute before Copilot writes your message. Calls are now matched by their kind and order, and a round by its words. The performance review matches the gate's answers the same way.
 - The button of the Enter screen could show no words until a reload (1.8.44; since 1.8.34): when the browser stopped playing the button's fade for a moment (a busy or covered window), the label stayed invisible or kept its old words. The new words are there within half a second now, whatever the browser does.
 - The super agent's card of a stopped task showed the agent's notes from the middle of its turn ("I'll run it again…", "Now update LOG.md…") with its reply (1.8.43): it shows only the reply, the last message after its last tool call, as the task page does. The super agent's history shows **bold**, `code` and links as the chat does (it showed the marks).
 - `Code` in the agent's replies and in the task's documents did not stand out from the words around it (1.8.41): it is a violet chip now, in the light and the dark theme; a code block keeps its own colours.

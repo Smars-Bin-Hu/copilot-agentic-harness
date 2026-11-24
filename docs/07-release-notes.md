@@ -8,11 +8,16 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.33 (1.8.0 – 1.8.33, 2026-11-17 – 2026-11-23)
+## 1.8.34 (1.8.0 – 1.8.34, 2026-11-17 – 2026-11-23)
 
 ### Added
 
-- **Walk the setup guide again** (1.8.33): the last line of Settings opens the whole setup guide (`/setup`) once more, page by page. The copy stays set up: leaving the guide halfway changes nothing.
+- **Motion in the first run** (1.8.34): pages turn, the bar fills and draws its ticks and yellow dots, and the robot's head walks the bar: it hops over the steps already done and when a step is done, cheers at Confirm, and flies on as the Enter screen's robot. The wordmark appears whole; Enter to the board in two short steps; Settings grows out of the gear, its sections fade over, and grey bars stand in while one loads. Transform and opacity only, no move over 300 ms but the robot's own; Lite and reduced motion keep short fades only.
+- **The programs' own icons** (1.8.34): the Programs page shows Python, Git, VS Code and the GitHub mark; the harness command is the robot's head.
+- **The certificate bundle made by itself** (1.8.34): when the knowledge base brings a recipe (`company/tools/computer.json`) and this computer has no bundle, the harness makes it in the background. The guide shows a line while it works; Review has **Try again** when it failed, and the gear gets a dot.
+- **The GitHub account in Settings** (1.8.34): the bottom left of Settings shows who is signed in, with **Sign out** (it signs the GitHub CLI out on this computer, after a confirm), **Walk the setup guide again** and **Restart board**.
+
+- **Walk the setup guide again** (1.8.33): the bottom left of Settings opens the whole setup guide (`/setup`) once more, page by page. The copy stays set up: leaving the guide halfway changes nothing.
 
 - **A tool pack can be a sample** (1.8.32): `"sample": true` in its `toolpack.json`. Settings lists a sample only once a knowledge base turns it on, so a newcomer does not take it for a real tool. The factory `demotracker` is one.
 
@@ -53,6 +58,9 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- After Confirm the Enter screen showed a grey *Checking…* for seconds while doctor ran again (1.8.34): a clean answer is kept while doctor runs in the background.
+- The 3D robot's feet stood in the letters of the Enter screen's wordmark (1.8.34): it floats 8 px above them.
+
 - The first-run screens, after two walkthroughs by a newcomer (1.8.32). The wizard shows the harness robot; it showed a placeholder box whose eyes slid into its corners. A new copy opens at the wizard, with no Enter screen that said *Checking* first. Settings, Copilot no longer says *Moving on…* or closes the window. Welcome counts the repositories you saved, and its minutes count the pages that will show. The knowledge base step has no second counter, and a grey **Continue** says why on every page. The review rows all have a value, and the repository lists show whole rows, with **Select none**. The note that offers Lite does not show on a first visit, goes away when Settings or the wizard opens, sits at the bottom left, and **Not now** keeps it away for 30 days. The hint *Hold to charge the light* waits for the pointer to rest on the word.
 - After a language switch the Enter screen stayed nearly empty for seconds on a slow computer (1.8.32): a page loaded again skips the opening, and the button speaks the new language at once.
 - A 40 or 64 digit hex digest (a certificate thumbprint, a commit) was masked as a key in the board's chat (1.8.32): it shows as written; inline code in the Live and Rounds text is a chip.
@@ -85,6 +93,10 @@ To see which version you have: `harness --version`.
 - After an update of the folder while the board ran in the background (1.8.23), the board kept the old code: doctor said the guardrail files differ (the hook refused the agent meanwhile) and new pages showed names like `board.stop.title`. The Enter screen now says the board is older, with **Restart board**; a double-click of Start Harness stops it and starts the new release; the restart accepts the new guardrail files. **Restart board** in the settings restarted VS Code instead of the board: it has its own path now.
 
 ### Retired
+
+- **Network and the third group of Settings** (1.8.34): Settings has two groups, Harness (You, Programs, Copilot) and Company (Knowledge base, Tool packs, Code repositories, Connections), then Advanced, which opens with Network (proxy and certificates). Restart board is at the bottom left.
+- **Skill prefix in Settings** (1.8.34): the company's knowledge base sets it.
+- **VS Code as a required line of the Enter screen** (1.8.34): four required lines; the Copilot line holds the VS Code check, and the button is still **Find VS Code** when it is missing.
 
 - **Try the sample** and **Take the 20-minute lesson** on an empty board (1.8.32): the empty board has one **New task**. The first lesson is still in the help panel (**?**, **First lesson**).
 - **Language and Restart board in the sliders panel** (1.8.32): the panel is **Appearance** (theme, rendering, background). Set the language in Settings, You (it changes when you press **Save**); **Restart board** is in Settings, Advanced.

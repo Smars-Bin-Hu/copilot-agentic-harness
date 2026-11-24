@@ -142,6 +142,10 @@ html.lite .wz .wz-btn,html.lite .wz .wz-tile{transition:opacity var(--m-micro) l
 .wz-cp{display:flex;flex-direction:column;align-items:flex-start;gap:14px}
 .wz .wz-btn.gh-btn{height:52px;padding:0 26px;font-size:15.5px;border-radius:26px}
 .wz-gh{width:20px;height:20px}
+.wz-ic.pic{background:var(--card)}  /* a program's own logo (programicons.js, 1.8.34): inside the same 32px badge */
+.wz-ic .pi{width:22px;height:22px;display:block}
+.wz-ic .pi-gh{color:var(--ink)}  /* the GitHub mark is dark on light and light on dark */
+.wz-ic .pi-harness{width:24px;height:auto}
 .wz-cp .wz-under{margin-top:0}  /* the line about the one-time code sits under the button, not a screen away (1.8.32) */
 .wz-codebox{width:100%;border:1px solid var(--line);border-radius:16px;background:var(--card);padding:26px 26px 22px}
 .wz-codebox .cap{font-size:12px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase;font-weight:600}

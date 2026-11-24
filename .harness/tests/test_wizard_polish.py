@@ -228,3 +228,21 @@ class WizardPolishTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProgramIconsTest(unittest.TestCase):
+    """1.8.34: each program of the wizard's rows shows its own logo, drawn in programicons.js; every page that loads wizard.js loads it first."""
+
+    def test_five_programs_have_an_icon_and_the_file_loads_first(self):
+        icons = (WEB / "programicons.js").read_text(encoding="utf-8")
+        for pid in ("python", "git", "vscode", "gh", "harness"):
+            self.assertRegex(icons, r"\b%s\(\) \{" % pid)
+        self.assertIn("ROBOT.svg({head: true})", icons)
+        self.assertIn("PROGRAM_ICONS.svg(id)", SCRIPT)
+        html = (WEB.parent / "taskhtml.py").read_text(encoding="utf-8")
+        lists = re.findall(r"\[[^\[\]]*\"wizard\.js\"[^\[\]]*\]", html)
+        self.assertGreaterEqual(len(lists), 4)
+        for one in lists:
+            self.assertLess(one.index('"programicons.js"'), one.index('"wizard.js"'))
+            if '"robot.js"' in one:
+                self.assertLess(one.index('"robot.js"'), one.index('"programicons.js"'))

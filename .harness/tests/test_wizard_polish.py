@@ -285,3 +285,39 @@ class SettingsGroupsTest(unittest.TestCase):
                 self.assertTrue(texts["settings.g." + key])
             self.assertNotIn("setup.prefix", texts)
         self.assertNotIn("setup.prefix", code)
+
+class SettingsLoadingTest(unittest.TestCase):
+    """1.8.41: a section of Settings never stays grey. It waits only for what it shows, every read has a time limit, and a slow section that was switched to still lands."""
+
+    def test_a_slow_section_lands_and_reads_only_what_it_needs(self):
+        code = (WEB / "settings.js").read_text(encoding="utf-8")
+        lines = [row for row in code.splitlines() if "leaveBars().then(land)" in row]
+        self.assertTrue(lines)
+        for row in lines:  # since 1.8.33 the `else` sat inside the comment of the line above: a section that took more than 120 ms stayed grey
+            self.assertNotIn("//", row.split("leaveBars().then(land)")[0])
+        self.assertIn("WIZARD.prepare(id)", code)
+        self.assertIn('t("wizard.p.again")', code)  # a read that failed or was late: the reason and Try again
+        needs = re.search(r"const NEEDS = \{(.*?)\};", SCRIPT).group(1)
+        self.assertIn('programs: ["progs"]', needs)
+        self.assertIn('copilot: ["ready"]', needs)
+        self.assertNotIn("scan", re.sub(r'repos: \[[^\]]*\]', "", needs))  # only Code repositories waits for the scan of the repository folders
+        self.assertIn("needs ? api.poll(step) : api.setup(step)", SCRIPT)  # api.poll has a time limit; the wizard's own start keeps its reads as they were
+
+
+class InlineCodeTest(unittest.TestCase):
+    """1.8.41: `code` in what the agent wrote is a violet chip in Live, Rounds and every document, in both themes; a code block keeps its own colours. The grey chip of 1.8.32 could not be seen on a work screen."""
+
+    def test_inline_code_is_a_violet_chip_and_a_block_is_not(self):
+        tokens = (WEB / "tokens.css").read_text(encoding="utf-8")
+        for theme in (r':root,html\[data-theme="light"\]\{', r'html\[data-theme="dark"\][^{]*\{'):
+            block = re.search(theme + r"(.*?)\n\}", tokens, re.S).group(1)
+            for name in ("--code-ink:", "--code-bg:", "--code-line:"):
+                self.assertIn(name, block)
+        for sheet, chip, plain in (("live.css", ".tx.md code{", ".tx.md pre code{"), ("ui.css", "article.md code{", "article.md pre code{"), ("page.css", "article.md code{", "pre.code code{")):
+            text = (WEB / sheet).read_text(encoding="utf-8")
+            rule = text[text.index(chip):].split("}", 1)[0]
+            for part in ("color:var(--code-ink)", "background:var(--code-bg)", "border:1px solid var(--code-line)"):
+                self.assertIn(part, rule, sheet)
+            reset = text[text.index(plain):].split("}", 1)[0]
+            self.assertIn("color:inherit", reset, sheet)
+            self.assertIn("background:none", reset, sheet)

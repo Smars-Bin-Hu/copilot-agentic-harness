@@ -178,7 +178,8 @@ kbd{font:500 10.5px/1 var(--mono);padding:3px 5px;border-radius:5px;background:v
 .subtab.on{background:var(--card);border-color:var(--line2);color:var(--ink)}
 .subtab.good{color:var(--good)}.subtab.bad{color:var(--bad)}.subtab.hot{color:var(--hot)}
 .pane{padding:6px 22px 20px}
-article.md code{background:var(--track);border-radius:5px;padding:1px 5px;font-family:var(--mono);font-size:.9em}
+article.md code{color:var(--code-ink);background:var(--code-bg);border:1px solid var(--code-line);border-radius:5px;padding:1px 5px;font-family:var(--mono);font-size:.9em;overflow-wrap:anywhere}
+article.md pre code{color:inherit;background:none;border:0;padding:0;font-size:inherit}  /* a code block keeps its own colours (1.8.41) */
 pre.code,pre.diff,.send-preview,pre.commit{font-family:var(--mono)}
 table.md th{color:var(--soft)}
 table.md td.v-good{color:var(--good)}table.md td.v-bad{color:var(--bad)}table.md td.v-warn{color:var(--hot)}

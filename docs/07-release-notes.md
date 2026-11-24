@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.40 (1.8.0 – 1.8.40, 2026-11-17 – 2026-11-24)
+## 1.8.41 (1.8.0 – 1.8.41, 2026-11-17 – 2026-11-24)
 
 ### Added
 
@@ -64,6 +64,8 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- `Code` in the agent's replies and in the task's documents did not stand out from the words around it (1.8.41): it is a violet chip now, in the light and the dark theme; a code block keeps its own colours.
+- A section of Settings you switched to could stay as grey bars (1.8.41; since 1.8.33): a section whose data took longer than a moment never showed. It shows now, and each section waits only for what it shows: Programs and Copilot no longer wait for the scan of your code repository folders (slow on a work computer), and a read with no answer in time says so with **Try again**.
 - The Closed list of the super agent showed at most 12 tasks while its button counted them all (1.8.40): it lists every closed task the board lists (the newest 50 by default); with more, both say **50+**.
 - The setup guide stopped at sync when the knowledge base brings its own skills (1.8.37): a new copy with no skill prefix now takes the knowledge base's own, as **Use** in the dock does. A prefix you set yourself is never replaced.
 - After Confirm the Enter screen showed a grey *Checking…* for seconds while doctor ran again (1.8.34): a clean answer is kept while doctor runs in the background.

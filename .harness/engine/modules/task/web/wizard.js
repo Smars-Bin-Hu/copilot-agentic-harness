@@ -1098,14 +1098,20 @@ const WIZARD = (function () {
   // ------------------------------------------------------------------------------------------------ start
   // What the pages know, read from the back end: the state, the programs, the readiness and the repositories found. Settings asks for it each time it opens a section (`opts.fresh` keeps what was read).
   const isUnpaired = (error) => Boolean(error && error.data && error.data.unpaired);
-  function load() {
+  // `needs` (Settings, 1.8.41): only these reads, each with a time limit; one that fails or is late rejects, so a section never waits for ever on what it does not show (the scan of the
+  // repository folders is slow on a work computer and only Code repositories uses it). With no `needs` (the wizard's own start) all four are read and a failed one is null, as before.
+  function load(needs) {
     M.unpaired = false;
-    const first = (promise) => promise.catch((error) => { if (isUnpaired(error)) M.unpaired = true; return null; });  // an unknown is never drawn as "not found": an unpaired browser gets only the pairing line
-    return Promise.all([first(api.setup("state")), first(api.setup("programs")), first(api.ready()), first(api.setup("scan"))]).then(([st, progs, ready, scan]) => {
-      M.st = st || {name: "", language: document.documentElement.lang || "en", kb: {here: false}, company: {packs: [], connections: [], recipe: {}}};
-      M.progs = progs;
-      M.ready = ready;
-      M.scan = scan || {places: [], rows: [], more: false};
+    const want = needs || ["st", "progs", "ready", "scan"];
+    const first = (promise) => promise.catch((error) => { if (isUnpaired(error)) M.unpaired = true; if (needs && !M.unpaired) throw error; return null; });  // an unknown is never drawn as "not found": an unpaired browser gets only the pairing line
+    const read = (key, ask) => (want.includes(key) ? first(ask()) : Promise.resolve(undefined));
+    const timed = (step) => () => (needs ? api.poll(step) : api.setup(step));
+    return Promise.all([read("st", timed("state")), read("progs", timed("programs")), read("ready", api.ready), read("scan", timed("scan"))]).then(([st, progs, ready, scan]) => {
+      if (st !== undefined || !M.st) M.st = st || {name: "", language: document.documentElement.lang || "en", kb: {here: false}, company: {packs: [], connections: [], recipe: {}}};
+      if (progs !== undefined) M.progs = progs;
+      if (ready !== undefined) M.ready = ready;
+      if (scan !== undefined || !M.scan) M.scan = scan || {places: [], rows: [], more: false};
+      if (st === undefined) { if (!M.lang) M.lang = document.documentElement.lang || "en"; return; }
       M.name = M.st.name || "";
       M.lang = FAKE ? q("lang", M.st.language || "en") : (M.st.language || document.documentElement.lang || "en");
       M.kb.step = M.st.kb && M.st.kb.here ? "done" : q("kb", "") === "copy" && FAKE ? "copy" : "empty";
@@ -1151,14 +1157,21 @@ const WIZARD = (function () {
   // ------------------------------------------------------------------------------------------------ for the Settings window (settings.js)
   // `prepare()` reads what the pages know (again each time). `mount(name, box, hooks)` draws one page bare: no title, no bar, no Back or Later. The page's own button is made by the caller from `foot()`:
   // {main: {label, off, go}}; `hooks.changed()` says when it may have changed, `hooks.saved()` when the page saved and wanted to go on. The kb page stays on its first small page (the import).
-  function prepare() {
+  // (1.8.41) a section reads only what it shows (NEEDS). Programs and Copilot read again on their own every few seconds: once read in this window they draw at once and the read runs behind.
+  const NEEDS = {you: ["st"], programs: ["progs"], copilot: ["ready"], kb: ["st"], repos: ["st", "scan"]};
+  function prepare(id) {
     if (!api) api = FAKE ? fakeApi() : realApi();
     M.picks = null; M.extras = null; M.kbsub = 0; M.fromReview = false; M.kb.send = null; M.kb.sent = false;
-    return load().then(() => pollReady()).then(() => {
+    const needs = NEEDS[id] || ["st", "progs", "ready", "scan"];
+    const run = load(needs).then(() => {
+      if (!needs.includes("scan")) return;
       // a repository kept that the scan did not find (outside the usual places) is shown too, or saving the page would drop it
       const have = new Set(M.scan.rows.map((row) => row.path));
       ((M.st && M.st.singles) || []).forEach((path) => { if (!have.has(path)) { M.scan.rows.unshift({path, shown: path, name: String(path).split(/[\\/]/).pop() || path, branch: "", picked: true}); have.add(path); } });
     });
+    const known = (id === "programs" && M.progs) || (id === "copilot" && M.ready);
+    if (known) { run.catch(() => {}); return Promise.resolve(); }
+    return run;
   }
   function mount(name, box, hooks) {
     const opts = {bare: true, changed: hooks.changed || (() => {}), rerender: hooks.rerender || (() => {}), next: hooks.saved || (() => {}), back: () => {}, jump: hooks.jump || (() => {})};

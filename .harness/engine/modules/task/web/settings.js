@@ -175,7 +175,8 @@ const SETTINGS = (function () {
           if (!parted) { ready = {nodes}; return; }
           if (!onSkeleton) { put(body, nodes); reveal(); return; }
           const land = () => { if (mine !== token) return; onSkeleton = false; cut(body); put(body, nodes); if (moves()) MOTION.appear(body, {y: 8, ms: ARRIVE}); reveal(); };
-          if (first || performance.now() - skeletonAt < 120 || !moves()) land();  // the window's own opening covers the first one else leaveBars().then(land);
+          if (first || performance.now() - skeletonAt < 120 || !moves()) land();  // the window's own opening covers the first one
+          else leaveBars().then(land);  // (1.8.41) this was inside the comment above since 1.8.33: a section switched to that took longer than 120 ms stayed grey
         };
         fadeOut().then(() => {
           if (mine !== token) return;
@@ -194,12 +195,13 @@ const SETTINGS = (function () {
           inside: (nodes, stopper) => { if (!live()) { if (stopper) stopper(); return; } stop = stopper || null; arrive(nodes); },
         };
         const draw = {you: wizardSection, programs: wizardSection, copilot: wizardSection, kb: wizardSection, repos: wizardSection, packs: packsSection, connections: connectionsSection, adv: advancedSection}[id];
-        Promise.resolve(draw(id, env)).catch((error) => { if (live()) arrive([h("p", {class: "bad"}, errorText(error))]); });
+        const again = () => { const button = h("button", {type: "button", class: "wz-btn sm"}, t("wizard.p.again")); button.addEventListener("click", () => show(id, part, focus)); return button; };
+        Promise.resolve(draw(id, env)).catch((error) => { if (live()) arrive([h("p", {class: "bad"}, errorText(error)), again()]); });  // a read that failed or was late (1.8.41): the reason and Try again, never grey bars for ever
       }
 
       // the sections that are pages of the wizard: prepared (read again), drawn bare, with a Save of their own where the page saves
       function wizardSection(id, env) {
-        return WIZARD.prepare().then(() => {
+        return WIZARD.prepare(id).then(() => {
           hold = true;
           if (!env.live()) return;
           const holder = h("div"), foot = h("div", {class: "st-foot"}), said = h("span", {class: "st-saved", role: "status"});

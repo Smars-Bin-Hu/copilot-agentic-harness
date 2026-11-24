@@ -78,10 +78,11 @@ class WorkbenchWordsTests(unittest.TestCase):
                 self.assertNotIn(word, source(name))
 
     def test_the_task_pane_asks_for_the_embedded_page_and_keeps_its_frames(self) -> None:
-        script = source("workbench.js")
+        self.assertIn("TASKFRAMES.create(", source("workbench.js"))  # 1.8.36: the tabs and frames are taskframes.js, shared with the task window
+        script = source("taskframes.js")
         self.assertIn('"?embed=1"', script)
-        self.assertIn("MAX_FRAMES = 6", script)
-        self.assertIn("frame.hidden = !on", script)  # a loaded frame is hidden, not destroyed
+        self.assertIn("MAX = 6", script)
+        self.assertIn("tab.frame.hidden = !on", script)  # a loaded frame is hidden, not destroyed
 
     def test_the_task_link_is_read_only_from_a_task_page_address(self) -> None:
         script = source("workbench.js")

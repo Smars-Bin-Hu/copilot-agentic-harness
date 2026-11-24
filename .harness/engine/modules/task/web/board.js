@@ -575,8 +575,35 @@
 
   // Two ways to look at the same rows: the lobby (the first screen) and the list. The choice stays in this browser.
   // The card of a robot (lobby.js) is the row of the list again: the same marks (status.js), the same numbers (`figures`), the same buttons (`actionStrip`).
+  // The task window (1.8.36, taskwin.js): on a served board a task of Lobby or List opens over the board, in a tab; a rest of the pointer loads it ahead.
+  const win = DATA.serve && typeof TASKWIN !== "undefined" ? TASKWIN : null;
+  const inWindow = (row) => Boolean(win && row && row.status !== "new");
   const lobby = Lobby.create({href: (row) => (DATA.serve && row.status !== "new" ? "/task/" + encodeURIComponent(row.name)
-    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : ""), figures, actions: actionStrip, live, first: firstTask, go: bigNewTask});
+    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : ""), figures, actions: actionStrip, live, first: firstTask, go: bigNewTask,
+    open: (row) => { if (!inWindow(row)) return false; win.open(row.name); return true; },
+    warm: (row) => { if (inWindow(row)) win.warm(row.name); }});
+  if (win) {
+    const taskLink = (event) => {  // a plain link to a task page in the board's own content (List), not in the workbench or the super view
+      const link = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+      if (!link || link.target || link.closest(".wb-root,.sa,.tw,.tw-strip,.shade")) return "";
+      return typeof WORKBENCH !== "undefined" ? WORKBENCH.taskOf(link.getAttribute("href")) : "";
+    };
+    document.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const name = taskLink(event);
+      if (!name) return;
+      event.preventDefault();
+      win.open(name);
+    });
+    let warmTimer = 0;
+    document.addEventListener("mouseover", (event) => {
+      const name = taskLink(event);
+      clearTimeout(warmTimer);
+      if (name) warmTimer = setTimeout(() => win.warm(name), 150);
+    });
+    window.EMBED_HOST = win.host;  // desk.js inside a frame of the window: another task opens as a tab, the board minimizes it
+    win.restore();
+  }
   let mode = keep.get("mode", "lobby") === "list" ? "list" : "lobby";  // "super" is never kept: the board opens as before
   const controls = h("div", {class: "controls"}, chips, roundBox, kinds, search, clear);
   const modeButtons = {};

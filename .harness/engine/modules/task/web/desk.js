@@ -7,11 +7,23 @@
 
 (function () {
   const app = document.getElementById("app");
-  // Embed mode (?embed=1, class `embed` set in theme.js): a link that goes to the board or to another task page opens at the top level, not inside the frame. A link with its own target, a download or a report stays as it is.
+  // Embed mode (?embed=1, class `embed` set in theme.js): a link that goes to the board or to another task page opens at the top level, not inside the frame (in the board's task window: a tab, or the window minimizes). A link with its own target, a download or a report stays as it is.
   if (document.documentElement.classList.contains("embed")) {
     document.addEventListener("click", (event) => {
       const link = event.target.closest ? event.target.closest("a[href]") : null;
-      if (link && !link.getAttribute("target") && !link.hasAttribute("download") && /^\/(task\/|$|\?)/.test(link.getAttribute("href"))) link.setAttribute("target", "_top");
+      if (!link || link.getAttribute("target") || link.hasAttribute("download") || !/^\/(task\/|$|\?)/.test(link.getAttribute("href"))) return;
+      // 1.8.36: the board's task window (taskwin.js `host`) takes a plain click itself: another task opens as a tab, the board minimizes the window.
+      const plain = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+      let host = null;
+      try { host = window.parent !== window ? window.parent.EMBED_HOST : null; } catch (error) { host = null; }
+      if (plain && host) {
+        const found = /^\/task\/([^/?#]+)(?:[?#].*)?$/.exec(link.getAttribute("href"));
+        let name = "";
+        try { name = found ? decodeURIComponent(found[1]) : ""; } catch (error) { name = ""; }
+        const done = name ? host.task(name, window.frameElement) : /^\/($|\?)/.test(link.getAttribute("href")) && host.board(window.frameElement);
+        if (done) { event.preventDefault(); return; }
+      }
+      link.setAttribute("target", "_top");
     }, true);
   }
   let full = DATA.desk;  // the task as the server gave it; `desk` is what the page draws: this, or an earlier round of it (pastView)

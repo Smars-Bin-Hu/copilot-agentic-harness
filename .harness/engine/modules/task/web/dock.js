@@ -568,8 +568,8 @@ const DOCK = (function () {
       tip.replaceChildren(h("div", {class: "dock-tip-t"}, t("board.enter.notes.title")), ...list.map((note) => h("div", {class: "dock-tip-i"}, h("i", {class: "dock-tip-d"}), h("span", null, h("b", null, note.text), note.effect ? h("em", null, note.effect) : null))));
       if (!list.length) hide(); else if (!tip.hidden) place();
     });
-    // a page that has no block of the board (the task page) asks for itself, slowly, and not while the Enter screen does
-    const ask = () => { if (document.hidden || document.documentElement.classList.contains("en-open") || typeof READYBAR !== "undefined" || typeof SERVE === "undefined") return; SERVE.call("/api/ready", {}, 8).then((data) => { if (Array.isArray(data.checks)) READY.notes(data.notes); }, () => {}); };
+    // a page that has no block of the board (the task page) asks for itself, slowly, and not while the Enter screen does; a page in a frame of the board has no gear (desk.css html.embed) and asks nothing (1.8.36)
+    const ask = () => { if (document.hidden || document.documentElement.classList.contains("en-open") || document.documentElement.classList.contains("embed") || typeof READYBAR !== "undefined" || typeof SERVE === "undefined") return; SERVE.call("/api/ready", {}, 8).then((data) => { if (Array.isArray(data.checks)) READY.notes(data.notes); }, () => {}); };
     setTimeout(ask, 1500); setInterval(ask, 8000);
   }
 

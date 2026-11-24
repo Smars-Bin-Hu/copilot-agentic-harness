@@ -7,15 +7,14 @@
 // The deck: the chat in the middle, four panels that fold (Queue, Agents on the left; Data, Task on the right), two bars that resize the columns, a battery of today's Credits in the top bar,
 // a FOCUS toggle (the chat and a big picture; what waits comes as one card), and a dash that puts the whole mode away (a small pill on the board brings it back).
 // A window taller than wide uses the Tall layout: nothing covers anything, everything stacks downward.
-// A link to a task page inside the layer opens that task in the Task pane (a tab with an iframe of `/task/<name>?embed=1`; a loaded frame is hidden, never destroyed, so a tab switch is instant).
+// A link to a task page inside the layer opens that task in the Task pane (taskframes.js: a tab with an iframe of `/task/<name>?embed=1`, hidden and never destroyed, so a tab switch is instant; past six loaded the one seen longest ago unloads, its tab stays).
 // The bridge, the tree, the Data blocks, the picture of Focus, the hover card of a task and the task line of a queue item are drawn by wbpanels.js; this file gives them their places, says which are on screen and
 // gives the bridge its four calls (pick, menu, closed, target), which act on the avatars of super.js.
-// Needs common.js, serve.js, super.js (SUPER.waiting) and wbpanels.js; board.js calls `WORKBENCH.create`.
+// Needs common.js, serve.js, super.js (SUPER.waiting), taskframes.js and wbpanels.js; board.js calls `WORKBENCH.create`.
 "use strict";
 
 const WORKBENCH = (function () {
   const PREFIX = "harness.board.wb.";
-  const MAX_FRAMES = 6;  // task pages kept loaded; the oldest one is dropped
   const memory = {};
   const store = {
     get(name, fallback) { try { const value = localStorage.getItem(PREFIX + name); return value === null ? fallback : value; } catch (error) { return name in memory ? memory[name] : fallback; } },
@@ -25,7 +24,7 @@ const WORKBENCH = (function () {
   const still = () => Boolean(query && query.matches) || document.documentElement.classList.contains("lite");
   const isTall = () => innerWidth < innerHeight;
   const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
-  const taskUrl = (name) => "/task/" + encodeURIComponent(name);
+  const taskUrl = (name) => TASKFRAMES.url(name);
   function taskOf(href) {  // the task a link opens, if it is a link to a task page
     const found = /^\/task\/([^/?#]+)(?:[?#].*)?$/.exec(String(href || ""));
     if (!found) return "";
@@ -85,7 +84,7 @@ const WORKBENCH = (function () {
     let cardMin = false;  // Focus: the card is put away (not kept)
     let open = false, tall = false, down = false, minimized = false;
     let home = null, queueHome = null, queueNode = null, queueList = null, observer = null, costObserver = null, moved = [], headHome = null;
-    let tabs = [], active = "", cardSig = "", cardId = "";
+    let cardSig = "", cardId = "";
     const later = new Map();  // task item id -> the number of the "Later" that moved it to the end
     let laterNo = 0;
 
@@ -131,6 +130,7 @@ const WORKBENCH = (function () {
     dataBody.append(panels2.data);
 
     // The Task pane: tabs, one iframe each. Made once and never moved (a moved iframe reloads); CSS puts it in the right column, in the window of Focus, or under the chat.
+    let frames = null;  // taskframes.js, made below
     const tabsEl = h("div", {class: "wb-tabs", role: "tablist"});
     const out = h("a", {class: "wb-out", "data-wb-out": "", href: "#", target: "_blank", rel: "noopener", title: t("super.wb.task.out"), "aria-label": t("super.wb.task.out"), hidden: ""}, "↗");
     const closeLayer = h("button", {type: "button", class: "wb-x wb-closelayer", title: t("super.wb.task.close"), "aria-label": t("super.wb.task.close")}, "✕");
@@ -143,6 +143,8 @@ const WORKBENCH = (function () {
     const tabbar = h("div", {class: "wb-tabbar"}, taskLbl, tabsEl, out, closeLayer, taskFold);
     tabbar.addEventListener("click", (event) => { if (fold.p && (event.target === tabbar || event.target === tabsEl || event.target === taskLbl)) foldPanel("p", false); });
     pn.p = h("section", {class: "wb-pn wb-pn-p", hidden: ""}, tabbar, framesEl);
+    frames = TASKFRAMES.create({tabs: tabsEl, frames: framesEl, prefix: "wb", title: (name) => t("super.wb.task.frame", {name}), changed: () => syncTask(),
+      closed: () => { if (!frames.count() && !wideNow()) closePanel("p"); else layout(); }});
 
     const railL = h("div", {class: "wb-rail"}, rails.q, rails.t);
     const railR = h("div", {class: "wb-rail"}, rails.d, rails.p);
@@ -348,7 +350,7 @@ const WORKBENCH = (function () {
       fold[key] = value;
       keep();
       layout();
-      if (!value && key === "p") { const one = tabs.find((tab) => tab.name === active); if (one) wake(one.frame); }
+      if (!value && key === "p") frames.wakeActive();
     }
     function closePanel(key) {  // the Task layer of Focus and Tall, and the open panel of Tall
       if (key === "p") taskOn = false; else sheet = "";
@@ -399,51 +401,17 @@ const WORKBENCH = (function () {
     bar(barR, "r");
 
     // ---- the Task pane ----
-    function syncTask() {
-      const one = tabs.find((tab) => tab.name === active) || null;
-      taskEmpty.hidden = tabs.length > 0;
-      taskLbl.hidden = tabs.length > 0 && !(wideNow() && fold.p);
+    function syncTask() {  // the parts of the pane around the tabs (taskframes.js draws the tabs and the frames)
+      const one = frames ? frames.active() : "";
+      const count = frames ? frames.count() : 0;
+      taskEmpty.hidden = count > 0;
+      taskLbl.hidden = count > 0 && !(wideNow() && fold.p);
       out.hidden = !one;
-      if (one) out.href = taskUrl(one.name);
-      for (const tab of tabs) {
-        const on = tab === one;
-        const was = tab.frame.hidden;
-        tab.frame.hidden = !on;
-        if (on && was) wake(tab.frame);
-        tab.tab.classList.toggle("on", on);
-        tab.tab.firstChild.setAttribute("aria-selected", on ? "true" : "false");
-      }
-    }
-    // A frame that was not shown asked nothing (common.js pollEvery): it looks again at once when it shows (1.8.25).
-    function wake(frame) { setTimeout(() => { try { frame.contentDocument.dispatchEvent(new Event("visibilitychange")); } catch (error) { /* not loaded yet: it asks on its next round */ } }, 0); }
-    function select(name) { active = name; syncTask(); }
-    function dropTab(tab) {
-      tab.frame.remove();
-      tab.tab.remove();
-      tabs = tabs.filter((one) => one !== tab);
-      if (active === tab.name) active = tabs.length ? tabs[tabs.length - 1].name : "";
+      if (one) out.href = taskUrl(one);
     }
     function openTask(name) {
-      let tab = tabs.find((one) => one.name === name);
-      if (!tab) {
-        const frame = h("iframe", {class: "wb-frame", src: taskUrl(name) + "?embed=1", title: t("super.wb.task.frame", {name}), hidden: ""});
-        const label = h("button", {type: "button", class: "wb-tab-n", role: "tab", title: name}, name);
-        const x = h("button", {type: "button", class: "wb-tab-x", title: t("super.wb.task.tab.close"), "aria-label": t("super.wb.task.tab.close")}, "✕");
-        const node = h("div", {class: "wb-tab"}, label, x);
-        tab = {name, frame, tab: node};
-        label.addEventListener("click", () => select(name));
-        x.addEventListener("click", () => {
-          dropTab(tab);
-          if (!tabs.length && !wideNow()) { closePanel("p"); return; }
-          layout();
-        });
-        tabs.push(tab);
-        tabsEl.append(node);
-        framesEl.append(frame);
-        while (tabs.length > MAX_FRAMES) dropTab(tabs.find((one) => one.name !== name));
-      }
-      active = name;
       if (wideNow()) { fold.p = false; keep(); } else taskOn = true;
+      frames.open(name);
       layout();
     }
     root.addEventListener("click", (event) => {  // a link to a task page opens in the pane; a click with a modifier key and a middle click keep their way (a new browser tab)
@@ -485,7 +453,7 @@ const WORKBENCH = (function () {
       if (!root.parentNode) { document.body.append(root); panels2.bind(root); }
       center.append(sv);
       root.hidden = false;
-      for (const tab of tabs) if (!tab.frame.hidden) wake(tab.frame);
+      frames.wakeActive();
       document.documentElement.classList.add("wb-lock");
       cardSig = "";
       layout();

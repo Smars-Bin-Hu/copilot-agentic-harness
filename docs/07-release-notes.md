@@ -8,10 +8,11 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.35 (1.8.0 – 1.8.35, 2026-11-17 – 2026-11-23)
+## 1.8.36 (1.8.0 – 1.8.36, 2026-11-17 – 2026-11-23)
 
 ### Added
 
+- **Tasks open next to the board** (1.8.36): a click on a task in Lobby or List splits the screen: the board keeps the left side (the top on a screen taller than wide) and the task page takes the other; drag the line between them to change the share. **Float over the board** (⧉) turns it into a window you drag by its bar and size by its bottom right corner; ◫ splits again. Each task is a tab; switching is instant. **Maximize** fills the screen; **Minimize** puts it in a strip at the bottom; **Open in its own browser tab** is at the top right. Cmd, Ctrl or Shift and the middle button still open a browser tab. Only the tab on screen asks the board for news; at most six pages stay loaded (an older one unloads and reloads when picked); a task the pointer rests on is loaded ahead. After a reload the tabs come back in the strip and load when picked. The super agent workbench's Task pane uses the same tabs. Settings says Copilot is signed in the same way in its left column and on its Copilot page.
 - **Motion in the first run** (1.8.34): pages turn, the bar fills and draws its ticks and yellow dots, and the robot's head walks the bar: it hops over the steps already done and when a step is done, cheers at Confirm, and flies on as the Enter screen's robot. The wordmark appears whole; Enter to the board in two short steps; Settings grows out of the gear, its sections fade over, and grey bars stand in while one loads. Transform and opacity only, no move over 300 ms but the robot's own; Lite and reduced motion keep short fades only.
 - **The programs' own icons** (1.8.34): the Programs page shows Python, Git, VS Code and the GitHub mark; the harness command is the robot's head.
 - **The certificate bundle made by itself** (1.8.34): when the knowledge base brings a recipe (`company/tools/computer.json`) and this computer has no bundle, the harness makes it in the background. The guide shows a line while it works; Review has **Try again** when it failed, and the gear gets a dot.

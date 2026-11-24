@@ -455,7 +455,7 @@ const WIZARD = (function () {
       if (typeof SETTINGS !== "undefined" && SETTINGS.signOut) acts.append(link(t("settings.who.signout"), () => SETTINGS.signOut(tick)));
       let again = null;
       if (st.restart) { again = btn(t("wizard.c.st.restart"), "sm primary", () => restartHost(again)); acts.append(again); }
-      put(body, el("div", "wz-signed", el("span", "wz-big-ok" + (st.kind === "ok" ? "" : " warn"), st.kind === "bad" ? "!" : "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), lineBox), acts),
+      put(body, el("div", "wz-signed", el("span", "wz-big-ok" + (st.kind === "ok" ? "" : " warn"), st.kind === "bad" ? "!" : "\u2713"), el("div", null, el("div", "t1", (line.login ? t("wizard.c.done", {u: line.login}) : t("wizard.c.done.anon"))), lineBox), acts),
         line.why === "host-failed" ? el("p", "wz-err", t("wizard.c.hostfail", {why: line.detail || "-"})) : null);
       if (again && !hadRestart) MOTION.appear(again, {y: 4, ms: MOTION.MS.show});
       hadRestart = Boolean(again);
@@ -472,7 +472,7 @@ const WIZARD = (function () {
       const bareHost = opts.bare && line.why === "host-failed" && line.login;  // (1.8.35) Settings: a stopped host keeps the account card, with Start Copilot again
       if (signed || bareHost) {
         if (opts.bare && !ONLY) { statusCard(line); opts.changed(); return; }
-        put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", t("wizard.c.done", {u: line.login || "GitHub"})), el("div", "t2", ONLY || opts.bare ? "" : t("wizard.c.next")))));  // Settings (bare) only shows the state: no "Moving on", no step forward (1.8.32)
+        put(body, el("div", "wz-signed", el("span", "wz-big-ok", "\u2713"), el("div", null, el("div", "t1", (line.login ? t("wizard.c.done", {u: line.login}) : t("wizard.c.done.anon"))), el("div", "t2", ONLY || opts.bare ? "" : t("wizard.c.next")))));  // Settings (bare) only shows the state: no "Moving on", no step forward (1.8.32)
         if (sawOut && !ONLY && !opts.bare && !advance) hopHead();  // (1.8.34) W7: a step done: the head hops twice and the bulb lights
         if (sawOut && !ONLY && !opts.bare && q("hold", "") !== "1" && !advance) advance = setTimeout(() => { if (!stopped) opts.next(); }, HOLD);  // the card stays 1500 ms, never less than 900 (W7)
       } else if (line.why === "signing-in") {
@@ -1116,5 +1116,5 @@ const WIZARD = (function () {
   }
 
   if (typeof DATA !== "undefined" && DATA.wizard) start();
-  return {parts, M, start, go, prepare, mount};
+  return {parts, M, start, go, prepare, mount, signedIn: copilotSignedIn};  // signedIn: the one rule of "Copilot is signed in" (Settings' foot uses it too, 1.8.36)
 })();

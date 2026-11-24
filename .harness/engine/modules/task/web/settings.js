@@ -330,10 +330,10 @@ const SETTINGS = (function () {
     const restart = h("button", {type: "button", class: "wz-btn sm st-restart"}, t("board.shell.restart"));
     restart.addEventListener("click", restartAsk);
     const paint = (check) => {
-      const on = Boolean(check && check.login);
-      login.textContent = on ? check.login : "";
+      const on = typeof WIZARD !== "undefined" && WIZARD.signedIn ? WIZARD.signedIn(check) : Boolean(check && check.login);  // the Copilot page's rule, so the two never disagree (1.8.36)
+      login.textContent = on ? check.login || "" : "";
       line.textContent = t(on ? "settings.who.line" : "settings.who.none");
-      login.hidden = !on; out.hidden = !on; signin.hidden = on;
+      login.hidden = !on || !check.login; out.hidden = !on; signin.hidden = on;  // signed in with no account name read: no name, never a made-up one
     };
     const refresh = () => SERVE.call("/api/ready", {}, 8).then((data) => paint(((data && data.checks) || []).find((one) => one.id === "copilot")), () => {});
     out.addEventListener("click", () => signOutAsk(() => { paint(null); refresh(); }));

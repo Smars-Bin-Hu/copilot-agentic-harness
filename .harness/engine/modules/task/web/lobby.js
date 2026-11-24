@@ -278,16 +278,30 @@ const Lobby = (function () {
 
     function wire(entry) {
       const slot = entry.slot;
-      const go = () => { const href = options.href(entry.row); if (href) window.location.href = href; };
-      slot.addEventListener("mouseenter", () => { if (!touchy()) show(entry); });
+      // 1.8.36: a served board opens the task in its window (options.open); Cmd, Ctrl or Shift and the middle button open a browser tab, as a link would.
+      const go = (event) => {
+        const href = options.href(entry.row);
+        if (!href) return;
+        if (event && (event.metaKey || event.ctrlKey || event.shiftKey)) { window.open(href, "_blank", "noopener"); return; }
+        if (options.open && options.open(entry.row)) return;
+        window.location.href = href;
+      };
+      let warmTimer = 0;  // a pointer that rests on a card loads its page ahead (options.warm)
+      slot.addEventListener("mouseenter", () => {
+        if (touchy()) return;
+        show(entry);
+        if (options.warm) { clearTimeout(warmTimer); warmTimer = setTimeout(() => options.warm(entry.row), 150); }
+      });
+      slot.addEventListener("mouseleave", () => clearTimeout(warmTimer));
+      slot.addEventListener("auxclick", (event) => { const href = event.button === 1 && options.href(entry.row); if (href) { event.preventDefault(); window.open(href, "_blank", "noopener"); } });
       slot.addEventListener("focus", () => { if (slot.matches(":focus-visible")) show(entry); });  // the keyboard opens it; a tap on a touch screen focuses too, but its click decides
       slot.addEventListener("mouseleave", later);
       slot.addEventListener("blur", later);
-      slot.addEventListener("click", () => {
-        if (touchy()) { if (current === entry && card.classList.contains("on")) hide(); else show(entry); } else go();
+      slot.addEventListener("click", (event) => {
+        if (touchy()) { if (current === entry && card.classList.contains("on")) hide(); else show(entry); } else go(event);
       });
       slot.addEventListener("keydown", (event) => {
-        if (isEnter(event)) go();
+        if (isEnter(event)) go(event);
         else if (event.key === "Tab" && !event.shiftKey && current === entry && card.classList.contains("on")) {
           const items = focusable();
           if (items.length) { event.preventDefault(); items[0].focus(); }

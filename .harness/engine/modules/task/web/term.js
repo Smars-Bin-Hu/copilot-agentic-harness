@@ -41,7 +41,7 @@ const TERM = (() => {
     ui.toggle.title = memory.running ? t("term.count", {n: memory.running}) : t("term.open");
   }
   function watch() {
-    if (unseen()) { setTimeout(watch, WATCH); return; }  // a frame of the workbench that is not shown (common.js) asks nothing
+    if (unseen() || document.documentElement.classList.contains("embed")) { setTimeout(watch, WATCH); return; }  // a frame not shown asks nothing (common.js); a page in a frame of the board has no Terminal button (desk.css html.embed) (1.8.36)
     post({op: "running"}).then((found) => { memory.running = found.running.length; paintCount(); setTimeout(watch, WATCH); }, () => setTimeout(watch, WATCH * 4));
   }
   function paint() {

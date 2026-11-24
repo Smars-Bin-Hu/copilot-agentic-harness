@@ -1,7 +1,7 @@
 """What the Enter screen of the board asks (`/api/ready`, 1.6 B86): is everything the board needs in place? One line for each check, as data; the page says it in words.
 
 Two blocks (1.7.38, block B).
-- REQUIRED, Harness & Local: this copy is set up, this browser is paired, `harness doctor` has no error, VS Code is open for this copy, Copilot is connected. Every line must be ok before Enter is on:
+- REQUIRED, Harness & Local: this copy is set up, this browser is paired, `harness doctor` has no error, Copilot is connected (1.8.33: four lines; VS Code is read inside the Copilot line, not as a line of its own). Every line must be ok before Enter is on:
   without one the harness cannot work here. They are `checks`, each with `group: "required"` and `blocking: true`, and a `level` for its dot: ok, grey, yellow, red.
 - OPTIONAL, from the company: knowledge base, instructions, company skills, code standards, tool packs, connections, code repositories (`core/readyitems.py`). They never block. `optional` holds the items and the
   `problems` to look at; each problem has the place that mends it.
@@ -58,9 +58,9 @@ EFFECTS = {"kb": "ready.effect.kb", "instructions": "ready.effect.instructions",
 NOTES = {"kb": "ready.note.kb", "instructions": "ready.note.instructions", "skills": "ready.note.skills", "standards": "ready.note.standards", "packs": "ready.note.packs", "connections": "ready.note.connections", "repos": "ready.note.repos"}  # the words of its dot on the gear
 BUTTONS = {"pair": "ready.btn.pair", "setup": "ready.btn.setup", "program": "ready.btn.program", "doctor": "ready.btn.doctor", "signin": "ready.btn.signin", "signing": "ready.btn.signing", "preparing": "ready.btn.preparing", "restart-host": "ready.btn.restart-host",
            "wait": "ready.btn.wait", "check": "ready.btn.check", "enter": "ready.btn.enter"}  # the label of each kind of the middle button
-RED_FIX = {"signin": "signin", "refused": "signin", "no-gh": "get-gh"}  # the board's red block (readybar.js): the fix button of a Copilot line, by its reason
-KNOWN_FAIL = {"setup": ("new",), "paired": ("unpaired",), "doctor": ("failed", "errors", "stale"), "vscode": ("no-code", "off"), "copilot": ("no-gh", "gh-broken", "signin", "refused", "host-failed")}  # the reasons a failed required line can have that the button and the red block know; any other (`error`: the check itself broke) is shown, never left as "Checking…"
-WHAT = {"setup": "ready.what.setup", "paired": "ready.what.paired", "doctor": "ready.what.doctor", "vscode": "ready.what.vscode", "copilot": "ready.what.copilot"}  # the name of a required line, for the text of one that could not be checked
+RED_FIX = {"signin": "signin", "refused": "signin", "no-gh": "get-gh", "no-code": "get-vscode"}  # the board's red block (readybar.js): the fix button of a Copilot line, by its reason
+KNOWN_FAIL = {"setup": ("new",), "paired": ("unpaired",), "doctor": ("failed", "errors", "stale"), "copilot": ("no-code", "off", "no-gh", "gh-broken", "signin", "refused", "host-failed")}  # the reasons a failed required line can have that the button and the red block know; any other (`error`: the check itself broke) is shown, never left as "Checking…"
+WHAT = {"setup": "ready.what.setup", "paired": "ready.what.paired", "doctor": "ready.what.doctor", "copilot": "ready.what.copilot"}  # the name of a required line, for the text of one that could not be checked
 PROGRAM_PAGES = {"vscode": "https://code.visualstudio.com/download", "gh": ghauth.DOWNLOAD_PAGE}
 
 
@@ -191,7 +191,7 @@ def run_doctor(root: Path, timeout: Optional[float] = None, progress: Optional[C
 
 
 class Ready:
-    REQUIRED = ("setup", "paired", "doctor", "vscode", "copilot")  # Harness & Local: every one must be ok before Enter (1.7.38)
+    REQUIRED = ("setup", "paired", "doctor", "copilot")  # Harness & Local: every one must be ok before Enter (1.7.38; 1.8.33: VS Code is no line of its own, the Copilot line holds it)
 
     def __init__(self, root: Path, link: Any, doctor: Optional[Callable[[Path], Dict[str, Any]]] = None, clock: Callable[[], float] = time.monotonic, checker: Any = None) -> None:
         self.root = root
@@ -310,6 +310,8 @@ class Ready:
     def copilot(self, vscode: Dict[str, Any]) -> Dict[str, Any]:
         """1.8.x: "Copilot signed in (gh)". Three things: gh is found, gh is signed in, the host has models once it got gh's token. `host` rides along while the agent host
         is being prepared (the download of a first start), whatever the rest says, so the page can show its progress beside a sign-in."""
+        if vscode["state"] == "fail":  # 1.8.33: VS Code missing or switched off (`no-code`, `off`) is the Copilot line failing; its button is the VS Code download
+            return {"state": "fail", "why": vscode["why"], "download": vscode.get("download") or VSCODE_PAGE}
         if vscode["state"] != "ok":
             return {"state": "wait", "why": "vscode"}
         host = self.link.host_state()
@@ -340,8 +342,8 @@ class Ready:
             return {"state": "wait", "why": "host-preparing", **about}
         if state == "failed":
             return {"state": "fail", "why": "host-failed", "detail": short(host.get("why", "")), **about}
-        if state in ("no-code", "off"):
-            return {"state": "wait", "why": "vscode"}
+        if state in ("no-code", "off"):  # VS Code went away after the probe
+            return {"state": "fail", "why": state, "download": VSCODE_PAGE}
         if not self.link.status().get("ready"):
             return {"state": "wait", "why": "connecting", **about}
         models = int(self.link.copilot().get("models") or 0)
@@ -611,7 +613,7 @@ class Ready:
         """The one button in the middle of the Enter screen (O1): the first of BUTTONS that holds. `{kind, label, off, code, url, left, percent, program, download, detail, n}`; the page only draws it."""
         say = messages.text
         found = {entry["id"]: entry for entry in checks}
-        setup, paired, doctor, vscode, copilot = (found.get(name) or {} for name in self.REQUIRED)
+        setup, paired, doctor, copilot = (found.get(name) or {} for name in self.REQUIRED)
         out: Dict[str, Any] = {"kind": "", "label": "", "off": False, "code": "", "url": "", "left": None, "percent": None, "program": "", "download": "", "detail": "", "n": 0}
         why = str(copilot.get("why") or "")
         kind = "check"
@@ -619,7 +621,7 @@ class Ready:
             kind = "pair"
         elif setup.get("state") == "fail" and setup.get("why") == "new":
             kind = "setup"
-        elif vscode.get("why") in ("no-code", "off") and vscode.get("state") == "fail":
+        elif copilot.get("state") == "fail" and why in ("no-code", "off"):
             kind, out["program"], out["download"] = "program", "VS Code", PROGRAM_PAGES["vscode"]
         elif copilot.get("state") == "fail" and why in ("no-gh", "gh-broken"):
             kind, out["program"], out["download"], out["detail"] = "program", "GitHub CLI", str(copilot.get("download") or PROGRAM_PAGES["gh"]), str(copilot.get("detail") or "")
@@ -635,7 +637,7 @@ class Ready:
             kind, out["percent"] = "preparing", (copilot.get("host") or {}).get("percent")
         elif copilot.get("state") == "fail" and why == "host-failed":
             kind, out["detail"] = "restart-host", str(copilot.get("detail") or "")
-        elif vscode.get("state") == "wait" or (copilot.get("state") == "wait" and why in ("host-starting", "connecting", "models", "vscode")):
+        elif copilot.get("state") == "wait" and why in ("host-starting", "connecting", "models", "vscode"):
             kind = "wait"
         elif any(entry.get("state") == "check" for entry in checks):
             kind = "check"
@@ -680,9 +682,6 @@ class Ready:
             elif key == "doctor":
                 text, reason = (say("ready.r.doctor.failed"), line.get("detail", "")) if why == "failed" else (say("ready.r.doctor.errors.one" if line.get("n") == 1 else "ready.r.doctor.errors", n=line.get("n", "")), line.get("detail", ""))
                 fix = {} if line.get("integrity") else {"to": "doctor", "label": say("board.enter.doctor.again")}  # 1.7.45: run it now, not when its wait is over; guardrail files have their own button
-            elif key == "vscode":
-                text, reason = say(f"ready.r.vscode.{'off' if why == 'off' else 'no-code'}"), say("ready.r.vscode.no-code.why")
-                fix = {"to": "copilot", "kind": "get-vscode", "url": line.get("download") or VSCODE_PAGE, "label": say("ready.act.get-vscode")} if why == "no-code" else {}
             elif key == "copilot":
                 if why == "vscode":
                     continue
@@ -771,8 +770,7 @@ class Ready:
         add("setup", lambda: {"state": "fail", "why": "new"} if not setup_done(self.root) else {"state": "ok", "why": "ok"})
         add("paired", lambda: {"state": "ok", "why": "ok"} if paired else {"state": "fail", "why": "unpaired"})
         add("doctor", self.doctor_line)
-        vscode = add("vscode", self.vscode)
-        add("copilot", lambda: self.copilot(vscode))
+        add("copilot", lambda: self.copilot(self.vscode()))  # 1.8.33: the VS Code probe runs inside the Copilot line
         began = time.monotonic()
         try:
             self.checker.maybe()  # the board asks the connections itself: the screen need not wait for a chat

@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, logs, messages, repo_paths, targets, tasks
+from core import config, filecache, logs, messages, repo_paths, targets, tasks
 from core.logs import read_lines, read_session
 from core.paths import logs_dir
 
@@ -322,18 +322,15 @@ def cell(text: str) -> str:
     return cut(text, REASON_CHARS).replace("|", "\\|")
 
 
-def child_sessions(root: Path, surface: str, session_id: str, since: str) -> List[Dict[str, Any]]:
-    """SDK engine: a subagent runs in a session of its own. Those logs name the session that called them, in their first row.
-    A log is picked by its first and last row (`logs.ends`, kept while the file does not change); only a child is read whole. Oldest first, as `session_files` lists them."""
-    if surface in ("", ".", "..") or Path(surface).name != surface:
-        return []
-    picked = []
+def _session_ends(folder: Path) -> List[Tuple[float, str, Path, Any, str]]:
+    """Each log of the folder: (modification time, name, path, the session its first row names as the caller, the time of its last row)."""
     try:
-        entries = list(os.scandir(logs_dir(root) / surface))  # one listing: on Windows its stat comes with it
+        entries = list(os.scandir(folder))  # one listing: on Windows its stat comes with it
     except OSError:
         return []
+    found = []
     for entry in entries:
-        if not entry.name.endswith(".jsonl") or entry.name[:-len(".jsonl")] == session_id:
+        if not entry.name.endswith(".jsonl"):
             continue
         try:
             if not entry.is_file():
@@ -342,8 +339,19 @@ def child_sessions(root: Path, surface: str, session_id: str, since: str) -> Lis
         except OSError:
             continue
         first, last = logs.ends(Path(entry.path), info)
-        if first.get("parent_session_id") == session_id and last.get("at", "") >= since:
-            picked.append((info.st_mtime, entry.name, Path(entry.path)))
+        found.append((info.st_mtime, entry.name, Path(entry.path), first.get("parent_session_id"), str(last.get("at", ""))))
+    return found
+
+
+def child_sessions(root: Path, surface: str, session_id: str, since: str) -> List[Dict[str, Any]]:
+    """SDK engine: a subagent runs in a session of its own. Those logs name the session that called them, in their first row.
+    A log is picked by its first and last row (`logs.ends`, kept while the file does not change); only a child is read whole. Oldest first, as `session_files` lists them."""
+    if surface in ("", ".", "..") or Path(surface).name != surface:
+        return []
+    folder = logs_dir(root) / surface
+    # 1.8.x: in one board pass the folder is listed (and the ends of its logs read) once for all the tasks; outside a pass every call lists it again
+    logged = filecache.in_pass(f"child_sessions\0{folder}", lambda: _session_ends(folder))
+    picked = [(mtime, name, path) for mtime, name, path, parent, last_at in logged if name[:-len(".jsonl")] != session_id and parent == session_id and last_at >= since]
     found: List[Dict[str, Any]] = []
     for _at, _name, path in sorted(picked):
         rows = read_lines(path)

@@ -6,7 +6,8 @@ reply, no thinking is read or kept.
 
   stuck     the agent is at work and has made no tool call for `stuck_minutes`
   repeat    the same command (by its hash) the last `repeat_commands` terminal calls in a row, with no file change between them
-  idle      `idle_turns` model turns since the last file change (and since the user's last message)
+  idle      `idle_turns` model turns since the last file change (and since the user's last message), of a task that is meant
+            to change files: not a Q&A (kind qa or light tier), which reads and answers
   context   the context of the chat is over `context_percent` of its window (B78; from the board's link, not from a file: `context_rule`)
   cost      Credits at `cost_ratio` times the median of closed tasks of the same kind; fewer than MIN_PEERS of them: no rule
 
@@ -177,6 +178,11 @@ def with_context(root: Path, row: Dict[str, Any], chat: Optional[Dict[str, Any]]
     row["warn"] = [item for item in row.get("warn") or [] if item.get("rule") != "context"] + ([found] if found else [])
 
 
+def _meant_to_change_files(row: Dict[str, Any], data: Dict[str, Any]) -> bool:
+    """False for a task that only reads and answers (kind qa, light tier: it ends when answered); many turns are normal there."""
+    return str(row.get("kind") or data.get("kind") or "") != "qa" and str(data.get("tier") or "") != "light"
+
+
 def check(root: Path, row: Dict[str, Any], data: Dict[str, Any], peers: Optional[List[float]] = None, now: Optional[float] = None) -> List[Dict[str, Any]]:
     """The rules that fire for an open task, each `{rule, n}` (`n`: the number the tooltip says). Never raises: a task whose files cannot be read has none."""
     try:
@@ -200,7 +206,7 @@ def _check(root: Path, row: Dict[str, Any], data: Dict[str, Any], peers: List[fl
             found.append({"rule": "stuck", "n": int((now - max(times)) // 60)})
         if hooks and hooks["run_count"] >= limits["repeat_commands"]:
             found.append({"rule": "repeat", "n": hooks["run_count"]})
-        if events:
+        if events and _meant_to_change_files(row, data):
             since = max([0.0] + [value for value in [(hooks or {}).get("last_edit")] if value is not None])
             idle = [at for at in events["turns"] if at > since]
             if len(idle) >= limits["idle_turns"]:

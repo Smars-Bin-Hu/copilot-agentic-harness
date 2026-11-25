@@ -123,10 +123,10 @@ const SPACE = (function () {
   }
   let note = null, asked = false;
   const snoozed = () => { const at = Number(keep.get(ASKED)); return at > 1 && Date.now() - at < SNOOZE && at <= Date.now() + 60000; };
-  // Not while the setup wizard runs or the Settings window is open (1.8.32): the note would sit on top of what the person is doing. The check goes on, so it may come later.
+  // Not while the setup wizard runs, the Settings window or any dialog is open (1.8.32): the note would sit on top of what the person is doing. The check goes on, so it may come later.
   // Not on the first visit of this browser to the Enter screen either (1.8.32): enter.js sets `harness.enter.visited` once it is open, and this script loads first, so the key is read now.
   const firstVisit = (() => { try { return localStorage.getItem("harness.enter.visited") !== "1"; } catch (error) { return true; } })();
-  const busy = () => document.body.classList.contains("wz-doc") || Boolean(document.querySelector(".wz-top")) || (typeof SETTINGS !== "undefined" && SETTINGS.isOpen());
+  const busy = () => document.body.classList.contains("wz-doc") || Boolean(document.querySelector(".wz-top")) || (typeof SETTINGS !== "undefined" && SETTINGS.isOpen()) || document.body.classList.contains("has-dialog");  // a dialog (New task ...) is open: the note would sit over its buttons (F9)
   function offer() {
     if (asked || note || firstVisit || lite() || !on() || snoozed() || busy() || typeof harnessTheme === "undefined" || typeof t !== "function") return;
     asked = true;

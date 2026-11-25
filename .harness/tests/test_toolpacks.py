@@ -13,10 +13,11 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from support import HarnessTestCase, pre_tool, use_packs
 
-from core import company, config, toolpacks, launchenv, connections, skillcheck
+from core import company, config, filecache, toolpacks, launchenv, connections, skillcheck
 from core.toolpacks import ToolpackError
 
 SKILL = "---\nname: {name}\ndescription: 'Read a ticket of the tracker and draft a comment for the person to approve. Use when a task names a ticket.'\ntype: workflow\nspecificTo: generic\n---\n\n# Ticket\n\nRead it.\n"
@@ -2160,3 +2161,52 @@ class SamplePackTests(unittest.TestCase):
         self.assertIn('row.from === "harness" && !row.sample', settings)
         machine = (self.HARNESS / "engine" / "modules" / "task" / "web" / "machine.js").read_text(encoding="utf-8")
         self.assertIn('row.from === "harness" && (!row.sample || row.active)', machine)  # with a knowledge base: shown only once it is on
+
+
+class ListingsKept(ToolpackCase):
+    """1.8.x: `desk()` and the Ready pass listed the pack folders 8 to 35 times each; in the board server a listing is kept while the folder's stamp is the same."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.factory = self.root / toolpacks.FOLDER
+        make(self.factory / "alpha", "alpha")
+        filecache.enable(True)
+        self.addCleanup(filecache.enable, False)
+        patch = mock.patch.object(filecache, "FRESH_NS", 0)  # the made folders are young; a real one that is older than 2 s is kept
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def listings(self, action) -> int:
+        real = os.scandir
+        with mock.patch("os.scandir", wraps=real) as counted:
+            action()
+        return counted.call_count
+
+    def test_the_pack_folders_are_listed_once_for_many_calls_and_a_change_is_seen_at_once(self) -> None:
+        first = self.listings(lambda: [toolpacks.listed(self.root) for _ in range(8)])
+        again = self.listings(lambda: [toolpacks.listed(self.root) for _ in range(8)])
+        self.assertGreaterEqual(first, 1)
+        self.assertEqual(again, 0)
+        make(self.factory / "beta", "beta")  # a pack added: the next call lists again and sees it
+        self.assertEqual(sorted(toolpacks.listed(self.root)), ["alpha", "beta"])
+        (self.factory / "beta" / "types" / "other.json").write_text(json.dumps(dict(KIND, type="other")), encoding="utf-8")
+        self.assertEqual([path.name for path in toolpacks.types_of(self.factory / "beta")], ["other.json", "tracker.json"])
+        shutil.rmtree(self.factory / "alpha")
+        self.assertEqual(sorted(toolpacks.listed(self.root)), ["beta"])
+
+    def test_without_the_board_every_call_lists_the_folder(self) -> None:
+        filecache.enable(False)  # a hook, the gate and the command line
+        toolpacks.listed(self.root)
+        self.assertGreaterEqual(self.listings(lambda: [toolpacks.listed(self.root) for _ in range(3)]), 3)
+        make(self.factory / "beta", "beta")
+        self.assertEqual(sorted(toolpacks.listed(self.root)), ["alpha", "beta"])
+
+    def test_a_folder_changed_a_moment_ago_is_never_kept(self) -> None:
+        with mock.patch.object(filecache, "FRESH_NS", 60 * 10**9):
+            toolpacks.listed(self.root)
+            self.assertGreaterEqual(self.listings(lambda: toolpacks.listed(self.root)), 1)
+
+    def test_a_missing_folder_is_not_kept_as_empty(self) -> None:
+        self.assertEqual(toolpacks.types_of(self.factory / "nope"), [])
+        make(self.factory / "nope", "nope")
+        self.assertEqual([path.name for path in toolpacks.types_of(self.factory / "nope")], ["tracker.json"])

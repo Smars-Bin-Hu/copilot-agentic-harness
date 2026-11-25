@@ -563,6 +563,13 @@ class PageTests(unittest.TestCase):
         self.assertIn("const served = typeof SERVE !== \"undefined\" && Boolean(DATA.serve)", page)
         self.assertNotIn("const SERVE", page)
 
+    def test_f9_the_slow_motion_note_keeps_away_from_an_open_dialog(self) -> None:
+        space = source("space.js")
+        busy = [row for row in space.splitlines() if row.lstrip().startswith("const busy = ")][0]
+        self.assertIn('classList.contains("has-dialog")', busy)  # the class SERVE.dialog sets
+        self.assertIn('classList.add("has-dialog")', source("serve.js"))
+        self.assertRegex(source("space.css"), r"body\.has-dialog \.sp-slow\{display:none\}|body\.has-dialog \.sp-slow[^{]*\{[^}]*display:none")
+
     def test_the_slow_motion_note_keeps_away_from_the_wizard_and_settings_and_is_snoozed_30_days(self) -> None:
         """1.8.32 (A3): the note about slow motion is never offered while the setup wizard runs or the Settings window is open; "Not now" is kept 30 days; its words are about motion."""
         space = source("space.js")

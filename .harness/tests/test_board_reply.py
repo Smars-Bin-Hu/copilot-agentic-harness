@@ -87,6 +87,12 @@ class StateTests(unittest.TestCase):
     def test_the_queue_of_a_chat_follows_the_host(self) -> None:
         state: Dict[str, Any] = ahp.trimmed({"turns": [], "queuedMessages": [{"id": "s", "kind": "steering", "message": {"text": "now"}}]})
         self.assertEqual(ahp.queued(state), [])  # a steer goes into the turn: not a queued message
+        self.assertEqual(ahp.steering(state), [{"id": "s", "text": "now"}])
+        bad = {"queuedMessages": [{"id": "x", "kind": "steering"}, "junk", {"id": 5, "kind": "steering", "text": "n"}, {"kind": "steering", "id": "y", "text": "ok"}]}
+        self.assertEqual(ahp.steering(bad), [{"id": "y", "text": "ok"}])  # an unknown or malformed entry is one bad item
+        gone: Dict[str, Any] = {"queuedMessages": [{"id": "s", "kind": "steering", "text": "now"}, {"id": "q", "kind": "queued", "text": "later"}]}
+        ahp.reduce_chat(gone, {"type": "chat/turnStarted", "turnId": "n", "message": {"text": "now"}})
+        self.assertEqual((ahp.steering(gone), ahp.queued(gone)), ([], [{"id": "q", "text": "later"}]))
         for ident in ("q1", "q2"):
             ahp.reduce_chat(state, {"type": "chat/pendingMessageSet", "kind": "queued", "id": ident, "message": {"text": "later " + ident, "attachments": [{"data": "big"}]}})
         ahp.reduce_chat(state, {"type": "chat/queuedMessagesReordered", "order": ["q2", "q1"]})
@@ -393,6 +399,35 @@ class ServeTests(SendCase):
         status, data, _ = self.post("/api/unqueue", {"id": told["id"]})
         self.assertEqual((status, data["error"]), (409, messages.text("send.refused.queue-gone")))
         self.assertIn("queue", [item["what"] for item in tasks.read(self.root, ".workspace/sandbox/tasks/job1")["events"]])
+
+    def test_a_steer_is_on_the_page_at_once_and_goes_when_it_is_taken(self) -> None:
+        """F5: a message sent into the running turn shows as sent until the agent takes it; the queue panel does not list it."""
+        task = ".workspace/sandbox/tasks/job1"
+        self.busy({"id": "t2", "startedAt": "2026-11-03T10:00:00Z", "message": {"text": "x"}, "responseParts": []})
+        status, data, _ = self.post("/api/steer", {"text": "use the other table", "lang": "en"})
+        self.assertEqual(status, 200, data)
+        told = self.told()
+        self.assertEqual(told["kind"], "steering")
+        found = self.vs.live(task)
+        self.assertEqual([(item["id"], item["text"]) for item in found["steering"]], [(told["id"], told["message"]["text"])])
+        self.assertEqual(found["queued"], [])
+        with self.vs.lock:  # the agent took it: the running turn's own message holds the words
+            held = self.vs.chats[self.chat]
+            held["state"]["activeTurn"] = {"id": "t3", "message": {"text": " " + told["message"]["text"] + " "}, "responseParts": []}
+            held["rev"] += 1
+        self.assertEqual(self.vs.live(task)["steering"], [])
+
+    def test_a_steer_that_was_not_taken_does_not_linger(self) -> None:
+        task = ".workspace/sandbox/tasks/job1"
+        self.busy({"id": "t2", "startedAt": "2026-11-03T10:00:00Z", "message": {"text": "x"}, "responseParts": []})
+        self.post("/api/steer", {"text": "change of plan", "lang": "en"})
+        self.assertEqual(len(self.vs.live(task)["steering"]), 1)
+        with self.vs.lock:  # the turn ends without taking it
+            ahp.reduce_chat(self.vs.chats[self.chat]["state"], {"type": "chat/turnComplete", "turnId": "t2", "duration": 5})
+            self.vs.chats[self.chat]["state"]["activeTurn"] = None
+            self.vs.chats[self.chat]["rev"] += 1
+        self.assertEqual(ahp.steering(self.vs.chats[self.chat]["state"]), [])
+        self.assertEqual(self.vs.live(task)["steering"], [])
 
     def test_a_queue_needs_a_turn_that_runs(self) -> None:
         status, data, _ = self.post("/api/queue", {"text": "later", "lang": "en"})

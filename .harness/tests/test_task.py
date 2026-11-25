@@ -224,10 +224,17 @@ class FetchDiffTests(TaskCase):
         self.run_cli("task", "fetch", "--overwrite", "repo_b/src/a.sql")
         self.assertEqual(self.dev("repo_b/src/a.sql").read_text(encoding="utf-8"), "select 1;\n")
 
+    def test_the_skill_every_board_task_loads_names_fetch_read(self) -> None:
+        """F2: an agent that never opened the workspace rules must still find --read."""
+        skill = Path(__file__).resolve().parents[2] / ".github" / "skills" / "harness-my-task" / "SKILL.md"
+        self.assertIn("task fetch --read", skill.read_text(encoding="utf-8"))
+
     def test_fetch_to_read_copies_the_base_version_into_read_needs_no_plan_and_is_nothing_promote_sees(self) -> None:
         """1.7.42: the code a card is written from. READ/, not DEV/: a copy only read never holds a write-back back. The commit is fixed as for any fetch, so later reads have the same lines."""
         self.new()  # no plan approved
-        self.assertIn("计划", self.run_cli("task", "fetch", "repo_b/src/a.sql", ok=False)["stderr"])  # a fetch to change still needs the plan
+        refusal = self.run_cli("task", "fetch", "repo_b/src/a.sql", ok=False)["stderr"]
+        self.assertIn("计划", refusal)  # a fetch to change still needs the plan
+        self.assertIn("fetch --read --task " + TASK, refusal)  # F2: and the refusal names the way to only read
         result = self.run_cli("task", "fetch", "--read", "repo_b/src/a.sql")
         self.assertEqual(result["read"], [f"{TASK}/READ/repo_b/src/a.sql"])
         self.assertEqual((self.task / "READ" / "repo_b" / "src" / "a.sql").read_text(encoding="utf-8"), "select 1;\n")

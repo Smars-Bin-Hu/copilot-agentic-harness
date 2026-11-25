@@ -188,7 +188,6 @@ def todo_counts(root: Path, task: str) -> Optional[Dict[str, int]]:
 
 CLOSED_SHOWN = 50  # how many closed tasks the board lists (the newest); `board.closed_shown` in task.json
 _closed: Dict[Tuple[str, str], Tuple[str, Any, str]] = {}  # a closed task does not change: its numbers and page are made once
-_written: Dict[Tuple[str, str], Any] = {}  # (root, task) -> (the `updated_at` of the task, its credits) when a served board last wrote its page
 USAGE_WAIT_S = 15 * 60  # Copilot writes the credits of a turn when the turn ends: a task the agent closed in its last turn has none yet; its numbers are not kept for this long
 
 
@@ -244,8 +243,8 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
     A task whose numbers cannot be worked out is listed without them. With `everything`, the newest closed tasks come
     too (`closed_shown`): the page filters and sorts them; `closed_hidden` counts the older ones that are not listed.
     `hold` False (the served board): a working row keeps its wait here; `Board.settle` holds it once the chat has said whether the agent works (1.8.49).
-    `rewrite` False (the served board, 1.6.109): a task's page on disk is written only when it is missing or the task changed. The served board
-    draws that page when it is asked for, and writing every page every few seconds cost a slow computer much of its time."""
+    `rewrite` False (the served board, 1.6.109): a task's page on disk is written only when it is missing (1.8.x: not when the task changed; `updated_at` and the credits move with every
+    hook and every turn of a working task, and each write also built the Gate section). The served board draws that page when it is asked for, and writing every page every few seconds cost a slow computer much of its time."""
     result = tasklife.list_tasks(root, everything)
     limit = closed_shown(root)
     closed = [row for row in result["tasks"] if row["status"] == "closed"]
@@ -288,10 +287,8 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
             info, now = insight(root, row["task"], use_events)
             row["brief"] = taskinsight.brief(info)
             page = common.task_report_file(root, task_ops.name_of(row["task"]), common.REPORT_HTML)
-            stamp = (row["updated_at"], row["brief"].get("aiu"))
-            if rewrite or _written.get(key) != stamp or not page.is_file():
+            if rewrite or not page.is_file():  # 1.8.x: a served board never reads this file (it draws the page when asked), so it is written once and again only by what asks for a fresh one: `task report`, a verdict, the board on disk
                 write_task_page(root, row["task"], info, refresh, now)
-                _written[key] = stamp
             row["report"] = page.relative_to(root / common.REPORTS_DIR).as_posix()
             if row["status"] == "closed" and not usage_pending(row, row["brief"]):
                 _closed[key] = (row["updated_at"], row["brief"], row["report"])

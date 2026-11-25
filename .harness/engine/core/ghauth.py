@@ -284,13 +284,13 @@ def folders_of(root: Optional[Path]) -> List[str]:
         return []
 
 
-def check(root: Optional[Path] = None, extra: Optional[Dict[str, str]] = None, find: Callable[..., Optional[str]] = find_gh) -> Dict[str, Any]:
+def check(root: Optional[Path] = None, extra: Optional[Dict[str, str]] = None, find: Callable[..., Optional[str]] = find_gh, known: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """The gh half of the Enter item "Copilot signed in (gh)": `{gh, version, signed_in, login, why}`. `why`: `no-gh`, `cannot-run`, `slow`, `not-signed-in`, or empty. Never the token."""
     gh = find(folders_of(root))
     if not gh:
         return {"gh": "", "version": "", "signed_in": False, "login": "", "why": "no-gh", "download": DOWNLOAD_PAGE}
     try:
-        found = version(gh, extra)
+        found = (known or {}).get(gh) or version(gh, extra)  # `known`: gh's version by path, kept by the caller; the version does not change inside a run
         state = status(gh, extra)
     except GhError as error:
         return {"gh": gh, "version": "", "signed_in": False, "login": "", "why": error.why}

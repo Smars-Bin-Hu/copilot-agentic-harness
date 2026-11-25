@@ -40,6 +40,7 @@ Who may do what:
 
 from __future__ import annotations
 
+import datetime
 import http.server
 import io
 import json
@@ -221,6 +222,7 @@ RESTART_AFTER = 0.3  # seconds for the answer to reach the page
 RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: in its environment, never on disk
 
 
+SLOW_CALL = 2.0  # seconds: a message to the chat or a task page slower than this gets a line in the board's log, with the time of each part (F5, F8)
 START_LATE = 120.0  # 1.8.5: seconds after the board sent something before "starting" says the agent was not seen to start
 START_FORGET = 600.0  # and seconds after that before the board lets go of the mark
 NEW_CHAT_MARKS = {"newchat": ("asking", "sent"), "reopen": ("asking", "sent", "opening"), "after": ("asking", "sent")}  # 1.8.50: a mark whose message goes in a new chat, and the stages of that chat that are never late
@@ -246,6 +248,29 @@ def trust_chat(row: Dict[str, Any]) -> bool:
     row["active"] = False
     row["state"] = tasklife.state_of(row.get("status", ""), row.get("paused_since", ""), row.get("waiting_why", ""), bool(row.get("held")), False)
     return True
+
+
+def log_slow(key: str, spent: float, took: Dict[str, float], **fields: Any) -> None:
+    """One line in the board's log when a call took over SLOW_CALL seconds, with the time of each part (longest first); never raises, never holds the person's words (F5, F8)."""
+    try:
+        if spent > SLOW_CALL:
+            parts = ", ".join(f"{name} {value:.1f}" for name, value in sorted(((key, number) for key, number in took.items() if isinstance(number, (int, float)) and number >= 0.1), key=lambda item: -item[1]))
+            print(messages.text(key, seconds=f"{spent:.1f}", parts=parts or "-", **fields), flush=True)
+    except Exception:  # noqa: BLE001 - a note about time must not break the call
+        pass
+
+
+def recent_start(stamp: Any) -> bool:
+    """True when a turn's start stamp (ISO, `Z` or an offset) is at most START_LATE seconds old (a start in the future counts as now). Missing or unreadable: False."""
+    if not isinstance(stamp, str) or not stamp or len(stamp) > 64:
+        return False
+    try:
+        began = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if began.tzinfo is None:
+            began = began.replace(tzinfo=datetime.timezone.utc)
+        return (datetime.datetime.now(datetime.timezone.utc) - began).total_seconds() <= START_LATE
+    except (TypeError, ValueError):
+        return False
 
 
 def model_pair(model: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -805,8 +830,17 @@ class Board:
             self.wall_window.release()
         return {"wall": self.set_wall_folder({"folder": text}), "cancelled": False} if text else {"wall": wallpaper.listing(self.root), "cancelled": True}
 
-    def desk_page(self, name: str) -> str:
-        return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH), linked=True)
+    def desk_page(self, name: str, took: Optional[Dict[str, float]] = None) -> str:
+        """The page of a task. `took`, when given, gets the seconds of each part (F8: the log line for a page slower than SLOW_CALL)."""
+        marks = took if took is not None else {}
+        began = time.monotonic()
+        data = self.desk(name)
+        marks["desk"], began = time.monotonic() - began, time.monotonic()
+        info = self.serve_info({}, DESK_REFRESH)
+        marks["info"], began = time.monotonic() - began, time.monotonic()
+        page = taskhtml.desk_page(data, info, linked=True)
+        marks["html"] = time.monotonic() - began
+        return page
 
     def report_info(self, name: str) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
         task = task_ops.resolve(self.root, name)
@@ -1164,6 +1198,8 @@ class Board:
             for key in WAIT_FIELDS:
                 if key in row:
                     row[key] = ""
+        if live and state == "busy" and row.get("state") == "quiet" and recent_start(chat.get("started_at")):  # the chat runs a turn that began a moment ago; the hook log has not written yet (3-13 s on a slow PC)
+            row["state"] = "working"
         if live and state == "error":
             row["state"], row["active"] = "error", False
             row["error"] = chat.get("error") if isinstance(chat.get("error"), dict) else {}
@@ -1644,10 +1680,10 @@ class Board:
             self.bundle_job.kick(True)
             return self.bundle_job.view()
         if step == "summary":
-            line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})
+            line = next((entry for entry in self.ready.latest(True, True)["checks"] if entry["id"] == "copilot"), {})
             return core_wizard.summary(self.root, self.programs(), line, self.bundle_job.view())
         if step == "finish":
-            line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})  # the board's last answer: gh is not run again in this request
+            line = next((entry for entry in self.ready.latest(True, True)["checks"] if entry["id"] == "copilot"), {})  # the board's last answer: gh is not run again in this request
             core_wizard.refuse_finish(self.root, self.programs(), line)  # ValueError: what is still missing (409)
             core_wizard.finish(self.root)
             self.ready.setup_now_done()  # the kept answer must not send the page back to the wizard
@@ -1803,12 +1839,19 @@ class Board:
         files = self.files_of(data)
         job = self.say_or(task, kind) if kind == "queue" else kind
         pre = self.before(task)
+        began = time.monotonic()
         try:
             done = self.link.dispatch(job, task, text, model, files)
         except vslink.Refused as error:
             raise Fallback(self.refusal(error.why), text) from None
         except Exception as error:  # noqa: BLE001
             raise Fallback(ahp_scrub(error), text) from None
+        finally:
+            took = {"wait": time.monotonic() - began}
+        if isinstance(done.get("parts"), dict):
+            took = {**took, **{str(name): value for name, value in done["parts"].items()}}  # lane, gate, look, dispatch: where the call spent its time
+            took.pop("wait", None)
+        log_slow("steer.slow", time.monotonic() - began, took, kind=job)
         extra = {"model": model or {}, "files": chatsend.listed(files)}
         if job == "say":
             extra["skipped"] = done.get("skipped") or []
@@ -2299,8 +2342,14 @@ def handler_for(board: Board) -> type:
                 if path in ("/", "/board.html"):
                     board.look_at_page(True)
                 try:
-                    page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"))
-                    return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+                    began, took = time.monotonic(), {}
+                    page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"), took)
+                    built = time.monotonic()
+                    sent = self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+                    if path.startswith("/task/"):
+                        took["send"] = time.monotonic() - built
+                        log_slow("task.slow", time.monotonic() - began, took, task=path[len("/task/"):].strip("/")[:80])
+                    return sent
                 except CommandError as error:  # a task the board does not list
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
@@ -2387,7 +2436,7 @@ def handler_for(board: Board) -> type:
                 return None
             if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the last answer of `Ready.keep_fresh`; it waits for nothing
                 try:
-                    return self.answer(200, board.ready.latest(board.paired(self.token())))  # 1.8.13: worked out on a thread of its own, sent at once
+                    return self.answer(200, board.ready.latest(board.paired(self.token()), data.get("live") is True))  # 1.8.13: worked out on a thread of its own, sent at once
                 except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
                     return self.answer(500, {"error": f"{type(error).__name__}: {error}"[:300]})
             if path == "/api/live":  # the Live tab of an open task: the latest items of its chat, from the memory of the link (no file, no call to the host); `rev` makes an unchanged poll tiny
@@ -2592,6 +2641,23 @@ def handler_for(board: Board) -> type:
                         return self.answer(200, {"result": done})
                     listed = integrity.read(board.root)
                     return self.answer(200, {"result": {"changed": integrity.changes(board.root), "was": str((listed or {}).get("harness") or ""), "now": integrity._registry_version(board.root)}})  # noqa: SLF001
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/hook-ack":  # (1.8.x, F13) the person has seen the hooks Copilot stopped waiting for: write down the events the page showed (their identities). The paired browser only; in a terminal it is `doctor --accept-hooks`, and the gate refuses an agent's call of it
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    import doctor
+
+                    events = data.get("events")
+                    if not isinstance(events, list) or not events or len(events) > 200 or not all(isinstance(item, str) and 0 < len(item) <= 300 for item in events):  # never "whatever is there"
+                        return self.answer(400, {"error": say("serve.hookack.events")})
+                    done = doctor.acknowledge_hooks(board.root, events, via="board")
+                    if not done["until"]:
+                        return self.answer(409, {"error": say("doctor.hook.accept_none")})
+                    board.ready.drop_doctor()  # what doctor said was about the record as it was
+                    print(say("serve.did", action="hook-ack", task="-"), flush=True)
+                    return self.answer(200, {"result": {"until": done["until"], "n": done["n"]}})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
             if path == "/api/reboard":  # Restart board: the paired browser only. 1.8.23: its own path; under /api/restart, the VS Code restart above answered and the board never restarted

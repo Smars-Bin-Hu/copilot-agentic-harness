@@ -14,7 +14,7 @@ from unittest import mock
 
 from support import GIT, HarnessTestCase, make_repo, make_root, run_git
 
-from core import company, kbextract, reinstall, standards, targets
+from core import company, filecache, kbextract, reinstall, standards, targets
 from core import setup as core_setup
 from core.company import CompanyError
 from modules.task import setupjob
@@ -46,6 +46,44 @@ class CompanyCase(HarnessTestCase):
         super().setUp()
         self.kb = self.root / "knowledge-base"
         put(self.kb, FILES)
+
+
+class FoundInPlaceKept(CompanyCase):
+    """1.8.x: the green marks of the board were worked out (nine listings) at every poll; in the board server they are kept while what they look at is the same."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        company._found.clear()
+        self.addCleanup(company._found.clear)
+        filecache.enable(True)
+        self.addCleanup(filecache.enable, False)
+
+    def lists(self) -> int:
+        with mock.patch.object(company, "layout", wraps=company.layout) as worked:
+            company.found_in_place(self.root)
+            return worked.call_count
+
+    def test_the_second_poll_does_not_look_again_and_a_change_is_seen_at_once(self) -> None:
+        before = company.found_in_place(self.root)
+        self.assertTrue(before)
+        self.assertEqual(self.lists(), 0)
+        self.assertEqual(company.found_in_place(self.root), before)
+        put(self.kb, {"company/instructions/sql.instructions.md": "---\napplyTo: '**/*.sql'\n---\n\nSee it.\n"})  # a file added: the folder's stamp moved
+        self.assertEqual(self.lists(), 1)
+        (self.kb / "company" / "company.json").write_text('{ "skill_prefix": "other-word" }\n', encoding="utf-8")  # a file changed in place
+        self.assertEqual(self.lists(), 1)
+        self.assertNotEqual(company.found_in_place(self.root), before)
+
+    def test_too_old_an_answer_is_made_again(self) -> None:
+        company.found_in_place(self.root)
+        with mock.patch.object(company, "FOUND_FOR", 0.0):
+            self.assertEqual(self.lists(), 1)
+
+    def test_a_hook_and_the_command_line_look_every_time(self) -> None:
+        filecache.enable(False)
+        company.found_in_place(self.root)
+        self.assertEqual(self.lists(), 1)
+        self.assertEqual(self.lists(), 1)
 
 
 class ManifestWordsTests(CompanyCase):

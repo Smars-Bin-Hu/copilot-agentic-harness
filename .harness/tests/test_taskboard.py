@@ -246,12 +246,67 @@ class ChildLogTests(unittest.TestCase):
             self.assertEqual(whole.call_count, 2)
         self.assertEqual(self.children(), ["half", "kid", "over"])
 
+    def test_one_board_pass_lists_the_folder_once_for_every_task(self) -> None:
+        """1.8.x: the folder was listed once per task per pass; outside a pass every call is current."""
+        from core import filecache
+
+        self.log("kid", {"at": "2026-11-03T08:00:00Z", "parent_session_id": "boss"}, {"at": "2026-11-03T09:00:00Z"})
+        real = os.scandir
+        with mock.patch.object(os, "scandir", wraps=real) as listed:
+            with filecache.one_pass():
+                for task in range(10):
+                    self.assertEqual(self.children(), ["kid"])
+            self.assertEqual(listed.call_count, 1)
+            with filecache.one_pass():
+                self.log("kid2", {"at": "2026-11-03T08:00:00Z", "parent_session_id": "boss"}, {"at": "2026-11-03T09:00:00Z"})
+                self.assertEqual(self.children(), ["kid", "kid2"])  # a new pass sees the new log
+            self.assertEqual(listed.call_count, 2)
+            self.children()
+            self.children()  # no pass (gate review, report): current every time
+            self.assertEqual(listed.call_count, 4)
+
     def test_a_log_that_changed_is_looked_at_again(self) -> None:
         self.log("late", {"at": "2026-11-03T08:00:00Z"})
         self.assertEqual(self.children(), [])
         self.log("late", {"at": "2026-11-03T08:00:00Z", "parent_session_id": "boss"}, {"at": "2026-11-03T10:00:00Z"})
         self.assertEqual(self.children("2026-11-03T09:00:00Z"), ["late"])
         self.assertEqual(common.child_sessions(self.root, "../vscode", "boss", ""), [])
+
+
+class ReposOfTests(HarnessTestCase):
+    """1.8.x: DEV/ of an open task was walked (iterdir, then rglob of each repository) for every call of the queue; once per board pass is enough."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from modules.task import taskqueue
+
+        self.queue = taskqueue
+        self.dev = tasks.dev_dir(self.root, "job")
+        (self.dev / "repo-a" / "deep" / "er").mkdir(parents=True)
+        (self.dev / "repo-a" / "deep" / "er" / "x.sql").write_text("select 1", encoding="utf-8")
+        (self.dev / "repo-b" / "empty").mkdir(parents=True)
+        (self.dev / "other").mkdir()
+        (self.dev / "other" / "y.sql").write_text("select 2", encoding="utf-8")
+
+    def test_a_pass_looks_at_the_folder_once_and_a_new_pass_looks_again(self) -> None:
+        from core import filecache
+
+        data = {"task": "job", "deletes": ["repo-c/old.sql"]}
+        known = ["repo-a", "repo-b", "repo-c"]
+        self.assertEqual(self.queue.repos_of(self.root, data, known), ["repo-a", "repo-c"])  # an empty tree and a folder nobody knows are none
+        with mock.patch.object(os, "walk", wraps=os.walk) as walked, mock.patch.object(Path, "iterdir", autospec=True, side_effect=Path.iterdir) as listed:
+            with filecache.one_pass():
+                for _ in range(6):
+                    self.assertEqual(self.queue.repos_of(self.root, data, known), ["repo-a", "repo-c"])
+            once = (walked.call_count, listed.call_count)
+            with filecache.one_pass():
+                (self.dev / "repo-b" / "z.sql").write_text("select 3", encoding="utf-8")
+                self.assertEqual(self.queue.repos_of(self.root, data, known), ["repo-a", "repo-b", "repo-c"])
+            self.assertEqual(listed.call_count, 2 * once[1])
+            self.assertEqual(once[1], 1)
+            self.queue.repos_of(self.root, data, known)
+            self.queue.repos_of(self.root, data, known)  # no pass (a command): every call looks
+            self.assertEqual(listed.call_count, 4)
 
 
 class BoardCase(HarnessTestCase):
@@ -1035,7 +1090,7 @@ class PageTests(BoardCase):
             taskboard.board_rows(self.root, True)
         self.assertEqual(len([call for call in calls if call.endswith("ancient")]), 1)
 
-    def test_a_served_board_writes_a_tasks_page_only_when_the_task_changed(self) -> None:
+    def test_a_served_board_writes_a_tasks_page_only_when_it_is_missing(self) -> None:
         """1.6.109: the served board asks for the rows every few seconds and draws a task's page when it is asked for; writing every page each time only cost time."""
         self.new("alpha")
         page = common.task_report_file(self.root, "alpha", common.REPORT_HTML)
@@ -1048,12 +1103,15 @@ class PageTests(BoardCase):
             data["updated_at"] = "2099-01-01T00:00:00+00:00"  # the task changed
             (self.root / BASE / "alpha" / ".task" / "task.json").write_text(json.dumps(data), encoding="utf-8")
             taskboard.board_rows(self.root, True, rewrite=False)
-            self.assertEqual(wrote.call_count, 2)
+            self.assertEqual(wrote.call_count, 1)  # 1.8.x: a task that changes at every hook does not get its page written again
             page.unlink()  # the task page links to the file: one that is gone is written again
             taskboard.board_rows(self.root, True, rewrite=False)
-            self.assertEqual(wrote.call_count, 3)
+            self.assertEqual(wrote.call_count, 2)
             taskboard.board_rows(self.root, True)  # a board on disk writes every page each time
-            self.assertEqual(wrote.call_count, 4)
+            self.assertEqual(wrote.call_count, 3)
+            page.write_text("old", encoding="utf-8")
+            self.cli_json("task", "report", "--task", "alpha")  # `task report` writes a current one when it is asked
+            self.assertNotEqual(page.read_text(encoding="utf-8"), "old")
 
     def test_refresh_writes_the_board_again_over_the_same_files_until_it_is_stopped(self) -> None:
         self.new("alpha")

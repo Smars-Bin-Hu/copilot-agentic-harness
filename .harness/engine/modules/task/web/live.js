@@ -804,6 +804,24 @@ const LIVE = (function () {
     for (const id of now) { out.push(id); if (after.has(id)) out.push(...after.get(id)); }
     return out;
   }
+  // F5: a message sent into the running turn that the agent has not taken yet: a "You" line at the end of the feed with a short mark, outside the items (it is no step of the turn; the real message
+  // is drawn as an item when the agent takes it, and this line goes: the server stops sending it then, or when the chat is not at work any more).
+  const pending = new Map();
+  function paintPending(data) {
+    const now = data && data.bound && Array.isArray(data.steering) ? data.steering.filter((one) => one && typeof one.id === "string" && typeof one.text === "string") : [];
+    const keep = new Set(now.map((one) => one.id));
+    for (const [id, li] of pending) if (!keep.has(id)) { li.remove(); pending.delete(id); }
+    for (const one of now) {
+      let li = pending.get(one.id);
+      if (!li) {
+        li = h("li", {class: "fi fi-me fi-pending", "data-id": "pending." + one.id}, h("i", {class: "dot"}),
+          h("div", {class: "fb"}, h("span", {class: "me-tag"}, t("desk.live.you")), h("div", {class: "me-box"}, h("div", {class: "me-tx me-clamp"}), h("div", {class: "sub me-pend"}, t("desk.live.pending.steer")))));
+        li.querySelector(".me-tx").textContent = one.text;
+        pending.set(one.id, li);
+      }
+      feed.append(li);  // last, in the order they were sent
+    }
+  }
   // Takes an answer into the record. Returns the ids to draw again, or null when the answer cannot be used (a stub of an item the page does not hold: it asks again for everything).
   function absorb(data) {
     if (!data.bound) { forget(); st.turn = ""; return new Set(); }
@@ -862,6 +880,7 @@ const LIVE = (function () {
     for (const node of nodes) {
       if (node !== expected) feed.insertBefore(node, expected); else expected = expected.nextSibling;
     }
+    paintPending(data);
     earlierLi.hidden = !(data && data.bound && ids.length && st.reach > 0) || Boolean(st.filter && st.filter !== "all");
     paintSince();
     if (!findRow.hidden && fd.q && ids.length !== fd.size) refreshFind();

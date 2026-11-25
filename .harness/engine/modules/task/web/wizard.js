@@ -77,7 +77,7 @@ const WIZARD = (function () {
       gh: (body) => send("/api/gh", body),
       host: (body) => send("/api/host", body),
       account: (fresh) => call("/api/copilot-account", fresh ? {fresh: true} : {}, 8),  // (1.8.38) Settings > Copilot: credits, seat, switches, models
-      ready: () => call("/api/ready", {}, 8),
+      ready: () => call("/api/ready", {live: true}, 8),
       language: (language) => SERVE.post("/api/language", {language}, true),
     };
   }

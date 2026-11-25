@@ -439,7 +439,7 @@ def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
 
     for folder in govern.folders(root):
         pack = folder.name
-        for path in sorted((folder / toolpacks.TYPES).glob("*.json")) if (folder / toolpacks.TYPES).is_dir() else []:
+        for path in toolpacks.types_of(folder):
             try:
                 text = path.read_text(encoding="utf-8-sig", errors="replace")
             except OSError as error:

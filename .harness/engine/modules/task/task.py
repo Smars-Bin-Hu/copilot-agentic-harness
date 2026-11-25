@@ -662,7 +662,11 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False, 
     kept: List[str] = []
     with locked(root, task) as data:
         require_open(data)
-        require_plan(root, task, data)
+        try:
+            require_plan(root, task, data)
+        except CommandError as error:
+            hint = say("fetch.plan.read", task=task)  # F2: the way to only read; the refusal itself is unchanged
+            raise CommandError(f"{error} {hint}") from error
         if data["promote"]["state"] in ("done", "partial"):
             raise CommandError(say("fetch.promoted"))
         found = common.load_targets(root)

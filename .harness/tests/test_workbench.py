@@ -198,6 +198,20 @@ class WorkbenchPanelsTests(unittest.TestCase):
         self.assertIn("node.dataset.task", script)
         self.assertIn('node.classList.contains("item")', script)
 
+    def test_before_the_first_answer_the_view_does_not_say_nothing_waits_or_that_the_agent_is_gone(self) -> None:
+        sup, bench = source("super.js"), source("workbench.js")
+        self.assertIn("talk = null, heard = false,", sup)  # not heard yet is its own state
+        self.assertIn("heard = true;", sup.split("function apply(")[1].split("function morning")[0])  # set by an answer of /api/super
+        self.assertIn('!talk && heard ? "none" : ""', sup)  # the red bar only from a real answer, never from the initial null
+        self.assertIn('const talkOff = () => (!talk ? (heard ? "none" : "") :', sup)  # the input stays enabled until then
+        self.assertIn('heard ? "" : failed || t("board.enter.checking")', sup)  # a failed request shows as the failure, otherwise "Checking"
+        self.assertIn("superView.note()", bench)
+        self.assertIn("superView.note() || t(\"super.wb.queue.empty\")", bench)
+        self.assertIn("superView.subscribe", bench)  # the list is drawn again when the first answer (or its failure) comes
+        self.assertIn("unsubscribe()", bench)
+        for name in ("en", "zh"):
+            self.assertIn('"board.enter.checking"', (CORE / f"messages.{name}.json").read_text(encoding="utf-8"))
+
     def test_the_send_button_keeps_its_own_colours(self) -> None:
         self.assertIn(":where(.wb-root) button{font:inherit;color:inherit}", source("workbench.css"))
 

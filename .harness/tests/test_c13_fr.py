@@ -499,6 +499,20 @@ class IntegrityTests(unittest.TestCase):
             out = self.call("run_in_terminal", {"command": command})
             self.assertEqual(out.get("permissionDecision"), "deny", command)
 
+    def test_the_gate_does_not_let_the_agent_acknowledge_the_hook_timeouts_either(self) -> None:
+        """(1.8.x, F13) `harness doctor --accept-hooks` is the person's too: an agent that acknowledged the record of a call that ran without the gate would close the problem itself."""
+        done = subprocess.run([sys.executable, str(self.hook.parent / "cli.py"), "doctor", "--accept-hooks"], capture_output=True, text=True, encoding="utf-8", stdin=subprocess.DEVNULL,
+                              env={**os.environ, "HARNESS_ROOT": str(self.root), "HARNESS_LANGUAGE": "en"}, check=False)
+        self.assertNotEqual(done.returncode, 0)
+        for command in ("harness doctor --accept-hooks", "harness doctor --json --accept-hooks", "cd x && harness doctor --accept-hooks", "harness.cmd doctor --accept-hooks"):
+            out = self.call("run_in_terminal", {"command": command})
+            self.assertEqual(out.get("permissionDecision"), "deny", command)
+        for command in ("harness doctor", "harness doctor --json"):
+            self.assertNotEqual(self.call("run_in_terminal", {"command": command}).get("permissionDecision"), "deny", command)  # looking is free
+        from core import hookack
+
+        self.assertEqual(hookack.path_of(self.root).parent, self.integrity.home_dir(), "kept in the guarded folder, where an agent cannot write")
+
     def test_the_check_is_cheap(self) -> None:
         import time
 

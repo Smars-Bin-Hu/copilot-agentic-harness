@@ -60,6 +60,13 @@ class TaskFramesTests(unittest.TestCase):
         self.assertIn("WARM_MS = 20000", script)
         self.assertIn("tab.frame = warm.frame", script)
 
+    def test_a_frame_shows_the_turning_circle_until_its_page_has_loaded(self) -> None:
+        script = source("taskframes.js")
+        self.assertIn("spinner()", script)
+        self.assertIn('frame.addEventListener("load"', script)
+        self.assertEqual(script.count("frame.remove()"), 1)  # a frame is taken away by `drop` only, with its circle
+        self.assertIn(".tw-frame:not([hidden])+.tw-wait", source("taskwin.css"))
+
     def test_restored_tabs_load_nothing(self) -> None:
         body = re.search(r"restore\(names, at\) \{(.*?)\},", source("taskframes.js"), re.S)
         self.assertIsNotNone(body)

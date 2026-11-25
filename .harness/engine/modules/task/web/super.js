@@ -108,7 +108,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     foldBtn.addEventListener("click", () => setFold(!chatFolded, true));
     foldLine.addEventListener("click", () => setFold(false, true));
     drawFold();
-    let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
+    let shown = false, pet = null, data = null, talk = null, heard = false, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], making = [], closedList = [], closedMore = 0, localThink = 0, failed = "";
     const PULSE_MS = 1500, PULSE_POLL_MS = 2500, PULSE_QUICK_MS = 15000;
     let pulseTimer = 0, pulseLast = "", pulseQuick = 0, pulseOff = 0;
@@ -1256,7 +1256,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
     function drawBanner() {
       const mood = moodNow();
-      const kind = mood === "sleep" ? "sleep" : mood === "tired" ? "tired" : !talk ? "none" : "";
+      const kind = mood === "sleep" ? "sleep" : mood === "tired" ? "tired" : !talk && heard ? "none" : "";  // 1.8.x: no talk before the first answer is "not heard yet", not "no agent"
       const sig = kind + (talk ? "|" + talk.spent + "|" + talk.limit : "");
       if (sig === bannerSig) return;
       bannerSig = sig;
@@ -1271,7 +1271,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const spent = talk.spent || 0, left = Math.max(0, talk.limit - spent), numbers = {spent: amount(spent), limit: amount(talk.limit), left: amount(left)};
       return {left: left / talk.limit, full: moodNow() === "tired", tip: t("super.cost.tip", numbers), label: t("super.cost.label", numbers)};
     }
-    const talkOff = () => (!talk ? "none" : moodNow() === "sleep" ? "asleep" : moodNow() === "tired" ? "limit" : "");
+    const talkOff = () => (!talk ? (heard ? "none" : "") : moodNow() === "sleep" ? "asleep" : moodNow() === "tired" ? "limit" : "");
     // The placeholder of the box; a closed task with checks above 0 gets the words of a note for the checks (1.8.21).
     function drawHolder(off, routing) {
       if (off === undefined) { routing = Boolean(filter); off = routing ? "" : talkOff(); }
@@ -1608,6 +1608,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       failed = "";
       if (shown) fit();  // the board's banner above the view may have gone (hidden by the person): the view takes the room it left
       data = result;
+      heard = true;
       talk = spoken && typeof spoken === "object" && spoken.state ? spoken : null;
       drawTeam(result.mates || [], result.making, Array.isArray(result.closed) ? result.closed : [], result.closed_more);
       if (talk && talk.state !== "thinking" && localThink && Date.now() - localThink > 4000) localThink = 0;  // the server is done (a message, or nothing to say)
@@ -1759,7 +1760,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       popUp.setAttribute("aria-label", popUp.title);
       popUp.addEventListener("click", () => COMPANION.open(pop));
     }
-    return {node: sv, show, hide, setVscode: (status) => { vsDown = Boolean(status) && !status.ready; if (shown) { drawStatus(); drawBanner(); drawInput(); applyMood(); } emit(); }};
+    return {node: sv, show, hide, heard: () => heard, note: () => (heard ? "" : failed || t("board.enter.checking")), subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, setVscode: (status) => { vsDown = Boolean(status) && !status.ready; if (shown) { drawStatus(); drawBanner(); drawInput(); applyMood(); } emit(); }};
   }
 
   return {create, waiting};

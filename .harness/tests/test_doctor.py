@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -434,11 +435,20 @@ class DoctorTests(unittest.TestCase):
         return home
 
     @staticmethod
-    def hook_end(kind: str, seconds: int = 0) -> dict:
-        data = {"hookInvocationId": "h", "hookType": kind, "success": not seconds}
+    def hook_end(kind: str, seconds: int = 0, stamp: str = "2026-11-24T17:00:00.000Z", invocation: str = "h") -> dict:
+        data = {"hookInvocationId": invocation, "hookType": kind, "success": not seconds}
         if seconds:
             data["error"] = {"message": f"HookTimeoutError: Hook command timed out after {seconds} seconds: python .harness/engine/launch.py"}
-        return {"type": "hook.end", "data": data, "timestamp": "2026-11-24T17:00:00.000Z"}
+        row = {"type": "hook.end", "data": data, "timestamp": stamp}
+        if not stamp:
+            del row["timestamp"]
+        return row
+
+    @staticmethod
+    def hook_start(invocation: str, *tools: str) -> dict:
+        """The row that tells which calls a preToolUse hook was asked about (the arguments are in it; doctor takes the names only)."""
+        calls = [{"id": f"c{number}", "name": name, "args": {"path": "/secret/place"}} for number, name in enumerate(tools)]
+        return {"type": "hook.start", "data": {"hookInvocationId": invocation, "hookType": "preToolUse", "input": {"toolCalls": calls}}, "timestamp": "2026-11-24T16:59:00.000Z"}
 
     def test_hooks_copilot_stopped_waiting_for_are_an_error_with_the_calls_that_ran_ungated(self) -> None:
         self.write_log([self.call()])
@@ -446,6 +456,310 @@ class DoctorTests(unittest.TestCase):
         result = self.doctor(COPILOT_HOME=str(home))
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("在 120 秒超时后不再等 Hook：postToolUse 1, preToolUse 2。有 2 个调用没经过 gate", result.stdout)
+
+    # (1.8.x) VS Code 1.148: the agent host runs the hooks only in a folder it holds as trusted; elsewhere every hook "ends" in milliseconds with no answer.
+    def idle_session(self, began: str = "2026-11-25T14:10:15.000Z", took_ms: int = 5, said: bool = False, cwd: str = "", session: str = "idle") -> Path:
+        def pair(kind: str, number: int, output: bool = False) -> list:
+            end = {"hookInvocationId": f"i{number}", "hookType": kind, "success": True}
+            if output:
+                end["output"] = {"additionalContext": "Current session id: x"}
+            return [{"type": "hook.start", "data": {"hookInvocationId": f"i{number}", "hookType": kind, "input": {}}, "timestamp": f"2026-11-25T14:10:{20 + number}.000Z"},
+                    {"type": "hook.end", "data": end, "timestamp": f"2026-11-25T14:10:{20 + number}.{took_ms:03d}Z"}]
+
+        rows = [{"type": "session.start", "data": {"copilotVersion": "1.0.114", "context": {"cwd": cwd or str(self.root)}}, "timestamp": began}]
+        rows += pair("sessionStart", 0, said) + pair("userPromptSubmitted", 1, said) + pair("preToolUse", 2) + pair("postToolUse", 3) + pair("preToolUse", 4)
+        return self.copilot_record(rows, session)
+
+    def trust(self, state: str, at: float) -> None:
+        folder = self.root / ".harness" / "runtime" / "agent-host"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "trust.json").write_text(json.dumps({"state": state, "at": at}), encoding="utf-8")
+
+    BEGAN = 1795615815.0  # 2026-11-25T14:10:15Z
+
+    def test_hooks_that_ended_in_milliseconds_with_no_answer_are_an_error(self) -> None:
+        result = self.doctor(COPILOT_HOME=str(self.idle_session()))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("没有一个真的运行：5 个 Hook", result.stdout)
+        self.assertIn("其中 2 个在工具调用之前", result.stdout)
+
+    def test_hooks_that_answered_are_fine(self) -> None:
+        result = self.doctor(COPILOT_HOME=str(self.idle_session(took_ms=300, said=True)))
+        self.assertNotIn("没有一个真的运行", result.stdout)
+        self.assertIn("Hook 有回答", result.stdout)
+
+    def test_quick_hooks_with_an_answer_and_slow_hooks_without_are_not_idle(self) -> None:
+        for home in (self.idle_session(said=True), self.idle_session(took_ms=400)):
+            result = self.doctor(COPILOT_HOME=str(home))
+            self.assertNotIn("没有一个真的运行", result.stdout)
+
+    def test_a_session_of_another_folder_is_not_read(self) -> None:
+        result = self.doctor(COPILOT_HOME=str(self.idle_session(cwd=str(self.root.parent / "elsewhere"))))
+        self.assertNotIn("没有一个真的运行", result.stdout)
+        self.assertNotIn("Hook 有回答", result.stdout)
+
+    def test_an_idle_session_from_before_the_board_declared_trust_is_a_warning(self) -> None:
+        home = self.idle_session()
+        self.trust("declared", self.BEGAN + 60)
+        result = self.doctor(COPILOT_HOME=str(home))
+        self.assertRegex(result.stdout, r"\[WARN\]\s+在看板声明这个文件夹受信任之前")
+        self.assertNotIn("最新的会话里 Copilot 调用了 Hook", "".join(line for line in result.stdout.splitlines() if line.startswith("[ERROR]")))
+
+    def test_an_idle_session_after_the_declaration_a_refused_one_and_a_broken_record_stay_errors(self) -> None:
+        home = self.idle_session()
+        for state, at in (("declared", self.BEGAN - 60), ("refused", self.BEGAN + 60), ("declared", 9e12), ("declared", True), ("yes", self.BEGAN + 60)):
+            self.trust(state, at)
+            result = self.doctor(COPILOT_HOME=str(home))
+            self.assertRegex(result.stdout, r"\[ERROR\]\s+最新的会话里", (state, at))
+        (self.root / ".harness" / "runtime" / "agent-host" / "trust.json").write_text("{not json", encoding="utf-8")
+        self.assertRegex(self.doctor(COPILOT_HOME=str(home)).stdout, r"\[ERROR\]\s+最新的会话里")
+
+    # (1.8.x, F13) A timed-out preToolUse hook is a record of the past: the person acknowledges what they have seen, and only that.
+
+    def ack_env(self) -> dict:
+        return {"HARNESS_INTEGRITY_DIR": str(self.root / "integrity-home")}
+
+    def acknowledge(self, *events: str, clock: float = None) -> None:
+        """Store acknowledged events: `(identity, time as written)` pairs written as `"s1:h1@2026-11-24T17:00:00.000Z"`."""
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        from core import copilot_events, hookack
+
+        with mock.patch.dict(os.environ, self.ack_env()), mock.patch.object(hookack, "now", **({"return_value": clock} if clock is not None else {"side_effect": time.time})):
+            hookack.acknowledge(self.root, [{"id": item.split("@")[0], "at": copilot_events.seconds(item.split("@")[1])} for item in events])
+
+    def timed_out_record(self, *more: dict) -> Path:
+        self.write_log([self.call()])
+        return self.copilot_record([self.hook_start("h1", "view", "view", "edit"), self.hook_end("preToolUse", 120, invocation="h1"), *more])
+
+    def test_an_unacknowledged_pretooluse_timeout_is_an_error_with_its_time_and_calls(self) -> None:
+        home = self.timed_out_record()
+        result = self.doctor(COPILOT_HOME=str(home), **self.ack_env())
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("最新一次在 2026-11-24 17:00:00 UTC。没经过 gate 就执行的调用：view 2, edit 1", result.stdout)
+        self.assertIn("harness doctor --accept-hooks", result.stdout)
+        self.assertNotIn("/secret/place", result.stdout, "names of the calls only, never their arguments")
+        self.assertNotIn("[MARK]", result.stdout, "the mark is for the board's own run")
+
+    def test_an_acknowledged_timeout_is_a_warning_with_its_details_and_doctor_does_not_fail(self) -> None:
+        home = self.timed_out_record()
+        self.acknowledge("s1:h1@2026-11-24T17:00:00.000Z")
+        result = self.doctor(COPILOT_HOME=str(home), **self.ack_env())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("[ERROR]", result.stdout)
+        self.assertIn("[WARN]  你已确认：Copilot 不再等 preToolUse Hook 时，有 1 个调用没经过 gate 就执行了。最新一次在 2026-11-24 17:00:00 UTC。调用：view 2, edit 1", result.stdout)
+        self.assertNotIn("没有 Hook 超时", result.stdout, "never an OK line for a timeout that happened")
+
+    def test_a_newer_timeout_after_the_acknowledgement_is_an_error_again(self) -> None:
+        home = self.timed_out_record(self.hook_end("preToolUse", 120, stamp="2026-11-24T17:00:01.000Z", invocation="h2"))
+        self.acknowledge("s1:h1@2026-11-24T17:00:00.000Z")
+        result = self.doctor(COPILOT_HOME=str(home), **self.ack_env())
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("[ERROR]", result.stdout)
+        self.assertIn("有 1 个调用没经过 gate", result.stdout)  # only the newer one is counted as an error
+        self.assertIn("[WARN]  你已确认", result.stdout)  # the one the person saw is still said
+
+    def test_an_event_without_a_readable_time_stays_an_error_after_an_acknowledgement(self) -> None:
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        from core import hookack
+
+        for stamp in ("", "yesterday"):
+            home = self.timed_out_record(self.hook_end("preToolUse", 120, stamp=stamp, invocation="h3"))
+            self.acknowledge("s1:h1@2026-11-24T17:00:00.000Z")
+            with mock.patch.dict(os.environ, self.ack_env()):  # even an acknowledgement that names the unreadable event
+                file = hookack.path_of(self.root)
+                data = json.loads(file.read_text(encoding="utf-8"))
+                data["events"].append({"id": "s1:h3", "at": 0})
+                file.write_text(json.dumps(data), encoding="utf-8")
+            result = self.doctor(COPILOT_HOME=str(home), **self.ack_env())
+            self.assertEqual(result.returncode, 1, (stamp, result.stdout))
+            self.assertIn("[ERROR]", result.stdout)
+            self.assertIn("[WARN]  你已确认", result.stdout)  # the readable one was acknowledged, the unreadable one was not
+            self.assertNotIn("--accept-hooks", result.stdout, "an event with no time cannot be acknowledged: the line does not offer it")
+
+    def test_a_broken_acknowledgement_file_changes_nothing(self) -> None:
+        home = self.timed_out_record()
+        self.acknowledge("s1:h1@2026-11-24T17:00:00.000Z")
+        sys.path.insert(0, str(ENGINE))
+        from unittest import mock
+
+        from core import hookack
+
+        good = {"version": 2, "events": [{"id": "s1:h1", "at": 1}], "at": "2026-11-24T18:00:00+00:00"}
+        for text in ("{not json", "[]", '{"until": "not a time"}', '{"until": 5}', "", '{"until": "2026-11-24T17:00:00.000Z"}',  # the old file: a time only
+                     json.dumps({**good, "version": 1}), json.dumps({**good, "events": "s1:h1"}), json.dumps({**good, "at": "2999-01-01T00:00:00+00:00"}), json.dumps({**good, "at": "x"}),
+                     json.dumps({**good, "events": [{"id": "s1:h1", "at": 10 ** 400}]})):  # a number float() cannot hold: read() must say "none", not raise (a raise made the whole check a warning)
+            with mock.patch.dict(os.environ, self.ack_env()):
+                hookack.path_of(self.root).write_text(text, encoding="utf-8")
+            result = self.doctor(COPILOT_HOME=str(home), **self.ack_env())
+            self.assertEqual(result.returncode, 1, (text, result.stdout))
+            self.assertNotIn("你已确认", result.stdout)
+
+    def test_the_boards_run_hands_the_newest_time_to_its_button(self) -> None:
+        home = self.timed_out_record(self.hook_end("preToolUse", 120, stamp="2026-11-24T17:05:00.000Z", invocation="h2"))
+        result = self.doctor(COPILOT_HOME=str(home), HARNESS_DOCTOR_TOPICS="1", **self.ack_env())
+        self.assertIn('[MARK]  hook-timeouts ["s1:h1","s1:h2"]', result.stdout)
+        self.assertNotIn("--accept-hooks", result.stdout, "no command text on the board")
+        self.acknowledge("s1:h1@2026-11-24T17:00:00.000Z", "s1:h2@2026-11-24T17:05:00.000Z")
+        result = self.doctor(COPILOT_HOME=str(home), HARNESS_DOCTOR_TOPICS="1", **self.ack_env())
+        self.assertNotIn("[MARK]", result.stdout)
+        self.assertIn("[WARN:hooks] 你已确认", result.stdout)
+
+    def test_accept_hooks_is_refused_without_a_person_and_a_person_writes_what_the_record_holds(self) -> None:
+        from io import StringIO
+        from contextlib import redirect_stdout
+        from unittest import mock
+
+        home = self.timed_out_record()
+        done = subprocess.run([sys.executable, str(CLI), "doctor", "--accept-hooks"], text=True, encoding="utf-8", capture_output=True, stdin=subprocess.DEVNULL,
+                              env=self.env(COPILOT_HOME=str(home), **self.ack_env()), check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertFalse((self.root / "integrity-home").exists(), "nothing was written")
+        sys.path.insert(0, str(ENGINE))
+        import doctor
+        from core import hookack
+
+        out = StringIO()
+        with mock.patch.dict(os.environ, {**self.ack_env(), "COPILOT_HOME": str(home), "HARNESS_LANGUAGE": "en"}), mock.patch("core.approval.require_person"), \
+                mock.patch.object(doctor, "session_files", return_value=[("vscode", self.root / ".harness" / "runtime" / "logs" / "vscode" / "s1.jsonl")]), redirect_stdout(out):
+            doctor.run(self.root, accept_hooks=True)
+            kept = hookack.read(self.root)
+        self.assertIn("2026-11-24T17:00:00.000Z", out.getvalue())  # the language of the words is the person's setting; the time it says is not
+        first = out.getvalue().splitlines()[0]
+        self.assertTrue("2026-11-24 17:00:00 UTC" in first and "view 2, edit 1" in first, "the events it stores are the events it prints")
+        self.assertEqual([item["id"] for item in kept["events"]], ["s1:h1"])
+        self.assertTrue(kept["at"] and kept["via"] == "terminal")
+        with mock.patch.dict(os.environ, self.ack_env()):
+            self.assertEqual(hookack.path_of(self.root).parent, self.root / "integrity-home", "kept beside the integrity list, outside the workspace's own files")
+
+    def test_the_board_cannot_acknowledge_a_timeout_it_was_not_shown(self) -> None:
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        import doctor
+        from core import hookack
+
+        home = self.timed_out_record(self.hook_end("preToolUse", 120, stamp="2026-11-24T17:05:00.000Z", invocation="h2"))
+        with mock.patch.dict(os.environ, {**self.ack_env(), "COPILOT_HOME": str(home)}):
+            with self.assertRaises(ValueError):
+                doctor.acknowledge_hooks(self.root, ["s1:h1"])  # the page showed the older one
+            self.assertIsNone(hookack.read(self.root))
+            done = doctor.acknowledge_hooks(self.root, ["s1:h1", "s1:h2", "s1:never-there"], via="board")
+            self.assertEqual(hookack.acked_ids(self.root), {"s1:h1", "s1:h2"}, "only what the record holds and the page showed")
+        self.assertEqual(done["until"], "2026-11-24T17:05:00.000Z")
+
+    # (1.8.x, F13 review) Future times, events not a watermark, a list that has to be sent.
+
+    def in_process(self, home: Path, now: float = None, extra: dict = None) -> list:
+        """The lines of the hook check run in this process, with the clock set."""
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        import doctor
+
+        report = doctor.Report()
+        with mock.patch.dict(os.environ, {**self.ack_env(), "COPILOT_HOME": str(home), **(extra or {})}), \
+                mock.patch.object(doctor, "session_files", return_value=[("vscode", self.root / ".harness" / "runtime" / "logs" / "vscode" / "s1.jsonl")]):
+            doctor.check_hook_timeouts(report, self.root, now)
+        return report.lines
+
+    def test_an_event_from_the_future_is_always_an_error_and_cannot_be_acknowledged(self) -> None:
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        import doctor
+        from core import copilot_events, hookack
+
+        home = self.timed_out_record()
+        at = copilot_events.seconds("2026-11-24T17:00:00.000Z")
+        self.acknowledge("s1:h1@2026-11-24T17:00:00.000Z", clock=at + 30)
+        self.assertTrue(self.in_process(home, at + 60)[0].startswith("[WARN]"), "four minutes of skew is allowed: the clock of a computer is not exact")
+        lines = self.in_process(home, at - 10 * 60)  # now is ten minutes before the event
+        self.assertTrue(lines[0].startswith("[ERROR]"), lines)
+        self.assertNotIn("--accept-hooks", lines[0], "not offered")
+        with mock.patch.dict(os.environ, {**self.ack_env(), "COPILOT_HOME": str(home)}), \
+                mock.patch.object(doctor, "session_files", return_value=[("vscode", self.root / ".harness" / "runtime" / "logs" / "vscode" / "s1.jsonl")]), mock.patch.object(hookack, "now", return_value=at - 10 * 60):
+            hookack.path_of(self.root).unlink()
+            done = doctor.acknowledge_hooks(self.root)
+            self.assertEqual((done["n"], done["unread"], done["until"]), (0, 1, ""))
+            self.assertIsNone(hookack.read(self.root), "nothing stored")
+
+    def test_an_acknowledgement_made_in_the_future_is_none(self) -> None:
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        from core import copilot_events, hookack
+
+        home = self.timed_out_record()
+        at = copilot_events.seconds("2026-11-24T17:00:00.000Z")
+        with mock.patch.dict(os.environ, self.ack_env()), mock.patch.object(hookack, "now", return_value=at + 3600 * 24 * 365):
+            hookack.acknowledge(self.root, [{"id": "s1:h1", "at": at}])  # written by a computer whose clock was far ahead
+        self.assertTrue(self.in_process(home, at + 60)[0].startswith("[ERROR]"), "its own time is later than now plus five minutes: no acknowledgement")
+        self.assertTrue(self.in_process(home, at + 3600 * 24 * 365)[0].startswith("[WARN]"), "and an honest one at its own time is read")
+
+    def test_the_terminal_says_only_the_events_it_really_stored(self) -> None:
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        import doctor
+        from core import hookack
+
+        home = self.timed_out_record(self.hook_end("preToolUse", 120, stamp="2026-11-24T17:05:00.000Z", invocation="h2"))
+        with mock.patch.dict(os.environ, {**self.ack_env(), "COPILOT_HOME": str(home), "HARNESS_ROOT": str(self.root)}), mock.patch.object(hookack, "MAX_EVENTS", 1), \
+                mock.patch.object(hookack, "now", return_value=time.time()):
+            done = doctor.acknowledge_hooks(self.root, via="terminal")
+            kept = hookack.acked_ids(self.root)
+        self.assertEqual(done["n"], 1, "the file keeps one: one is said")
+        self.assertEqual([event["key"] for event in done["events"]], ["s1:h2"], "the newest")
+        self.assertEqual(kept, {"s1:h2"})
+
+    def test_an_event_nobody_was_shown_is_an_error_even_when_it_is_older_than_the_one_acknowledged(self) -> None:
+        home = self.timed_out_record(self.hook_end("preToolUse", 120, stamp="2026-11-24T16:00:00.000Z", invocation="old"))  # a session that came back into the window
+        self.acknowledge("s1:h1@2026-11-24T17:00:00.000Z")
+        lines = self.in_process(home)
+        self.assertEqual([line[:7] for line in lines], ["[WARN] ", "[ERROR]"], lines)
+        self.assertIn("2026-11-24 16:00:00 UTC", lines[1], "the one nobody was shown, not the one acknowledged")
+
+    def test_an_acknowledgement_of_a_time_only_hides_nothing(self) -> None:
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        from core import hookack
+
+        home = self.timed_out_record()
+        with mock.patch.dict(os.environ, self.ack_env()):
+            hookack.path_of(self.root).parent.mkdir(parents=True, exist_ok=True)
+            hookack.path_of(self.root).write_text(json.dumps({"version": 1, "until": "2999-01-01T00:00:00.000Z", "at": "2026-11-24T18:00:00+00:00"}), encoding="utf-8")
+        self.assertTrue(self.in_process(home)[0].startswith("[ERROR]"))
+
+    def test_an_event_without_an_id_is_known_by_its_session_time_and_kind(self) -> None:
+        sys.path.insert(0, str(ENGINE))
+        from core import hookack
+
+        self.assertEqual(hookack.identity("s1", "h1", ""), "s1:h1")
+        self.assertEqual(hookack.identity("s1", "", "2026-11-24T17:00:00.000Z"), "s1|2026-11-24T17:00:00.000Z|preToolUse")
+        self.assertIsNone(hookack.identity("s1", "", "yesterday"), "neither an id nor a time")
+        self.assertIsNone(hookack.identity("s1", "", ""))
+        home = self.timed_out_record(self.hook_end("preToolUse", 120, stamp="2026-11-24T17:07:00.000Z", invocation=""))
+        self.assertIn('hook-timeouts ["s1:h1","s1|2026-11-24T17:07:00.000Z|preToolUse"]', self.doctor(COPILOT_HOME=str(home), HARNESS_DOCTOR_TOPICS="1", **self.ack_env()).stdout)
+        self.acknowledge("s1|2026-11-24T17:07:00.000Z|preToolUse@2026-11-24T17:07:00.000Z")
+        lines = self.in_process(home)
+        self.assertEqual([line[:7] for line in lines], ["[WARN] ", "[ERROR]"], "only the one that was shown")
+
+    def test_the_stored_set_is_bounded_to_the_newest_events(self) -> None:
+        from unittest import mock
+
+        sys.path.insert(0, str(ENGINE))
+        from core import hookack
+
+        with mock.patch.dict(os.environ, self.ack_env()):
+            for start in (0, 150):
+                hookack.acknowledge(self.root, [{"id": f"s:{number}", "at": 1000.0 + number} for number in range(start, start + 150)])
+            ids = hookack.acked_ids(self.root)
+        self.assertEqual((len(ids), "s:299" in ids, "s:100" in ids, "s:99" in ids), (200, True, True, False))
 
     def test_timeouts_of_hooks_that_decide_nothing_are_a_warning(self) -> None:
         self.write_log([self.call()])

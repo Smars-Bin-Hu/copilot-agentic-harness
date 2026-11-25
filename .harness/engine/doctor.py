@@ -11,7 +11,7 @@ import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from core import ahp, clip, pace, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, session_files
@@ -40,6 +40,7 @@ STALE_HOOK_DAYS = 7
 SLOW_GATE_SHARE = 0.5  # of the PreToolUse timeout: the SDK engine lets a call through when the hook times out
 DEFAULT_HOOK_TIMEOUT = 30
 MIN_HOOK_TIMEOUT = 120  # (1.8.48) seconds: Copilot lets a call through when its hook times out, and a work PC measured hooks up to 111 s (2026-11-24); a lower timeout is an error
+MAX_ACK = 200  # events one acknowledgement can hold (core/hookack.py MAX_EVENTS)
 TIMEOUT_SESSIONS = 5  # the newest sessions whose Copilot record is read for hooks that timed out
 TIMED_OUT = re.compile(r"timed out after (\d+) seconds", re.I)
 
@@ -63,6 +64,10 @@ class Report:
     def error(self, message: str) -> None:
         self.errors += 1
         self.lines.append(f"[ERROR] {message}")
+
+    def mark(self, text: str) -> None:
+        """(1.8.x, F13) A line only the board reads (`[MARK] <name> <value>`), printed in its own run: it hands a fact of the record to a button."""
+        self.lines.append(f"[MARK]  {text}")
 
 
 def check_python(report: Report) -> None:
@@ -163,54 +168,309 @@ def check_hook_activity(report: Report, root: Path, registry: Dict[str, Any]) ->
         report.ok(text)
 
 
-def check_hook_timeouts(report: Report, root: Path) -> None:
+MAX_RECORD_LINE = 2_000_000  # characters: a longer line of Copilot's record is one bad item, not parsed
+SHOWN_CALLS = 5  # kinds of call named in a message
+MAX_STARTS = 500  # hook.start rows of preToolUse kept to find the calls of a timed-out one
+
+
+def start_tools(line: str, starts: Dict[str, List[str]]) -> None:
+    """(1.8.x, F13) The names of the calls a preToolUse hook was asked about (names only: the arguments can hold secrets), by the id of the invocation. A line that is too long or not understood is one bad item."""
+    if len(line) > MAX_RECORD_LINE:
+        return
+    try:
+        data = json.loads(line).get("data") or {}
+        names = [str(call.get("name") or "?")[:40] for call in (data.get("input") or {}).get("toolCalls") or [] if isinstance(call, dict)]
+        key = str(data.get("hookInvocationId") or "")
+    except (ValueError, AttributeError, TypeError, RecursionError):
+        return
+    if key and data.get("hookType") == "preToolUse":
+        if len(starts) >= MAX_STARTS:
+            starts.pop(next(iter(starts)))
+        starts[key] = names
+
+
+def scan_hook_timeouts(root: Path) -> Any:
+    """(1.8.x, F13) The record of the newest sessions read for hooks that timed out: `(sessions read, limit, counts, older, pre)`, or None when the report of Copilot's record is switched off. `counts` and `older`: the
+    number of each hook kind that timed out at or after / before today's limit. `pre`: `[{stamp, at, tools, key}]` for each preToolUse event of `counts`: the time as written, as seconds (None when it cannot be read), its identity (`core/hookack.py`, None when it has none) and the names of the
+    calls that ran without the gate. Raises when the record cannot be read: the caller says so."""
+    if not (config.policy_or_empty(root, "task").get("report") or {}).get("copilot_events", True):
+        return None
+    from core import copilot_events, hookack
+    limit = hook_timeout(root)
+    sessions = [path.stem for surface, path in sorted(session_files(root), key=lambda item: item[1].stat().st_mtime, reverse=True) if surface == "vscode"]
+    counts: Dict[str, int] = {}
+    older: Dict[str, int] = {}
+    pre: List[Dict[str, Any]] = []
+    read = 0
+    for session in sessions:
+        if read >= TIMEOUT_SESSIONS:
+            break
+        path = copilot_events.events_path(session)
+        if path is None:
+            continue
+        read += 1
+        starts: Dict[str, List[str]] = {}
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if '"hook.start"' in line and "preToolUse" in line:
+                    start_tools(line, starts)
+                    continue
+                if '"hook.end"' not in line or "imed out" not in line:
+                    continue
+                try:
+                    row = json.loads(line)
+                    data = row.get("data") or {}
+                except ValueError:
+                    continue
+                error = data.get("error")
+                found = TIMED_OUT.search(str(error.get("message") if isinstance(error, dict) else error or ""))
+                if data.get("success") is False and found:
+                    kind = str(data.get("hookType") or "?")
+                    bucket = counts if float(found.group(1)) >= limit else older
+                    bucket[kind] = bucket.get(kind, 0) + 1
+                    if bucket is counts and kind == "preToolUse":
+                        stamp = row.get("timestamp")
+                        stamp = stamp if isinstance(stamp, str) else ""
+                        invocation = str(data.get("hookInvocationId") or "")
+                        pre.append({"stamp": stamp, "at": copilot_events.seconds(stamp), "tools": starts.get(invocation, []), "key": hookack.identity(session, invocation, stamp)})
+    return read, limit, counts, older, pre
+
+
+IDLE_LOOK = 40  # the newest session folders of Copilot looked at to find the newest session of this workspace
+IDLE_MS = 150  # a hook that started Python and answered takes longer on any computer; the idle ones took 0-60 ms
+IDLE_HOOKS = 2000  # hook rows of one session read
+SAYING_HOOKS = ("sessionStart", "userPromptSubmitted")  # the hooks of the harness that always answer with words (the session id)
+
+
+def newest_session_here(root: Path) -> Optional[Path]:
+    """The events file of the newest Copilot session whose working folder is this workspace, from Copilot's own folder (not from the hook logs: a session whose hooks never ran has none).
+    Only the first line of each of the IDLE_LOOK newest is read."""
+    from core import ahp, copilot_events
+
+    base = copilot_events.home() / "session-state"
+    found: List[Any] = []
+    try:
+        with os.scandir(base) as entries:
+            for entry in entries:
+                try:
+                    found.append((entry.stat().st_mtime, entry.name))
+                except OSError:
+                    continue
+    except OSError:
+        return None
+    for _at, name in sorted(found, reverse=True)[:IDLE_LOOK]:
+        path = copilot_events.events_path(name)
+        if path is None:
+            continue
+        try:
+            with path.open(encoding="utf-8", errors="replace") as handle:
+                first = handle.readline(MAX_RECORD_LINE + 1)
+            if len(first) > MAX_RECORD_LINE:
+                continue
+            row = json.loads(first)
+            where = ((row.get("data") or {}).get("context") or {}).get("cwd") if row.get("type") == "session.start" else None
+        except (OSError, ValueError, AttributeError, RecursionError):
+            continue
+        if isinstance(where, str) and where and (ahp.same_folder(where, str(root)) or ahp.same_folder(os.path.realpath(where), os.path.realpath(str(root)))):  # /var and /private/var, a link
+            return path
+    return None
+
+
+def scan_idle_hooks(path: Path) -> Dict[str, Any]:
+    """The hooks of one session as Copilot recorded them: `{ended, gate, slowest, answered, saying, began}`. `ended`: hooks that ended well; `gate`: preToolUse among them; `slowest`: the longest
+    in ms (None when no time could be read); `answered`: hooks that ended with an answer, failed or timed out (so something ran); `saying`: sessionStart and userPromptSubmitted hooks that ended;
+    `began`: when the session started, seconds since 1970 (None when unreadable)."""
+    from core import copilot_events
+
+    out: Dict[str, Any] = {"ended": 0, "gate": 0, "slowest": None, "answered": 0, "saying": 0, "began": None}
+    starts: Dict[str, Optional[float]] = {}
+    rows = 0
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for number, line in enumerate(handle):
+            if number == 0 and len(line) <= MAX_RECORD_LINE:
+                try:
+                    out["began"] = copilot_events.seconds(json.loads(line).get("timestamp"))
+                except (ValueError, AttributeError, RecursionError):
+                    pass
+            if '"hook.start"' not in line and '"hook.end"' not in line:
+                continue
+            rows += 1
+            if rows > IDLE_HOOKS:
+                break
+            if len(line) > MAX_RECORD_LINE:
+                out["answered"] += 1  # not read: never counted as a hook that did nothing
+                continue
+            try:
+                row = json.loads(line)
+                data = row.get("data") or {}
+                kind, key = row.get("type"), str(data.get("hookInvocationId") or "")
+                at = copilot_events.seconds(row.get("timestamp"))
+            except (ValueError, AttributeError, RecursionError):
+                out["answered"] += 1
+                continue
+            if kind == "hook.start":
+                starts[key] = at
+                continue
+            if kind != "hook.end":
+                continue
+            if data.get("success") is not True or data.get("output") or data.get("error"):
+                out["answered"] += 1
+                continue
+            out["ended"] += 1
+            out["gate"] += data.get("hookType") == "preToolUse"
+            out["saying"] += data.get("hookType") in SAYING_HOOKS
+            began = starts.pop(key, None)
+            if at is None or began is None:
+                out["answered"] += 1  # no time: not known to be idle
+                continue
+            took = max(0.0, (at - began) * 1000)
+            out["slowest"] = took if out["slowest"] is None else max(out["slowest"], took)
+    return out
+
+
+def check_hook_idle(report: Report, root: Path) -> None:
+    """(1.8.x) Did the hooks do anything in the newest session of this workspace? Since VS Code 1.148 the agent host runs the hooks of a repository only in a folder it holds as trusted;
+    in any other, Copilot's record shows every hook "ended" in milliseconds with no answer, the hook log has no line, and every call ran without the gate (Mac, 2026-11-25). Idle means:
+    the hooks that always answer with words (sessionStart, userPromptSubmitted) ended without any, no hook answered, failed or timed out, and the slowest took under IDLE_MS. That is an
+    error, unless the board declared the workspace trusted after that session began (`core/agenthost.py` trust.json): then it is a record of the past, a warning, until the next chat shows it. Needs `report.copilot_events`."""
+    if not (config.policy_or_empty(root, "task").get("report") or {}).get("copilot_events", True):
+        return
+    from core import agenthost
+
+    try:
+        path = newest_session_here(root)
+        if path is None:
+            return
+        found = scan_idle_hooks(path)
+    except Exception as error:  # noqa: BLE001 - a record that cannot be read is said, not taken for fine
+        report.warn(say("doctor.hook.timeouts_unreadable", error=" ".join(str(error).split())[:200]))
+        return
+    if not found["ended"] and not found["answered"]:
+        return  # no hook was called yet in it: nothing to say
+    idle = found["saying"] > 0 and not found["answered"] and found["slowest"] is not None and found["slowest"] < IDLE_MS
+    if not idle:
+        report.ok(say("doctor.hook.idle_none"))
+        return
+    text = say("doctor.hook.idle", n=found["ended"], ms=IDLE_MS, gate=found["gate"])
+    trust = agenthost.read_trust(root)
+    if trust is not None and trust["state"] == "declared" and found["began"] is not None and trust["at"] > found["began"]:
+        report.warn(say("doctor.hook.idle_before", text=text))  # a plain warning: the board lists it with doctor's notes; Enter stays open, the next chat is the proof
+    else:
+        report.error(text)
+
+
+def can_acknowledge(event: Dict[str, Any], now: Optional[float] = None) -> bool:
+    """An event the person can acknowledge has an identity and a time that can be read and is not in the future (an event "from tomorrow" is treated as one whose time cannot be read: always an error)."""
+    from core import hookack
+
+    return bool(event.get("key")) and event["at"] is not None and not hookack.in_future(event["at"], now)
+
+
+def split_acknowledged(root: Path, pre: List[Dict[str, Any]], now: Optional[float] = None) -> Any:
+    """`(events not acknowledged, events acknowledged)`. An event is acknowledged only when it can be acknowledged and its identity is in the set the person stored; no acknowledgement, a broken
+    one, an old one (a time only), a future one and an event nobody was shown leave the event unacknowledged (pass is strict)."""
+    from core import hookack
+
+    ids = hookack.acked_ids(root, now)
+    seen = [event for event in pre if ids and can_acknowledge(event, now) and event["key"] in ids]
+    return [event for event in pre if event not in seen], seen
+
+
+def when_of(event: Dict[str, Any]) -> str:
+    stamp = str(event.get("stamp") or "")
+    return stamp[:19].replace("T", " ") + " UTC" if stamp.endswith("Z") and len(stamp) >= 19 else (stamp or "?")
+
+
+def newest_of(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return max((event for event in events if event["at"] is not None), key=lambda event: event["at"], default={})
+
+
+def calls_of(events: List[Dict[str, Any]]) -> str:
+    """The calls that ran without the gate, as `view 10, edit 2` (names only). Words for a record that does not say."""
+    named: Dict[str, int] = {}
+    for event in events:
+        for name in event["tools"]:
+            named[name] = named.get(name, 0) + 1
+    if not named:
+        return say("doctor.hook.calls_unknown")
+    ordered = sorted(named.items(), key=lambda item: (-item[1], item[0]))
+    return ", ".join(f"{name} {count}" for name, count in ordered[:SHOWN_CALLS]) + (f" (+{len(ordered) - SHOWN_CALLS} more)" if len(ordered) > SHOWN_CALLS else "")
+
+
+def check_hook_timeouts(report: Report, root: Path, now: Optional[float] = None) -> None:
     """(1.8.48) The hooks Copilot stopped waiting for, from its own record of the newest sessions (`hook.end` with `HookTimeoutError`). A preToolUse hook that timed out is a call
     the gate never judged: Copilot ran it. The hook log cannot show this: a hook that was given up on still writes its line, later. Timeouts under an older, shorter limit are
-    a warning (they were before the limit was raised); under the limit of today's config, an error when a preToolUse hook timed out, else a warning (1.8.52: the other hooks decide nothing, so no call ran ungated). Needs `report.copilot_events`."""
+    a warning (they were before the limit was raised); under the limit of today's config, an error when a preToolUse hook timed out, else a warning (1.8.52: the other hooks decide nothing, so no call ran ungated). Needs `report.copilot_events`. (1.8.x, F13) The person can acknowledge the preToolUse events they have seen
+    (`core/hookack.py`): those, and only those the person was shown, are a warning that still names the time and the calls; any other, one whose time cannot be read and one from the future, is an error."""
     try:
-        if not (config.policy_or_empty(root, "task").get("report") or {}).get("copilot_events", True):
+        found = scan_hook_timeouts(root)
+        if found is None:
             return
-        from core import copilot_events
-        limit = hook_timeout(root)
-        sessions = [path.stem for surface, path in sorted(session_files(root), key=lambda item: item[1].stat().st_mtime, reverse=True) if surface == "vscode"]
-        counts: Dict[str, int] = {}
-        older: Dict[str, int] = {}
-        read = 0
-        for session in sessions:
-            if read >= TIMEOUT_SESSIONS:
-                break
-            path = copilot_events.events_path(session)
-            if path is None:
-                continue
-            read += 1
-            with path.open(encoding="utf-8", errors="replace") as handle:
-                for line in handle:
-                    if '"hook.end"' not in line or "imed out" not in line:
-                        continue
-                    try:
-                        data = json.loads(line).get("data") or {}
-                    except ValueError:
-                        continue
-                    error = data.get("error")
-                    found = TIMED_OUT.search(str(error.get("message") if isinstance(error, dict) else error or ""))
-                    if data.get("success") is False and found:
-                        kind = str(data.get("hookType") or "?")
-                        bucket = counts if float(found.group(1)) >= limit else older
-                        bucket[kind] = bucket.get(kind, 0) + 1
+        read, limit, counts, older, pre = found
+        fresh, seen = split_acknowledged(root, pre, now)
     except Exception as error:  # noqa: BLE001 - a record that cannot be read is said, not taken for none
         report.warn(say("doctor.hook.timeouts_unreadable", error=" ".join(str(error).split())[:200]))
         return
     if not read:
         return
+    if seen:  # a record of the past that the person has looked at: still said, with its time and calls, never OK
+        counts["preToolUse"] -= len(seen)
+        if not counts["preToolUse"]:
+            del counts["preToolUse"]
+        report.topic = "hooks"  # the board's own run marks this `[WARN:hooks]`: it shows it by the Enter button, not in the count of the company's notes
+        report.warn(say("doctor.hook.timeouts_acked", n=len(seen), when=when_of(newest_of(seen)), calls=calls_of(seen)))
+        report.topic = ""
+    ask = hook_ack_words(fresh, now)
     shown = lambda found: ", ".join(f"{kind} {count}" for kind, count in sorted(found.items()))  # noqa: E731
     if counts.get("preToolUse"):  # a call ran without the gate
-        report.error(say("doctor.hook.timeouts", sessions=read, seconds=f"{limit:.0f}", counts=shown(counts), gate=counts["preToolUse"]))
+        report.error(say("doctor.hook.timeouts", sessions=read, seconds=f"{limit:.0f}", counts=shown(counts), gate=counts["preToolUse"]) + ask)
     elif counts:  # (1.8.52) another hook only records or adds words: Copilot went on without them, and no call passed the gate unjudged. The board's red "cannot work" box was wrong for it (work PC, 2026-11-24)
         report.warn(say("doctor.hook.timeouts_record", sessions=read, seconds=f"{limit:.0f}", counts=shown(counts)))
     elif older:
         report.warn(say("doctor.hook.timeouts_older", sessions=read, seconds=f"{limit:.0f}", counts=shown(older)))
+    elif seen:
+        pass  # the warning above is the line: not an OK next to it
     else:
         report.ok(say("doctor.hook.timeouts_none", sessions=read, seconds=f"{limit:.0f}"))
+    if fresh and os.environ.get(TOPICS) and all(can_acknowledge(event, now) for event in fresh) and len(fresh) <= MAX_ACK:  # the board's own run: the identities to hand back with the Acknowledge button (an event that cannot be acknowledged keeps the button away)
+        report.mark("hook-timeouts " + json.dumps(sorted({event["key"] for event in fresh}), separators=(",", ":")))
+
+
+def hook_ack_words(fresh: List[Dict[str, Any]], now: Optional[float] = None) -> str:
+    """The end of the error line for preToolUse events nobody acknowledged: when and which calls ran without the gate, and how to acknowledge. The board's run says it with its button, no command."""
+    if not fresh:
+        return ""
+    readable = any(event["at"] is not None for event in fresh)
+    out = say("doctor.hook.timeouts_when", when=when_of(newest_of(fresh)) if readable else "?", calls=calls_of(fresh))
+    if readable and all(can_acknowledge(event, now) for event in fresh) and len(fresh) <= MAX_ACK:  # only events with a time can be acknowledged: the others stay an error, and the line does not offer what would not help
+        out += " " + say("doctor.hook.timeouts_ack.board" if os.environ.get(TOPICS) else "doctor.hook.timeouts_ack")
+    return out
+
+
+def acknowledge_hooks(root: Path, shown: Optional[List[str]] = None, via: str = "", now: Optional[float] = None) -> Dict[str, Any]:
+    """(1.8.x, F13) The person has seen the preToolUse hooks Copilot stopped waiting for: store the identity of each one (`core/hookack.py`). `{until, n, unread, events, path}`; `until` is "" when there is
+    nothing to acknowledge (nothing is stored). `shown`: the identities the person's page showed; an event in the record now that the page did not show raises ValueError (the person has not seen it) and nothing is
+    stored; only the events shown are stored. `None` (the terminal): the events found in this run, which the caller prints. `events`: the events stored by this call. `unread`: the events that cannot be
+    acknowledged (no readable time or identity, or from the future): they stay errors. Raises OSError when the file cannot be written."""
+    from core import hookack
+
+    found = scan_hook_timeouts(root)
+    pre = found[4] if found else []
+    fresh, _seen = split_acknowledged(root, pre, now)
+    able = [event for event in fresh if can_acknowledge(event, now)]
+    unread = len(pre) - len(able) - len(_seen)
+    if shown is not None:
+        asked = set(shown)
+        missed = [event for event in able if event["key"] not in asked]
+        if missed:
+            raise ValueError(say("doctor.hook.accept_newer", when=when_of(newest_of(missed))))
+        able = [event for event in able if event["key"] in asked]
+    if not able:
+        return {"until": "", "n": 0, "unread": unread, "events": [], "path": ""}
+    if len(able) > hookack.MAX_EVENTS:  # the file keeps the newest MAX_EVENTS: say (and count) only what is really stored; the older ones stay errors
+        able = sorted(able, key=lambda event: event["at"])[-hookack.MAX_EVENTS:]
+    done = hookack.acknowledge(root, [{"id": event["key"], "at": event["at"]} for event in able], via, now)
+    return {"until": newest_of(able)["stamp"], "n": len(able), "unread": unread, "events": able, "path": done["path"]}
 
 
 def launcher_files(root: Path) -> List[Path]:
@@ -1034,7 +1294,7 @@ def check_integrity(report: Report, root: Path) -> None:
 
 PROGRESS = "HARNESS_DOCTOR_PROGRESS"  # set by the board (1.7.43): each step is told on stderr as it starts, for the Enter screen's progress bar
 PROGRESS_MARK = "harness-doctor-step"
-STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'hook_timeouts', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
+STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'hook_timeouts', 'hook_idle', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
 
 
 def tick(name: str) -> None:
@@ -1048,7 +1308,24 @@ def tick(name: str) -> None:
         pass
 
 
-def run(root: Path, accept: bool = False) -> int:
+def run(root: Path, accept: bool = False, accept_hooks: bool = False) -> int:
+    if accept_hooks:  # the person has seen the hooks Copilot stopped waiting for (cli.py: `harness doctor --accept-hooks`, a person at a terminal; gate.json refuses an agent's call)
+        from core import approval
+
+        approval.require_person("doctor --accept-hooks", typed=False)
+        try:
+            done = acknowledge_hooks(root, via="terminal")
+        except OSError as error:
+            print(say("doctor.hook.cannot_write", error=" ".join(f"{type(error).__name__}: {error}".split())[:200]))
+            return 1
+        except Exception as error:  # noqa: BLE001 - a record that cannot be read: said, and nothing is stored
+            print(say("doctor.hook.timeouts_unreadable", error=" ".join(str(error).split())[:200]))
+            return 1
+        for event in done["events"]:  # exactly the events stored by this run
+            print(say("doctor.hook.accept_line", when=when_of(event), calls=calls_of([event])))
+        print(say("doctor.hook.accepted", n=done["n"], when=done["until"], path=done["path"]) if done["until"] else say("doctor.hook.accept_none"))
+        if done["unread"]:
+            print(say("doctor.hook.accept_unread", n=done["unread"]))
     if accept:  # the person says the guardrail files are as they should be (cli.py: `harness doctor --accept`, a person at a terminal)
         from core import approval
 
@@ -1092,6 +1369,8 @@ def run(root: Path, accept: bool = False) -> int:
     check_hook_activity(report, root, registry)
     tick('check_hook_timeouts')
     check_hook_timeouts(report, root)
+    tick('check_hook_idle')
+    check_hook_idle(report, root)
     tick('check_agents')
     check_agents(report, root)
     tick('check_logs')

@@ -7,13 +7,12 @@ it read committed content of a repository by blob: what `task fetch`, `kb stale`
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from . import messages
-from . import pace, procrun
+from . import pace, procenv, procrun
 
 DEFAULT_TIMEOUT = 30
 PATHS_PER_CALL = 200  # a Windows command line ends near 32 000 characters
@@ -26,7 +25,7 @@ class GitError(ValueError):
 
 def env() -> Dict[str, str]:
     """No password prompt (a hook must never wait), and git's own words in English (the output is parsed)."""
-    return {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
+    return {**procenv.environ(), "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
 
 
 def command(path: Path, arguments: List[str]) -> List[str]:

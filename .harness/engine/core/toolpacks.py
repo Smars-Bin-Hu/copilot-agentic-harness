@@ -39,7 +39,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import filecache, messages, skillcheck, targets
+from . import filecache, messages, procenv, skillcheck, targets
 from .paths import runtime_dir, utc_now
 from .registry import harness_version
 
@@ -386,6 +386,9 @@ def _path_of(root: Path) -> Optional[str]:
 
 def locate(program: str, path: Optional[str]) -> str:
     """Where `program` is on `path` (the PATH VS Code will get), "" when it is not."""
+    if path is None and procenv.active():
+        path = procenv.getenv("PATH")  # `shutil.which` reads the process's own PATH when it is given none: the hook's is meant
+        path = os.defpath if path is None else path
     return shutil.which(str(program), path=path) or ""
 
 
@@ -393,7 +396,7 @@ def blocked(program: str, path: Optional[str]) -> str:
     """Where `program` is on `path` when the file is there but has no run bit (macOS and Linux), else "". A pack handed over in a zip that lost the bit brings such a file (1.7.38)."""
     if os.name == "nt" or not program or "/" in str(program):
         return ""
-    for folder in (path if path is not None else os.environ.get("PATH", "")).split(os.pathsep):
+    for folder in (path if path is not None else procenv.getenv("PATH", "")).split(os.pathsep):
         try:
             found = Path(folder) / str(program) if folder else None
             if found is not None and found.is_file() and not os.access(found, os.X_OK):

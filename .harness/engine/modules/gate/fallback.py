@@ -21,7 +21,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, List, Optional
 
-from core import messages, tasks
+from core import messages, procenv, tasks
 from core.events import Decision
 
 from . import external, gitcmd
@@ -44,7 +44,7 @@ def task_folder(ctx: Any) -> Optional[Path]:
 
 def _same_or_inside(path: str, folder: Path) -> bool:
     try:
-        real, base = os.path.normcase(os.path.realpath(path)), os.path.normcase(os.path.realpath(str(folder)))
+        real, base = os.path.normcase(procenv.realpath(path)), os.path.normcase(procenv.realpath(str(folder)))
         return os.path.commonpath([real, base]) == base
     except (OSError, ValueError):
         return False
@@ -55,7 +55,7 @@ def _absolute(word: str, base: Optional[str]) -> Optional[str]:
     word = word.strip().strip("\"'")
     if not word or _UNKNOWN.search(word):
         return None
-    word = os.path.expanduser(word)
+    word = procenv.expanduser(word)
     if re.match(r"^[A-Za-z]:[\\/]", word) or os.path.isabs(word):
         return os.path.normpath(word)
     return os.path.normpath(os.path.join(base, word)) if base else None

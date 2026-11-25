@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any, Dict, List
+
+from . import procenv
 
 # Without these the gate would not protect the harness itself. They are always guarded, even when a policy or an
 # override drops them from guardrail_paths; doctor reports that as an error.
@@ -52,10 +52,10 @@ def home_folders() -> List[str]:
     """The folders outside the workspace that are guarded: `~/.copilot-harness`, and the folder `HARNESS_INTEGRITY_DIR` names. As absolute paths, `/` as separator. Never raises."""
     found: List[str] = []
     try:
-        found.append(str(Path.home() / HOME_FOLDER))
+        found.append(str(procenv.home() / HOME_FOLDER))
     except (RuntimeError, KeyError, OSError):
         pass
-    custom = os.environ.get("HARNESS_INTEGRITY_DIR", "").strip()
+    custom = (procenv.getenv("HARNESS_INTEGRITY_DIR") or "").strip()
     if custom:
         found.append(custom)
     return [item.replace("\\", "/").rstrip("/") for item in found if item]

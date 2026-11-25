@@ -17,6 +17,8 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from core import procenv
+
 MAX_BYTES = 200 * 1024
 MAX_FILES = 24
 MAX_DEPTH = 4
@@ -77,12 +79,13 @@ _KNOWN_COMMANDS = {  # words that are no script name for `pnpm`, `yarn` and `bun
 
 def _read(path: str) -> Tuple[str, str]:
     """`(state, text)`: `ok` (a text, or a binary that has none to read), `missing` (no such file), `unreadable` (too big or not readable)."""
-    if not os.path.isfile(path):
+    here = procenv.anchored(path)  # a relative path is the hook's, read from the hook's folder
+    if not os.path.isfile(here):
         return "missing", ""
     try:
-        if os.path.getsize(path) > MAX_BYTES:
+        if os.path.getsize(here) > MAX_BYTES:
             return "unreadable", ""
-        with open(path, "rb") as handle:
+        with open(here, "rb") as handle:
             data = handle.read()
     except OSError:
         return "unreadable", ""
@@ -92,7 +95,7 @@ def _read(path: str) -> Tuple[str, str]:
 
 
 def _join(base: str, name: str) -> str:
-    name = os.path.expanduser(name.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", name) else name)
+    name = procenv.expanduser(name.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", name) else name)
     return os.path.normpath(os.path.join(base or ".", name))
 
 
@@ -150,7 +153,7 @@ def _named_files(spec: Dict[str, Any], args: List[str], folders: List[str]) -> L
 def _exact(path: str) -> bool:
     """Is there a file with exactly this name (a case-blind disk finds `Makefile` for `makefile`: one file, named as it is)?"""
     try:
-        return os.path.basename(path) in os.listdir(os.path.dirname(path) or ".")
+        return os.path.basename(path) in os.listdir(procenv.anchored(os.path.dirname(path) or "."))
     except OSError:
         return False
 
@@ -162,10 +165,10 @@ def _default_files(spec: Dict[str, Any], folders: List[str]) -> List[str]:
 def _identity(path: str) -> Any:
     """The file itself (device and inode) when it exists, so a second name for it is read once; else its real path."""
     try:
-        found = os.stat(path)
+        found = os.stat(procenv.anchored(path))
         return (found.st_dev, found.st_ino)
     except OSError:
-        return os.path.realpath(path)
+        return procenv.realpath(path)
 
 
 class Texts:
@@ -222,7 +225,7 @@ def _scripts_of(out: Texts, folders: List[str]) -> None:
                 continue
             for base in [os.path.dirname(path)] + folders:
                 inner = _join(base, name)
-                if os.path.isfile(inner):
+                if os.path.isfile(procenv.anchored(inner)):
                     out.add(inner)
                     break
 
@@ -232,7 +235,7 @@ def _nearest(base: str, name: str) -> str:
     current = base
     for _ in range(40):
         path = os.path.join(current, name)
-        if os.path.isfile(path):
+        if os.path.isfile(procenv.anchored(path)):
             return path
         parent = os.path.dirname(current)
         if not parent or parent == current:

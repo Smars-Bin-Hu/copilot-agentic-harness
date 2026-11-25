@@ -18,10 +18,9 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 import json
-import os
 import re
 
-from core import autorunfiles, calls, govern, messages, pinfiles, reach, repo_paths, connections, targets, tasks, unseen
+from core import autorunfiles, calls, govern, messages, pinfiles, procenv, reach, repo_paths, connections, targets, tasks, unseen
 from core import systems as systems_mod
 from core.paths import board_serve_port
 from core.context import Context
@@ -37,7 +36,7 @@ WRITE_KINDS = ("edit", "create")
 
 def check_write(event: HookEvent, ctx: Context, compiled: Compiled) -> Optional[Decision]:
     for raw in event.paths:
-        spelled = os.path.expandvars(os.path.expanduser(raw)) if raw.strip().startswith(("~", "$", "%")) else raw  # a tool that is given `~/x` or `$HOME/x` may expand it
+        spelled = procenv.expandvars(procenv.expanduser(raw)) if raw.strip().startswith(("~", "$", "%")) else raw  # a tool that is given `~/x` or `$HOME/x` may expand it
         for absolute in repo_paths.resolve(raw, ctx.root, event.cwd) + (repo_paths.resolve(spelled, ctx.root, event.cwd) if spelled != raw else []):
             if repo_paths.has_git_folder(absolute):
                 return Decision(permission="deny", reason=rules.git_folder(absolute))

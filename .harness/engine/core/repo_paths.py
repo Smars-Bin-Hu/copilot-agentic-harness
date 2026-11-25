@@ -5,12 +5,13 @@ Everything is compared as a lowercase, forward-slash path relative to the reposi
 
 from __future__ import annotations
 
-import os
 import posixpath
 import re
 from pathlib import Path
 from typing import List, Optional, Pattern
 from urllib.parse import unquote
+
+from . import procenv
 
 _DRIVE = re.compile(r"^[A-Za-z]:/")
 
@@ -54,7 +55,7 @@ def resolve(raw: str, root: Path, cwd: str = "") -> List[str]:
         return []
     roots = {_normal(str(root))}
     try:
-        roots.add(_normal(os.path.realpath(str(root))))
+        roots.add(_normal(procenv.realpath(str(root))))
     except OSError:
         pass
     path = _normal(raw)
@@ -66,7 +67,7 @@ def resolve(raw: str, root: Path, cwd: str = "") -> List[str]:
             bases.append(posixpath.normpath(here + "/" + path))  # a cwd outside the repo says nothing about this path
     for base in list(bases):
         try:
-            real = _normal(os.path.realpath(base))
+            real = _normal(procenv.realpath(base))
         except OSError:
             real = base
         if real != base:
@@ -81,7 +82,7 @@ def repo_relative(raw: str, root: Path, cwd: str = "") -> List[Optional[str]]:
     """
     roots = {_normal(str(root))}
     try:
-        roots.add(_normal(os.path.realpath(str(root))))
+        roots.add(_normal(procenv.realpath(str(root))))
     except OSError:
         pass
     found: List[Optional[str]] = []
@@ -96,7 +97,7 @@ def inside(path: str, folder: Path) -> List[str]:
     """`path` (normal, absolute) relative to `folder`, once for the folder as written and once for its real path."""
     names = {_normal(str(folder))}
     try:
-        names.add(_normal(os.path.realpath(str(folder))))
+        names.add(_normal(procenv.realpath(str(folder))))
     except OSError:
         pass
     return [hit for hit in (_inside(path, name) for name in sorted(names)) if hit is not None]

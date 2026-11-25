@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from . import procenv
+
 
 def is_windows(windows: Optional[bool] = None) -> bool:
     return os.name == "nt" if windows is None else windows
@@ -64,9 +66,9 @@ def local_stamp(moment: Optional[datetime] = None) -> str:
 
 
 def repo_root() -> Path:
-    override = os.environ.get("HARNESS_ROOT")
+    override = procenv.getenv("HARNESS_ROOT")
     if override:
-        return Path(override).resolve()
+        return procenv.resolve(override)
     # .harness/engine/core/paths.py -> repository root
     return Path(__file__).resolve().parents[3]
 

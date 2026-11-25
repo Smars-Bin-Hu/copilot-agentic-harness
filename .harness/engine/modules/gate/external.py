@@ -30,7 +30,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import inputfiles, messages, statements
+from core import inputfiles, messages, procenv, statements
 from core.systems import (  # noqa: F401 - the names the handler, doctor and the tests use from here
     ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, by_address, clis, reach, run_probe, validate, warnings,
 )
@@ -468,13 +468,13 @@ def _file_state(path: str, names: List[str], ctx: _Ctx, folders: Optional[List[s
         return "ok", ""  # nothing to run
     if re.search(r"(?:^|[\\/])\.harness[\\/](?:engine|tests)[\\/]", path):
         return "ok", ""  # the harness's own program and tests: the gate guards them in other ways
-    root = os.path.realpath(str(ctx.root)) if ctx.root is not None else ""
+    root = procenv.realpath(str(ctx.root)) if ctx.root is not None else ""
     bases = list(folders or []) + [os.path.join(ctx.cwd or ".", item) for item in reversed(ctx.dirs)] + [ctx.cwd or "", root or "."]
     for base in bases:
-        full = os.path.normpath(os.path.join(base or ".", os.path.expanduser(path.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", path) else path)))
-        if not os.path.isfile(full):
+        full = os.path.normpath(os.path.join(base or ".", procenv.expanduser(path.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", path) else path)))
+        if not os.path.isfile(procenv.anchored(full)):  # a relative name is read from the folder the hook's process was in
             continue
-        real = os.path.realpath(full)
+        real = procenv.realpath(full)
         if root:
             try:
                 inside = os.path.commonpath([real, root]) == root
@@ -484,9 +484,9 @@ def _file_state(path: str, names: List[str], ctx: _Ctx, folders: Optional[List[s
             if relative.startswith((".harness/engine/", ".harness/tests/")):
                 return "ok", ""
         try:
-            if os.path.getsize(full) > MAX_SCRIPT_BYTES:
+            if os.path.getsize(procenv.anchored(full)) > MAX_SCRIPT_BYTES:
                 return "unreadable", ""
-            with open(full, "rb") as handle:
+            with open(procenv.anchored(full), "rb") as handle:
                 data = handle.read()
         except OSError:
             return "unreadable", ""
@@ -598,12 +598,12 @@ def _identities(name: str, ctx: "_Ctx") -> set:
 
     out: set = set()
     bases = pinfiles.bases(Path(str(ctx.root)), Path(str(ctx.folder)) if ctx.folder else Path(str(ctx.root)), ctx.cwd, ctx.line) if ctx.root is not None else [Path(ctx.cwd or ".")]
-    shaped = os.path.expanduser(name.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", name) else name)
+    shaped = procenv.expanduser(name.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", name) else name)
     for base in bases:
         full = shaped if os.path.isabs(shaped) else os.path.join(str(base), shaped)
-        out.add(os.path.normcase(os.path.realpath(full)))
+        out.add(os.path.normcase(procenv.realpath(full)))
         try:
-            found = os.stat(full)
+            found = os.stat(procenv.anchored(full))
             out.add((found.st_dev, found.st_ino))
         except OSError:
             pass
@@ -675,9 +675,9 @@ def _in_task_folder(path: str, ctx: "_Ctx") -> bool:
     """Is this file (as the shell resolves it, from the folder the call runs in) a place inside the task folder the agent may write: not a variable, a glob, `~`, a place the harness owns, nor a link or `..` that leaves the folder?"""
     if ctx.folder is None or not path or _SPECIAL.search(path) or "$" in path:
         return False
-    folder = os.path.realpath(str(ctx.folder))
+    folder = procenv.realpath(str(ctx.folder))
     base = ctx.cwd or str(ctx.root or ".")
-    full = os.path.realpath(os.path.join(base, os.path.expanduser(path)))
+    full = procenv.realpath(os.path.join(base, procenv.expanduser(path)))
     try:
         if os.path.commonpath([full, folder]) != folder or full == folder:
             return False
@@ -1102,9 +1102,9 @@ def _after_cd(folders: List[str], tokens: List[str], at: int) -> List[str]:
 
 def _start_folders(ctx: "_Ctx") -> List[str]:
     """The folders a command of the line can run in before the line changes any: the folder of the terminal and the root, moved by the `cd` the earlier commands of the line made (`ctx.dirs`)."""
-    first = [os.path.abspath(ctx.cwd or ".")]
+    first = [procenv.abspath(ctx.cwd or ".")]
     if ctx.root is not None:
-        first.append(os.path.realpath(str(ctx.root)))
+        first.append(procenv.realpath(str(ctx.root)))
     folders = list(dict.fromkeys(first))
     for target in ctx.dirs:
         folders = _after_cd(folders, ["cd", target], 0)
@@ -1125,8 +1125,8 @@ def _runner_of(tokens: List[str], at: int) -> Tuple[str, List[str]]:
 def _shown_path(path: str, ctx: "_Ctx") -> str:
     """A file as the words of a refusal name it: from the root of the repository when it is inside it."""
     try:
-        root = os.path.realpath(str(ctx.root)) if ctx.root is not None else ""
-        real = os.path.realpath(path.split(" (script ")[0])
+        root = procenv.realpath(str(ctx.root)) if ctx.root is not None else ""
+        real = procenv.realpath(path.split(" (script ")[0])
         if root and os.path.commonpath([real, root]) == root:
             return os.path.relpath(real, root).replace("\\", "/") + (" (script " + path.split(" (script ", 1)[1] if " (script " in path else "")
     except (ValueError, OSError):

@@ -10,10 +10,11 @@ be read, gives the name itself back: a wrong text must not stop a command or a h
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+from . import procenv
 
 LANGUAGES = ("en", "zh")
 DEFAULT_LANGUAGE = "en"
@@ -72,10 +73,14 @@ def configured(root: Optional[Path] = None) -> Any:
 
 
 def language(root: Optional[Path] = None) -> str:
-    """The language of this process. Read once: one command or one hook call speaks one language."""
+    """The language of this process. Read once: one command or one hook call speaks one language. Under a `procenv` override (a hook judged inside the board) the environment is another process's, so the answer is
+    worked out each time and never kept: the board's own language must not become the hook's, nor the hook's the board's."""
     global _LANGUAGE
+    if procenv.active():
+        wanted = (procenv.getenv(ENVIRONMENT) or "").strip().lower() or configured(root)
+        return wanted if wanted in LANGUAGES else DEFAULT_LANGUAGE
     if _LANGUAGE is None or root is not None:
-        wanted = os.environ.get(ENVIRONMENT, "").strip().lower() or configured(root)
+        wanted = (procenv.getenv(ENVIRONMENT) or "").strip().lower() or configured(root)
         found = wanted if wanted in LANGUAGES else DEFAULT_LANGUAGE
         if root is not None:
             return found

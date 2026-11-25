@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import procenv
+
 FILE_NAME = "events.jsonl"
 HOME_ENV = "COPILOT_HOME"  # Copilot's own variable for its folder; ~/.copilot when it is not set
 MAX_BYTES = 300 * 1024 * 1024
@@ -42,8 +44,8 @@ def asked_compact(start: Dict[str, Any], in_turn: bool) -> bool:
 
 
 def home() -> Path:
-    custom = os.environ.get(HOME_ENV, "").strip()
-    return Path(custom) if custom else Path.home() / ".copilot"
+    custom = (procenv.getenv(HOME_ENV) or "").strip()
+    return Path(custom) if custom else procenv.home() / ".copilot"
 
 
 def events_path(session_id: str, hint: str = "") -> Optional[Path]:

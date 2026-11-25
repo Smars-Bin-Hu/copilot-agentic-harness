@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from core import procenv  # standard library only itself, so this file still needs none of the engine that can be broken
+
 DIRS = (".harness/engine", ".harness/bin", ".github/hooks", ".harness/toolpacks")  # walked: every file, but the cache of Python
 FILES = (".harness/registry.json",)
 POLICIES = ".harness/policies"  # the files of the folder itself, but not the settings the person's tools write (`*.override.json`) and the company's (`*.company.json`)
@@ -32,11 +34,11 @@ VERSION = 1
 
 def home_dir() -> Optional[Path]:
     """Where the lists are kept: `HARNESS_INTEGRITY_DIR`, else `~/.copilot-harness/integrity`. None when there is no home to keep them in."""
-    custom = os.environ.get("HARNESS_INTEGRITY_DIR")
+    custom = procenv.getenv("HARNESS_INTEGRITY_DIR")
     if custom:
         return Path(custom)
     try:
-        return Path.home() / ".copilot-harness" / "integrity"
+        return procenv.home() / ".copilot-harness" / "integrity"
     except (RuntimeError, KeyError):
         return None
 

@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from . import procenv
+
 MAX_FILES = 12
 MAX_BYTES = 8 * 1024 * 1024  # a file this large is pinned by its first bytes and its size
 _TOKEN = re.compile(r"""\"((?:[^\"\\]|\\.)*)\"|'([^']*)'|(\S+)""")
@@ -50,7 +52,7 @@ def bases(root: Path, folder: Path, cwd: str = "", command: str = "") -> List[Pa
     start = Path(cwd) if cwd else None
     add(start)
     for found in _CD.finditer(command or ""):
-        target = Path(next((part for part in found.groups() if part), "")).expanduser()
+        target = procenv.expanded(next((part for part in found.groups() if part), ""))
         add(target if target.is_absolute() else (start or root) / target)
     add(root)
     add(folder)
@@ -62,7 +64,7 @@ def locate(value: str, root: Path, folder: Path, cwd: str = "", command: str = "
     if not value or value.startswith("-") or "\x00" in value or len(value) > 400:
         return None
     try:
-        named = Path(value).expanduser()
+        named = procenv.expanded(value)
         for base in ([None] if named.is_absolute() else bases(root, folder, cwd, command)):
             path = (named if base is None else base / named).resolve()
             if path.is_file():
@@ -79,7 +81,7 @@ HOMES_SECONDS = 3
 def repo_homes(root: Path) -> Dict[str, Path]:
     """`{name: folder}` of the target repositories (`core.targets`): where a script of the line may be, besides the task folder. Empty when there are none or the policy cannot be read.
     Kept for a few seconds, and again at once when a target policy file changes."""
-    key = str(root)
+    key = str(root) + "\0" + procenv.fingerprint()  # the folders a policy names expand `~` and `$HOME`: a judgment under another environment must not take this one's list
     try:
         stamps = tuple(sorted((item.name, item.stat().st_mtime_ns) for item in (Path(root) / ".harness" / "policies").glob("target*.json")))
     except OSError:

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from core import config, redact
+from core import config, procenv, redact
 from core.context import Context
 from core.events import Decision, HookEvent
 from core.logs import log_call, safe_name
@@ -75,9 +75,9 @@ def capture(root: Path, record: Dict[str, Any], raw: str, output: Dict[str, Any]
         "argv_event": record.get("event", ""),
         "surface": record.get("surface", ""),
         "pid": os.getpid(),
-        "cwd": os.getcwd(),
+        "cwd": procenv.cwd(),
         "python": sys.version.split()[0],
-        "env_names": sorted(os.environ.keys()),  # names only, never values
+        "env_names": sorted(procenv.environ().keys()),  # names only, never values
         "stdin_raw": raw,
         "stdin_json": payload if isinstance(payload, dict) else None,
         "hook_output": output,

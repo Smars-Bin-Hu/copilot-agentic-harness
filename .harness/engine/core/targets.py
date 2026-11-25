@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, gitread, messages, pace, repo_paths, schema
 from .paths import policies_dir
-from . import procrun
+from . import procenv, procrun
 
 POLICY_NAME = "target"
 REPO_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -97,7 +97,7 @@ def validate_policy(policy: Dict[str, Any]) -> None:
 
 def expand(raw: str, root: Optional[Path] = None) -> Path:
     """`~` and environment variables (`%USERPROFILE%`, `$HOME`) in a configured path. With `root`: a path that is not absolute is under it."""
-    path = Path(os.path.expandvars(os.path.expanduser(raw.strip())))
+    path = Path(procenv.expandvars(procenv.expanduser(raw.strip())))
     return path if root is None or path.is_absolute() else root / path
 
 

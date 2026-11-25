@@ -18,7 +18,7 @@ import re
 import shlex
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import guardrails, messages
+from core import guardrails, messages, procenv
 
 from . import external
 from . import shellwords
@@ -358,15 +358,15 @@ def _read(path: str, ctx: "external._Ctx") -> Optional[str]:
         return None
     if re.search(r"(?:^|[\\/])\.harness[\\/](?:engine|tests)[\\/]", path):
         return None
-    root = os.path.realpath(str(ctx.root)) if ctx.root is not None else ""
+    root = procenv.realpath(str(ctx.root)) if ctx.root is not None else ""
     bases = [os.path.join(ctx.cwd or ".", item) for item in reversed(ctx.dirs)] + [ctx.cwd or "", root or "."]
     if ctx.folder is not None:
         bases.append(str(ctx.folder))
     for base in bases:
-        full = os.path.normpath(os.path.join(base or ".", os.path.expanduser(path.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", path) else path)))
-        if not os.path.isfile(full):
+        full = os.path.normpath(os.path.join(base or ".", procenv.expanduser(path.replace("\\", "/") if os.sep == "/" and not re.match(r"^[A-Za-z]:", path) else path)))
+        if not os.path.isfile(procenv.anchored(full)):  # a relative name is read from the folder the hook's process was in
             continue
-        real = os.path.realpath(full)
+        real = procenv.realpath(full)
         if root:
             try:
                 inside = os.path.commonpath([real, root]) == root
@@ -375,9 +375,10 @@ def _read(path: str, ctx: "external._Ctx") -> Optional[str]:
             if inside and os.path.relpath(real, root).replace("\\", "/").startswith((".harness/engine/", ".harness/tests/")):
                 return None
         try:
-            if os.path.getsize(full) > MAX_BYTES:
+            if os.path.getsize(procenv.anchored(full)) > MAX_BYTES:
                 return None
-            data = open(full, "rb").read()
+            with open(procenv.anchored(full), "rb") as handle:
+                data = handle.read()
         except OSError:
             return None
         return None if b"\0" in data[:8000] else data.decode("utf-8", errors="replace")

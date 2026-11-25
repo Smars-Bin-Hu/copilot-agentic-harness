@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-from core import messages, repo_paths
+from core import messages, procenv, repo_paths
 from core.events import Decision
 
 from . import gitcmd, terminal
@@ -32,9 +32,9 @@ _OTHER_PLACE = re.compile(r"(?:^|[\s;&|(])(?:-C|--git-dir|--work-tree)(?:\s|=|$)
 def git_root(path: str) -> Optional[str]:
     """The folder, as written, whose `.git` holds the repository that this path is in (the path itself too); None when it is in none."""
     try:
-        here = os.path.normpath(os.path.expanduser(path))
+        here = os.path.normpath(procenv.expanduser(path))
         while True:
-            if os.path.exists(os.path.join(here, ".git")):
+            if os.path.exists(procenv.anchored(os.path.join(here, ".git"))):
                 return here
             parent = os.path.dirname(here)
             if not parent or parent == here:
@@ -46,7 +46,7 @@ def git_root(path: str) -> Optional[str]:
 
 def _same(one: Optional[str], other: Optional[str]) -> bool:
     try:
-        return bool(one and other) and os.path.normcase(os.path.realpath(str(one))) == os.path.normcase(os.path.realpath(str(other)))
+        return bool(one and other) and os.path.normcase(procenv.realpath(str(one))) == os.path.normcase(procenv.realpath(str(other)))
     except (OSError, ValueError):
         return False
 
@@ -70,7 +70,7 @@ def _named(command: str, event: Any, root: Path) -> List[str]:
         word = word.strip()
         if not word:
             continue
-        absolute = word if os.path.isabs(os.path.expanduser(word)) or re.match(r"^[A-Za-z]:[\\/]", word) else os.path.join(base, word)
+        absolute = word if os.path.isabs(procenv.expanduser(word)) or re.match(r"^[A-Za-z]:[\\/]", word) else os.path.join(base, word)
         one = foreign(absolute, root)
         if one and one not in found:
             found.append(one)
@@ -85,7 +85,7 @@ def _absolute(command: str, event: Any, root: Path) -> str:
         shown = word.strip()
         if not shown or shown.startswith(("-", "/dev/")):
             continue
-        absolute = os.path.expanduser(shown)
+        absolute = procenv.expanduser(shown)
         absolute = absolute if os.path.isabs(absolute) or re.match(r"^[A-Za-z]:[\\/]", absolute) else os.path.join(base, absolute)
         text = text.replace(word, os.path.normpath(absolute).replace("\\", "/"))
     return text

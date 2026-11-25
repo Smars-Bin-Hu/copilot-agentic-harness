@@ -30,7 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import clip
+from . import clip, procenv
 from . import systems as outside
 from .paths import utc_now
 
@@ -173,6 +173,8 @@ def start(root: Path, listed: Dict[str, Any]) -> bool:
         flags["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0x8) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
     else:
         flags["start_new_session"] = True
+    if procenv.active():
+        flags["env"] = procenv.snapshot()  # the probes run with the identity of the hook that asked, not of the board that judged for it
     subprocess.Popen([sys.executable, str(cli), "tools", "reach", "--probe"], **flags)  # noqa: S603 - our own command, no shell
     return True
 

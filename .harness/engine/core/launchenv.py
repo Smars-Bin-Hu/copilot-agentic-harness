@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import messages, pace
+from . import messages, pace, procenv
 from . import connections as conn_core
 from .paths import utc_now
 
@@ -106,7 +106,7 @@ def detect_mcp() -> str:
                     continue
         except ImportError:
             pass
-    settings = Path(os.environ.get("APPDATA", "")) / "Code" / "User" / "settings.json" if os.name == "nt" else Path.home() / ("Library/Application Support" if sys.platform == "darwin" else ".config") / "Code" / "User" / "settings.json"
+    settings = Path(procenv.getenv("APPDATA") or "") / "Code" / "User" / "settings.json" if os.name == "nt" else procenv.home() / ("Library/Application Support" if sys.platform == "darwin" else ".config") / "Code" / "User" / "settings.json"
     try:
         text = settings.read_text(encoding="utf-8")
         for key in ("chat.mcp.access", "chat.mcp.enabled"):
@@ -154,7 +154,7 @@ def save_paths(root: Path, raw: List[str]) -> Dict[str, Any]:
         text = str(item).strip().strip('"')
         if not text or text in paths:
             continue
-        folder = Path(os.path.expandvars(os.path.expanduser(text)))
+        folder = Path(procenv.expandvars(procenv.expanduser(text)))
         if not folder.is_absolute():
             raise ValueError(say("launch.path.relative", path=text))
         if not folder.is_dir():
@@ -169,7 +169,7 @@ def save_paths(root: Path, raw: List[str]) -> Dict[str, Any]:
 def add_folder(root: Path, program: str, raw: str) -> Dict[str, Any]:
     """"I installed it here" (1.7.37): add the folder to `HARNESS_TOOL_PATH` when it holds `program`, so the next check finds it. A folder without it is refused."""
     text = str(raw).strip().strip('"')
-    folder = Path(os.path.expandvars(os.path.expanduser(text)))
+    folder = Path(procenv.expandvars(procenv.expanduser(text)))
     if not text or not folder.is_absolute():
         raise ValueError(say("launch.path.relative", path=text or "-"))
     if not folder.is_dir():
@@ -235,7 +235,7 @@ def tool_folders(root: Path) -> List[str]:
 def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Optional[Tuple[str, ...]] = None) -> Dict[str, str]:
     """The variables the board adds when it starts its agent host: PATH with the tool folders first, each trust variable naming the bundle (when it is there),
     and the proxy when the board's own environment names none (`proxy_extra`)."""
-    base = dict(os.environ if environ is None else environ)
+    base = dict(procenv.environ() if environ is None else environ)
     kept = settings(root)
     out: Dict[str, str] = {}
     from . import toolpacks  # it reads this module
@@ -294,14 +294,23 @@ def system_bypass(platform: str = sys.platform) -> List[str]:
 
 def detect_proxy(environ: Optional[Dict[str, str]] = None) -> str:
     """`host:port` of the HTTPS proxy this computer names (the environment, then the system's own setting), or ""."""
-    env = os.environ if environ is None else environ
+    env = procenv.environ() if environ is None else environ
     found = env.get("HTTPS_PROXY") or env.get("https_proxy") or ""
     if not found and environ is None:
         try:
-            found = urllib.request.getproxies().get("https", "")
+            found = _system_proxies().get("https", "")
         except Exception:  # noqa: BLE001 - a setting we cannot read is no proxy
             found = ""
     return proxy_address(found)
+
+
+def _system_proxies() -> Dict[str, str]:
+    """What this computer names as proxies. `urllib.request.getproxies` reads the process's own environment first; under an override (`procenv`) that is another process's, and the environment was read through
+    `procenv` already, so only the system's own setting (the registry on Windows, the network settings on macOS) is read here."""
+    if procenv.active():
+        read = getattr(urllib.request, "getproxies_registry", None) or getattr(urllib.request, "getproxies_macosx_sysconf", None)
+        return dict(read()) if read else {}
+    return urllib.request.getproxies()
 
 
 def proxy_address(text: str) -> str:

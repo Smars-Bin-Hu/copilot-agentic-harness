@@ -87,16 +87,29 @@ def told(code: int, text: str, waited: int, error: int = 0) -> Tuple[Optional[in
     return code, text.split(MARK, 1)[1].lstrip("\r\n ")
 
 
+LINE = "HARNESS_NETONLY_LINE"  # (1.8.51) the command goes to the shell in this variable, not on its command line
+LINE_MAX = 32000  # a variable holds 32767 characters at most
+
+
+def wrapped(out: Path) -> str:
+    """(1.8.51) The command line of the started shell. CreateProcessWithLogonW takes 1024 characters at most and answers 87 (a wrong parameter) past that, so a long
+    query (`harness as <prod> -- sqlcmd -Q "..."`) never started while Test, a short command, passed. The command is in `LINE`: cmd puts it in at the first reading of
+    the line and parses it as if typed there, but does not read a `%` inside it again, so `LIKE '%x%'` stays as written."""
+    return f'cmd.exe /d /s /c "(echo {MARK}& %{LINE}%) > "{out}" 2>&1"'
+
+
 def run(account: str, password: str, command: str, cwd: Path, extra_env: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> Tuple[Optional[int], str]:
     """Run a shell command with these network credentials and wait: (exit code, what it printed). (None, why) when it could not start or took too long."""
     timeout = pace.scaled(60.0) if timeout is None else timeout  # 1.8.15
     if not available():
         return None, "network credentials (runas /netonly) exist on Windows only"
+    if len(command) > LINE_MAX:
+        return None, f"the command is too long to start with these credentials ({len(command)} characters, at most {LINE_MAX})"
     handle, name = tempfile.mkstemp(prefix="harness-as-", suffix=".txt")
     os.close(handle)  # (1.7.39) the file is the shell's to write: this process keeps no handle on it
     out = Path(name)
     try:
-        info = _create(account, password, f'cmd.exe /d /s /c "(echo {MARK}& {command}) > "{out}" 2>&1"', cwd, extra_env or {}, CREATE_NO_WINDOW)
+        info = _create(account, password, wrapped(out), cwd, {**(extra_env or {}), LINE: command}, CREATE_NO_WINDOW)
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
         kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
         kernel.WaitForSingleObject.restype = ctypes.c_ulong  # WAIT_FAILED is 0xFFFFFFFF, not -1

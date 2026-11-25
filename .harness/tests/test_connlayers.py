@@ -144,3 +144,29 @@ class NetonlyStartTests(ConnectionsCase):
             netonly.Process("DOM\\me", "pw", ["code.exe", "agent", "host"], self.root, {})
         self.assertEqual(made.call_args[0][5], netonly.CREATE_NO_WINDOW)
         self.assertFalse(hasattr(netonly, "DETACHED_PROCESS"))
+
+    def test_a_long_command_goes_in_a_variable_and_the_start_line_stays_short(self) -> None:  # 1.8.51: past 1024 characters the call answered 87
+        from unittest import mock
+
+        from core import netonly
+
+        query = "sqlcmd -S db,5150 -E -Q \"SELECT 1 WHERE n LIKE N'%ABC%'" + " AND 1=1" * 200 + "\""
+        with mock.patch.object(netonly, "available", return_value=True), \
+                mock.patch.object(netonly, "_create", return_value=netonly._ProcessInfo()) as made, mock.patch.object(netonly.ctypes, "WinDLL", create=True):
+            netonly.run("DOM\\me", "pw", query, self.root, {"X": "1"})
+        line, env = made.call_args[0][2], made.call_args[0][4]
+        self.assertLess(len(line), 1024 - 300, "room for a long temporary folder")
+        self.assertNotIn("SELECT", line)
+        self.assertIn("%" + netonly.LINE + "%", line)
+        self.assertEqual(env, {"X": "1", netonly.LINE: query})
+
+    def test_a_command_past_what_a_variable_holds_is_told_not_started(self) -> None:
+        from unittest import mock
+
+        from core import netonly
+
+        with mock.patch.object(netonly, "available", return_value=True), mock.patch.object(netonly, "_create") as made:
+            code, why = netonly.run("DOM\\me", "pw", "x" * (netonly.LINE_MAX + 1), self.root)
+        made.assert_not_called()
+        self.assertIsNone(code)
+        self.assertIn("too long", why)

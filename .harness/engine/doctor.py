@@ -166,7 +166,7 @@ def check_hook_activity(report: Report, root: Path, registry: Dict[str, Any]) ->
 def check_hook_timeouts(report: Report, root: Path) -> None:
     """(1.8.48) The hooks Copilot stopped waiting for, from its own record of the newest sessions (`hook.end` with `HookTimeoutError`). A preToolUse hook that timed out is a call
     the gate never judged: Copilot ran it. The hook log cannot show this: a hook that was given up on still writes its line, later. Timeouts under an older, shorter limit are
-    a warning (they were before the limit was raised); under the limit of today's config, an error. Needs `report.copilot_events`."""
+    a warning (they were before the limit was raised); under the limit of today's config, an error when a preToolUse hook timed out, else a warning (1.8.52: the other hooks decide nothing, so no call ran ungated). Needs `report.copilot_events`."""
     try:
         if not (config.policy_or_empty(root, "task").get("report") or {}).get("copilot_events", True):
             return
@@ -203,8 +203,10 @@ def check_hook_timeouts(report: Report, root: Path) -> None:
     if not read:
         return
     shown = lambda found: ", ".join(f"{kind} {count}" for kind, count in sorted(found.items()))  # noqa: E731
-    if counts:
-        report.error(say("doctor.hook.timeouts", sessions=read, seconds=f"{limit:.0f}", counts=shown(counts), gate=counts.get("preToolUse", 0)))
+    if counts.get("preToolUse"):  # a call ran without the gate
+        report.error(say("doctor.hook.timeouts", sessions=read, seconds=f"{limit:.0f}", counts=shown(counts), gate=counts["preToolUse"]))
+    elif counts:  # (1.8.52) another hook only records or adds words: Copilot went on without them, and no call passed the gate unjudged. The board's red "cannot work" box was wrong for it (work PC, 2026-11-24)
+        report.warn(say("doctor.hook.timeouts_record", sessions=read, seconds=f"{limit:.0f}", counts=shown(counts)))
     elif older:
         report.warn(say("doctor.hook.timeouts_older", sessions=read, seconds=f"{limit:.0f}", counts=shown(older)))
     else:
@@ -1032,7 +1034,7 @@ def check_integrity(report: Report, root: Path) -> None:
 
 PROGRESS = "HARNESS_DOCTOR_PROGRESS"  # set by the board (1.7.43): each step is told on stderr as it starts, for the Enter screen's progress bar
 PROGRESS_MARK = "harness-doctor-step"
-STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
+STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'hook_timeouts', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
 
 
 def tick(name: str) -> None:

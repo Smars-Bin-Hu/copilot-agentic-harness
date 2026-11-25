@@ -1037,6 +1037,7 @@
   "doctor.gate.speed": "The last {count} gate calls: {middle} ms as a rule, {slowest} ms at the slowest (the timeout is {timeout} seconds)",
   "doctor.gate.slow": "{text}. Too close to the timeout: a call whose hook times out is let through, so the gate guards nothing. Find what slows the start of Python (antivirus, a network drive)",
   "doctor.hook.timeouts": "In the last {sessions} sessions Copilot stopped waiting for hooks at the {seconds}-second timeout: {counts}. {gate} calls ran without the gate. The hook is too slow on this computer: find what slows the start of Python (antivirus, a network drive) and tell the harness maintainers",
+  "doctor.hook.timeouts_record": "In the last {sessions} sessions Copilot stopped waiting for hooks at the {seconds}-second timeout: {counts}. No call ran without the gate (these hooks only record what a call did, or add words to a prompt), but their records may be missing. The hook is slow on this computer",
   "doctor.hook.timeouts_older": "In the last {sessions} sessions Copilot stopped waiting for hooks under an older, shorter timeout: {counts}. None under today's {seconds} seconds",
   "doctor.hook.timeouts_none": "No hook timed out in the last {sessions} sessions (timeout {seconds} seconds, from Copilot's record)",
   "doctor.hook.timeouts_unreadable": "Copilot's record could not be read to look for hooks that timed out: {error}",

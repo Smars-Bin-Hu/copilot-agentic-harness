@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.51 (1.8.0 – 1.8.51, 2026-11-17 – 2026-11-24)
+## 1.8.52 (1.8.0 – 1.8.52, 2026-11-17 – 2026-11-24)
 
 ### Added
 
@@ -66,6 +66,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- **A slow record hook no longer says the agent cannot work** (1.8.52): `harness doctor` counted every hook Copilot stopped waiting for as an error, and the board then showed its red "The agent cannot work right now". Only a timed-out preToolUse hook lets a call run without the gate, so only that one is an error; a record hook (postToolUse, the prompt hooks, Stop) that timed out is a warning that some records may be missing.
 - **`harness as` with a Windows account failed on a long command** (1.8.51). A long query (`harness as <connection> -- sqlcmd -Q "..."`) stopped with `could not start with these credentials: ... CreateProcessWithLogonW failed`, while **Test** on the same connection passed. Windows starts a program with another account only when its command line is under 1024 characters. The command now goes to the shell another way, so its length no longer matters, and a `%` in it (`LIKE '%x%'`) stays as written.
 - **Reopen and hand to the agent showed nothing until the agent had opened the task** (1.8.50). The task stayed **closed** on its page, in the list and in the super agent until the agent ran `harness task open`, a minute or two on a work computer. Now the task page shows **Sent. Waiting for the agent to start…** with the time and the step (the agent host makes the chat → the chat is made → the agent opens the task), the list row and the super agent say **Starting…**, and Reopen and Archive are hidden until the agent starts. The same holds for checks after the close and for a message sent from the super agent. The super agent's line now says the chat is being made, not that the task was reopened. If no start is seen after two minutes, or the agent host refuses the chat, the yellow **The agent has not been seen to start** note shows as before.
 - **"Waits for you" while the agent was still writing** (1.8.49). The super agent showed a card and its avatar turned amber while a task's agent was still writing `REQ.md` or `PLAN.md`; the task page said it waited for you, and nothing on it could be pressed. Now a task whose agent is in a turn waits for you only for what holds the agent (a tool to allow, a question, a held call). A requirement, a plan, a write-back or a delivery shows when the turn ends, the same on the board, the task page, the super agent and `harness task list`. **Off work** still puts such a task aside.

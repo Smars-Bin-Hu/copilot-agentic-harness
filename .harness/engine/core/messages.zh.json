@@ -1037,6 +1037,7 @@
   "doctor.gate.speed": "gate 最近 {count} 次调用：一般 {middle} 毫秒，最慢 {slowest} 毫秒（超时是 {timeout} 秒）",
   "doctor.gate.slow": "{text}。离超时太近：Hook 超时的调用会被直接放行，gate 等于没拦。查是什么拖慢了 Python 的启动（杀毒软件、网络盘）",
   "doctor.hook.timeouts": "最近 {sessions} 个会话里，Copilot 在 {seconds} 秒超时后不再等 Hook：{counts}。有 {gate} 个调用没经过 gate 就执行了。这台电脑上 Hook 太慢：查是什么拖慢了 Python 的启动（杀毒软件、网络盘），并告诉 harness 的维护人",
+  "doctor.hook.timeouts_record": "最近 {sessions} 个会话里，Copilot 在 {seconds} 秒超时后不再等 Hook：{counts}。没有调用绕过 gate（这些 Hook 只记下调用做了什么，或给提示加话），但它们的记录可能缺了。这台电脑上 Hook 很慢",
   "doctor.hook.timeouts_older": "最近 {sessions} 个会话里，有 Hook 在以前较短的超时下被放弃：{counts}。在现在的 {seconds} 秒下没有",
   "doctor.hook.timeouts_none": "最近 {sessions} 个会话里没有 Hook 超时（超时 {seconds} 秒，据 Copilot 的记录）",
   "doctor.hook.timeouts_unreadable": "读不了 Copilot 的记录，没法查 Hook 超时：{error}",

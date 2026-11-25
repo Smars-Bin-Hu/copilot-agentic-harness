@@ -6,7 +6,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],
@@ -20,7 +19,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],
@@ -34,7 +32,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],
@@ -48,7 +45,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],
@@ -62,7 +58,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],
@@ -76,7 +71,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],
@@ -90,7 +84,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],
@@ -104,7 +97,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],
@@ -118,7 +110,6 @@
         "type": "command",
         "exec": "python",
         "args": [
-          "-I",
           "-S",
           ".harness/engine/launch.py"
         ],

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Pattern, Tuple
 
 from core import config, messages, repo_paths, schema
 from core.paths import policies_dir
-from core.guardrails import CORE_GUARDRAILS, HOME_FOLDER, admin_locked, guardrail_paths, home_folders, missing_core
+from core.guardrails import CORE_GUARDRAILS, HOME_FOLDER, ROOT_LEVEL_GUARDRAILS, admin_locked, guardrail_paths, home_folders, missing_core
 
 POLICY_NAME = "gate"
 # Any `.git` folder (in a target repository or anywhere else) in a terminal command, with the spellings Windows treats as the same.
@@ -105,6 +105,18 @@ def diagnose(root: Path, error: BaseException) -> Tuple[str, str]:
     return f"{POLICY_NAME}.json", " ".join(str(error).split())[:200]
 
 
+ROOT_NAME = r"(?<![\w./\\-])(?:\./)?(?:{names})(?![\w.-])"  # a name at the root of the workspace, said bare or with `./`: `src/python` is not it
+
+
+def guard_pattern(paths: List[str]) -> str:
+    """The guardrail paths as one pattern over a terminal command (`{guard}` of a rule). The names that are files at the root (`python.exe`: `ROOT_LEVEL_GUARDRAILS`) are found only when said bare, so a folder `src/python` is not one."""
+    rooted = [item for item in paths if item in ROOT_LEVEL_GUARDRAILS]
+    found = repo_paths.command_regex([item for item in paths if item not in ROOT_LEVEL_GUARDRAILS]).pattern
+    if not rooted:
+        return found
+    return "(?:" + found + "|" + ROOT_NAME.format(names="|".join(re.escape(item) for item in sorted(rooted, key=len, reverse=True))) + ")"
+
+
 class Compiled:
     """The policy with its patterns compiled. Built once per hook call."""
 
@@ -116,7 +128,7 @@ class Compiled:
         self.paths = admin_locked(policy) if admin else guardrail_paths(policy)
         self.path_regexes: List[Tuple[str, Pattern[str]]] = [(item, repo_paths.glob_regex(item)) for item in self.paths]
         self.home = home_folders()  # (1.7.38, C13 FR2 11b) the folders outside the workspace that hold what the guardrails trust: closed in admin mode too
-        guard = repo_paths.command_regex(self.paths + [f"{HOME_FOLDER}/**"] + self.home).pattern  # a command names the folder as `~/.copilot-harness/...`, `$HOME/...`, or by its full path
+        guard = guard_pattern(self.paths + [f"{HOME_FOLDER}/**"] + self.home)  # a command names the folder as `~/.copilot-harness/...`, `$HOME/...`, or by its full path
         self.guard_writes = [
             (re.compile(expand(rule["pattern"], guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"]

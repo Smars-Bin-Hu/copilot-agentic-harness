@@ -9,13 +9,13 @@ import os
 import re
 import shutil
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from core import ahp, clip, pace, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
-from core.logs import read_lines, session_files
-from core.paths import cli_command, policies_dir, python_command
+from core.logs import read_lines, safe_name, session_files
+from core.paths import cli_command, logs_dir, policies_dir, python_command
 from core.registry import load_registry
 from core.events import CONFIG_KEYS
 from core.state import TRACKED_EVENTS
@@ -28,7 +28,7 @@ def say(key: str, /, **values: Any) -> str:
 
 HOOK_ENTRY = ".harness/engine/launch.py"  # the one file the hook configuration starts (1.7.38, C13 FR2 4); it loads hook.py
 HOOK_EXEC = "python"  # (1.8.50) the program every hook entry starts with `exec`, found on PATH by Copilot: no PowerShell or shell in between (about 1.7 s a hook on a work PC)
-HOOK_ARGS = ["-I", "-S", HOOK_ENTRY]  # isolated, no site packages: the engine is the standard library only, and Python starts faster
+HOOK_ARGS = ["-S", HOOK_ENTRY]  # no site packages: the engine is the standard library only, and Python starts faster. Not `-I` (1.8.53): `-E` in it turns off the bytecode cache of the Mac's system Python (+140 ms a hook) and `-I` ignores PYTHONUTF8 (a file encoding on Windows could change)
 SHELL_KEYS = ("command", "windows", "linux", "osx", "bash", "powershell")  # Copilot skips an entry that has `exec` and any of these: the hook would not run at all
 KB_DIR = "knowledge-base"
 BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
@@ -44,6 +44,17 @@ DEFAULT_HOOK_TIMEOUT = 30
 MIN_HOOK_TIMEOUT = 120  # (1.8.48) seconds: Copilot lets a call through when its hook times out, and a work PC measured hooks up to 111 s (2026-11-24); a lower timeout is an error
 TIMEOUT_SESSIONS = 5  # the newest sessions whose Copilot record is read for hooks that timed out
 TIMED_OUT = re.compile(r"timed out after (\d+) seconds", re.I)
+SCRIPT_SUFFIXES = (".bat", ".cmd", ".ps1")  # (1.8.53) Copilot's `exec` starts only .exe and .com programs: a `python` found as one of these is not what it starts
+SERVICE_SAMPLE = 40  # the newest hook calls whose `via` says who judged them
+SERVICE_QUIET = ("absent", "dead", "")  # the board was not running: not a fault of the service
+CLIENT_DAYS = 7  # the hook client's own trace is checked for this long
+CLIENT_GRACE_SECONDS = 60  # a line this new may be ahead of the board's own record
+CLIENT_TAIL_BYTES = 4 * 1024 * 1024
+CLIENT_LOG_FILES = 400  # the session logs looked at for the nonces
+NEVER_RAN_SESSIONS = 5  # the newest Copilot sessions of this folder
+NEVER_RAN_DAYS = 14
+NEVER_RAN_SCAN_BYTES = 16 * 1024 * 1024
+NONCE = re.compile(r'"nonce": ?"([0-9a-fA-F]{8,64})"')
 
 
 TOPICS = "HARNESS_DOCTOR_TOPICS"  # the board's own run (1.7.38): a warning about the company's content (knowledge base, standards, repositories) says so, `[WARN:company]`; one about its copies `[WARN:copies]`; a person's run prints `[WARN]` as always
@@ -212,6 +223,144 @@ def check_hook_timeouts(report: Report, root: Path) -> None:
         report.warn(say("doctor.hook.timeouts_older", sessions=read, seconds=f"{limit:.0f}", counts=shown(older)))
     else:
         report.ok(say("doctor.hook.timeouts_none", sessions=read, seconds=f"{limit:.0f}"))
+
+
+def check_hook_python(report: Report, found: Optional[str] = None, windows: Optional[bool] = None) -> None:
+    """(1.8.53) On Windows, Copilot's `exec` runs only .exe and .com programs, and `shutil.which` also finds a `.bat`, `.cmd` or `.ps1`: a `python` that is one of those is found here and not by the hook, which then does not start. `found` and
+    `windows` are given by the tests (the Mac has no PATHEXT)."""
+    windows = (sys.platform == "win32") if windows is None else windows
+    if not windows:
+        return
+    found = shutil.which(HOOK_EXEC) if found is None else found
+    if found and found.lower().endswith(SCRIPT_SUFFIXES):
+        report.warn(say("doctor.hook.python_script", found=found, kind=Path(found).suffix.lower()))
+
+
+def check_hook_service(report: Report, root: Path, rows: Optional[List[Dict[str, Any]]] = None) -> None:
+    """(1.8.53) Does the board's judging service answer the hooks, or do they judge by themselves? The log rows say `via` (`service` or `local`) and, for a local one, `why` (`absent` and `dead`: no board; `tmp`, `python`, `stale`...: the
+    service would not answer). When the board was running (service rows are in the newest rows) and over half of them are local for a reason other than the board's absence, the hooks are slower than they have to be: a warning that names the reasons."""
+    try:
+        found = recent_calls(root) if rows is None else rows
+    except Exception:  # noqa: BLE001 - check_hook_activity says that the logs cannot be read
+        return
+    sample = [row for row in found if row.get("via") in ("service", "local")][-SERVICE_SAMPLE:]
+    served = sum(1 for row in sample if row.get("via") == "service")
+    if not served:
+        return
+    odd = [row for row in sample if row.get("via") == "local" and str(row.get("why") or "") not in SERVICE_QUIET]
+    if len(odd) * 2 <= len(sample):
+        report.ok(say("doctor.hook.service_ok", served=served, count=len(sample)))
+        return
+    counts: Dict[str, int] = {}
+    for row in odd:
+        counts[str(row.get("why"))] = counts.get(str(row.get("why")), 0) + 1
+    reasons = ", ".join(f"{name} {count}" for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+    newest = next((str(row.get("why") or "") for row in reversed(sample) if row.get("via") == "local"), "")
+    report.warn(say("doctor.hook.service_local", served=served, local=len(odd), count=len(sample), reasons=reasons) + (" " + say("doctor.hook.service_stale") if newest == "stale" else ""))
+
+
+def _stamp(at: Any) -> Optional[datetime]:
+    try:
+        moment = datetime.fromisoformat(str(at).replace("Z", "+00:00"))
+        return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def check_hook_client_trace(report: Report, root: Path, now: Optional[datetime] = None) -> None:
+    """(1.8.53, red team F1) The hook client writes `{"at", "nonce", "session_id", "event"}` to `logs/hookclient.jsonl` each time it takes an answer from a service, and the board's service puts the same `nonce` in the
+    record of the call it judged (the session log). An answer the client took with no such record came from something that is not the board (a process that took the port of a board that closed, with a key it read)."""
+    try:
+        path = logs_dir(root) / "hookclient.jsonl"
+        if not path.is_file():
+            return
+        now = now or datetime.now(timezone.utc)
+        since, until = now - timedelta(days=CLIENT_DAYS), now - timedelta(seconds=CLIENT_GRACE_SECONDS)
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            if size > CLIENT_TAIL_BYTES:
+                handle.seek(size - CLIENT_TAIL_BYTES)
+                handle.readline()  # the start of a line
+            text = handle.read().decode("utf-8", errors="replace")
+        used: Dict[str, datetime] = {}
+        for line in text.split("\n"):
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            at = _stamp(row.get("at")) if isinstance(row, dict) else None
+            if at is not None and since <= at <= until and isinstance(row.get("nonce"), str) and row["nonce"]:
+                used[row["nonce"]] = max(at, used.get(row["nonce"], at))
+        if not used:
+            return
+        known: Set[str] = set()
+        files = sorted((item for _surface, item in session_files(root)), key=lambda item: item.stat().st_mtime, reverse=True)[:CLIENT_LOG_FILES]
+        for item in files:
+            if item.stat().st_mtime < since.timestamp():
+                break
+            with item.open(encoding="utf-8", errors="replace") as handle:
+                known.update(NONCE.findall(handle.read(CLIENT_TAIL_BYTES * 2)))
+    except Exception as error:  # noqa: BLE001 - a trace that cannot be read is said, not taken for clean
+        report.warn(say("doctor.hook.client_unreadable", error=" ".join(str(error).split())[:200]))
+        return
+    missing = {nonce: at for nonce, at in used.items() if nonce not in known}
+    if missing:
+        report.error(say("doctor.hook.client_foreign", count=len(missing), total=len(used), days=CLIENT_DAYS, when=max(missing.values()).strftime("%Y-%m-%d %H:%M") + " UTC"))
+    else:
+        report.ok(say("doctor.hook.client_ok", count=len(used), days=CLIENT_DAYS))
+
+
+def check_hooks_ran(report: Report, root: Path, registry: Dict[str, Any], now: Optional[datetime] = None) -> None:
+    """(1.8.53, red team F6) A session whose Copilot record shows tool calls and for which the harness has no hook row at all: the hooks did not run in it (a Copilot that ignores `exec`, VS Code's Local mode), so no call of it was
+    judged. The newest `NEVER_RAN_SESSIONS` sessions that Copilot ran in this folder, started after the hook configuration was last written."""
+    entry = registry["modules"].get("observe")
+    if entry is None or not entry["enabled"]:
+        return
+    try:
+        if not (config.policy_or_empty(root, "task").get("report") or {}).get("copilot_events", True):
+            return
+        from core import copilot_events
+        now = now or datetime.now(timezone.utc)
+        floor = now - timedelta(days=NEVER_RAN_DAYS)
+        configs = sorted((root / ".github" / "hooks").glob("*.json"))
+        if configs:
+            floor = max(floor, datetime.fromtimestamp(max(item.stat().st_mtime for item in configs), timezone.utc))
+        here = os.path.normcase(os.path.realpath(str(root)))
+        logged = {safe_name(item.stem) for _surface, item in session_files(root)}
+        folders = sorted((item for item in (copilot_events.home() / "session-state").glob("*/" + copilot_events.FILE_NAME)), key=lambda item: item.stat().st_mtime, reverse=True)
+        read, silent = 0, []
+        for item in folders:
+            if read >= NEVER_RAN_SESSIONS:
+                break
+            started, cwd, tools, scanned = None, "", False, 0
+            with item.open(encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    scanned += len(line)
+                    if started is None and '"session.start"' in line:
+                        try:
+                            data = json.loads(line).get("data") or {}
+                        except ValueError:
+                            break
+                        started, cwd = _stamp(data.get("startTime")), str((data.get("context") or {}).get("cwd") or "")
+                        if started is None or started < floor or not cwd or os.path.normcase(os.path.realpath(cwd)) != here:
+                            break
+                    if '"tool.execution_start"' in line:
+                        tools = True
+                        break
+                    if scanned > NEVER_RAN_SCAN_BYTES:
+                        break
+            if started is None or started < floor or not cwd or os.path.normcase(os.path.realpath(cwd)) != here:
+                continue
+            read += 1
+            if tools and safe_name(item.parent.name) not in logged:
+                silent.append(item.parent.name)
+    except Exception as error:  # noqa: BLE001 - a record that cannot be read is said, not taken for clean
+        report.warn(say("doctor.hook.ran_unreadable", error=" ".join(str(error).split())[:200]))
+        return
+    if silent:
+        report.error(say("doctor.hook.never_ran", count=len(silent), sessions=read, ids=", ".join(name[:8] for name in silent)))
+    elif read:
+        report.ok(say("doctor.hook.ran_ok", sessions=read))
 
 
 def launcher_files(root: Path) -> List[Path]:
@@ -1024,7 +1173,7 @@ def check_integrity(report: Report, root: Path) -> None:
 
 PROGRESS = "HARNESS_DOCTOR_PROGRESS"  # set by the board (1.7.43): each step is told on stderr as it starts, for the Enter screen's progress bar
 PROGRESS_MARK = "harness-doctor-step"
-STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
+STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'hook_timeouts', 'hook_python', 'hook_service', 'hook_client_trace', 'hooks_ran', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
 
 
 def tick(name: str) -> None:
@@ -1082,6 +1231,14 @@ def run(root: Path, accept: bool = False) -> int:
     check_hook_activity(report, root, registry)
     tick('check_hook_timeouts')
     check_hook_timeouts(report, root)
+    tick('check_hook_python')
+    check_hook_python(report)
+    tick('check_hook_service')
+    check_hook_service(report, root)
+    tick('check_hook_client_trace')
+    check_hook_client_trace(report, root)
+    tick('check_hooks_ran')
+    check_hooks_ran(report, root, registry)
     tick('check_agents')
     check_agents(report, root)
     tick('check_logs')

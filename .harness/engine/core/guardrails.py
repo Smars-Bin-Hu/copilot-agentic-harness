@@ -6,6 +6,10 @@ from typing import Any, Dict, List
 
 from . import procenv
 
+# The files at the root of the workspace that Copilot may start in place of the Python of the person (1.8.53): a hook runs with the workspace root as its folder, and on Windows the search for `python` may look there
+# first (`python.exe`, `python.com`), a `.bat` or `.cmd` is found by a shell. Only the root: `src/python/` is an ordinary folder. The gate refuses a write to one, and a terminal command that names it bare (`python.exe`, `./python`).
+ROOT_LEVEL_GUARDRAILS = ("python.exe", "python.com", "python.bat", "python.cmd", "python", "python3")
+
 # Without these the gate would not protect the harness itself. They are always guarded, even when a policy or an
 # override drops them from guardrail_paths; doctor reports that as an error.
 CORE_GUARDRAILS = (
@@ -16,7 +20,7 @@ CORE_GUARDRAILS = (
     ".harness/registry.json",
     ".harness/runtime/**",
     ".vscode/settings.json",  # it holds chat.useHooks: an agent that turns it off turns every hook off
-)
+) + ROOT_LEVEL_GUARDRAILS
 
 # What stays closed in admin mode. The session state and the approvals live in the runtime folder: a session that could
 # write it could make itself admin or forge a person's approval.

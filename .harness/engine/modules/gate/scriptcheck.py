@@ -36,15 +36,19 @@ def names_of(policy: Dict[str, Any], admin: bool = False) -> "re.Pattern[str]":
     parts: List[str] = [] if admin else list(EXTRA[:2])
     parts += list(EXTRA[2:])
     exact: List[str] = [] if admin else list(EXACT)
+    rooted: List[str] = []
     for path in (guardrails.admin_locked(policy or {}) if admin else guardrails.guardrail_paths(policy or {})):
         plain = re.sub(r"(?:/\*\*|/\*)$", "", str(path)).strip("/")
-        if plain and not plain.startswith(("*", "!")) and "*" not in plain:
+        if plain in guardrails.ROOT_LEVEL_GUARDRAILS:
+            rooted.append(plain)
+        elif plain and not plain.startswith(("*", "!")) and "*" not in plain:
             (parts if "/" in plain or plain.startswith(".") else exact).append(re.escape(plain).replace(r"\/", r"[\\/]+"))
     for folder in guardrails.home_folders():  # a folder `HARNESS_INTEGRITY_DIR` names, written by its full path
         parts.append(re.escape(folder).replace(r"\/", r"[\\/]+"))
     body = "(?:" + "|".join(parts) + ")(?![\\w-])" if parts else ""
     whole = "(?<![\\w.-])(?:" + "|".join(re.escape(item) for item in exact) + ")(?![\\w.-])" if exact else ""
-    return re.compile("|".join(item for item in (body, whole) if item) or "(?!x)x", re.IGNORECASE)
+    root = r"(?<![\w./\\-])(?:\./)?(?:" + "|".join(re.escape(item) for item in sorted(rooted, key=len, reverse=True)) + r")(?![\w.-])" if rooted else ""  # files at the root of the workspace: not `src/python`
+    return re.compile("|".join(item for item in (body, whole, root) if item) or "(?!x)x", re.IGNORECASE)
 
 
 # --- reading a text: assignments, expressions, calls ---------------------------------------------------------------------------------------------------------------------------------------------------

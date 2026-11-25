@@ -30,7 +30,13 @@ _JSON = r'''
   ".vscode/settings.json",
   ".vscode/mcp.json",
   "LICENSE",
-  "NOTICE"
+  "NOTICE",
+  "python.exe",
+  "python.com",
+  "python.bat",
+  "python.cmd",
+  "python",
+  "python3"
  ],
  "extra_guardrail_paths": [],
  "admin_locked_paths": [

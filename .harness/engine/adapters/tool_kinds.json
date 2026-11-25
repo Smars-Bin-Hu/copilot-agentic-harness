@@ -49,6 +49,29 @@
         "agentName",
         "agent_type"
       ],
+      "post_kinds": [
+        "read",
+        "edit",
+        "create",
+        "terminal",
+        "search",
+        "subagent",
+        "ask"
+      ],
+      "post_kinds_note": "The kinds of tool a PostToolUse call is acted on for (hook speed: `.github/hooks/harness.json` starts the post hook only for these, with the `matcher` that `core/postmatch.py` derives from this file; a test and doctor keep the two the same). read/search/terminal: the knowledge base reads and the call record (commands, paths), the reach of a system; edit/create: the task's writes and the health of a task; subagent: the reviewer's verdict; ask: the question tool's return. A kind not listed (web, skill, meta, mcp, other) has nothing done after it: its PreToolUse row is its whole record.",
+      "copilot_names": {
+        "view": "read",
+        "edit": "edit",
+        "create": "create",
+        "apply_patch": "edit",
+        "bash": "terminal",
+        "grep": "search",
+        "glob": "search",
+        "rg": "search",
+        "task": "subagent",
+        "ask_user": "ask"
+      },
+      "copilot_names_note": "The names Copilot itself gives its tools (`toolName` of the `hook.start` of a postToolUse in `events.jsonl`, 2026-11-25, 552 sessions: bash, view, edit, create, apply_patch, task, ask_user, rg, glob, grep, ...). A hook `matcher` is a regular expression over THESE names, while the hook payload carries the names above (`Read` for `view`, `Write` for `create`, `Agent` for `task`); the matcher lists both. Used by the matcher only: the gate reads the payload names above.",
       "unrecorded_tools": [
         "multi_replace_string_in_file",
         "insert_edit_into_file",

@@ -211,7 +211,7 @@ def from_hook_log(rows: List[Dict[str, Any]], hook_prompts: List[Dict[str, Any]]
                     prompt["skills"].append(row["skill"])
             elif row.get("event") in ("PostToolUse", "PostToolUseFailure") and started.get(name):
                 prompt["tools"].append({"name": name, "seconds": max(0.0, at - started[name].pop(0)), "ok": row["event"] == "PostToolUse", "result_tokens": None})
-        for name, times in started.items():  # refused, or its end was not logged
+        for name, times in started.items():  # refused, or its end was not logged (a tool the PostToolUse hook is not started for, `core/postmatch.py`, never has one: its time is unknown, and counts as none)
             prompt["tools"].extend({"name": name, "seconds": 0.0, "ok": True, "result_tokens": None} for _at in times)
         found.append(prompt)
     return found

@@ -56,6 +56,7 @@
     "PostToolUse": [
       {
         "type": "command",
+        "matcher": "^(?:Agent|AskUserQuestion|Bash|Edit|Glob|Grep|PowerShell|Read|Write|apply_patch|ask_user|bash|create|create_file|edit|edit_notebook_file|file_search|glob|grep|grep_search|insert_edit_into_file|list_dir|multi_replace_string_in_file|powershell|read_file|replace_string_in_file|rg|runSubagent|run_in_terminal|search_code_subagent|semantic_search|task|view)$",
         "exec": "python",
         "args": [
           "-S",

@@ -27,7 +27,9 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 HOOK_ENTRY = ".harness/engine/launch.py"  # the one file the hook configuration starts (1.7.38, C13 FR2 4); it loads hook.py
-COMMAND_KEYS = ("command", "windows", "linux", "osx", "bash", "powershell")
+HOOK_EXEC = "python"  # (1.8.50) the program every hook entry starts with `exec`, found on PATH by Copilot: no PowerShell or shell in between (about 1.7 s a hook on a work PC)
+HOOK_ARGS = ["-I", "-S", HOOK_ENTRY]  # isolated, no site packages: the engine is the standard library only, and Python starts faster
+SHELL_KEYS = ("command", "windows", "linux", "osx", "bash", "powershell")  # Copilot skips an entry that has `exec` and any of these: the hook would not run at all
 KB_DIR = "knowledge-base"
 BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
 MARKDOWN_LINK = re.compile(r"\]\(([^)\s]+)\)")
@@ -78,25 +80,26 @@ def check_python(report: Report) -> None:
 
 
 def check_interpreter(report: Report) -> None:
-    """The launcher and the hook start `python` (Windows) or `python3` (elsewhere). It has to run, not only be found.
+    """The short command starts `python` (Windows) or `python3` (elsewhere); every hook starts `python` on every system (`HOOK_EXEC`, 1.8.50: Copilot starts it itself, with no shell, and a hook
+    entry cannot name one program per system). Each has to run, and the hook's has to be Python 3.9 or later (an old Mac has a Python 2 `python`), not only be found.
 
-    In a Copilot (SDK) session a hook that cannot start counts as a refusal: every tool call is denied (P2, 2026-10-10).
-    """
-    name = python_command()
+    A hook that cannot start counts as a refusal: every tool call is denied (P2, 2026-10-10; Copilot's own log says "spawn python ENOENT")."""
     consequence = say("doctor.interpreter.consequence")
-    found = shutil.which(name)
-    if not found:
-        report.error(say("doctor.interpreter.missing", name=name, consequence=consequence))
-        return
-    try:
-        result = procrun.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=pace.scaled(INTERPRETER_SECONDS))
-        problem = "" if result.returncode == 0 and result.stdout.strip() == "1" else say("doctor.interpreter.exit", code=result.returncode)
-    except Exception as error:
-        problem = f"{type(error).__name__}"
-    if problem:
-        report.error(say("doctor.interpreter.broken", name=name, found=found, problem=problem, consequence=consequence))
-    else:
-        report.ok(say("doctor.interpreter.ok", name=name))
+    for name in dict.fromkeys((python_command(), HOOK_EXEC)):
+        found = shutil.which(name)
+        if not found:
+            report.error(say("doctor.interpreter.missing", name=name, consequence=consequence) + ("" if name == python_command() else ". " + say("doctor.interpreter.hook_python")))
+            continue
+        try:
+            result = procrun.run([found, "-c", "import sys; print(1 if sys.version_info >= (3, 9) else 0)"], capture_output=True, text=True, timeout=pace.scaled(INTERPRETER_SECONDS))
+            answer = result.stdout.strip()
+            problem = "" if result.returncode == 0 and answer == "1" else say("doctor.interpreter.old", name=name) if result.returncode == 0 and answer == "0" else say("doctor.interpreter.exit", code=result.returncode)
+        except Exception as error:
+            problem = f"{type(error).__name__}"
+        if problem:
+            report.error(say("doctor.interpreter.broken", name=name, found=found, problem=problem, consequence=consequence) + ("" if name == python_command() else ". " + say("doctor.interpreter.hook_python")))
+        else:
+            report.ok(say("doctor.interpreter.ok", name=name))
 
 
 def hook_timeout(root: Path) -> float:
@@ -253,19 +256,9 @@ def check_files(report: Report, root: Path, owner: str, files: List[str]) -> Non
 
 
 def interpreter_problems(entry: Dict[str, Any]) -> List[str]:
-    """The config carries two sets of keys: `command`/`windows`, and `bash`/`powershell` which a Copilot (SDK) session reads.
-
-    An engine that finds no key for its system runs the wrong one, and a hook that fails to start counts as a deny:
-    every tool call is refused. Windows has `python` and often no `python3`.
-    """
-    problems = []
-    for key, interpreter in (("command", "python3"), ("bash", "python3"), ("windows", "python"), ("powershell", "python")):
-        value = entry.get(key)
-        if not isinstance(value, str):
-            problems.append(say("doctor.hookcfg.key_missing", key=key, system="Windows" if interpreter == "python" else "macOS/Linux", engine="VS Code" if key in ("command", "windows") else say("doctor.hookcfg.engine.sdk")))
-        elif value.split()[0] != interpreter:
-            problems.append(say("doctor.hookcfg.key_wrong", key=key, interpreter=interpreter, found=value.split()[0]))
-    return problems
+    """(1.8.50) A hook entry starts `python` itself (`exec`); it may not carry a shell command too. Copilot does not pick one of the two: it skips the whole entry with one line in its own log, so the gate
+    would not run at all (found on the Mac, 2026-11-24). Nor is there an `exec` per system: `windows`/`osx`/`linux` only replace `command`."""
+    return [say("doctor.hookcfg.shell_key", key=key) for key in SHELL_KEYS if key in entry]
 
 
 def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> None:
@@ -291,9 +284,8 @@ def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> N
                 limit = entry.get("timeoutSec") or entry.get("timeout")
                 if not isinstance(limit, (int, float)) or isinstance(limit, bool) or limit < MIN_HOOK_TIMEOUT:
                     report.error(say("doctor.hookcfg.timeout_low", name=path.name, event=event, seconds=limit if limit is not None else "-", least=MIN_HOOK_TIMEOUT))
-                commands = [entry[key] for key in COMMAND_KEYS if isinstance(entry.get(key), str)]
-                if not commands or any(HOOK_ENTRY not in command for command in commands):
-                    report.error(say("doctor.hookcfg.wrong_entry", name=path.name, event=event, entry=HOOK_ENTRY))
+                if entry.get("exec") != HOOK_EXEC or entry.get("args") != HOOK_ARGS or entry.get("cwd") != ".":
+                    report.error(say("doctor.hookcfg.wrong_entry", name=path.name, event=event, entry=f"exec {HOOK_EXEC} {' '.join(HOOK_ARGS)}, cwd ."))
                 for problem in interpreter_problems(entry):
                     report.error(say("doctor.hookcfg.problem", name=path.name, event=event, problem=problem))
     needed: Set[str] = set(TRACKED_EVENTS)

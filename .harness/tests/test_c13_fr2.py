@@ -625,7 +625,7 @@ class LauncherTests(unittest.TestCase):
         import subprocess
         import sys
 
-        done = subprocess.run([sys.executable, str(self.launch)], input=raw or json.dumps(data), text=True, encoding="utf-8", capture_output=True, check=False,
+        done = subprocess.run([sys.executable, "-I", "-S", str(self.launch)], input=raw or json.dumps(data), text=True, encoding="utf-8", capture_output=True, check=False,
                               env={**os.environ, "HARNESS_ROOT": str(self.root), "HARNESS_LANGUAGE": "en", "HARNESS_INTEGRITY_DIR": str(self.root / "no-integrity-here")})
         self.assertEqual(done.returncode, 0, done.stderr)
         return json.loads(done.stdout)
@@ -706,10 +706,9 @@ class LauncherTests(unittest.TestCase):
     def test_every_event_of_the_hook_configuration_starts_launch_py_for_every_engine(self) -> None:
         data = json.loads((self.repo / ".github" / "hooks" / "harness.json").read_text(encoding="utf-8"))
         for event, entries in data["hooks"].items():
-            for entry in entries:
-                for key in ("command", "windows", "bash", "powershell"):
-                    self.assertTrue(entry[key].endswith(".harness/engine/launch.py"), (event, key, entry[key]))
-                    self.assertNotIn("hook.py", entry[key])
+            for entry in entries:  # (1.8.50) Copilot starts Python itself, with no shell: one entry, the same on every system
+                self.assertEqual((entry["exec"], entry["args"], entry["cwd"]), ("python", ["-I", "-S", ".harness/engine/launch.py"], "."), event)
+                self.assertFalse({"command", "windows", "linux", "osx", "bash", "powershell"} & set(entry), event)
 
     def test_the_launcher_is_small_standard_library_only_and_keeps_the_tool_list_of_hook_py(self) -> None:
         import ast

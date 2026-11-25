@@ -273,42 +273,33 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("只保留一份", result.stdout)
 
-    def test_a_hook_command_that_does_not_call_hook_py_is_an_error(self) -> None:
+    def test_a_hook_entry_that_does_not_start_launch_py_is_an_error(self) -> None:
         def change(data: dict) -> None:
-            data["hooks"]["PreToolUse"][0]["command"] = "python3 something_else.py"
+            data["hooks"]["PreToolUse"][0]["args"] = ["-I", "-S", "something_else.py"]
 
         self.edit_json(".github/hooks/harness.json", change)
         self.assertEqual(self.doctor().returncode, 1)
 
-    def test_a_windows_command_is_checked_too(self) -> None:
-        def change(data: dict) -> None:
-            data["hooks"]["PreToolUse"][0]["windows"] = "python other.py"
+    def test_a_hook_entry_that_starts_another_program_is_an_error(self) -> None:
+        for key, value in (("exec", "python3"), ("exec", "py"), ("cwd", ".harness")):
+            with self.subTest(key=key, value=value):
+                def change(data: dict, key: str = key, value: str = value) -> None:
+                    data["hooks"]["Stop"][0][key] = value
 
-        self.edit_json(".github/hooks/harness.json", change)
-        self.assertEqual(self.doctor().returncode, 1)
+                self.edit_json(".github/hooks/harness.json", change)
+                self.assertEqual(self.doctor().returncode, 1)
+                shutil.copy(REPO / ".github" / "hooks" / "harness.json", self.root / ".github" / "hooks" / "harness.json")
 
-    def test_every_hook_entry_needs_the_keys_of_both_engines(self) -> None:
+    def test_a_shell_command_beside_exec_is_an_error_because_copilot_skips_the_entry(self) -> None:
         for key in ("command", "windows", "bash", "powershell"):
             with self.subTest(key):
                 def change(data: dict, key: str = key) -> None:
-                    del data["hooks"]["PreToolUse"][0][key]
+                    data["hooks"]["PreToolUse"][0][key] = "python .harness/engine/launch.py"
 
                 self.edit_json(".github/hooks/harness.json", change)
                 result = self.doctor()
                 self.assertEqual(result.returncode, 1, result.stdout)
-                self.assertIn(f"缺少 `{key}`", result.stdout)
-                shutil.copy(REPO / ".github" / "hooks" / "harness.json", self.root / ".github" / "hooks" / "harness.json")
-
-    def test_a_windows_key_that_uses_python3_is_an_error(self) -> None:
-        for key in ("windows", "powershell"):
-            with self.subTest(key):
-                def change(data: dict, key: str = key) -> None:
-                    data["hooks"]["Stop"][0][key] = "python3 .harness/engine/launch.py"
-
-                self.edit_json(".github/hooks/harness.json", change)
-                result = self.doctor()
-                self.assertEqual(result.returncode, 1, result.stdout)
-                self.assertIn(f"`{key}` 应该用 `python`", result.stdout)
+                self.assertIn(f"不能有 `{key}`", result.stdout)
                 shutil.copy(REPO / ".github" / "hooks" / "harness.json", self.root / ".github" / "hooks" / "harness.json")
 
     def test_a_missing_event_in_the_hook_config_is_an_error(self) -> None:

@@ -22,7 +22,7 @@ import re
 
 from core import autorunfiles, calls, govern, messages, pinfiles, procenv, reach, repo_paths, connections, targets, tasks, unseen
 from core import systems as systems_mod
-from core.paths import board_serve_port
+from core.paths import board_serve_port, hook_serve_file, hook_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
@@ -151,6 +151,9 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     port = asks_board(ctx, event.command)
     if port:
         return Decision(permission="deny", reason=rules.board_request(port))
+    port = asks_hook_service(ctx, event.command)
+    if port:
+        return Decision(permission="deny", reason=rules.say("gate.hookserve.request", port=port), facts={"kind": "hookserve"})
     outside = check_external(event, ctx, judged, policy)
     if outside:
         return outside
@@ -580,6 +583,15 @@ def first_reach(event: HookEvent, ctx: Context) -> Optional[Decision]:
 USER_TEXT_TOOLS = ("ask_user", "askuserquestion")  # tools whose input is text shown to the person: a question, with its choices. They call no address
 
 
+def asks_hook_service(ctx: Context, text: str) -> int:
+    """The port, when `text` sends a request to the hook service of this copy (1.8.53): it judges the agent's calls for the gate, so a request from the agent could ask for a judgement or leave a record the
+    agent wrote. The same net as `asks_board`: the key in `hookserve.json` is the other half (`check_secrets`)."""
+    port = hook_serve_port(ctx.root)
+    if port and re.search(rf"(?:127\.0\.0\.1|localhost|\[?::1\]?|0\.0\.0\.0)\W{{0,4}}\s*[:,]\s*{port}\b", text, re.IGNORECASE):  # `host:port`, and `('localhost', port)` of a socket call
+        return port
+    return 0
+
+
 def asks_board(ctx: Context, text: str) -> int:
     """The port, when `text` sends a request to the board server that runs from this copy: its buttons are the person's."""
     port = board_serve_port(ctx.root)
@@ -619,6 +631,7 @@ def watch_reach(event: HookEvent, ctx: Context) -> None:
 
 
 SECRET_FILE = re.compile(r"\.harness[\\/]+\.env(?![\w.-])", re.IGNORECASE)
+HOOK_KEY_FILE = re.compile(r"hookserve\.json|hookserve\b", re.IGNORECASE)  # (1.8.53) the key of the hook service: any spelling of its file name in a command
 DUMP_ALL = re.compile(r"(?:^|[;&|(]\s*)(?:env|printenv|set|export\s+-p|Get-ChildItem\s+env:|gci\s+env:|dir\s+env:|ls\s+env:)\s*(?:$|[;&|)>])", re.IGNORECASE)
 
 
@@ -642,10 +655,14 @@ def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
             continue
         if target == secret:
             return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
+        if target == hook_serve_file(ctx.root).resolve():
+            return Decision(permission="deny", reason=rules.say("gate.hookserve.secret"), facts={"kind": "secret"})
     if event.tool_kind == "terminal" and event.command:
         plain = shellwords.dialect(event.command, "power")  # 1.7.38 (C13 FR3): a PowerShell escape (`` cat .harness/.e`nv ``) hides the name from the text: the line is read with it taken away too
         for text in [event.command] + ([plain] if plain else []):
             named = {name for name in secret_names(ctx) if re.search(r"(?<![\w])" + re.escape(name), text)}
+            if HOOK_KEY_FILE.search(text):
+                return Decision(permission="deny", reason=rules.say("gate.hookserve.secret"), facts={"kind": "secret"})
             if SECRET_FILE.search(text) or DUMP_ALL.search(text) or (named and not named <= owned_names(event, ctx)):
                 return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
     return None
@@ -764,6 +781,9 @@ def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         port = 0 if event.tool_name.strip().lower() in USER_TEXT_TOOLS else asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))  # 1.7.38 (C13 FR 26): the tool that only shows a question to the person sends no request: its text may hold the address of the board (a link to the task page)
         if port:
             return Decision(permission="deny", reason=rules.board_request(port))
+        port = 0 if event.tool_name.strip().lower() in USER_TEXT_TOOLS else asks_hook_service(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))
+        if port:
+            return Decision(permission="deny", reason=rules.say("gate.hookserve.request", port=port), facts={"kind": "hookserve"})
         if event.tool_kind == "other":  # an MCP or browser tool: no file and no command line
             judged = check_mcp(event, ctx)
             if judged:

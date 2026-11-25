@@ -481,6 +481,8 @@
   "gate.task.outside": "Task {task} is open: you may write only inside the task folder `{task}/`, and you tried to write `{relative}`. Notes, RCA, design and read-only queries go at the root of the task folder, read-only checks in `TEST/`; code goes under `{task}/DEV/` once the plan is approved: `DEV/<repository>/<path>` to promote, `DEV/_server/<path>` for a script run on a server.",
   "gate.task.person_files": "`{relative}` is in `REQ/`, `REF/` or `INBOX/` of task {task}. Those hold what the user gave and are read only. Write notes and results at the root of the task folder `{task}/`.",
   "gate.board.request": "Refused: this asks the board server on port {port}, and its buttons are the user's. Do not call it. If something on the board should change, tell the user.",
+  "gate.hookserve.request": "Refused: this asks the harness hook service on port {port}. It judges your calls for the gate: do not call it. If a call was judged wrongly, tell the user.",
+  "gate.hookserve.secret": "Refused: `.harness/runtime/hookserve.json` holds the key of the hook service that judges your calls for the gate. Never read, print or use it.",
   "gate.super.refused": "Refused: the super agent only reads and talks. It does not change anything. Use the buttons on the board to act.",
   "gate.ask.refused": "Refused: this turn is a question from the person through the board. Answer it and change nothing. If work is needed, say so: the person sends a normal message.",
   "gate.terminal.denied": "This terminal command is refused: {why}. Do not retry with a command of the same kind. If it is needed, stop and tell the user why: the user runs it.",

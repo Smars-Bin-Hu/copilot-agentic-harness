@@ -1164,6 +1164,34 @@ class AskUserWithBoardAddressTests(ListedCase):
         self.assertEqual(self.tool("ask_user", {"question": "no address here"}), {})
 
 
+class HookServiceIsNotTheAgentsTests(ListedCase):
+    """(1.8.53) The hook service in the board judges the agent's calls for the gate: a request from the agent to its port, and a read of its key, are refused like a request to the board and a read of `.harness/.env`."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.root / ".harness" / "runtime").mkdir(parents=True, exist_ok=True)
+        (self.root / ".harness" / "runtime" / "hookserve.json").write_text(json.dumps({"v": 1, "port": 8822, "pid": 1, "key": "k" * 64, "wait": 3}), encoding="utf-8")
+
+    def tool(self, name: str, given: Any) -> Dict[str, Any]:
+        return self.hook(pre_tool(SESSION, name, given))
+
+    def test_a_request_to_its_port_is_refused(self) -> None:
+        for command in ("curl http://127.0.0.1:8822/", "python -c \"import socket; socket.create_connection(('localhost', 8822))\"", "nc 127.0.0.1:8822"):
+            out = self.term(command)
+            self.assertEqual(out.get("permissionDecision"), "deny", command)
+        out = self.tool("WebFetch", {"url": "http://127.0.0.1:8822/"})
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("8822", out["permissionDecisionReason"])
+        self.assertNotEqual(self.term("curl http://127.0.0.1:8823/").get("permissionDecisionReason", "").count("8822"), 1)
+
+    def test_a_read_of_its_key_is_refused(self) -> None:
+        out = self.tool("Read", {"path": ".harness/runtime/hookserve.json"})
+        self.assertEqual(out.get("permissionDecision"), "deny")
+        self.assertIn("hookserve.json", out["permissionDecisionReason"])
+        for command in ("cat .harness/runtime/hookserve.json", "Get-Content .harness\\runtime\\hookserve.json", "python -c \"print(open('.harness/runtime/hookserve.json').read())\""):
+            self.assertEqual(self.term(command).get("permissionDecision"), "deny", command)
+
+
 class InterfaceAndWordsTests(ListedCase):
     """Items 10 to 15: the box of a batch, the refusal rows of Agent actions, the words of the buttons, the doctor row of Enter, the narrow page and the low items."""
 

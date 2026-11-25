@@ -98,6 +98,21 @@ def board_serve_file(root: Path) -> Path:
     return runtime_dir(root) / "board-serve.json"
 
 
+def hook_serve_file(root: Path) -> Path:
+    """Written by the board's hook service while it runs (`modules/task/hookserve.py`): its port and key. The gate refuses a read of it and a request to its port (1.8.53)."""
+    return runtime_dir(root) / "hookserve.json"
+
+
+def hook_serve_port(root: Path) -> int:
+    """The port of the hook service of this copy, or 0 when none runs. Never fails."""
+    try:
+        import json
+
+        return int(json.loads(hook_serve_file(root).read_text(encoding="utf-8"))["port"])
+    except Exception:  # noqa: BLE001 - no file or a broken one: nothing to guard
+        return 0
+
+
 def board_serve_port(root: Path) -> int:
     """The port of the board server of this copy, or 0 when none runs. Never fails."""
     try:

@@ -481,6 +481,8 @@
   "gate.task.outside": "任务 {task} 进行中，只能在任务目录 `{task}/` 里写，你要写的是 `{relative}`。笔记、RCA、设计和只读查询写在任务目录根下，只读检查放 `TEST/`；代码在计划批准后写在 `{task}/DEV/` 下：要 promote 的放 `DEV/<仓库名>/<路径>`，在服务器上跑的脚本放 `DEV/_server/<路径>`。",
   "gate.task.person_files": "`{relative}` 在任务 {task} 的 `REQ/`、`REF/` 或 `INBOX/` 里。那是用户给的材料，只读。要记笔记或写成果，写在任务目录 `{task}/` 根下。",
   "gate.board.request": "拒绝：这是在请求端口 {port} 上的看板服务，它的按钮只属于用户。不要调用它。看板上有要改的，告诉用户。",
+  "gate.hookserve.request": "已拒绝：这是在请求端口 {port} 上的 harness hook 服务。它替 gate 判断你的调用：不要调用它。觉得哪个调用判错了，告诉用户。",
+  "gate.hookserve.secret": "已拒绝：`.harness/runtime/hookserve.json` 存着替 gate 判断你的调用的 hook 服务的口令。永远不要读、打印或使用它。",
   "gate.super.refused": "已拒绝：super agent 只读和对话，不改任何东西。要操作，请用 board 上的按钮。",
   "gate.ask.refused": "已拒绝：这一轮是用户通过 board 发来的提问。只回答，不改任何东西。需要做事时，请说明：用户会发一条普通消息。",
   "gate.terminal.denied": "这条终端命令被拒绝：{why}。不要重试同类命令。需要时，停下来告诉用户原因，由用户自己运行。",

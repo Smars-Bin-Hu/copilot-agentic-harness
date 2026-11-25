@@ -6,9 +6,9 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Pattern, Tuple
 
-from core import config, messages, repo_paths, schema
+from core import config, guardrails, messages, procenv, repo_paths, schema
 from core.paths import policies_dir
-from core.guardrails import CORE_GUARDRAILS, HOME_FOLDER, ROOT_LEVEL_GUARDRAILS, admin_locked, guardrail_paths, home_folders, missing_core
+from core.guardrails import CORE_GUARDRAILS, HOME_FOLDER, PROGRAM_GUARDRAILS, ROOT_LEVEL_GUARDRAILS, ROOT_ONLY_GUARDRAILS, admin_locked, guardrail_paths, home_folders, missing_core
 
 POLICY_NAME = "gate"
 # Any `.git` folder (in a target repository or anywhere else) in a terminal command, with the spellings Windows treats as the same.
@@ -105,35 +105,69 @@ def diagnose(root: Path, error: BaseException) -> Tuple[str, str]:
     return f"{POLICY_NAME}.json", " ".join(str(error).split())[:200]
 
 
-ROOT_NAME = r"(?<![\w./\\-])(?:\./)?(?:{names})(?![\w.-])"  # a name at the root of the workspace, said bare or with `./`: `src/python` is not it
-
-
-def guard_pattern(paths: List[str]) -> str:
-    """The guardrail paths as one pattern over a terminal command (`{guard}` of a rule). The names that are files at the root (`python.exe`: `ROOT_LEVEL_GUARDRAILS`) are found only when said bare, so a folder `src/python` is not one."""
-    rooted = [item for item in paths if item in ROOT_LEVEL_GUARDRAILS]
+def guard_pattern(paths: List[str], roots: Optional[List[str]] = None) -> str:
+    """The guardrail paths as one pattern over a terminal command (`{guard}` of a rule). The names that are files at the root (`ROOT_LEVEL_GUARDRAILS`) are found as `core.guardrails` says: the programs (`python.exe`, ...)
+    in any folder, `python` and `python3` only where the root is meant (`./`, `../`, `$PWD/`, the full path of the workspace: `roots`), so a folder `src/python` is not one."""
+    programs = [item for item in paths if item in PROGRAM_GUARDRAILS]
+    rooted = [item for item in paths if item in ROOT_ONLY_GUARDRAILS]
     found = repo_paths.command_regex([item for item in paths if item not in ROOT_LEVEL_GUARDRAILS]).pattern
-    if not rooted:
+    more = ([guardrails.program_pattern(programs)] if programs else []) + ([guardrails.root_pattern(rooted, roots or [])] if rooted else [])
+    return "(?:" + "|".join([found] + more) + ")" if more else found
+
+
+ROOT_MOVE_WHY = {"en": "it moves, copies or links a file named like a program of Python into the root of the workspace", "zh": "它会把名字像 Python 程序的文件移到、复制或链接到工作区根目录"}
+
+
+def root_texts(root: Optional[Path]) -> List[str]:
+    """The root of the workspace as a command says it (normal form: `/` as separator), as given and as resolved. Nothing when the root is not known."""
+    found: List[str] = []
+    if root is None:
         return found
-    return "(?:" + found + "|" + ROOT_NAME.format(names="|".join(re.escape(item) for item in sorted(rooted, key=len, reverse=True))) + ")"
+    spelled = [str(root), procenv.realpath(str(root))]
+    for text in list(spelled):
+        if text.startswith(("/private/var/", "/private/tmp/", "/private/etc/")):
+            spelled.append(text[len("/private"):])  # macOS: `/var` is a link to `/private/var`; a command may say either
+    for text in spelled:
+        try:
+            item = repo_paths.normal(text)
+        except (OSError, ValueError):
+            continue
+        if item not in found and item.strip("/."):
+            found.append(item)
+    return found
+
+
+def root_move_patterns(paths: List[str], roots: Optional[List[str]] = None) -> List[str]:
+    """Patterns over a terminal command that moves, copies or links a file named `python` or `python3` (from any folder) INTO the root: `mv sub/python .`, `cp x/python3 ./`, `ln -s /opt/x/python $PWD`. The name is
+    then written in the root though the command never says it there. Where the folder is meant by `.` the command's own folder is taken for the root: a net (no cwd is known)."""
+    rooted = [item for item in paths if item in ROOT_ONLY_GUARDRAILS]
+    if not rooted:
+        return []
+    names = "|".join(re.escape(item) for item in sorted(rooted, key=len, reverse=True))
+    here = r"(?:\.{1,2}/?|" + guardrails.HERE + "/?" + "".join("|" + re.escape(item.rstrip("/")) + "/?" for item in (roots or []) if item.strip("/")) + ")"
+    return [COMMAND_PLACEHOLDER + r"(?:cp|mv|ln|install|rsync|ditto|copy|move|xcopy|copy-item|move-item|robocopy)\b[^;&|\n]*?(?<![\w.-])(?:" + names + r")" + guardrails.NAME_TAIL + r"[\"']?\s+[\"']?" + here + r"[\"']?(?=\s|$|[;&|])"]
 
 
 class Compiled:
     """The policy with its patterns compiled. Built once per hook call."""
 
-    def __init__(self, policy: Dict[str, Any], repos: Optional[List[Tuple[str, Path, List[str]]]] = None, admin: bool = False) -> None:
+    def __init__(self, policy: Dict[str, Any], repos: Optional[List[Tuple[str, Path, List[str]]]] = None, admin: bool = False, root: Optional[Path] = None) -> None:
         """`repos`: (name, path, refused_paths) of each target repository. Without them only the `.git` floor applies.
 
         `admin`: the session is in admin mode. Only the guardrails that stay closed for an admin count then.
+
+        `root`: the workspace. A command that names `python` by the full path of the root (`/work/x/python`) is the root's file (red team N3); without it only the relative ways are known.
         """
         self.paths = admin_locked(policy) if admin else guardrail_paths(policy)
         self.path_regexes: List[Tuple[str, Pattern[str]]] = [(item, repo_paths.glob_regex(item)) for item in self.paths]
         self.home = home_folders()  # (1.7.38, C13 FR2 11b) the folders outside the workspace that hold what the guardrails trust: closed in admin mode too
-        guard = guard_pattern(self.paths + [f"{HOME_FOLDER}/**"] + self.home)  # a command names the folder as `~/.copilot-harness/...`, `$HOME/...`, or by its full path
+        roots = root_texts(root)
+        guard = guard_pattern(self.paths + [f"{HOME_FOLDER}/**"] + self.home, roots)  # a command names the folder as `~/.copilot-harness/...`, `$HOME/...`, or by its full path
         self.guard_writes = [
             (re.compile(expand(rule["pattern"], guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"]
             if not rule.get("inline")  # the code of an inline script is read by `scriptcheck.py` for guardrail paths: it writes to one only when the target of a write is one (1.7.38, C13 FR2 3)
-        ]
+        ] + [(re.compile(expand(pattern, ""), re.IGNORECASE), messages.pick(ROOT_MOVE_WHY)) for pattern in root_move_patterns(self.paths, roots)]
         # Files only the CLI writes (a task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the reports). Same write patterns as for guardrail files.
         self.owned = list(policy.get("cli_owned_paths", []))
         self.owned_regexes: List[Tuple[str, Pattern[str]]] = [(item, repo_paths.glob_regex(item)) for item in self.owned]
@@ -175,10 +209,15 @@ class Compiled:
         return ""
 
     def guardrail_match(self, relative: str) -> str:
-        """The guardrail pattern a repo-relative path falls under, or an empty string."""
-        for pattern, regex in self.path_regexes:
-            if regex.match(relative):
-                return pattern
+        """The guardrail pattern a repo-relative path falls under, or an empty string. The path is read as written and as Windows reads it: no `::$DATA` stream, no trailing dots or spaces in a name (`python.exe.` is `python.exe`)."""
+        spellings = [relative]
+        windows = "/".join(repo_paths.windows_name(part) for part in relative.split("/"))
+        if windows != relative:
+            spellings.append(windows)
+        for spelled in spellings:
+            for pattern, regex in self.path_regexes:
+                if regex.match(spelled):
+                    return pattern
         return ""
 
     def owned_match(self, relative: str) -> str:

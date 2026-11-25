@@ -31,15 +31,19 @@ SHOWN = 90  # characters of the write that a refusal quotes
 SHELL_SUFFIXES = (".sh", ".bash", ".zsh", ".ps1", ".psm1", ".cmd", ".bat")
 
 
-def names_of(policy: Dict[str, Any], admin: bool = False) -> "re.Pattern[str]":
-    """The guardrail paths as one pattern over the text of a write target: each path of the policy without its `/**`, and the names that are always guarded (`EXTRA`). In an admin session only what stays closed there."""
+def names_of(policy: Dict[str, Any], admin: bool = False, roots: Optional[List[str]] = None) -> "re.Pattern[str]":
+    """The guardrail paths as one pattern over the text of a write target: each path of the policy without its `/**`, and the names that are always guarded (`EXTRA`). In an admin session only what stays closed there.
+    The programs at the root (`python.exe`...) are named in any folder, `python` and `python3` where the root is meant (`core.guardrails`); `roots` are the full paths of the workspace."""
     parts: List[str] = [] if admin else list(EXTRA[:2])
     parts += list(EXTRA[2:])
     exact: List[str] = [] if admin else list(EXACT)
     rooted: List[str] = []
+    programs: List[str] = []
     for path in (guardrails.admin_locked(policy or {}) if admin else guardrails.guardrail_paths(policy or {})):
         plain = re.sub(r"(?:/\*\*|/\*)$", "", str(path)).strip("/")
-        if plain in guardrails.ROOT_LEVEL_GUARDRAILS:
+        if plain in guardrails.PROGRAM_GUARDRAILS:
+            programs.append(plain)
+        elif plain in guardrails.ROOT_ONLY_GUARDRAILS:
             rooted.append(plain)
         elif plain and not plain.startswith(("*", "!")) and "*" not in plain:
             (parts if "/" in plain or plain.startswith(".") else exact).append(re.escape(plain).replace(r"\/", r"[\\/]+"))
@@ -47,8 +51,9 @@ def names_of(policy: Dict[str, Any], admin: bool = False) -> "re.Pattern[str]":
         parts.append(re.escape(folder).replace(r"\/", r"[\\/]+"))
     body = "(?:" + "|".join(parts) + ")(?![\\w-])" if parts else ""
     whole = "(?<![\\w.-])(?:" + "|".join(re.escape(item) for item in exact) + ")(?![\\w.-])" if exact else ""
-    root = r"(?<![\w./\\-])(?:\./)?(?:" + "|".join(re.escape(item) for item in sorted(rooted, key=len, reverse=True)) + r")(?![\w.-])" if rooted else ""  # files at the root of the workspace: not `src/python`
-    return re.compile("|".join(item for item in (body, whole, root) if item) or "(?!x)x", re.IGNORECASE)
+    root = guardrails.root_pattern(rooted, roots or []) if rooted else ""  # files at the root of the workspace: not `src/python`
+    program = guardrails.program_pattern(programs) if programs else ""
+    return re.compile("|".join(item for item in (body, whole, root, program) if item) or "(?!x)x", re.IGNORECASE)
 
 
 # --- reading a text: assignments, expressions, calls ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -400,12 +405,22 @@ def _is_shell_script(path: str, body: str) -> bool:
     return not first.startswith("#!") or bool(re.search(r"\b(?:ba|z|da|k|c)?sh\b|pwsh", first))
 
 
+def policy_roots(root: Any) -> List[str]:
+    """The workspace as a script may say it (normal form), for `names_of`."""
+    try:
+        from .policy import root_texts
+        from pathlib import Path
+        return root_texts(Path(str(root)))
+    except Exception:  # noqa: BLE001 - the relative ways stay
+        return []
+
+
 def refusal(command: str, root: Any, cwd: str, folder: Any, policy: Dict[str, Any], admin: bool = False) -> Optional[str]:
     """The words of the refusal when the line runs a script file or code that writes to a guardrail path; None when it runs none, or none such. In an admin session only what stays closed there counts. Never raises."""
     try:
         if not command.strip() or root is None:
             return None
-        names = names_of(policy, admin)
+        names = names_of(policy, admin, policy_roots(root))
         ctx = external._Ctx(root, cwd, hold=True, folder=folder, line=command)  # noqa: SLF001
         in_guard = False
         plain = shellwords.dialect(command, "power")  # a PowerShell escape in the line (`` .harness/eng`ine ``): the line is read with it taken away too (1.7.38, C13 FR3)

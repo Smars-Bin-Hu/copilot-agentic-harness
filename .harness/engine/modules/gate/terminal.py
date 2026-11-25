@@ -121,6 +121,10 @@ def _texts(command: str) -> List[str]:
         except Exception:  # noqa: BLE001 - the plain text is still checked
             moved = None
         out += [text, moved] if moved and moved != text else [text]
+    for text in list(out):  # the shell joins what is split by quotes (`py''thon.exe`, `.har"ness"`): the line is also read with the quote marks taken away (red team N3). The separators inside quotes were turned into spaces above
+        joined = text.replace("'", "").replace('"', "").replace("^", "")  # `^` is the escape of `cmd`
+        if joined != text and joined not in out:
+            out.append(joined)
     return out
 
 

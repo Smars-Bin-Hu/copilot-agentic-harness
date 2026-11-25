@@ -57,6 +57,7 @@ class Action:
     note: str = ""  # the statement that decided: the one the refuse list caught, or the first that is on no list (cut short)
     reason: str = ""  # zone "refuse": the type's reason for it, in the language of the session: tells the agent the right way
     option: str = ""  # zone "unpinned" (1.7.38, C13 F2): the option the type names the target with (`-S`), for the words that tell the agent the right way
+    blind: bool = False  # (1.8.51) zone "ask" because the gate did not see all the call does: a file it could not read, input it cannot see (stdin, SQLCMDINI), or words it cannot place (`-o` outside the task folder). An opened connection does not pass it
     via: str = ""  # zone "unpinned" (1.7.38, C13 FR 5): the connection the call was written for with `harness as <alias> --`: that gives its sign-in, not its server, so the words say how to write the server
 
     def facts(self) -> Dict[str, Any]:
@@ -724,7 +725,7 @@ def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: st
     read = inputfiles.read(system, args, ctx.root, ctx.folder, ctx.cwd, ctx.line or text)
     rest = inputfiles.verb_of_text(system, " ".join(lead + ([read.rest] if read else args)))  # the words that are no statement: the settings before the program (`SQLCMDINI=file`) and its options (`-o file`, `-q`)
     if read is None or not read.sources:  # the program reads what it is given on its input: nothing the gate sees
-        return Action(name, env, strict([rest, WRITE]), target, text, named=rest is not None, call=call, zone=statements.ASK)
+        return Action(name, env, strict([rest, WRITE]), target, text, named=rest is not None, call=call, zone=statements.ASK, blind=True)
     joined = " ; ".join(_kind_text(item) for item in read.items)
     label = inputfiles.strictest([inputfiles.verb_of_text(system, joined), rest])
     verdict = statements.judge(system, read.items)
@@ -738,7 +739,8 @@ def _by_lists(system: Dict[str, Any], name: str, env: str, target: str, text: st
     why = read.state  # "unread", "twice": a file the gate could not read, or may change before it runs
     if why or read.unsure or verdict.zone == statements.ASK or rest in (WRITE, EXEC):
         about = read.file if why else read.unsure or ((verdict.quote or verdict.statement) if verdict.zone == statements.ASK else read.rest)
-        return Action(name, env, strict([label, WRITE]), target, text, named=label is not None and not why, call=call, file=read.file if why else "", file_why=why, zone=statements.ASK, note=_short(about))
+        return Action(name, env, strict([label, WRITE]), target, text, named=label is not None and not why, call=call, file=read.file if why else "", file_why=why, zone=statements.ASK, note=_short(about),
+                      blind=bool(why or read.unsure or rest in (WRITE, EXEC)))
     if verdict.zone == statements.WRITE:
         return Action(name, env, strict([label, WRITE]), target, text, named=True, call=call, zone=statements.WRITE)
     if label == DESTROY:  # (C13 RE-A M6) the read list says read, the verbs say destroy: a read list that is too wide; the person decides

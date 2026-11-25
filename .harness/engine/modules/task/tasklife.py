@@ -566,11 +566,11 @@ def set_allow(root: Path, raw_task: str, name: str, on: bool, interactive: Optio
     if on:
         if not isinstance(system, dict):
             raise CommandError(say("task.allow.retired" if name in RETIRED_ENVS else "task.allow.unknown", name=name or "-", open=say("desk.outbox.open", name="...")))  # the label of the card's button, as the page draws it
-        scope = conn_scope(system)
-        if scope == outside.ITEMS:  # the connection opens as its linked items (ado)
+        why = outside.may_open_any(system)  # 1.8.51: a connection opens whole (every call passes); QAT and PROD only when declared read-only
+        if why and conn_scope(system) == outside.ITEMS:  # it cannot open whole, but its type opens the linked items (ado): the card's button for a linked item
             return dict(_set_allow_links(root, raw_task, True), conn=name)
-        if scope != outside.ALL:
-            raise CommandError(say("task.allow.no", name=name))
+        if why:
+            raise CommandError(say("task.allow.readonly" if why == "read-only" else "task.allow.no", name=name))
     with task_ops.locked(root, task) as data:
         task_ops.require_open(data)
         held = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
@@ -584,6 +584,42 @@ def set_allow(root: Path, raw_task: str, name: str, on: bool, interactive: Optio
             where = str(held.get(name, {}).get("env") or env or (system or {}).get("env") or "").lower() if on else str(env or "").lower()  # the scope: the environment it was opened for (F3 AP)
             task_ops.note(data, "allow-env", f"{name}{f' ({where})' if where and where != 'none' else ''}: {'on' if on else 'off'}", name=name, env=where if where != "none" else "")
     return {"task": task, "conn": name, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.conn.on" if on else "task.allow.conn.off", name=name)}
+
+
+def set_allow_set(root: Path, raw_task: str, names: List[str], interactive: Optional[bool] = None) -> Dict[str, Any]:
+    """(1.8.51) The Apply of the Open to the agent dialog: after it, exactly these connections are open for the task (the linked items keep their own switch). Every name is checked first, and nothing
+    changes when one cannot be opened; then the whole set is written under one lock, with a line in the task's record for each connection that changed."""
+    task_ops.person("task allow", interactive, typed=False)
+    from core import config, systems as outside
+
+    wanted = sorted({" ".join(str(name or "").split()).lower() for name in names or [] if str(name or "").strip()} - {LINKS})
+    systems = config.policy_or_empty(root, "tools").get("systems") or {}
+    task = task_ops.resolve(root, raw_task)
+    kept = tasks.read(root, task) or {}
+    already = set(kept.get(ALLOW_KEY) or {}) if isinstance(kept.get(ALLOW_KEY), dict) else set()
+    for name in [one for one in wanted if one not in already]:  # only what is newly ticked is checked: one opened before may stay as it is
+        system = systems.get(name)
+        if not isinstance(system, dict):
+            raise CommandError(say("task.allow.unknown", name=name, open=say("desk.outbox.open", name="...")))
+        why = outside.may_open_any(system)
+        if why:
+            raise CommandError(say("task.allow.readonly" if why == "read-only" else "task.allow.no", name=name))
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        held = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
+        gone = [name for name in sorted(held) if name not in wanted]
+        added = [name for name in wanted if name not in held]
+        for name in gone:
+            where = str((held.get(name) or {}).get("env") or "").lower()
+            held.pop(name, None)
+            task_ops.note(data, "allow-env", f"{name}{f' ({where})' if where and where != 'none' else ''}: off", name=name, env=where if where != "none" else "")
+        for name in added:
+            where = str((systems.get(name) or {}).get("env") or "").lower()
+            held[name] = {"at": utc_now(), "env": where}
+            task_ops.note(data, "allow-env", f"{name}{f' ({where})' if where and where != 'none' else ''}: on", name=name, env=where if where != "none" else "")
+        data[ALLOW_KEY] = held
+    return {"task": task, "open": sorted(held), "added": added, "closed": gone, "changed": bool(added or gone),
+            "next": say("task.allow.set", names=", ".join(sorted(held)) or "-")}
 
 
 def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:

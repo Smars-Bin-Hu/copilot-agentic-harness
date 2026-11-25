@@ -447,6 +447,13 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("在 120 秒超时后不再等 Hook：postToolUse 1, preToolUse 2。有 2 个调用没经过 gate", result.stdout)
 
+    def test_timeouts_of_hooks_that_decide_nothing_are_a_warning(self) -> None:
+        self.write_log([self.call()])
+        home = self.copilot_record([self.hook_end("postToolUse", 120), self.hook_end("userPromptSubmitted", 120), self.hook_end("preToolUse")])
+        result = self.doctor(COPILOT_HOME=str(home))
+        self.assertNotIn("[ERROR]", result.stdout)
+        self.assertIn("[WARN]  最近 1 个会话里，Copilot 在 120 秒超时后不再等 Hook：postToolUse 1, userPromptSubmitted 1。没有调用绕过 gate", result.stdout)
+
     def test_timeouts_under_an_older_shorter_limit_are_a_warning(self) -> None:
         self.write_log([self.call()])
         home = self.copilot_record([self.hook_end("preToolUse", 30)])

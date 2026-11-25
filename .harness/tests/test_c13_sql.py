@@ -58,12 +58,16 @@ class OpenedPassesTests(ShippedCase):
             self.runs(self.q(SERVER, sql))
         self.runs(f"{SERVER} -i {self.script(PROC, 'proc.sql')}")
 
-    def test_what_the_gate_cannot_see_still_waits_when_opened(self) -> None:
-        self.open_connection()
+    def test_what_the_gate_cannot_see_waits_when_closed_and_passes_when_opened(self) -> None:
+        body = "CREATE PROCEDURE dbo.p AS\nBEGIN\n  EXEC master..xp_cmdshell 'dir';\nEND\n"
         for sql in ("EXEC('SELECT 1')", "UPDATE dbo.t SET a = 1", "SELECT a INTO dbo.copy FROM dbo.t"):
             self.held(self.q(SERVER, sql))
-        body = "CREATE PROCEDURE dbo.p AS\nBEGIN\n  EXEC master..xp_cmdshell 'dir';\nEND\n"
+            self.assertEqual(self.classify(self.q(SERVER, sql))[0].zone, "ask", sql)
         self.held(f"{SERVER} -i {self.script(body, 'xp.sql')}")
+        self.open_connection()
+        for sql in ("EXEC('SELECT 1')", "UPDATE dbo.t SET a = 1", "SELECT a INTO dbo.copy FROM dbo.t"):
+            self.runs(self.q(SERVER, sql))  # 1.8.51: an opened connection passes every call but the refuse list
+        self.runs(f"{SERVER} -i {self.script(body, 'xp2.sql')}")
 
 
 class OtherEnvironmentsTests(ShippedCase):
@@ -110,21 +114,19 @@ class RetestHolesTests(ShippedCase):
                 self.assertNotEqual(self.answer(f'{server} {option} -Q "SELECT 1"'), "pass", option)
 
     def test_s2_a_batch_end_the_gate_does_not_know_makes_no_body(self) -> None:
-        self.open_connection()
-        for number, end in enumerate(("GO /* c */", "GO 1 /* c */", "go -- x")):
+        for number, end in enumerate(("GO /* c */", "GO 1 /* c */", "go -- x")):  # 1.8.51: judged closed: the statement after the end is on no list (an opened connection would pass it)
             body = "CREATE PROCEDURE dbo.p AS SELECT 1\n" + end + "\nEXEC('x')\n"
-            self.assertEqual(self.answer(f"{SERVER} -i {self.script(body, f'end{number}.sql')}"), "held", end)
+            self.assertEqual(self.classify(f"{SERVER} -i {self.script(body, f'end{number}.sql')}")[0].zone, "ask", end)
         other = self.script("CREATE PROCEDURE dbo.p AS SELECT 1\nXX\nEXEC('x')\n", "xx.sql")
         for option in ("-c XX", "-cXX", "--batch-terminator XX"):
-            self.assertEqual(self.answer(f"{SERVER} {option} -i {other}"), "held", option)
+            self.assertEqual(self.classify(f"{SERVER} {option} -i {other}")[0].zone, "ask", option)
         self.assertEqual(self.answer(f'{SERVER} -C -Q "SELECT 1"'), "pass", "-C (trust the certificate) is not -c")
 
     def test_s3_s4_and_a_read_carry_no_statement_on_the_next_line(self) -> None:
-        self.open_connection()
         for number, text in enumerate(("COMMIT RECONFIGURE", "BEGIN TRAN\nRECONFIGURE", "ROLLBACK SETUSER", "ALTER TABLE dbo.t ADD c int\nSELECT * INTO dbo.copy FROM dbo.t",
                      "CREATE TABLE dbo.t (a int)\nDISABLE TRIGGER tr ON dbo.x", "CREATE INDEX ix ON dbo.t (a)\nUSE master", "SELECT a INTO #t FROM dbo.t\nENABLE TRIGGER tr ON dbo.x",
                      "INSERT INTO dbo.t VALUES (1)\nDISABLE TRIGGER tr ON dbo.x", "UPDATE dbo.t SET a = 1 WHERE b = 2\nWRITETEXT dbo.t.c @p 'x'")):
-            self.assertEqual(self.answer(f"{SERVER} -i {self.script(text + chr(10), f'tail{number}.sql')}"), "held", text)
+            self.assertEqual(self.classify(f"{SERVER} -i {self.script(text + chr(10), f'tail{number}.sql')}")[0].zone, "ask", text)  # 1.8.51: judged closed (an opened connection passes it)
         self.assertEqual(self.answer(f"{QAT} -i {self.script('SELECT 1' + chr(10) + 'DISABLE TRIGGER tr ON dbo.x' + chr(10), 'readtail.sql')}"), "held", "a read with a write on the next line is no read")
 
     def test_m2_a_variable_set_twice_is_not_trusted(self) -> None:

@@ -216,14 +216,14 @@ class FileTests(ListedCase):
 
 
 class OpenedConnectionTests(ListedCase):
-    def test_an_opened_connection_passes_the_write_list_and_nothing_else(self) -> None:
+    def test_an_opened_connection_passes_every_call_and_a_closed_one_holds_what_is_off_the_lists(self) -> None:
+        for line in ('UPDATE dbo.orders SET status = 1', 'SELECT a INTO b FROM c', 'EXEC dbo.usp_load', 'UPDATE dbo.orders SET a = 1 WHERE id = 3; DELETE FROM dbo.orders'):
+            self.held(f'{SERVER} -Q "{line}"')  # 1.8.51: closed, as before
         self.open_connection()
         self.runs(f'{SERVER} -Q "UPDATE dbo.orders SET status = 1 WHERE id = 3"')
         self.runs(f'{SERVER} -Q "USE AcmeDW; INSERT INTO dbo.log SELECT 1"')
-        self.held(f'{SERVER} -Q "UPDATE dbo.orders SET status = 1"')  # no WHERE: on no list
-        self.held(f'{SERVER} -Q "SELECT a INTO b FROM c"')
-        self.held(f'{SERVER} -Q "EXEC dbo.usp_load"')
-        self.held(f'{SERVER} -Q "UPDATE dbo.orders SET a = 1 WHERE id = 3; DELETE FROM dbo.orders"')
+        for line in ('UPDATE dbo.orders SET status = 1', 'SELECT a INTO b FROM c', 'EXEC dbo.usp_load', 'UPDATE dbo.orders SET a = 1 WHERE id = 3; DELETE FROM dbo.orders'):
+            self.runs(f'{SERVER} -Q "{line}"')  # 1.8.51: opened, every call passes but the refuse list
 
     def test_an_opened_connection_never_lets_a_refused_statement_through(self) -> None:
         self.open_connection()
@@ -231,14 +231,15 @@ class OpenedConnectionTests(ListedCase):
         self.refused(f'{SERVER} -Q "EXEC(\'x\')"')
         self.refused(f"{SERVER} -i {self.script('UPDATE t SET a = 1 WHERE b = 2;' + chr(10) + ':connect prod' + chr(10), 'c.sql')}")
 
-    def test_an_opened_connection_never_lets_through_a_script_the_gate_could_not_read(self) -> None:
+    def test_an_opened_connection_passes_a_script_off_the_lists_but_not_one_it_could_not_read(self) -> None:
+        self.held(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql")  # closed: held
         self.open_connection()
         self.runs(f"{SERVER} -i {self.script('UPDATE t SET a = 1 WHERE b = 2;' + chr(10), 'w.sql')}")
-        self.held(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql")
-        self.held(f"{SERVER} -i {self.script(':listvar' + chr(10) + 'UPDATE t SET a = 1 WHERE b = 2;' + chr(10), 'o.sql')}")
+        self.assertEqual(self.term(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql").get("permissionDecision"), "deny")  # a file the gate cannot read still waits (on the same card): it may hide `!!` (review 2026-11-25)
+        self.runs(f"{SERVER} -i {self.script(':listvar' + chr(10) + 'UPDATE t SET a = 1 WHERE b = 2;' + chr(10), 'o.sql')}")
 
-    def test_the_card_of_a_call_the_opening_would_not_pass_offers_no_open(self) -> None:
-        self.assertNotIn(messages.text("desk.outbox.open", name="acmedw-dev"), self.held(f'{SERVER} -Q "SELECT a INTO b FROM c"'))
+    def test_the_card_of_a_held_call_offers_to_open_its_connection(self) -> None:
+        self.assertIn(messages.text("desk.outbox.open", name="acmedw-dev"), self.held(f'{SERVER} -Q "SELECT a INTO b FROM c"'))  # 1.8.51: opening passes it now
         self.assertIn(messages.text("desk.outbox.open", name="acmedw-dev"), self.held(f'{SERVER} -Q "UPDATE dbo.orders SET a = 1 WHERE id = 3"'))
 
 

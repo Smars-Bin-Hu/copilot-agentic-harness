@@ -120,7 +120,7 @@ class ScriptFileTests(TaskCase):
         self.open_connection()
         self.refused(f"{SERVER} -i {self.script('SELECT 1;' + chr(10) + '!! whoami' + chr(10), 'shell2.sql')}", f"{TASK}/DEV/_manual/shell2.sql")
         self.held(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql")  # a file it cannot read still waits for the person, opened or not
-        self.held(f"{SERVER} -i {self.script(':listvar' + chr(10) + 'SELECT 1;' + chr(10), 'onerr.sql')}")  # a sqlcmd line no list names: asks
+        self.assertEqual(self.term(f"{SERVER} -i {self.script(':listvar' + chr(10) + 'SELECT 1;' + chr(10), 'onerr.sql')}"), {})  # 1.8.51: a sqlcmd line no list names passes an opened connection
         self.assertEqual(self.term(f"{SERVER} -i {self.script(':setvar what orders' + chr(10) + 'SELECT * FROM dbo.$(what);' + chr(10), 'var.sql')}"), {}, "C13 SQL: the variable is filled in, and the read runs")
 
     def test_a_script_that_calls_a_procedure_is_an_exec_and_waits_in_dev(self) -> None:

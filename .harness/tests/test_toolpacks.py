@@ -1649,8 +1649,8 @@ class OpenRulesOfTheTypes(TaskCase):
         for name in ("acmedw-qat", "acmedw-prod", "dev"):
             with self.assertRaises(Exception, msg=name):
                 tasklife.set_allow(self.root, NAME, name, True, interactive=True)
-        self.assertEqual(tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)["env"], "links", "an items connection opens as its linked items")
-        self.assertTrue(self.data()["allow_links"])
+        self.assertIn("ado", tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)["open"], "1.8.51: a connection opens whole from the terminal and the pop; the card of a linked ticket opens the linked items")
+        self.assertFalse(self.data().get("allow_links"))
 
     def test_the_gate_lets_an_opened_connection_through_only_for_a_write_or_a_run_and_never_in_another_connection(self) -> None:
         from modules.task import tasklife
@@ -1759,11 +1759,12 @@ class OpenRulesOfTheTypes(TaskCase):
         self.assertEqual(self.term("ado comment 123 --text hi")["permissionDecision"], "deny")
         entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
         self.assertEqual(entry["offers"], [{"system": "ado", "env": "none", "scope": "items", "refs": ["ado:123"]}])
-        self.term("ado create --type Bug --title x")  # a new item: no opening covers it
+        self.term("ado create --type Bug --title x")  # a new item: the linked items do not cover it; 1.8.51: the whole connection does
         created = [item for item in approvals.pending(self.root, 10, file=approvals.ACTIONS) if "create" in item["command"]][0]
-        self.assertIsNone(created.get("offers"))
+        self.assertEqual(created.get("offers"), [{"system": "ado", "env": "none", "scope": "all"}])
         tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)
         self.assertEqual(self.term("ado comment 123 --text hi"), {})
+        self.assertEqual(self.term("ado comment 124 --text hi"), {}, "1.8.51: an opened connection passes a ticket the task does not name too")
 
     def test_a_company_that_lowers_ado_to_no_keeps_the_linked_items_held(self) -> None:
         from modules.task import tasklife

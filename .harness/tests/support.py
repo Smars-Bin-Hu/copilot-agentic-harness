@@ -115,10 +115,20 @@ def make_root(root: Path, with_registry: bool = True, with_policy: bool = True) 
         shutil.copytree(REPO / ".harness" / "contracts", root / ".harness" / "contracts")
 
 
+def join_board_tells() -> None:
+    """Wait for the boards' background "tell the agent" threads (`Board.tell_soon`) to end."""
+    import threading
+
+    for thread in threading.enumerate():
+        if thread.name == "board-tell":
+            thread.join(15)
+
+
 class HarnessTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self._temporary.cleanup)
+        self.addCleanup(join_board_tells)  # runs first: a board tells the agent in the background (1.8.55) and writes in the folder that goes next
         self.root = Path(self._temporary.name)
         make_root(self.root)
         # COPILOT_HOME: the report reads Copilot's own session record; a test must not read the real one of this machine

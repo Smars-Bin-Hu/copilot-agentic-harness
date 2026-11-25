@@ -258,6 +258,15 @@ def approved_for(root: Path, task: str) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: str(item.get("approved_at", "")))
 
 
+RAN_SHOW_S = 60  # (1.8.55) a call that ran is listed this long, for the card that counts down to say so
+
+
+def ran_for(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls of this task that ran in the last RAN_SHOW_S seconds after the person approved them or opened their connection (1.8.55)."""
+    minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+    return [item for item in approvals.ran_lately(root, RAN_SHOW_S, minutes, file=approvals.ACTIONS) if item.get("task") == task]
+
+
 class FileChanged(ValueError):
     """A file the call names is not what the person saw in View (1.7.38, C12 RB-N5): `files` are those that changed."""
 

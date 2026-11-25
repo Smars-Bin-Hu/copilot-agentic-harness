@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.8.51",
-  "released": "2026-11-24",
+  "version": "1.8.55",
+  "released": "2026-11-25",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -241,6 +241,7 @@
         ".harness/tests/test_chatrounds.py",
         ".harness/tests/test_chatstream.py",
         ".harness/tests/test_callmatch.py",
+        ".harness/tests/test_callrecord.py",
         ".harness/tests/test_taskfiles.py",
         ".harness/tests/test_deskscripts.py",
         ".harness/tests/test_taskinbox.py",
@@ -294,6 +295,7 @@
         ".harness/tests/test_connections.py",
         ".harness/tests/test_connlayers.py",
         ".harness/tests/test_open_connection.py",
+        ".harness/tests/test_open_pick.py",
         ".harness/tests/test_approval_wake.py",
         ".harness/tests/test_accept.py",
         ".harness/tests/test_c12_fb.py",

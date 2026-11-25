@@ -141,6 +141,7 @@ def run_approval_wait(root: Path, code: str, timeout: int = DEFAULT_TIMEOUT, clo
             if found is None:
                 raise CommandError(say("wait.approval.none", code=code))
             if found.get("state") != "pending":
+                approvals.heard(root, code, minutes, file=approvals.ACTIONS)  # 1.8.55: the board does not tell it again
                 return {"code": code, "seconds": int(clock() - started), **outbox.decided(found, minutes)}
             now = clock()
             if last_beat is None or now - last_beat >= beat:
@@ -152,6 +153,7 @@ def run_approval_wait(root: Path, code: str, timeout: int = DEFAULT_TIMEOUT, clo
             sleep(min(poll, left))  # the last sleep is what is left: the wait ends at the time that was asked, not a second before
         again = approvals.find(root, code, minutes, file=approvals.ACTIONS)  # the person may have decided in the last moment
         if again is not None and again.get("state") != "pending":
+            approvals.heard(root, code, minutes, file=approvals.ACTIONS)
             return {"code": code, "seconds": int(clock() - started), **outbox.decided(again, minutes)}
         approvals.wait_mark(root, code, "timeout", minutes, file=approvals.ACTIONS)
         return {"code": code, "approved": False, "state": "pending", "waiting": True, "seconds": timeout, "next": say("wait.approval.timeout", seconds=timeout, code=code)}

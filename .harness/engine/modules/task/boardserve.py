@@ -69,6 +69,7 @@ from core.paths import board_serve_file, board_serve_port, utc_now
 from core import company, programs as core_programs, reinstall, setup as core_setup, shortcmd, skillboard, wizard as core_wizard
 
 from . import chatrounds, testrecord
+from . import hookserve
 from . import kbview
 from . import bundlejob, setupjob
 from . import taskfileedit
@@ -135,7 +136,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept", "reopen"]}
+    return {"port": config.whole(found.get("port"), 8765), "hook_service": found.get("hook_service") is not False, "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close", "accept", "reopen"]}
 
 
 class Fallback(CommandError):
@@ -2930,6 +2931,16 @@ def stop_on_signal(board: Board) -> Callable[[], None]:
     return restore
 
 
+def measure_pace(root: Path, hooks: Optional[hookserve.HookService]) -> None:
+    """Measure how slow this computer is (`pace`), and tell the hook service, whose file holds the time a hook process waits for it, which grows with the factor."""
+    pace.measure_and_save(root)
+    if hooks is not None and hooks.server is not None:
+        try:
+            hooks.write()
+        except OSError:
+            pass
+
+
 def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,
           link: Optional[vslink.VsLink] = None) -> Dict[str, Any]:
     """Run until Ctrl+C. `opener`, `ready` and `link` exist for the tests: `ready` gets the server once it listens; `link`, a link made by hand (a fake host, or none)."""
@@ -2954,6 +2965,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     link.start()  # the thread only; the board does not wait for VS Code
     board.space.start()
     board.start_sweeper()  # a promoted task closes by itself, with no page open (1.7.38)
+    hooks = hookserve.HookService(root) if found["hook_service"] else None  # 1.8.50: the judging service for hook calls; started below, with the board listening, and stopped with it
     path = board_serve_file(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"port": board.port, "pid": os.getpid(), "started": utc_now()}), encoding="utf-8")
@@ -2963,7 +2975,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     serving = threading.Thread(target=server.serve_forever, name="board-serve", daemon=True)
     serving.start()  # 1.7.43: the page is answered as soon as the browser asks; before, the browser opened and waited until the terminal had said its lines
     if ready is None:
-        threading.Thread(target=pace.measure_and_save, args=(root,), name="pace", daemon=True).start()  # 1.8.15: how slow this computer is, for every time limit after it
+        threading.Thread(target=measure_pace, args=(root, hooks), name="pace", daemon=True).start()  # 1.8.15: how slow this computer is, for every time limit after it
         board.bundle_job.kick()  # (1.8.34) the recipe is there and the bundle is not: made in the background, once
         board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104); 1.7.43: before the browser is asked to open, not after
 
@@ -2991,6 +3003,8 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     reason = ""
     restore_signals = stop_on_signal(board)
+    if hooks is not None:
+        hooks.start()  # never raises: without it every hook process judges its own calls, as before
     try:
         filecache.enable()  # 1.8.25: a file read before is read again only when it changed (a task page read some 360 files every 3 s); off again in the finally below
         while serving.is_alive():
@@ -3000,6 +3014,8 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     except KeyboardInterrupt:
         pass
     finally:
+        if hooks is not None:
+            hooks.stop()  # first: a hook process then finds no service and judges itself
         server.shutdown()
         board.sweeping.set()
         board.runner.stop_all()

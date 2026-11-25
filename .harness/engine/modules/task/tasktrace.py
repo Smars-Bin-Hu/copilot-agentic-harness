@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import calls, config, copilot_events, redact
+from core import calls, config, copilot_events, postmatch, redact
 from core.logs import read_tail, session_log_path
 
 from . import callmatch, common, taskinsight
@@ -97,6 +97,10 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
             item["paths"] = [_path(path) for path in target.get("paths") or []]
             if event == "PostToolUseFailure":
                 item["error"] = _clip(row.get("error"))
+    for item in entries:  # a call the PostToolUse hook is not started for (`core/postmatch.py`: a skill, a web fetch, a rename) has no row for its end, and is not running: its start is all the log says. A failure still has its row (PostToolUseFailure has no matcher)
+        if item["kind"] == "tool" and item.get("ok") is None and not postmatch.matches(item["tool"]):
+            item["ok"] = True
+            item["end_unlogged"] = True
     if source:
         entries = [dict(item, source=source) for item in entries if item["kind"] != "prompt"]  # a subagent's prompt is the agent's call message, not the user
     cut = max(0, len(entries) - shown)

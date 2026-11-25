@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from core import ahp, clip, pace, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
+from core import ahp, clip, pace, company, config, govern, kbstd, messages, output, postmatch, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, safe_name, session_files
 from core.paths import board_serve_file, cli_command, hook_serve_file, logs_dir, policies_dir, python_command
 from core.registry import load_registry
@@ -35,6 +35,7 @@ BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
 MARKDOWN_LINK = re.compile(r"\]\(([^)\s]+)\)")
 SHOWN_BROKEN_LINKS = 5
 UNSEEN_SHOWN = 10
+UNMATCHED_SHOWN = 8  # the names a warning about the PostToolUse matcher says
 TOOL_KINDS = {"read", "edit", "create", "terminal", "search", "subagent", "mcp", "web", "skill", "meta", "ask"}
 INTERPRETER_SECONDS = 15
 RECENT_LOG_FILES = 20  # the hook self-check reads only the newest session logs
@@ -495,6 +496,65 @@ def interpreter_problems(entry: Dict[str, Any]) -> List[str]:
     return [say("doctor.hookcfg.shell_key", key=key) for key in SHELL_KEYS if key in entry]
 
 
+def matcher_problem(report: Report, name: str, event: str, entry: Dict[str, Any]) -> None:
+    """(hook speed) The `matcher` of an entry. Only PostToolUse may have one, and it is exactly what `core/postmatch.py` derives from tool_kinds.json: the tools something is done after. PreToolUse and the other events have none: the gate must
+    see every call. A PostToolUse entry with no matcher works, only slower (a process for every call, also for a skill or a web fetch): a warning. A different one is an error: a tool missing from it gets no post hook, and what is done after a
+    write, a command or a reviewer's answer is lost."""
+    given = postmatch.configured(entry)
+    if event.lower() != postmatch.EVENT.lower():
+        if "matcher" in entry:
+            report.error(say("doctor.hookcfg.matcher_other", name=name, event=event))
+        return
+    try:
+        wanted = postmatch.matcher()
+    except Exception as error:  # noqa: BLE001 - tool_kinds.json is checked by check_tool_kinds; this says only that the matcher cannot be compared
+        report.error(say("doctor.hookcfg.matcher_unknown", name=name, event=event, error=" ".join(str(error).split())[:200]))
+        return
+    if "matcher" not in entry:
+        report.warn(say("doctor.hookcfg.matcher_missing", name=name, event=event, matcher=wanted))
+    elif given != wanted:
+        report.error(say("doctor.hookcfg.matcher_wrong", name=name, event=event, got=given if given is not None else json.dumps(entry.get("matcher")), matcher=wanted))
+    else:
+        report.ok(say("doctor.hookcfg.matcher_ok", event=event, count=len(postmatch.names())))
+
+
+def configured_post_matcher(root: Path) -> Optional[str]:
+    """The `matcher` of the PostToolUse entry of the hook configuration, or None (no configuration, none readable, no matcher)."""
+    directory = root / ".github" / "hooks"
+    for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+        try:
+            for entry in config.read_json(path)["hooks"][postmatch.EVENT]:
+                found = postmatch.configured(entry)
+                if found:
+                    return found
+        except Exception:  # noqa: BLE001 - check_hook_config says what is wrong with the file
+            continue
+    return None
+
+
+def check_post_matcher(report: Report, root: Path, rows: Optional[List[Dict[str, Any]]] = None) -> None:
+    """(hook speed) A PreToolUse row of the hook log whose tool is of a kind something is done after, but whose name the `matcher` of PostToolUse does not match: the post hook is not started for it, so what is done after it is lost
+    (a new tool name that the matcher does not list yet). The names are said. No matcher, or none that is a valid expression: nothing to compare (check_hook_config says the latter)."""
+    try:
+        text = configured_post_matcher(root)
+        if not text:
+            return
+        pattern = re.compile(text)
+        kinds = set(postmatch.kinds())
+        found = recent_calls(root) if rows is None else rows
+    except Exception:  # noqa: BLE001 - a log that cannot be read is check_hook_activity's to say
+        return
+    counts: Dict[str, int] = {}
+    for row in found:
+        name = row.get("tool_name")
+        if row.get("event") == "PreToolUse" and row.get("tool_kind") in kinds and isinstance(name, str) and name and not pattern.search(name):
+            counts[name] = counts.get(name, 0) + 1
+    if counts:
+        shown = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        names = ", ".join(f"{name} ({count})" for name, count in shown[:UNMATCHED_SHOWN]) + (f" (+{len(shown) - UNMATCHED_SHOWN} more)" if len(shown) > UNMATCHED_SHOWN else "")
+        report.warn(say("doctor.hook.post_unmatched", names=names, matcher=postmatch.matcher()))
+
+
 def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> None:
     directory = root / ".github" / "hooks"
     configs = sorted(directory.glob("*.json")) if directory.is_dir() else []
@@ -522,6 +582,7 @@ def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> N
                     report.error(say("doctor.hookcfg.wrong_entry", name=path.name, event=event, entry=f"exec {HOOK_EXEC} {' '.join(HOOK_ARGS)}, cwd ."))
                 for problem in interpreter_problems(entry):
                     report.error(say("doctor.hookcfg.problem", name=path.name, event=event, problem=problem))
+                matcher_problem(report, path.name, event, entry)
     needed: Set[str] = set(TRACKED_EVENTS)
     for name, entry in registry["modules"].items():
         if entry["enabled"] and entry["status"] != "retired":
@@ -1258,7 +1319,7 @@ def check_integrity(report: Report, root: Path) -> None:
 
 PROGRESS = "HARNESS_DOCTOR_PROGRESS"  # set by the board (1.7.43): each step is told on stderr as it starts, for the Enter screen's progress bar
 PROGRESS_MARK = "harness-doctor-step"
-STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_start', 'messages', 'hook_activity', 'hook_timeouts', 'hook_python', 'hook_service', 'hook_client_trace', 'hooks_ran', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
+STEPS = ('python', 'interpreter', 'short_command', 'files', 'tool_kinds', 'hook_config', 'hook_matcher', 'hook_start', 'messages', 'hook_activity', 'hook_timeouts', 'hook_python', 'hook_service', 'hook_client_trace', 'hooks_ran', 'agents', 'logs', 'unseen', 'overrides', 'output', 'user', 'targets', 'location', 'knowledge_base', 'skills', 'company', 'toolpacks', 'integrity', 'standards', 'task_names', 'optional_packages', 'vscode', 'systems', 'modules')
 
 
 def tick(name: str) -> None:
@@ -1308,6 +1369,8 @@ def run(root: Path, accept: bool = False) -> int:
     check_tool_kinds(report)
     tick('check_hook_config')
     check_hook_config(report, root, registry)
+    tick('check_hook_matcher')
+    check_post_matcher(report, root)
     tick('check_hook_start')
     check_hook_start(report, root)
     tick('check_messages')

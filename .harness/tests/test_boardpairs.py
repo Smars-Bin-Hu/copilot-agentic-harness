@@ -148,7 +148,7 @@ class ServedTests(test_boardserve.ServeCase):
 
     def test_every_endpoint_but_the_reads_refuses_an_unpaired_browser(self) -> None:
         # review 1 of 1.8.11: every POST path of the server, not a sample; a new path that acts must be refused too, or named here as a read
-        reads = {"/api/pair", "/api/reopen", "/api/status", "/api/ready", "/api/live", "/api/board", "/api/desk", "/api/file", "/api/super", "/api/super/history", "/api/super/talk", "/api/wall"}
+        reads = {"/api/pair", "/api/reopen", "/api/status", "/api/ready", "/api/live", "/api/board", "/api/desk", "/api/file", "/api/super", "/api/super/history", "/api/super/talk", "/api/super/pulse", "/api/wall"}  # /api/super/pulse (1.8.47): a mark of the bound chats from memory, a read
         source = Path(boardserve.__file__).read_text(encoding="utf-8")
         handler = source[source.index("def do_POST"):]
         paths = set()

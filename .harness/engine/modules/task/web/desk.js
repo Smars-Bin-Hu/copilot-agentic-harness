@@ -95,7 +95,7 @@
     if (tab === "todo" || tab === "log" || tab === "req") return Boolean(doc(FILES[tab]));
     if (tab === "scripts") return Boolean(desk.scripts);  // the scripts run on a server and the check scripts (1.8.9)
     if (tab === "test") return Boolean(desk.test);
-    if (tab === "evidence") return Boolean(desk.evidence && desk.evidence.length);  // the saved runs of the task (1.7.3), a tab of Results (1.7.9)
+    if (tab === "evidence") return Boolean((desk.evidence && desk.evidence.length) || (desk.calls && desk.calls.length));  // Runs: the saved runs of the task (1.7.3) and the calls to outside systems that wrote or ran (callrecord.py)
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0 || Boolean(desk.review.after && !desk.past);
     if (tab === "files") return desk.files.length > 0;
     if (tab === "trace") return Boolean(desk.trace && desk.trace.entries.length);
@@ -1590,7 +1590,7 @@
     if (tab === "changes") return {name, count: desk.changes.files.length ? String(desk.changes.files.length) : "", bang: Boolean(desk.commit && !desk.commit.written) || (mine && desk.waiting_why === "promote")};
     if (tab === "scripts") return {name, count: String(desk.scripts.dev.length + desk.scripts.test.length)};
     if (tab === "test") return {name, count: desk.test.passed + "/" + desk.test.total};
-    if (tab === "evidence") return {name, count: String(desk.evidence.length)};
+    if (tab === "evidence") return {name, count: String(desk.evidence.length + (desk.calls || []).length)};
     if (tab === "review") {
       const r = desk.review, later = !desk.past && r.after;
       return {name, count: r.n ? r.passes + "/" + r.n : later && later.n ? later.passes + "/" + later.n : String(r.rounds.length + (later ? later.rounds.length : 0))};
@@ -2060,6 +2060,9 @@
 
   // The Scripts tab: the files to run on DEV and the read-only checks. A file opens in place in the viewer of the Files tab (fileView), with its Copy button.
   let scriptOpen = "";
+  // What the rows of the calls (callrows.js) take from this page.
+  const callCtx = () => ({task: desk.name, served: served(), command: stepCommand, output: outputPane, redraw: () => draw(true),
+    evChip: (id) => { const chip = evChip(id); chip.addEventListener("click", (event) => event.preventDefault()); return chip; }});
   function scriptsTab() {
     const mark = {new: "create", changed: "modify"};
     const section = (key, items) => {
@@ -2067,12 +2070,14 @@
       const rows = items.map((item) => {
         const on = item.path === scriptOpen;
         const tag = mark[item.mark] ? h("span", {class: "tag fmark " + mark[item.mark]}, markText()[mark[item.mark]]) : null;
-        const button = h("button", {type: "button", class: "file script-row" + (on ? " on" : ""), "aria-expanded": on ? "true" : "false", title: item.path}, h("span", {class: "script-path"}, item.path), h("span", {class: "sub"}, size(item.size)), tag, key === "dev" ? ranMark(item.runs) : null);
+        const stale = key === "dev" && item.runs.length && item.runs[item.runs.length - 1].script_changed ? h("span", {class: "tag", title: t("desk.scripts.stale.tip", {at: when(item.runs[item.runs.length - 1].at, 0, 16)})}, t("desk.scripts.stale")) : null;
+        const button = h("button", {type: "button", class: "file script-row" + (on ? " on" : ""), "aria-expanded": on ? "true" : "false", title: item.path}, h("span", {class: "script-path"}, item.path), h("span", {class: "sub"}, size(item.size)), tag, key === "dev" ? [ranMark(item.runs), CALLROWS.last(item.runs), stale] : null);
         button.addEventListener("click", () => { scriptOpen = on ? "" : item.path; draw(true); });
         if (!on) return button;
         const known = desk.files.find((file) => file.path === item.path) || {path: item.path, size: item.size, kind: "text"};
         fileLoad(known);
-        return [button, h("div", {class: "script-view"}, fileView(known))];
+        const runs = key === "dev" ? h("div", {class: "cr-runs"}, h("div", {class: "cr-sub"}, t("desk.scripts.runs"), " ", h("span", {class: "sub"}, String(item.runs.length))), item.runs.length ? CALLROWS.list(item.runs, callCtx()) : h("p", {class: "sub cr-zero"}, t("desk.scripts.norun.tip"))) : null;
+        return [button, h("div", {class: "script-view"}, runs, key === "dev" ? h("div", {class: "cr-sub"}, t("desk.scripts.script"), stale ? h("span", {class: "sub"}, t("desk.scripts.script.now")) : null) : null, fileView(known))];
       });
       return h("section", {class: "scripts-sec"}, h("h3", {class: "scripts-h", title: key === "dev" ? t("desk.scripts.dev.tip") : t("desk.scripts.test.tip")}, key === "dev" ? t("desk.scripts.dev") : t("desk.scripts.test"), " ", h("span", {class: "sub"}, String(items.length))), rows);
     };
@@ -2162,8 +2167,9 @@
         h("td", {class: "sub"}, item.at ? item.at.slice(0, 16).replace("T", " ") : ""), h("td", {class: "sub"}, item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})),
         h("td", {class: "sub"}, cited), h("td", {class: "ev-tools"}, window_, " ", file));
     });
-    return h("div", {class: "evidence"}, h("p", {class: "hint top"}, t("desk.evidence.hint")),
-      h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.leave")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")), h("th", null))), h("tbody", null, rows))));
+    const saved = h("section", {class: "cr-sec"}, h("h3", {class: "cr-h"}, t("desk.evidence.saved"), " ", h("span", {class: "tk-n"}, String(desk.evidence.length))), desk.evidence.length ? [h("p", {class: "hint top"}, t("desk.evidence.hint")),
+      h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.leave")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")), h("th", null))), h("tbody", null, rows)))] : h("p", {class: "sub cr-zero"}, t("desk.evidence.zero")));
+    return h("div", {class: "evidence"}, saved, CALLROWS.section(desk.calls || [], callCtx()));
   }
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and
@@ -2798,7 +2804,7 @@
     if (!runs || !runs.length) return null;
     const last = runs[runs.length - 1];
     const lines = runs.map((run) => when(run.at, 0, 16) + " \u00b7 " + [run.system, run.env].filter(Boolean).join(" ") + (run.code ? " \u00b7 " + t("desk.scripts.ran.code", {code: run.code}) : run.how ? " \u00b7 " + run.how : ""));
-    return h("span", {class: "tag good", title: t("desk.scripts.ran.tip") + "\n" + lines.join("\n")}, t(runs.length === 1 ? "desk.scripts.ran.one" : "desk.scripts.ran", {env: last.env || last.system || "", n: runs.length}));
+    return h("span", {class: "tag", title: t("desk.scripts.ran.tip") + "\n" + lines.join("\n")}, t(runs.length === 1 ? "desk.scripts.ran.one" : "desk.scripts.ran", {env: last.env || last.system || "", n: runs.length}));
   }
 
   function body() {

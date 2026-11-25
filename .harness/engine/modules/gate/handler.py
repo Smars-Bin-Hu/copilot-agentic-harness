@@ -827,7 +827,7 @@ def _handle_call(event: HookEvent, ctx: Context, policy: dict, compiled: Compile
         if judged and (judged["passes"] or judged["approved"]) and not (decided and decided.permission == "deny"):
             data = _open_task(ctx)
             if data:  # the call goes through now: the task keeps what let it through, so a run the agent records can say it (core.calls, 1.7.9)
-                calls.note(ctx.root, data["task"], event.command, judged["action"].system, judged["action"].env, judged["action"].verb, judged.get("how", ""), judged.get("code", ""))
+                calls.note(ctx.root, data["task"], event.command, judged["action"].system, judged["action"].env, judged["action"].verb, judged.get("how", ""), judged.get("code", ""), floor=not judged["action"].named)
         return decided
     if not event.paths:
         return Decision(permission="deny", reason=rules.write_no_path(event.tool_name), facts={"kind": "write-no-path"})

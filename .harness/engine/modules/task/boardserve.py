@@ -80,7 +80,7 @@ from . import wallpaper
 from . import superbrain, superdirect, superfacts, superpreview, superroute, superview, taskreopen
 from . import accept, autorun, boardpairs, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
-from . import perfreview, reachcheck
+from . import callrecord, perfreview, reachcheck
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -853,6 +853,8 @@ class Board:
         The commands the buttons would copy and the link to the time-and-usage page mean nothing away from this board: they are left out."""
         found = self.desk(name)
         found["actions"], found["report"] = [], ""
+        script_runs = [run for item in (found.get("scripts") or {}).get("dev") or [] for run in item.get("runs") or []]
+        callrecord.with_outputs(self.root, found["task"], list({id(row): row for row in (found.get("calls") or []) + script_runs}.values()))  # a saved copy asks no server: each call takes its output along, cut short
         taskfiles.embed(self.root, found["task"], found["files"])
         for item in found["files"]:  # a picture of the Files tab comes in as its own bytes
             if item["kind"] == "image":
@@ -2729,6 +2731,16 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/callrecord":  # the command and the output of one call to an outside system, when the person opens its row (Runs, Scripts). What a server answered is for the paired browser only, as the rounds of the chat are
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                found = None
+                try:
+                    row = taskdesk.row_of(board.root, str(data.get("task", "")))
+                    found = callrecord.detail(board.root, row["task"], str(data.get("id", ""))[:40]) if row else None
+                except Exception:  # noqa: BLE001 - the page keeps what it shows
+                    found = None
+                return self.answer(200, {"call": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
             if path == "/api/file":  # one file of the Files tab, when the person opens it
                 found = None
                 try:

@@ -1,0 +1,68 @@
+/* The rows of the calls to outside systems (callrows.js): the Runs tab and the runs of a script on the Scripts tab. One row is one call: how it ended, what it did, where, what let it through. */
+.cr-sec{margin:0 0 22px;min-width:0}
+.cr-h{display:flex;align-items:baseline;gap:8px;font-size:14px;margin:0 0 8px}
+.pane h3.cr-h{margin:0 0 8px}
+.cr-h[title]{cursor:help}
+.cr-zero{margin:0}
+.cr-filters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.cr-filters .chip{height:24px;font-size:12px;padding:0 10px;gap:5px}
+.cr-filters .chip .tk-n{font-size:11.5px}
+.cr-filters .chip.on .tk-n{color:inherit}
+.cr-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;container:cr/inline-size;min-width:0}
+.cr-list>li+li{border-top:1px solid var(--line)}
+.cr-row{min-width:0}
+.cr-line{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 10px;font-size:13px;line-height:20px;cursor:pointer;list-style:none}
+.cr-line::-webkit-details-marker{display:none}
+.cr-line:hover,.cr-row[open]>.cr-line{background:var(--hover)}
+.cr-dot{flex:none;width:8px;height:8px;border-radius:50%;box-sizing:border-box}
+.cr-dot.ok{background:var(--good-dot)}
+.cr-dot.failed{background:var(--bad)}
+.cr-dot.running{background:var(--run);animation:stlive 2.4s ease-in-out infinite}
+.cr-dot.unknown{background:transparent;border:1.5px solid var(--soft)}
+html.lite .cr-dot.running{animation:none}@media (prefers-reduced-motion:reduce){.cr-dot.running{animation:none}}
+.cr-verb{flex:none;position:relative;display:inline-flex;align-items:center;width:22px;color:var(--hot);cursor:help}
+.cr-verb svg{flex:none;width:14px;height:14px}
+.cr-verb.read{color:var(--soft)}
+.cr-verb.destroy{color:var(--bad)}
+.cr-verb.floor b{position:absolute;right:0;top:-4px;font-size:10px;font-weight:700;line-height:1}
+.cr-sys{flex:none;max-width:16ch;overflow:hidden;text-overflow:ellipsis;font-weight:550;white-space:nowrap;margin-left:2px}
+.cr-env{flex:none;max-width:10ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 6px;border:1px solid var(--line2);border-radius:5px;font:11px/16px var(--mono);color:var(--soft);text-transform:uppercase}
+.cr-cmd{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px/20px var(--mono);color:var(--soft);background:none;border:0;padding:0}
+.cr-line:hover .cr-cmd{color:var(--ink)}
+.cr-tail{flex:none;display:inline-flex;align-items:center;gap:8px}
+.cr-how{display:inline-flex;align-items:center;gap:4px;cursor:help}
+.cr-how svg{flex:none;width:12px;height:12px}
+.cr-how.you{background:var(--good-bg);color:var(--good);font-weight:600}
+.cr-tail .ev{height:20px}
+.cr-dur,.cr-at{flex:none;font-size:12px;color:var(--soft);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.cr-dur{min-width:4.2em}.cr-dur.run{color:var(--run)}
+.cr-at{min-width:5.6em}
+.cr-destroy .cr-sys{color:var(--bad)}
+.cr-body{padding:2px 12px 12px 58px;min-width:0}
+.cr-body .step-cmd pre.code{white-space:pre-wrap;overflow-wrap:anywhere;max-height:14em;overflow:auto}
+.cr-body>p{margin:6px 0}
+.cr-exit{margin-left:4px;font-family:var(--mono);font-size:11.5px}
+.cr-none{padding:8px 10px;border:1px dashed var(--line2);border-radius:8px}
+.evidence tr.cr-flash td{animation:crflash 1.6s ease-out}
+@keyframes crflash{0%,30%{background:var(--good-bg)}100%{background:transparent}}
+.cr-older{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:8px 0 0 10px;font-size:12px;color:var(--soft)}
+.cr-older::after{content:"";flex:1;min-width:24px;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+.cr-older-btn{padding:2px 0;border:0;background:none;color:var(--soft);font:inherit;font-size:12px;cursor:pointer}
+.cr-older-btn::before{content:"\2193";margin-right:6px}
+.cr-older-btn:hover{color:var(--ink);text-decoration:underline}
+/* The Scripts tab: the result of a script's last run on its row, and the runs over the script. */
+.cr-last{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;white-space:nowrap}
+.cr-last.ok{color:var(--good)}.cr-last.failed{color:var(--bad)}.cr-last.running{color:var(--run)}.cr-last.unknown{color:var(--soft)}
+.cr-norun{font-size:12.5px;color:var(--soft);white-space:nowrap}
+.cr-runs{margin:8px 0 14px}
+.cr-sub{display:flex;align-items:baseline;gap:8px;margin:10px 0 6px;font-size:13px;font-weight:600}
+.cr-sub .sub{font-weight:400}
+/* Narrow (a split task page, a phone): line 1 keeps result, verb, system, environment and time; the command and the tail go under it. */
+@container cr (max-width:620px){
+  .cr-line{flex-wrap:wrap;row-gap:2px}
+  .cr-at{order:5;margin-left:auto}
+  .cr-cmd{order:10;flex:1 1 100%;padding-left:48px}
+  .cr-tail{order:11;flex-wrap:wrap;padding-left:48px;gap:6px}
+  .cr-dur{min-width:0;text-align:left}
+  .cr-body{padding-left:12px}
+}

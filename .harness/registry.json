@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.8.53",
+  "version": "1.8.54",
   "released": "2026-11-25",
   "copyright": "Smars Hu",
   "contributors": [
@@ -241,6 +241,7 @@
         ".harness/tests/test_chatrounds.py",
         ".harness/tests/test_chatstream.py",
         ".harness/tests/test_callmatch.py",
+        ".harness/tests/test_callrecord.py",
         ".harness/tests/test_taskfiles.py",
         ".harness/tests/test_deskscripts.py",
         ".harness/tests/test_taskinbox.py",

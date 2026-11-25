@@ -15,7 +15,7 @@ from core import systems as outside
 from core import approval, calls, config, messages, outbox, pinfiles, tasks
 from core.paths import cli_command, utc_now
 
-from . import accept, autorun, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, taskreopen, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
+from . import accept, autorun, callrecord, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, taskreopen, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
 from . import steps as step_parts
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
@@ -452,21 +452,13 @@ def promote_stamp(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"state": record["state"], "at": str(record.get("at") or ""), "branch": str(record.get("branch") or ""), "approved_at": str(record.get("approved_at") or ""), "code": approval.code_of(digest) if digest else ""}
 
 
-def server_runs(root: Path, task: str, paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
-    """1.8.16: for each script of `DEV/_server/`, the calls the gate let through that named it (`.task/calls.jsonl`): `{at, system, env, how, code}`, oldest first.
-    A call names a script when its command holds the script's path under the task folder or its file name as a word of its own. A run before 1.7.9 left no line."""
-    try:
-        found = calls.read(root, task)
-    except Exception:  # noqa: BLE001 - the tab shows the scripts anyway
-        return {}
+def server_runs(rows: List[Dict[str, Any]], paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """1.8.16: for each script of `DEV/_server/`, the calls the gate let through that named it, oldest first: the rows of `callrecord.listing` (the call, what let it through, how it ended).
+    A call names a script when its command holds the script's file name as a word of its own. A run before 1.7.9 left no line."""
     out: Dict[str, List[Dict[str, Any]]] = {}
-    for path in paths:
-        name = path.rsplit("/", 1)[-1]
-        pattern = re.compile(r"(?:^|[\\/\s\"'=])" + re.escape(name) + r"(?:$|[\s\"';])")
-        runs = [{"at": str(line.get("at") or ""), "system": str(line.get("system") or ""), "env": str(line.get("env") or ""), "how": str(line.get("how") or ""), "code": str(line.get("code") or "")}
-                for line in found if isinstance(line, dict) and pattern.search(str(line.get("command") or ""))]
-        if runs:
-            out[path] = runs
+    for row in rows:
+        if row.get("script") in paths:
+            out.setdefault(row["script"], []).append(row)
     return out
 
 
@@ -666,6 +658,8 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
     review, events = reviews(root, task, data), history(data)
     listed, changes_view = taskfiles.listing(root, task), changed(root, task, data)
     systems, is_open = tools_systems(root), row.get("status") == "open"
+    saved_runs = evidence.listing(root, task)
+    call_rows = callrecord.listing(root, task, saved_runs)  # the calls to outside systems with how each ended: the Runs tab lists those that wrote or ran, the Scripts tab every run of a script
     return {
         "name": name, "task": task, "title": row.get("title") or "", "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "state": row.get("state", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
@@ -678,7 +672,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view, server_runs(root, task, [item["path"] for item in listed if item["path"].startswith(tasks.DEV_NAME + "/") and tasks.is_manual(item["path"].split("/", 1)[-1])])), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task, systems), "outbox": outbox_view(root, task, systems) if is_open else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task, systems) if is_open else [], "opened": opened_view(root, task, systems) if is_open else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view, server_runs(call_rows, [item["path"] for item in listed if item["path"].startswith(tasks.DEV_NAME + "/") and tasks.is_manual(item["path"].split("/", 1)[-1])])), "evidence": saved_runs, "calls": [item for item in call_rows if item["listed"]], "allow": allow_view(root, data, task, systems), "outbox": outbox_view(root, task, systems) if is_open else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task, systems) if is_open else [], "opened": opened_view(root, task, systems) if is_open else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "req_approval": req_approval(root, task, data), "promote_stamp": promote_stamp(data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"),
         "plan_after_req": row.get("waiting_why") == "req" and bool(tasks.plan_digest(root, task)) and not tasks.plan_approved(root, task, data), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),  # plan_after_req (1.8.49): the plan is written and comes after the requirement
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),

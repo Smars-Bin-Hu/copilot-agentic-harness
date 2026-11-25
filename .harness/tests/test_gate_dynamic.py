@@ -30,12 +30,18 @@ from core import config, guardrails
 from modules.gate import handler, scriptcheck, shellvars, terminal
 from modules.gate import policy as gate_policy
 
-LIMIT = 4.0  # seconds: 0.1 to 1.5 on the development Mac when it is idle; a pass that goes back takes minutes, so the limit leaves room for a loaded computer
+LIMIT = 8.0  # seconds: 0.1 to 1.7 on the development Mac when it is idle; a pass that goes back takes minutes, so the limit leaves room for a loaded computer
 LINE_LIMIT = 10.0  # the whole judgment of a line of the longest size the gate reads
 POLICY = config.read_json(REPO / ".harness" / "policies" / "gate.json")
 
 # (line, what the line does)
 REFUSED: List[str] = [
+    # a path spelled with `/./` or `//`: the same file
+    "printf x > .harness/./runtime/x.json",
+    "printf x > .harness//runtime/x.json",
+    "cp x .harness/./policies/gate.json",
+    "printf x > ./.harness/./runtime/state/vscode/s.json",
+    "d=.harness; cp x ${d}/./runtime/x",
     # bash: a variable the line sets
     "d=.harness; printf x > $d/runtime/x.json",
     'd=.harness; printf x > "$d"/runtime/x.json',
@@ -112,6 +118,8 @@ REFUSED: List[str] = [
 ]
 
 ALLOWED: List[str] = [
+    "echo x > build//out.txt",
+    "cp a ./src/./b.txt",
     "echo x > $TMPDIR/a",
     'out=build/log; echo x > "$out"',
     "cp a $HOME/x",

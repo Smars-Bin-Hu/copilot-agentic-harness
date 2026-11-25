@@ -15,7 +15,7 @@
 The rule for a search that names no folder and no glob (the whole workspace, which is what Grep does by default): it passes. The search tools skip what `.gitignore` lists, and `.harness/runtime/` and `.harness/.env` are listed there.
 A search that aims at the folder (`.harness`, `.harness/runtime`), or at a glob that matches the file (`**/*.json`, `.harness/**`, `**/hookserve*`), or that asks for the ignored files too (`includeIgnoredFiles`), is refused.
 
-THE ACCEPTED LIMIT: a recursive search of the whole workspace from the terminal (`grep -r key .`, `rg -u key`, `find . -type f | xargs cat`) is not refused: the command names no folder of the harness, and what it would
+THE ACCEPTED LIMIT: a recursive search of the whole workspace or of `.harness` whole from the terminal (`grep -r key .`, `grep -r key .harness`, `rg -u key`, `find . -type f | xargs cat`) is not refused: the command names no folder of the harness, and what it would
 read is what the shell can reach anyway. It is a net, like the rest of `check_secrets`: the key lets a process on this computer ask the hook service, and the service's own checks (the nonce, the record, `harness doctor`)
 are the other half. A key alone does not make a forged call possible (the service judges with its own state); it lets the agent ask the real service, as running `launch.py` with a made-up payload already could at the base.
 
@@ -568,8 +568,8 @@ def command_kind(command: str) -> str:
                     return "hookserve"
                 if env and reading["all"]:
                     return "env"
-                if (folder and reading["all"]) or (harness and reading["files"]):
-                    return "hookserve"
+                if folder and reading["all"]:
+                    return "hookserve"  # `.harness` whole (`grep -r x .harness`, `cp -r .harness b`) is read like `.` from the root: the accepted limit at the top of this file (refusing it guarded nothing that `grep -r x .` does not reach, and held everyday searches)
     except Exception:  # noqa: BLE001 - a command that cannot be read is judged by the rest of the gate
         return ""
     return ""

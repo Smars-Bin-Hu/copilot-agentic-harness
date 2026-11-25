@@ -117,7 +117,6 @@ def guard_pattern(paths: List[str], roots: Optional[List[str]] = None) -> str:
     return "(?:" + "|".join([found] + more) + ")" if more else found
 
 
-ROOT_MOVE_WHY = {"en": "it moves, copies or links a file named like a program of Python into the root of the workspace", "zh": "它会把名字像 Python 程序的文件移到、复制或链接到工作区根目录"}
 
 
 def root_texts(root: Optional[Path]) -> List[str]:
@@ -169,7 +168,7 @@ class Compiled:
             (re.compile(expand(rule["pattern"], guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"]
             if not rule.get("inline")  # the code of an inline script is read by `scriptcheck.py` for guardrail paths: it writes to one only when the target of a write is one (1.7.38, C13 FR2 3)
-        ] + [(re.compile(expand(pattern, ""), re.IGNORECASE), messages.pick(ROOT_MOVE_WHY)) for pattern in root_move_patterns(self.paths, roots)]
+        ] + [(re.compile(expand(pattern, ""), re.IGNORECASE), messages.text("gate.guard.root_move")) for pattern in root_move_patterns(self.paths, roots)]
         # Files only the CLI writes (a task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the reports). Same write patterns as for guardrail files.
         self.owned = list(policy.get("cli_owned_paths", []))
         self.owned_regexes: List[Tuple[str, Pattern[str]]] = [(item, repo_paths.glob_regex(item)) for item in self.owned]

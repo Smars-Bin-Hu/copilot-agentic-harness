@@ -235,11 +235,6 @@ class CommandTests(unittest.TestCase):
             "findstr . .harness\\runtime\\*",
             "Select-String key .harness\\runtime\\*",
             "find .harness/runtime -exec cat {} +",
-            "tar czf a.tgz .harness",
-            "cp -r .harness ../x",
-            "grep -r key .harness",
-            "rg -uu key .harness",
-            "git grep --no-index key .harness",
             "head -c 99 .harness/runtime/hookserve.json",
             "ls .harness/runtime/*",
             "cat hookserve.json",
@@ -269,9 +264,14 @@ class CommandTests(unittest.TestCase):
         ):
             self.assertEqual(keyguard.command_kind(command), "", command)
 
-    def test_a_program_that_reads_the_folder_still_refuses(self) -> None:
+    def test_a_program_that_reads_the_whole_harness_folder_is_the_accepted_limit(self) -> None:
+        """`.harness` searched or copied whole is read like `.` from the root (the accepted limit at the top of keyguard.py): refusing it guarded nothing `grep -r x .` does not reach, and held everyday
+        searches (`grep -rn tracker .harness`, test_toolpacks). Naming the runtime folder or the key still refuses."""
         for command in ("zip -r a.zip .harness", "tar czf a.tgz .harness", "cp -r .harness /tmp/x", "diff -r .harness other", "rsync -a .harness /tmp/x", "grep -r x .harness",
-                        "grep -r x --exclude-dir=src .harness", "rg -uu x .harness", "rg -u --files-with-matches x .harness", "tar czf a.tgz --exclude=.harness/engine .harness"):
+                        "grep -r x --exclude-dir=src .harness", "rg -uu x .harness", "rg -u --files-with-matches x .harness", "tar czf a.tgz --exclude=.harness/engine .harness",
+                        "grep -rn tracker .harness | head", "git grep --no-index key .harness"):
+            self.assertEqual(keyguard.command_kind(command), "", command)
+        for command in ("grep -r x .harness/runtime", "tar czf a.tgz .harness/runtime", "cp -r .harness/runtime /tmp/x", "rg -uu x .harness/runtime"):
             self.assertEqual(keyguard.command_kind(command), "hookserve", command)
 
     def test_a_file_address_in_a_command_is_read(self) -> None:
@@ -353,7 +353,7 @@ class HookTests(SessionCase):
         """(red team N4) the code and the tests of the service have its name; and a command that only lists names or leaves the folder out reads nothing."""
         for command in ("pytest test_hookserve.py", "git log -- .harness/engine/modules/task/hookserve.py", "grep -n foo hookserve.py", "echo hookserve", "rg --files .harness", "grep -r x --exclude-dir=.harness .", "ls .harness"):
             self.not_secret(self.term(command), command)
-        for command in ("zip -r a.zip .harness", "tar czf a.tgz .harness", "cp -r .harness /tmp/x", "diff -r .harness other", "cat hookserve.json", "cat HookServe.JSON."):
+        for command in ("zip -r a.zip .harness/runtime", "tar czf a.tgz .harness/runtime", "cp -r .harness/runtime /tmp/x", "cat hookserve.json", "cat HookServe.JSON."):
             self.refused_secret(self.term(command), command)
 
     def test_the_refusal_says_what_was_refused(self) -> None:

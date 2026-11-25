@@ -44,7 +44,9 @@ def normalize(command: str) -> str:
 
 
 _CD = re.compile(r"^(?:cd|pushd|chdir|set-location|push-location|sl)$", re.IGNORECASE)
-_SPLIT = re.compile(r"(\s*(?:&&|\|\||[;&|\n()])\s*)")
+# A separator with the white space around it. The white space in front is taken only from the beginning of a run (`(?<!\s)`): started at every character of a run of 10 000 spaces, the old pattern went over the run again from each one (3 s, and 30 000 took
+# 80 s). A separator that follows white space a match before it took (`;  ;`) is found without it: the groups are the same (a test compares them with the old pattern on random lines).
+_SPLIT = re.compile(r"((?:(?<!\s)\s*)?(?:&&|\|\||[;&|\n()])\s*)")
 _REDIRECT = re.compile(r"^(\d*>>?)(.*)$")
 _INLINE = re.compile(r"^(?:python3?|py|node|perl|ruby)$", re.IGNORECASE)
 
@@ -121,6 +123,10 @@ def _texts(command: str) -> List[str]:
         except Exception:  # noqa: BLE001 - the plain text is still checked
             moved = None
         out += [text, moved] if moved and moved != text else [text]
+    for text in list(out):  # the shell joins what is split by quotes (`py''thon.exe`, `.har"ness"`): the line is also read with the quote marks taken away (red team N3). The separators inside quotes were turned into spaces above
+        joined = text.replace("'", "").replace('"', "").replace("^", "")  # `^` is the escape of `cmd`
+        if joined != text and joined not in out:
+            out.append(joined)
     return out
 
 

@@ -631,7 +631,14 @@ def watch_reach(event: HookEvent, ctx: Context) -> None:
 
 
 SECRET_FILE = re.compile(r"\.harness[\\/]+\.env(?![\w.-])", re.IGNORECASE)
-HOOK_KEY_FILE = re.compile(r"hookserve\.json|hookserve\b", re.IGNORECASE)  # (1.8.53) the key of the hook service: any spelling of its file name in a command
+MAX_COMMAND = 32000  # (hook speed round 3, red team N1) the longest terminal command the gate reads: the limit `harness as <alias> -- ...` tells of (`netonly.run`, 1.8.51: a longer line does not fit a variable of the environment). The rules over a line take time in proportion to its length (the quadratic ones were made linear: `terminal._SPLIT`, `policy.COMMAND_START`, `core/redact.py`), so a longer one cannot be judged in the time the host waits for a hook, and it is refused
+
+
+def unreadable_command(command: str) -> bool:
+    """A command the gate does not read: longer than `MAX_COMMAND`. It is refused, not passed: a gate that cannot judge in time lets a call run (a host runs a call whose hook is too slow)."""
+    return len(command) > MAX_COMMAND
+
+
 DUMP_ALL = re.compile(r"(?:^|[;&|(]\s*)(?:env|printenv|set|export\s+-p|Get-ChildItem\s+env:|gci\s+env:|dir\s+env:|ls\s+env:)\s*(?:$|[;&|)>])", re.IGNORECASE)
 
 
@@ -660,6 +667,10 @@ def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
         kind = keyguard.path_kind(ctx.root, path)  # (1.8.53, red team F2) the same file in another case, another spelling or through a link, a Windows short name
         if kind:
             return secret_refusal(kind)
+    if event.tool_kind != "terminal":  # (hook speed round 3, F2) a `file://` address in any tool's arguments (a `url`, a `uri`, a path written as an address) of one of the files
+        kind = keyguard.url_kind(ctx.root, tool_arguments(event))
+        if kind:
+            return secret_refusal(kind)
     if event.tool_kind == "search":  # (1.8.53) a search that aims at the files, a folder that holds them or a glob that reaches them
         kind = keyguard.search_kind(ctx.root, event.tool_name, tool_arguments(event))
         if kind:
@@ -668,8 +679,6 @@ def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
         plain = shellwords.dialect(event.command, "power")  # 1.7.38 (C13 FR3): a PowerShell escape (`` cat .harness/.e`nv ``) hides the name from the text: the line is read with it taken away too
         for text in [event.command] + ([plain] if plain else []):
             named = {name for name in secret_names(ctx) if re.search(r"(?<![\w])" + re.escape(name), text)}
-            if HOOK_KEY_FILE.search(text):
-                return Decision(permission="deny", reason=rules.say("gate.hookserve.secret"), facts={"kind": "secret"})
             if SECRET_FILE.search(text) or DUMP_ALL.search(text) or (named and not named <= owned_names(event, ctx)):
                 return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
         kind = keyguard.command_kind(event.command)  # (1.8.53) `.harness/runtime` named and read, with a wildcard or a program that reads, in any case and quoting
@@ -787,6 +796,8 @@ def park_worker_call(event: HookEvent, ctx: Context, decided: Decision) -> None:
 
 
 def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    if event.event == "PreToolUse" and event.tool_kind == "terminal" and unreadable_command(event.command or ""):
+        return Decision(permission="deny", reason=rules.say("gate.command.toolong", limit=MAX_COMMAND, length=len(event.command or "")), facts={"kind": "command-length"})  # cannot be judged in time: it does not pass (a host runs a call whose hook takes too long)
     superagent.mark(event, ctx)  # 1.8.1: the chat the board opens to talk about the tasks is known by its first message
     refused_super = superagent.check(event, ctx)
     if refused_super is not None:
@@ -826,11 +837,11 @@ def _handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     try:
         policy = ctx.policy(POLICY_NAME)
         validate_policy(policy, floor=False)
-        compiled = Compiled(policy, repos, admin=ctx.admin)
+        compiled = Compiled(policy, repos, admin=ctx.admin, root=ctx.root)
     except Exception as error:  # noqa: BLE001 - 1.7.38 (C13 F2c): the gate's own policy cannot be read: it runs on a built-in copy of the shipped one, and a write that is not inside the task folder and a git write are refused (`fallback`)
         broken = error
         policy = builtin.policy()
-        compiled = Compiled(policy, repos, admin=ctx.admin)
+        compiled = Compiled(policy, repos, admin=ctx.admin, root=ctx.root)
     decided = _handle_call(event, ctx, policy, compiled, found)
     if broken is not None:
         file, problem = gate_policy.diagnose(ctx.root, broken)

@@ -595,7 +595,7 @@ USER_TEXT_TOOLS = ("ask_user", "askuserquestion")  # tools whose input is text s
 
 
 def asks_hook_service(ctx: Context, text: str) -> int:
-    """The port, when `text` sends a request to the hook service of this copy (1.8.53): it judges the agent's calls for the gate, so a request from the agent could ask for a judgement or leave a record the
+    """The port, when `text` sends a request to the hook service of this copy (1.8.58): it judges the agent's calls for the gate, so a request from the agent could ask for a judgement or leave a record the
     agent wrote. The same net as `asks_board`: the key in `hookserve.json` is the other half (`check_secrets`)."""
     port = hook_serve_port(ctx.root)
     if port and re.search(rf"(?:127\.0\.0\.1|localhost|\[?::1\]?|0\.0\.0\.0)\W{{0,4}}\s*[:,]\s*{port}\b", text, re.IGNORECASE):  # `host:port`, and `('localhost', port)` of a socket call
@@ -675,14 +675,14 @@ def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
             return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
         if target is not None and target == hook_serve_file(ctx.root).resolve():
             return Decision(permission="deny", reason=rules.say("gate.hookserve.secret"), facts={"kind": "secret"})
-        kind = keyguard.path_kind(ctx.root, path)  # (1.8.53, red team F2) the same file in another case, another spelling or through a link, a Windows short name
+        kind = keyguard.path_kind(ctx.root, path)  # (1.8.58, red team F2) the same file in another case, another spelling or through a link, a Windows short name
         if kind:
             return secret_refusal(kind)
     if event.tool_kind != "terminal":  # (hook speed round 3, F2) a `file://` address in any tool's arguments (a `url`, a `uri`, a path written as an address) of one of the files
         kind = keyguard.url_kind(ctx.root, tool_arguments(event))
         if kind:
             return secret_refusal(kind)
-    if event.tool_kind == "search":  # (1.8.53) a search that aims at the files, a folder that holds them or a glob that reaches them
+    if event.tool_kind == "search":  # (1.8.58) a search that aims at the files, a folder that holds them or a glob that reaches them
         kind = keyguard.search_kind(ctx.root, event.tool_name, tool_arguments(event))
         if kind:
             return secret_refusal(kind)
@@ -692,7 +692,7 @@ def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
             named = {name for name in secret_names(ctx) if re.search(r"(?<![\w])" + re.escape(name), text)}
             if SECRET_FILE.search(text) or DUMP_ALL.search(text) or (named and not named <= owned_names(event, ctx)):
                 return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
-        kind = keyguard.command_kind(event.command)  # (1.8.53) `.harness/runtime` named and read, with a wildcard or a program that reads, in any case and quoting
+        kind = keyguard.command_kind(event.command)  # (1.8.58) `.harness/runtime` named and read, with a wildcard or a program that reads, in any case and quoting
         if kind:
             return secret_refusal(kind)
     return None

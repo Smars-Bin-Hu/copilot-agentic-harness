@@ -27,8 +27,8 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 HOOK_ENTRY = ".harness/engine/launch.py"  # the one file the hook configuration starts (1.7.38, C13 FR2 4); it loads hook.py
-HOOK_EXEC = "python"  # (1.8.50) the program every hook entry starts with `exec`, found on PATH by Copilot: no PowerShell or shell in between (about 1.7 s a hook on a work PC)
-HOOK_ARGS = ["-S", HOOK_ENTRY]  # no site packages: the engine is the standard library only, and Python starts faster. Not `-I` (1.8.53): `-E` in it turns off the bytecode cache of the Mac's system Python (+140 ms a hook) and `-I` ignores PYTHONUTF8 (a file encoding on Windows could change)
+HOOK_EXEC = "python"  # (1.8.58) the program every hook entry starts with `exec`, found on PATH by Copilot: no PowerShell or shell in between (about 1.7 s a hook on a work PC)
+HOOK_ARGS = ["-S", HOOK_ENTRY]  # no site packages: the engine is the standard library only, and Python starts faster. Not `-I` (1.8.58): `-E` in it turns off the bytecode cache of the Mac's system Python (+140 ms a hook) and `-I` ignores PYTHONUTF8 (a file encoding on Windows could change)
 SHELL_KEYS = ("command", "windows", "linux", "osx", "bash", "powershell")  # Copilot skips an entry that has `exec` and any of these: the hook would not run at all
 KB_DIR = "knowledge-base"
 BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
@@ -46,7 +46,7 @@ MIN_HOOK_TIMEOUT = 120  # (1.8.48) seconds: Copilot lets a call through when its
 MAX_ACK = 200  # events one acknowledgement can hold (core/hookack.py MAX_EVENTS)
 TIMEOUT_SESSIONS = 5  # the newest sessions whose Copilot record is read for hooks that timed out
 TIMED_OUT = re.compile(r"timed out after (\d+) seconds", re.I)
-SCRIPT_SUFFIXES = (".bat", ".cmd", ".ps1")  # (1.8.53) Copilot's `exec` starts only .exe and .com programs: a `python` found as one of these is not what it starts
+SCRIPT_SUFFIXES = (".bat", ".cmd", ".ps1")  # (1.8.58) Copilot's `exec` starts only .exe and .com programs: a `python` found as one of these is not what it starts
 SERVICE_SAMPLE = 40  # the newest hook calls whose `via` says who judged them
 SERVICE_QUIET = ("absent", "dead", "")  # the board was not running: not a fault of the service. `born` is not here: the system would not tell this process whether the board runs (Windows: access denied), which is a problem to report
 SERVICE_MIN = 3  # the calls judged by the hook process for a reason of its own (not `SERVICE_QUIET`) that make a warning, however few the calls are
@@ -99,7 +99,7 @@ def check_python(report: Report) -> None:
 
 
 def check_interpreter(report: Report) -> None:
-    """The short command starts `python` (Windows) or `python3` (elsewhere); every hook starts `python` on every system (`HOOK_EXEC`, 1.8.50: Copilot starts it itself, with no shell, and a hook
+    """The short command starts `python` (Windows) or `python3` (elsewhere); every hook starts `python` on every system (`HOOK_EXEC`, 1.8.58: Copilot starts it itself, with no shell, and a hook
     entry cannot name one program per system). Each has to run, and the hook's has to be Python 3.9 or later (an old Mac has a Python 2 `python`), not only be found.
 
     A hook that cannot start counts as a refusal: every tool call is denied (P2, 2026-10-10; Copilot's own log says "spawn python ENOENT")."""
@@ -491,7 +491,7 @@ def acknowledge_hooks(root: Path, shown: Optional[List[str]] = None, via: str = 
 
 
 def check_hook_python(report: Report, found: Optional[str] = None, windows: Optional[bool] = None) -> None:
-    """(1.8.53) On Windows, Copilot's `exec` runs only .exe and .com programs, and `shutil.which` also finds a `.bat`, `.cmd` or `.ps1`: a `python` that is one of those is found here and not by the hook, which then does not start. `found` and
+    """(1.8.58) On Windows, Copilot's `exec` runs only .exe and .com programs, and `shutil.which` also finds a `.bat`, `.cmd` or `.ps1`: a `python` that is one of those is found here and not by the hook, which then does not start. `found` and
     `windows` are given by the tests (the Mac has no PATHEXT)."""
     windows = (sys.platform == "win32") if windows is None else windows
     if not windows:
@@ -525,7 +525,7 @@ def check_hook_service_file(report: Report, root: Path, now: Optional[datetime] 
 
 
 def check_hook_service(report: Report, root: Path, rows: Optional[List[Dict[str, Any]]] = None, now: Optional[datetime] = None) -> None:
-    """(1.8.53) Does the board's judging service answer the hooks, or do they judge by themselves? The log rows say `via` (`service` or `local`) and, for a local one, `why` (`absent` and `dead`: no board; `tmp`, `python`, `stale`,
+    """(1.8.58) Does the board's judging service answer the hooks, or do they judge by themselves? The log rows say `via` (`service` or `local`) and, for a local one, `why` (`absent` and `dead`: no board; `tmp`, `python`, `stale`,
     `born`...: the service would not answer, or the board could not be told from another process). When over half of the newest rows are local for a reason other than the board's absence (1.8.54: also when none was served at all:
     a service that never worked), the hooks are slower than they have to be: a warning that names the reasons. A board that runs without having written `hookserve.json` is a warning too (`check_hook_service_file`)."""
     check_hook_service_file(report, root, now)
@@ -589,7 +589,7 @@ def _tail_nonces(path: Path) -> Any:
 
 
 def check_hook_client_trace(report: Report, root: Path, now: Optional[datetime] = None, registry: Optional[Dict[str, Any]] = None) -> None:
-    """(1.8.53, red team F1) The hook client writes `{"at", "nonce", "session_id", "event"}` to `logs/hookclient.jsonl` each time it takes an answer from a service (for a PreToolUse, UserPromptSubmit or SessionStart call), and the
+    """(1.8.58, red team F1) The hook client writes `{"at", "nonce", "session_id", "event"}` to `logs/hookclient.jsonl` each time it takes an answer from a service (for a PreToolUse, UserPromptSubmit or SessionStart call), and the
     board's service puts the same `nonce` in the record of the call it judged (the `nonce` field of a row of the session log). An answer the client took with no such record came from something that is not the board (a process that took
     the port of a board that closed, with a key it read). Needs the observe module (it writes the records). 1.8.54: the end of each log is read, where the newest rows are; a line whose session log is gone and that is a day old was pruned,
     which is not a forgery; one whose log is there (or is not and is younger) is."""
@@ -659,7 +659,7 @@ def check_hook_client_trace(report: Report, root: Path, now: Optional[datetime] 
 
 
 def check_hooks_ran(report: Report, root: Path, registry: Dict[str, Any], now: Optional[datetime] = None) -> None:
-    """(1.8.53, red team F6) A session whose Copilot record shows tool calls and for which the harness has no hook row at all: the hooks did not run in it (a Copilot that ignores `exec`, VS Code's Local mode), so no call of it was
+    """(1.8.58, red team F6) A session whose Copilot record shows tool calls and for which the harness has no hook row at all: the hooks did not run in it (a Copilot that ignores `exec`, VS Code's Local mode), so no call of it was
     judged. The newest `NEVER_RAN_SESSIONS` sessions that Copilot ran in this folder, started after the hook configuration was last written."""
     entry = registry["modules"].get("observe")
     if entry is None or not entry["enabled"]:
@@ -753,7 +753,7 @@ def check_files(report: Report, root: Path, owner: str, files: List[str]) -> Non
 
 
 def interpreter_problems(entry: Dict[str, Any]) -> List[str]:
-    """(1.8.50) A hook entry starts `python` itself (`exec`); it may not carry a shell command too. Copilot does not pick one of the two: it skips the whole entry with one line in its own log, so the gate
+    """(1.8.58) A hook entry starts `python` itself (`exec`); it may not carry a shell command too. Copilot does not pick one of the two: it skips the whole entry with one line in its own log, so the gate
     would not run at all (found on the Mac, 2026-11-24). Nor is there an `exec` per system: `windows`/`osx`/`linux` only replace `command`."""
     return [say("doctor.hookcfg.shell_key", key=key) for key in SHELL_KEYS if key in entry]
 

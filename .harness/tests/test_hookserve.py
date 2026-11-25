@@ -1,4 +1,4 @@
-"""The board's judging service for hook calls (hook speed, 1.8.50): `hookclient.py` (in the hook process), `hookserve.py` (in the board) and `hook.answer` (the one judgment, run by either).
+"""The board's judging service for hook calls (hook speed, 1.8.58): `hookclient.py` (in the hook process), `hookserve.py` (in the board) and `hook.answer` (the one judgment, run by either).
 
 The one rule behind every test here: whatever goes wrong with the service, the call is judged as it is judged without a service. So each failure is checked the same way: what the hook process ends up with (the service's
 answer when it is a good one, else its own judgment, as `launch.py` does) equals what a plain `hook.answer` gives for the same call on a root of the same state, and a call that is refused locally is never `{}`.

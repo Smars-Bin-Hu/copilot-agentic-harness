@@ -1,4 +1,4 @@
-"""Who may read the two secret files: `.harness/.env` (the person's identities) and `.harness/runtime/hookserve.json` (the key of the hook service in the board) (1.8.53, red team F2, N1, N4). Standard library only.
+"""Who may read the two secret files: `.harness/.env` (the person's identities) and `.harness/runtime/hookserve.json` (the key of the hook service in the board) (1.8.58, red team F2, N1, N4). Standard library only.
 
 `check_secrets` (handler.py) asks this module four questions about a call:
 

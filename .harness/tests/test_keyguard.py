@@ -1,4 +1,4 @@
-"""1.8.53 (hook speed, red team F2 and F7, Windows review F3): who may read `.harness/.env` and `.harness/runtime/hookserve.json` (the key of the hook service), and the files at the root of the workspace that
+"""1.8.58 (hook speed, red team F2 and F7, Windows review F3): who may read `.harness/.env` and `.harness/runtime/hookserve.json` (the key of the hook service), and the files at the root of the workspace that
 Copilot may start in place of Python. The pure rules (`modules/gate/keyguard.py`) are tested on their own, the safety items through the real hook."""
 
 from __future__ import annotations

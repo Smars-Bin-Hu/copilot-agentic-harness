@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Sequence
 
 from . import procenv
 
-# The files at the root of the workspace that Copilot may start in place of the Python of the person (1.8.53): a hook runs with the workspace root as its folder, and on Windows the search for `python` may look there
+# The files at the root of the workspace that Copilot may start in place of the Python of the person (1.8.58): a hook runs with the workspace root as its folder, and on Windows the search for `python` may look there
 # first (`python.exe`, `python.com`), a `.bat` or `.cmd` is found by a shell. Only the root: `src/python/` is an ordinary folder. A write tool is refused at the root; for a terminal command see below.
 ROOT_LEVEL_GUARDRAILS = ("python.exe", "python.com", "python.bat", "python.cmd", "python", "python3")
 # (hook speed round 3, red team N3) A terminal command that writes to a program of these names is refused in ANY folder, by any path: they have no use in a data workspace, and `mv sub/python.exe .`, `../python.exe`, an

@@ -1,4 +1,4 @@
-"""`core/procenv.py`: the environment, home folder and working folder of the hook path, read through one layer that a thread can override (1.8.50).
+"""`core/procenv.py`: the environment, home folder and working folder of the hook path, read through one layer that a thread can override (1.8.58).
 
 The hook is a fresh process; the board will judge hooks for it inside one long, multi-threaded process. The answer must be what the hook's own process would compute, so no code on the hook path reads
 `os.environ`, `os.getenv`, `expanduser`, `expandvars`, `Path.home()`, `Path.cwd()` or `os.getcwd()` itself. Four groups of tests:

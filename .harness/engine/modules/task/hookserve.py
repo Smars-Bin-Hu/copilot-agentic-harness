@@ -1,4 +1,4 @@
-"""The board's judging service for hook calls (hook speed, 1.8.50).
+"""The board's judging service for hook calls (hook speed, 1.8.58).
 
 Starting Python and loading the engine takes a hook process 4 to 8 seconds on a work computer, and the board, which is always open, has the engine loaded. So the board listens on a port of its own (127.0.0.1 only,
 not the board's page: no pairing, no cookie) and a hook process asks it to judge the call (`hookclient.py`, started by `launch.py`). The judgment is `hook.answer`, the same function the hook process runs, so there is one

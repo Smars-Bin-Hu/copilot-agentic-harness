@@ -3160,7 +3160,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     link.start()  # the thread only; the board does not wait for VS Code
     board.space.start()
     board.start_sweeper()  # a promoted task closes by itself, with no page open (1.7.38)
-    hooks = hookserve.HookService(root) if found["hook_service"] else None  # 1.8.50: the judging service for hook calls; started below, with the board listening, and stopped with it
+    hooks = hookserve.HookService(root) if found["hook_service"] else None  # 1.8.58: the judging service for hook calls; started below, with the board listening, and stopped with it
     path = board_serve_file(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"port": board.port, "pid": os.getpid(), "started": utc_now()}), encoding="utf-8")

@@ -99,7 +99,7 @@ def board_serve_file(root: Path) -> Path:
 
 
 def hook_serve_file(root: Path) -> Path:
-    """Written by the board's hook service while it runs (`modules/task/hookserve.py`): its port and key. The gate refuses a read of it and a request to its port (1.8.53)."""
+    """Written by the board's hook service while it runs (`modules/task/hookserve.py`): its port and key. The gate refuses a read of it and a request to its port (1.8.58)."""
     return runtime_dir(root) / "hookserve.json"
 
 

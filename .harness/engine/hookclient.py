@@ -1,4 +1,4 @@
-"""The hook process asks the board to judge a call (hook speed, 1.8.50). Standard library only, no import of the engine, small on purpose: `launch.py` loads it before anything else, and nobody should have a reason to change it.
+"""The hook process asks the board to judge a call (hook speed, 1.8.58). Standard library only, no import of the engine, small on purpose: `launch.py` loads it before anything else, and nobody should have a reason to change it.
 
 Starting Python and importing the engine takes 4 to 8 seconds in a hook process on a work computer (endpoint security reads every file), and the board, which is always open, has the engine loaded already. So the board
 runs a judging service (`modules/task/hookserve.py`) and this file is its client. It only ever makes the answer quicker: the service's answer is used only when it comes with the right signature; in every other case

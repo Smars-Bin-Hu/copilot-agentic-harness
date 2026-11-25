@@ -1,4 +1,4 @@
-"""One judgment, two ways in (hook speed, 1.8.50): every hook call of the existing hook tests is judged BOTH by the board's service and by a hook process of its own, on identical state, and the two are compared.
+"""One judgment, two ways in (hook speed, 1.8.58): every hook call of the existing hook tests is judged BOTH by the board's service and by a hook process of its own, on identical state, and the two are compared.
 
 The service is only worth having if it is not another judge. `hookserve.py` runs `hook.answer`, the same function the hook process runs; what could differ is what is around it (the environment, the working folder, memory
 kept in the board's process, the order of things). So the proof is not a list of cases written for it: it is every payload that the tests of the gate, the breaker, the observer and the task hooks already send,

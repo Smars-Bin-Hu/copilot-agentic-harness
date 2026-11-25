@@ -706,7 +706,7 @@ class LauncherTests(unittest.TestCase):
     def test_every_event_of_the_hook_configuration_starts_launch_py_for_every_engine(self) -> None:
         data = json.loads((self.repo / ".github" / "hooks" / "harness.json").read_text(encoding="utf-8"))
         for event, entries in data["hooks"].items():
-            for entry in entries:  # (1.8.50) Copilot starts Python itself, with no shell: one entry, the same on every system
+            for entry in entries:  # (1.8.58) Copilot starts Python itself, with no shell: one entry, the same on every system
                 self.assertEqual((entry["exec"], entry["args"], entry["cwd"]), ("python", ["-S", ".harness/engine/launch.py"], "."), event)
                 self.assertFalse({"command", "windows", "linux", "osx", "bash", "powershell"} & set(entry), event)
 

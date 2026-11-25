@@ -1,4 +1,4 @@
-"""1.8.53 (hook speed): what `harness doctor` says about the hooks and the board's hook service. The checks are run in this process with files made for each case; none needs Windows, a board or Copilot."""
+"""1.8.58 (hook speed): what `harness doctor` says about the hooks and the board's hook service. The checks are run in this process with files made for each case; none needs Windows, a board or Copilot."""
 
 from __future__ import annotations
 

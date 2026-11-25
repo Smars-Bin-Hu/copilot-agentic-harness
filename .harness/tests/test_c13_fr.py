@@ -1183,7 +1183,7 @@ class AskUserWithBoardAddressTests(ListedCase):
 
 
 class HookServiceIsNotTheAgentsTests(ListedCase):
-    """(1.8.53) The hook service in the board judges the agent's calls for the gate: a request from the agent to its port, and a read of its key, are refused like a request to the board and a read of `.harness/.env`."""
+    """(1.8.58) The hook service in the board judges the agent's calls for the gate: a request from the agent to its port, and a read of its key, are refused like a request to the board and a read of `.harness/.env`."""
 
     def setUp(self) -> None:
         super().setUp()

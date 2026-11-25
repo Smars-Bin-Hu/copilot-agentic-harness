@@ -309,7 +309,31 @@ def allow_view(root: Path, data: Dict[str, Any], task: str = "", systems: Option
     if scoped:  # 1.7.18: the items the task is linked to: the agent's writes to them only
         on = bool(data.get(tasklife.LINKS_KEY)) and is_open
         links = {"systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "refs": [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]}
-    return {"open": rows, "links": links, "can": can, "any": bool(openable), "never": [outside.PROD]}
+    every = _every_connection(root, systems, held)
+    return {"open": rows, "links": links, "can": can, "any": bool(openable) or bool(every), "never": [], "all": every}
+
+
+def _every_connection(root: Path, systems: Dict[str, Any], held: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """(1.8.51) What the Open to the agent dialog lists: every connection the gate knows, `{name, group, env, open, why}`, sorted by group, then environment (dev, ist, qat, prod), then name.
+    `group` is the label of the connection's type (the system it reaches); `why` is empty when it may be ticked, else `systems.may_open`'s word. A system written by hand (no connection) is listed too."""
+    try:
+        from core import connections
+
+        listed = connections.listed(root)
+        kinds = connections.types(root)
+    except Exception:  # noqa: BLE001 - the dialog then groups by name only
+        listed, kinds = {}, {}
+    order = {env: index for index, env in enumerate(outside.ENVS)}
+    out = []
+    for name, system in systems.items():
+        if not isinstance(system, dict) or name.startswith("broken-") or system.get("blocked") or system.get("broken"):  # nothing to open: refused whatever is ticked
+            continue
+        kind = str((listed.get(name) or {}).get("type") or "")
+        label = (kinds.get(kind) or {}).get("label") if kind else ""
+        group = str(messages.pick(label) if label else kind or system.get("toolpack") or name)
+        env = str(system.get("env") or "").lower() or ",".join(sorted({str(rule.get("env")) for rule in system.get("env_from") or [] if isinstance(rule, dict) and rule.get("env")}))
+        out.append({"name": name, "group": group, "env": env, "open": name in held, "why": outside.may_open_any(system), "access": str(system.get("access") or "")})
+    return sorted(out, key=lambda item: (item["group"].lower(), order.get(item["env"], len(order)), item["name"]))
 
 
 def links_view(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:

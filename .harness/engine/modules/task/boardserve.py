@@ -999,6 +999,10 @@ class Board:
             noted(self.root, task, action)
             result["told"] = self.after_dismiss(result)
             return result
+        if action == "task allow" and str(who or "") == "set":  # 1.8.51: the Apply of the Open to the agent dialog: exactly the connections ticked there are open for the task, no code (the person picks them on the page)
+            result = tasklife.set_allow_set(self.root, task, [part for part in str(env_name or "").split(",")], interactive=True)
+            noted(self.root, result.get("task") or task, action)
+            return result
         if action == "task allow":  # the person closes a connection for this task with one click (1.7.6); the same function as `task allow`. Opening one needs the code of a held call that offers it (1.7.38)
             name = " ".join(str(env_name or "").split()).lower()
             on, offer = str(who or "") == "on", None
@@ -1006,7 +1010,10 @@ class Board:
                 offer = outbox.offer_for(self.root, task_ops.resolve(self.root, task), str(code or ""), name)
                 if not offer:
                     raise CommandError(say("serve.allow.code", name=name or "-"))
-            result = tasklife.set_allow(self.root, task, name, on, interactive=True, env=str((offer or {}).get("env") or ""))
+            items = (offer or {}).get("scope") == "items"  # 1.8.51: the card of a write to a linked ticket opens the linked items, not the whole connection (that is ticked in the pop)
+            result = tasklife.set_allow(self.root, task, tasklife.LINKS if items else name, on, interactive=True, env=str((offer or {}).get("env") or ""))
+            if items:
+                result["conn"] = name
             if offer:  # the held calls that offered it have done their part: the agent that waits hears at once, one whose turn ended is woken, else the page asks the person to tell it (1.7.38)
                 found = result.get("task") or task_ops.resolve(self.root, task)
                 stood = {str(item["code"]): outbox.agent_place(item) for item in outbox.pending_for(self.root, found) if any(isinstance(one, dict) and one.get("system") == name for one in item.get("offers") or [])}

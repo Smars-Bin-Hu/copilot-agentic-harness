@@ -140,7 +140,10 @@ const Status = (function () {
   function openMark(names, key, focusable) {
     if (!names || !names.length) return null;
     const words = t("board.status.open.conns", {names: names.join(", ")});
-    return marked(h("span", {class: "st-chip st-open"}, names.length === 1 ? names[0] + " " + t("board.status.open.word") : names.length + " " + t("board.status.open.word")), key, () => words, words, focusable);
+    // One name: the name gives way (ellipsis) and the word "open" always stays, so a long name never hides what the mark says (the full names are in the tip).
+    const word = t("board.status.open.word");
+    const chip = names.length === 1 ? h("span", {class: "st-chip st-open"}, h("span", {class: "st-on"}, names[0]), h("span", {class: "st-ow"}, word)) : h("span", {class: "st-chip st-open"}, names.length + " " + word);
+    return marked(chip, key, () => words, words, focusable);
   }
 
   // The tickets the task is linked to (1.7.38): a small link icon after the task name (the list and the card of the lobby), and the number when there are more than one. The card lists them as `type:id`;

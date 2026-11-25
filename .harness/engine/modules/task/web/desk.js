@@ -811,9 +811,9 @@
       h("p", {class: "sub set-note", title: t("desk.set.note")}, t("desk.set.note")));
   }
 
-  // "Open to the agent" (1.7.6; by connection since 1.7.38): a setting of the task at the head of its page, beside Independent review. It lists what the person opened for this task, each one with a
-  // button that closes it: connections (a held write's card opens them: `Open <connection> for this task`), and the linked items. Nothing to open here before a call is held; the
-  // card of the call is where the person decides. A click on Close is `harness task allow --conn <name> --off`: no code, it can be closed at once. Not drawn when there is nothing to say.
+  // "Open to the agent" (1.7.6; by connection since 1.7.38; 1.8.51: pick from every connection): a setting of the task at the head of its page, beside Independent review. The pop lists every
+  // connection with a box; Apply opens exactly the ticked ones for this task (`task allow`, runner `set`, no code), and every call on them then passes. QAT and PROD tick only when the connection
+  // is declared `access: read-only`. A held card can still open its connection with the code. The linked items keep their own button. Not drawn when there is nothing to list.
   const DOOR = ["M3 14V3.5A1.5 1.5 0 0 1 4.5 2h5A1.5 1.5 0 0 1 11 3.5V14", "M11 6h2.5v8H11", "M3 14h10.5", "M8 8.5h.01"];
   let closeEnvs = null;
   const keepEnvs = (on) => { try { if (on) sessionStorage.setItem("tk-envs-open", "1"); else sessionStorage.removeItem("tk-envs-open"); } catch (error) { /* no storage: the pop closes, as before */ } };  // a click reloads the page: the pop stays open, so the next click is one more click
@@ -823,37 +823,73 @@
   function envButton() {
     const found = desk.allow;
     closeEnvs = null;
-    if (!found || (!(found.open || []).length && !found.links && !(found.can || []).length && !found.any)) return null;
+    const every = found && Array.isArray(found.all) ? found.all : [];
+    if (!found || (!every.length && !(found.open || []).length && !found.links)) return null;
     const rows = found.open || [];
     const links = found.links;
     const can = served() && full.status === "open" && SERVE.runs("task allow");
     const buttons = [];
-    const flip = (name, on, node) => {
+    // 1.8.51: every connection, a box each, grouped by the system it reaches; Apply opens exactly the ticked ones (no code). QAT and PROD tick only when declared read-only.
+    const before = new Set(every.filter((item) => item.open).map((item) => item.name));
+    const boxes = new Map();
+    const count = h("span", {class: "sub open-count"});
+    const apply = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("desk.set.open.apply"));
+    const cancel = h("button", {type: "button", class: "act"}, t("desk.set.open.cancel"));
+    buttons.push(apply);
+    const wanted = () => [...boxes].filter(([, box]) => box.checked).map(([name]) => name);
+    const recount = () => {
+      const now = wanted();
+      const changes = now.filter((name) => !before.has(name)).length + [...before].filter((name) => !now.includes(name)).length;
+      count.textContent = t("desk.set.open.count", {n: now.length, changes});
+      apply.disabled = !can || !changes;
+      boxes.forEach((box) => box.closest(".open-row").classList.toggle("on", box.checked));
+    };
+    const pickRow = (item) => {
+      const box = h("input", {type: "checkbox", disabled: can && (!item.why || item.open) ? null : "disabled", "aria-label": item.name});  // an open one that may no longer open can still be closed
+      box.checked = item.open;
+      if (!item.why || item.open) boxes.set(item.name, box);
+      box.addEventListener("change", recount);
+      const why = item.why ? t("desk.set.open.why." + item.why, {name: item.name}) : "";
+      const env = item.env ? tag(item.env.toUpperCase(), item.env === "prod" ? "hot" : "") : null;
+      const note = item.why ? h("span", {class: "sub"}, t("desk.set.open.why.short." + item.why)) : item.access ? h("span", {class: "sub"}, t("desk.set.open.readonly")) : null;
+      return h("label", {class: "open-row pick" + (item.open ? " on" : "") + (item.why && !item.open ? " off" : ""), "data-conn": item.name, title: why || item.name}, box, h("span", {class: "open-nm"}, item.name), env, note);
+    };
+    const groups = [];
+    let last = null;
+    for (const item of every) {
+      if (item.group !== last) { groups.push(h("div", {class: "open-grp"}, item.group)); last = item.group; }
+      groups.push(pickRow(item));
+    }
+    const envs = [...new Set(every.filter((item) => !item.why && item.env && !item.env.includes(",")).map((item) => item.env))];
+    const byEnv = envs.length > 1 || every.length > 3 ? h("div", {class: "open-envs"}, h("span", {class: "sub"}, t("desk.set.open.all")), envs.map((env) => {
+      const link = h("button", {type: "button", class: "linkish", disabled: can ? null : "disabled"}, env.toUpperCase());
+      link.addEventListener("click", () => { const mine = every.filter((item) => item.env === env && boxes.has(item.name) && !item.why); const on = !mine.every((item) => boxes.get(item.name).checked); mine.forEach((item) => { boxes.get(item.name).checked = on; }); recount(); });
+      return link;
+    })) : null;
+    apply.addEventListener("click", () => {
       buttons.forEach((one) => { one.disabled = true; });
-      SERVE.post("/api/act", {action: "task allow", task: desk.name, env: name, runner: on ? "on" : "off", step: "act"}).then(() => { keepEnvs(true); SERVE.done(); }, (error) => { buttons.forEach((one) => { one.disabled = false; }); SERVE.failed(error); });
-    };
-    const rowFor = (item) => {
-      const close = h("button", {type: "button", class: "act", title: item.known ? t("desk.set.open.conn.tip", {name: item.name}) : t("desk.set.open.conn.gone", {name: item.name}), disabled: can ? null : "disabled"}, t("desk.set.open.conn.close"));
-      buttons.push(close);
-      close.addEventListener("click", () => flip(item.name, false, close));
-      return h("div", {class: "open-row", "data-conn": item.name}, h("b", null, item.name), item.env && item.env !== "none" ? tag(item.env, "hot") : null, h("span", {class: "sub"}, t("desk.set.open.conn.scope")), close);
-    };
+      SERVE.post("/api/act", {action: "task allow", task: desk.name, env: wanted().join(","), runner: "set", step: "act"}).then(() => { keepEnvs(true); SERVE.done(); }, (error) => { recount(); SERVE.failed(error); });
+    });
+    cancel.addEventListener("click", () => { boxes.forEach((box, name) => { box.checked = before.has(name); }); recount(); show(false); });
     const linksRow = () => {
       const systems = links.systems.join(", ");
       const refs = links.refs.join(", ");
       const toggle = h("button", {type: "button", class: "act" + (links.open ? "" : " hot"), title: links.open ? t("desk.set.open.links.on.tip", {systems}) : t("desk.set.open.links.off.tip", {systems}), disabled: can ? null : "disabled"}, links.open ? t("desk.set.open.conn.close") : t("desk.outbox.open", {name: t("desk.set.open.links")}));
       buttons.push(toggle);
-      toggle.addEventListener("click", () => flip("links", !links.open, toggle));
-      return h("div", {class: "open-row", "data-conn": "links"}, h("b", null, t("desk.set.open.links")), h("span", {class: "sub"}, links.open ? t("desk.set.open.links.row", {refs}) : t("desk.set.open.links.off.row", {refs})), toggle);
+      toggle.addEventListener("click", () => {
+        buttons.forEach((one) => { one.disabled = true; });
+        SERVE.post("/api/act", {action: "task allow", task: desk.name, env: "links", runner: links.open ? "off" : "on", step: "act"}).then(() => { keepEnvs(true); SERVE.done(); }, (error) => { buttons.forEach((one) => { one.disabled = false; }); recount(); SERVE.failed(error); });
+      });
+      return h("div", {class: "open-row" + (links.open ? "" : " pick"), "data-conn": "links"}, h("b", null, t("desk.set.open.links")), h("span", {class: "sub"}, links.open ? t("desk.set.open.links.row", {refs}) : t("desk.set.open.links.off.row", {refs})), toggle);
     };
-    const shown = [...rows.map(rowFor), links ? linksRow() : null].filter(Boolean);
-    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip.conn")),
-      h("div", {class: "open-list"}, shown.length ? [h("b", {class: "sub"}, t("desk.set.open.list")), ...shown] : h("p", {class: "sub"}, t("desk.set.open.empty"))),
-      (found.can || []).length ? h("p", {class: "sub"}, t("desk.set.open.can", {names: found.can.join(", ")})) : null,
-      h("p", {class: "sub"}, t("desk.set.open.never")),
+    const pop = h("div", {class: "rv-pop open-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip.pick")), byEnv,
+      h("div", {class: "open-list"}, every.length ? groups : h("p", {class: "sub"}, t("desk.set.open.none.listed")), links ? [h("div", {class: "open-grp"}, t("desk.set.open.links")), linksRow()] : null),
+      h("p", {class: "set-warn"}, t("desk.set.open.account")),
+      h("div", {class: "open-foot"}, count, cancel, apply),
       can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
+    recount();
     const names = [...rows.map((item) => item.name), ...(links && links.open ? [t("desk.set.open.links")] : [])];
-    const button = h("button", {type: "button", class: "rv-btn" + (names.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip.conn")},
+    const button = h("button", {type: "button", class: "rv-btn" + (names.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: names.length ? names.join("\n") : t("desk.set.open.tip.pick")},
       icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, names.length ? (names.length > 2 ? String(names.length) : names.join(", ")) : t("desk.set.open.off")));
     const show = (on) => { if (on && closeReview) closeReview(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => { keepEnvs(false); show(pop.hidden); });

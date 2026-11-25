@@ -42,7 +42,7 @@ ALIAS = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 IDENTITIES = ("env", "netonly", "keyfile", "tool", "token")  # tool (1.7.13): the program keeps its own sign-in (`az login`); the harness keeps no account, only who the test answered
 SECRET_FIELDS = ("password", "token")
 IDENTITY_FIELDS = ("account", "password", "keyfile", "token")
-OWN_FIELDS = ("type", "env", "auth", "label", "about")  # what a server of the person's own has besides the kind's fields (1.7.38: `about`, one line the agent finds it by)
+OWN_FIELDS = ("type", "env", "auth", "label", "about", "access")  # what a server of the person's own has besides the kind's fields (1.7.38: `about`, one line the agent finds it by; 1.8.51: `access`, `read-only` when its account only reads)
 TEST_SECONDS = 15
 TOOL_TEST_SECONDS = 60  # a program that keeps its own sign-in (`az`) is slow to start; a type may set `test.timeout` itself (1.7.19)
 VIAS = ("cli", "mcp")  # how a connection of the type is reached: a program in the terminal, or an MCP server VS Code runs (1.7.17)
@@ -359,6 +359,8 @@ def faults(root: Path) -> List[Dict[str, str]]:
                 found.append({"file": name, "problem": f"connection {alias}: `type` is the name of a connection type"})
             elif item.get("env") not in ENVS:
                 found.append({"file": name, "problem": f"connection {alias}: `env` is one of {', '.join(ENVS)}"})
+            elif item.get("access") not in (None, "", outside.READ_ONLY):
+                found.append({"file": name, "problem": f"connection {alias}: `access` is `{outside.READ_ONLY}` or left out"})
     if not found:
         try:
             config.load_policy(root, POLICY)  # the layers must merge too
@@ -637,6 +639,11 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
             if kind.get(key) is not None:
                 system[key] = kind[key]
         system["open"] = connection_scope(kind, server)
+        system["connection"] = True  # (1.8.51) a connection of the list: the Open to the agent dialog may open it (`systems.may_open`)
+        if str(server.get("access") or "").lower() == outside.READ_ONLY:
+            system["access"] = outside.READ_ONLY
+        if server.get("open") is not None and outside.scope_rule(server["open"], str(server.get("env") or "")) == outside.NO:
+            system["locked"] = True  # the company closed this connection: it is never opened
         out[alias] = system
     return {alias: system for alias, system in out.items() if alias not in (tools_policy.get("systems") or {})}
 

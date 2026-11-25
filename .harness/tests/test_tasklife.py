@@ -823,6 +823,7 @@ class MessageTests(unittest.TestCase):
             "board.ask.auth.reason.",  # 1.8.x B5: chat.js builds the key from why a tool waits for a sign-in (required, expired, insufficientScope)
             "acct.plan.", "acct.sw.", "menu.copilot.",  # 1.8.38, 1.8.39 (topmenu.js: the state of the Copilot check): acct.js builds the key from the plan and the switch's name (copilotacct.SWITCHES)
             "waits.what.",  # 1.8.5: common.js startingTip builds the key from what the board sent (`starting.what`)
+            "desk.set.open.why.",  # 1.8.51: desk.js builds the key from `systems.may_open`'s word (read-only, locked, no)
             "report.perf.owner.","report.perf.confidence.", "report.perf.metric.", "report.perf.origin.", "report.perf.why.", "report.perf.chain.", "report.perf.priority.", "report.perf.outcome.", "report.perf.fact.",  # 1.7.41: the review page builds the key from an owner, an origin, a fact and so on (perfpage.js)
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')

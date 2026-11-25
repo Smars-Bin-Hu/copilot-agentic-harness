@@ -104,6 +104,84 @@ class ServiceUseTests(Case):
         doctor.check_hook_service(self.report, self.root)
         self.assertIn("python 25", self.lines())
 
+    def test_a_service_that_never_answered_is_a_warning_too(self) -> None:
+        """Equivalence N1: with no `via: service` row at all the check used to say nothing, and a service that never worked (another temp folder, another python) went unseen."""
+        doctor.check_hook_service(self.report, self.root, self.rows(0, {"tmp": 30, "absent": 5}))
+        text = self.lines()
+        self.assertIn("[WARN]", text)
+        self.assertIn("tmp 30", text)
+        self.assertNotIn("[OK]", text)
+
+    def test_a_few_calls_of_a_reason_of_their_own_are_not_a_warning_and_other_reasons_than_absent_all_count(self) -> None:
+        doctor.check_hook_service(self.report, self.root, self.rows(0, {"connect": 2}))
+        self.assertEqual(self.report.lines, [])
+        for why in ("connect", "file", "wait", "reply", "mac", "client:ImportError", "born"):
+            self.report = doctor.Report()
+            doctor.check_hook_service(self.report, self.root, self.rows(0, {why: 12}))
+            self.assertIn("[WARN]", self.lines(), why)
+            self.assertIn(f"{why} 12", self.lines(), why)
+
+    def test_born_is_a_problem_and_dead_is_quiet(self) -> None:
+        """The client says `born` when the system would not tell when the board began (Windows: access denied) and `dead` when there is no such process (red team N7)."""
+        self.assertNotIn("born", doctor.SERVICE_QUIET)
+        self.assertIn("dead", doctor.SERVICE_QUIET)
+        doctor.check_hook_service(self.report, self.root, self.rows(0, {"dead": 30}))
+        self.assertEqual(self.report.lines, [])
+        doctor.check_hook_service(self.report, self.root, self.rows(3, {"born": 30}))
+        self.assertIn(messages.text("doctor.hook.service_born"), self.lines())
+
+
+class ServiceFileTests(Case):
+    """The board runs and the hook service is on in the settings, but `hookserve.json` is not there: the service did not start (equivalence N2)."""
+
+    def board(self, pid: int, minutes_ago: float = 10) -> None:
+        path = self.root / ".harness" / "runtime" / "board-serve.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"port": 8765, "pid": pid, "started": stamp(minutes_ago)}), encoding="utf-8")
+
+    def check(self) -> str:
+        doctor.check_hook_service(self.report, self.root, [], NOW)
+        return self.lines()
+
+    def test_a_running_board_without_the_file_is_a_warning_that_says_where_the_reason_is(self) -> None:
+        self.board(os.getpid())
+        text = self.check()
+        self.assertIn("[WARN]", text)
+        self.assertIn(str(os.getpid()), text)
+        self.assertIn("hook service not started", text)
+        self.assertIn("hookserve.json", text)
+
+    def test_the_file_a_board_that_is_gone_a_switch_off_and_a_board_just_begun_say_nothing(self) -> None:
+        self.board(os.getpid())
+        (self.root / ".harness" / "runtime" / "hookserve.json").write_text("{}", encoding="utf-8")
+        self.assertEqual(self.check(), "")
+        (self.root / ".harness" / "runtime" / "hookserve.json").unlink()
+        self.board(os.getpid(), minutes_ago=0.1)  # 6 s ago
+        self.assertEqual(self.check(), "")
+        import subprocess
+        import sys
+
+        done = subprocess.Popen([sys.executable, "-c", "pass"])
+        done.wait()
+        self.board(done.pid)
+        self.assertEqual(self.check(), "")
+        self.board(os.getpid())
+        (self.root / ".harness" / "policies" / "task.override.json").write_text(json.dumps({"board": {"hook_service": False}}), encoding="utf-8")
+        self.assertEqual(self.check(), "")
+
+    def test_no_board_file_or_one_that_is_not_one_says_nothing(self) -> None:
+        self.assertEqual(self.check(), "")
+        path = self.root / ".harness" / "runtime" / "board-serve.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        for text in ("not json", "[1]", json.dumps({"pid": "x"}), json.dumps({"pid": True}), json.dumps({"pid": -4})):
+            path.write_text(text, encoding="utf-8")
+            self.assertEqual(self.check(), "", text)
+
+    def test_a_pid_the_system_will_not_tell_about_counts_as_a_board_that_may_run(self) -> None:
+        self.board(os.getpid())
+        with mock.patch("hookclient.lookup", return_value=(None, "born")):
+            self.assertIn("[WARN]", self.check())
+
 
 class ClientTraceTests(Case):
     def client(self, rows: List[Dict[str, Any]]) -> None:
@@ -155,6 +233,53 @@ class ClientTraceTests(Case):
             handle.write("x" * (doctor.CLIENT_TAIL_BYTES + 10) + "\n" + json.dumps(self.line("ff" * 16, 10)) + "\n")
         doctor.check_hook_client_trace(self.report, self.root, NOW)
         self.assertEqual(self.report.errors, 1)  # the old lines are before the part that is read; the one at the end has no record
+
+    def test_the_nonce_is_the_field_of_a_row_not_a_text_anywhere_in_it(self) -> None:
+        """Red team N2: a nonce that only appears inside another field of a row (a command, a reason) is not a record of the call."""
+        self.client([self.line("aa" * 16)])
+        self.session_log("s1", [{"at": stamp(30), "reason": 'said "nonce": "' + "aa" * 16 + '"', "target": {"command": "echo " + "aa" * 16}}, {"at": stamp(29), "nonce": ""}, {"at": stamp(28), "nonce": 5}])
+        doctor.check_hook_client_trace(self.report, self.root, NOW)
+        self.assertEqual(self.report.errors, 1)
+
+    def test_the_record_is_found_at_the_end_of_a_long_log(self) -> None:
+        self.client([self.line("ab" * 16, 30)])
+        path = self.session_log("s1", [{"at": stamp(500 + n), "event": "PreToolUse", "pad": "x" * 200} for n in range(40000)] + [{"at": stamp(30), "nonce": "ab" * 16}])
+        self.assertGreater(path.stat().st_size, doctor.CLIENT_TAIL_BYTES)
+        doctor.check_hook_client_trace(self.report, self.root, NOW)
+        self.assertEqual(self.report.errors, 0)
+        self.assertIn("[OK]", self.lines())
+
+    def test_a_line_older_than_the_part_of_a_long_log_that_is_read_is_not_told(self) -> None:
+        self.client([self.line("ab" * 16, 60 * 24 * 3), self.line("cd" * 16, 5)])
+        self.session_log("s1", [{"at": stamp(60 * 24 * 3), "nonce": "ab" * 16}] + [{"at": stamp(4000 - n * 0.09), "event": "PreToolUse", "pad": "x" * 200} for n in range(40000)] + [{"at": stamp(5), "nonce": "cd" * 16}])
+        doctor.check_hook_client_trace(self.report, self.root, NOW)
+        self.assertEqual(self.report.errors, 0, self.lines())  # the first one is in the beginning that is not read; the second is at the end
+
+    def test_a_pruned_log_is_not_a_fault_when_the_line_is_a_day_old_and_is_when_it_is_younger(self) -> None:
+        self.client([self.line("aa" * 16, 60 * 25, session="gone"), self.line("bb" * 16, 60 * 5, session="gone-too")])
+        self.session_log("elsewhere", [{"at": stamp(10), "nonce": "cc" * 16}])
+        doctor.check_hook_client_trace(self.report, self.root, NOW)
+        self.assertEqual(self.report.errors, 1)  # the one of 5 hours cannot have been pruned by a prune that deletes logs idle for days; the one of 25 hours may
+        self.assertIn((NOW - timedelta(minutes=300)).strftime("%Y-%m-%d %H:%M"), self.lines())
+        self.report = doctor.Report()
+        self.client([self.line("aa" * 16, 60 * 25, session="gone")])
+        doctor.check_hook_client_trace(self.report, self.root, NOW)
+        self.assertEqual(self.report.errors, 0)
+
+    def test_a_session_whose_log_is_there_without_the_nonce_is_a_fault_whatever_its_age(self) -> None:
+        self.client([self.line("aa" * 16, 60 * 25, session="s1")])
+        self.session_log("s1", [{"at": stamp(60 * 25), "nonce": "bb" * 16}])
+        doctor.check_hook_client_trace(self.report, self.root, NOW)
+        self.assertEqual(self.report.errors, 1)
+
+    def test_nothing_is_said_without_the_observe_module(self) -> None:
+        """No observe module, no records: every line would be a fault that is not one (red team N2)."""
+        self.client([self.line("aa" * 16)])
+        doctor.check_hook_client_trace(self.report, self.root, NOW, {"modules": {"observe": {"enabled": False}}})
+        doctor.check_hook_client_trace(self.report, self.root, NOW, {"modules": {}})
+        self.assertEqual(self.report.lines, [])
+        doctor.check_hook_client_trace(self.report, self.root, NOW, REGISTRY)
+        self.assertEqual(self.report.errors, 1)
 
 
 class HooksRanTests(Case):
@@ -246,7 +371,7 @@ class ConfigTests(unittest.TestCase):
                 self.assertEqual((entry["exec"], entry["args"], entry["cwd"]), ("python", ["-S", ".harness/engine/launch.py"], "."), event)
 
     def test_every_new_message_has_both_languages(self) -> None:
-        for key in ("python_script", "service_ok", "service_local", "service_stale", "client_unreadable", "client_foreign", "client_ok", "ran_unreadable", "never_ran", "ran_ok"):
+        for key in ("python_script", "service_ok", "service_local", "service_stale", "service_missing", "service_born", "client_unreadable", "client_foreign", "client_ok", "ran_unreadable", "never_ran", "ran_ok"):
             for language in ("en", "zh"):
                 self.assertTrue(messages.table(language).get(f"doctor.hook.{key}"), (key, language))
 

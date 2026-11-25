@@ -11,8 +11,8 @@ The protocol (local TCP, one JSON object on a line each way, UTF-8):
   2. request: `{"v":2, "nonce", "raw", "env", "cwd", "py", "pid", "deadline", "mac"}`; `mac` is HMAC-SHA256 with `key` over the nonce and the SHA-256 of the rest of the request as canonical JSON.
   3. the service answers `{"ok":false,"why":...}` when it will not judge (only ever read as "judge it yourself"), else `{"start":true,"mac"}` (the mac of the nonce and "start") once it has the call and the lock,
      then `{"ok":true,"output":{...},"mac"}` (the mac of the nonce and the output as canonical JSON). A line whose mac is not right, or that is not what it should be, is not an answer.
-Each time the answer of the service is used, one line goes to `.harness/runtime/logs/hookclient.jsonl` (`at`, `nonce`, `session_id`, `event`); the service writes the same `nonce` in the record of the call, so a check can
-find an answer that was used and was not judged by this board."""
+Each time the answer of the service is used for a PreToolUse, UserPromptSubmit or SessionStart call that names its session, one line goes to `.harness/runtime/logs/hookclient.jsonl` (`at`, `nonce`, `session_id`, `event`);
+the service writes the same `nonce` in the record of the call (`hook.answer` always leaves that record for such a call), so a check can find an answer that was used and was not judged by this board."""
 
 import hashlib
 import hmac
@@ -25,7 +25,8 @@ import time
 LIMIT = 8 * 1024 * 1024  # bytes of one line, either way
 CONNECT = 1.0  # seconds to connect (a closed port on Windows takes 1 to 2 s to say so)
 MOST = 5.0  # most seconds to wait for the hello and for the start line, whatever the file says
-TOTAL = 60.0  # seconds from the start of this process to the answer (the hook may run 120: Copilot lets the call go when a hook does not answer in time; the judgment here comes after)
+AFTER = 20.0  # most seconds to wait for the answer once the start line has come (a normal answer takes under 1 s): a judgement that is stuck must leave time for the one in this process before Copilot gives up on the hook at 120 s
+TRACED = ("PreToolUse", "UserPromptSubmit", "SessionStart")  # the events whose used answer is traced: for these the service's record of the call always exists and has the nonce (`hook.answer`)
 FILE = (".harness", "runtime", "hookserve.json")
 TRACE = (".harness", "runtime", "logs", "hookclient.jsonl")
 
@@ -47,12 +48,18 @@ def same(one, other):
 
 
 def born(pid):
-    """When the process `pid` was created, as the system tells it (a text that is the same each time it is asked while the process lives), or None when there is no such process or the system does not say. Windows:
-    GetProcessTimes; macOS: proc_pidinfo; Linux: /proc. Any doubt is None, and None is never the same as anything."""
+    """When the process `pid` was created, as the system tells it (a text that is the same each time it is asked while the process lives), or None when there is no such process or the system does not say. Any doubt is None, and
+    None is never the same as anything. `lookup` tells which of the two it was."""
+    return lookup(pid)[0]
+
+
+def lookup(pid):
+    """`(when the process was created, "")`; `(None, "dead")` when there is no such process (or it ended and nobody has collected it); `(None, "born")` when the system would not tell (access denied, a call that failed, a
+    shape not known): the board may run, and this process cannot know. Windows: GetProcessTimes; macOS: proc_pidinfo; Linux: /proc."""
     try:
         pid = int(pid)
         if pid < 1:
-            return None
+            return None, "dead"
         if os.name == "nt":
             return _born_windows(pid)
         if sys.platform == "darwin":
@@ -61,7 +68,7 @@ def born(pid):
             return _born_linux(pid)
     except BaseException:  # noqa: BLE001
         pass
-    return None
+    return None, "born"
 
 
 def _born_windows(pid):
@@ -79,15 +86,17 @@ def _born_windows(pid):
     kernel.CloseHandle.restype = wintypes.BOOL
     handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not handle:
-        return None
+        return None, ("dead" if ctypes.get_last_error() == 87 else "born")  # ERROR_INVALID_PARAMETER: no such process; access denied and the rest: the system will not say
     try:
         code = wintypes.DWORD()
-        if not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value != 259:  # STILL_ACTIVE
-            return None
+        if not kernel.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return None, "born"
+        if code.value != 259:  # STILL_ACTIVE
+            return None, "dead"
         created, _exit, _kernel, _user = (wintypes.FILETIME() for _ in range(4))
         if not kernel.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(_exit), ctypes.byref(_kernel), ctypes.byref(_user)):
-            return None
-        return "nt:%d" % ((created.dwHighDateTime << 32) | created.dwLowDateTime)
+            return None, "born"
+        return "nt:%d" % ((created.dwHighDateTime << 32) | created.dwLowDateTime), ""
     finally:
         kernel.CloseHandle(handle)
 
@@ -100,20 +109,24 @@ def _born_mac(pid):
     lib.proc_pidinfo.restype = ctypes.c_int
     size = 136  # sizeof(struct proc_bsdinfo)
     buffer = ctypes.create_string_buffer(size)
+    ctypes.set_errno(0)
     if lib.proc_pidinfo(pid, 3, 0, buffer, size) != size:  # PROC_PIDTBSDINFO
-        return None
+        return None, ("dead" if ctypes.get_errno() == 3 else "born")  # ESRCH: no such process; EPERM and the rest: the system will not say
     raw = buffer.raw
     if int.from_bytes(raw[4:8], sys.byteorder) == 5:  # SZOMB: it ended, nobody has collected it yet
-        return None
+        return None, "dead"
     seconds, micro = int.from_bytes(raw[120:128], sys.byteorder), int.from_bytes(raw[128:136], sys.byteorder)  # pbi_start_tvsec, pbi_start_tvusec
-    return "mac:%d.%06d" % (seconds, micro) if seconds else None
+    return ("mac:%d.%06d" % (seconds, micro), "") if seconds else (None, "born")
 
 
 def _born_linux(pid):
-    with open("/proc/%d/stat" % pid, "rb") as handle:
-        text = handle.read().decode("latin-1")
+    try:
+        with open("/proc/%d/stat" % pid, "rb") as handle:
+            text = handle.read().decode("latin-1")
+    except FileNotFoundError:
+        return None, "dead"
     rest = text[text.rindex(")") + 2:].split()  # after the name of the program, which may hold spaces and brackets: state is field 3, start time field 22
-    return None if rest[0] in ("Z", "X") else "linux:" + rest[19]
+    return (None, "dead") if rest[0] in ("Z", "X") else ("linux:" + rest[19], "")
 
 
 def read_line(sock, buffer, until):
@@ -154,17 +167,23 @@ def clean(why):
 
 
 def trace(root, nonce, raw):
-    """One line in `hookclient.jsonl`: this process used an answer of the service. A trace is never a reason to change the answer, so whatever goes wrong here is ignored."""
+    """One line in `hookclient.jsonl`: this process used an answer of the service, for a call whose record the service always leaves with this nonce (an event of `TRACED`, in a session: for any other call `hook.answer` writes
+    a record only when it can read the call, so a line for one of those could be a false alarm). A trace is never a reason to change the answer, so whatever goes wrong here is ignored."""
     try:
         try:
             data = json.loads(raw)
         except ValueError:
-            data = {}  # the service judged a payload that is no object too (it refuses it): that is a record, so it is a line
-        data = data if isinstance(data, dict) else {}
-        session, event = data.get("session_id") or data.get("sessionId") or "", data.get("hook_event_name") or ""
+            return
+        if not isinstance(data, dict):
+            return
+        session, event = data.get("session_id") or data.get("sessionId"), data.get("hook_event_name")
+        if not (isinstance(session, str) and session and event in TRACED):
+            return
         now = time.time()
-        row = {"at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + ".%06d+00:00" % int((now % 1) * 1000000), "nonce": nonce, "session_id": session if isinstance(session, str) else "", "event": event if isinstance(event, str) else ""}
-        with open(os.path.join(str(root), *TRACE), "a", encoding="utf-8") as handle:
+        row = {"at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + ".%06d+00:00" % int((now % 1) * 1000000), "nonce": nonce, "session_id": session, "event": event}
+        path = os.path.join(str(root), *TRACE)
+        os.makedirs(os.path.dirname(path), exist_ok=True)  # an answer of something that is not the board may be the first thing there: the line is still the proof
+        with open(path, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(row) + "\n")
     except BaseException:  # noqa: BLE001
         pass
@@ -179,7 +198,6 @@ def ask(raw, root):
 
 
 def _ask(raw, root):
-    began = time.monotonic()
     try:
         with open(os.path.join(str(root), *FILE), "r", encoding="utf-8") as handle:
             info = json.load(handle)
@@ -194,8 +212,9 @@ def _ask(raw, root):
         return None, "file"
     if pid < 1 or port < 1:
         return None, "file"
-    if born(pid) != saved:  # no such process, another process (the pid was used again after the board went), or the system does not say: not the board that wrote this file
-        return None, "dead"
+    found, problem = lookup(pid)
+    if found != saved:  # not the board that wrote this file: no such process (`dead`), another process (the pid was used again after the board went: `dead`), or the system would not tell (`born`: access denied or a failed call, a board that may run and that this process cannot tell from another)
+        return None, "born" if problem == "born" else "dead"
     window = min(max(float(wait), 1.0), MOST)
     try:
         sock = socket.create_connection(("127.0.0.1", port), timeout=CONNECT)
@@ -240,7 +259,7 @@ def _ask(raw, root):
             return None, clean(first.get("why"))
         if first.get("start") is not True or not isinstance(first.get("mac"), str) or not same(first["mac"], sign(key, nonce, "start")):
             return None, "mac" if first.get("start") is True else "reply"
-        line, why = read_line(sock, buffer, time.monotonic() + max(TOTAL - (time.monotonic() - began), 1.0))
+        line, why = read_line(sock, buffer, time.monotonic() + AFTER)  # a normal answer is there in under a second
         if line is None:
             return None, "lost-after-start" if why in ("wait", "closed") else why
         second = parse(line)

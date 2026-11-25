@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from core import ahp, clip, pace, company, config, govern, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, safe_name, session_files
-from core.paths import cli_command, logs_dir, policies_dir, python_command
+from core.paths import board_serve_file, cli_command, hook_serve_file, logs_dir, policies_dir, python_command
 from core.registry import load_registry
 from core.events import CONFIG_KEYS
 from core.state import TRACKED_EVENTS
@@ -46,15 +46,17 @@ TIMEOUT_SESSIONS = 5  # the newest sessions whose Copilot record is read for hoo
 TIMED_OUT = re.compile(r"timed out after (\d+) seconds", re.I)
 SCRIPT_SUFFIXES = (".bat", ".cmd", ".ps1")  # (1.8.53) Copilot's `exec` starts only .exe and .com programs: a `python` found as one of these is not what it starts
 SERVICE_SAMPLE = 40  # the newest hook calls whose `via` says who judged them
-SERVICE_QUIET = ("absent", "dead", "")  # the board was not running: not a fault of the service
+SERVICE_QUIET = ("absent", "dead", "")  # the board was not running: not a fault of the service. `born` is not here: the system would not tell this process whether the board runs (Windows: access denied), which is a problem to report
+SERVICE_MIN = 3  # the calls judged by the hook process for a reason of its own (not `SERVICE_QUIET`) that make a warning, however few the calls are
+SERVICE_START_SECONDS = 30  # a board that began less ago has not written `hookserve.json` yet (the service starts after the page is listening, and the doctor of the Enter screen runs in between)
 CLIENT_DAYS = 7  # the hook client's own trace is checked for this long
 CLIENT_GRACE_SECONDS = 60  # a line this new may be ahead of the board's own record
-CLIENT_TAIL_BYTES = 4 * 1024 * 1024
+CLIENT_TAIL_BYTES = 4 * 1024 * 1024  # of the end of the trace, and of the end of each session log (the newest rows are there)
 CLIENT_LOG_FILES = 400  # the session logs looked at for the nonces
+CLIENT_PRUNED_HOURS = 24  # a trace line this old whose session log is gone was pruned (`logs prune`), not forged: a younger one cannot have been
 NEVER_RAN_SESSIONS = 5  # the newest Copilot sessions of this folder
 NEVER_RAN_DAYS = 14
 NEVER_RAN_SCAN_BYTES = 16 * 1024 * 1024
-NONCE = re.compile(r'"nonce": ?"([0-9a-fA-F]{8,64})"')
 
 
 TOPICS = "HARNESS_DOCTOR_TOPICS"  # the board's own run (1.7.38): a warning about the company's content (knowledge base, standards, repositories) says so, `[WARN:company]`; one about its copies `[WARN:copies]`; a person's run prints `[WARN]` as always
@@ -236,27 +238,56 @@ def check_hook_python(report: Report, found: Optional[str] = None, windows: Opti
         report.warn(say("doctor.hook.python_script", found=found, kind=Path(found).suffix.lower()))
 
 
-def check_hook_service(report: Report, root: Path, rows: Optional[List[Dict[str, Any]]] = None) -> None:
-    """(1.8.53) Does the board's judging service answer the hooks, or do they judge by themselves? The log rows say `via` (`service` or `local`) and, for a local one, `why` (`absent` and `dead`: no board; `tmp`, `python`, `stale`...: the
-    service would not answer). When the board was running (service rows are in the newest rows) and over half of them are local for a reason other than the board's absence, the hooks are slower than they have to be: a warning that names the reasons."""
+def check_hook_service_file(report: Report, root: Path, now: Optional[datetime] = None) -> None:
+    """(1.8.54, equivalence N2) The board runs and its hook service is switched on, but `hookserve.json` is not there: the service did not start (the board printed why), and every hook process judges for itself. A board that
+    began a moment ago has not written it yet."""
+    try:
+        if (config.policy_or_empty(root, "task").get("board") or {}).get("hook_service") is False:
+            return
+        data = config.read_json(board_serve_file(root))
+        pid = data.get("pid") if isinstance(data, dict) else None
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid < 1 or hook_serve_file(root).exists():
+            return
+        began = _stamp(data.get("started"))
+        if began is not None and ((now or datetime.now(timezone.utc)) - began).total_seconds() < SERVICE_START_SECONDS:
+            return
+        import hookclient
+
+        found, problem = hookclient.lookup(pid)
+        if found is None and problem != "born":
+            return  # the file is a board's that is gone
+    except Exception:  # noqa: BLE001 - no board file, or one that cannot be read: there is nothing to say
+        return
+    report.warn(say("doctor.hook.service_missing", pid=pid))
+
+
+def check_hook_service(report: Report, root: Path, rows: Optional[List[Dict[str, Any]]] = None, now: Optional[datetime] = None) -> None:
+    """(1.8.53) Does the board's judging service answer the hooks, or do they judge by themselves? The log rows say `via` (`service` or `local`) and, for a local one, `why` (`absent` and `dead`: no board; `tmp`, `python`, `stale`,
+    `born`...: the service would not answer, or the board could not be told from another process). When over half of the newest rows are local for a reason other than the board's absence (1.8.54: also when none was served at all:
+    a service that never worked), the hooks are slower than they have to be: a warning that names the reasons. A board that runs without having written `hookserve.json` is a warning too (`check_hook_service_file`)."""
+    check_hook_service_file(report, root, now)
     try:
         found = recent_calls(root) if rows is None else rows
     except Exception:  # noqa: BLE001 - check_hook_activity says that the logs cannot be read
         return
     sample = [row for row in found if row.get("via") in ("service", "local")][-SERVICE_SAMPLE:]
     served = sum(1 for row in sample if row.get("via") == "service")
-    if not served:
-        return
     odd = [row for row in sample if row.get("via") == "local" and str(row.get("why") or "") not in SERVICE_QUIET]
-    if len(odd) * 2 <= len(sample):
-        report.ok(say("doctor.hook.service_ok", served=served, count=len(sample)))
+    if len(odd) * 2 <= len(sample) or len(odd) < SERVICE_MIN:
+        if served:
+            report.ok(say("doctor.hook.service_ok", served=served, count=len(sample)))
         return
     counts: Dict[str, int] = {}
     for row in odd:
         counts[str(row.get("why"))] = counts.get(str(row.get("why")), 0) + 1
     reasons = ", ".join(f"{name} {count}" for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])))
     newest = next((str(row.get("why") or "") for row in reversed(sample) if row.get("via") == "local"), "")
-    report.warn(say("doctor.hook.service_local", served=served, local=len(odd), count=len(sample), reasons=reasons) + (" " + say("doctor.hook.service_stale") if newest == "stale" else ""))
+    text = say("doctor.hook.service_local", served=served, local=len(odd), count=len(sample), reasons=reasons)
+    if newest == "stale":
+        text += " " + say("doctor.hook.service_stale")
+    if "born" in counts:
+        text += " " + say("doctor.hook.service_born")
+    report.warn(text)
 
 
 def _stamp(at: Any) -> Optional[datetime]:
@@ -267,10 +298,43 @@ def _stamp(at: Any) -> Optional[datetime]:
         return None
 
 
-def check_hook_client_trace(report: Report, root: Path, now: Optional[datetime] = None) -> None:
-    """(1.8.53, red team F1) The hook client writes `{"at", "nonce", "session_id", "event"}` to `logs/hookclient.jsonl` each time it takes an answer from a service, and the board's service puts the same `nonce` in the
-    record of the call it judged (the session log). An answer the client took with no such record came from something that is not the board (a process that took the port of a board that closed, with a key it read)."""
+def _tail_nonces(path: Path) -> Any:
+    """`(the nonces in the rows of the end of the log, the time of its first whole row read, whether the beginning of the log was left out)`. A row is read as JSON and its `nonce` field is the one that counts."""
+    size = path.stat().st_size
+    with path.open("rb") as handle:
+        if size > CLIENT_TAIL_BYTES:
+            handle.seek(size - CLIENT_TAIL_BYTES)
+            handle.readline()  # the start of a line
+        text = handle.read().decode("utf-8", errors="replace")
+    found: Set[str] = set()
+    first: Optional[datetime] = None
+    for number, line in enumerate(text.split("\n")):
+        if not line.strip():
+            continue
+        if number == 0 or '"nonce"' in line:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            if first is None:
+                first = _stamp(row.get("at"))
+            if isinstance(row.get("nonce"), str) and row["nonce"]:
+                found.add(row["nonce"])
+    return found, first, size > CLIENT_TAIL_BYTES
+
+
+def check_hook_client_trace(report: Report, root: Path, now: Optional[datetime] = None, registry: Optional[Dict[str, Any]] = None) -> None:
+    """(1.8.53, red team F1) The hook client writes `{"at", "nonce", "session_id", "event"}` to `logs/hookclient.jsonl` each time it takes an answer from a service (for a PreToolUse, UserPromptSubmit or SessionStart call), and the
+    board's service puts the same `nonce` in the record of the call it judged (the `nonce` field of a row of the session log). An answer the client took with no such record came from something that is not the board (a process that took
+    the port of a board that closed, with a key it read). Needs the observe module (it writes the records). 1.8.54: the end of each log is read, where the newest rows are; a line whose session log is gone and that is a day old was pruned,
+    which is not a forgery; one whose log is there (or is not and is younger) is."""
     try:
+        registry = load_registry(root) if registry is None else registry
+        entry = registry["modules"].get("observe")
+        if entry is None or not entry["enabled"]:
+            return
         path = logs_dir(root) / "hookclient.jsonl"
         if not path.is_file():
             return
@@ -282,7 +346,7 @@ def check_hook_client_trace(report: Report, root: Path, now: Optional[datetime] 
                 handle.seek(size - CLIENT_TAIL_BYTES)
                 handle.readline()  # the start of a line
             text = handle.read().decode("utf-8", errors="replace")
-        used: Dict[str, datetime] = {}
+        used: Dict[str, Any] = {}  # nonce -> (when, session)
         for line in text.split("\n"):
             try:
                 row = json.loads(line)
@@ -290,24 +354,45 @@ def check_hook_client_trace(report: Report, root: Path, now: Optional[datetime] 
                 continue
             at = _stamp(row.get("at")) if isinstance(row, dict) else None
             if at is not None and since <= at <= until and isinstance(row.get("nonce"), str) and row["nonce"]:
-                used[row["nonce"]] = max(at, used.get(row["nonce"], at))
+                before = used.get(row["nonce"])
+                used[row["nonce"]] = (max(at, before[0]) if before else at, str(row.get("session_id") or ""))
         if not used:
             return
         known: Set[str] = set()
-        files = sorted((item for _surface, item in session_files(root)), key=lambda item: item.stat().st_mtime, reverse=True)[:CLIENT_LOG_FILES]
-        for item in files:
+        covered: Dict[str, Any] = {}  # the file name of a session log -> (the time of the first row read, or None; whether the beginning was left out)
+        every = sorted(session_files(root), key=lambda item: item[1].stat().st_mtime, reverse=True)
+        names = {item.name for _surface, item in every}
+        for _surface, item in every[:CLIENT_LOG_FILES]:
             if item.stat().st_mtime < since.timestamp():
                 break
-            with item.open(encoding="utf-8", errors="replace") as handle:
-                known.update(NONCE.findall(handle.read(CLIENT_TAIL_BYTES * 2)))
+            nonces, first, cut = _tail_nonces(item)
+            known.update(nonces)
+            covered[item.name] = (first, cut)
+            if used.keys() <= known:
+                break
     except Exception as error:  # noqa: BLE001 - a trace that cannot be read is said, not taken for clean
         report.warn(say("doctor.hook.client_unreadable", error=" ".join(str(error).split())[:200]))
         return
-    missing = {nonce: at for nonce, at in used.items() if nonce not in known}
+    missing: Dict[str, datetime] = {}
+    for nonce, (at, session) in used.items():
+        if nonce in known:
+            continue
+        name = safe_name(session) + ".jsonl"
+        if name not in names:
+            if (now - at).total_seconds() >= CLIENT_PRUNED_HOURS * 3600:
+                continue  # its log was pruned
+        elif name not in covered:
+            continue  # the log is there and was not read (older than the days checked, or too many logs): not told
+        else:
+            first, cut = covered[name]
+            if cut and (first is None or at < first):
+                continue  # the row would be in the beginning of the log, which is not read
+        missing[nonce] = at
+    checked = sum(1 for nonce, (at, session) in used.items() if nonce in known or nonce in missing)
     if missing:
         report.error(say("doctor.hook.client_foreign", count=len(missing), total=len(used), days=CLIENT_DAYS, when=max(missing.values()).strftime("%Y-%m-%d %H:%M") + " UTC"))
-    else:
-        report.ok(say("doctor.hook.client_ok", count=len(used), days=CLIENT_DAYS))
+    elif checked:
+        report.ok(say("doctor.hook.client_ok", count=checked, days=CLIENT_DAYS))
 
 
 def check_hooks_ran(report: Report, root: Path, registry: Dict[str, Any], now: Optional[datetime] = None) -> None:
@@ -1236,7 +1321,7 @@ def run(root: Path, accept: bool = False) -> int:
     tick('check_hook_service')
     check_hook_service(report, root)
     tick('check_hook_client_trace')
-    check_hook_client_trace(report, root)
+    check_hook_client_trace(report, root, registry=registry)
     tick('check_hooks_ran')
     check_hooks_ran(report, root, registry)
     tick('check_agents')

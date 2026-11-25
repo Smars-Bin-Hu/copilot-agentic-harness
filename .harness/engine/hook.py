@@ -153,8 +153,12 @@ def process(raw: str, root: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     return adapter.render(event, decision), record
 
 
+KEPT_WHEN_OBSERVE_FAILS = ("surface", "engine", "event", "session_id", "tool_name", "decision", "ms", "pid", "via", "why", "nonce")  # nothing that could hold a command or a password
+
+
 def observe(root: Path, record: Dict[str, Any], raw: str, output: Dict[str, Any]) -> None:
-    """Hand the call record to the observe module, if it is on. Logging must never get in the way of the hook."""
+    """Hand the call record to the observe module, if it is on. Logging must never get in the way of the hook. When the module cannot be asked (the registry cannot be read) the call still leaves a short line in the log
+    of its session, without its texts: a hook process that took the service's answer wrote a trace line for it, and `doctor` matches the two (1.8.54)."""
     try:
         entry = registry_module.load_registry(root)["modules"].get("observe")
         if entry is None or not entry["enabled"] or entry["status"] == "retired":
@@ -162,6 +166,12 @@ def observe(root: Path, record: Dict[str, Any], raw: str, output: Dict[str, Any]
         importlib.import_module("modules.observe").record_call(root, record, raw, output)
     except Exception as error:
         log_error(root, "observe", error)
+        try:
+            from core.logs import log_call as write_line
+
+            write_line(root, dict({key: record[key] for key in KEPT_WHEN_OBSERVE_FAILS if key in record}, error="observe: " + type(error).__name__))
+        except Exception:  # noqa: BLE001 - a log is never a reason to change the answer
+            pass
 
 
 # --- the emergency answer: the standard library only ----------------------------------------------------------------------------------------------------------
@@ -350,6 +360,19 @@ def refusal_record(raw: str, output: Dict[str, Any], kind: str) -> Dict[str, Any
         return {}
 
 
+RECORDED = ("PreToolUse", "UserPromptSubmit", "SessionStart")  # the events of which a hook process that took the service's answer writes a trace line (`hookclient.TRACED`, a test keeps the two the same): each of them has a record in the log of its session, with the nonce
+
+
+def leftover(raw: str) -> Dict[str, Any]:
+    """The few fields that make a call of `RECORDED` a line in the log of its session (`core.logs.log_call` writes none without a session) when the record of the call could not be made: a judgment that failed with nothing to say
+    to the agent (a read), or a record that could not be built. `{}` for any other call, or one that names no session."""
+    payload = _payload(raw)
+    session, event = payload.get("session_id") or payload.get("sessionId"), payload.get("hook_event_name")
+    if isinstance(session, str) and session and event in RECORDED:
+        return {"surface": "vscode", "event": event, "session_id": session}  # `vscode` is the one surface the adapters know
+    return {}
+
+
 def answer(raw: str, root: Path, origin: str = "local", pid: Optional[int] = None, nonce: str = "") -> Dict[str, Any]:
     """The whole judgment of one hook call: payload text in, the output of the runtime out (the log of the call is written here too). The one place that judges: the hook process runs it (`main`), and so does the
     board's judging service for a hook process that asked it (`hookserve.py`, `origin="service"`), so no line of judgment exists twice. Never raises: what cannot be decided is refused as before (`fail_closed`).
@@ -383,6 +406,8 @@ def answer(raw: str, root: Path, origin: str = "local", pid: Optional[int] = Non
         output = fail_closed(root, raw, error)
         record = (refusal_record(raw, output, "engine") if ENGINE_FAULT is None and (output.get("permissionDecision") or output.get("additionalContext")) else {})
         record = dict(record, error=where(error))
+    if ENGINE_FAULT is None and not record.get("session_id"):
+        record = dict(record, **leftover(raw))  # a call that failed to be judged or recorded still leaves its line (below)
     record["ms"] = round((time.monotonic() - started) * 1000, 1)
     record["pid"] = pid if isinstance(pid, int) and not isinstance(pid, bool) else os.getpid()
     record["via"] = "service" if origin == "service" else "local"

@@ -118,6 +118,13 @@ REFUSED: List[str] = [
 ]
 
 ALLOWED: List[str] = [
+    # red team round 3: `state` and `approvals` are common folder names; only inside `runtime` do they count
+    "echo x > $OUT/state/x.json",
+    'mkdir -p "$OUT/approvals" && echo ok > "$OUT/approvals/a.json"',
+    "mkdir -p $HOME/.local/state/app",
+    "rsync -a $SRC/state/ $DST/state/",
+    "Out-File -FilePath $env:TEMP\\state\\a.txt",
+    "touch $dir/state",
     "echo x > build//out.txt",
     "cp a ./src/./b.txt",
     "echo x > $TMPDIR/a",
@@ -215,8 +222,8 @@ class GateDynamicTests(unittest.TestCase):
             "d=.harness; printf '{\"admin\":{\"on\":true}}' > $d/runtime/state/vscode/dyn.json",
             "S=.harness/runtime/state/vscode; python3 -c \"import json;json.dump({'admin':{'on':True}},open('$S/dyn.json','w'))\"",
             "A=.harness/runtime; echo '{\"entries\":[]}' > $A/git-approvals.json",
-            "printf x > $BASE/approvals/x",
-            "printf x > $BASE/state/vscode/s.json",
+            "printf x > $BASE/runtime/approvals/x",
+            "printf x > $BASE/runtime/state/vscode/s.json",
         ):
             with self.subTest(command):
                 self.assertEqual(self.term(command).get("permissionDecision"), "deny")

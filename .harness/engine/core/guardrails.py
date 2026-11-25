@@ -84,7 +84,9 @@ _STREAM_NAME = re.compile(r"::\$\w*$")
 def dynamic_fragments(policy: Dict[str, Any], admin: bool = False) -> List[Tuple[str, ...]]:
     """The parts of the guardrail folders as tuples of names (lower case) for `dynamic_hit`: one name alone (`runtime`, `hookserve`, `.harness`), or the names of a folder in a row (`.github`, `hooks`). In an admin session
     only what stays closed there; the folders outside the workspace (`.copilot-harness`), the key of the hook service and the programs of the root are closed in every session."""
-    found: List[Tuple[str, ...]] = [(HOME_FOLDER,), (FRAGMENT_VARIABLE,)] + [(item,) for item in SERVICE_PARTS] + [(item,) for item in PROGRAM_GUARDRAILS]
+    # `state` and `approvals` are common folder names (`$OUT/state/x`, `$HOME/.local/state`): they count only inside `runtime`, never alone (red team round 3). `runtime` alone still counts: `$X/runtime/...` with X
+    # set in an earlier call is the shape of the hole (forged approvals, `hookserve.json`), and a build that writes a folder `runtime` through a variable is asked to use another name or a literal path.
+    found: List[Tuple[str, ...]] = [(HOME_FOLDER,), (FRAGMENT_VARIABLE,), ("hookserve",), ("runtime",)] + [("runtime", item) for item in SERVICE_PARTS if item != "hookserve"] + [(item,) for item in PROGRAM_GUARDRAILS]
     own = [str(item) for item in policy.get("admin_locked_paths", [])]
     for path in admin_locked(policy) if admin else guardrail_paths(policy):
         parts = tuple(item.lower() for item in str(path).replace("\\", "/").split("/") if item and "*" not in item and "?" not in item)
@@ -109,7 +111,7 @@ def dynamic_hit(word: str, fragments: Sequence[Tuple[str, ...]]) -> str:
     """The fragment (`runtime`, `.github/hooks`...) that a word of a write target names in one of its parts, or "". The word is cut at `/`, `\\` and the marks a substitution leaves in it (`shellvars`): `$(echo .harness)/runtime/x`
     has the parts `$`, `echo`, `.harness`, `runtime`, `x`. Never raises."""
     try:
-        parts = [item for item in (_part(piece) for piece in _PART_SPLIT.split(word)) if item]
+        parts = [".harness" if item.startswith("harnes~") and _SHORT_NAME.fullmatch(item) else item for item in (_part(piece) for piece in _PART_SPLIT.split(word)) if item]  # `HARNES~1` is `.harness` on Windows
         seen = set(parts)
         for fragment in fragments:
             name = fragment[0]

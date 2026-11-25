@@ -47,7 +47,7 @@ HERE = Path(__file__).resolve().parent
 # key and the root-level files), the breaker, the observer, admin mode, the outbox and the language, the task hooks (autorun, rules) and the pins of a held call, the connections; and the small files of other areas (under a
 # minute each: sessions replayed, map-reduce, the agents, the stages of a task, the eval check, the knowledge base status). About 13 minutes with 4 at once.
 HOOK_TESTS = (
-    "test_gate", "test_gate_lists", "test_gate_external", "test_gate_git", "test_gate_approval", "test_gate_ask", "test_gate_super", "test_gate_redteam", "test_keyguard",
+    "test_gate", "test_gate_lists", "test_gate_external", "test_gate_git", "test_gate_approval", "test_gate_ask", "test_gate_super", "test_gate_redteam", "test_keyguard", "test_open_pick",
     "test_breaker", "test_observe", "test_admin", "test_outbox", "test_language", "test_accept", "test_c13_d5",
     "test_autorun_hooks", "test_taskrules", "test_connections", "test_connection_find",
     "test_mapreduce", "test_taskagents", "test_rewind", "test_health", "test_wait", "test_evidence", "test_taskfork", "test_evalcheck", "test_kbstatus", "test_c12_fc", "test_autorun_spend", "test_testdefects", "test_taskinbox",

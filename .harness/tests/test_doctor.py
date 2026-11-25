@@ -275,7 +275,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_a_hook_entry_that_does_not_start_launch_py_is_an_error(self) -> None:
         def change(data: dict) -> None:
-            data["hooks"]["PreToolUse"][0]["args"] = ["-I", "-S", "something_else.py"]
+            data["hooks"]["PreToolUse"][0]["args"] = ["-S", "something_else.py"]
 
         self.edit_json(".github/hooks/harness.json", change)
         self.assertEqual(self.doctor().returncode, 1)

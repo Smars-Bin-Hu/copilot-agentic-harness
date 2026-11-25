@@ -26,7 +26,7 @@ from core.paths import board_serve_port, hook_serve_file, hook_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
 
-from . import approvals, askturn, builtin, external, failclosed, fallback, gitcmd, harnesscmd, outbox, rules, scriptcheck, shellwords, superagent, targetfault, terminal
+from . import approvals, askturn, builtin, external, failclosed, fallback, gitcmd, harnesscmd, keyguard, outbox, rules, scriptcheck, shellwords, superagent, targetfault, terminal
 from . import policy as gate_policy
 from .policy import POLICY_NAME, Compiled, validate_policy
 
@@ -652,11 +652,18 @@ def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
         try:
             target = (ctx.root / path).resolve() if not path.startswith(("/", "\\")) and ":" not in path[:3] else type(ctx.root)(path).resolve()
         except (OSError, ValueError):
-            continue
-        if target == secret:
+            target = None
+        if target is not None and target == secret:
             return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
-        if target == hook_serve_file(ctx.root).resolve():
+        if target is not None and target == hook_serve_file(ctx.root).resolve():
             return Decision(permission="deny", reason=rules.say("gate.hookserve.secret"), facts={"kind": "secret"})
+        kind = keyguard.path_kind(ctx.root, path)  # (1.8.53, red team F2) the same file in another case, another spelling or through a link, a Windows short name
+        if kind:
+            return secret_refusal(kind)
+    if event.tool_kind == "search":  # (1.8.53) a search that aims at the files, a folder that holds them or a glob that reaches them
+        kind = keyguard.search_kind(ctx.root, event.tool_name, tool_arguments(event))
+        if kind:
+            return secret_refusal(kind)
     if event.tool_kind == "terminal" and event.command:
         plain = shellwords.dialect(event.command, "power")  # 1.7.38 (C13 FR3): a PowerShell escape (`` cat .harness/.e`nv ``) hides the name from the text: the line is read with it taken away too
         for text in [event.command] + ([plain] if plain else []):
@@ -665,7 +672,25 @@ def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
                 return Decision(permission="deny", reason=rules.say("gate.hookserve.secret"), facts={"kind": "secret"})
             if SECRET_FILE.search(text) or DUMP_ALL.search(text) or (named and not named <= owned_names(event, ctx)):
                 return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
+        kind = keyguard.command_kind(event.command)  # (1.8.53) `.harness/runtime` named and read, with a wildcard or a program that reads, in any case and quoting
+        if kind:
+            return secret_refusal(kind)
     return None
+
+
+def secret_refusal(kind: str) -> Decision:
+    return Decision(permission="deny", reason=rules.say("gate.connections.secret" if kind == "env" else "gate.hookserve.secret"), facts={"kind": "secret"})
+
+
+def tool_arguments(event: HookEvent) -> Dict[str, Any]:
+    """What the tool was given, as the adapter reads it (`tool_input`, or `toolArgs` as text)."""
+    given = (event.raw or {}).get("tool_input", (event.raw or {}).get("toolArgs"))
+    if isinstance(given, str):
+        try:
+            given = json.loads(given)
+        except ValueError:
+            return {}
+    return given if isinstance(given, dict) else {}
 
 
 def owned_names(event: HookEvent, ctx: Context) -> set:

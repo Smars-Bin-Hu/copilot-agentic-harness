@@ -37,11 +37,11 @@ The **kind** decides what counts as done. The **tier** decides which files the f
 
 ## The gate: stopping dangerous writes and commands
 
-The gate is a hook module that checks before every tool call. It guards writes only, not reads.
+The gate is a hook module that checks before every tool call. It guards writes only, not reads; the one exception is the person's secrets (`.harness/.env` and the key of the board's hook service, `.harness/runtime/hookserve.json`), which it does not let an agent read.
 
 | What it stops | Notes |
 | --- | --- |
-| Guardrail files | `.github/hooks/`, `.harness/engine/`, `.harness/policies/`, `.harness/bin/`, `.harness/toolpacks/`, `.harness/.env`, `Start Harness.command`, `Start Harness.cmd`, `.harness/registry.json`, `.harness/runtime/`, `.vscode/settings.json`, `.vscode/mcp.json`, `LICENSE`, `NOTICE`. They cannot be changed, and an override cannot remove them. The one exception is a session in admin mode (see "admin" below) |
+| Guardrail files | `.github/hooks/`, `.harness/engine/`, `.harness/policies/`, `.harness/bin/`, `.harness/toolpacks/`, `.harness/.env`, `Start Harness.command`, `Start Harness.cmd`, `.harness/registry.json`, `.harness/runtime/`, `.vscode/settings.json`, `.vscode/mcp.json`, `LICENSE`, `NOTICE`, and the files `python.exe`, `python.com`, `python.bat`, `python.cmd`, `python` and `python3` at the root of the workspace only (a hook runs with the root as its folder and Copilot may start a `python` found there). They cannot be changed, and an override cannot remove them. The one exception is a session in admin mode (see "admin" below) |
 | Writes outside the task | A session with a task can write the task folder only. `DEV/` waits for you to approve the plan; `REQ/` and `REF/` cannot be written |
 | The working tree of a target repository | Files in a target repository cannot be changed directly; only promote writes them |
 | Files of the CLI | A task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the two `.diff` files and the reports can be changed only by commands |

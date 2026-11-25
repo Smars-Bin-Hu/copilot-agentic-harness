@@ -39,7 +39,8 @@
       },
       "path_keys": [
         "filePath",
-        "path"
+        "path",
+        "file_path"
       ],
       "command_key": "command",
       "skill_key": "skill",

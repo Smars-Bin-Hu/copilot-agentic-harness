@@ -352,13 +352,14 @@
   const CAPTION = {signin: ["board.enter.cap.signin", ""], preparing: ["board.enter.cap.preparing", ""], doctor: ["board.enter.cap.doctor", "bad"], program: ["board.enter.cap.program", "hot"], "restart-host": ["", "bad"]};
   function paintSub(b) {  // the short line under the button: what it is about, with the reason in its hover
     const cap = CAPTION[b.kind];
-    const text = chk0.said || (b.kind === "restart-host" || !cap ? plainWords(b.detail || "") : t(cap[0], {program: b.program || ""}));
-    const level = chk0.said ? "bad" : cap ? cap[1] : "";
+    const acked = b.kind === "enter" && !chk0.said ? checkOf("doctor").acked : "";  // F13: Enter is open, and a timed-out hook the person acknowledged stays on view, amber, with its time and calls on hover
+    const text = chk0.said || (acked ? t("board.enter.cap.hooks") : b.kind === "restart-host" || !cap ? plainWords(b.detail || "") : t(cap[0], {program: b.program || ""}));
+    const level = chk0.said ? "bad" : acked ? "warn" : cap ? cap[1] : "";
     sub.hidden = !text;
     setText(subText, text);
     setClass(subDot, "en-dot" + (level ? " " + level : ""));
     subDot.hidden = !level;
-    sub.title = b.kind === "restart-host" ? plainWords(b.detail || "") : "";
+    sub.title = acked ? plainWords(acked) : b.kind === "restart-host" ? plainWords(b.detail || "") : "";
   }
   function paintCode(b) {  // the code card of the sign-in: made again only when the code changes; the time left changes in place
     const key = "code|" + (b.code || "") + "|" + root.lang;
@@ -377,7 +378,7 @@
   }
   function paintDoctor() {  // the problems of `harness doctor`: the line it found first, and the ways on from it
     const c = checkOf("doctor"), b = view();
-    const key = ["doctor", c.why, c.detail, c.n, c.integrity, c.started, c.now, b.n, root.lang].join("|");
+    const key = ["doctor", c.why, c.detail, c.n, c.integrity, c.hooks, c.started, c.now, b.n, root.lang].join("|");
     if (card.dataset.k !== key) {
       card.dataset.k = key;
       const said = c.why === "stale" ? t("board.enter.m.doctor.stale", {started: c.started, now: c.now}) : plainWords(c.detail || "");
@@ -391,6 +392,7 @@
         acts.append(restart);
       } else {
         if (c.integrity) acts.append(READY.acceptButton(() => poll()));
+        if (c.hooks) acts.append(READY.link({to: "hookack", events: c.hooks, tip: t("board.hooks.tip")}, {done: () => poll()}, t("board.hooks.button")));  // F13: the timed-out hook of the gate; the person says they have seen it
         acts.append(READY.link({to: "doctor"}, {done: () => poll()}, t("board.enter.doctor.again")));
       }
       card.replaceChildren(h("div", {class: "en-card-t"}, t("board.enter.doc.title")), h("div", {class: "en-probs"}, ...rows), acts);
@@ -473,7 +475,7 @@
   function poll() {
     if (!open || chk0.inflight || document.hidden) return;
     chk0.inflight = true;
-    ask("/api/ready", {}).then((data) => { if (Array.isArray(data.checks) && data.button && data.button.kind === "setup") { open = false; location.replace("/setup"); return; }  // a copy that is not set up (the browser is paired: kind `pair` comes first) goes to the wizard by itself, no click; /setup never sends back to / before Confirm
+    ask("/api/ready", {live: true}).then((data) => { if (Array.isArray(data.checks) && data.button && data.button.kind === "setup") { open = false; location.replace("/setup"); return; }  // a copy that is not set up (the browser is paired: kind `pair` comes first) goes to the wizard by itself, no click; /setup never sends back to / before Confirm
       if (Array.isArray(data.checks)) { chk0.last = data; chk0.at = Date.now(); chk0.error = ""; chk0.misses = 0; READY.notes(data.notes); } else { chk0.error = "bad answer"; chk0.misses = (chk0.misses || 0) + 1; } },
       (error) => { chk0.error = String(error.message || error).slice(0, 200); chk0.misses = (chk0.misses || 0) + 1; })
       .then(() => {

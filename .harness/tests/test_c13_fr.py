@@ -499,6 +499,20 @@ class IntegrityTests(unittest.TestCase):
             out = self.call("run_in_terminal", {"command": command})
             self.assertEqual(out.get("permissionDecision"), "deny", command)
 
+    def test_the_gate_does_not_let_the_agent_acknowledge_the_hook_timeouts_either(self) -> None:
+        """(1.8.x, F13) `harness doctor --accept-hooks` is the person's too: an agent that acknowledged the record of a call that ran without the gate would close the problem itself."""
+        done = subprocess.run([sys.executable, str(self.hook.parent / "cli.py"), "doctor", "--accept-hooks"], capture_output=True, text=True, encoding="utf-8", stdin=subprocess.DEVNULL,
+                              env={**os.environ, "HARNESS_ROOT": str(self.root), "HARNESS_LANGUAGE": "en"}, check=False)
+        self.assertNotEqual(done.returncode, 0)
+        for command in ("harness doctor --accept-hooks", "harness doctor --json --accept-hooks", "cd x && harness doctor --accept-hooks", "harness.cmd doctor --accept-hooks"):
+            out = self.call("run_in_terminal", {"command": command})
+            self.assertEqual(out.get("permissionDecision"), "deny", command)
+        for command in ("harness doctor", "harness doctor --json"):
+            self.assertNotEqual(self.call("run_in_terminal", {"command": command}).get("permissionDecision"), "deny", command)  # looking is free
+        from core import hookack
+
+        self.assertEqual(hookack.path_of(self.root).parent, self.integrity.home_dir(), "kept in the guarded folder, where an agent cannot write")
+
     def test_the_check_is_cheap(self) -> None:
         import time
 
@@ -880,11 +894,12 @@ class AgentGoneTests(BatchCase):
         self.stop()
         board = self.board()
         shown = board.batch({"step": "preview", "codes": [a, b]})
-        with mock.patch.object(boardserve.Board, "wake", return_value=True) as wake:
+        with mock.patch.object(boardserve.Board, "wake_why", return_value="") as wake:
             done = board.batch({"step": "act", "codes": [a, b], "code": shown["code"], "seen": {}})
+            board.telling.join(10)  # 1.8.55: told in the background
         self.assertEqual(wake.call_count, 1)
         self.assertIn(a, wake.call_args[0][1])
-        self.assertEqual(done["agent"], {a: "ended", b: "ended"}, "the page must not say it goes on by itself")
+        self.assertEqual(done["agent"], {a: "telling", b: "telling"}, "the page must not say it goes on by itself")
         self.assertEqual([self.told(a), self.told(b)], ["message", "message"])
 
     def test_when_the_wake_cannot_go_the_card_asks_the_person_to_tell_the_agent_and_never_says_it_goes_on(self) -> None:
@@ -893,10 +908,11 @@ class AgentGoneTests(BatchCase):
         self.beat(a, b)
         self.stop()
         board = self.board()
-        with mock.patch.object(boardserve.Board, "wake", return_value=False):
+        with mock.patch.object(boardserve.Board, "wake_why", return_value="VS Code is closed."):
             done = board.batch({"step": "act", "codes": [a, b], "code": board.batch({"step": "preview", "codes": [a, b]})["code"], "seen": {}})
-        self.assertEqual(done["agent"], {a: "ended", b: "ended"})
-        self.assertEqual([self.told(a), self.told(b)], ["", ""], "nothing was told: the page offers the button")
+            board.telling.join(10)
+        self.assertEqual(done["agent"], {a: "telling", b: "telling"})
+        self.assertEqual([self.told(a), self.told(b)], ["failed", "failed"], "nothing was told: the page offers the button, and says why")
 
     def test_an_agent_that_is_still_in_its_wait_hears_by_it_and_is_not_woken(self) -> None:
         self.new(kind="rca")
@@ -915,10 +931,12 @@ class AgentGoneTests(BatchCase):
         self.beat(a)
         self.stop()
         board = self.board()
-        with mock.patch.object(boardserve.Board, "wake", return_value=True) as wake:
+        with mock.patch.object(boardserve.Board, "wake_why", return_value="") as wake:
             done = board.act("approve-action", NAME, "act", code=a)
+            board.telling.join(10)
         self.assertEqual(wake.call_count, 1)
-        self.assertEqual(done["agent"], "ended")
+        self.assertEqual(done["agent"], "telling")
+        self.assertEqual(self.told(a), "message")
 
     def test_a_dismissal_with_its_reason_and_line_wakes_the_agent_that_has_stopped(self) -> None:
         self.new(kind="rca")

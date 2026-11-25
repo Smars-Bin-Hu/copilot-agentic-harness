@@ -293,6 +293,12 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     opened = False
     system = systems.get(action.system) or {}
     scope = systems_mod.open_scope(system, action.env)  # 1.7.38: how far the person may open this connection: all, items or no (prod is always no)
+    whole = not systems_mod.may_open(system, action.env)  # 1.8.51: the person may open this connection whole (QAT and PROD only when declared read-only)
+    seen = not getattr(action, "blind", False) and getattr(action, "file_why", "") in ("", "destroy")  # 1.8.51: the gate saw all the call does (no unread file, no unseen input, no stray output file)
+    if not passes and whole and seen and getattr(action, "zone", "") not in ("refuse", "broken"):  # 1.8.51: an opened connection passes every call, whatever its rule says; the account it signs in with protects it.
+        data = _open_task(ctx)  # Never the refuse list, a broken pack, nor what reaches no connection the gate can name (those were answered above)
+        if data and _conn_opened(data, action.system, action.env):
+            return {"action": action, "decision": decision, "passes": True, "approved": False, "opened": True, "how": "opened", "code": ""}
     if decision == external.TASK:
         data = _open_task(ctx)
         if data and _test_granted(data, action.env):
@@ -309,17 +315,19 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     held = decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes
     unjudged = getattr(action, "zone", "") in ("ask", "broken")  # a call of a type with lists that is in no list (a script the gate could not read, a statement off the write list): opening the connection does not let it through, each run waits for the person
     listed_write = getattr(action, "zone", "") == "write"  # every statement is on the type's read or write list (1.7.38, C13 SQL): a destroy that the write list names (`DROP TABLE`, `TRUNCATE TABLE` on DEV) passes an opened connection too
-    if held and scope == systems_mod.ALL and (action.verb != external.DESTROY or listed_write) and not unjudged:  # the person opened this connection for this task (`task allow --conn`, 1.7.38): no further approval. A destroy of a type with no lists never passes
+    if held and not whole and systems_mod.may_open(system, action.env) != "read-only" and scope == systems_mod.ALL and (action.verb != external.DESTROY or listed_write) and not unjudged:  # a system written by hand opened before 1.8.51 by its old rule: its listed writes still pass
         data = _open_task(ctx)
         opened = bool(data and _conn_opened(data, action.system, action.env))
         passes = opened
         how = "opened" if opened else ""
     result = {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
     if decision == external.OUTBOX and not passes:  # what the card can offer: open this connection (or its linked items) for the task. A line with writes to two connections has one offer for each
-        if scope == systems_mod.ALL and (action.verb != external.DESTROY or listed_write) and not unjudged:
-            result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ALL}
-        elif scope == systems_mod.ITEMS and scoped and scoped[0] == "linked":
+        if scope == systems_mod.ITEMS and scoped and scoped[0] == "linked":  # a write to a linked ticket: the card opens the linked items, as before (the whole connection is ticked in the pop, 1.8.51)
             result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ITEMS, "refs": [scoped[1]]}
+        elif whole and seen and getattr(action, "zone", "") != "broken":  # 1.8.51: the card opens the connection whole, as the pop does (not for a call opening would not pass)
+            result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ALL}
+        elif scope == systems_mod.ALL and systems_mod.may_open(system, action.env) != "read-only" and (action.verb != external.DESTROY or listed_write) and not unjudged:
+            result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ALL}
     return result
 
 
@@ -877,7 +885,7 @@ def _handle_call(event: HookEvent, ctx: Context, policy: dict, compiled: Compile
         if judged and (judged["passes"] or judged["approved"]) and not (decided and decided.permission == "deny"):
             data = _open_task(ctx)
             if data:  # the call goes through now: the task keeps what let it through, so a run the agent records can say it (core.calls, 1.7.9)
-                calls.note(ctx.root, data["task"], event.command, judged["action"].system, judged["action"].env, judged["action"].verb, judged.get("how", ""), judged.get("code", ""))
+                calls.note(ctx.root, data["task"], event.command, judged["action"].system, judged["action"].env, judged["action"].verb, judged.get("how", ""), judged.get("code", ""), floor=not judged["action"].named)
         return decided
     if not event.paths:
         return Decision(permission="deny", reason=rules.write_no_path(event.tool_name), facts={"kind": "write-no-path"})

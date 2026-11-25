@@ -9,7 +9,7 @@ import unittest
 
 import support  # noqa: F401 - puts the engine on the path
 
-from core import messages
+from core import messages, tasks
 from modules.task import taskhtml
 
 WEB = taskhtml.WEB
@@ -163,6 +163,58 @@ class KeyAndLanguageTests(unittest.TestCase):
         for key in ("desk.tab.live", "desk.live.title", "desk.info.effort", "desk.ctx.part.system"):
             self.assertRegex(zh[key], HAN, key)
         self.assertIn("{level}", zh["desk.info.effort"])
+
+
+class FormStateTests(unittest.TestCase):
+    """F3 and F4 of the slow-computer findings: the New task form follows its fields, an old answer never wins, and the selects are never empty or reset."""
+
+    def create(self) -> str:
+        return source("chat.js").split("function create(preset)")[1].split("// \"Allow . deny\"")[0]
+
+    def test_f3_an_older_preview_answer_never_overwrites_a_newer_one(self) -> None:
+        create = self.create()
+        refresh = create.split("function refresh()")[1].split("const close = ")[0]
+        self.assertIn("const mine = ++state.seq;", refresh)
+        self.assertEqual(refresh.count("if (mine !== state.seq) return;"), 2)  # the answer and the error
+        self.assertIn("state.seq++", create.split("const close = ")[1].split("\n")[0])  # a closed dialog takes no answer
+        self.assertIn('preview.classList.add("is-pending")', refresh)
+        self.assertIn(".send-preview.is-pending", source("space.css"))
+
+    def test_f3_create_follows_the_fields_not_the_last_server_answer(self) -> None:
+        create = self.create()
+        line = [row for row in create.splitlines() if row.lstrip().startswith("const sync = ")][0]
+        for part in ("state.busy", "files.reading()", "!state.options", "!local()", "state.pending"):
+            self.assertIn(part, line)
+        local = [row for row in create.splitlines() if row.lstrip().startswith("const local = ")][0]
+        for part in ("name.value.trim()", "kind.value", "text.value.trim()", "state.skill"):
+            self.assertIn(part, local)
+        self.assertIn("sync();", create.split("function refresh()")[1].split("state.timer = setTimeout")[0])  # on every keystroke, before the round trip
+        click = create.split('go.addEventListener("click"')[1].split('ask("/api/create", {step: "options"})')[0]
+        self.assertIn("said.replaceChildren(...SERVE.reasons(shown(error)))", click)  # a refusal of the server is told, never silent
+        self.assertIn('...body("act")', click)  # the server still checks everything on Create
+
+    def test_f4_the_kind_list_is_the_engines_and_the_options_answer_leaves_it_alone(self) -> None:
+        chat = source("chat.js")
+        found = re.search(r"const KINDS = \[([^\]]*)\];", chat)
+        self.assertIsNotNone(found)
+        self.assertEqual(re.findall(r'"([a-z]+)"', found.group(1)), list(tasks.KINDS))  # same ids, same order
+        create = self.create()
+        self.assertIn("...KINDS.map(", create.split("const source = ")[0])
+        self.assertNotIn("kind.replaceChildren", create)
+        self.assertNotIn("found.kinds", create)
+
+    def test_f4_a_late_option_list_fills_without_touching_what_the_person_picked(self) -> None:
+        create = self.create()
+        fill = create.split("function fill(found)")[1].split("function again()")[0]
+        self.assertIn("state.touched.model", fill)
+        self.assertIn("had.source", fill)
+        self.assertIn("if (first) {", fill)  # chips, domains and the preset are made once
+        self.assertIn("state.tries < 20", fill)
+        self.assertIn("setTimeout(again, 2000)", fill)
+        self.assertIn("remembered()", fill)  # the remembered model is applied when the list holds it
+        self.assertIn("clearTimeout(state.retry)", create.split("const close = ")[1].split("\n")[0])
+        self.assertIn("board.serve.working", create)  # one "loading" entry in source and model until the answer
+        self.assertIn("state.touched.model = true", create)
 
 
 if __name__ == "__main__":

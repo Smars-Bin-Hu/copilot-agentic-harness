@@ -99,3 +99,69 @@ Every task was done once only, so the numbers show the order of magnitude and no
 - **What the extra money of the orchestration bought was mainly the independent check**: once the builder missed two references across domains, and the reviewer found them and sent the work back, with no person stepping in.
 - So 1.1 kept only the independent check, as `[review]=n` that is switched on when wanted: one agent does the work, and the reviewer checks. A person's approval before anything is written into a repository, and a record that can be looked up, come with a task anyway.
 - **What this did not measure**: tasks with a vague requirement in a very large and messy repository. How much n of 0, 1 and 2 for `[review]` differ on real tasks has to be verified with your real repositories and past requirements.
+
+## 10. What a chat costs: cache, context and model
+
+Every model call sends the whole conversation again: the tool definitions, the system text, the rules, and every message and tool result so far. A **prompt cache** makes that bearable: the part of the prompt that is the same as last time is read from the cache at a low price. Only the new part is written to it, at a high price. The cache lives for a short time. When it has run out, the next call writes everything again.
+
+So three things set the price of the next message: **how large the context is, how long the agent was silent, and which model runs.**
+
+### Measured
+
+These numbers come from Copilot's own session records on one development computer (2026-11-24: 316 sessions with prices, 5,166 AI credits). Most of these sessions were test runs, one straight after the other. Real work has more pauses, so read the shares as a lower bound for cold calls. Prices and cache lifetimes are Copilot's and can change; the harness reads them from the record and does not assume them.
+
+**Where the credits went, by kind of token**
+
+| Kind | Share |
+| --- | --- |
+| Written to the cache | 48% |
+| Read from the cache | 33% |
+| Output | 18% |
+| Plain input | under 1% |
+
+**Where they went, by kind of call**
+
+| Call | Calls | Share | Credits for each, on average |
+| --- | --- | --- | --- |
+| Warm (the cache was alive) | 4,155 | 59% | 0.7 |
+| The first call of a chat | 316 | 23% | 3.8 |
+| Not the main agent (a title, a subagent) | 443 | 9% | 1.0 |
+| Cold (the cache had run out) | 53 | 8% | 7.6 |
+| The first call after a change of model inside a chat | 6 | 1% | 6.4 |
+
+**How long a cache lived**
+
+| Models | Lifetime |
+| --- | --- |
+| The Claude models seen | about 5 minutes |
+| The GPT models seen | about 30 minutes |
+
+**Prices seen** (AI credits for one million tokens)
+
+| Model | Input | Cache read | Cache write | Output |
+| --- | --- | --- | --- | --- |
+| Claude Sonnet 5.5 | 200 | 10 | 250 | 1,000 |
+| Claude Haiku 5.5 | 10 | 1 | 12.5 | 50 |
+
+**How large a prompt was** (main agent, Claude Sonnet 5.5): the first call of a chat about 55,000 tokens; half of all calls under 64,000; nine in ten under 94,000.
+
+### What follows from the numbers
+
+- **A new chat is not free, and it saves less than it seems.** Its first call already carries about 55,000 tokens of tools, system text and rules. Half of all calls are less than 10,000 tokens above that. A new chat is cheaper than a cold old one only when the old one has grown well past it (about 100,000 tokens here), or when the model must change anyway.
+- **A pause of more than five minutes makes the next call cold** on a Claude model: reading a plan, or approving a call, usually takes longer. At a context of 64,000 tokens a cold call on Claude Sonnet 5.5 is about 16 credits; the same call warm is about 0.6.
+- **The tier matters most.** Claude Sonnet 5.5 and Claude Haiku 5.5 differ by 20 times on every kind of token. A mechanical step on the light tier costs a twentieth.
+- **Waiting inside a chat is not free either.** `harness wait` calls no model while it waits, but each return is a model call, and a wait of nine minutes outlives a five-minute cache: every return is a cold call. An hour of waiting for a job at that context is about seven cold calls (worked out from the numbers above, not measured). A long job should not hold a chat.
+- **Compacting is itself a call that reads the whole context.** It is cheap while the cache is alive, and it pays only when the chat is near the limit of the model's window.
+
+In order of size, the ways to spend less are: pick the tier by the stage of the task; make fewer cold calls, and let one cold call do as much as it can; know how long the cache of the model lives; open a new chat only when the numbers say so; compact last.
+
+### What you can do today
+
+- For a task with many pauses of yours, expect each message after a pause to cost a cold call. Answer several open points in one message, not one message for each.
+- Do not open a new chat to "clean up" a small one. Open one when the task page shows a large context and you have been away.
+- Pick the model for the stage: a strong one for the requirement and the plan, a lighter one for mechanical steps.
+- See the numbers of a task on its analysis page (`harness task report`): the calls whose cache had run out are listed with what the wait cost.
+
+### What is planned
+
+A router in the harness that makes these choices for every message the board sends, and writes down each choice with its reason and its cost. See [05](05-design.md#the-task-is-the-memory-the-chat-is-rented-the-model-is-a-tier).

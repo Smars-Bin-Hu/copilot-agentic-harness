@@ -52,7 +52,7 @@ SIGNED = {"gh": "/usr/bin/gh", "version": "2.0.0", "signed_in": True, "login": "
 
 
 def setUpModule() -> None:  # noqa: N802 - gh is signed in unless a test says otherwise (HARNESS_GH=off has no gh at all)
-    patcher = mock.patch.object(ready.ghauth, "check", side_effect=lambda root=None, extra=None: dict(SIGNED))
+    patcher = mock.patch.object(ready.ghauth, "check", side_effect=lambda root=None, extra=None, known=None: dict(SIGNED))
     patcher.start()
     unittest.addModuleCleanup(patcher.stop)
 
@@ -183,6 +183,58 @@ class ReadinessTests(TaskCase):
             check.answer(True)
             self.assertTrue(until(lambda: len(runs) == count and not check.running))
 
+    def test_a_timed_out_hook_has_its_own_button_and_once_acknowledged_the_enter_answer_is_ready_with_an_amber_line(self) -> None:
+        """(1.8.x, F13) Doctor's error about a call that ran without the gate hands its time to the page; after the person acknowledged it only a warning is left: Enter opens, the line stays amber."""
+        stamp = ["s1:h1", "s1:h2"]
+        state = {"found": {"errors": 1, "first": "Copilot stopped waiting for hooks", "failed": "", "hooks": stamp}}
+        check = ready.Ready(self.root, StubLink(UP), lambda _root: dict(state["found"]))
+        found = settled(check)
+        self.assertEqual((found["ready"], found["button"]["kind"]), (False, "doctor"))
+        self.assertEqual(line(found, "doctor")["hooks"], stamp)
+        fix = found["problems"]["required"][0]["fix"]
+        self.assertEqual((fix["to"], fix["events"], fix["label"]), ("hookack", stamp, messages.text("board.hooks.button")))
+        self.assertNotIn("--accept-hooks", json.dumps(found), "a button on the board, never a command to type")
+        state["found"] = {"errors": 0, "first": "", "failed": "", "hooks": [], "hooks_seen": "1 call ran without the gate. Newest at 2026-11-25 03:59:52 UTC. Calls: view 10"}
+        check.drop_doctor()
+        found = settled(check)
+        self.assertEqual((found["ready"], found["button"]["kind"]), (True, "enter"))
+        self.assertEqual((line(found, "doctor")["state"], line(found, "doctor")["level"]), ("ok", "yellow"))
+        self.assertIn("Calls: view 10", line(found, "doctor")["acked"])
+        state["found"] = {"errors": 1, "first": "a newer timeout", "failed": "", "hooks": ["s1:h3"], "hooks_seen": "old"}
+        check.drop_doctor()
+        found = settled(check)
+        self.assertEqual((found["ready"], found["button"]["kind"]), (False, "doctor"), "a newer event blocks again")
+
+    def test_the_doctor_run_of_the_board_reads_the_mark_and_the_acknowledged_warning(self) -> None:
+        out = "[MARK]  hook-timeouts [\"s1:h1\",\"s1|2026-11-25T03:59:52.732Z|preToolUse\"]\n[ERROR] Copilot stopped waiting\n[WARN:hooks] Acknowledged by you: 1 calls\n[WARN]  other\n{\"errors\": 1}\n"
+
+        class Done:
+            returncode, stdout, stderr = 1, out.encode(), b""
+
+        with mock.patch.object(ready.procrun, "run", return_value=Done()):
+            found = ready.run_doctor(self.root, timeout=5)
+        self.assertEqual((found["hooks"], found["errors"], found["warned"]), (["s1:h1", "s1|2026-11-25T03:59:52.732Z|preToolUse"], 1, 1))
+        for bad in ("2026-11-25T03:59:52.732Z", "[5]", '{"a": 1}', "[" + '"x",' * 300 + '"x"]', "not json"):  # a mark that is not a list of identities is no button
+            self.assertEqual(ready.hook_events(bad), [], bad)
+        self.assertIn("Acknowledged by you", found["hooks_seen"])
+
+    def test_the_new_words_are_in_both_languages(self) -> None:
+        for key in ("board.hooks.button", "board.hooks.tip", "board.enter.cap.hooks", "doctor.hook.timeouts_when", "doctor.hook.timeouts_ack", "doctor.hook.timeouts_ack.board", "doctor.hook.timeouts_acked",
+                    "doctor.hook.accepted", "doctor.hook.accept_line", "serve.hookack.events", "doctor.hook.accept_none", "doctor.hook.accept_newer", "doctor.hook.cannot_write"):
+            for language in ("en", "zh"):
+                self.assertTrue(messages.table(language).get(key), (key, language))
+        self.assertNotIn("--accept-hooks", messages.table("en")["doctor.hook.timeouts_ack.board"])
+        self.assertNotIn("--accept-hooks", messages.table("en")["board.hooks.tip"])
+
+    def test_the_enter_screen_acknowledges_with_the_button_and_shows_the_amber_line(self) -> None:
+        enter, ui = (WEB / "enter.js").read_text(encoding="utf-8"), (WEB / "readyui.js").read_text(encoding="utf-8")
+        self.assertIn('READY.link({to: "hookack"', enter)
+        self.assertIn('"/api/hook-ack"', ui)
+        self.assertIn("{events: fix.events}", ui)
+        self.assertIn("events: c.hooks", enter)
+        self.assertIn('board.enter.cap.hooks', enter)
+        self.assertIn(".en-dot.warn", (WEB / "enter.css").read_text(encoding="utf-8"))
+
     def test_a_doctor_with_no_answer_says_where_it_stopped_and_waits_ten_minutes(self) -> None:
         now, runs = [100.0], []
 
@@ -206,7 +258,7 @@ class ReadinessTests(TaskCase):
         """1.8.13: one answer took more than the page's 8 s on a work computer; the page called the board down and turned Enter off with every line green."""
         check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), lambda _root: {"errors": 0, "first": "", "failed": ""})
         settled(check)
-        first = check.latest(True)
+        first = check.latest(True, True)
         self.assertEqual(len(first["checks"]), len(ready.Ready.REQUIRED))
         gate, inside = threading.Event(), threading.Event()
         real = check.answer
@@ -220,10 +272,10 @@ class ReadinessTests(TaskCase):
         with mock.patch.object(check, "answer", side_effect=slow), mock.patch.object(ready, "SLOW_ANSWER", 0.05), mock.patch.object(ready, "KEEP_EVERY", 0.05), mock.patch("sys.stdout", out):
             self.assertTrue(inside.wait(5))  # the thread is now inside a slow answer
             began = time.monotonic()
-            again = check.latest(True)
+            again = check.latest(True, True)
             self.assertLess(time.monotonic() - began, 0.5, "the page is not kept waiting")
             self.assertEqual([line["id"] for line in again["checks"]], [line["id"] for line in first["checks"]])
-            unpaired = check.latest(False)
+            unpaired = check.latest(False, True)
             self.assertFalse(unpaired["ready"])
             self.assertEqual(next(line for line in unpaired["checks"] if line["id"] == "paired")["state"], "fail")
             time.sleep(0.2)  # longer than SLOW_ANSWER here
@@ -969,6 +1021,136 @@ class EnterMotionTests(unittest.TestCase):
             if ms != "500":  # the robot's flight (W10) is the one longer move, allowed for the robot
                 self.assertLessEqual(int(ms), 300)
         self.assertNotIn("requestAnimationFrame", body)
+
+
+class QuietSpeedTests(TaskCase):
+    """1.8.x (F6, F11): a page that does not watch the checks gets the kept answer; only a live page keeps the worker going, and gh is kept long while signed in."""
+
+    def make(self):
+        now = [1000.0]
+        check = ready.Ready(self.root, StubLink(UP), clean, clock=lambda: now[0])
+        calls: List[bool] = []
+        real = check.answer
+
+        def counted(paired: bool) -> Dict[str, Any]:
+            calls.append(getattr(check.mode, "live", True))
+            return real(paired)
+
+        check.answer = counted  # type: ignore[method-assign]
+        return check, now, calls
+
+    def idle(self, check: ready.Ready) -> None:
+        for thread in (check.once, check.worker):
+            if thread is not None:
+                thread.join(5)
+
+    def test_quiet_asks_work_out_one_answer_a_quarter_hour_not_one_per_pause(self) -> None:
+        check, now, calls = self.make()
+        with mock.patch.object(ready, "KEEP_EVERY", 0):
+            check.latest(True)  # the first answer: one pass
+            self.idle(check)
+            self.assertEqual(len(calls), 1)
+            for _ in range(360):  # half an hour of a board page asking every 5 s... and the worker never starts
+                now[0] += 5
+                check.latest(True)
+                self.idle(check)
+            self.assertEqual(len(calls), 1 + 2)  # QUIET_EVERY is 15 min: the first answer, then one at 15 and one at 30 min
+            self.assertFalse(check.worker is not None and check.worker.is_alive())
+            self.assertEqual(calls[1:], [False] * (len(calls) - 1))  # quiet passes are not live
+
+    def test_a_quiet_ask_inside_the_quiet_time_does_not_work_anything_out(self) -> None:
+        check, now, calls = self.make()
+        check.latest(True)
+        self.idle(check)
+        now[0] += ready.QUIET_EVERY - 1
+        check.latest(True)
+        self.idle(check)
+        self.assertEqual(len(calls), 1)
+        now[0] += 2
+        check.latest(True)
+        self.idle(check)
+        self.assertEqual(len(calls), 2)
+
+    def test_a_live_ask_starts_the_worker_and_keeps_today_s_pace(self) -> None:
+        check, now, calls = self.make()
+        with mock.patch.object(ready, "KEEP_EVERY", 0.01):
+            check.latest(True)
+            self.idle(check)
+            check.latest(True, True)
+            self.assertTrue(until(lambda: len(calls) >= 4))
+            check.asked_at = -1e9
+            self.idle(check)
+        self.assertTrue(calls[-1])  # live passes
+
+    def test_a_change_the_board_knows_is_worked_out_at_once(self) -> None:
+        check, now, calls = self.make()
+        check.latest(True)
+        self.idle(check)
+        for change in (check.forget_gh, check.drop_doctor, check.drop_optional):
+            before = len(calls)
+            now[0] += 1
+            check.latest(True)
+            self.idle(check)
+            self.assertEqual(len(calls), before, "nothing changed: nothing is worked out")
+            change()
+            check.latest(True)
+            self.idle(check)
+            self.assertEqual(len(calls), before + 1, change.__name__)
+
+    def test_an_answer_that_could_not_be_worked_out_again_is_not_shown_as_ok(self) -> None:
+        check, now, calls = self.make()
+        check.latest(True)
+        self.idle(check)
+        self.assertTrue(check.kept["ready"] is True or check.kept["checks"])
+        check.kept["ready"] = True
+        now[0] += ready.QUIET_LIMIT + 1
+        with mock.patch.object(check, "pass_once"):  # the pass hangs or fails to start
+            found = check.latest(True)
+        self.assertFalse(found["ready"])
+        self.assertTrue(all(one["state"] == "check" for one in found["checks"]))
+
+    def test_gh_is_asked_once_in_five_minutes_when_signed_in_and_quiet(self) -> None:
+        check, now, _calls = self.make()
+        counted = []
+        with mock.patch.object(ready.ghauth, "check", side_effect=lambda root=None, extra=None, known=None: counted.append(known) or dict(SIGNED)):
+            check.mode.live = False
+            try:
+                for _ in range(10):
+                    check.gh_state({"state": "none"})
+                    now[0] += 20
+                self.assertEqual(len(counted), 1)  # 200 s
+                now[0] += 120
+                check.gh_state({"state": "none"})
+                self.assertEqual(len(counted), 2)
+                self.assertEqual(counted[1], {"/usr/bin/gh": "2.0.0"})  # `gh --version` is not run again
+                check.forget_gh()
+                check.gh_state({"state": "none"})
+                self.assertEqual((len(counted), counted[2]), (3, None))  # forgotten: the version is asked again too
+                check.mode.live = True  # a live asker: every 20 s as before
+                now[0] += 21
+                check.gh_state({"state": "none"})
+                self.assertEqual(len(counted), 4)
+            finally:
+                check.mode.live = True
+
+    def test_gh_not_signed_in_is_asked_again_after_twenty_seconds(self) -> None:
+        check, now, _calls = self.make()
+        counted = []
+        out = dict(SIGNED, signed_in=False, why="not-signed-in", login="")
+        with mock.patch.object(ready.ghauth, "check", side_effect=lambda root=None, extra=None, known=None: counted.append(1) or dict(out)):
+            check.mode.live = False
+            try:
+                check.gh_state({"state": "none"})
+                now[0] += 21
+                check.gh_state({"state": "none"})
+            finally:
+                check.mode.live = True
+        self.assertEqual(len(counted), 2)
+
+    def test_the_pages_that_watch_the_checks_say_so(self) -> None:
+        for name in ("enter.js", "wizard.js", "settings.js"):
+            self.assertIn("live: true", (WEB / name).read_text(encoding="utf-8"), name)
+        self.assertNotIn("live: true", (WEB / "readybar.js").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

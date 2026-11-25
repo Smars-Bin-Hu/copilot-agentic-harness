@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import socket
@@ -534,6 +536,62 @@ class VsLinkHostTest(unittest.TestCase):
     def test_a_closed_connection_is_not_a_refusal(self) -> None:
         with self.assertRaises(ahp.ConnectionClosed):
             self.hand(self.FakeLink(ahp.ConnectionClosed("gone")))
+
+    # (1.8.x) VS Code 1.148 runs the hooks of a repository only in a folder the client declared trusted.
+    class RootLink:
+        """A host's root channel: keeps `workspaceTrust` as a real host does (a merge), or ignores the ask (`deaf`)."""
+
+        def __init__(self, held: Any = None, deaf: bool = False, error: Exception = None) -> None:
+            self.values: dict = {} if held is None else {"workspaceTrust": held}
+            self.deaf, self.error, self.sent, self.open = deaf, error, [], 0
+
+        def subscribe(self, channel: str, timeout: Any = None) -> dict:
+            if self.error:
+                raise self.error
+            self.open += 1
+            return {"config": {"values": json.loads(json.dumps(self.values))}}
+
+        def unsubscribe(self, channel: str, timeout: Any = None) -> None:
+            self.open -= 1
+
+        def dispatch(self, channel: str, action: dict) -> None:
+            self.sent.append((channel, action))
+            if not self.deaf:
+                self.values.update(action["config"])
+
+    def test_the_board_declares_its_workspace_trusted_and_reads_it_back(self) -> None:
+        fake = self.RootLink()
+        self.link._declare_trust(fake)
+        self.assertEqual(self.link.trust_state(), "declared")
+        (channel, action), = fake.sent
+        self.assertEqual((channel, action["type"]), ("ahp-root:/", "root/configChanged"))
+        held = action["config"]["workspaceTrust"]
+        self.assertIs(held["enabled"], True)
+        self.assertIn(ahp.folder_uri(self.link.root), held["trustedUris"])
+        self.assertEqual(fake.open, 0)  # every subscription of the root channel is closed again
+        self.assertEqual(agenthost.read_trust(self.link.root)["state"], "declared")
+
+    def test_what_the_host_already_trusts_is_kept_and_nothing_is_sent_twice(self) -> None:
+        fake = self.RootLink({"enabled": True, "trustedUris": ["file:///other/place"]})
+        self.link._declare_trust(fake)
+        self.assertEqual(fake.sent[0][1]["config"]["workspaceTrust"]["trustedUris"][0], "file:///other/place")
+        self.link._declare_trust(fake)
+        self.assertEqual(len(fake.sent), 1)
+        off = self.RootLink({"enabled": False, "trustedUris": []})  # trust switched off in the host: every folder is trusted
+        self.link._declare_trust(off)
+        self.assertEqual((off.sent, self.link.trust_state()), ([], "declared"))
+
+    def test_a_host_that_does_not_hold_the_declaration_is_refused_not_declared(self) -> None:
+        for fake in (self.RootLink(deaf=True), self.RootLink(error=ahp.AhpError("subscribe failed")), self.RootLink("not a dict", deaf=True)):
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.link._declare_trust(fake)
+            self.assertEqual(self.link.trust_state(), "refused")
+            self.assertEqual(agenthost.read_trust(self.link.root)["state"], "refused")
+        with self.assertRaises(ahp.ConnectionClosed):
+            self.link._declare_trust(self.RootLink(error=ahp.ConnectionClosed("gone")))
+
+    def test_the_trusted_addresses_cover_both_cases_of_a_windows_drive_letter(self) -> None:
+        self.assertEqual(ahp.trust_uris("C:\\work\\repo")[:2], ["file:///C:/work/repo", "file:///c:/work/repo"])
 
     def test_switched_off_opens_nothing(self) -> None:
         with self.assertRaises(ahp.NotReady) as caught:

@@ -122,7 +122,7 @@ html[lang="zh"] .en-card-t{letter-spacing:.04em;text-transform:none;font-size:12
 .en-prob{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;font:12px/1.5 var(--mono);color:var(--en-cap);overflow-wrap:anywhere}
 .en-prob+.en-prob{border-top:1px solid var(--line)}.en-prob.soft{font-family:var(--sans)}
 .en-prob .en-dot{margin-top:6px}
-.en-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--soft)}.en-dot.bad{background:var(--bad)}
+.en-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--soft)}.en-dot.bad{background:var(--bad)}.en-dot.warn{background:var(--open-dot)}
 .en-spin{flex:none;width:10px;height:10px;box-sizing:border-box;border:2px solid var(--hot-dot);border-right-color:transparent;border-radius:50%;animation:enspin 1s linear infinite}
 @keyframes enspin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.en-spin{animation:none}}

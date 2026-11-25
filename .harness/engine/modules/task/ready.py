@@ -49,6 +49,9 @@ FRESH_FOR = 20.0  # 1.8.13: seconds after the page's last question that the answ
 KEEP_EVERY = 2.0  # 1.8.13: the pause between two answers worked out
 FIRST_WAIT = 5.0  # 1.8.13: how long the first question waits for the first answer
 GH_KEEP = 20.0  # 1.8.x: seconds what gh said (found, signed in, as whom) is kept; a sign-in that ends, or a folder given, asks again at once
+GH_KEEP_OK = 300.0  # 1.8.x: a signed-in answer seen by a page that does not watch the checks is kept this long (it was 20 s: gh started twice every 21 s for ever on a board page); not signed in, failed or live: GH_KEEP
+QUIET_EVERY = 900.0  # 1.8.x: a page that does not watch the checks (the board's red block, a task page) gets the kept answer; it is worked out again at most this often for such askers (15 min, the person's choice 2026-11-25: on a slow computer one pass is 10 s of work; the Enter screen, Settings and anything the board itself changes still ask at once)
+QUIET_LIMIT = QUIET_EVERY + 300.0  # 1.8.x: a kept answer older than this that could not be worked out again is shown as not known (checking), never as it was
 MODELS_GRACE = 30.0  # 1.8.x: seconds after gh's token was handed in which "no model yet" is still waiting; after that the host refused it
 VSCODE_PAGE = "https://code.visualstudio.com/"
 SLOW_ANSWER = 3.0  # 1.8.13: an answer that took longer is written to the board's log, with the time of each part
@@ -161,6 +164,15 @@ def _run_with_steps(command: List[str], root: Path, env: Dict[str, str], flags: 
 PROGRESS_MARK = "harness-doctor-step"  # the line `doctor` writes on stderr at each step when HARNESS_DOCTOR_PROGRESS is set (1.7.43): the same word as doctor.PROGRESS_MARK
 
 
+def hook_events(text: str) -> List[str]:
+    """(1.8.x, F13) The identities in the `hook-timeouts` mark of doctor's own run: a JSON list of strings, bounded. Anything else is none (the button is not shown)."""
+    try:
+        found = json.loads(text) if 0 < len(text) <= 200 * 320 else []
+    except (ValueError, RecursionError):
+        return []
+    return found if isinstance(found, list) and len(found) <= 200 and all(isinstance(item, str) and 0 < len(item) <= 300 for item in found) else []
+
+
 def run_doctor(root: Path, timeout: Optional[float] = None, progress: Optional[Callable[[int, int, str], None]] = None) -> Dict[str, Any]:
     """`doctor` in a child process: `{errors, first, failed}`. `failed`: why it could not be run or read (empty when it ran). Never raises.
     `progress(done, total, step)` (1.7.43): called at each step while it runs, for the Enter screen's bar: on a work computer it takes a minute or more."""
@@ -185,9 +197,17 @@ def run_doctor(root: Path, timeout: Optional[float] = None, progress: Optional[C
     warnings = [line[len("[WARN]"):].strip() for line in text.splitlines() if line.startswith("[WARN]")]
     company = [line[len("[WARN:company]"):].strip() for line in text.splitlines() if line.startswith("[WARN:company]")]  # about the company's content: they go with the Optional block
     copies = [line[len("[WARN:copies]"):].strip() for line in text.splitlines() if line.startswith("[WARN:copies]")]  # the copies differ: the board counts them itself, with a Sync button (readyitems.sync_item)
+    marks = [line[len("[MARK]"):].split(None, 1) for line in text.splitlines() if line.startswith("[MARK]")]
+    hooks = hook_events(next((rest[1] for rest in marks if len(rest) == 2 and rest[0] == "hook-timeouts"), ""))  # (1.8.x, F13) the identities of the preToolUse timeouts nobody acknowledged: the Acknowledge button hands them back
+    seen = [line[len("[WARN:hooks]"):].strip() for line in text.splitlines() if line.startswith("[WARN:hooks]")]  # the same events, acknowledged: a warning with their time and calls
     if not errors and done.returncode != 0 and '"errors"' not in text:  # it did not get as far as its summary line
         return {"errors": 0, "first": "", "failed": short(crash_words(done.stderr.decode("utf-8", errors="replace"), root) or f"exit code {done.returncode}")}
-    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company) + len(copies), "warning": clip(" ".join((warnings + company + copies)[0].split()), REASON_MAX) if warnings or company or copies else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
+    result = {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company) + len(copies), "warning": clip(" ".join((warnings + company + copies)[0].split()), REASON_MAX) if warnings or company or copies else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
+    if hooks:  # F13: only when there is something, so the shape of the answer stays as it was
+        result["hooks"] = hooks
+    if seen:
+        result["hooks_seen"] = clip(" ".join(seen[0].split()), REASON_MAX)
+    return result
 
 
 class Ready:
@@ -217,6 +237,11 @@ class Ready:
         self.checker = checker or reachcheck.Checker(root)  # the board's own look at the connections (1.7.19)
         self.bundle = bundlejob.Auto(root)  # (1.8.34) the board puts its own here; the state of the certificate bundle that is made in the background
         self.gh_kept: Optional[Any] = None  # 1.8.x: (what `ghauth.check` said, when, the sign-in state then)
+        self.gh_known: Dict[str, str] = {}  # 1.8.x: gh's version by its path: `gh --version` runs once per board run, until a path changes or `forget_gh`
+        self.kept_at: Optional[float] = None  # 1.8.x: when `kept` was worked out (None: set by hand, taken as new)
+        self.dirty = False  # 1.8.x: something the board knows changed (sign-in, setting, Check again): the next question of any page works the answer out again at once
+        self.once: Optional[threading.Thread] = None  # 1.8.x: the one pass a page that does not watch the checks asks for
+        self.mode = threading.local()  # 1.8.x: `live` of the pass that runs on this thread (no value: live, as before)
 
     # --- doctor: once, off the request thread ----------------------------------------------------------------------
 
@@ -295,18 +320,27 @@ class Ready:
     def gh_state(self, login: Dict[str, Any]) -> Dict[str, Any]:
         """What gh says (`ghauth.check`), kept GH_KEEP seconds; asked again at once when the sign-in the page started changed its state. Runs gh twice: on the answer's thread, never a request's."""
         now = self.clock()
+        live = getattr(self.mode, "live", True)
         with self.lock:
             kept = self.gh_kept
-        if kept and now - kept[1] < GH_KEEP and kept[2] == login.get("state"):
+            known = {} if live else dict(self.gh_known)
+        keep = GH_KEEP_OK if (kept and not live and kept[0].get("signed_in") is True) else GH_KEEP  # 1.8.x: only a signed-in answer, and only for a page that does not watch the checks
+        if kept and now - kept[1] < keep and kept[2] == login.get("state"):
             return kept[0]
-        found = ghauth.check(self.root, launchenv.extra(self.root))
+        found = ghauth.check(self.root, launchenv.extra(self.root), known=known) if known else ghauth.check(self.root, launchenv.extra(self.root))
         with self.lock:
             self.gh_kept = (found, now, login.get("state"))
+            if found.get("gh") and found.get("version"):
+                self.gh_known = {found["gh"]: found["version"]}
+            else:
+                self.gh_known = {}
         return found
 
     def forget_gh(self) -> None:
         with self.lock:
             self.gh_kept = None
+            self.gh_known = {}
+            self.dirty = True
 
     def copilot(self, vscode: Dict[str, Any]) -> Dict[str, Any]:
         """1.8.x: "Copilot signed in (gh)". Three things: gh is found, gh is signed in, the host has models once it got gh's token. `host` rides along while the agent host
@@ -383,7 +417,7 @@ class Ready:
         if found["failed"]:
             return {"state": "fail", "why": "failed", "detail": found["failed"]}
         if found["errors"]:
-            return {"state": "fail", "why": "errors", "n": found["errors"], "detail": found["first"]}
+            return {"state": "fail", "why": "errors", "n": found["errors"], "detail": found["first"], **({"hooks": found["hooks"]} if found.get("hooks") else {})}  # F13: the row has a button that acknowledges the timeouts of the hook
         try:
             from core import toolpacks
 
@@ -404,18 +438,22 @@ class Ready:
             files = ", ".join(changed[: integrity.SHOWN])
             words = messages.text("doctor.integrity.upgrade.board", n=len(changed), files=files, was=was, now=now) if was != now else messages.text("doctor.integrity.changed.board", n=len(changed), files=files)  # no command text on a page (FR2 8)
             return {"state": "fail", "why": "errors", "n": len(changed), "detail": short(words), "integrity": len(changed)}  # the row has a button that accepts them (1.7.39)
+        if found.get("hooks_seen"):  # F13: only acknowledged timeouts of the hook are left: Enter is open, and the line stays amber with their time and calls
+            return {"state": "ok", "why": "ok", "n": 0, "acked": found["hooks_seen"], "level": "yellow"}
         return {"state": "ok", "why": "ok", "n": 0}
 
     def drop_doctor(self) -> None:
         """What doctor said is old (a sync was done, or the person pressed Check again): the next question runs it again."""
         with self.lock:
             self.at = -1e9
+            self.dirty = True
 
     def setup_now_done(self) -> None:
         """Confirm of the wizard just wrote `setup_done` (1.8.x): the kept answer says "new" until the next round, and the page would go back to the wizard. Set that line to ok and work out `ready`,
         `button` and `problems.required` again from the kept lines: no slow work, nothing is run."""
         with self.lock:
             self.confirmed += 1
+            self.dirty = True
             if self.kept is not None:
                 self.patch_setup(self.kept)
 
@@ -458,6 +496,7 @@ class Ready:
         """What the optional items said is old (a sync was done, F3 FB1-b): the next question reads them again at once, so a yellow note that a sync mended is gone on the poll that follows it, not when the kept answer runs out."""
         with self.lock:
             self.optional_kept = None
+            self.dirty = True
 
     def doctor_notes(self) -> Dict[str, Any]:
         """What `harness doctor` warned of about the company's content, from the kept result: `{n, first}`."""
@@ -685,6 +724,8 @@ class Ready:
             elif key == "doctor":
                 text, reason = (say("ready.r.doctor.failed"), line.get("detail", "")) if why == "failed" else (say("ready.r.doctor.errors.one" if line.get("n") == 1 else "ready.r.doctor.errors", n=line.get("n", "")), line.get("detail", ""))
                 fix = {} if line.get("integrity") else {"to": "doctor", "label": say("board.enter.doctor.again")}  # 1.7.45: run it now, not when its wait is over; guardrail files have their own button
+                if line.get("hooks"):  # F13: the person has seen the timeouts of the hook: this button writes down those events (only the ones shown)
+                    fix = {"to": "hookack", "events": line["hooks"], "label": say("board.hooks.button"), "tip": say("board.hooks.tip")}
             elif key == "copilot":
                 if why == "vscode":
                     continue
@@ -695,20 +736,32 @@ class Ready:
             out.append({"key": key, "level": "red" if state == "fail" else "yellow", "code": why, "text": plain(text), "why": plain(short(reason)), "fix": fix})
         return out
 
-    def latest(self, paired: bool) -> Dict[str, Any]:
+    def latest(self, paired: bool, live: bool = False) -> Dict[str, Any]:
         """1.8.13: what `/api/ready` sends: the last answer a thread of its own worked out, at once. On a work computer one answer took more than the page's 8 s, the page
-        counted that as "the board did not answer" and turned Enter off, with every line green. The thread works while the page asks (FRESH_FOR s after the last question).
-        Until the first answer is there: every line is still being checked."""
+        counted that as "the board did not answer" and turned Enter off, with every line green. Until the first answer is there: every line is still being checked.
+        1.8.x, two speeds: a page that watches the checks (`live`: the Enter screen, the wizard, Settings > Copilot) keeps the thread working FRESH_FOR s after its last question, an answer every
+        KEEP_EVERY s. Any other page (the board's red block, a task page) gets the kept answer and makes at most one pass every QUIET_EVERY s (at once when the board itself changed something: `dirty`)."""
         with self.lock:
-            self.asked_at = self.clock()
+            now = self.clock()
+            if live:
+                self.asked_at = now
+                if self.worker is None or not self.worker.is_alive():
+                    self.worker = threading.Thread(target=self.keep_fresh, name="ready-answer", daemon=True)
+                    self.worker.start()
             kept = self.kept
-            if self.worker is None or not self.worker.is_alive():
-                self.worker = threading.Thread(target=self.keep_fresh, name="ready-answer", daemon=True)
-                self.worker.start()
+            age = None if self.kept_at is None else now - self.kept_at
+            if not live and (self.worker is None or not self.worker.is_alive()) and (self.once is None or not self.once.is_alive()) and (kept is None or self.dirty or (age is not None and age >= QUIET_EVERY)):
+                self.once = threading.Thread(target=self.pass_once, name="ready-once", daemon=True)
+                self.once.start()
+            if kept is not None and age is not None and age > QUIET_LIMIT:
+                kept = None  # old and not worked out again: not known, as at the start, never shown as it was
         if kept is None:
-            self.first.wait(pace.scaled(FIRST_WAIT))
+            if self.kept is None:
+                self.first.wait(pace.scaled(FIRST_WAIT))
             with self.lock:
                 kept = self.kept
+                if kept is not None and self.kept_at is not None and self.clock() - self.kept_at > QUIET_LIMIT:
+                    kept = None
         if kept is None:
             checking = [{"id": name, "blocking": True, "group": "required", "kind": "setup" if name == "setup" else "run", "state": "check", "why": "running", "level": "grey"} for name in self.REQUIRED]
             return {"ready": False, "checks": checking, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": [], "optional": []}, "button": self.button(checking, False), "notes": []}
@@ -727,31 +780,44 @@ class Ready:
         return out
 
     def keep_fresh(self) -> None:
-        """Work the answer out again and again while the page asks; stop FRESH_FOR s after its last question. A slow answer is written to the board's log with the time of each part."""
+        """Work the answer out again and again while a live page asks; stop FRESH_FOR s after its last question."""
         while True:
             with self.lock:
                 if self.clock() - self.asked_at > FRESH_FOR:
                     self.worker = None
                     return
-            began = time.monotonic()
-            with self.lock:
-                gen = self.confirmed
-            try:
-                found = self.answer(True)
-            except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
-                broken = [{"id": "doctor", "blocking": True, "group": "required", "kind": "run", "state": "fail", "why": "failed", "level": "red", "detail": short(f"{type(error).__name__}: {error}")}]
-                found = {"ready": False, "checks": broken, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": self.required_problems(broken), "optional": []},
-                         "button": self.button(broken, False), "notes": []}  # the doctor button, with the error in its card: a check that broke is shown, never a "Checking…" that does not end
-            spent = time.monotonic() - began
-            if spent > SLOW_ANSWER:
-                parts = ", ".join(f"{name} {value:.1f}" for name, value in sorted((getattr(self, "took", {}) or {}).items(), key=lambda item: -item[1]) if value >= 0.1)
-                print(messages.text("ready.slow", seconds=f"{spent:.1f}", parts=parts or "-"), flush=True)
-            with self.lock:
-                if self.confirmed != gen and any(line.get("id") == "setup" for line in found.get("checks", [])):
-                    self.patch_setup(found)  # Confirm came while this answer was worked out: it read the state before it
-                self.kept = found
-            self.first.set()
+            self.work_out(True)
             time.sleep(KEEP_EVERY)
+
+    def pass_once(self) -> None:
+        """1.8.x: one pass for pages that do not watch the checks: gh is kept longer (GH_KEEP_OK)."""
+        self.work_out(False)
+
+    def work_out(self, live: bool) -> None:
+        """One answer, kept. A slow answer is written to the board's log with the time of each part."""
+        self.mode.live = live
+        began = time.monotonic()
+        with self.lock:
+            gen = self.confirmed
+            self.dirty = False
+        try:
+            found = self.answer(True)
+        except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
+            broken = [{"id": "doctor", "blocking": True, "group": "required", "kind": "run", "state": "fail", "why": "failed", "level": "red", "detail": short(f"{type(error).__name__}: {error}")}]
+            found = {"ready": False, "checks": broken, "optional": {"items": [], "problems": [], "count": 0, "notes": []}, "problems": {"required": self.required_problems(broken), "optional": []},
+                     "button": self.button(broken, False), "notes": []}  # the doctor button, with the error in its card: a check that broke is shown, never a "Checking…" that does not end
+        finally:
+            self.mode.live = True
+        spent = time.monotonic() - began
+        if spent > SLOW_ANSWER:
+            parts = ", ".join(f"{name} {value:.1f}" for name, value in sorted((getattr(self, "took", {}) or {}).items(), key=lambda item: -item[1]) if value >= 0.1)
+            print(messages.text("ready.slow", seconds=f"{spent:.1f}", parts=parts or "-"), flush=True)
+        with self.lock:
+            if self.confirmed != gen and any(line.get("id") == "setup" for line in found.get("checks", [])):
+                self.patch_setup(found)  # Confirm came while this answer was worked out: it read the state before it
+            self.kept = found
+            self.kept_at = self.clock()
+        self.first.set()
 
     def answer(self, paired: bool) -> Dict[str, Any]:
         """`{ready, checks, optional, problems, button, notes}`. `checks`: the five required lines `{id, group, blocking, level, state, why, ...}`. `state`: ok, wait (it comes by itself), fail (needs the person), check

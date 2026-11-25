@@ -271,6 +271,7 @@ const WORKBENCH = (function () {
       const sig = mode + "|" + count + "|" + line.map((node) => node.dataset.id).join(",");
       for (const node of queueList.children) node.classList.toggle("wb-cur", mode === "focus" && node === now);
       queueEmpty.hidden = count > 0;
+      queueEmpty.textContent = superView.note ? superView.note() || t("super.wb.queue.empty") : t("super.wb.queue.empty");  // 1.8.x: before the first answer of the board the list does not know yet: "Checking", or the failure; never "Nothing waits"
       queueTotal.textContent = count ? String(count) : "";
       for (const badge of [queueCount, dockCount]) { badge.hidden = !count; badge.textContent = count; }
       const shownCard = mode === "focus" && count > 0;
@@ -437,7 +438,7 @@ const WORKBENCH = (function () {
       orb.title = t("board.mode.super.badge", {n: count});
       if (open) { paint(); panels2.decorate(queueList); }
     }
-    let queued = false;
+    let queued = false, unsubscribe = null;
     const changed = () => { if (queued) return; queued = true; Promise.resolve().then(() => { queued = false; if (open) drawQueue(); }); };
     function show() {
       if (open) return;
@@ -467,6 +468,7 @@ const WORKBENCH = (function () {
       }
       const costNode = sv.querySelector(".sa-cost");
       if (costNode) { costObserver = new MutationObserver(costChanged); costObserver.observe(costNode, {childList: true, subtree: true, attributes: true}); }
+      if (superView.subscribe) { let seen = superView.note(); unsubscribe = superView.subscribe(() => { const now = superView.note(); if (now !== seen) { seen = now; changed(); } }); }
       costChanged();
       update();
       drawQueue();
@@ -490,6 +492,7 @@ const WORKBENCH = (function () {
       root.hidden = true;
       document.documentElement.classList.remove("wb-lock");
       queueNode = queueList = null;
+      if (unsubscribe) { unsubscribe(); unsubscribe = null; }
     }
     // The link of VS Code: when it is down the edge of the deck turns red (the banner above the input is the one of super.js).
     function setVscode(status) {

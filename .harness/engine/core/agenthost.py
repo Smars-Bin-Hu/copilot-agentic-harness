@@ -74,6 +74,40 @@ def record_file(root: Path) -> Path:
     return folder(root) / "host.json"
 
 
+def trust_file(root: Path) -> Path:
+    """(1.8.x) The last time the board declared this workspace trusted to its host: `{state: declared | refused, at: seconds since 1970}`. `harness doctor` reads it to tell a session that
+    ran without hooks before the declaration (a record of the past) from one after it (the hooks still do not run)."""
+    return folder(root) / "trust.json"
+
+
+def write_trust(root: Path, state: str, now: Optional[float] = None) -> None:
+    """Best effort: a record that cannot be written leaves doctor with the strict reading (a session without hooks is an error)."""
+    path = trust_file(root)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        part = path.with_name(path.name + ".part")
+        part.write_text(json.dumps({"state": state, "at": time.time() if now is None else now}), encoding="utf-8")
+        os.replace(part, path)
+    except OSError:
+        pass
+
+
+def read_trust(root: Path) -> Optional[Dict[str, Any]]:
+    """`{state, at}` or None (no record, not readable, not understood, a time in the future)."""
+    try:
+        path = trust_file(root)
+        if path.stat().st_size > 4096:
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("state") not in ("declared", "refused") or isinstance(data.get("at"), bool) or not isinstance(data.get("at"), (int, float)):
+        return None
+    if not (0 < data["at"] <= time.time() + 60):
+        return None
+    return {"state": data["state"], "at": float(data["at"])}
+
+
 def token_file(root: Path) -> Path:
     return folder(root) / "connection-token"
 

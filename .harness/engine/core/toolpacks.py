@@ -150,7 +150,7 @@ def problems(root: Path, folder: Path) -> List[str]:
             ok = False
         if not ok:
             out.append(say("toolpack.mcp.bad", rule=f"mcp.tools[{index}]"))
-    for path in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+    for path in types_of(folder):
         try:
             kind = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError) as error:
@@ -173,9 +173,26 @@ def problems(root: Path, folder: Path) -> List[str]:
     return out
 
 
+def sub_folders(base: Path) -> List[Path]:
+    """The folders inside `base`, sorted (`[]` when `base` is not a folder). In the board server the listing is kept while the folder does not change (`filecache.names`)."""
+    try:
+        return sorted(base / name for name, is_dir in filecache.names(base) if is_dir)
+    except OSError:
+        return []
+
+
+def types_of(folder: Path) -> List[Path]:
+    """The `*.json` files of a pack's `types/`, sorted; `[]` when it has none."""
+    base = folder / TYPES
+    try:
+        found = filecache.names(base)
+    except OSError:
+        return []
+    return sorted(base / name for name, _dir in found if (name.lower() if os.name == "nt" else name).endswith(".json"))
+
+
 def _skills(folder: Path) -> List[Path]:
-    base = folder / "skills"
-    return sorted(item for item in base.iterdir() if item.is_dir()) if base.is_dir() else []
+    return sub_folders(folder / "skills")
 
 
 def _json(path: Path) -> Any:
@@ -243,8 +260,8 @@ def clashes(root: Path) -> List[str]:
     factory = root / FOLDER
     if base is None or not base.is_dir() or not factory.is_dir():
         return []
-    have = {item.name for item in factory.iterdir() if item.is_dir()}
-    return sorted(item.name for item in base.iterdir() if item.is_dir() and item.name in have)
+    have = {item.name for item in sub_folders(factory)}
+    return sorted(item.name for item in sub_folders(base) if item.name in have)
 
 
 def clash_lines(root: Path) -> List[str]:
@@ -275,10 +292,10 @@ def _candidates(root: Path) -> List[tuple]:
     found: List[tuple] = []
     base = company / COMPANY_PACKS if company else None
     clash = set(clashes(root))
-    found += [(item, COMPANY, True) for item in (sorted(base.iterdir()) if base is not None and base.is_dir() else []) if item.is_dir() and item.name not in clash]
+    found += [(item, COMPANY, True) for item in (sub_folders(base) if base is not None else []) if item.name not in clash]
     found += [(Path(raw), raw, True) for raw in paths(root)]
     factory = root / FOLDER
-    found += [(item, HARNESS, None) for item in (sorted(factory.iterdir()) if factory.is_dir() else []) if item.is_dir()]
+    found += [(item, HARNESS, None) for item in sub_folders(factory)]
     return found
 
 
@@ -332,7 +349,7 @@ installed = active  # the name the other modules know (before 1.7.30 a pack was 
 def type_names(folder: Path) -> List[str]:
     """The connection types a pack's `types/` brings: the `type` of each file (the file's name when it names none)."""
     out: List[str] = []
-    for path in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+    for path in types_of(folder):
         found = _json(path)
         out.append(str(found.get("type") or path.stem) if isinstance(found, dict) else path.stem)  # a file that cannot be read is known by its name: a connection of that type still names this pack (1.7.38, S1)
     return out
@@ -476,7 +493,7 @@ def declared_needs(folder: Path, manifest: Dict[str, Any], path: Optional[str]) 
     rows: Dict[str, Dict[str, Any]] = {}
     for program in (manifest.get("needs") or {}).get("programs") or []:
         rows[str(program)] = {"program": str(program), "found": False, "path": "", "why": "pack"}
-    for one in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+    for one in types_of(folder):
         spec = _json(one)
         for auth in (spec.get("auth") or {}).values() if isinstance(spec, dict) and isinstance(spec.get("auth"), dict) else []:
             for program in (auth.get("needs") or []) if isinstance(auth, dict) and isinstance(auth.get("needs"), list) else []:
@@ -505,7 +522,7 @@ def skill_label(names: List[str]) -> str:
 
 def typed_entries(root: Path, guard: bool = False) -> List[tuple]:
     """`(pack name, type file, the pack)` of each connection type the active packs bring, in the order of the packs. With `guard` also those of the off packs a connection uses (`guarded`, 1.7.38)."""
-    return [(name, path, item) for name, item in (guarded(root) if guard else active(root)).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
+    return [(name, path, item) for name, item in (guarded(root) if guard else active(root)).items() for path in types_of(item["folder"])]
 
 
 def type_entries(root: Path, guard: bool = False) -> List[tuple]:
@@ -581,7 +598,7 @@ def faults(root: Path) -> List[Dict[str, Any]]:
         for one in sorted(bin_folder.iterdir()) if bin_folder.is_dir() else []:
             if one.is_file():
                 programs.add(re.sub(r"\.(?:cmd|bat|exe|ps1|py|sh)$", "", one.name.lower()))
-        for path in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+        for path in types_of(folder):
             try:
                 kind = json.loads(path.read_text(encoding="utf-8-sig"))
             except (OSError, ValueError) as error:
@@ -671,7 +688,7 @@ def link_types(root: Path) -> List[Dict[str, str]]:
         for key, spec in links.items():
             if LINK.match(f"{key}:0") and isinstance(spec, dict):
                 found.setdefault(key, {"type": key, "label": str(spec.get("label") or ""), "toolpack": name, "id": str(spec.get("id") or "") if _id_form_ok(spec) else "", "example": str(spec.get("example") or "") if _id_form_ok(spec) else ""})
-        for path in sorted((item["folder"] / "types").glob("*.json")) if isinstance(item.get("folder"), Path) and (item["folder"] / "types").is_dir() else []:
+        for path in types_of(item["folder"]) if isinstance(item.get("folder"), Path) else []:
             try:
                 kind = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
@@ -1211,7 +1228,7 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
         errors = problems(root, folder)
         needs = found.get("needs") or {}
         types_here = []
-        for one in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+        for one in types_of(folder):
             try:
                 spec = json.loads(one.read_text(encoding="utf-8-sig"))
                 types_here.append({"type": str(spec.get("type") or one.stem), "label": str(spec.get("label") or spec.get("type") or one.stem), "via": str(spec.get("via") or "cli")})

@@ -93,6 +93,29 @@ class StartingTests(unittest.TestCase):
         settle(fake, found)
         self.assertEqual(found["waiting_why"], "outbox")
 
+    def test_a_busy_chat_with_a_fresh_turn_is_working_while_the_hooks_have_not_written(self) -> None:
+        """F14: after a send the chat runs a turn, the hook log has not written yet: the row is not "quiet"."""
+        fake = board()
+        fresh = boardserve.ahp.utc_stamp()
+        old = (boardserve.datetime.datetime.now(boardserve.datetime.timezone.utc) - boardserve.datetime.timedelta(minutes=10)).isoformat()
+        fake.link.chat = {"bound": True, "state": "busy", "started_at": fresh}
+        found = row(fake.link, state="quiet", active=False, waiting="", waiting_why="")
+        settle(fake, found)
+        self.assertEqual(found["state"], "working")
+        fake.link.chat = {"bound": True, "state": "busy", "started_at": old}  # a turn that began long ago and left no trace stays quiet
+        found = row(fake.link, state="quiet", active=False, waiting="", waiting_why="")
+        settle(fake, found)
+        self.assertEqual(found["state"], "quiet")
+        for chat in ({"bound": True, "state": "busy"}, {"bound": True, "state": "busy", "started_at": "nonsense"}, {"bound": True, "state": "idle", "started_at": fresh}):
+            fake.link.chat = chat  # no stamp, a bad stamp, no running turn: as before
+            found = row(fake.link, state="quiet", active=False, waiting="", waiting_why="")
+            settle(fake, found)
+            self.assertEqual(found["state"], "quiet", chat)
+        fake.link.chat = {"bound": True, "state": "busy", "started_at": fresh}
+        found = row(fake.link, state="paused", paused_since="2026-11-18T00:00:00+00:00", waiting="", waiting_why="")
+        settle(fake, found)
+        self.assertEqual(found["state"], "paused")
+
     def test_a_decision_waits_for_the_turn_to_end(self) -> None:
         """1.8.49: while the agent works, a requirement, a plan or a delivery waits for nobody yet; what holds the agent still does. A chat that runs no turn is not at work."""
         fake = board()
@@ -163,6 +186,55 @@ class StartingTests(unittest.TestCase):
             settle(fake, found)
             self.assertNotIn("starting", found, extra)
             self.assertEqual(fake.started, {}, extra)
+
+    def test_a_reopen_holds_on_the_closed_row_with_its_stage_and_is_never_late_while_the_chat_is_made_or_opens_it(self) -> None:  # 1.8.50
+        fake = board()
+        fake.link.chat = {"bound": False}
+        fake.link.mark = ("", "", "")
+        begin(fake, "reopen")
+        fake.started["t/a"]["mono"] -= boardserve.START_LATE + 1
+        for stage in ("asking", "sent", "opening"):
+            fake.link.making = stage
+            found = row(fake.link, name="a", status="closed", state="closed", actions=[{"action": "archive", "command": ""}, {"action": "reopen", "command": ""}])
+            self.assertFalse(settle(fake, found))
+            self.assertEqual([item["action"] for item in found["actions"]], ["reopen"])  # no Archive while the agent is about to open it
+            self.assertEqual((found["starting"]["what"], found["starting"]["late"], found["starting"]["stage"]), ("reopen", False, stage))
+            self.assertEqual(found["state"], "closed")  # the row stays a closed one
+        fake.link.making = ""  # the agent opened it: the new chat is bound and works
+        fake.link.chat = {"bound": True, "state": "busy"}
+        found = row(fake.link, name="a", state="working", waiting="", waiting_why="")
+        settle(fake, found)
+        self.assertNotIn("starting", found)
+        self.assertEqual(fake.started, {})
+
+    def test_a_refused_new_chat_is_late_at_once(self) -> None:
+        fake = board()
+        begin(fake, "reopen")
+        fake.link.making = "refused"
+        found = row(fake.link, name="a", status="closed")
+        settle(fake, found)
+        self.assertTrue(found["starting"]["late"])
+
+    def test_checks_after_the_close_end_when_the_first_turn_runs(self) -> None:
+        fake = board()
+        fake.link.chat = {"bound": False}
+        begin(fake, "after")
+        fake.link.making = "sent"
+        found = row(fake.link, name="a", status="closed")
+        settle(fake, found)
+        self.assertEqual(found["starting"]["what"], "after")
+        fake.link.making = "opening"
+        found = row(fake.link, name="a", status="closed")
+        settle(fake, found)
+        self.assertNotIn("starting", found)
+
+    def test_a_plain_mark_on_a_closed_task_still_lets_go(self) -> None:
+        fake = board()
+        begin(fake, "newchat")
+        fake.link.making = "asking"
+        found = row(fake.link, name="a", status="closed")
+        settle(fake, found)
+        self.assertNotIn("starting", found)
 
     def test_try_again_on_a_failed_chat_is_starting_until_the_chat_leaves_the_error(self) -> None:
         fake = board()
@@ -374,6 +446,22 @@ class ServedTests(SendCase):
         self.assertEqual(self.post("/api/title", {"title": ""})[0], 200)
         self.assertNotIn("title", tasks.read(self.root, TASK))
         self.assertEqual(self.board_row()["title"], "")
+
+
+class SlowCallTests(unittest.TestCase):
+    def test_a_slow_call_gets_one_log_line_with_the_time_of_each_part(self) -> None:
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            boardserve.log_slow("steer.slow", 18.84, {"look": 17.5, "lane": 1.0, "gate": 0.0, "dispatch": 0.3}, kind="steer")
+            boardserve.log_slow("steer.slow", 0.5, {"look": 0.4}, kind="steer")  # not slow: nothing
+            boardserve.log_slow("task.slow", 3.0, {"desk": 2.5, "bad": "x"}, task="a")
+        lines = out.getvalue().splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[0], messages.text("steer.slow", seconds="18.8", parts="look 17.5, lane 1.0, dispatch 0.3", kind="steer"))
+        self.assertIn("desk 2.5", lines[1])
+        self.assertNotIn("bad", lines[1])
 
 
 class MakingTests(CreateCase):

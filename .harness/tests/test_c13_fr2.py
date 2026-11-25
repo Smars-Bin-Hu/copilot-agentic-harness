@@ -171,9 +171,9 @@ class AsRcaTests(lists.ListedCase):
         self.open_connection()
         self.runs(write)
         self.runs(f'{self.AS}{self.DEV} -Q "USE AcmeDW; INSERT INTO dbo.log SELECT 1"')
-        self.held(f'{self.AS}{self.DEV} -Q "UPDATE dbo.orders SET status = 1"')  # no WHERE: on no list
-        self.held(f'{self.AS}{self.DEV} -Q "SELECT 1 AS x INTO dbo.tmp_x"')
-        self.held(f'{self.AS}{self.DEV} -Q "EXEC dbo.usp_load"')
+        self.runs(f'{self.AS}{self.DEV} -Q "UPDATE dbo.orders SET status = 1"')  # 1.8.51: on no list, but the connection is open: every call passes but the refuse list
+        self.runs(f'{self.AS}{self.DEV} -Q "SELECT 1 AS x INTO dbo.tmp_x"')
+        self.runs(f'{self.AS}{self.DEV} -Q "EXEC dbo.usp_load"')
         self.refused(f'{self.AS}{self.DEV} -Q "UPDATE dbo.orders SET a = 1 WHERE id = 3; DROP TABLE dbo.orders"')
         self.refused(f"{self.AS}{self.DEV} -Q \"EXEC('x')\"")
 

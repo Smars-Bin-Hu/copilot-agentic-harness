@@ -987,6 +987,17 @@ class PageFilesTests(unittest.TestCase):
             self.assertNotIn(gone, live_pane)  # nothing stays on the page: it is in the panel
         self.assertIn("resultForm()", live_pane)  # the form for the results of a run stays on the Live tab for as long as that wait lasts
 
+    def test_a_steer_that_waits_is_drawn_as_you_with_a_short_mark(self) -> None:
+        live = source("live.js")
+        self.assertIn("function paintPending(data)", live)
+        self.assertIn("data.steering", live)
+        self.assertIn('t("desk.live.pending.steer")', live)
+        self.assertIn(".fi-pending", source("live.css"))
+        for language in ("en", "zh"):
+            table = json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{language}.json").read_text(encoding="utf-8"))
+            for key in ("desk.live.pending.steer", "steer.slow", "task.slow"):
+                self.assertIn(key, table)
+
     def test_the_reply_panel_keeps_what_send_steer_and_the_drafts_did(self) -> None:
         reply, chat = source("reply.js"), source("chat.js")
         self.assertIn('"/api/send", {task: info.name, kind: "answer"', reply)

@@ -406,8 +406,8 @@ class GateExternalTaskTests(TaskCase):
         testrecord.set_runner(self.root, "t-test", "DEV", False, interactive=True)
         self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")
 
-    def test_the_person_opens_a_connection_for_one_task_and_the_switch_lets_writes_through_but_never_a_destroy_or_prod(self) -> None:
-        """1.7.38: `task allow --conn cloud --on` is the task-level switch: task, outbox and human decisions of that connection pass; deny does not; prod cannot be opened."""
+    def test_the_person_opens_a_connection_for_one_task_and_the_switch_lets_calls_through_but_never_an_undeclared_prod(self) -> None:
+        """1.7.38: `task allow --conn cloud --on` is the task-level switch. 1.8.51: in dev every call passes, a destroy too; prod opens only when declared read-only."""
         from modules.task import tasklife
 
         self.configure()
@@ -424,11 +424,11 @@ class GateExternalTaskTests(TaskCase):
         self.assertEqual((found["conn"], found["on"], found["open"]), ("cloud", True, ["cloud"]))
         self.assertEqual(self.term("cloudctl --sub dev create --name x"), {})
         self.assertEqual(self.term("cloudctl --sub dev run --name j"), {})  # human in dev: opened too
-        self.assertEqual(self.term("cloudctl --sub qat run --name j"), {})  # the connection serves qat too, and the CLI opened it whole
-        self.assertEqual(self.term("cloudctl --sub dev delete x")["permissionDecision"], "deny")  # never a destroy
+        self.assertEqual(self.term("cloudctl --sub qat run --name j")["permissionDecision"], "deny")  # 1.8.51: qat opens only when the system says access read-only
+        self.assertEqual(self.term("cloudctl --sub dev delete x"), {})  # 1.8.51: a destroy too, in an environment that opens whole (dev)
         self.assertEqual(self.term("cloudctl run --name j")["permissionDecision"], "deny")  # no environment named: prod, never opened
         rows = [row["external"] for row in self.session_log(SESSION) if row.get("external")]
-        self.assertEqual([(row["env"], row["verb"], row.get("opened")) for row in rows[-5:]], [("dev", "write", True), ("dev", "exec", True), ("qat", "exec", True), ("dev", "destroy", None), ("prod", "exec", None)])  # the log says what went through on the switch
+        self.assertEqual([(row["env"], row["verb"], row.get("opened")) for row in rows[-5:]], [("dev", "write", True), ("dev", "exec", True), ("qat", "exec", None), ("dev", "destroy", True), ("prod", "exec", None)])  # the log says what went through on the switch
         tasklife.set_allow(self.root, NAME, "cloud", False, interactive=True)
         self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")
         self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "allow-env"], ["cloud: on", "cloud: off"])

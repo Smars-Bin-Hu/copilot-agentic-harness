@@ -486,14 +486,14 @@ class LineOnTwoSystemsTests(English, ListedCase):
         with mock.patch.object(boardserve.Board, "idle", return_value=False):
             self.board.act("task allow", "job1", "act", code=code, env_name=name, who="on")
 
-    def test_a_part_that_no_opening_passes_leaves_no_open_button_and_the_card_says_which(self) -> None:
+    def test_a_part_on_no_list_can_be_opened_too_and_the_card_says_which(self) -> None:
         reason = self.held(f"{IST} {WRITE} && {SERVER} {INTO}")
         card = self.card()
-        self.assertEqual(card["offers"], [], "opening IST alone would still leave the statement of DEV held")
-        self.assertEqual([(one["system"], one["zone"], one["opens"]) for one in card["holds"]], [("acmedw-ist", "write", True), ("acmedw-dev", "ask", False)])
-        self.assertEqual(card["zone"], "ask", "the line says what the part that opening cannot pass says")
+        self.assertEqual(sorted(one["system"] for one in card["offers"]), ["acmedw-dev", "acmedw-ist"], "1.8.51: an opened connection passes a statement on no list, so both are offered")
+        self.assertEqual([(one["system"], one["zone"], one["opens"]) for one in card["holds"]], [("acmedw-ist", "write", True), ("acmedw-dev", "ask", True)])
+        self.assertEqual(card["zone"], "ask", "the line says what the part on no list says")
         self.assertIn("INTO", card["zone_note"])
-        self.assertNotIn(messages.text("gate.external.outbox.opens", buttons="X")[:24], reason, "the agent is not told about a button that is not there")
+        self.assertIn(messages.text("gate.external.outbox.opens", buttons="X")[:24], reason, "the agent is told about the buttons")
 
     def test_when_every_held_part_can_be_opened_each_connection_is_offered_and_the_line_runs_once_both_are_open(self) -> None:
         line = f"{IST} {WRITE} && {SERVER} {WRITE}"
@@ -796,18 +796,10 @@ class WordsOfTheBoardTests(unittest.TestCase):
                 if key.endswith(".tip") and key.startswith(("desk.", "board.", "dock.", "connections.", "tools.", "machine.", "setup.")):
                     self.assertNotIn("`harness ", value, (key, language))
 
-    def test_the_open_popover_says_a_ticket_linked_later_once_and_fits_in_fewer_lines(self) -> None:
+    def test_the_open_popover_words_are_short(self) -> None:
+        """1.8.51: the pop's line under its title fits in a few lines on the hover, in both languages."""
         for language in ("en", "zh"):
-            tip = self.table(language)["desk.set.open.tip.conn"]
-            self.assertLess(len(tip), len(messages.table(language).get("desk.set.open.tip.conn.old", "x" * 10 ** 6)))
-        en = self.table("en")["desk.set.open.tip.conn"]
-        self.assertEqual(en.count("later"), 1)
-        self.assertNotIn("links by itself", en)
-        self.assertNotIn("newly linked", en)
-        self.assertLessEqual(len(en), 330, "it was 410 characters, seven lines on the hover")
-        zh = self.table("zh")["desk.set.open.tip.conn"]
-        self.assertEqual(zh.count("之后关联或新建"), 1)
-        self.assertNotIn("自己新关联", zh)
+            self.assertLessEqual(len(self.table(language)["desk.set.open.tip.pick"]), 330, language)
 
     def test_the_view_window_closes_with_close_not_cancel(self) -> None:
         for file, name in (("callview.js", "function open(item, options)"), ("desk.js", "function evidenceWindow(item)")):  # the window of a held call moved to callview.js (1.8.25)

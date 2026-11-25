@@ -88,7 +88,8 @@ const REOPEN = (function () {
       busy(true, hand);
       SERVE.post("/api/super/send", {task: name, text: message.value.trim(), seen: {mode: plan.mode, round: plan.round}}).then((answer) => {
         if (answer && answer.ok === false) { fail({message: whyText(answer.why, answer.error)}, hand); return; }
-        view.close(); SERVE.done();
+        hand.classList.add("is-waiting");  // 1.8.50: the card stays, turning, until the page shows the start: no moment with nothing on screen
+        Promise.resolve(SERVE.done()).then(view.close, view.close);
       }, (error) => fail(error, hand));
     });
     return view;

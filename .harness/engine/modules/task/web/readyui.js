@@ -22,6 +22,7 @@ const READY = (function () {
     else if (fix.to === "copilot" && fix.kind === "signin") return SERVE.post("/api/gh", {do: "login"}).then(() => { if (given.done) given.done(); });  // 1.8.x: gh's web sign-in; the Enter screen shows its code
     else if (fix.to === "copilot" && fix.url) window.open(fix.url, "_blank", "noopener");  // GitHub's or VS Code's own download page: the board downloads nothing
     else if (fix.to === "identities" && typeof SERVERS !== "undefined") SERVERS.choose(() => { if (given.done) given.done(); });
+    else if (fix.to === "hookack") return SERVE.post("/api/hook-ack", {events: fix.events}).then(() => { if (given.done) given.done(); });  // F13: the person has seen the timed-out hook; an error (a timeout the page did not show) is said on the button
     else if (fix.to === "doctor") return SERVE.post("/api/doctor-again", {}).then(() => { if (given.done) given.done(); });  // 1.7.45: doctor runs now; the line shows its progress at the next look
     return undefined;
   }
@@ -37,12 +38,12 @@ const READY = (function () {
 
   // A fix as a small button (the board's block) or as a link in a note (the Enter screen).
   function button(fix, hooks, cls) {
-    const node = h("button", {type: "button", class: cls || "act"}, fix.label || "");
+    const node = h("button", {type: "button", class: cls || "act", title: fix.tip || null}, fix.label || "");
     node.addEventListener("click", () => wait(node, fix, hooks));
     return node;
   }
   function link(fix, hooks, text) {
-    const node = h("button", {type: "button", class: "en-link"}, text || fix.label || "");
+    const node = h("button", {type: "button", class: "en-link", title: fix.tip || null}, text || fix.label || "");
     node.addEventListener("click", () => wait(node, fix, hooks));
     return node;
   }

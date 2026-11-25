@@ -11,10 +11,11 @@ Nothing here writes, and nothing commits for the person. `task list` carries the
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from core import messages, targets, tasks
+from core import filecache, messages, targets, tasks
 from core.paths import cli_command
 
 from . import common
@@ -44,16 +45,30 @@ def every_task(root: Path) -> List[Dict[str, Any]]:
     return found
 
 
-def repos_of(root: Path, data: Dict[str, Any], known: List[str]) -> List[str]:
-    """The target repositories a task has results for: the folders under DEV/, and what it took or will delete."""
-    names = set()
-    dev = tasks.dev_dir(root, data["task"])
+def _has_file(folder: Path) -> bool:
+    """Is there a file anywhere under `folder`? Stops at the first one (the folders are not all walked as `rglob` did)."""
+    for _here, _dirs, files in os.walk(folder):
+        if files:
+            return True
+    return False
+
+
+def _repos_in(dev: Path, known: Tuple[str, ...]) -> List[str]:
+    names: List[str] = []
     try:
         for child in dev.iterdir():
-            if child.is_dir() and child.name in known and any(item.is_file() for item in child.rglob("*")):
-                names.add(child.name)
+            if child.is_dir() and child.name in known and _has_file(child):
+                names.append(child.name)
     except OSError:
         pass
+    return names
+
+
+def repos_of(root: Path, data: Dict[str, Any], known: List[str]) -> List[str]:
+    """The target repositories a task has results for: the folders under DEV/, and what it took or will delete. 1.8.x: DEV/ is looked at once per board pass for a task (it was once per call, and a call
+    came from the line, the queue and the promote check of each task); outside a pass every call looks again."""
+    dev = tasks.dev_dir(root, data["task"])
+    names = set(filecache.in_pass(f"repos_in\0{dev}\0{'|'.join(known)}", lambda: _repos_in(dev, tuple(known))))
     for key in list(data.get("deletes") or []):
         first = str(key).split("/", 1)[0]
         if first in known:

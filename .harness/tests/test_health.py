@@ -159,6 +159,25 @@ class IdleTests(Logs):
         found = health.check(self.root, row(), self.data, None, now=NOW.timestamp())
         self.assertEqual([(item["rule"], item["n"]) for item in found], [("idle", 4)])
 
+    def test_a_read_only_qa_task_with_many_turns_and_no_edit_has_no_idle_warning(self) -> None:
+        self.events([self.user(20)] + [self.turn(minutes) for minutes in (15, 13, 11, 9, 7, 5)])
+        self.data["tier"] = "light"
+        self.assertEqual(self.check(row(kind="qa")), [])
+
+    def test_the_gate_is_on_both_kind_and_tier(self) -> None:
+        self.events([self.user(20)] + [self.turn(minutes) for minutes in (15, 13, 11, 9, 7, 5)])
+        self.assertEqual(self.check(row(kind="qa")), [])  # an old record with no tier
+        self.data["tier"] = "light"
+        self.assertEqual(self.check(row(kind="other")), [])
+        self.data["tier"] = "full"
+        self.assertEqual(self.check(row(kind="dev")), ["idle"])
+
+    def test_a_qa_task_with_no_call_for_ten_minutes_is_still_stuck(self) -> None:
+        self.events([self.user(20), self.turn(15)])
+        self.data["tier"] = "light"
+        self.hook_rows([self.call(14, "Read", "read")])
+        self.assertEqual(self.check(row(kind="qa")), ["stuck"])
+
     def test_three_turns_do_not(self) -> None:
         self.events([self.user(20), self.turn(15), self.turn(12), self.turn(9)])
         self.assertEqual(self.check(), [])

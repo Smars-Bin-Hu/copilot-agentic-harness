@@ -15,7 +15,7 @@ from core import systems as outside
 from core import approval, calls, config, messages, outbox, pinfiles, tasks
 from core.paths import cli_command, utc_now
 
-from . import accept, autorun, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, taskreopen, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
+from . import accept, autorun, callrecord, cmdview, common, evidence, health, mdtree, stmtview, task as task_ops, taskboard, taskinsight, taskreopen, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
 from . import steps as step_parts
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
@@ -248,6 +248,12 @@ def cut_command(command: Any, size: int = 80) -> str:
     return one if len(one) <= size else one[: size - 1].rstrip() + "\u2026"
 
 
+def told_of(item: Dict[str, Any]) -> Dict[str, str]:
+    """How far the board got in telling the agent about the person's decision (`approvals.told`, 1.8.55): `told` (wait, message, steer, telling, failed, left, or "" when nothing was tried), `told_at` (the
+    agent has it since then: the card counts down from it, the same on every page and after a reload), `told_why` (why it failed, in the person's words)."""
+    return {"told": str(item.get("told") or ""), "told_at": str(item.get("told_at") or ""), "told_why": str(item.get("told_why") or "")}
+
+
 def approved_view(root: Path, task: str, systems: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """The calls of this task approved on the board or in a terminal and not run yet (1.7.24): the page keeps its green card, and tells the agent, until the command has run.
     1.7.25: each has a `title` (the sentence of its type's `say`, else the start of the command), so the card says which call was approved."""
@@ -261,7 +267,7 @@ def approved_view(root: Path, task: str, systems: Optional[Dict[str, Any]] = Non
             except Exception:  # noqa: BLE001 - a title is a help; the card has the command anyway
                 said = ""
             out.append({"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"],
-                        "approved_at": item.get("approved_at", ""), "title": said or cut_command(item["command"]), "told": str(item.get("told") or "")})  # told: "wait" (its wait returned), "message" (the board woke it)
+                        "approved_at": item.get("approved_at", ""), "title": said or cut_command(item["command"]), **told_of(item)})
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []
@@ -279,9 +285,17 @@ def opened_view(root: Path, task: str, systems: Optional[Dict[str, Any]] = None)
             except Exception:  # noqa: BLE001 - a title is a help; the card has the code anyway
                 said = ""
             names = [str(name) for name in item.get("opened_for") or []]
-            out.append({"code": item["code"], "names": names, "shown": [outbox.opened_words(name, item.get("opened_offers")) for name in names], "title": said or cut_command(item["command"]), "told": str(item.get("told") or "")})
+            out.append({"code": item["code"], "names": names, "shown": [outbox.opened_words(name, item.get("opened_offers")) for name in names], "title": said or cut_command(item["command"]), "command": item["command"], **told_of(item)})
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
+        return []
+
+
+def ran_view(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls of this task that ran a moment ago (1.8.55, `outbox.ran_for`): the green card of each says "The agent ran it" until its count is over. `ran_at`: when."""
+    try:
+        return [{"code": item["code"], "ran_at": str(item.get("used_at") or ""), "opened": bool(item.get("opened_for")), **told_of(item)} for item in outbox.ran_for(root, task)]
+    except Exception:  # noqa: BLE001 - a help: the card then goes when the call leaves the list
         return []
 
 
@@ -309,7 +323,31 @@ def allow_view(root: Path, data: Dict[str, Any], task: str = "", systems: Option
     if scoped:  # 1.7.18: the items the task is linked to: the agent's writes to them only
         on = bool(data.get(tasklife.LINKS_KEY)) and is_open
         links = {"systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "refs": [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]}
-    return {"open": rows, "links": links, "can": can, "any": bool(openable), "never": [outside.PROD]}
+    every = _every_connection(root, systems, held)
+    return {"open": rows, "links": links, "can": can, "any": bool(openable) or bool(every), "never": [], "all": every}
+
+
+def _every_connection(root: Path, systems: Dict[str, Any], held: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """(1.8.51) What the Open to the agent dialog lists: every connection the gate knows, `{name, group, env, open, why}`, sorted by group, then environment (dev, ist, qat, prod), then name.
+    `group` is the label of the connection's type (the system it reaches); `why` is empty when it may be ticked, else `systems.may_open`'s word. A system written by hand (no connection) is listed too."""
+    try:
+        from core import connections
+
+        listed = connections.listed(root)
+        kinds = connections.types(root)
+    except Exception:  # noqa: BLE001 - the dialog then groups by name only
+        listed, kinds = {}, {}
+    order = {env: index for index, env in enumerate(outside.ENVS)}
+    out = []
+    for name, system in systems.items():
+        if not isinstance(system, dict) or name.startswith("broken-") or system.get("blocked") or system.get("broken"):  # nothing to open: refused whatever is ticked
+            continue
+        kind = str((listed.get(name) or {}).get("type") or "")
+        label = (kinds.get(kind) or {}).get("label") if kind else ""
+        group = str(messages.pick(label) if label else kind or system.get("toolpack") or name)
+        env = str(system.get("env") or "").lower() or ",".join(sorted({str(rule.get("env")) for rule in system.get("env_from") or [] if isinstance(rule, dict) and rule.get("env")}))
+        out.append({"name": name, "group": group, "env": env, "open": name in held, "why": outside.may_open_any(system), "access": str(system.get("access") or "")})
+    return sorted(out, key=lambda item: (item["group"].lower(), order.get(item["env"], len(order)), item["name"]))
 
 
 def links_view(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -428,21 +466,13 @@ def promote_stamp(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"state": record["state"], "at": str(record.get("at") or ""), "branch": str(record.get("branch") or ""), "approved_at": str(record.get("approved_at") or ""), "code": approval.code_of(digest) if digest else ""}
 
 
-def server_runs(root: Path, task: str, paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
-    """1.8.16: for each script of `DEV/_server/`, the calls the gate let through that named it (`.task/calls.jsonl`): `{at, system, env, how, code}`, oldest first.
-    A call names a script when its command holds the script's path under the task folder or its file name as a word of its own. A run before 1.7.9 left no line."""
-    try:
-        found = calls.read(root, task)
-    except Exception:  # noqa: BLE001 - the tab shows the scripts anyway
-        return {}
+def server_runs(rows: List[Dict[str, Any]], paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """1.8.16: for each script of `DEV/_server/`, the calls the gate let through that named it, oldest first: the rows of `callrecord.listing` (the call, what let it through, how it ended).
+    A call names a script when its command holds the script's file name as a word of its own. A run before 1.7.9 left no line."""
     out: Dict[str, List[Dict[str, Any]]] = {}
-    for path in paths:
-        name = path.rsplit("/", 1)[-1]
-        pattern = re.compile(r"(?:^|[\\/\s\"'=])" + re.escape(name) + r"(?:$|[\s\"';])")
-        runs = [{"at": str(line.get("at") or ""), "system": str(line.get("system") or ""), "env": str(line.get("env") or ""), "how": str(line.get("how") or ""), "code": str(line.get("code") or "")}
-                for line in found if isinstance(line, dict) and pattern.search(str(line.get("command") or ""))]
-        if runs:
-            out[path] = runs
+    for row in rows:
+        if row.get("script") in paths:
+            out.setdefault(row["script"], []).append(row)
     return out
 
 
@@ -642,6 +672,8 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
     review, events = reviews(root, task, data), history(data)
     listed, changes_view = taskfiles.listing(root, task), changed(root, task, data)
     systems, is_open = tools_systems(root), row.get("status") == "open"
+    saved_runs = evidence.listing(root, task)
+    call_rows = callrecord.listing(root, task, saved_runs)  # the calls to outside systems with how each ended: the Runs tab lists those that wrote or ran, the Scripts tab every run of a script
     return {
         "name": name, "task": task, "title": row.get("title") or "", "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "state": row.get("state", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
@@ -654,7 +686,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view, server_runs(root, task, [item["path"] for item in listed if item["path"].startswith(tasks.DEV_NAME + "/") and tasks.is_manual(item["path"].split("/", 1)[-1])])), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task, systems), "outbox": outbox_view(root, task, systems) if is_open else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task, systems) if is_open else [], "opened": opened_view(root, task, systems) if is_open else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": listed, "scripts": scripts(listed, changes_view, server_runs(call_rows, [item["path"] for item in listed if item["path"].startswith(tasks.DEV_NAME + "/") and tasks.is_manual(item["path"].split("/", 1)[-1])])), "evidence": saved_runs, "calls": [item for item in call_rows if item["listed"]], "allow": allow_view(root, data, task, systems), "outbox": outbox_view(root, task, systems) if is_open else [], "batch_max": outbox.BATCH_MAX, "approved": approved_view(root, task, systems) if is_open else [], "opened": opened_view(root, task, systems) if is_open else [], "ran": ran_view(root, task) if is_open else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changes_view, "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "req_approval": req_approval(root, task, data), "promote_stamp": promote_stamp(data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"),
         "plan_after_req": row.get("waiting_why") == "req" and bool(tasks.plan_digest(root, task)) and not tasks.plan_approved(root, task, data), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),  # plan_after_req (1.8.49): the plan is written and comes after the requirement
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),

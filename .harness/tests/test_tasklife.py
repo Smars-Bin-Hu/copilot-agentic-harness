@@ -822,7 +822,10 @@ class MessageTests(unittest.TestCase):
             "ready.act.", "ready.r.copilot.",  # 1.8.x: the button and the problems of the board's own agent host are built from the line's `why` (ready.py)
             "board.ask.auth.reason.",  # 1.8.x B5: chat.js builds the key from why a tool waits for a sign-in (required, expired, insufficientScope)
             "acct.plan.", "acct.sw.", "menu.copilot.",  # 1.8.38, 1.8.39 (topmenu.js: the state of the Copilot check): acct.js builds the key from the plan and the switch's name (copilotacct.SWITCHES)
+            "desk.calls.filter.", "desk.calls.why.", "desk.calls.outcome.", "desk.calls.verb.", "desk.scripts.last.",  # callrows.js builds the key from a filter, why no output was kept, how a call ended, its verb
             "waits.what.",  # 1.8.5: common.js startingTip builds the key from what the board sent (`starting.what`)
+            "desk.set.open.why.",  # 1.8.51: desk.js builds the key from `systems.may_open`'s word (read-only, locked, no)
+            "desk.outbox.told.", "desk.outbox.tell.why.",  # 1.8.55: desk.js builds the key from how the agent heard an approval (wait, steer, message); boardserve.tell_refusal from why the board could not tell it
             "report.perf.owner.","report.perf.confidence.", "report.perf.metric.", "report.perf.origin.", "report.perf.why.", "report.perf.chain.", "report.perf.priority.", "report.perf.outcome.", "report.perf.fact.",  # 1.7.41: the review page builds the key from an owner, an origin, a fact and so on (perfpage.js)
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')

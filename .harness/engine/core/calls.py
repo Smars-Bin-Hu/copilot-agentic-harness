@@ -1,5 +1,5 @@
 """The calls to outside systems that went through, noted by the gate for the task that was open (1.7.9): `.task/calls.jsonl` in the task folder, one line per call,
-`{at, command, system, env, verb, how, code}`. `how` is what let it through: `allow` (the policy, a read), `plan` (the task level: an approved plan), `runner` (a test
+`{at, command, system, env, verb, how, code, floor}`. `how` is what let it through: `allow` (the policy, a read), `plan` (the task level: an approved plan), `runner` (a test
 environment the person let the agent run), `opened` (the person opened the environment for the task), `approved` (the person approved this command once; `code` says which).
 
 A run the agent records (`task run record --run-by agent`, `task test record --run-by agent`) looks its commands up here and writes what let them through into the
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from . import approvals, filecache, tasks
 from .paths import utc_now
@@ -24,14 +24,17 @@ def path(root: Path, task: str) -> Path:
     return tasks.task_dir(root, task) / tasks.STATE_DIR / FILE
 
 
-def note(root: Path, task: str, command: str, system: str, env: str, verb: str, how: str, code: str = "") -> None:
-    """One line for a call that goes through now. Never raises: a note must not stop the call."""
+def note(root: Path, task: str, command: str, system: str, env: str, verb: str, how: str, code: str = "", floor: Optional[bool] = None) -> None:
+    """One line for a call that goes through now. Never raises: a note must not stop the call. `floor` (1.8.54): True when no rule named the verb and the gate counted a write
+    (it could not tell a read from a write); a line written before has no such key."""
     try:
         target = path(root, task)
         target.parent.mkdir(parents=True, exist_ok=True)
         line = {"at": utc_now(), "command": approvals.collapse(command), "system": system, "env": env, "verb": verb, "how": how if how in HOWS else UNKNOWN}
         if code:
             line["code"] = code
+        if isinstance(floor, bool):
+            line["floor"] = floor
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(line, ensure_ascii=False) + "\n")
     except Exception:  # noqa: BLE001 - see above

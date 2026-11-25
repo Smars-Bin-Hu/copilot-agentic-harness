@@ -243,17 +243,29 @@ def wait_mark(root: Path, code: str, state: str, limit_minutes: int, now: Option
     return False
 
 
-def told(root: Path, code: str, how: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> bool:
-    """The agent was told that the person decided (1.7.38): by the wait that was running (`wait`) or by a message the board sent to its chat (`message`). The card of the page then does not ask the person to tell it."""
+TOLD_DONE = ("wait", "message", "steer")  # the agent has it: by the wait that was running, by a message that woke it, or by a steer into its running turn
+
+
+def told(root: Path, code: str, how: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE, why: str = "") -> bool:
+    """Where telling the agent stands, after the person decided (1.7.38; 1.8.55 all of them): `wait`, `message`, `steer` (TOLD_DONE: the agent has it, `told_at` says since when, so every page counts
+    its card down from the same moment), `telling` (the board is at it, in the background), `failed` (it could not: `why`), `left` (the agent delivered its work without this call: only the person's button tells it)."""
     now = time.time() if now is None else now
     with state_lock(path(root, file)):
         entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
         for item in entries:
             if item["code"] == str(code or "").strip().upper():
-                item["told"] = how
+                item.update(told=how, told_at=utc_now() if how in TOLD_DONE else "", told_why=str(why or "")[:300])
                 _write(root, entries, file)
                 return True
     return False
+
+
+def heard(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> bool:
+    """`harness wait --approval` returned the person's decision to the agent (1.8.55): the agent has it, whatever the board was doing to tell it. A code already told is left as it is."""
+    found = find(root, code, limit_minutes, now, file)
+    if not found or found.get("state") == "pending" or found.get("told") in TOLD_DONE:
+        return False
+    return told(root, code, "wait", limit_minutes, now, file)
 
 
 def opened_all(root: Path, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> List[Dict[str, Any]]:
@@ -282,15 +294,26 @@ def mark_opened(root: Path, code: str, names: List[str], limit_minutes: int, now
 
 
 def settle(root: Path, task: str, command: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> int:
-    """The agent ran the command of an `opened` entry again (it went through, or it is held anew): the entry has done its work and goes (1.7.38). How many were taken away."""
+    """The agent ran the command of an `opened` entry again (it went through, or it is held anew): the entry has done its work (1.7.38) and is left as a `used` stub (1.8.55). How many."""
     now = time.time() if now is None else now
     text = collapse(command)
     if not path(root, file).exists():
         return 0
     with state_lock(path(root, file)):
         entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
-        keep = [item for item in entries if not (item["state"] == "opened" and item.get("task") == task and item["command"] == text)]
-        if len(keep) != len(entries):
-            _write(root, keep, file)
-        return len(entries) - len(keep)
+        count = 0
+        for item in entries:
+            if item["state"] == "opened" and item.get("task") == task and item["command"] == text:
+                item.pop("files", None)
+                item.update(state="used", at=now, used_at=utc_now())  # 1.8.55: a stub, as `consume` leaves, so the card can say the agent ran it
+                count += 1
+        if count:
+            _write(root, entries, file)
+        return count
+
+
+def ran_lately(root: Path, seconds: float, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> List[Dict[str, Any]]:
+    """The entries whose command ran in the last `seconds` (1.8.55): an approval used up, or a call whose connection was opened and that the agent ran again. The card of the page says it ran."""
+    now = time.time() if now is None else now
+    return [item for item in _read(root, file) if item["state"] == "used" and _alive(item, limit_minutes * 60.0, now) and now - float(item.get("at", 0)) <= seconds]
 

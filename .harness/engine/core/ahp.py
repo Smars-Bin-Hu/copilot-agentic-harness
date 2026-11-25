@@ -609,6 +609,57 @@ def folder_uri(folder: Any) -> str:
     return "file://" + quote(path, safe="/:")
 
 
+
+ROOT_CHANNEL = "ahp-root:/"
+TRUST_KEY = "workspaceTrust"  # root config of the host: `{enabled, trustedUris}`
+
+
+def trust_uris(folder: Any) -> List[str]:
+    """(1.8.x) The addresses under which a folder is declared trusted to the host: as the board gives it for `workingDirectories`, as the OS resolves it, and on Windows with the drive letter
+    in both cases (the host compares addresses; which case it holds is its own business). The folder and what is under it, nothing above."""
+    out: List[str] = []
+    for path in (str(folder), os.path.realpath(str(folder))):
+        uri = folder_uri(path)
+        for one in (uri, re.sub(r"^file:///([A-Za-z]):", lambda found: "file:///" + found.group(1).swapcase() + ":", uri)):
+            if one not in out:
+                out.append(one)
+    return out
+
+
+def trusted(state: Dict[str, Any], uris: List[str]) -> bool:
+    """Does the root state of the host hold every one of these addresses as trusted? A host that says trust is off (`enabled: false`) trusts every folder."""
+    values = (state.get("config") or {}).get("values") if isinstance(state.get("config"), dict) else None
+    held = values.get(TRUST_KEY) if isinstance(values, dict) else None
+    if not isinstance(held, dict):
+        return False
+    if held.get("enabled") is False:
+        return True
+    have = held.get("trustedUris")
+    return isinstance(have, list) and all(uri in have for uri in uris)
+
+
+def declare_trust(link: Any, folder: Any, timeout: Optional[float] = -1.0) -> bool:
+    """(1.8.x) Tell the host that this folder is trusted, and read back that it holds it. VS Code 1.148's agent host runs the hooks of a repository (`.github/hooks/`) only for a working
+    folder inside `workspaceTrust.trustedUris` of its root config; a VS Code window sends its own Workspace Trust, and a host the board started had none: every hook then "ended" in
+    milliseconds with no output and no call was judged (Mac, 2026-11-25). What the host already trusts is kept. False when the host does not hold it after the ask (an older host that does
+    not know the setting runs the hooks without it)."""
+    uris = trust_uris(folder)
+    state = link.subscribe(ROOT_CHANNEL, timeout)
+    try:
+        if trusted(state, uris):
+            return True
+        values = (state.get("config") or {}).get("values") if isinstance(state.get("config"), dict) else None
+        held = values.get(TRUST_KEY) if isinstance(values, dict) else None
+        kept = [uri for uri in (held.get("trustedUris") if isinstance(held, dict) else None) or [] if isinstance(uri, str)]
+        link.dispatch(ROOT_CHANNEL, {"type": "root/configChanged", "config": {TRUST_KEY: {"enabled": True, "trustedUris": kept + [uri for uri in uris if uri not in kept]}}})
+    finally:
+        link.unsubscribe(ROOT_CHANNEL, timeout)
+    try:
+        return trusted(link.subscribe(ROOT_CHANNEL, timeout), uris)
+    finally:
+        link.unsubscribe(ROOT_CHANNEL, timeout)
+
+
 INITIATOR_KEY = "vscode.session.initiator"  # `_meta` of a session summary: who made the chat; `vscode` is what the Agents window of VS Code shows
 def initiator_of(meta: Any) -> str:
     """The name in `_meta["vscode.session.initiator"]`: the host gives `{"name": "vscode"}` (checked live); a plain string is taken as it is."""
@@ -932,6 +983,17 @@ def queued(state: Dict[str, Any]) -> List[Dict[str, str]]:
     return [{"id": item["id"], "text": item["text"]} for item in state.get("queuedMessages") or [] if isinstance(item, dict) and item.get("kind") == "queued"]
 
 
+def steering(state: Dict[str, Any]) -> List[Dict[str, str]]:
+    """The messages sent into the running turn that the agent has not taken yet (`kind: steering`), oldest first: `{id, text}`. The Live view shows them as sent (F5)."""
+    return [{"id": item["id"], "text": item["text"]} for item in state.get("queuedMessages") or [] if isinstance(item, dict) and item.get("kind") == "steering" and isinstance(item.get("id"), str) and isinstance(item.get("text"), str)]
+
+
+def _drop_steering(state: Dict[str, Any]) -> None:
+    """A turn started or ended: a steering message not taken by then is not waiting any more (it became the next turn's message, or the host dropped it)."""
+    if any(isinstance(item, dict) and item.get("kind") == "steering" for item in state.get("queuedMessages") or []):
+        state["queuedMessages"] = [item for item in state.get("queuedMessages") or [] if not (isinstance(item, dict) and item.get("kind") == "steering")]
+
+
 def resumable_turn(state: Dict[str, Any]) -> str:
     """The id of the last turn when it ended in an error the host says can be tried again (its last part: `{kind: error, resumable: true}`), and nothing runs. Empty: none."""
     turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
@@ -1089,6 +1151,7 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         state["backgroundWork"] = [item for item in state.get("backgroundWork") or [] if isinstance(item, dict) and item.get("id") != action.get("id")]
         return
     if kind == "chat/turnStarted":
+        _drop_steering(state)
         state["activeTurn"] = {"id": action.get("turnId"), "startedAt": action.get("startedAt"), "message": action.get("message"), "responseParts": [], "usage": None}
         state["modifiedAt"] = action.get("startedAt") or state.get("modifiedAt")
         return
@@ -1157,6 +1220,7 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         done = dict(active, state={"chat/turnComplete": "complete", "chat/turnCancelled": "cancelled"}.get(kind, "error"), duration=action.get("duration"))
         state["turns"] = (list(state.get("turns") or []) + [done])[-keep:]
         state["activeTurn"] = None
+        _drop_steering(state)
         return
     if len(parts) > PARTS_KEEP + 20:  # cut in steps, not on every action
         active["dropped"] = int(active.get("dropped") or 0) + len(parts) - PARTS_KEEP

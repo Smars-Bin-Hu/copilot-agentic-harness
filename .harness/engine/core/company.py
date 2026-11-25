@@ -29,7 +29,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import approval, gitread, kbstd, messages, skillcheck, standards, targets
+from . import approval, filecache, gitread, kbstd, messages, skillcheck, standards, targets
 from .paths import runtime_dir
 from .registry import harness_version
 from . import procrun
@@ -500,11 +500,42 @@ def skills_part(company: Path) -> List[Dict[str, Any]]:
     return [{"key": "skills", "ok": True, "count": len(names), "text": say("setup.layout.skills", n=len(names))}]
 
 
+FOUND_FOR = 10.0  # seconds a "found in place" answer is kept in the board server, at most
+FOUND_KEPT = 8
+_found: Dict[str, Tuple[float, Tuple[Any, ...], List[str]]] = {}
+
+
+def _looks(kb: Path) -> Tuple[Any, ...]:
+    """The stamps (modification time, size) of the folders and files `layout` looks at; None for one that is not there. A stat each, no listing."""
+    company = kb / targets.COMPANY_DIR
+    places = [kb, kb / "domains", company, company / "instructions", company / "standards", company / "skills", company / TOOLS_DIR, company / TOOLS_DIR / "packs",
+              company / CONFIG_FILE, company / TOOLS_DIR / CONNECTIONS_FILE, company / TOOLS_DIR / COMPUTER_FILE, company / "tools" / "packs.json"]
+    stamps: List[Any] = []
+    for place in places:
+        try:
+            info = place.stat()
+            stamps.append((info.st_mtime_ns, info.st_size, info.st_ino))
+        except OSError:
+            stamps.append(None)
+    return tuple(stamps)
+
+
 def found_in_place(root: Path) -> List[str]:
-    """What the board shows in green: the parts of the knowledge base in place that are right. Quick: a few file looks. Empty with no knowledge base."""
+    """What the board shows in green: the parts of the knowledge base in place that are right. Quick: a few file looks. Empty with no knowledge base.
+    1.8.x: in the board server the answer is kept while the stamps of what `layout` looks at stay the same and for FOUND_FOR seconds at most (it was nine listings for every poll); a hook and the command line look every time."""
     for _name, path in targets.knowledge_bases(root):
         if targets.knowledge_base_content(path):
-            return [item["text"] for item in layout(path) if item["ok"]]
+            if not filecache.enabled():
+                return [item["text"] for item in layout(path) if item["ok"]]
+            key, looks, now = str(path), _looks(path), time.monotonic()
+            held = _found.get(key)
+            if held is not None and held[1] == looks and now - held[0] < FOUND_FOR:
+                return list(held[2])
+            lines = [item["text"] for item in layout(path) if item["ok"]]
+            if len(_found) >= FOUND_KEPT and key not in _found:
+                _found.pop(next(iter(_found)))
+            _found[key] = (now, looks, lines)
+            return list(lines)
     return []
 
 

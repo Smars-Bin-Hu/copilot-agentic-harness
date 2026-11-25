@@ -36,6 +36,14 @@ class ClosedListTests(unittest.TestCase):
         self.assertEqual(found[0], {"task": "c14", "kind": "dev", "closed_at": "2026-11-15T00:00:00+00:00", "title": "T14", "reopen": None})
         self.assertEqual(superview.closed_of(rows, 2)[1]["task"], "c13")
 
+    def test_a_closed_task_just_handed_to_an_agent_is_a_being_created_item(self) -> None:  # 1.8.50
+        since = "2026-11-24T10:00:00+00:00"
+        rows = [row("r1", status="closed", kind="dev", starting={"what": "reopen", "since": since, "late": False, "stage": "sent"}),
+                row("r2", status="closed", starting={"what": "after", "since": since, "late": True, "stage": ""}),  # late: the strip says nothing more
+                row("r3", status="open", starting={"what": "answer", "since": since, "late": False}), row("r4", status="closed"), "x", None]
+        self.assertEqual(superview.handed_of(rows), [{"name": "r1", "kind": "dev", "since": since, "stage": "sent", "stage_since": since, "slow": False, "error": "", "warn": ""}])
+        self.assertEqual(superview.handed_of(None), [])
+
     def test_all_closed_rows_the_board_lists_are_listed(self) -> None:
         for count in (27, 50):  # the board lists at most `closed_shown` (50) closed rows; the menu lists all of them
             rows = [row(f"c{index:02d}", status="closed", closed_at=f"2026-10-{index % 28 + 1:02d}T{index // 28:02d}:00:00+00:00") for index in range(count)]

@@ -80,11 +80,11 @@ class ReopenPageText(unittest.TestCase):
     def test_the_pill_is_left_of_the_checks_and_the_icon_is_next_to_archive(self) -> None:
         desk, board = source("desk.js"), source("board.js")
         self.assertIn("ui.rounds.node, ui.reopen.node, ui.review.node,", desk)
-        self.assertIn('full.status === "closed" && !desk.past && Boolean(desk.reopen)', desk)  # a closed task, never an earlier round's view
+        self.assertIn('full.status === "closed" && !desk.past && !handedOff(desk) && Boolean(desk.reopen)', desk)  # a closed task, never an earlier round's view, not while a reopen starts (1.8.50)
         self.assertIn("REOPEN.pill(desk.name, desk.reopen)", desk)
         self.assertIn("actionStrip(row, true)", board)  # the list row has the icon ...
         self.assertIn("actions: actionStrip,", board)  # ... the lobby card does not
-        self.assertIn('row.status === "closed" && row.reopen', board)
+        self.assertIn('row.status === "closed" && !handedOff(row) && row.reopen', board)
         css = source("reopen.css")
         self.assertIn(".ro-mode.new{background:var(--hot-bg)", css)  # amber, green, red from the tokens: light and dark
         self.assertIn(".ro-mode.same{background:var(--good-bg)", css)

@@ -258,12 +258,14 @@ const CHAT = (function () {
     waiting = null;
   }
 
+  const KINDS = ["qa", "rca", "design", "dev", "test", "kb", "other"];  // the kinds of a task, in the engine's order (core/tasks.py KINDS; a test pins both): the Kind select is built from this at once, the options answer never rebuilds it (F4)
   function create(preset) {  // preset: `true` for the sample of the lesson, or {name, kind, domains, text, skill, note, thinking, back} for a skill; `back` opens the place the person came from; `text` is then only the words for the skill
-    const state = {skill: "", lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set(), linkTypes: []};
+    const state = {skill: "", lang: "en", busy: false, ready: false, pending: false, seq: 0, closed: false, touched: {model: false, thinking: false}, tries: 0, retry: null, timer: null, models: [], options: null, domainList: null, domains: new Set(), linkTypes: []};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
-    const kind = h("select", {class: "send-body"});
-    const source = h("select", {class: "send-body"});
+    const kind = h("select", {class: "send-body"}, ...KINDS.map((item) => h("option", {value: item, selected: item === "dev" ? "" : null}, t("task.kind." + item))));
+    const loading = () => h("option", {value: ""}, t("board.serve.working"));  // until the options answer: one entry, never an empty select
+    const source = h("select", {class: "send-body"}, loading());
     const links = h("input", {type: "text", class: "send-body new-links", maxlength: 400, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.links.ph")});  // tickets to link (1.7.20): `ado:300100`, several split by space or comma
     const linkKinds = h("div", {class: "chips new-link-types"});
     const smallNote = h("p", {class: "sub new-small", hidden: "", role: "note"}, t("board.new.small"));  // tickets named, a short text, Kind Dev: a small errand is lighter as Q&A (1.7.26). Kind is not changed for the person.
@@ -271,7 +273,7 @@ const CHAT = (function () {
     const text = h("textarea", {rows: 5, class: "send-body", placeholder: t("board.new.text.ph"), maxlength: 10000});
     const said = h("div", {class: "bad"});
     const files = fileTray(text, said, () => sync());
-    const model = h("select", {class: "send-body"});
+    const model = h("select", {class: "send-body"}, loading());
     const thinking = h("select", {class: "send-body"});
     const room = h("select", {class: "send-body", title: t("desk.set.context.tip")});
     const roomField = field(t("board.new.context"), room, "new-context");
@@ -318,7 +320,9 @@ const CHAT = (function () {
       const ticks = list.map((item) => chip(item, state.domains.has(item), () => { state.domains.has(item) ? state.domains.delete(item) : state.domains.add(item); drawKb(); refresh(); }));
       kbBox.replaceChildren(h("div", {class: "chips kb-list"}, none, ...ticks), h("p", {class: "sub"}, t("board.new.kb.hint")));
     }
-    const sync = () => { go.disabled = state.busy || !state.ready || files.reading(); };
+    // Create waits only for what the fields say now (F3): a name, a kind, words (or a skill). The server's preview adds its own reason (a name that exists, a host not linked) once its answer for these fields is in; the server checks everything again on Create.
+    const local = () => Boolean(name.value.trim() && kind.value && (text.value.trim() || state.skill));
+    const sync = () => { go.disabled = state.busy || files.reading() || !state.options || !local() || (!state.pending && !state.ready); };
     function levels() {
       const found = state.models.find((item) => item.id === model.value);
       const list = (found && found.thinking && found.thinking.levels) || [];
@@ -329,14 +333,24 @@ const CHAT = (function () {
     function refresh() {
       small();
       clearTimeout(state.timer);
+      const mine = ++state.seq;  // an answer of an older preview never overwrites a newer one
+      state.pending = true;
+      preview.classList.add("is-pending");
+      preview.setAttribute("aria-busy", "true");
+      sync();
       state.timer = setTimeout(() => {
+        const settled = () => { state.pending = false; preview.classList.remove("is-pending"); preview.removeAttribute("aria-busy"); };
         ask("/api/create", body("preview")).then((found) => {
+          if (mine !== state.seq) return;
+          settled();
           preview.textContent = found.text + (found.then ? "\n\n" + t("board.new.then") + "\n" + found.then : "");  // the server's own message, grown from the fields as they are now (a field not right yet is a <placeholder>); read only
           problem.replaceChildren(...(found.problem ? SERVE.reasons(found.problem) : []));  // quiet: it is what is missing now, not a failure
           state.ready = !found.blocked && !found.problem;
           blocked.replaceChildren(...(found.blocked ? SERVE.reasons(found.blocked) : []));
           sync();
         }, (error) => {
+          if (mine !== state.seq) return;
+          settled();
           state.ready = false;
           preview.textContent = "...";
           problem.replaceChildren(...SERVE.reasons(shown(error)));  // quiet: it is what is missing now, not a failure
@@ -344,7 +358,7 @@ const CHAT = (function () {
         });
       }, 250);
     }
-    const close = () => { clearTimeout(state.timer); waiting = null; view.close(); };
+    const close = () => { clearTimeout(state.timer); clearTimeout(state.retry); state.closed = true; state.seq++; waiting = null; view.close(); };
     no.addEventListener("click", close);
     if (preset && preset.back) {
       const back = h("button", {type: "button", class: "act"}, t("dock.back"));
@@ -353,8 +367,8 @@ const CHAT = (function () {
     }
     for (const control of [name, text, links]) control.addEventListener("input", refresh);
     for (const control of [kind, source, thinking]) control.addEventListener("change", refresh);
-    model.addEventListener("change", () => { levels(); sizes.fill(state.models.find((item) => item.id === model.value), ""); keepPick(); refresh(); });
-    thinking.addEventListener("change", keepPick);
+    model.addEventListener("change", () => { state.touched.model = true; levels(); sizes.fill(state.models.find((item) => item.id === model.value), ""); keepPick(); refresh(); });
+    thinking.addEventListener("change", () => { state.touched.thinking = true; keepPick(); });
     room.addEventListener("change", keepPick);
     go.addEventListener("click", () => {
       state.busy = true; go.textContent = t("board.new.working"); sync(); said.replaceChildren();
@@ -372,43 +386,60 @@ const CHAT = (function () {
         done.focus();
       }, (error) => { state.busy = false; go.textContent = t("board.new.go"); sync(); said.replaceChildren(...SERVE.reasons(shown(error))); });
     });
-    ask("/api/create", {step: "options"}).then((found) => {
+    // The options answer fills source, model, thinking, the knowledge base and the link types. It never resets what the person has already picked (kind, source, model, thinking), and it can come again (F4).
+    function fill(found) {
+      const first = !state.options;
       state.options = found; state.models = found.models || [];
-      kind.replaceChildren(...found.kinds.map((item) => h("option", {value: item, selected: item === "dev" ? "" : null}, t("task.kind." + item))));
+      const had = {source: source.value, model: model.value, thinking: thinking.value};
       source.replaceChildren(h("option", {value: ""}, t("board.new.source.none")), ...found.sources.map((item) => h("option", {value: item.name}, item.name + (item.kind ? " \u00b7 " + t("task.kind." + item.kind) : "") + (item.status === "closed" ? " \u00b7 " + t("board.filter.closed") : ""))));
+      if (had.source && [...source.options].some((option) => option.value === had.source)) source.value = had.source;
       model.replaceChildren(h("option", {value: ""}, t("board.new.model.chat")), ...state.models.map((item) => h("option", {value: item.id}, item.name)));
       const last = remembered();  // a task's chat starts on the model last picked for a task, not on Copilot Fusion (1.6.101)
-      if (last && state.models.some((item) => item.id === last.id)) model.value = last.id;
-      state.domainList = Array.isArray(found.domains) ? found.domains : [];
-      state.linkTypes = Array.isArray(found.link_types) ? found.link_types : [];
-      if (state.linkTypes.length) links.placeholder = state.linkTypes.slice(0, 2).map((one) => one.type + ":" + (one.example || "id")).join(" ");  // a sample of a type that is really there (F1 L6)
-      for (const one of state.linkTypes) {  // a click puts the type in, ready for the number
-        const chip = h("button", {type: "button", class: "chip", title: (one.label || one.type) + " \u00b7 " + one.toolpack}, one.type + ":");
-        chip.addEventListener("click", () => { links.value = (links.value.trim() ? links.value.trim() + " " : "") + one.type + ":"; links.focus(); refresh(); });
-        linkKinds.append(chip);
-      }
-      drawKb();
+      if (state.touched.model && [...model.options].some((option) => option.value === had.model)) model.value = had.model;
+      else if (!state.touched.model && last && state.models.some((item) => item.id === last.id)) model.value = last.id;
+      const mine = state.touched.model && model.value === had.model;  // the person's own model: its thinking and room stay theirs too
       levels();
-      if (last && model.value === last.id && [...thinking.options].some((option) => option.value === last.thinking)) thinking.value = last.thinking;
-      sizes.fill(state.models.find((item) => item.id === model.value), last && model.value === last.id ? last.context : "");
-      const filled = preset === true ? (found.sample && found.sample.name ? {...found.sample, note: t("board.new.sample")} : null) : preset;
-      if (filled) {
-        if (filled.name) name.value = filled.name;
-        if (filled.kind) kind.value = filled.kind;
-        for (const domain of filled.domains || []) {  // a domain that has no folder yet is offered here too: a `kb` task may learn it
-          const same = state.domainList.find((item) => item.toLowerCase() === domain.toLowerCase());
-          if (!same) state.domainList.push(domain);
-          state.domains.add(same || domain);
+      if (state.touched.thinking && mine && [...thinking.options].some((option) => option.value === had.thinking)) thinking.value = had.thinking;
+      else if (!state.touched.model && last && model.value === last.id && [...thinking.options].some((option) => option.value === last.thinking)) thinking.value = last.thinking;
+      if (first || !state.touched.model) sizes.fill(state.models.find((item) => item.id === model.value), last && model.value === last.id ? last.context : "");
+      if (first) {
+        state.domainList = Array.isArray(found.domains) ? found.domains : [];
+        state.linkTypes = Array.isArray(found.link_types) ? found.link_types : [];
+        if (state.linkTypes.length) links.placeholder = state.linkTypes.slice(0, 2).map((one) => one.type + ":" + (one.example || "id")).join(" ");  // a sample of a type that is really there (F1 L6)
+        for (const one of state.linkTypes) {  // a click puts the type in, ready for the number
+          const chip = h("button", {type: "button", class: "chip", title: (one.label || one.type) + " \u00b7 " + one.toolpack}, one.type + ":");
+          chip.addEventListener("click", () => { links.value = (links.value.trim() ? links.value.trim() + " " : "") + one.type + ":"; links.focus(); refresh(); });
+          linkKinds.append(chip);
         }
         drawKb();
-        text.value = filled.text || "";
-        state.skill = filled.skill || "";  // the server makes "Use the skill", or the /<skill> it sends once the task is open (1.8.2)
-        if (filled.thinking && [...thinking.options].some((option) => option.value === filled.thinking)) thinking.value = filled.thinking;  // a skill that needs it sets the thinking; the model stays the person's
-        if (filled.note) blocked.after(h("p", {class: "sub"}, filled.note));
+        const filled = preset === true ? (found.sample && found.sample.name ? {...found.sample, note: t("board.new.sample")} : null) : preset;
+        if (filled) {
+          if (filled.name) name.value = filled.name;
+          if (filled.kind) kind.value = filled.kind;
+          for (const domain of filled.domains || []) {  // a domain that has no folder yet is offered here too: a `kb` task may learn it
+            const same = state.domainList.find((item) => item.toLowerCase() === domain.toLowerCase());
+            if (!same) state.domainList.push(domain);
+            state.domains.add(same || domain);
+          }
+          drawKb();
+          text.value = filled.text || "";
+          state.skill = filled.skill || "";  // the server makes "Use the skill", or the /<skill> it sends once the task is open (1.8.2)
+          if (filled.thinking && [...thinking.options].some((option) => option.value === filled.thinking)) thinking.value = filled.thinking;  // a skill that needs it sets the thinking; the model stays the person's
+          if (filled.note) blocked.after(h("p", {class: "sub"}, filled.note));
+        }
       }
       if (!found.ready) blocked.replaceChildren(h("p", null, t("board.new.off")), h("p", {class: "sub"}, t("board.vs.why." + (found.why || "starting"))));
+      else if (!first) blocked.replaceChildren();
       refresh();
-    }, (error) => { blocked.replaceChildren(h("p", null, t("board.new.options", {error: shown(error)}))); });
+      // The host has just linked and lists no model yet: ask again every 2 s, 20 times at most, and fill without touching what the person changed.
+      if (!state.closed && (!found.ready || !state.models.length) && state.tries < 20) state.retry = setTimeout(again, 2000);
+    }
+    function again() {
+      if (state.closed) return;
+      state.tries++;
+      ask("/api/create", {step: "options"}).then((found) => { if (!state.closed) fill(found); }, () => { if (!state.closed && state.tries < 20) state.retry = setTimeout(again, 2000); });
+    }
+    ask("/api/create", {step: "options"}).then(fill, (error) => { blocked.replaceChildren(h("p", null, t("board.new.options", {error: shown(error)}))); });
     levels();
     name.focus();
   }

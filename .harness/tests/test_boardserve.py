@@ -438,6 +438,45 @@ class IntegrityAcceptTests(ServeCase):
         self.assertEqual(integrity.changes(self.root), [])
 
 
+class HookAckTests(ServeCase):
+    """(1.8.x, F13) The board writes down that the person has seen the hooks Copilot stopped waiting for (`/api/hook-ack`): the paired browser only, and only the events its page showed."""
+
+    def record(self, *stamps: str) -> None:
+        logs = self.root / ".harness" / "runtime" / "logs" / "vscode"
+        logs.mkdir(parents=True, exist_ok=True)
+        (logs / "s1.jsonl").write_text(json.dumps({"at": "2026-11-24T17:00:00+00:00", "event": "PreToolUse", "engine": "cli", "ms": 20, "session_id": "s1", "surface": "vscode"}) + "\n", encoding="utf-8")
+        folder = Path(self.home) / "session-state" / "s1"
+        folder.mkdir(parents=True, exist_ok=True)
+        rows = [{"type": "hook.end", "timestamp": stamp, "data": {"hookInvocationId": f"h{number}", "hookType": "preToolUse", "success": False,
+                                                              "error": {"message": "HookTimeoutError: Hook command timed out after 120 seconds: x"}}} for number, stamp in enumerate(stamps)]
+        (folder / "events.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    def test_only_the_paired_browser_acknowledges_and_never_beyond_what_it_showed(self) -> None:
+        from core import hookack
+
+        self.home = str(self.root / "copilot-home")
+        patch = mock.patch.dict(os.environ, {"COPILOT_HOME": self.home, "HARNESS_INTEGRITY_DIR": str(self.root / "integrity-home")})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.record("2026-11-24T17:00:00.000Z", "2026-11-24T17:05:00.000Z")
+        body = {"events": ["s1:h0", "s1:h1"]}
+        self.assertEqual(self.request("POST", "/api/hook-ack", body)[0], 403, "not paired: refused")
+        self.assertIsNone(hookack.read(self.root))
+        cookie = self.pair()
+        for bad in ({}, {"until": "2026-11-24T17:05:00.000Z"}, {"events": []}, {"events": "s1:h0"}, {"events": [5]}, {"events": [""]}, {"events": ["x"] * 201}):
+            self.assertEqual(self.request("POST", "/api/hook-ack", bad, cookie=cookie)[0], 400, bad)  # never "whatever is there"
+        self.assertIsNone(hookack.read(self.root))
+        status, data, _ = self.request("POST", "/api/hook-ack", {"events": ["s1:h0"]}, cookie=cookie)
+        self.assertEqual(status, 409, "an event than the page did not show")
+        self.assertIsNone(hookack.read(self.root))
+        status, data, _ = self.request("POST", "/api/hook-ack", body, cookie=cookie)
+        self.assertEqual((status, data["result"]["until"], data["result"]["n"]), (200, "2026-11-24T17:05:00.000Z", 2))
+        self.assertEqual(hookack.read(self.root)["via"], "board")
+        self.assertEqual(hookack.acked_ids(self.root), {"s1:h0", "s1:h1"})
+        self.record()  # nothing left to acknowledge
+        self.assertEqual(self.request("POST", "/api/hook-ack", body, cookie=cookie)[0], 409)
+
+
 class ServeLifeTests(TaskCase):
     def test_only_a_person_starts_it(self) -> None:
         with self.assertRaises(CommandError):

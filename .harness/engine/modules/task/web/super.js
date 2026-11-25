@@ -108,7 +108,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     foldBtn.addEventListener("click", () => setFold(!chatFolded, true));
     foldLine.addEventListener("click", () => setFold(false, true));
     drawFold();
-    let shown = false, pet = null, data = null, talk = null, talkGone = 0, first = true, vsDown = false, filter = "";
+    let shown = false, pet = null, data = null, talk = null, heard = false, talkGone = 0, first = true, vsDown = false, filter = "";
     let teamSig = "", bannerSig = "", mates = [], making = [], closedList = [], closedMore = 0, localThink = 0, failed = "";
     const PULSE_MS = 1500, PULSE_POLL_MS = 2500, PULSE_QUICK_MS = 15000;
     let pulseTimer = 0, pulseLast = "", pulseQuick = 0, pulseOff = 0;
@@ -171,7 +171,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
 
     // ---------- the avatars ----------
     // The recently closed tasks (1.8.17): not on the strip as avatars but behind one control at its end. A task is "closed" here only while it has no avatar: once it is open again its avatar takes over.
-    const closedOnly = () => closedList.filter((one) => one && one.task && !mates.some((mate) => mate.task === one.task));
+    const closedOnly = () => closedList.filter((one) => one && one.task && !mates.some((mate) => mate.task === one.task) && !making.some((item) => item && item.name === one.task));  // 1.8.50: one just handed to an agent turns on the strip instead
     const isClosed = (task) => Boolean(task) && closedOnly().some((one) => one.task === task);
     const closedTitle = (one) => String((one && one.title) || "");
     // 1.8.21: what a reopen of a closed task will be, said before the person presses. From the Closed list (`reopen` of the row: {mode: same | new | refused, round, next_round, why}); null when the server gave none (an older one).
@@ -1256,7 +1256,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     }
     function drawBanner() {
       const mood = moodNow();
-      const kind = mood === "sleep" ? "sleep" : mood === "tired" ? "tired" : !talk ? "none" : "";
+      const kind = mood === "sleep" ? "sleep" : mood === "tired" ? "tired" : !talk && heard ? "none" : "";  // 1.8.x: no talk before the first answer is "not heard yet", not "no agent"
       const sig = kind + (talk ? "|" + talk.spent + "|" + talk.limit : "");
       if (sig === bannerSig) return;
       bannerSig = sig;
@@ -1271,7 +1271,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       const spent = talk.spent || 0, left = Math.max(0, talk.limit - spent), numbers = {spent: amount(spent), limit: amount(talk.limit), left: amount(left)};
       return {left: left / talk.limit, full: moodNow() === "tired", tip: t("super.cost.tip", numbers), label: t("super.cost.label", numbers)};
     }
-    const talkOff = () => (!talk ? "none" : moodNow() === "sleep" ? "asleep" : moodNow() === "tired" ? "limit" : "");
+    const talkOff = () => (!talk ? (heard ? "none" : "") : moodNow() === "sleep" ? "asleep" : moodNow() === "tired" ? "limit" : "");
     // The placeholder of the box; a closed task with checks above 0 gets the words of a note for the checks (1.8.21).
     function drawHolder(off, routing) {
       if (off === undefined) { routing = Boolean(filter); off = routing ? "" : talkOff(); }
@@ -1441,7 +1441,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         line.classList.add("sa-dl");
         if (bubble || !ok) toBottom();
       }
-      if (result.ok) poll().then(schedule, schedule);
+      if (result.ok) { SERVE.done(); poll().then(schedule, schedule); }  // 1.8.50: the board's rows too (the bridge draws from them): a task just handed shows at once
       return result;
     }
     async function submit_direct(target, typed) {
@@ -1608,6 +1608,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       failed = "";
       if (shown) fit();  // the board's banner above the view may have gone (hidden by the person): the view takes the room it left
       data = result;
+      heard = true;
       talk = spoken && typeof spoken === "object" && spoken.state ? spoken : null;
       drawTeam(result.mates || [], result.making, Array.isArray(result.closed) ? result.closed : [], result.closed_more);
       if (talk && talk.state !== "thinking" && localThink && Date.now() - localThink > 4000) localThink = 0;  // the server is done (a message, or nothing to say)
@@ -1759,7 +1760,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       popUp.setAttribute("aria-label", popUp.title);
       popUp.addEventListener("click", () => COMPANION.open(pop));
     }
-    return {node: sv, show, hide, setVscode: (status) => { vsDown = Boolean(status) && !status.ready; if (shown) { drawStatus(); drawBanner(); drawInput(); applyMood(); } emit(); }};
+    return {node: sv, show, hide, heard: () => heard, note: () => (heard ? "" : failed || t("board.enter.checking")), subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, setVscode: (status) => { vsDown = Boolean(status) && !status.ready; if (shown) { drawStatus(); drawBanner(); drawInput(); applyMood(); } emit(); }};
   }
 
   return {create, waiting};

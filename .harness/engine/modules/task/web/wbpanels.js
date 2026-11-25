@@ -56,6 +56,7 @@ const WBPANELS = (function () {
   }
   // The look of a task's state: wait (amber), work (green), err (red), idle (grey).
   function kindOf(row) {
+    if (handedOff(row)) return "work";  // 1.8.50: a closed task just handed to an agent: it is on its way
     const state = stateOf(row, true);
     if (state === "error" || state === "broken") return "err";
     if (row.status === "open" && row.waiting_why && !String(row.waiting_why).startsWith("go-") && !row.paused_since) return "wait";
@@ -134,6 +135,7 @@ const WBPANELS = (function () {
     else if (one.type === "mapper" && agents.mapper && finite(Number(agents.mapper.started)) && finite(Number(agents.mapper.limit))) text += " · " + t("super.wb.sub.started", {n: agents.mapper.started, total: agents.mapper.limit});
     return text;
   }
+  const startingOf = (row) => (row && row.starting && !row.starting.late ? row.starting : null);  // 1.8.50: the board sent something and has not seen the agent start (`Board.settle`)
   function nowOf(row) {  // what a working task does now: its last tool call (the line the board already has), else "thinking"; never asked for again
     const sub = row.sub && typeof row.sub === "object" ? row.sub : null;
     if (sub && sub.kind !== "reply") {
@@ -174,14 +176,14 @@ const WBPANELS = (function () {
       prem: row.brief && finite(row.brief.premium_requests) ? row.brief.premium_requests : null,
       ctx: meter ? {used: meter.used, window: meter.window, percent: meter.percent} : null,
       subs: subs.map((one) => Object.assign(one, {label: subLabel(one, row)})), subsN: subs.reduce((sum, one) => sum + one.n, 0),
-      gate, now: kind === "work" ? nowOf(row) : "", time: timeOf(row), waited: finite(row.waited_s) ? row.waited_s : 0,
+      gate, now: kind === "work" ? (startingOf(row) ? (startingOf(row).stage && has("waits.stage." + startingOf(row).stage) ? t("waits.stage." + startingOf(row).stage) : "") : nowOf(row)) : "", time: timeOf(row), waited: finite(row.waited_s) ? row.waited_s : 0,
     };
   }
   function wordOf(info) {  // the state as a word (no time: the time is a cell that runs)
     const state = info.row.state;
     if (info.kind === "err") return t("waits.error");
     if (info.kind === "wait") return t("super.wb.st.wait");
-    if (info.kind === "work") return t("board.state.working");
+    if (info.kind === "work") return t(startingOf(info.row) ? "waits.starting" : "board.state.working");  // 1.8.50: sent, the agent not seen to start yet
     return has("board.state." + state) ? t("board.state." + state) : t("board.state.quiet");
   }
   // The reasons to look at a task, the worst first: [{sev, text}]. Error 0, stuck 1, a full context 1.5, the gate 2, a context from 70% 3, repeat 4, cost 5, idle 6.
@@ -379,7 +381,7 @@ const WBPANELS = (function () {
       return bridgeGroups(items, fitOf(width, big));
     }
     function planSig(plan, W, H, big, quiet, down) {
-      const one = (item) => { const info = item.info; return [info.name, info.shown, info.kind, info.subsN, info.subs.map((sub) => sub.type + sub.n).join(","), info.gate ? info.gate.n : 0].join("~"); };
+      const one = (item) => { const info = item.info; return [info.name, info.shown, info.kind, info.subsN, info.subs.map((sub) => sub.type + sub.n).join(","), info.gate ? info.gate.n : 0, startingOf(info.row) ? 1 : 0].join("~"); };  // 1.8.50: Starting… becomes working
       return [W, H, big, quiet, down, targetOf(), plan.grouped, closedN, closedMoreN, plan.groups.map((group) => group.kind + group.more + ":" + group.list.length + ":" + group.show.map(one).join("|")).join("/")].join("#");
     }
     function sceneSVG(plan, W, H, big, quiet, down) {
@@ -567,8 +569,8 @@ const WBPANELS = (function () {
       lastVis = vis;
       const now = Date.now();
       const all = rowsOf() || [];
-      const open = all.filter((row) => row && row.status === "open");
-      closedN = all.reduce((sum, row) => sum + (row && row.status === "closed" ? 1 : 0), 0);
+      const open = all.filter((row) => row && (row.status === "open" || handedOff(row)));  // 1.8.50: with the closed tasks just handed to an agent, until it opens them
+      closedN = all.reduce((sum, row) => sum + (row && row.status === "closed" && !handedOff(row) ? 1 : 0), 0);
       closedMoreN = Number(moreOf()) > 0 ? 1 : 0;
       closedBy = {};
       for (const row of all) if (row && row.status === "closed") { const lane = laneOf(String(row.kind || "")); closedBy[lane] = (closedBy[lane] || 0) + 1; }

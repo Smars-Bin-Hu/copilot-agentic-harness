@@ -337,7 +337,7 @@ const SETTINGS = (function () {
       line.textContent = t(on ? "settings.who.line" : "settings.who.none");
       login.hidden = !on || !check.login; out.hidden = !on; signin.hidden = on;  // signed in with no account name read: no name, never a made-up one
     };
-    const refresh = () => SERVE.call("/api/ready", {}, 8).then((data) => paint(((data && data.checks) || []).find((one) => one.id === "copilot")), () => {});
+    const refresh = () => SERVE.call("/api/ready", {live: true}, 8).then((data) => paint(((data && data.checks) || []).find((one) => one.id === "copilot")), () => {});
     out.addEventListener("click", () => signOutAsk(() => { paint(null); refresh(); }));
     signin.addEventListener("click", () => show("copilot"));
     paint(null);

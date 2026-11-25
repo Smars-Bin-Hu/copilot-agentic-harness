@@ -33,6 +33,10 @@ class DirectLink(vslink.VsLink):
         self.fail: Optional[BaseException] = None
         self.sent: List[Dict[str, Any]] = []
         self.made: List[Dict[str, Any]] = []
+        self.stage = ""  # how far VS Code is with the new chat (`made_stage`)
+
+    def made_stage(self, name: str) -> str:
+        return self.stage
 
     def check(self, task: str, kind: str) -> str:
         if self.off:
@@ -374,6 +378,35 @@ class ReopenTests(DirectCase):
         self.request("POST", "/api/board", {}, cookie=self.cookie)  # the board sets nothing more
         self.assertEqual(self.state()["review"]["after"]["n"], 2)
         self.assertNotEqual(self.state()["review"].get("n"), 2)
+
+    def starting_of(self) -> Any:
+        rows = self.request("POST", "/api/board", {}, cookie=self.cookie)[1]["rows"]
+        return next(row for row in rows if row["task"] == TASK).get("starting")
+
+    def test_a_reopen_shows_starting_on_the_closed_row_until_the_agent_opens_it(self) -> None:  # 1.8.50: nothing moved between the send and the agent's `task open`
+        self.close()
+        self.vs.bound_ok = False
+        self.post({"text": "go on"})
+        found = self.starting_of()
+        self.assertEqual((found["what"], found["late"]), ("reopen", False))
+        self.assertEqual(self.state()["status"], "closed")
+
+    def test_checks_after_the_close_show_starting_too(self) -> None:
+        self.close()
+        self.vs.bound_ok = False
+        self.vs.stage = "sent"
+        self.post({"text": "check it", "checks": 2})
+        self.assertEqual(self.starting_of()["what"], "after")
+        self.vs.stage = "opening"  # the first turn runs: the agent started
+        self.assertIsNone(self.starting_of())
+
+    def test_a_queued_message_marks_nothing_and_a_sent_one_does(self) -> None:
+        self.vs.state = "busy"
+        self.post({"text": "later"})
+        self.assertIsNone(self.starting_of())
+        self.vs.state = "idle"
+        self.post({"text": "now"})
+        self.assertEqual(self.starting_of()["what"], "answer")
 
     def test_zero_checks_on_a_closed_task_still_reopen_it(self) -> None:
         self.close()

@@ -18,7 +18,7 @@ import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Callable, Iterator, Tuple, Union
+from typing import Any, Callable, Iterator, List, Tuple, Union
 
 MAX_FILES = 2000
 MAX_TOTAL = 64 * 1024 * 1024  # all the texts kept together, at most
@@ -29,6 +29,8 @@ _on = False
 _lock = threading.Lock()
 _size = 0  # the characters of the texts kept now
 _pass = threading.local()  # one_pass(): what this thread read in the pass, fresh files too
+MAX_LISTINGS = 500
+_listed: "OrderedDict[str, Tuple[Tuple[int, int, int], Tuple[Tuple[str, bool], ...]]]" = OrderedDict()
 _kept: "OrderedDict[str, Tuple[Tuple[int, int, int, int], Any]]" = OrderedDict()
 
 
@@ -38,6 +40,7 @@ def enable(on: bool = True) -> None:
     _on = on
     if not on:
         with _lock:
+            _listed.clear()
             _kept.clear()
             _size = 0
 
@@ -58,6 +61,18 @@ def one_pass() -> Iterator[None]:
     finally:
         if outer is None:
             _pass.kept = None
+
+
+def in_pass(key: str, make: Callable[[], Any]) -> Any:
+    """`make()`, run once per `one_pass` for `key` (what a listing of a folder gave). Outside a pass (the command line, a hook, a task page's own draw) `make` runs every time, so what it gives is current.
+    What `make` gives is shared by the callers of the pass: they must not change it."""
+    store = getattr(_pass, "kept", None)
+    if store is None:
+        return make()
+    marked = "pass\0" + key
+    if marked not in store:
+        store[marked] = (None, make())
+    return store[marked][1]
 
 
 def _kept_or(target: Path, kind: str, make: Callable[[Path], Any], size_limit: int = MAX_BYTES) -> Any:
@@ -115,3 +130,37 @@ def sha256(path: Union[str, Path]) -> str:
         return found.hexdigest()
 
     return _kept_or(target, "sha256", digest, size_limit=1 << 62) if _on else digest(target)
+
+
+def names(path: Union[str, Path]) -> List[Tuple[str, bool]]:
+    """`[(name, is_dir)]` of the entries of a folder, in the order of the file system (sort them as the caller needs). Raises OSError as listing it would (the folder is gone, or not one).
+    In the board server a folder is listed again only when its modification time, inode or entry count moved: a stat is enough to see that an entry was added, removed or renamed (a change inside a
+    file moves nothing and the callers only ask for names). A folder changed in the last FRESH_NS is never kept (a coarse clock could hide a second change). Off, or in a hook or the command line: a listing every time."""
+    target = os.fspath(path)
+
+    def listing() -> List[Tuple[str, bool]]:
+        with os.scandir(target) as entries:
+            found = []
+            for entry in entries:
+                try:
+                    found.append((entry.name, entry.is_dir()))
+                except OSError:
+                    found.append((entry.name, False))
+            return found
+
+    if not _on:
+        return listing()
+    info = os.stat(target)
+    stamp = (info.st_mtime_ns, info.st_ino, info.st_ctime_ns)
+    with _lock:
+        found_before = _listed.get(target)
+        if found_before is not None and found_before[0] == stamp:
+            _listed.move_to_end(target)
+            return list(found_before[1])
+    found = listing()
+    if time.time_ns() - info.st_mtime_ns > FRESH_NS:
+        with _lock:
+            _listed[target] = (stamp, tuple(found))
+            while len(_listed) > MAX_LISTINGS:
+                _listed.popitem(last=False)
+    return found

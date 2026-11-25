@@ -40,6 +40,7 @@ Who may do what:
 
 from __future__ import annotations
 
+import datetime
 import http.server
 import io
 import json
@@ -81,7 +82,7 @@ from . import wallpaper
 from . import superbrain, superdirect, superfacts, superpreview, superroute, superview, taskreopen
 from . import accept, autorun, boardpairs, autorun_board, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
-from . import perfreview, reachcheck
+from . import callrecord, perfreview, reachcheck
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -110,6 +111,8 @@ WHEEL = "|/-\\"
 WHEEL_EVERY = 0.15
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 SETTINGS = ("review set", "task allow", "task link", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
+TELL_WATCH_S = 20.0  # (1.8.55) a call held a moment ago, no wait yet, the agent at work: it may be on its way to start its wait; the board looks this long before it steers
+TELL_LOOK_S = 1.0  # how often it looks meanwhile
 CALL_DECISIONS = ("approve-action", "dismiss action")  # 1.8.31: the person's word on a held call goes through while the agent works: it is bound to the digest of what they saw and changes nothing under the agent's hands
 WAKING = ("confirm-req", "approve-plan", "approve-promote")  # the decisions of the person that wake the agent by themselves (1.7.38, C13 RB-2)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
@@ -220,8 +223,11 @@ RESTART_AFTER = 0.3  # seconds for the answer to reach the page
 RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: in its environment, never on disk
 
 
+SLOW_CALL = 2.0  # seconds: a message to the chat or a task page slower than this gets a line in the board's log, with the time of each part (F5, F8)
 START_LATE = 120.0  # 1.8.5: seconds after the board sent something before "starting" says the agent was not seen to start
 START_FORGET = 600.0  # and seconds after that before the board lets go of the mark
+NEW_CHAT_MARKS = {"newchat": ("asking", "sent"), "reopen": ("asking", "sent", "opening"), "after": ("asking", "sent")}  # 1.8.50: a mark whose message goes in a new chat, and the stages of that chat that are never late
+CLOSED_MARKS = ("reopen", "after")  # 1.8.50: marks that hold while the task is still closed: the agent of the new chat opens it (reopen) or checks it closed (after)
 TITLE_MAX = 80  # characters of a task's display name (1.8.5)
 WAIT_FIELDS = tasklife.WAIT_FIELDS
 ANSWERED_BY_A_TURN = ("go-req", "go-plan", "go-promote", "go-recover", "go-review", "asking", "stopped", "cancelled")  # marks a running turn has answered; the hooks take them away later (slowly on a busy computer)
@@ -243,6 +249,29 @@ def trust_chat(row: Dict[str, Any]) -> bool:
     row["active"] = False
     row["state"] = tasklife.state_of(row.get("status", ""), row.get("paused_since", ""), row.get("waiting_why", ""), bool(row.get("held")), False)
     return True
+
+
+def log_slow(key: str, spent: float, took: Dict[str, float], **fields: Any) -> None:
+    """One line in the board's log when a call took over SLOW_CALL seconds, with the time of each part (longest first); never raises, never holds the person's words (F5, F8)."""
+    try:
+        if spent > SLOW_CALL:
+            parts = ", ".join(f"{name} {value:.1f}" for name, value in sorted(((key, number) for key, number in took.items() if isinstance(number, (int, float)) and number >= 0.1), key=lambda item: -item[1]))
+            print(messages.text(key, seconds=f"{spent:.1f}", parts=parts or "-", **fields), flush=True)
+    except Exception:  # noqa: BLE001 - a note about time must not break the call
+        pass
+
+
+def recent_start(stamp: Any) -> bool:
+    """True when a turn's start stamp (ISO, `Z` or an offset) is at most START_LATE seconds old (a start in the future counts as now). Missing or unreadable: False."""
+    if not isinstance(stamp, str) or not stamp or len(stamp) > 64:
+        return False
+    try:
+        began = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if began.tzinfo is None:
+            began = began.replace(tzinfo=datetime.timezone.utc)
+        return (datetime.datetime.now(datetime.timezone.utc) - began).total_seconds() <= START_LATE
+    except (TypeError, ValueError):
+        return False
 
 
 def model_pair(model: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -355,6 +384,7 @@ class Board:
         self.page_seen = self.restarted  # ... and a page asked /api/status after that (`page_seen`), and a paired page did (`page_paired`): the launcher of `--background` waits for them (a restart: the page is there already)
         self.page_paired = self.restarted
         self.woken: Optional[threading.Thread] = None  # the last wake of an agent after a decision, sent in the background (1.7.43)
+        self.telling: Optional[threading.Thread] = None  # the last "tell the agent" after an approval, in the background (1.8.55)
         self.opener: Callable[[str], Any] = webbrowser.open
         self.reopened = -REOPEN_EVERY
         self.first_pair = threading.Event()  # a browser paired: the wheel in the terminal stops (1.7.45)
@@ -801,8 +831,17 @@ class Board:
             self.wall_window.release()
         return {"wall": self.set_wall_folder({"folder": text}), "cancelled": False} if text else {"wall": wallpaper.listing(self.root), "cancelled": True}
 
-    def desk_page(self, name: str) -> str:
-        return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH), linked=True)
+    def desk_page(self, name: str, took: Optional[Dict[str, float]] = None) -> str:
+        """The page of a task. `took`, when given, gets the seconds of each part (F8: the log line for a page slower than SLOW_CALL)."""
+        marks = took if took is not None else {}
+        began = time.monotonic()
+        data = self.desk(name)
+        marks["desk"], began = time.monotonic() - began, time.monotonic()
+        info = self.serve_info({}, DESK_REFRESH)
+        marks["info"], began = time.monotonic() - began, time.monotonic()
+        page = taskhtml.desk_page(data, info, linked=True)
+        marks["html"] = time.monotonic() - began
+        return page
 
     def report_info(self, name: str) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
         task = task_ops.resolve(self.root, name)
@@ -852,6 +891,8 @@ class Board:
         The commands the buttons would copy and the link to the time-and-usage page mean nothing away from this board: they are left out."""
         found = self.desk(name)
         found["actions"], found["report"] = [], ""
+        script_runs = [run for item in (found.get("scripts") or {}).get("dev") or [] for run in item.get("runs") or []]
+        callrecord.with_outputs(self.root, found["task"], list({id(row): row for row in (found.get("calls") or []) + script_runs}.values()))  # a saved copy asks no server: each call takes its output along, cut short
         taskfiles.embed(self.root, found["task"], found["files"])
         for item in found["files"]:  # a picture of the Files tab comes in as its own bytes
             if item["kind"] == "image":
@@ -962,8 +1003,7 @@ class Board:
                     task_ops.note(held, "approve-call", str(call["code"]), code=call["code"], batch=result["count"], files={key: str(value)[:12] for key, value in (call.get("files") or {}).items()}, system=call.get("system", ""), env=call.get("env", ""))
             noted(self.root, task, "approve-action")
             stood = [(code, self.place_of(before[code])) for code in (call["code"] for call in calls) if code in before]
-            self.after_decision(task, stood, messages.text("desk.outbox.tell.body", codes=", ".join(code for code, _place in stood)))
-            result["agent"] = {code: place for code, place in stood}
+            result["agent"] = self.after_decision(task, stood, messages.text("desk.outbox.tell.body", codes=", ".join(code for code, _place in stood)))
         return result
 
     def act(self, action: str, task: str, step: str, code: str = "", n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False, voids: Any = None, no_wake: bool = False) -> Dict[str, Any]:
@@ -998,6 +1038,10 @@ class Board:
             noted(self.root, task, action)
             result["told"] = self.after_dismiss(result)
             return result
+        if action == "task allow" and str(who or "") == "set":  # 1.8.51: the Apply of the Open to the agent dialog: exactly the connections ticked there are open for the task, no code (the person picks them on the page)
+            result = tasklife.set_allow_set(self.root, task, [part for part in str(env_name or "").split(",")], interactive=True)
+            noted(self.root, result.get("task") or task, action)
+            return result
         if action == "task allow":  # the person closes a connection for this task with one click (1.7.6); the same function as `task allow`. Opening one needs the code of a held call that offers it (1.7.38)
             name = " ".join(str(env_name or "").split()).lower()
             on, offer = str(who or "") == "on", None
@@ -1005,12 +1049,15 @@ class Board:
                 offer = outbox.offer_for(self.root, task_ops.resolve(self.root, task), str(code or ""), name)
                 if not offer:
                     raise CommandError(say("serve.allow.code", name=name or "-"))
-            result = tasklife.set_allow(self.root, task, name, on, interactive=True, env=str((offer or {}).get("env") or ""))
+            items = (offer or {}).get("scope") == "items"  # 1.8.51: the card of a write to a linked ticket opens the linked items, not the whole connection (that is ticked in the pop)
+            result = tasklife.set_allow(self.root, task, tasklife.LINKS if items else name, on, interactive=True, env=str((offer or {}).get("env") or ""))
+            if items:
+                result["conn"] = name
             if offer:  # the held calls that offered it have done their part: the agent that waits hears at once, one whose turn ended is woken, else the page asks the person to tell it (1.7.38)
                 found = result.get("task") or task_ops.resolve(self.root, task)
                 stood = {str(item["code"]): outbox.agent_place(item) for item in outbox.pending_for(self.root, found) if any(isinstance(one, dict) and one.get("system") == name for one in item.get("offers") or [])}
                 outbox.mark_opened_everywhere(self.root, found, [name])
-                self.after_decision(found, [(each, place) for each, place in stood.items() if (self.entry(each) or {}).get("state") == "opened"], messages.text("desk.outbox.opened.body", names=outbox.opened_words(name, [offer] if offer else [])))
+                result["agent"] = self.after_decision(found, [(each, place) for each, place in stood.items() if (self.entry(each) or {}).get("state") == "opened"], messages.text("desk.outbox.opened.body", names=outbox.opened_words(name, [offer] if offer else [])))  # code -> wait, telling or left: the page turns the card green at once (1.8.55)
             noted(self.root, result.get("task") or task, action)
             return result
         if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`
@@ -1081,8 +1128,8 @@ class Board:
             result["agent"] = "sending"  # work computer). A message that does not go leaves the "go on" card, as before
         if stood and stood.get("task"):
             place = self.place_of(stood)
-            self.after_decision(str(stood["task"]), [(str(stood["code"]), place)], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
-            result["agent"] = place  # the page says so on the green card at once, before its next poll (1.7.38, C12 TB-02)
+            how = self.after_decision(str(stood["task"]), [(str(stood["code"]), place)], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
+            result["agent"] = how.get(str(stood["code"]), "")  # wait, telling or left: the page says so on the green card at once, before its next poll (1.7.38, C12 TB-02; 1.8.55)
         return result
 
     # --- the agent, after the person decided on a held call (1.7.38) -----------------------------------------------
@@ -1126,25 +1173,34 @@ class Board:
             now = self.link.turn_mark(task)
             ran = now != mark["mark"] and not now[2]  # a new turn that already ended (a fast one); a new turn that runs while the list of sessions still says the old state stays "starting"
             lagging = bool(now[2]) and state in ("idle", "error", "input")  # the chat holds a running turn; the list of sessions has not said so yet
-            if not live or age > START_LATE + START_FORGET or (state != "unknown" and not lagging and (state != mark["before"] or ran)):
+            stage = self.link.made_stage(str(row.get("name") or "")) if mark["what"] in NEW_CHAT_MARKS else ""  # 1.8.50: how far VS Code is with the new chat (asking, sent, opening), told on the page
+            closed = row.get("status") == "closed" and not row.get("paused_since") and mark["what"] in CLOSED_MARKS  # 1.8.50: reopen and checks after the close: the task is closed until the agent opens it
+            started = mark["what"] == "after" and stage in ("opening", "")  # checks after the close: the task stays closed; the first turn of the chat runs (or VS Code is done with it)
+            if (not live and not closed) or started or age > START_LATE + START_FORGET or (state != "unknown" and not lagging and (state != mark["before"] or ran)):
                 with self.started_lock:
                     if self.started.get(task) is mark:
                         del self.started[task]
                 mark = None
-            elif age <= START_LATE or (mark["what"] == "newchat" and self.link.made_stage(str(row.get("name") or "")) in ("asking", "sent")):  # a new chat VS Code is still making: no limit (1.8.7)
-                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": False}
+            elif (age <= START_LATE and stage not in ("refused", "lost")) or stage in NEW_CHAT_MARKS.get(mark["what"], ()):  # VS Code refused the new chat, or the connection went: no start seen, at once; still making it (1.8.7), or a reopen whose first turn runs: no limit
+                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": False, "stage": stage}
+                if closed:  # the row stays a closed one; the page says the agent was handed it. No Archive while the agent is about to open it
+                    if isinstance(row.get("actions"), list):
+                        row["actions"] = [item for item in row["actions"] if not (isinstance(item, dict) and item.get("action") == "archive")]
+                    return False
                 row["state"], row["active"] = "working", False
                 for key in WAIT_FIELDS:
                     if key in row:
                         row[key] = ""
                 return row["state"] != old
             else:
-                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": True}
+                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": True, "stage": stage}
         if live and state == "busy" and row.get("waiting_why") in ANSWERED_BY_A_TURN:  # the chat runs a turn: the agent works, whatever mark the hooks have not taken away yet
             row["state"] = "working"
             for key in WAIT_FIELDS:
                 if key in row:
                     row[key] = ""
+        if live and state == "busy" and row.get("state") == "quiet" and recent_start(chat.get("started_at")):  # the chat runs a turn that began a moment ago; the hook log has not written yet (3-13 s on a slow PC)
+            row["state"] = "working"
         if live and state == "error":
             row["state"], row["active"] = "error", False
             row["error"] = chat.get("error") if isinstance(chat.get("error"), dict) else {}
@@ -1222,17 +1278,102 @@ class Board:
             return "ended"
         return place
 
-    def after_decision(self, task: str, decided: List[Tuple[str, str]], text: str) -> None:
-        """The person approved calls or opened their connection. `decided`: each code and where the agent stood (`outbox.agent_place`). One that waits in `harness wait --approval` hears it by itself
-        (the entry is marked). One whose wait ran out and whose turn ended is woken with `text`, as one message for all of them. Others are left: the card asks the person to tell the agent."""
+    def after_decision(self, task: str, decided: List[Tuple[str, str]], text: str) -> Dict[str, str]:
+        """The person approved calls or opened their connection. `decided`: each code and where the agent stood (`place_of`). 1.8.55: the board tells the agent in every case it can, so the card's
+        button is only for when it could not. One that waits in `harness wait --approval` hears it by itself: `wait`, now. A call the agent left when it delivered its work: `left`, only the person's
+        button tells it (1.8.31: that call was given up). Every other one is `telling` now, and `tell_soon` tells the agent in the background: the person's click is answered at once, not after VS Code
+        took a message (up to JOB_WAIT on a work computer). Returns code -> wait, telling or left."""
         minutes = approvals.minutes(config.policy_or_empty(self.root, "gate"))
+        out: Dict[str, str] = {}
+        fresh: List[str] = []
         for code, place in decided:
-            if place == "wait":
-                approvals.told(self.root, code, "wait", minutes, file=approvals.ACTIONS)
-        ended = [code for code, place in decided if place == "ended"]
-        if ended and self.wake(task, text):
-            for code in ended:
-                approvals.told(self.root, code, "message", minutes, file=approvals.ACTIONS)
+            entry = self.entry(code) or {}
+            wait = entry.get("wait") if isinstance(entry.get("wait"), dict) else {}
+            how = "wait" if place == "wait" else "left" if wait.get("state") == "left" else "telling"
+            approvals.told(self.root, code, how, minutes, file=approvals.ACTIONS)
+            out[code] = how
+            if how == "telling" and place == "ended" and not wait:
+                fresh.append(code)  # held a moment ago and no wait yet: the agent may be on its way to start it
+        rest = [code for code, how in out.items() if how == "telling"]
+        if rest:
+            self.tell_soon(task, rest, text, fresh)
+        return out
+
+    def tell_soon(self, task: str, codes: List[str], text: str, fresh: Optional[List[str]] = None) -> None:
+        """`tell` in the background (1.8.55). `self.telling` is the thread, for a test to join."""
+        self.telling = threading.Thread(target=self.tell, args=(task, list(codes), text, list(fresh or [])), name="board-tell", daemon=True)
+        self.telling.start()
+
+    def tell(self, task: str, codes: List[str], text: str, fresh: Optional[List[str]] = None) -> str:
+        """Tell the agent of `task` that the person decided on `codes` (1.8.55), and mark each code with how (`approvals.told`): `wait` when its `harness wait` picked it up, `message` when its chat was idle
+        and the board sent `text` (it starts a turn), `steer` when the agent was at work and `text` went into its running turn (its approval lasts 10 minutes; a turn on a work computer often lasts longer, so it
+        is not left for after the turn), `failed` with the reason in the person's words when neither could go (no chat, VS Code closed, the chat waits for an answer). A code in `fresh` (held a moment ago,
+        no wait yet) is looked at for TELL_WATCH_S first while the agent works: an agent on its way to `harness wait` hears it there, and a steer would only say it twice. Never raises. Returns how."""
+        minutes = approvals.minutes(config.policy_or_empty(self.root, "gate"))
+        codes = [str(code) for code in codes]
+        watch = set(str(code) for code in fresh or [])
+        until = time.monotonic() + pace.scaled(TELL_WATCH_S)
+        try:
+            while True:
+                heard = [code for code in codes if str((self.entry(code) or {}).get("told") or "") == "wait"]  # `harness wait` found the decision and marked it (wait.py)
+                codes = [code for code in codes if code not in heard]
+                if not codes:
+                    return "wait"
+                if not (watch & set(codes)) or time.monotonic() >= until or self.link.check(task, "steer"):
+                    break  # nothing to watch, the watch is over, or the agent is not at work: tell it now
+                time.sleep(TELL_LOOK_S)
+            how, why = self.tell_chat(task, text)
+        except Exception as error:  # noqa: BLE001 - the approval stands; the card asks the person
+            how, why = "failed", ahp_scrub(error)
+        for code in codes:
+            if str((self.entry(code) or {}).get("told") or "") != "wait":  # its wait may have picked it up meanwhile
+                approvals.told(self.root, code, how, minutes, file=approvals.ACTIONS, why=why)
+        return how
+
+    def tell_chat(self, task: str, text: str) -> Tuple[str, str]:
+        """Send `text` to the chat of `task` the way it can take it now (1.8.55): `message` (idle: `wake`, which starts a turn) or `steer` (at work: into the running turn). ("failed", why) when neither."""
+        if self.link.check(task, "steer"):  # not at work
+            why = self.wake_why(task, text)
+            return ("failed", why) if why else ("message", "")
+        try:
+            found = tasks.read(self.root, task) or {}
+            made = chatsend.prepare(self.root, task, "answer", "", "", text, "", with_drafts=False)
+            model = chatsend.model_of(found)
+            done = self.link.dispatch("steer", task, made["text"], model, [])
+        except vslink.Refused as error:
+            if error.why == "not-busy" and self.wake(task, text):  # its turn ended a moment ago
+                return "message", ""
+            return "failed", self.tell_refusal(error.why)
+        except Exception as error:  # noqa: BLE001
+            return "failed", ahp_scrub(error)
+        self.sent(task, found, "steer", made["text"], done, {"model": model or {}, "files": [], "by": "board"})
+        return "steer", ""
+
+    def tell_refusal(self, why: str) -> str:
+        """Why the board could not tell the agent, in words for the card of an approved call (1.8.55); the words of a refused send where the card has none of its own."""
+        key = f"desk.outbox.tell.why.{why}"
+        return say(key) if key in messages.table("en") else self.refusal(why)
+
+    def tell_again(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The card's button (1.8.55): the board could not tell the agent, or the agent left the call when it delivered. Tell it now, in the background, the same way as after the approval
+        (a steer when it works, a message when its chat is idle). `codes`: approved calls of the task, or calls whose connection was opened (`opened`: true)."""
+        task, _found = self.target(data)
+        if "approve-action" not in self.actions:
+            raise CommandError(say("serve.action.off", action="approve-action"))
+        codes = [str(code).strip().upper() for code in data.get("codes") or []] if isinstance(data.get("codes"), list) else []
+        entries = [self.entry(code) or {} for code in codes]
+        state = "opened" if data.get("opened") else "approved"
+        codes = [str(entry["code"]) for entry in entries if entry.get("task") == task and entry.get("state") == state]
+        if not codes:
+            raise CommandError(say("desk.outbox.tell.gone"))
+        minutes = approvals.minutes(config.policy_or_empty(self.root, "gate"))
+        for code in codes:
+            approvals.told(self.root, code, "telling", minutes, file=approvals.ACTIONS)
+        key = "desk.outbox.opened.body" if state == "opened" else "desk.outbox.tell.body"
+        names = list(dict.fromkeys(outbox.opened_words(str(name), entry.get("opened_offers")) for entry in entries if str(entry.get("code")) in codes for name in entry.get("opened_for") or []))
+        text = messages.text(key, names=", ".join(names)) if state == "opened" else messages.text(key, codes=", ".join(codes))
+        self.tell_soon(task, codes, text)
+        return {"codes": codes, "told": "telling"}
 
     def after_dismiss(self, done: Dict[str, Any]) -> str:
         """The person did not approve a held call. The agent that waits has the reason from its wait. One whose turn ended on the call is woken with the reason, when there is one; without a reason, or when the
@@ -1257,6 +1398,10 @@ class Board:
     def wake(self, task: str, text: str) -> bool:
         """Send `text` to the chat of the task as an answer (the agent's turn ended; the person has decided), without the person's saved drafts. False when it cannot go (no chat, VS Code closed, the chat is busy):
         nothing is lost, the page then asks the person to tell the agent."""
+        return not self.wake_why(task, text)
+
+    def wake_why(self, task: str, text: str) -> str:
+        """`wake`, saying why it could not, in the person's words ("" when it went; 1.8.55: the card shows the reason)."""
         try:
             found = tasks.read(self.root, task) or {}
             made = chatsend.prepare(self.root, task, "answer", "", "", text, "", with_drafts=False)
@@ -1264,14 +1409,16 @@ class Board:
             pre = self.before(task)
             done = self.link.dispatch("send", task, made["text"], model, [])
             self.begin(task, "wake", pre)
-        except Exception:  # noqa: BLE001 - see above
-            return False
+        except vslink.Refused as error:
+            return self.tell_refusal(error.why)
+        except Exception as error:  # noqa: BLE001 - see above
+            return ahp_scrub(error) or say("send.refused.timeout")
         try:
             tasklife.set_waiting(self.root, task, None)  # it works again; the card of the wait is gone with the answer
         except Exception:  # noqa: BLE001
             pass
         self.sent(task, found, "answer", made["text"], done, {"why": "", "lang": made["lang"], "model": model or {}, "drafts": 0, "files": [], "by": "board"})
-        return True
+        return ""
 
     # --- talking to the chat (B72) ---------------------------------------------------------------------------------
 
@@ -1534,10 +1681,10 @@ class Board:
             self.bundle_job.kick(True)
             return self.bundle_job.view()
         if step == "summary":
-            line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})
+            line = next((entry for entry in self.ready.latest(True, True)["checks"] if entry["id"] == "copilot"), {})
             return core_wizard.summary(self.root, self.programs(), line, self.bundle_job.view())
         if step == "finish":
-            line = next((entry for entry in self.ready.latest(True)["checks"] if entry["id"] == "copilot"), {})  # the board's last answer: gh is not run again in this request
+            line = next((entry for entry in self.ready.latest(True, True)["checks"] if entry["id"] == "copilot"), {})  # the board's last answer: gh is not run again in this request
             core_wizard.refuse_finish(self.root, self.programs(), line)  # ValueError: what is still missing (409)
             core_wizard.finish(self.root)
             self.ready.setup_now_done()  # the kept answer must not send the page back to the wizard
@@ -1693,12 +1840,19 @@ class Board:
         files = self.files_of(data)
         job = self.say_or(task, kind) if kind == "queue" else kind
         pre = self.before(task)
+        began = time.monotonic()
         try:
             done = self.link.dispatch(job, task, text, model, files)
         except vslink.Refused as error:
             raise Fallback(self.refusal(error.why), text) from None
         except Exception as error:  # noqa: BLE001
             raise Fallback(ahp_scrub(error), text) from None
+        finally:
+            took = {"wait": time.monotonic() - began}
+        if isinstance(done.get("parts"), dict):
+            took = {**took, **{str(name): value for name, value in done["parts"].items()}}  # lane, gate, look, dispatch: where the call spent its time
+            took.pop("wait", None)
+        log_slow("steer.slow", time.monotonic() - began, took, kind=job)
         extra = {"model": model or {}, "files": chatsend.listed(files)}
         if job == "say":
             extra["skipped"] = done.get("skipped") or []
@@ -2189,8 +2343,14 @@ def handler_for(board: Board) -> type:
                 if path in ("/", "/board.html"):
                     board.look_at_page(True)
                 try:
-                    page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"))
-                    return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+                    began, took = time.monotonic(), {}
+                    page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"), took)
+                    built = time.monotonic()
+                    sent = self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+                    if path.startswith("/task/"):
+                        took["send"] = time.monotonic() - built
+                        log_slow("task.slow", time.monotonic() - began, took, task=path[len("/task/"):].strip("/")[:80])
+                    return sent
                 except CommandError as error:  # a task the board does not list
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
@@ -2277,7 +2437,7 @@ def handler_for(board: Board) -> type:
                 return None
             if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the last answer of `Ready.keep_fresh`; it waits for nothing
                 try:
-                    return self.answer(200, board.ready.latest(board.paired(self.token())))  # 1.8.13: worked out on a thread of its own, sent at once
+                    return self.answer(200, board.ready.latest(board.paired(self.token()), data.get("live") is True))  # 1.8.13: worked out on a thread of its own, sent at once
                 except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
                     return self.answer(500, {"error": f"{type(error).__name__}: {error}"[:300]})
             if path == "/api/live":  # the Live tab of an open task: the latest items of its chat, from the memory of the link (no file, no call to the host); `rev` makes an unchanged poll tiny
@@ -2484,6 +2644,23 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": {"changed": integrity.changes(board.root), "was": str((listed or {}).get("harness") or ""), "now": integrity._registry_version(board.root)}})  # noqa: SLF001
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/hook-ack":  # (1.8.x, F13) the person has seen the hooks Copilot stopped waiting for: write down the events the page showed (their identities). The paired browser only; in a terminal it is `doctor --accept-hooks`, and the gate refuses an agent's call of it
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    import doctor
+
+                    events = data.get("events")
+                    if not isinstance(events, list) or not events or len(events) > 200 or not all(isinstance(item, str) and 0 < len(item) <= 300 for item in events):  # never "whatever is there"
+                        return self.answer(400, {"error": say("serve.hookack.events")})
+                    done = doctor.acknowledge_hooks(board.root, events, via="board")
+                    if not done["until"]:
+                        return self.answer(409, {"error": say("doctor.hook.accept_none")})
+                    board.ready.drop_doctor()  # what doctor said was about the record as it was
+                    print(say("serve.did", action="hook-ack", task="-"), flush=True)
+                    return self.answer(200, {"result": {"until": done["until"], "n": done["n"]}})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/reboard":  # Restart board: the paired browser only. 1.8.23: its own path; under /api/restart, the VS Code restart above answered and the board never restarted
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -2625,7 +2802,7 @@ def handler_for(board: Board) -> type:
                     board.brain.note_says(says)  # 1.8.43: the whole words go to the task's thread in the chat, once per wait
                     view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.17: the closed tasks the board lists (the newest `closed_shown`), to open again with `/api/super/send`
                     view["closed_more"] = int(result.get("hidden") or 0)  # the older closed tasks the board does not list: the Closed button says "N+"
-                    view["making"] = result.get("making") or []  # 1.8.5: chats the board made whose task is not there yet
+                    view["making"] = (result.get("making") or []) + superview.handed_of(result.get("rows") or [])  # 1.8.5: chats the board made whose task is not there yet; 1.8.50: and closed tasks just handed to an agent
                     return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(500, {"error": str(error)})
@@ -2714,6 +2891,16 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/callrecord":  # the command and the output of one call to an outside system, when the person opens its row (Runs, Scripts). What a server answered is for the paired browser only, as the rounds of the chat are
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                found = None
+                try:
+                    row = taskdesk.row_of(board.root, str(data.get("task", "")))
+                    found = callrecord.detail(board.root, row["task"], str(data.get("id", ""))[:40]) if row else None
+                except Exception:  # noqa: BLE001 - the page keeps what it shows
+                    found = None
+                return self.answer(200, {"call": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
             if path == "/api/file":  # one file of the Files tab, when the person opens it
                 found = None
                 try:
@@ -2731,6 +2918,14 @@ def handler_for(board: Board) -> type:
                     return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
                 if str(data.get("step", "act")) != "preview":
                     print(say("serve.did", action="approve-batch", task="-"), flush=True)
+                return self.answer(200, {"result": result})
+            if path == "/api/tell":  # 1.8.55: the button of an approved call's card, when the board could not tell the agent: the paired browser only, like every approval
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.tell_again(data)
+                except Exception as error:  # noqa: BLE001 - shown on the card
+                    return self.answer(409, {"error": str(error)})
                 return self.answer(200, {"result": result})
             if path != "/api/act":
                 return self.answer(404, {"error": say("serve.refused.request")})

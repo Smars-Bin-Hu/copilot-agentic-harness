@@ -143,6 +143,8 @@ class Job:
         self.cancelled = False
         self.result: Dict[str, Any] = {}
         self.error: Optional[BaseException] = None
+        self.born = time.monotonic()
+        self.parts: Dict[str, float] = {}  # F5: seconds each step of the thread took (wait for the lane, wait for the task's gate, the look at the chat, the dispatch), for a log line when a message was slow
 
 
 # "": any state: a setting of the chat holds from its next turn; a Withdraw stops a running turn first (1.6.99); Try again and taking back a queued message are checked by the thread
@@ -200,6 +202,7 @@ class VsLink:
         self.follow: Dict[str, Dict[str, Any]] = {}  # 1.8.2: task -> the second message of a chat made for a skill only a person starts (`chatnew.follow_up`), sent when the first turn is over; memory only
         self.follow_at = 0.0
         self.own: Optional[agenthost.Host] = None  # 1.8.x: the board's own agent host (made at the first open)
+        self.trust = ""  # 1.8.x: declared / refused: did the board's own host take the workspace as trusted (VS Code 1.148 runs the hooks only then)
         self.signin: Dict[str, Any] = {"state": "", "login": "", "at": 0.0}  # 1.8.x: the last hand-over of gh's token: handed, no-gh, not-signed-in, cannot-run, slow, refused
         self.models_quick_until = 0.0
         self.gh_login: Optional[ghauth.Login] = None  # 1.8.x: the sign-in the Enter page started (`gh auth login --web`)
@@ -291,9 +294,25 @@ class VsLink:
             found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root, cached.setdefault("memo", {}), have, number, {sub["call"] for sub in subs})  # a call with a subagent is whole: `sub` goes on it
             chatlive.attach_subs(found["items"], [(sub, self.chats.get(sub["chat"])) for sub in subs], self.root, cached["state"])
             # `queued`: the messages that go after the running turn; `retry`: the last turn ended in an error that Try again can run again (1.6.99)
-            return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"])),
+            return {"rev": rev, "n": number, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "steering": self._steering(cached["state"], state), "retry": bool(ahp.resumable_turn(cached["state"])),
                     "round": chatlive.round_facts(cached["state"]),  # B9: the live numbers of the title of the round
                     "activity": cached["state"].get("activity") or "", "background": list(cached["state"].get("backgroundWork") or [])}  # B15, B16
+
+    @staticmethod
+    def _steering(held: Dict[str, Any], state: str) -> List[Dict[str, str]]:
+        """F5: the messages sent into the running turn that the agent has not taken yet, for the Live view ("Sent. Waits for the agent's next step."), words cut as the feed cuts them. Shown only while
+        the chat runs a turn, and not once the running turn's own message holds the same words (the agent took it: the feed shows it as the person's). The reducer also drops them when a turn starts or ends."""
+        if state != "busy":
+            return []
+        active = held.get("activeTurn") if isinstance(held.get("activeTurn"), dict) else {}
+        said = active.get("message") if isinstance(active.get("message"), dict) else {}
+        taken = " ".join(str(said.get("text") or "").split())
+        out = []
+        for item in ahp.steering(held)[:5]:
+            if taken and " ".join(item["text"].split()) == taken:
+                continue
+            out.append({"id": item["id"], "text": chatlive.cut(item["text"], chatlive.TEXT_CAP)[0]})
+        return out
 
     def older(self, task: str, turn: str, before: int, count: int = 60) -> Dict[str, Any]:
         """The steps of the turn `turn` that came before part `before` (the `before` of `live`), from the task's stream file: `{items, before}`, the newest `count` of them, oldest first. `before`: where
@@ -894,8 +913,32 @@ class VsLink:
         except ahp.NotReady as error:
             raise ahp.NotReady("starting" if error.why == "cli-slow" else error.why, str(error)) from None
         link = ahp.connect(endpoint)
+        self._declare_trust(link)
         self._hand_token(link)
         return link
+
+    def _declare_trust(self, link: Any) -> None:
+        """(1.8.x) Every time the board connects to its own host: declare the workspace trusted (`ahp.declare_trust`), or the host of VS Code 1.148 runs no hook of the repository and
+        the gate judges nothing. What happened is kept (`trust_state`) and a host that does not hold it is written to the board's log; `harness doctor` shows the consequence
+        (hooks that answer with nothing)."""
+        state = "declared"
+        try:
+            if not ahp.declare_trust(link, self.root):
+                state = "refused"
+        except ahp.ConnectionClosed:
+            raise
+        except ahp.AhpError:
+            state = "refused"
+        with self.lock:
+            was, self.trust = self.trust, state
+        agenthost.write_trust(self.root, state)
+        if state != "declared" and was != state:
+            print(messages.text("host.trust_refused"), flush=True)
+
+    def trust_state(self) -> str:
+        """(1.8.x) "" before the first connection, `declared`, or `refused` (the host does not hold the workspace as trusted)."""
+        with self.lock:
+            return self.trust
 
     def _hand_token(self, link: Any) -> None:
         """Sign the host in with gh's token (`core.ghauth`). The token is read here, handed over the connection and dropped; what happened is kept for the Enter page."""
@@ -1663,11 +1706,16 @@ class VsLink:
                 return self._super(link, job)
             if job.cancelled:
                 raise Refused("timeout")
+            job.parts["lane"] = time.monotonic() - job.born
             gate = self._gate(job.task)
+            began = time.monotonic()
             if not gate.acquire(timeout=pace.scaled(GATE_WAIT)):  # 1.8.7: the person's lane and the background (relay, follow, Start) may send to one chat at once: one at a time
                 gate = None
                 raise Refused("not-idle")
+            job.parts["gate"] = time.monotonic() - began
+            began = time.monotonic()
             binding = self._recheck(link, job.task, job.kind)
+            job.parts["look"] = time.monotonic() - began
             if job.kind == "relay":  # a chat that ended in an error takes the next message (measured: status 34, then 33)
                 with self.lock:
                     if ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status")) not in ("idle", "error"):
@@ -1724,7 +1772,9 @@ class VsLink:
                     action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
                 else:  # steer goes into the turn that runs; queue (1.6.99) waits for its end, and Copilot sends it then as the next turn
                     action = {"type": "chat/pendingMessageSet", "kind": "queued" if job.kind == "queue" else "steering", "id": str(uuid.uuid4()), "message": message}
+            began = time.monotonic()
             link.dispatch(chat, action)
+            job.parts["dispatch"] = time.monotonic() - began
             with self.lock:
                 known = self.sessions.get(resource)
                 if job.kind in ("send", "relay"):
@@ -1734,12 +1784,12 @@ class VsLink:
                     ahp.reduce_chat(held["state"], {**action, "message": {key: value for key, value in message.items() if key != "attachments"}})  # the bytes are not kept here
                     chatlive.stamp(held, action, int(time.time() * 1000))
                     held["rev"] = held.get("rev", 0) + 1
-                elif job.kind == "queue":  # on the page at once; the host pushes the same
+                elif job.kind in ("queue", "steer"):  # on the page at once (a steer as "sent, waits for the agent's next step", F5); the host pushes the same
                     ahp.reduce_chat(held["state"], {**action, "message": {"text": job.text}})
                     held["rev"] = held.get("rev", 0) + 1
                 title = str((known or {}).get("title") or binding.get("title") or "")
                 self.dirty = True
-            job.result = {"chat": chat, "title": title, "turn": str(action.get("turnId") or "")}
+            job.result = {"chat": chat, "title": title, "turn": str(action.get("turnId") or ""), "parts": dict(job.parts)}
         except ahp.ConnectionClosed as error:
             job.error = error
             raise

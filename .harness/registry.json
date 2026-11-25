@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.8.49",
-  "released": "2026-11-24",
+  "version": "1.8.56",
+  "released": "2026-11-25",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -250,6 +250,7 @@
         ".harness/tests/test_gate_dynamic.py",
         ".harness/tests/test_doctor_hooks.py",
         ".harness/tests/test_postmatch.py",
+        ".harness/tests/test_callrecord.py",
         ".harness/tests/test_taskfiles.py",
         ".harness/tests/test_deskscripts.py",
         ".harness/tests/test_taskinbox.py",
@@ -303,6 +304,7 @@
         ".harness/tests/test_connections.py",
         ".harness/tests/test_connlayers.py",
         ".harness/tests/test_open_connection.py",
+        ".harness/tests/test_open_pick.py",
         ".harness/tests/test_approval_wake.py",
         ".harness/tests/test_accept.py",
         ".harness/tests/test_c12_fb.py",

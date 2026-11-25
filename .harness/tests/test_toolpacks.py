@@ -13,10 +13,11 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from support import HarnessTestCase, pre_tool, use_packs
 
-from core import company, config, toolpacks, launchenv, connections, skillcheck
+from core import company, config, filecache, toolpacks, launchenv, connections, skillcheck
 from core.toolpacks import ToolpackError
 
 SKILL = "---\nname: {name}\ndescription: 'Read a ticket of the tracker and draft a comment for the person to approve. Use when a task names a ticket.'\ntype: workflow\nspecificTo: generic\n---\n\n# Ticket\n\nRead it.\n"
@@ -1649,8 +1650,8 @@ class OpenRulesOfTheTypes(TaskCase):
         for name in ("acmedw-qat", "acmedw-prod", "dev"):
             with self.assertRaises(Exception, msg=name):
                 tasklife.set_allow(self.root, NAME, name, True, interactive=True)
-        self.assertEqual(tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)["env"], "links", "an items connection opens as its linked items")
-        self.assertTrue(self.data()["allow_links"])
+        self.assertIn("ado", tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)["open"], "1.8.51: a connection opens whole from the terminal and the pop; the card of a linked ticket opens the linked items")
+        self.assertFalse(self.data().get("allow_links"))
 
     def test_the_gate_lets_an_opened_connection_through_only_for_a_write_or_a_run_and_never_in_another_connection(self) -> None:
         from modules.task import tasklife
@@ -1759,11 +1760,12 @@ class OpenRulesOfTheTypes(TaskCase):
         self.assertEqual(self.term("ado comment 123 --text hi")["permissionDecision"], "deny")
         entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
         self.assertEqual(entry["offers"], [{"system": "ado", "env": "none", "scope": "items", "refs": ["ado:123"]}])
-        self.term("ado create --type Bug --title x")  # a new item: no opening covers it
+        self.term("ado create --type Bug --title x")  # a new item: the linked items do not cover it; 1.8.51: the whole connection does
         created = [item for item in approvals.pending(self.root, 10, file=approvals.ACTIONS) if "create" in item["command"]][0]
-        self.assertIsNone(created.get("offers"))
+        self.assertEqual(created.get("offers"), [{"system": "ado", "env": "none", "scope": "all"}])
         tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)
         self.assertEqual(self.term("ado comment 123 --text hi"), {})
+        self.assertEqual(self.term("ado comment 124 --text hi"), {}, "1.8.51: an opened connection passes a ticket the task does not name too")
 
     def test_a_company_that_lowers_ado_to_no_keeps_the_linked_items_held(self) -> None:
         from modules.task import tasklife
@@ -2159,3 +2161,52 @@ class SamplePackTests(unittest.TestCase):
         self.assertIn('row.from === "harness" && !row.sample', settings)
         machine = (self.HARNESS / "engine" / "modules" / "task" / "web" / "machine.js").read_text(encoding="utf-8")
         self.assertIn('row.from === "harness" && (!row.sample || row.active)', machine)  # with a knowledge base: shown only once it is on
+
+
+class ListingsKept(ToolpackCase):
+    """1.8.x: `desk()` and the Ready pass listed the pack folders 8 to 35 times each; in the board server a listing is kept while the folder's stamp is the same."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.factory = self.root / toolpacks.FOLDER
+        make(self.factory / "alpha", "alpha")
+        filecache.enable(True)
+        self.addCleanup(filecache.enable, False)
+        patch = mock.patch.object(filecache, "FRESH_NS", 0)  # the made folders are young; a real one that is older than 2 s is kept
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def listings(self, action) -> int:
+        real = os.scandir
+        with mock.patch("os.scandir", wraps=real) as counted:
+            action()
+        return counted.call_count
+
+    def test_the_pack_folders_are_listed_once_for_many_calls_and_a_change_is_seen_at_once(self) -> None:
+        first = self.listings(lambda: [toolpacks.listed(self.root) for _ in range(8)])
+        again = self.listings(lambda: [toolpacks.listed(self.root) for _ in range(8)])
+        self.assertGreaterEqual(first, 1)
+        self.assertEqual(again, 0)
+        make(self.factory / "beta", "beta")  # a pack added: the next call lists again and sees it
+        self.assertEqual(sorted(toolpacks.listed(self.root)), ["alpha", "beta"])
+        (self.factory / "beta" / "types" / "other.json").write_text(json.dumps(dict(KIND, type="other")), encoding="utf-8")
+        self.assertEqual([path.name for path in toolpacks.types_of(self.factory / "beta")], ["other.json", "tracker.json"])
+        shutil.rmtree(self.factory / "alpha")
+        self.assertEqual(sorted(toolpacks.listed(self.root)), ["beta"])
+
+    def test_without_the_board_every_call_lists_the_folder(self) -> None:
+        filecache.enable(False)  # a hook, the gate and the command line
+        toolpacks.listed(self.root)
+        self.assertGreaterEqual(self.listings(lambda: [toolpacks.listed(self.root) for _ in range(3)]), 3)
+        make(self.factory / "beta", "beta")
+        self.assertEqual(sorted(toolpacks.listed(self.root)), ["alpha", "beta"])
+
+    def test_a_folder_changed_a_moment_ago_is_never_kept(self) -> None:
+        with mock.patch.object(filecache, "FRESH_NS", 60 * 10**9):
+            toolpacks.listed(self.root)
+            self.assertGreaterEqual(self.listings(lambda: toolpacks.listed(self.root)), 1)
+
+    def test_a_missing_folder_is_not_kept_as_empty(self) -> None:
+        self.assertEqual(toolpacks.types_of(self.factory / "nope"), [])
+        make(self.factory / "nope", "nope")
+        self.assertEqual([path.name for path in toolpacks.types_of(self.factory / "nope")], ["tracker.json"])

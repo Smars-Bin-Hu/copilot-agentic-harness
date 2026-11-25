@@ -59,7 +59,7 @@ class OutboxTests(OutboxCase):
         for lang in ("en", "zh"):
             found = json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
             self.assertNotIn("UTC", found["desk.outbox.asked"], lang)
-            self.assertNotIn("DROP", found["desk.set.open.tip.conn"], lang)
+            self.assertNotIn("DROP", found["desk.set.open.tip.pick"], lang)
             self.assertNotIn("approve-action", found["desk.outbox.same_as"], lang)
 
     def test_a_write_waits_with_a_draft_then_runs_once_after_approval(self) -> None:

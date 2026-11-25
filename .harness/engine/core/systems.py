@@ -116,6 +116,9 @@ SYSTEMS_SCHEMA = {
             "blocked": {"type": ["string", "object"], "minLength": 1},  # 1.7.38 (C13 F2): a program (or code) the gate cannot judge: every call of it is refused with this text (a string, or {"en": ..., "zh": ...}), which says what to do instead
             "broken": {"type": "string", "minLength": 1},  # 1.7.38 (G-1): written by the harness for a tool pack whose type file or rules file is faulty: what is wrong. Every call of the programs it lists is held (it owns them before any other system)
             "openable": {"type": "boolean"},
+            "connection": {"type": "boolean"},  # (1.8.51) derived from a connection of the list: the Open to the agent dialog may open it
+            "access": {"enum": ["read-only"]},  # (1.8.51) the account only reads: QAT and PROD may then be opened
+            "locked": {"type": "boolean"},  # (1.8.51) the company wrote `open: no` on the connection
             "open": {"type": "string", "enum": list(OPEN_SCOPES)},  # 1.7.38: how far Open to the agent goes for this system; see `open_scope`
             "item": {"type": ["string", "array"], "minLength": 1, "items": {"type": "string", "minLength": 1}},  # 1.7.18: a pattern whose first group is the id of the item a write names (a work item); 1.7.25: a pattern, or a list of them; every group of every match names an item
             "link": {"type": "string", "minLength": 1},  # 1.7.18: the link type of `harness task link` that names such an item (ado)  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a tool pack's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
@@ -212,6 +215,33 @@ def openable(system: Dict[str, Any]) -> bool:
     if isinstance(system.get("openable"), bool):
         return system["openable"]
     return not system.get("toolpack")
+
+
+READ_ONLY = "read-only"  # (1.8.51) a connection's `access`: the person says its account can only read
+GUARDED_ENVS = ("qat", PROD)  # where a connection opens only when it is declared read-only
+
+
+def may_open(system: Dict[str, Any], env: str = "") -> str:
+    """(1.8.51) May the person open this system for a task from the Open to the agent dialog? Opened, every call of it passes for that task, except a statement on the refuse list, a broken pack
+    and a call the gate cannot attribute. "" when it may; else why not: "locked" (the company wrote `open: no` on the connection), "read-only" (QAT or PROD without `access: read-only`: the
+    account is what protects it, so the person must have said it only reads), "no" (a system written by hand whose rule does not open it)."""
+    env = str(env or system.get("env") or "").lower()
+    if system.get("blocked") or system.get("broken"):
+        return "no"  # a program the gate refuses (a pack's way round its connections) or a pack it cannot read is never opened
+    if system.get("locked"):
+        return "locked"
+    if env in GUARDED_ENVS:
+        return "" if system.get("access") == READ_ONLY else "read-only"
+    if system.get("connection"):
+        return ""
+    return "" if open_scope(system, env) in (ALL, ITEMS) else "no"
+
+
+def may_open_any(system: Dict[str, Any]) -> str:
+    """`may_open` for a system with no call in hand: a system written by hand that serves several environments may be opened when one of them may; the gate asks again for each call, with its environment."""
+    envs = {system["env"]} if system.get("env") else {rule["env"] for rule in system.get("env_from") or [] if isinstance(rule, dict) and rule.get("env")} | ({system["default_env"]} if system.get("default_env") else set())
+    whys = [may_open(system, env) for env in sorted(envs)] or [may_open(system, "none")]
+    return "" if "" in whys else whys[0]
 
 
 def scope_rule(rule: Any, env: str) -> str:

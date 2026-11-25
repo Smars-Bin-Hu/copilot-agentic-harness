@@ -685,7 +685,7 @@
       return nodes;
     });
     ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
-    const canReopen = served() && full.status === "closed" && !desk.past && Boolean(desk.reopen) && SERVE.runs("reopen") && typeof REOPEN !== "undefined";  // 1.8.21: a closed task, not an earlier round's view
+    const canReopen = served() && full.status === "closed" && !desk.past && !handedOff(desk) && Boolean(desk.reopen) && SERVE.runs("reopen") && typeof REOPEN !== "undefined";  // 1.8.21: a closed task, not an earlier round's view
     ui.reopen.set(canReopen ? JSON.stringify(desk.reopen) : "", () => (canReopen ? REOPEN.pill(desk.name, desk.reopen) : null));
     ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());
     ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());
@@ -1163,8 +1163,11 @@
   // --- starting, late, error (1.8.5) -----------------------------------------------------------------------------------------------
   // The board sent something to the agent and has not seen it start (`desk.starting`): one calm card with the seconds, in place of what the task waits for. After two minutes the card is a yellow note
   // with Try again. An agent that stopped with an error (`desk.state === "error"`) gets the red bar at the top of the page body; what the task waits for stays, but not hot.
-  const startingNow = () => Boolean(served() && !desk.past && desk.status === "open" && desk.starting && !desk.starting.late);
-  const lateNow = () => Boolean(served() && !desk.past && desk.status === "open" && desk.starting && desk.starting.late);
+  // 1.8.50: a closed task handed to the agent (Reopen and hand to the agent, checks after the close) shows the card too: it stays closed until the agent opens it.
+  const handed = () => desk.status === "open" || (desk.status === "closed" && Boolean(desk.starting) && ["reopen", "after"].includes(desk.starting.what));
+  const STARTING_PULL = 1500;  // 1.8.50: ms between looks while the card of the start shows
+  const startingNow = () => Boolean(served() && !desk.past && handed() && desk.starting && !desk.starting.late);
+  const lateNow = () => Boolean(served() && !desk.past && handed() && desk.starting && desk.starting.late);
   const errorNow = () => Boolean(served() && !desk.past && !saved && desk.status === "open" && desk.state === "error");
   const canRetry = () => Boolean((desk.chat && desk.chat.error && desk.chat.error.resumable) || (desk.error && desk.error.resumable) || (typeof LIVE !== "undefined" && LIVE.data() && LIVE.data().retry));
   function retryButton() {
@@ -1180,9 +1183,19 @@
     Status.clock();
     return h("span", {class: "sub tk-waited st-run", "data-since": String(from)}, before, h("span", {class: "st-time"}, clock(Math.max(0, Math.floor((Date.now() - from) / 1000)))), after);
   }
+  // 1.8.50: the steps of a new chat (`starting.stage`: asking, sent, opening), the one it is at in bold; none while it is not known.
+  const STAGES = {reopen: ["asking", "sent", "opening"], newchat: ["asking", "sent"], after: ["asking", "sent"]};
+  function stageLine(starting) {
+    const steps = STAGES[starting.what] || [], at = steps.indexOf(starting.stage);
+    if (at < 0) return null;
+    const parts = [];
+    steps.forEach((step, index) => { if (index) parts.push(" \u2192 "); parts.push(h("span", {class: index < at ? "done" : index === at ? "on" : null}, t("waits.stage." + step))); });
+    return h("p", {class: "tk-start-steps", "data-stage": starting.stage}, parts);
+  }
   function startingCard() {
     return h("section", {class: "tk-need tk-starting", title: startingTip(desk.starting)},
-      h("div", {class: "tk-need-h"}, h("span", {class: "tk-need-t"}, spinner(), h("b", null, t("desk.waits.starting.title"))), sinceLine(desk.starting.since)));
+      h("div", {class: "tk-need-h"}, h("span", {class: "tk-need-t"}, spinner(), h("b", null, t("desk.waits.starting.title"))), sinceLine(desk.starting.since)),
+      stageLine(desk.starting));
   }
   function lateCard() {
     return h("section", {class: "tk-need tk-late", title: startingTip(desk.starting)},
@@ -2862,7 +2875,7 @@
   }
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
     Run.attach(desk.name);
-    SERVE.onChange(() => { pull(); });  // after a click that changed something (a setting, a message sent): in place, so the reply panel and what was typed stay; a reload would drop them
+    SERVE.onChange(() => pull());  // after a click that changed something (a setting, a message sent): in place, so the reply panel and what was typed stay; a reload would drop them. 1.8.50: the promise goes back to `SERVE.done`, so a card can stay until the page shows what the click did
     if (current === "trace") pull();  // opened on this tab: the page came without the tree
     const typing = () => document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName);  // a redraw would take the focus from what the person is typing
     if (typeof LIVE !== "undefined") {  // the stream is asked every second, the page every few: when the chat starts or stops waiting the rest follows at once, or the two say different things for a moment
@@ -2879,5 +2892,6 @@
       if (SERVE.busy() || typing()) return null;
       return pull();
     });
+    setInterval(() => { if (startingNow() && !SERVE.busy() && !typing()) pull(); }, STARTING_PULL);  // 1.8.50: while the agent is starting, the page follows it closely: the card goes as soon as the agent works
   }
 })();

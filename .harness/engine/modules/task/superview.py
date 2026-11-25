@@ -120,6 +120,18 @@ def build(result: Dict[str, Any], age_up: Optional[int] = None) -> Dict[str, Any
     return {"status": status, "mates": mates, "items": items}
 
 
+def handed_of(rows: Any) -> List[Dict[str, Any]]:
+    """1.8.50: the closed tasks just handed to an agent (Reopen and hand to the agent, checks after the close: `row.starting` of `Board.settle`), as "being created" items of the strip
+    (`{name, kind, since, stage, stage_since, slow, error, warn}`), so the view shows the turning circle and the time until the agent opens the task. A pure function."""
+    out = []
+    for row in rows if isinstance(rows, list) else []:
+        starting = row.get("starting") if isinstance(row, dict) and row.get("status") == "closed" else None
+        if isinstance(starting, dict) and starting.get("what") in ("reopen", "after") and not starting.get("late"):
+            out.append({"name": name_of(row), "kind": str(row.get("kind") or ""), "since": str(starting.get("since") or ""), "stage": str(starting.get("stage") or "asking"),
+                        "stage_since": str(starting.get("since") or ""), "slow": False, "error": "", "warn": ""})
+    return out
+
+
 def closed_of(rows: Any, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     """The closed tasks of the board's rows, newest first (by `closed_at`, else `updated_at`): `{task, kind, closed_at, title}`. The rows hold at most `closed_shown` of them (the board cuts them), so the list is as long as the board's own; `limit` only cuts it more. A pure function; what is not a row is left out."""
     found = [row for row in rows if isinstance(row, dict) and row.get("status") == "closed" and row.get("task")] if isinstance(rows, list) else []

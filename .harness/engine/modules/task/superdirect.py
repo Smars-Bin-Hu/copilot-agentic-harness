@@ -9,6 +9,7 @@
          question: the words skip it), `new-chat` (a new chat that goes on with the task). `why` is a key part of `send.refused.*` (`text.empty`, `text.long`, `not-idle`, `confirm-waits`, `off`,
          `not-ready`, `unsure`, `changed`, `timeout`, `model`, `thinking`, `context`, `file-bad`, `file-big`, `file-count`, `host` (+ `error`: the name of the error)), or `unknown`, `paused` (keys
          `super.route.why.*`), or `request` (key `serve.refused.request`).
+  1.8.50: a message that makes the agent start (`sent`, `said`, a new chat, a reopen, checks after the close) marks the task as starting (`board.begin`): the page shows it until the agent is seen to start.
   One decision, in this order, from the link's cache (the thread looks again before it acts): paused, refuse; a command confirmation waits, refuse; a new chat is wanted or the task has no chat,
   make one (refuse `not-idle` while the old chat works or waits); the chat waits on its own question, `say`; it works, `queue` or `steer`; it is idle, `send`.
   The model, thinking and context are the person's choice; left out (no `model` key), the model of the task. The person's words are kept whole (10000 characters) and recorded in `.task/sent.jsonl` with `by: "super"`.
@@ -124,6 +125,7 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
         job = "send"
     else:
         return refusal(why)  # an error or an unknown state of the chat: it takes no message now
+    pre = board.before(task)  # 1.8.50: how the chat stood, so the page says "starting" until the agent is seen to start
     try:
         if job == "new-chat":
             if after:  # set before the chat starts: `task review after` reads it
@@ -147,6 +149,8 @@ def send(board: Any, data: Dict[str, Any]) -> Dict[str, Any]:
             tasklife.set_waiting(root, task, None)  # the person answered the question
         except Exception:  # noqa: BLE001
             pass
+    if job in ("send", "say", "new-chat"):  # a queued or steered message goes to an agent that works already
+        board.begin(task, "after" if after else "reopen" if reopen else {"send": "answer", "say": "say", "new-chat": "newchat"}[job], pre)
     kept = board.sent(task, found, job, first_message(root, name, lang or "en", text, reopen, after) if job == "new-chat" else text, done, extra)
     answer: Dict[str, Any] = {"ok": True, "how": "after" if after else "reopened" if reopen else {"send": "sent", "queue": "queued", "steer": "steered", "say": "said", "new-chat": "new-chat"}[job], "task": name, "chat": kept["chat"], "recorded": kept["recorded"]}
     if after:

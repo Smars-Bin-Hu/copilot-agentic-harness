@@ -164,6 +164,55 @@ class StartingTests(unittest.TestCase):
             self.assertNotIn("starting", found, extra)
             self.assertEqual(fake.started, {}, extra)
 
+    def test_a_reopen_holds_on_the_closed_row_with_its_stage_and_is_never_late_while_the_chat_is_made_or_opens_it(self) -> None:  # 1.8.50
+        fake = board()
+        fake.link.chat = {"bound": False}
+        fake.link.mark = ("", "", "")
+        begin(fake, "reopen")
+        fake.started["t/a"]["mono"] -= boardserve.START_LATE + 1
+        for stage in ("asking", "sent", "opening"):
+            fake.link.making = stage
+            found = row(fake.link, name="a", status="closed", state="closed", actions=[{"action": "archive", "command": ""}, {"action": "reopen", "command": ""}])
+            self.assertFalse(settle(fake, found))
+            self.assertEqual([item["action"] for item in found["actions"]], ["reopen"])  # no Archive while the agent is about to open it
+            self.assertEqual((found["starting"]["what"], found["starting"]["late"], found["starting"]["stage"]), ("reopen", False, stage))
+            self.assertEqual(found["state"], "closed")  # the row stays a closed one
+        fake.link.making = ""  # the agent opened it: the new chat is bound and works
+        fake.link.chat = {"bound": True, "state": "busy"}
+        found = row(fake.link, name="a", state="working", waiting="", waiting_why="")
+        settle(fake, found)
+        self.assertNotIn("starting", found)
+        self.assertEqual(fake.started, {})
+
+    def test_a_refused_new_chat_is_late_at_once(self) -> None:
+        fake = board()
+        begin(fake, "reopen")
+        fake.link.making = "refused"
+        found = row(fake.link, name="a", status="closed")
+        settle(fake, found)
+        self.assertTrue(found["starting"]["late"])
+
+    def test_checks_after_the_close_end_when_the_first_turn_runs(self) -> None:
+        fake = board()
+        fake.link.chat = {"bound": False}
+        begin(fake, "after")
+        fake.link.making = "sent"
+        found = row(fake.link, name="a", status="closed")
+        settle(fake, found)
+        self.assertEqual(found["starting"]["what"], "after")
+        fake.link.making = "opening"
+        found = row(fake.link, name="a", status="closed")
+        settle(fake, found)
+        self.assertNotIn("starting", found)
+
+    def test_a_plain_mark_on_a_closed_task_still_lets_go(self) -> None:
+        fake = board()
+        begin(fake, "newchat")
+        fake.link.making = "asking"
+        found = row(fake.link, name="a", status="closed")
+        settle(fake, found)
+        self.assertNotIn("starting", found)
+
     def test_try_again_on_a_failed_chat_is_starting_until_the_chat_leaves_the_error(self) -> None:
         fake = board()
         fake.link.chat = {"bound": True, "state": "error", "error": {"message": "rate limit", "resumable": True}}

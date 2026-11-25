@@ -221,6 +221,8 @@ RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: 
 
 START_LATE = 120.0  # 1.8.5: seconds after the board sent something before "starting" says the agent was not seen to start
 START_FORGET = 600.0  # and seconds after that before the board lets go of the mark
+NEW_CHAT_MARKS = {"newchat": ("asking", "sent"), "reopen": ("asking", "sent", "opening"), "after": ("asking", "sent")}  # 1.8.50: a mark whose message goes in a new chat, and the stages of that chat that are never late
+CLOSED_MARKS = ("reopen", "after")  # 1.8.50: marks that hold while the task is still closed: the agent of the new chat opens it (reopen) or checks it closed (after)
 TITLE_MAX = 80  # characters of a task's display name (1.8.5)
 WAIT_FIELDS = tasklife.WAIT_FIELDS
 ANSWERED_BY_A_TURN = ("go-req", "go-plan", "go-promote", "go-recover", "go-review", "asking", "stopped", "cancelled")  # marks a running turn has answered; the hooks take them away later (slowly on a busy computer)
@@ -1125,20 +1127,27 @@ class Board:
             now = self.link.turn_mark(task)
             ran = now != mark["mark"] and not now[2]  # a new turn that already ended (a fast one); a new turn that runs while the list of sessions still says the old state stays "starting"
             lagging = bool(now[2]) and state in ("idle", "error", "input")  # the chat holds a running turn; the list of sessions has not said so yet
-            if not live or age > START_LATE + START_FORGET or (state != "unknown" and not lagging and (state != mark["before"] or ran)):
+            stage = self.link.made_stage(str(row.get("name") or "")) if mark["what"] in NEW_CHAT_MARKS else ""  # 1.8.50: how far VS Code is with the new chat (asking, sent, opening), told on the page
+            closed = row.get("status") == "closed" and not row.get("paused_since") and mark["what"] in CLOSED_MARKS  # 1.8.50: reopen and checks after the close: the task is closed until the agent opens it
+            started = mark["what"] == "after" and stage in ("opening", "")  # checks after the close: the task stays closed; the first turn of the chat runs (or VS Code is done with it)
+            if (not live and not closed) or started or age > START_LATE + START_FORGET or (state != "unknown" and not lagging and (state != mark["before"] or ran)):
                 with self.started_lock:
                     if self.started.get(task) is mark:
                         del self.started[task]
                 mark = None
-            elif age <= START_LATE or (mark["what"] == "newchat" and self.link.made_stage(str(row.get("name") or "")) in ("asking", "sent")):  # a new chat VS Code is still making: no limit (1.8.7)
-                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": False}
+            elif (age <= START_LATE and stage not in ("refused", "lost")) or stage in NEW_CHAT_MARKS.get(mark["what"], ()):  # VS Code refused the new chat, or the connection went: no start seen, at once; still making it (1.8.7), or a reopen whose first turn runs: no limit
+                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": False, "stage": stage}
+                if closed:  # the row stays a closed one; the page says the agent was handed it. No Archive while the agent is about to open it
+                    if isinstance(row.get("actions"), list):
+                        row["actions"] = [item for item in row["actions"] if not (isinstance(item, dict) and item.get("action") == "archive")]
+                    return False
                 row["state"], row["active"] = "working", False
                 for key in WAIT_FIELDS:
                     if key in row:
                         row[key] = ""
                 return row["state"] != old
             else:
-                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": True}
+                row["starting"] = {"what": mark["what"], "since": mark["since"], "late": True, "stage": stage}
         if live and state == "busy" and row.get("waiting_why") in ANSWERED_BY_A_TURN:  # the chat runs a turn: the agent works, whatever mark the hooks have not taken away yet
             row["state"] = "working"
             for key in WAIT_FIELDS:
@@ -2624,7 +2633,7 @@ def handler_for(board: Board) -> type:
                     board.brain.note_says(says)  # 1.8.43: the whole words go to the task's thread in the chat, once per wait
                     view["closed"] = superview.closed_of(result.get("rows") or [])  # 1.8.17: the closed tasks the board lists (the newest `closed_shown`), to open again with `/api/super/send`
                     view["closed_more"] = int(result.get("hidden") or 0)  # the older closed tasks the board does not list: the Closed button says "N+"
-                    view["making"] = result.get("making") or []  # 1.8.5: chats the board made whose task is not there yet
+                    view["making"] = (result.get("making") or []) + superview.handed_of(result.get("rows") or [])  # 1.8.5: chats the board made whose task is not there yet; 1.8.50: and closed tasks just handed to an agent
                     return self.answer(200, view)
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(500, {"error": str(error)})

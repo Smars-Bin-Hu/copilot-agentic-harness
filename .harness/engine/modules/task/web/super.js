@@ -171,7 +171,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
 
     // ---------- the avatars ----------
     // The recently closed tasks (1.8.17): not on the strip as avatars but behind one control at its end. A task is "closed" here only while it has no avatar: once it is open again its avatar takes over.
-    const closedOnly = () => closedList.filter((one) => one && one.task && !mates.some((mate) => mate.task === one.task));
+    const closedOnly = () => closedList.filter((one) => one && one.task && !mates.some((mate) => mate.task === one.task) && !making.some((item) => item && item.name === one.task));  // 1.8.50: one just handed to an agent turns on the strip instead
     const isClosed = (task) => Boolean(task) && closedOnly().some((one) => one.task === task);
     const closedTitle = (one) => String((one && one.title) || "");
     // 1.8.21: what a reopen of a closed task will be, said before the person presses. From the Closed list (`reopen` of the row: {mode: same | new | refused, round, next_round, why}); null when the server gave none (an older one).
@@ -1441,7 +1441,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         line.classList.add("sa-dl");
         if (bubble || !ok) toBottom();
       }
-      if (result.ok) poll().then(schedule, schedule);
+      if (result.ok) { SERVE.done(); poll().then(schedule, schedule); }  // 1.8.50: the board's rows too (the bridge draws from them): a task just handed shows at once
       return result;
     }
     async function submit_direct(target, typed) {

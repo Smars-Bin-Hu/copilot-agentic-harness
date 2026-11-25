@@ -229,6 +229,7 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .tk-name-err{flex:1 1 100%;font-size:12.5px;overflow-wrap:anywhere}
 .tk-starting{background:var(--card)}
 .tk-starting .tk-need-t{gap:8px}
+.tk-start-steps{margin:2px 0 0;font-size:12.5px;line-height:1.5;color:var(--soft);overflow-wrap:anywhere}.tk-start-steps .on{color:var(--ink);font-weight:600}.tk-start-steps span{white-space:nowrap}  /* 1.8.50: the steps of a new chat */
 .tk-late{border-color:var(--hot-line);border-left:3px solid var(--hot-dot);background:var(--hot-bg)}
 .tk-late .tk-need-h b{color:var(--hot)}
 .tk-err{margin:0;padding:10px 16px;border-bottom:1px solid var(--bad-line);border-left:3px solid var(--bad);background:var(--bad-bg);color:var(--bad)}

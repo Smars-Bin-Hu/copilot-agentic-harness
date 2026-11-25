@@ -128,6 +128,8 @@ function startingTip(starting) {
   const what = Object.prototype.hasOwnProperty.call(TEXT, "waits.what." + starting.what) ? t("waits.what." + starting.what) : t("waits.what.other");
   return t(starting.late ? "waits.late.tip" : "waits.starting.tip", {what, at: when(starting.since, 11, 19)});
 }
+// 1.8.50: a closed task just handed to an agent (Reopen and hand to the agent, checks after the close) and not late: no second Reopen while the first one starts.
+const handedOff = (row) => Boolean(row && row.status === "closed" && row.starting && !row.starting.late && ["reopen", "after"].includes(row.starting.what));
 const errorWords = (row) => String((row && row.error && row.error.message) || "") || t("waits.error.none");
 function stateTag(row, live) {
   const state = stateOf(row, live);

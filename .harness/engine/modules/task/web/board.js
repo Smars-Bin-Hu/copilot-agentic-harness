@@ -182,7 +182,7 @@ function homeMark() {
   // The buttons of a row as one strip (also the lobby card's): what the task waits for, what is said to the agent, and the menu behind the three dots. Null: no action.
   function actionStrip(row, withReopen) {
     const items = row.actions || [];
-    const again = withReopen && row.status === "closed" && row.reopen && typeof SERVE !== "undefined" && typeof REOPEN !== "undefined" && DATA.serve && SERVE.runs("reopen") ? REOPEN.rowButton(row) : null;  // 1.8.21: a closed row of the list: the icon next to Archive (the lobby card has none)
+    const again = withReopen && row.status === "closed" && !handedOff(row) && row.reopen && typeof SERVE !== "undefined" && typeof REOPEN !== "undefined" && DATA.serve && SERVE.runs("reopen") ? REOPEN.rowButton(row) : null;  // 1.8.21: a closed row of the list: the icon next to Archive (the lobby card has none)
     if (!items.length && !again) return null;
     const first = items.find((item) => isHot(row, item) && !TALK.includes(item.action));  // the others go behind the three dots; steer and stop have their own place below (1.6.104: one was drawn twice)
     const direct = items.filter((item) => item.action === "archive" || item === first);

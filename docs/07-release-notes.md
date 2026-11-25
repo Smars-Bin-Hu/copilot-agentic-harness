@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.49 (1.8.0 – 1.8.49, 2026-11-17 – 2026-11-24)
+## 1.8.50 (1.8.0 – 1.8.50, 2026-11-17 – 2026-11-24)
 
 ### Added
 
@@ -66,6 +66,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- **Reopen and hand to the agent showed nothing until the agent had opened the task** (1.8.50). The task stayed **closed** on its page, in the list and in the super agent until the agent ran `harness task open`, a minute or two on a work computer. Now the task page shows **Sent. Waiting for the agent to start…** with the time and the step (the agent host makes the chat → the chat is made → the agent opens the task), the list row and the super agent say **Starting…**, and Reopen and Archive are hidden until the agent starts. The same holds for checks after the close and for a message sent from the super agent. The super agent's line now says the chat is being made, not that the task was reopened. If no start is seen after two minutes, or the agent host refuses the chat, the yellow **The agent has not been seen to start** note shows as before.
 - **"Waits for you" while the agent was still writing** (1.8.49). The super agent showed a card and its avatar turned amber while a task's agent was still writing `REQ.md` or `PLAN.md`; the task page said it waited for you, and nothing on it could be pressed. Now a task whose agent is in a turn waits for you only for what holds the agent (a tool to allow, a question, a held call). A requirement, a plan, a write-back or a delivery shows when the turn ends, the same on the board, the task page, the super agent and `harness task list`. **Off work** still puts such a task aside.
 - **A plan beside an open requirement** (1.8.49). In a dev, test or kb task the agent writes `PLAN.md` in the same turn as `REQ.md` only when the requirement has no template text and no question under "Not clear yet"; a hook refuses it otherwise, so the agent asks you first. Once you confirm the requirement, the plan can be written whatever is left.
 - **A call could run without the gate on a slow computer** (1.8.48). Copilot waits for each hook for the time set in `.github/hooks/harness.json`, and when the hook does not answer in time it runs the call anyway. That time was 30 seconds; on a work computer with an antivirus, hooks took 4–8 seconds as a rule and up to 111 seconds, and about 6 in 100 checks before a call ran out of time. The time is now 120 seconds for every hook. `harness doctor` says it is an error when a hook's time is under 120 seconds, and reads Copilot's own record of the last 5 sessions: a hook Copilot stopped waiting for is an error, with the number of calls that ran without the gate. Making the hook itself faster comes next.

@@ -483,7 +483,7 @@
   "gate.board.request": "拒绝：这是在请求端口 {port} 上的看板服务，它的按钮只属于用户。不要调用它。看板上有要改的，告诉用户。",
   "gate.hookserve.request": "已拒绝：这是在请求端口 {port} 上的 harness hook 服务。它替 gate 判断你的调用：不要调用它。觉得哪个调用判错了，告诉用户。",
   "gate.hookserve.secret": "已拒绝：这会读 `.harness/runtime/hookserve.json`（或存放它的文件夹），也就是替 gate 判断你的调用的 hook 服务的口令。不要读、复制、打印或搜索它。只列文件名，或搜索别的文件夹，是可以的。",
-  "gate.command.toolong": "已拒绝：这条终端命令（{length} 个字符）超过 {limit} 个字符，或者长段连续空白太多。gate 无法及时读完它。把文本用编辑器工具写进文件再运行这个文件，或者把命令拆开。",
+  "gate.command.toolong": "已拒绝：这条终端命令有 {length} 个字符，gate 最多读 {limit} 个。更长的无法及时判断。把文本用编辑器工具写进文件再运行这个文件，或者把命令拆开。",
   "gate.super.refused": "已拒绝：super agent 只读和对话，不改任何东西。要操作，请用 board 上的按钮。",
   "gate.ask.refused": "已拒绝：这一轮是用户通过 board 发来的提问。只回答，不改任何东西。需要做事时，请说明：用户会发一条普通消息。",
   "gate.terminal.denied": "这条终端命令被拒绝：{why}。不要重试同类命令。需要时，停下来告诉用户原因，由用户自己运行。",

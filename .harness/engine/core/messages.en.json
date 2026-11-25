@@ -483,7 +483,7 @@
   "gate.board.request": "Refused: this asks the board server on port {port}, and its buttons are the user's. Do not call it. If something on the board should change, tell the user.",
   "gate.hookserve.request": "Refused: this asks the harness hook service on port {port}. It judges your calls for the gate: do not call it. If a call was judged wrongly, tell the user.",
   "gate.hookserve.secret": "Refused: this reads `.harness/runtime/hookserve.json` (or the folder that holds it), the key of the hook service that judges your calls for the gate. Do not read, copy, print or search it. Listing names, or searching other folders, is fine.",
-  "gate.command.toolong": "Refused: this terminal command ({length} characters) is over {limit} characters, or has too much white space in long runs. The gate cannot read it in time. Put the text in a file with the editor tools and run the file, or split the command.",
+  "gate.command.toolong": "Refused: this terminal command is {length} characters long, and the gate reads {limit} at most. A longer one cannot be judged in time. Put the text in a file with the editor tools and run the file, or split the command.",
   "gate.super.refused": "Refused: the super agent only reads and talks. It does not change anything. Use the buttons on the board to act.",
   "gate.ask.refused": "Refused: this turn is a question from the person through the board. Answer it and change nothing. If work is needed, say so: the person sends a normal message.",
   "gate.terminal.denied": "This terminal command is refused: {why}. Do not retry with a command of the same kind. If it is needed, stop and tell the user why: the user runs it.",

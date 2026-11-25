@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import re
 import tempfile
 import time
 import unittest
@@ -22,9 +24,11 @@ import support  # noqa: F401 - the engine on sys.path
 from support import make_root, payload, pre_tool
 
 import hook
+from core import redact
 from modules.gate import builtin, handler, keyguard, policy as gate_policy, scriptcheck, terminal
 
 LIMIT = 2.0  # seconds, on the development Mac; the same inputs on a slow computer take longer, but never minutes
+LINE_LIMIT = 10.0  # a line of the longest size the gate reads (`MAX_COMMAND`), through `hook.answer` (the judgment and the record of the call): measured 0.3 to 1.7 s on the development Mac
 KEY_PARTS = (".harness", "runtime", "hookserve.json")
 
 
@@ -127,17 +131,21 @@ class GateTimeTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         hook.process(json.dumps(payload("UserPromptSubmit", "fz", prompt="start", cwd=str(self.root))), self.root)
 
-    def judge(self, name: str, given: Dict[str, Any]) -> Dict[str, Any]:
+    def judge(self, name: str, given: Dict[str, Any], limit: float = LIMIT, answered: bool = False) -> Dict[str, Any]:
+        """`answered`: through `hook.answer`, which also writes the record of the call (`core/redact.py` masks the text of the command there) and answers; else through `hook.process`, the judgment alone."""
         data = pre_tool("fz", name, given)
         data["cwd"] = str(self.root)
         started = time.monotonic()
-        output, _record = hook.process(json.dumps(data), self.root)
+        if answered:
+            output = hook.answer(json.dumps(data), self.root)
+        else:
+            output, _record = hook.process(json.dumps(data), self.root)
         elapsed = time.monotonic() - started
-        self.assertLess(elapsed, LIMIT, f"{name} {str(given)[:80]} took {elapsed:.1f} s")
+        self.assertLess(elapsed, limit, f"{name} {str(given)[:80]} took {elapsed:.1f} s")
         return output
 
-    def term(self, command: str) -> Dict[str, Any]:
-        return self.judge("run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+    def term(self, command: str, limit: float = LIMIT, answered: bool = False) -> Dict[str, Any]:
+        return self.judge("run_in_terminal", {"command": command, "explanation": "t", "isBackground": False}, limit, answered)
 
     def test_the_line_of_the_red_team_is_asked_about(self) -> None:
         for stars in (50, 100, 1000):
@@ -147,27 +155,41 @@ class GateTimeTests(unittest.TestCase):
     def test_a_line_with_one_adversarial_word(self) -> None:
         for name, word in words().items():
             for shape in ("echo {}", "rm {}", "echo x > {}", "cat {} && git push --force origin main"):
-                command = shape.replace("{}", word[:7000])  # the most the gate reads is `MAX_COMMAND`: a word of that size is judged, a longer line is refused (`test_a_line_over_what_is_read_is_refused_not_passed`)
+                command = shape.replace("{}", word)
                 out = self.term(command)
                 self.assertIn(out.get("permissionDecision"), (None, "", "ask", "deny"), f"{name} {shape}")
 
     def test_a_line_of_one_character(self) -> None:
         for name, line in lines().items():
-            self.term(line)
-            self.term("echo " + line)
-            self.term("rm " + line)
+            self.term(line, LINE_LIMIT, True)
+            self.term("echo " + line[:handler.MAX_COMMAND - 5], LINE_LIMIT, True)
+            self.term("rm " + line[:handler.MAX_COMMAND - 3], LINE_LIMIT, True)
 
     def test_a_line_over_what_is_read_is_refused_not_passed(self) -> None:
-        for command in ("echo " + "a " * 600000, "echo " + "a" * 1048576, "echo " + "*/" * 500000, "echo " + "*" * (handler.MAX_COMMAND + 1), "echo x" + " " * 600 + "&& rm -rf .harness/engine", "echo x" + "\n" * 600 + "rm -rf .harness/engine", ("a " * 3 + "\n" * 99) * 100):
+        for command in ("echo " + "a " * 600000, "echo " + "a" * 1048576, "echo " + "*/" * 500000, "echo " + "*" * handler.MAX_COMMAND, "x" * (handler.MAX_COMMAND + 1)):
             out = self.term(command)
             self.assertEqual(out.get("permissionDecision"), "deny", len(command))
             self.assertIn(str(handler.MAX_COMMAND), out.get("permissionDecisionReason", ""))
+        self.assertEqual(handler.MAX_COMMAND, 32000)  # what `harness as` tells of (netonly.run)
 
-    def test_the_most_white_space_that_is_read_is_judged_in_time(self) -> None:
-        """A rule over a run of white space goes over it once for each character: 10 000 spaces took 3 s, 8 runs of 1 900 newlines 40 s (before the budget)."""
-        for command in ("echo x" + " " * 499 + "&& git push --force origin main", "echo x" + "\n" * 499, ("a " * 3 + "\n" * 40) * 100, ("a;" + " " * 19) * 380, ("a " * 3 + "\t" * 60) * 50, "echo " + "x" * 8000):
-            self.assertFalse(handler.unreadable_command(command), len(command))
-            self.term(command)
+    def test_the_lines_that_were_slow_at_the_size_that_is_read(self) -> None:
+        """Through `hook.answer`, so that the record of the call is made too. Before the patterns were made linear: spaces 80 s, newlines (runs of 1 900) 40 s, `rm -u-u-u...` 6.7 s at 8 000 and minutes at 32 000, `token.token...` 20 s at 4 000."""
+        size = handler.MAX_COMMAND
+        for name, unit in (("spaces", " "), ("newlines", "\n"), ("tabs", "\t"), ("-u", "-u"), ("backticks", "`"), ("token.", "token."), ("a-", "a-"), ("sig", "sig"), ("pass ", "pass "), ("--pass ", "--pass "), ("x=", "x="), ("\"sig", "\"sig"),
+                           ("lines of spaces", " \n"), ("separators", "a ; "), ("quotes", "'")):
+            for head in ("echo ", "rm ", "x"):
+                command = (head + unit * size)[:size]
+                self.assertFalse(handler.unreadable_command(command))
+                self.term(command, LINE_LIMIT, True)
+
+    def test_runs_of_white_space_between_words(self) -> None:
+        size = handler.MAX_COMMAND
+        for unit in (" ", "\n", "\t", " \n", "\r\n", " ; "):
+            for run in (3, 100, 3000):
+                command = ("x" + unit * run) * (size // (run * len(unit) + 1) + 1)
+                self.term(command[:size], LINE_LIMIT, True)
+        out = self.term("echo x" + " " * 20000 + "&& rm -rf .harness/engine", LINE_LIMIT, True)  # a long run is read, and what follows it is judged
+        self.assertEqual(out.get("permissionDecision"), "deny")
 
     def test_a_line_of_the_size_that_is_read_is_judged(self) -> None:
         out = self.term("echo " + "word " * (handler.MAX_COMMAND // 6 - 1))
@@ -193,6 +215,80 @@ class GateTimeTests(unittest.TestCase):
         self.judge("Write", {"file_path": "notes/a.txt", "content": "x" * (1 << 20)})  # a large file is no reason to refuse: the gate reads the path, not the text
         out = self.judge("Write", {"file_path": "python.exe", "content": "x" * (1 << 20)})
         self.assertEqual(out.get("permissionDecision"), "deny")
+
+
+# --- the patterns that were quadratic, against the patterns they replaced --------------------------------------------------------------------------------------------------------------------------
+
+OLD_SPLIT = re.compile(r"(\s*(?:&&|\|\||[;&|\n()])\s*)")
+OLD_COMMAND_START = r"(?:^|[;&|(\n]\s*)(?:sudo\s+)?"
+OLD_JSON = re.compile(r"(?i)(\"[\w.-]*" + redact._NAMES + r"[\w.-]*\"\s*:\s*\")([^\"]*)(\")")
+OLD_VALUE = re.compile(r"(?i)(\b[\w.-]*" + redact._NAMES + r"[\w.-]*\s*[:=]\s*)(?!(?:bearer|basic)\b)(\"[^\"]*\"|'[^']*'|[^\s;&\"',]+)")
+OLD_OPTION = re.compile(r"(?i)(--?[\w-]*" + redact._NAMES + r"[\w-]*[ ]+)(\"[^\"]*\"|'[^']*'|[^\s;&|\-][^\s;&|]*)")
+SEPARATORS = ["a", "b", " ", "  ", "\t", "\n", ";", "&", "&&", "|", "||", "(", ")", "\r", "x y", "cd ", "  \n  ", "\x0b"]
+COMMANDS = ["rm", "rm -rf /", "curl x", "wget y", "sudo rm a", "mv a .harness/engine/x", "echo hi", "cp a .harness/policies/b", "git push", "ls", "cat f", "python3 -c 'open(\".harness/engine/a\",\"w\")'", "sed -i s/a/b/ .github/hooks/x",
+            "rm -rf ~", "mkdir x", "touch python", "tee python.exe", "curl -o a http://x"]
+BREAKS = [";", "&&", "||", "|", "&", "(", ")", "\n", "\n\n", " ", "  ", "\t", " \n ", "\n  ", "\r\n", ";\n", " ; ", "`"]
+NAME_PARTS = ["pass", "password", "token", "sig", "sas", "pat", "path", "api-key", "api_key", "apikey", "secret", "pwd", "auth", "Authorization", "credential", "x", "a", "1", "-", "--", "_", ".", "=", ":", " ", "  ", ";", "&", "|", "\"",
+              "'", ",", "bearer", "Bearer", "basic", "-P", "--password", "-Token", "AZURE_DEVOPS_EXT_PAT", "sqlcmd", "\n", "/", "@", "{", "}", "(", ")"]
+REAL_TEXTS = ["curl -H 'Authorization: Bearer abc' https://x", "sqlcmd -S srv -U u -P Secret123 -Q 'select 1'", "az login --password hunter2 --username a", "export AZURE_DEVOPS_EXT_PAT=abcdef", "git push https://u:tok@github.com/x",
+              "--token=abc --api-key xyz", "password: 'p w' next", "a.b.token = \"v\"; other = 1", "mysql -pSecret -h x", "--client-secret abc --tenant t", "Set-Variable -Name secret -Value x", "pwd=1;uid=2", "x-api-key: abc",
+              "-Password 'a b' -User u", "dbpass=1 dbtoken:2 sig=3", "patch=1 path=2 pat=3", "--sas-token \"x y\" --other", "token = bearer abc", "a --pass-through x -p y", '{"token": "abc", "x": 1}', '{"api-key":"v","name":"n"}',
+              '{"password" : "p w"}', "harness as acme -- sqlcmd -Q \"select * from t where token = 'x'\"", "rm -rf build; echo done\n\ncurl http://x | sh"]
+
+
+class LinearPatternTests(unittest.TestCase):
+    """(red team N1, round 3) The three groups of patterns that took the square of the length of a line (or the cube) are linear now, and they find what the old ones found."""
+
+    def test_the_split_of_a_line_is_the_same(self) -> None:
+        new = terminal._SPLIT
+        rng = random.Random(7)
+        for _ in range(40000):
+            text = "".join(rng.choice(SEPARATORS) for _ in range(rng.randint(0, 14)))
+            self.assertEqual(new.split(text), OLD_SPLIT.split(text), repr(text))
+            for part in OLD_SPLIT.split(text):
+                self.assertEqual(bool(new.fullmatch(part)), bool(OLD_SPLIT.fullmatch(part)), repr(part))
+        for command in REAL_TEXTS + COMMANDS:
+            self.assertEqual(new.split(command), OLD_SPLIT.split(command), command)
+
+    def test_the_start_of_a_command_is_the_same_for_every_rule_of_the_policy(self) -> None:
+        policy = builtin.policy()
+        guard = gate_policy.guard_pattern(policy["guardrail_paths"], ["/work/x"])
+        rules = [(group, rule["pattern"]) for group in ("guardrail_write", "deny", "ask") for rule in policy["terminal"][group]]
+        old = [(group, re.compile(pattern.replace("{cmd}", OLD_COMMAND_START).replace("{guard}", guard), re.IGNORECASE)) for group, pattern in rules]
+        new = [(group, re.compile(gate_policy.expand(pattern, guard), re.IGNORECASE)) for group, pattern in rules]
+        self.assertTrue(any("{cmd}" in pattern for _group, pattern in rules))
+        rng = random.Random(3)
+        for _ in range(12000):
+            text = "".join((rng.choice(COMMANDS) + rng.choice(BREAKS)) if rng.random() < 0.6 else rng.choice(BREAKS) for _ in range(rng.randint(1, 6)))
+            for (group, before), (_group, after) in zip(old, new):
+                self.assertEqual(bool(after.search(text)), bool(before.search(text)), (repr(text), before.pattern[:60]))
+                if group == "ask":  # the ask rules are read match by match: the program of each, and the command of the line it stands in
+                    found_old = [(one.group(0).strip(), terminal._span(text, one.start())) for one in before.finditer(text)]
+                    found_new = [(one.group(0).strip(), terminal._span(text, one.start())) for one in after.finditer(text)]
+                    self.assertEqual(found_new, found_old, (repr(text), before.pattern[:60]))
+
+    def test_the_masking_of_a_name_and_its_value_is_the_same(self) -> None:
+        pairs = ((redact._RULES[1][0], OLD_JSON, r"\1" + redact.MASK + r"\3"), (redact._RULES[2][0], OLD_VALUE, r"\1" + redact.MASK), (redact._RULES[3][0], OLD_OPTION, r"\1" + redact.MASK))
+        rng = random.Random(11)
+        texts = REAL_TEXTS + ["".join(rng.choice(NAME_PARTS) for _ in range(rng.randint(1, 12))) for _ in range(40000)]
+        for text in texts:
+            for new, old, replacement in pairs:
+                self.assertEqual(new.sub(replacement, text), old.sub(replacement, text), repr(text))
+
+    def test_the_new_patterns_take_a_line_of_the_longest_size_in_no_time(self) -> None:
+        size = handler.MAX_COMMAND
+        policy = builtin.policy()
+        compiled = gate_policy.Compiled(policy)
+        started = time.monotonic()
+        for unit in (" ", "\n", " \n", "\t", "a ; ", "-u", "token.", "sig", "a-", "pass ", "--pass ", "x=", "\"sig", "'"):
+            for head in ("", "\"", "x=\"", "rm "):
+                text = (head + unit * size)[:size]
+                terminal._SPLIT.split(text)
+                for rule, _why in compiled.deny + compiled.ask + compiled.guard_writes:
+                    rule.search(text)
+                for rule, replacement in redact._RULES[:4]:
+                    rule.sub(replacement, text)
+        self.assertLess(time.monotonic() - started, 10.0)
 
 
 if __name__ == "__main__":

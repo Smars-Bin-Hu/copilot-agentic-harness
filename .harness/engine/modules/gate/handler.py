@@ -631,13 +631,14 @@ def watch_reach(event: HookEvent, ctx: Context) -> None:
 
 
 SECRET_FILE = re.compile(r"\.harness[\\/]+\.env(?![\w.-])", re.IGNORECASE)
-MAX_COMMAND = 8192  # (hook speed round 3, red team N1) the longest terminal command the gate reads (the limit of `cmd.exe` too). The rules over its text take time in proportion to the length, and the record of the call (`core/redact.py`, after the judgment, before the answer) takes time in the square of it for a line like `rm -u-u-u...` (8 192 characters: 7 s; 32 768: minutes): a longer one cannot be answered in the time a host waits for a hook, so it is refused
-BLANK_BUDGET = 250000  # and the sum of the squares of the lengths of its runs of white space: the rules that cut a line at its separators go over a run once for each of its characters (a run of 10 000 spaces took 3 s, one of 30 000 took 80 s, 8 runs of 1 900 newlines 40 s). A heredoc of 400 lines indented by 12 is 70 thousand; one run of 500 is the whole budget
+MAX_COMMAND = 32000  # (hook speed round 3, red team N1) the longest terminal command the gate reads: the limit `harness as <alias> -- ...` tells of (`netonly.run`, 1.8.51: a longer line does not fit a variable of the environment). The rules over a line take time in proportion to its length (the quadratic ones were made linear: `terminal._SPLIT`, `policy.COMMAND_START`, `core/redact.py`), so a longer one cannot be judged in the time the host waits for a hook, and it is refused
 
 
 def unreadable_command(command: str) -> bool:
-    """A command the gate does not read: longer than `MAX_COMMAND`, or with runs of white space whose squares add up to over `BLANK_BUDGET`. It is refused, not passed: a gate that cannot judge in time lets a call run (a host runs a call whose hook is too slow)."""
-    return len(command) > MAX_COMMAND or sum(len(run) ** 2 for run in re.findall(r"\s{2,}", command)) > BLANK_BUDGET
+    """A command the gate does not read: longer than `MAX_COMMAND`. It is refused, not passed: a gate that cannot judge in time lets a call run (a host runs a call whose hook is too slow)."""
+    return len(command) > MAX_COMMAND
+
+
 DUMP_ALL = re.compile(r"(?:^|[;&|(]\s*)(?:env|printenv|set|export\s+-p|Get-ChildItem\s+env:|gci\s+env:|dir\s+env:|ls\s+env:)\s*(?:$|[;&|)>])", re.IGNORECASE)
 
 

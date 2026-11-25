@@ -47,11 +47,14 @@ def _long_run(found: Match[str]) -> str:
     return found.group(0) if _reads_as_name(found.group(0)) else MASK
 
 
+# (hook speed round 3) The three rules for a name and its value (`"token": "x"`, `key=value`, `--password x`) look once at what follows the run of name characters before they look for the name in it, and the last two start only at the
+# beginning of a run. Started at every word boundary, they went over the run again from each one, and again from each place the name was found in it (`rm -u-u-u...` of 4 000 characters took 2 s, `token.token.token...` 20 s: the square and
+# the cube of the length). The text they keep is the same: what comes before the name in the run belongs to the first group, which the replacement puts back (a test compares them with the old patterns).
 _RULES: List[Tuple[Pattern[str], Union[str, Callable[[Match[str]], str]]]] = [
     (re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}"), r"\1 " + MASK),
-    (re.compile(r"(?i)(\"[\w.-]*" + _NAMES + r"[\w.-]*\"\s*:\s*\")([^\"]*)(\")"), r"\1" + MASK + r"\3"),  # "token": "x" in a JSON body: the quotes stay
-    (re.compile(r"(?i)(\b[\w.-]*" + _NAMES + r"[\w.-]*\s*[:=]\s*)(?!(?:bearer|basic)\b)(\"[^\"]*\"|'[^']*'|[^\s;&\"',]+)"), r"\1" + MASK),  # key=value, key: value, --password=x (Authorization: Bearer x is the rule above)
-    (re.compile(r"(?i)(--?[\w-]*" + _NAMES + r"[\w-]*[ ]+)(\"[^\"]*\"|'[^']*'|[^\s;&|\-][^\s;&|]*)"), r"\1" + MASK),  # --password x
+    (re.compile(r"(?i)(\"(?=[\w.-]*\"\s*:\s*\")[\w.-]*" + _NAMES + r"[\w.-]*\"\s*:\s*\")([^\"]*)(\")"), r"\1" + MASK + r"\3"),  # "token": "x" in a JSON body: the quotes stay
+    (re.compile(r"(?i)((?<![\w.-])(?=[\w.-]+\s*[:=])[\w.-]*" + _NAMES + r"[\w.-]*\s*[:=]\s*)(?!(?:bearer|basic)\b)(\"[^\"]*\"|'[^']*'|[^\s;&\"',]+)"), r"\1" + MASK),  # key=value, key: value, --password=x (Authorization: Bearer x is the rule above)
+    (re.compile(r"(?i)((?<![\w-])(?=[\w-]+[ ])\w*--?[\w-]*" + _NAMES + r"[\w-]*[ ]+)(\"[^\"]*\"|'[^']*'|[^\s;&|\-][^\s;&|]*)"), r"\1" + MASK),  # --password x
     (re.compile(r"(://[^/\s:@]+:)[^@\s/]+(@)"), r"\1" + MASK + r"\2"),  # user:password@host
     (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{12,}|xox[abprs]-[A-Za-z0-9-]{10,})\b"), MASK),
     (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\b"), MASK),  # a JWT

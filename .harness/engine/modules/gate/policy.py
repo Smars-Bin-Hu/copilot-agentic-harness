@@ -17,7 +17,9 @@ GUARD_PLACEHOLDER = "{guard}"
 # Where a command can start: the beginning, or after `;`, `&`, `|`, `(`, a new line. An optional `sudo` may lead.
 # Patterns use it so that `grep "rm -rf" file` (rm inside an argument) does not look like a command.
 COMMAND_PLACEHOLDER = "{cmd}"
-COMMAND_START = r"(?:^|[;&|(\n]\s*)(?:sudo\s+)?"
+# The `\n` branch starts only at the beginning of a run of white space (`(?<!\s)`, the spaces and tabs before the `\n` are part of the match): started at each `\n` of a run, the old branch `[;&|(\n]\s*` went over the run again from each one
+# (8 runs of 1 900 newlines took 40 s in the whole gate). Every rule that follows starts with a letter, so the place where it can go on is the end of the run, the same for both; a test compares the two over the rules of the policy.
+COMMAND_START = r"(?:^|[;&|(]\s*|(?<!\s)[^\S\n]*\n\s*)(?:sudo\s+)?"
 
 _RULE_SCHEMA = {
     "type": "object",

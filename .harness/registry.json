@@ -247,6 +247,7 @@
         ".harness/tests/test_hookequiv.py",
         ".harness/tests/test_keyguard.py",
         ".harness/tests/test_keyguard_fuzz.py",
+        ".harness/tests/test_gate_dynamic.py",
         ".harness/tests/test_doctor_hooks.py",
         ".harness/tests/test_postmatch.py",
         ".harness/tests/test_taskfiles.py",

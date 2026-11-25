@@ -7,10 +7,11 @@ any path in ways a regular expression does not see.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Callable, List, Optional, Pattern, Tuple
 
-from . import shellwords
+from . import external, shellvars, shellwords
 from .policy import Compiled
 
 # (permission, why)
@@ -43,6 +44,8 @@ def normalize(command: str) -> str:
     return "".join(out)
 
 
+_DOT_SLASH = re.compile(r"/\.(?=/)")
+_SLASHES = re.compile(r"/{2,}")
 _CD = re.compile(r"^(?:cd|pushd|chdir|set-location|push-location|sl)$", re.IGNORECASE)
 # A separator with the white space around it. The white space in front is taken only from the beginning of a run (`(?<!\s)`): started at every character of a run of 10 000 spaces, the old pattern went over the run again from each one (3 s, and 30 000 took
 # 80 s). A separator that follows white space a match before it took (`;  ;`) is found without it: the groups are the same (a test compares them with the old pattern on random lines).
@@ -113,21 +116,41 @@ def after_cd(text: str) -> Optional[str]:
 
 def _texts(command: str) -> List[str]:
     """The texts the write rules are matched against: the line, and the line with the paths after a `cd` written out. A line with a PowerShell escape in it (`` r`m ``, `` .harness/eng`ine ``) is also read with the escape
-    taken away: that is what PowerShell runs (1.7.38, C13 FR3)."""
+    taken away: that is what PowerShell runs (1.7.38, C13 FR3). A line that sets variables (`d=.harness; ... > $d/runtime/x`) is also read with their values put in (hook speed round 3, red team: `shellvars.expand`)."""
+    return list(_texts_of(command))
+
+
+@functools.lru_cache(maxsize=16)
+def _texts_of(command: str) -> Tuple[str, ...]:
     out: List[str] = []
     plain = shellwords.dialect(command, "power")
-    for source in [command] + ([plain] if plain else []):
+    sources = [command] + ([plain] if plain else [])
+    if "$" in command or "%" in command or "`" in command:  # a line with no variable in it has nothing the readings below would change
+        try:
+            sources += external.nested(command)  # a command a shell is given (`bash -c '...'`) is read as a line of its own: its variables are its own
+        except Exception:  # noqa: BLE001 - the line as written is still checked
+            pass
+    for source in list(sources):
+        try:
+            sources += shellvars.expand(source)[0]
+        except Exception:  # noqa: BLE001 - the line as written is still checked, and `scriptcheck.dynamic_refusal` refuses what cannot be read
+            pass
+    for source in sources:
         text = normalize(source)
         try:
             moved = after_cd(text)
         except Exception:  # noqa: BLE001 - the plain text is still checked
             moved = None
         out += [text, moved] if moved and moved != text else [text]
+    for text in list(out):  # `.harness/./runtime/x` and `.harness//runtime/x` are the same file as `.harness/runtime/x` (hook speed round 3, red team): the line is also read with the `/./` and the doubled `/` taken out
+        clean = _SLASHES.sub("/", _DOT_SLASH.sub("", text))
+        if clean != text and clean not in out:
+            out.append(clean)
     for text in list(out):  # the shell joins what is split by quotes (`py''thon.exe`, `.har"ness"`): the line is also read with the quote marks taken away (red team N3). The separators inside quotes were turned into spaces above
         joined = text.replace("'", "").replace('"', "").replace("^", "")  # `^` is the escape of `cmd`
         if joined != text and joined not in out:
             out.append(joined)
-    return out
+    return tuple(dict.fromkeys(out))
 
 
 def _first(command: str, rules: List[Tuple[Pattern[str], str]]) -> Optional[str]:

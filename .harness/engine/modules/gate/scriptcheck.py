@@ -13,6 +13,7 @@ that writes by itself pass this check. `docs/12` says so; the guardrail files th
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import shlex
@@ -21,8 +22,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import guardrails, messages, procenv
 
 from . import external
+from . import shellvars
 from . import shellwords
-from .gitcmd import join_lines, split_segments
+from .gitcmd import LEADING_KEYWORDS, join_lines, split_segments
 
 MAX_BYTES = 200 * 1024
 EXTRA = (r"\.harness\b", r"\.github[\\/]+hooks", r"\.copilot-harness\b", r"HARNESS_INTEGRITY_DIR")  # named whole, even when the policy lists fewer; the folder of the lists the guardrails trust (1.7.38, C13 FR2 11b) too
@@ -201,8 +203,33 @@ _ALL_ARGS_SHELL = frozenset(
 )
 _DESTINATION_SHELL = frozenset("cp copy copy-item cpi install rsync xcopy robocopy ln scp".split())
 _GIT_WRITES = frozenset("checkout restore reset stash rm mv clean apply am cherry-pick revert switch merge rebase pull".split())
-_REDIRECT = re.compile(r"""(?<![<>=&\w-])(?:\d?>>?|&>>?|>\|)[ \t]*["']?([^\s"';&|<>)(`]+)""")
-_WRAPPERS = frozenset("sudo env nohup time command exec nice timeout call start builtin".split())
+_REDIRECT_OP = re.compile(r"(?<![<>=&\w-])(?:\d?>>?|&>>?|>\|)[ \t]*")
+_LINES = re.compile(r"[;\n]|&&|\|\||(?<![&>])&(?![&>])|\|")  # where one command of a text ends (not quote-aware: `shellvars.scan` has turned the separators inside quotes into `FILL`)
+
+
+def _redirects(line: str) -> List[Tuple[str, str]]:
+    """The files a line writes with `>`, `>>`, `1>`, `&>`, `>|`: `(the redirection as written, the file)`. The file is the whole word after the sign, quotes taken away (`"$d"/runtime/x` is `$d/runtime/x`): it ends at white
+    space, `;&|<>()` or a backtick outside quotes. One pass over the word, never a pattern that can go back."""
+    out: List[Tuple[str, str]] = []
+    for found in _REDIRECT_OP.finditer(line):
+        end, quote = found.end(), ""
+        while end < len(line):
+            char = line[end]
+            if quote:
+                if char == quote:
+                    quote = ""
+            elif char in "\"'":
+                quote = char
+            elif char in " \t\n;&|<>)(`":
+                break
+            end += 1
+        word = line[found.end():end].replace('"', "").replace("'", "")
+        if word:
+            out.append((line[found.start():end].strip()[:SHOWN], word))
+    return out
+
+
+_WRAPPERS = frozenset("sudo env nohup time command exec nice timeout call start builtin xargs watch busybox".split())
 _VALUE_OPTIONS = {"curl": ("-o", "--output", "-D", "--dump-header", "--stderr", "-c", "--cookie-jar", "--trace", "--trace-ascii"), "wget": ("-O", "--output-document", "-P", "--directory-prefix", "-o", "--output-file", "-a", "--append-output"),
                   "invoke-webrequest": ("-outfile",), "iwr": ("-outfile",), "invoke-restmethod": ("-outfile",), "irm": ("-outfile",), "start-bitstransfer": ("-destination",)}
 
@@ -233,43 +260,52 @@ def _shell_writes(text: str) -> List[Tuple[str, str]]:
     """The writes of the shell commands in a text: `(the command, the words that name what it writes)`. A redirection names its file; `rm`, `mv`, `tee`, `touch`... name all their words; `cp`, `install`, `ln`... their
     destination; `sed -i` and `perl -i` their files; `git checkout` and the like what they are given; `curl -o`, `wget -O`... their file."""
     out: List[Tuple[str, str]] = []
-    for line in re.split(r"[;\n]|&&|\|\||(?<![&>])&(?![&>])|\|", text):
-        for found in _REDIRECT.finditer(line):
-            out.append((found.group(0).strip()[:SHOWN], found.group(1)))
+    for line in _LINES.split(text.replace(">|", "> ")):
+        out.extend(_redirects(line))
         try:
             words = shlex.split(line.replace("\\", "/"), posix=True)  # a Windows path (`.harness\engine\x.py`) keeps its names: its backslash is a separator
         except ValueError:
             words = line.replace("\\", "/").split()
-        while words and (words[0].lower() in _WRAPPERS or re.match(r"^[A-Za-z_]\w*=", words[0]) or re.fullmatch(r"\d+", words[0]) or (words[0].startswith("-") and len(words) > 1)):
-            words = words[1:]
-        if not words:
-            continue
-        name = os.path.basename(words[0].replace("\\", "/")).lower()
-        name = name[:-4] if name.endswith(".exe") else name
-        rest = words[1:]
-        positional = [item for item in rest if not item.startswith("-")]
-        shown = " ".join(words)[:SHOWN]
-        if name in _ALL_ARGS_SHELL:
-            out.append((shown, " ".join(rest)))
-        elif name in _DESTINATION_SHELL:
-            targets = [rest[i + 1] for i, item in enumerate(rest[:-1]) if item.lower() in ("-t", "--target-directory", "-destination", "-dest")]
-            out.append((shown, " ".join(targets) if targets else (positional[-1] if positional else "")))
-        elif name == "dd":
-            out.append((shown, " ".join(item[3:] for item in rest if item.startswith("of="))))
-        elif name in ("sed", "perl", "ruby", "gawk", "awk"):
-            if any(re.fullmatch(r"-[A-Za-z]*i[A-Za-z]*", item) or item.startswith("--in-place") or item == "inplace" for item in rest):
+        for _round in range(4):  # `find . -exec cp {} dest \;` runs a command: it is read as one (and no more than four deep)
+            if words and words[0].startswith("(") and len(words[0]) > 1:
+                words[0] = words[0].lstrip("(")  # `(cd x && ...)`: a group
+            while words and (words[0].lower() in _WRAPPERS or words[0] in LEADING_KEYWORDS or words[0] == "(" or re.match(r"^[A-Za-z_]\w*=", words[0]) or re.fullmatch(r"\d+", words[0]) or (words[0].startswith("-") and len(words) > 1)):
+                words = words[1:]
+            if not words:
+                break
+            name = os.path.basename(words[0].replace("\\", "/")).lower()
+            name = name[:-4] if name.endswith(".exe") else name
+            rest = words[1:]
+            if name == "find":
+                at = next((i for i, item in enumerate(rest) if item in ("-exec", "-execdir", "-ok", "-okdir")), None)
+                if at is None:
+                    break
+                words = [item for item in rest[at + 1:] if item.strip("+;/\\" + shellvars.FILL)]  # the end of the command (`\;` is `/` here, the backslash being read as a separator)
+                continue
+            positional = [item for item in rest if not item.startswith("-")]
+            shown = " ".join(words)[:SHOWN]
+            if name in _ALL_ARGS_SHELL:
                 out.append((shown, " ".join(rest)))
-        elif name == "git":
-            word = next((item for item in rest if not item.startswith("-")), "")
-            if word in _GIT_WRITES:
-                out.append((shown, " ".join(rest)))
-        elif name in _VALUE_OPTIONS:
-            wanted = _VALUE_OPTIONS[name]
-            targets = [rest[i + 1] for i, item in enumerate(rest[:-1]) if item.lower() in wanted] + [item.split("=", 1)[1] for item in rest if "=" in item and item.split("=", 1)[0].lower() in wanted]
-            out.append((shown, " ".join(targets)))
-        elif name in ("tar", "unzip", "7z", "7za", "gunzip", "bunzip2", "xz", "unxz"):
-            if name != "tar" or any(re.fullmatch(r"-?[a-zA-Z]*x[a-zA-Z]*", item) or item == "--extract" for item in rest[:2]):
-                out.append((shown, " ".join(rest)))
+            elif name in _DESTINATION_SHELL:
+                targets = [rest[i + 1] for i, item in enumerate(rest[:-1]) if item.lower() in ("-t", "--target-directory", "-destination", "-dest")]
+                out.append((shown, " ".join(targets) if targets else (positional[-1] if positional else "")))
+            elif name == "dd":
+                out.append((shown, " ".join(item[3:] for item in rest if item.startswith("of="))))
+            elif name in ("sed", "perl", "ruby", "gawk", "awk"):
+                if any(re.fullmatch(r"-[A-Za-z]*i[A-Za-z]*", item) or item.startswith("--in-place") or item == "inplace" for item in rest):
+                    out.append((shown, " ".join(rest)))
+            elif name == "git":
+                word = next((item for item in rest if not item.startswith("-")), "")
+                if word in _GIT_WRITES:
+                    out.append((shown, " ".join(rest)))
+            elif name in _VALUE_OPTIONS:
+                wanted = _VALUE_OPTIONS[name]
+                targets = [rest[i + 1] for i, item in enumerate(rest[:-1]) if item.lower() in wanted] + [item.split("=", 1)[1] for item in rest if "=" in item and item.split("=", 1)[0].lower() in wanted]
+                out.append((shown, " ".join(targets)))
+            elif name in ("tar", "unzip", "7z", "7za", "gunzip", "bunzip2", "xz", "unxz"):
+                if name != "tar" or any(re.fullmatch(r"-?[a-zA-Z]*x[a-zA-Z]*", item) or item == "--extract" for item in rest[:2]):
+                    out.append((shown, " ".join(rest)))
+            break
     return [item for item in out if item[1]]
 
 
@@ -424,8 +460,11 @@ def refusal(command: str, root: Any, cwd: str, folder: Any, policy: Dict[str, An
         ctx = external._Ctx(root, cwd, hold=True, folder=folder, line=command)  # noqa: SLF001
         in_guard = False
         plain = shellwords.dialect(command, "power")  # a PowerShell escape in the line (`` .harness/eng`ine ``): the line is read with it taken away too (1.7.38, C13 FR3)
-        for text in [command] + external.nested(command) + ([plain] + external.nested(plain) if plain else []):
-            plain, bodies = external._heredocs(join_lines(text))  # noqa: SLF001
+        texts = [command] + external.nested(command) + ([plain] + external.nested(plain) if plain else [])
+        for text in list(texts):  # the line with the values it sets put in (hook speed round 3): `d=.harness; python3 -c "open('$d/runtime/x','w')"`
+            texts += shellvars.expand(text)[0]
+        for text in texts:
+            plain, bodies = _heredocs_of(text)
             for tokens in split_segments(plain):
                 tokens = external._without_redirects(external._setting_words(tokens))  # noqa: SLF001
                 at = external._head_index(tokens)  # noqa: SLF001
@@ -463,4 +502,107 @@ def refusal(command: str, root: Any, cwd: str, folder: Any, policy: Dict[str, An
                         in_guard = True  # what runs after a `cd` into a guardrail folder writes there by short names
     except Exception:  # noqa: BLE001 - the other checks of the gate stand; this one is best effort
         return None
+    return None
+
+
+# --- a write whose target is built at run time (hook speed round 3, red team) -----------------------------------------------------------------------------------------------------------------------------
+# `d=.harness; printf x > $d/runtime/x.json`, `cp x "$(echo .harness)"/runtime/`, `cd $d && echo x > state.json`: the target is not written out, so no literal rule of the gate sees the folder. Two readings meet it:
+# the variables the line sets are put in (`shellvars.expand`: the line is then read by every rule that reads a line as written, `terminal._texts` and `refusal`), and, here, a write whose target holds a variable, a
+# substitution, `%X%` or `$env:X` is refused when a word of that target names a part of a guardrail folder (`core.guardrails.dynamic_hit`). A variable the line does not set (`> $TMPDIR/a`, `> "$out"`) names nothing and passes.
+# A target that is a plain value of the environment (`> $OUT`) cannot be told from one that holds the runtime folder: it passes, and `docs/12` says so.
+
+_CD = frozenset("cd pushd chdir set-location sl push-location".split())
+_SHELLS = shellwords.SHELL_NAMES | shellwords.POWER_NAMES | frozenset(["cmd"])
+_NOT_SHOWN = str.maketrans({shellvars.FILL: " ", shellvars.TICK: "", shellvars.LITERAL: "$"})
+
+
+def _shown(text: str) -> str:
+    return text.translate(_NOT_SHOWN)[:SHOWN]
+
+
+def _absolute(word: str) -> bool:
+    return word.startswith(("/", "~")) or bool(re.match(r"[A-Za-z]:/", word))
+
+
+def _dynamic_word(word: str) -> bool:
+    return shellvars.dynamic(word) or "(" in word or ")" in word  # PowerShell: `(Join-Path $d 'runtime')`
+
+
+@functools.lru_cache(maxsize=16)
+def _heredocs_of(text: str) -> Tuple[str, Tuple[Tuple[str, bool], ...]]:
+    """The text without the bodies of its here-documents, and the bodies (`external._heredocs`): read once for a line, as `refusal` and `dynamic_refusal` both ask."""
+    plain, bodies = external._heredocs(join_lines(text))  # noqa: SLF001
+    return plain, tuple(bodies)
+
+
+def _enters(line: str, fragments: List[Tuple[str, ...]]) -> bool:
+    """Does this command of the line go into a folder (`cd`, `pushd`, `Set-Location`...) that a variable or a substitution names and that holds a guardrail folder?"""
+    low = line.lower()
+    if not any(name in low for name in ("cd", "pushd", "location", "chdir", "sl")):
+        return False
+    words = line.split()
+    while words and (words[0] in LEADING_KEYWORDS or words[0] in ("(", "{")):
+        words = words[1:]
+    if not words or words[0].lstrip("(").lower() not in _CD:
+        return False
+    argument = next((item for item in words[1:] if not item.startswith("-") and item.lower() != "/d"), "")
+    return bool(argument) and _dynamic_word(argument) and bool(guardrails.dynamic_hit(argument, fragments))
+
+
+def _dynamic_in(text: str, fragments: List[Tuple[str, ...]]) -> Optional[Tuple[str, str]]:
+    """`(the fragment, the write)` for the first write in a text whose target is built at run time and names a guardrail fragment; `("", "")` when the text could not be read; None when there is none."""
+    plain, bodies = _heredocs_of(text)
+    sources = [plain]
+    if any(word in _SHELLS for word in re.findall(r"[A-Za-z]+", plain.lower())):  # a here-document that a shell is given is code
+        sources += [body for body, _expands in bodies]
+    for source in sources:
+        _plain, mask, ok = shellvars.scan(source.replace(">|", "> "))
+        if not ok:
+            return "", ""
+        lines = _LINES.split(mask)
+        entered = {index for index, line in enumerate(lines) if _enters(line, fragments)}  # `cd $d` where the folder is named by a variable that holds a guardrail folder
+        first = min(entered) if entered else -1
+        if not entered:
+            lines = [mask]  # the common case: one pass over the whole text, where the writes are
+        for number, line in enumerate(lines):
+            if entered and number in entered:
+                continue
+            guarded = bool(entered) and number > first  # what the line writes after that `cd` is written there
+            if not guarded and "$" not in line and "%" not in line and "(" not in line and ")" not in line:
+                continue  # nothing in it is built at run time
+            for shown, target in writes_of(line, {}, True):
+                targets = target.split()
+                for word in targets:
+                    if _dynamic_word(word):
+                        hit = guardrails.dynamic_hit(word, fragments)
+                        if hit:
+                            return hit, _shown(shown)
+                if guarded and targets and not all(_absolute(item) and not guardrails.dynamic_hit(item, fragments) for item in targets):
+                    return "cd", _shown(shown)
+    return None
+
+
+def dynamic_refusal(command: str, policy: Dict[str, Any], admin: bool = False) -> Optional[str]:
+    """The words of the refusal when the line writes to a path that is built at run time and names a guardrail folder; None otherwise. In an admin session only what stays closed there counts. A line that cannot be read
+    (nested too deep, or put together to a size over the limit) is refused, and so is one this check breaks on: the gate does not pass what it cannot judge (a line with no variable in it is not read at all)."""
+    if "$" not in command and "%" not in command and "`" not in command:
+        return None
+    try:
+        fragments = guardrails.dynamic_fragments(policy or {}, admin)
+        texts = [command] + external.nested(command)
+        plain = shellwords.dialect(command, "power")  # a PowerShell escape in the line (`` .harness/eng`ine ``): the line is read with it taken away too
+        if plain:
+            texts += [plain] + external.nested(plain)
+        for text in dict.fromkeys(texts):
+            variants, ok = shellvars.expand(text)
+            if not ok:
+                return messages.text("gate.guard.dynamic.unread")
+            for reading in variants or [text]:  # with the values the line sets put in: a variable the line sets to a harmless value (`d=src; > $d/runtime/x`) is no longer built at run time
+                hit = _dynamic_in(reading, fragments)
+                if hit is not None:
+                    if not hit[0]:
+                        return messages.text("gate.guard.dynamic.unread")
+                    return messages.text("gate.guard.dynamic.cd" if hit[0] == "cd" else "gate.guard.dynamic", fragment=hit[0], write=hit[1])
+    except Exception:  # noqa: BLE001 - a line this check breaks on is not passed
+        return messages.text("gate.guard.dynamic.unread")
     return None

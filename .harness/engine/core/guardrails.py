@@ -71,6 +71,63 @@ def home_folders() -> List[str]:
     return [item.replace("\\", "/").rstrip("/") for item in found if item]
 
 
+# --- a path built at run time (hook speed round 3, red team: `d=.harness; printf x > $d/runtime/x.json`) -------------------------------------------------------------------------------------------------
+# A terminal command whose write target is not written out (`$d/...`, `${d}`, `$(...)`, a backtick pair, `%X%`, `$env:X`) is refused when a word of the target names a part of a guardrail folder. The parts are the names the
+# runtime folder holds and the folders of the guardrails; a name that is common elsewhere (`bin`, `hooks`, `engine`, `LICENSE`) counts only with the folder before it (`.github/hooks`), as a whole.
+SERVICE_PARTS = ("hookserve", "approvals", "state")  # what `.harness/runtime/` holds: the key of the hook service, the approvals, the session state
+FRAGMENT_VARIABLE = "harness_integrity_dir"  # the variable that names the folder of the lists the guardrails trust
+_SHORT_NAME = re.compile(r"harnes~\d+|hookse~\d+(?:\.\w*)?")  # the 8.3 names of Windows for `.harness` and `hookserve.json`
+_PART_SPLIT = re.compile(r"[/\\\x01\x02\x03(),=]")  # `/`, `\`, the marks `shellvars` leaves where a substitution begins and ends, and what PowerShell puts round a path (`(Join-Path $d runtime)`)
+_STREAM_NAME = re.compile(r"::\$\w*$")
+
+
+def dynamic_fragments(policy: Dict[str, Any], admin: bool = False) -> List[Tuple[str, ...]]:
+    """The parts of the guardrail folders as tuples of names (lower case) for `dynamic_hit`: one name alone (`runtime`, `hookserve`, `.harness`), or the names of a folder in a row (`.github`, `hooks`). In an admin session
+    only what stays closed there; the folders outside the workspace (`.copilot-harness`), the key of the hook service and the programs of the root are closed in every session."""
+    found: List[Tuple[str, ...]] = [(HOME_FOLDER,), (FRAGMENT_VARIABLE,)] + [(item,) for item in SERVICE_PARTS] + [(item,) for item in PROGRAM_GUARDRAILS]
+    own = [str(item) for item in policy.get("admin_locked_paths", [])]
+    for path in admin_locked(policy) if admin else guardrail_paths(policy):
+        parts = tuple(item.lower() for item in str(path).replace("\\", "/").split("/") if item and "*" not in item and "?" not in item)
+        if not parts or parts[0] in ROOT_LEVEL_GUARDRAILS:
+            continue
+        if parts[0] == ".harness":
+            if not admin:
+                found.append((".harness",))
+            if len(parts) > 1 and parts[1] == "runtime":
+                found.append(("runtime",))
+        elif len(parts) > 1 or str(path) in own:
+            found.append(parts)
+    return list(dict.fromkeys(found))
+
+
+def _part(text: str) -> str:
+    """One name of a path as the file system reads it: lower case, no quote mark, no `::$DATA`, no trailing dots or spaces (`..` is no name)."""
+    return _STREAM_NAME.sub("", text.replace('"', "").replace("'", "").lower()).rstrip(" .")
+
+
+def dynamic_hit(word: str, fragments: Sequence[Tuple[str, ...]]) -> str:
+    """The fragment (`runtime`, `.github/hooks`...) that a word of a write target names in one of its parts, or "". The word is cut at `/`, `\\` and the marks a substitution leaves in it (`shellvars`): `$(echo .harness)/runtime/x`
+    has the parts `$`, `echo`, `.harness`, `runtime`, `x`. Never raises."""
+    try:
+        parts = [item for item in (_part(piece) for piece in _PART_SPLIT.split(word)) if item]
+        seen = set(parts)
+        for fragment in fragments:
+            name = fragment[0]
+            if name == FRAGMENT_VARIABLE:
+                if name in word.lower():
+                    return name
+            elif len(fragment) == 1:
+                if name in seen or (name == "hookserve" and any(item.startswith("hookserve") or _SHORT_NAME.fullmatch(item) for item in parts)) or (name == ".harness" and any(item.startswith("harnes~") and _SHORT_NAME.fullmatch(item) for item in parts)):
+                    return name
+            elif name in seen:
+                for index, item in enumerate(parts):
+                    if item == name and tuple(parts[index:index + len(fragment)]) == fragment:
+                        return "/".join(fragment)
+    except Exception:  # noqa: BLE001 - a word that cannot be read names nothing
+        return ""
+    return ""
+
+
 # --- how a terminal command says those names (patterns over the text of a command, `\\` already `/`) --------------------------------------------------------------------------------------------------------
 # No pattern here nests a quantifier over a quantifier, and the alternatives of the repeated prefix start with different characters (`.`, a letter, `$`, `%`, `/`): a command cannot make them backtrack (red team N1).
 

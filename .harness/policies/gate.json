@@ -45,7 +45,7 @@
           "en": "it writes, deletes or moves one",
           "zh": "写入、删除或移动"
         },
-        "pattern": "(?:>>?\\s*|\\btee\\b[^;&|\\n]*\\s)[\"']?(?:[^\\s\"';&|<>]*/)?{guard}"
+        "pattern": "(?:>[>|]?\\s*|\\btee\\b(?:(?!\\btee\\b)[^;&|\\n])*\\s)[\"']?(?:[^\\s\"';&|<>]*/)?{guard}"
       },
       {
         "why": {
@@ -59,7 +59,7 @@
           "en": "it deletes or rewrites one with find",
           "zh": "用 find 删除或改写"
         },
-        "pattern": "\\bfind\\b[^;&|\\n]*{guard}[^;&|\\n]*(?:-delete\\b|-exec\\s+(?:rm|mv|chmod|sed)\\b)"
+        "pattern": "\\bfind\\b(?:(?!\\bfind\\b)[^;&|\\n])*{guard}(?:(?!\\bfind\\b)[^;&|\\n])*(?:-delete\\b|-exec\\s+(?:rm|mv|chmod|sed)\\b)"
       },
       {
         "why": {
@@ -67,6 +67,13 @@
           "zh": "复制到它里面"
         },
         "pattern": "{cmd}(?:cp|rsync|install|copy|xcopy|copy-item)\\b[^;&|\\n]*{guard}[^\\s\"';&|]*[\"']?\\s*(?:[;&|]|$)"
+      },
+      {
+        "why": {
+          "en": "it writes one with dd",
+          "zh": "用 dd 写入"
+        },
+        "pattern": "{cmd}dd\\b[^;&|\\n]*\\bof=[\"']?(?:[^\\s\"';&|<>]*/)?{guard}"
       },
       {
         "why": {

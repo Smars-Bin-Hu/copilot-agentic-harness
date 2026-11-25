@@ -10,6 +10,7 @@
     "files": [
       ".harness/engine/hook.py",
       ".harness/engine/launch.py",
+      ".harness/engine/hookclient.py",
    ".harness/engine/integrity.py",
       ".harness/engine/cli.py",
       ".harness/engine/doctor.py",
@@ -241,6 +242,7 @@
         ".harness/tests/test_chatrounds.py",
         ".harness/tests/test_chatstream.py",
         ".harness/tests/test_callmatch.py",
+        ".harness/tests/test_hookserve.py",
         ".harness/tests/test_taskfiles.py",
         ".harness/tests/test_deskscripts.py",
         ".harness/tests/test_taskinbox.py",

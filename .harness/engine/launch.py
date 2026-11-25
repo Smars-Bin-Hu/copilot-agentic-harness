@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The one file `.github/hooks/harness.json` starts (1.7.38, C13 FR2 4). Standard library only, small on purpose: nobody should have a reason to change it.
-
-It loads `hook.py` and runs it. When `hook.py` cannot be loaded (a syntax error, a conflict marker, a missing file), it answers in its place the way `hook.py` answers when the engine cannot decide: a command, a file
-change and any tool it does not know are refused, with the file and the fault; reads, asking the user and subagents stay; a prompt or a session start gets the words as context. Nothing is read from the engine here."""
+It asks the judging service in the board first (`hookclient.py`: its answer counts only when it is signed); with no answer, for any reason, it loads `hook.py` and runs it here, telling it why in `HARNESS_HOOK_ORIGIN`.
+When `hook.py` cannot be loaded (a syntax error, a conflict marker, a missing file), it answers in its place the way `hook.py` answers when the engine cannot decide: a command, a file change and any tool it does not know
+are refused, with the file and the fault; reads, asking the user and subagents stay; a prompt or a session start gets the words as context. Nothing is read from the engine here."""
 import importlib.util
 import io
 import json
@@ -47,8 +47,23 @@ def answer(raw, why):
     return {}
 
 
+def service(raw):  # (the output, "") of the board's judging service, or (None, why); a hookclient.py that cannot be loaded is a service that does not answer
+    try:
+        spec = importlib.util.spec_from_file_location("harness_hookclient", os.path.join(HERE, "hookclient.py"))
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+        return client.ask(raw.decode("utf-8-sig", errors="replace"), os.path.abspath(os.environ.get("HARNESS_ROOT") or os.path.dirname(os.path.dirname(HERE))))
+    except BaseException as error:  # noqa: BLE001
+        return None, "client:" + type(error).__name__
+
+
 def main():
     raw = sys.stdin.buffer.read()
+    output, why = service(raw)
+    if isinstance(output, dict):
+        sys.stdout.write(json.dumps(output) + "\n")
+        return 0
+    os.environ["HARNESS_HOOK_ORIGIN"] = "local:" + str(why or "none")
     try:
         spec = importlib.util.spec_from_file_location("harness_hook", os.path.join(HERE, "hook.py"))
         hook = importlib.util.module_from_spec(spec)

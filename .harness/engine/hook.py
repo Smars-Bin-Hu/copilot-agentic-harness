@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The only hook entry point. One process per hook event.
+"""The only judgment of a hook call. One process per hook event (`main`), or the board's judging service for a hook process that asked it (`answer`, called by `modules/task/hookserve.py`).
 
   stdin  -> adapter (raw payload -> HookEvent)
          -> session state (locked) -> core subagent tracking
@@ -180,8 +180,19 @@ TEXTS = {
 }
 
 
+def _env(name: str) -> str:
+    """One variable of the environment this call runs for. In the board's judging service (`modules/task/hookserve.py`) that is the environment of the hook process that asked, set with `core.procenv`; in a hook process of its own it is
+    `os.environ`. `core.procenv` is asked first and only when it can be imported: this file must answer even when the engine cannot be loaded."""
+    try:
+        from core import procenv
+
+        return str(procenv.environ().get(name, ""))
+    except BaseException:  # noqa: BLE001 - no procenv (or a broken engine): the plain environment
+        return os.environ.get(name, "")
+
+
 def _root() -> Path:
-    override = os.environ.get("HARNESS_ROOT")
+    override = _env("HARNESS_ROOT")
     return Path(override).resolve() if override else HERE.parents[1]
 
 
@@ -207,7 +218,7 @@ def where(error: BaseException) -> str:
 
 def _language(root: Path) -> str:
     """`en` or `zh`: the environment, else `user.json` and its override, as plain files. Any doubt says `en`."""
-    word = os.environ.get("HARNESS_LANGUAGE", "")
+    word = _env("HARNESS_LANGUAGE")
     if word not in ("en", "zh"):
         word = ""
         for name in ("user.json", "user.override.json"):
@@ -339,14 +350,16 @@ def refusal_record(raw: str, output: Dict[str, Any], kind: str) -> Dict[str, Any
         return {}
 
 
-def main() -> int:
+def answer(raw: str, root: Path, origin: str = "local", pid: Optional[int] = None) -> Dict[str, Any]:
+    """The whole judgment of one hook call: payload text in, the output of the runtime out (the log of the call is written here too). The one place that judges: the hook process runs it (`main`), and so does the
+    board's judging service for a hook process that asked it (`hookserve.py`, `origin="service"`), so no line of judgment exists twice. Never raises: what cannot be decided is refused as before (`fail_closed`).
+
+    `origin` goes into the record of the call: `via` is `service` or `local`; `why` is what is after the colon of `local:<why>` (the reason the hook process judged itself: no board, a late answer, ...), empty for a plain
+    `local`. `pid` is the hook process that asked, when the service judges for it (the record names that process, not the board)."""
     started = time.monotonic()
-    root = _root()
     output: Dict[str, Any] = {}
     record: Dict[str, Any] = {}
-    raw = ""
     try:
-        raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
         changed, why = integrity_problem(root, raw)
         key = "hook.integrity.upgrade" if why == "upgrade" else "hook.integrity"
         if ENGINE_FAULT is not None:
@@ -370,9 +383,21 @@ def main() -> int:
         record = (refusal_record(raw, output, "engine") if ENGINE_FAULT is None and (output.get("permissionDecision") or output.get("additionalContext")) else {})
         record = dict(record, error=where(error))
     record["ms"] = round((time.monotonic() - started) * 1000, 1)
-    record["pid"] = os.getpid()
+    record["pid"] = pid if isinstance(pid, int) and not isinstance(pid, bool) else os.getpid()
+    record["via"] = "service" if origin == "service" else "local"
+    record["why"] = origin.partition(":")[2] if origin.startswith("local:") else ""
     if ENGINE_FAULT is None:
         observe(root, record, raw, output)
+    return output
+
+
+def main() -> int:
+    """Read stdin, judge (`answer`), write stdout. `launch.py` sets `HARNESS_HOOK_ORIGIN=local:<why>` when it asked the board's judging service first and had to judge here (`hookclient.py`)."""
+    try:
+        raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
+    except BaseException:  # noqa: BLE001 - what cannot be read is judged as nothing: the call is refused like any call that cannot be decided
+        raw = ""
+    output = answer(raw, _root(), os.environ.get("HARNESS_HOOK_ORIGIN") or "local")
     sys.stdout.write(json.dumps(output))
     sys.stdout.write("\n")
     return 0

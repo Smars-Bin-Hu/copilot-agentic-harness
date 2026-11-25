@@ -60,7 +60,7 @@ _JSON = r'''
      "en": "it writes, deletes or moves one",
      "zh": "\u5199\u5165\u3001\u5220\u9664\u6216\u79fb\u52a8"
     },
-    "pattern": "(?:>>?\\s*|\\btee\\b[^;&|\\n]*\\s)[\"']?(?:[^\\s\"';&|<>]*/)?{guard}"
+    "pattern": "(?:>[>|]?\\s*|\\btee\\b(?:(?!\\btee\\b)[^;&|\\n])*\\s)[\"']?(?:[^\\s\"';&|<>]*/)?{guard}"
    },
    {
     "why": {
@@ -74,7 +74,7 @@ _JSON = r'''
      "en": "it deletes or rewrites one with find",
      "zh": "\u7528 find \u5220\u9664\u6216\u6539\u5199"
     },
-    "pattern": "\\bfind\\b[^;&|\\n]*{guard}[^;&|\\n]*(?:-delete\\b|-exec\\s+(?:rm|mv|chmod|sed)\\b)"
+    "pattern": "\\bfind\\b(?:(?!\\bfind\\b)[^;&|\\n])*{guard}(?:(?!\\bfind\\b)[^;&|\\n])*(?:-delete\\b|-exec\\s+(?:rm|mv|chmod|sed)\\b)"
    },
    {
     "why": {
@@ -82,6 +82,13 @@ _JSON = r'''
      "zh": "\u590d\u5236\u5230\u5b83\u91cc\u9762"
     },
     "pattern": "{cmd}(?:cp|rsync|install|copy|xcopy|copy-item)\\b[^;&|\\n]*{guard}[^\\s\"';&|]*[\"']?\\s*(?:[;&|]|$)"
+   },
+   {
+    "why": {
+     "en": "it writes one with dd",
+     "zh": "\u7528 dd \u5199\u5165"
+    },
+    "pattern": "{cmd}dd\\b[^;&|\\n]*\\bof=[\"']?(?:[^\\s\"';&|<>]*/)?{guard}"
    },
    {
     "why": {

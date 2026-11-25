@@ -59,6 +59,7 @@ EXCLUDED: Dict[str, str] = {
     "test_c13_f2": "over 25 minutes of calls (the SQL pack's cases)",
     "test_c13_fr": "17 minutes (300 calls); most of its calls go by `run_script`",
     "test_toolpacks": "16 minutes (445 calls); the calls are mostly the tool packs' own programs",
+    "test_gate_dynamic": "time limits per input (2 s, 10 s) that two judgements of each call would break; its calls are `hook.process`/`hook.answer` in this process, not routed",
     "test_keyguard_fuzz": "time limits per input (2 s, 10 s) that two judgements of each call would break; its calls are `hook.process`/`hook.answer` in this process, not routed",
     "test_tasklife": "14 minutes (224 calls of the task hooks; run it with HOOKEQUIV_FILES when the task hooks change)",
     "test_taskreview": "13 minutes (269 calls of the task hooks and the review checks)",

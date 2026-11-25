@@ -7,10 +7,11 @@ any path in ways a regular expression does not see.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Callable, List, Optional, Pattern, Tuple
 
-from . import shellwords
+from . import external, shellvars, shellwords
 from .policy import Compiled
 
 # (permission, why)
@@ -113,10 +114,25 @@ def after_cd(text: str) -> Optional[str]:
 
 def _texts(command: str) -> List[str]:
     """The texts the write rules are matched against: the line, and the line with the paths after a `cd` written out. A line with a PowerShell escape in it (`` r`m ``, `` .harness/eng`ine ``) is also read with the escape
-    taken away: that is what PowerShell runs (1.7.38, C13 FR3)."""
+    taken away: that is what PowerShell runs (1.7.38, C13 FR3). A line that sets variables (`d=.harness; ... > $d/runtime/x`) is also read with their values put in (hook speed round 3, red team: `shellvars.expand`)."""
+    return list(_texts_of(command))
+
+
+@functools.lru_cache(maxsize=16)
+def _texts_of(command: str) -> Tuple[str, ...]:
     out: List[str] = []
     plain = shellwords.dialect(command, "power")
-    for source in [command] + ([plain] if plain else []):
+    sources = [command] + ([plain] if plain else [])
+    try:
+        sources += external.nested(command)  # a command a shell is given (`bash -c '...'`) is read as a line of its own: its variables are its own
+    except Exception:  # noqa: BLE001 - the line as written is still checked
+        pass
+    for source in list(sources):
+        try:
+            sources += shellvars.expand(source)[0]
+        except Exception:  # noqa: BLE001 - the line as written is still checked, and `scriptcheck.dynamic_refusal` refuses what cannot be read
+            pass
+    for source in sources:
         text = normalize(source)
         try:
             moved = after_cd(text)
@@ -127,7 +143,7 @@ def _texts(command: str) -> List[str]:
         joined = text.replace("'", "").replace('"', "").replace("^", "")  # `^` is the escape of `cmd`
         if joined != text and joined not in out:
             out.append(joined)
-    return out
+    return tuple(dict.fromkeys(out))
 
 
 def _first(command: str, rules: List[Tuple[Pattern[str], str]]) -> Optional[str]:

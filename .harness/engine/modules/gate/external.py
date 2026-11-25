@@ -25,6 +25,8 @@ for (a judged call, or an argument of a program in READ_ONLY_PROGRAMS), or the l
 
 from __future__ import annotations
 
+import bisect
+import functools
 import os
 import re
 from dataclasses import dataclass
@@ -403,6 +405,7 @@ def _heredocs(text: str) -> Tuple[str, List[Tuple[str, bool]]]:
     out: List[str] = []
     bodies: List[Tuple[str, bool]] = []
     index = 0
+    rows: Optional[Tuple[Dict[str, List[int]], Dict[str, List[int]]]] = None
     quote = ""  # 1.7.38 (C13 FR3): a quote that was opened on an earlier line is still open on this one (`-Q 'SELECT 1` + new line + `x <<EOF`): the `<<` inside it is text, and the lines after it are not a here-document that hides them
     while index < len(lines):
         line = lines[index]
@@ -427,20 +430,20 @@ def _heredocs(text: str) -> Tuple[str, List[Tuple[str, bool]]]:
                     continue
             at += 1
         for tag, quoted, dash in tags:
-            body: List[str] = []
-            seen = False
             start = index
-            while index < len(lines):
-                row = lines[index]
-                index += 1
-                if (row.lstrip("\t") if dash else row) == tag:
-                    seen = True
-                    break
-                body.append(row)
-            if not seen:
+            if rows is None:  # where each line stands, found once: a tag whose end line is not there is known at once (hook speed round 3: 5 000 `<<EOF` lines that never end read the rest of the text each, 1.5 s)
+                rows = ({}, {})
+                for number, row in enumerate(lines):
+                    rows[0].setdefault(row, []).append(number)
+                    rows[1].setdefault(row.lstrip("\t"), []).append(number)
+            places = rows[1 if dash else 0].get(tag, [])
+            at_end = bisect.bisect_left(places, index)
+            if at_end >= len(places):
                 index = start  # no end line: the shell would give the rest of the text to it, but the gate reads it as commands, never hides it
                 break
-            bodies.append(("\n".join(body), not quoted))
+            end = places[at_end]
+            bodies.append(("\n".join(lines[index:end]), not quoted))
+            index = end + 1
     return "\n".join(out), bodies
 
 
@@ -1339,7 +1342,7 @@ def _too_deep(tokens: List[str], names: List[str]) -> Optional[Action]:
     return _hidden("deep", " ".join(tokens), program=hit) if hit else None
 
 
-def nested(command: str, depth: int = 0) -> List[str]:
+def _nested(command: str, depth: int) -> List[str]:
     """The command strings a shell is given inside a line (1.7.38, C13 F2): `bash -c '...'`, `pwsh -Command '...'`, `eval '...'`, `harness as x -- ...`, `harness wait --run '...'`, and the ones inside those. The gate
     judges each of them as it judges a bare line (the rules of the terminal too), so a call wrapped in `pwsh -Command` is no freer than the same call written alone. A shell given several words gives each reading of them (`shellwords.readings`)."""
     found: List[str] = []
@@ -1349,8 +1352,18 @@ def nested(command: str, depth: int = 0) -> List[str]:
     for tokens in split_segments(text):
         for inner in _wrapped(tokens):
             found.append(inner)
-            found.extend(nested(inner, depth + 1))
+            found.extend(_nested(inner, depth + 1))
     return list(dict.fromkeys(found))
+
+
+@functools.lru_cache(maxsize=16)
+def _nested_of(command: str) -> Tuple[str, ...]:
+    return tuple(_nested(command, 0))
+
+
+def nested(command: str, depth: int = 0) -> List[str]:
+    """`_nested`, with the answer for a line kept: one hook call asks for the same line three times (the rules of the terminal, the scripts, the paths built at run time), and the reading of a long line takes seconds (hook speed round 3)."""
+    return list(_nested_of(command)) if depth == 0 else _nested(command, depth)
 
 
 # Commands whose output is text the gate can read in the line (what they print is what stands in the line, or a file it reads): a shell that runs what they print is not a hidden call.

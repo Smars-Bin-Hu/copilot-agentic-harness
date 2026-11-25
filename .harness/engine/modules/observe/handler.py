@@ -61,6 +61,12 @@ def clip_record(record: Dict[str, Any], limit: int) -> Dict[str, Any]:
     return clipped
 
 
+def process_of(record: Dict[str, Any]) -> int:
+    """The hook process of the call: the record names it (when the board's judging service judges for a hook process, it is not this one), else this process."""
+    pid = record.get("pid")
+    return pid if isinstance(pid, int) and not isinstance(pid, bool) else os.getpid()
+
+
 def capture(root: Path, record: Dict[str, Any], raw: str, output: Dict[str, Any]) -> None:
     """The raw input and output of one call, for finding out what a runtime really sends. Off by default: the input holds code."""
     now = datetime.now(timezone.utc)
@@ -74,7 +80,7 @@ def capture(root: Path, record: Dict[str, Any], raw: str, output: Dict[str, Any]
         "captured_at": now.isoformat(),
         "argv_event": record.get("event", ""),
         "surface": record.get("surface", ""),
-        "pid": os.getpid(),
+        "pid": process_of(record),
         "cwd": procenv.cwd(),
         "python": sys.version.split()[0],
         "env_names": sorted(procenv.environ().keys()),  # names only, never values
@@ -82,7 +88,7 @@ def capture(root: Path, record: Dict[str, Any], raw: str, output: Dict[str, Any]
         "stdin_json": payload if isinstance(payload, dict) else None,
         "hook_output": output,
     }
-    name = f"{now.strftime('%Y%m%dT%H%M%S.%f')}-{record.get('event', 'unknown')}-{os.getpid()}.json"
+    name = f"{now.strftime('%Y%m%dT%H%M%S.%f')}-{record.get('event', 'unknown')}-{process_of(record)}.json"
     (directory / name).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

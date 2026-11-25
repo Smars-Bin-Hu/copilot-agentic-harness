@@ -786,7 +786,7 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(loose, [])
 
     def test_engine_code_uses_only_the_standard_library(self) -> None:
-        local = {"core", "adapters", "modules", "doctor", "hook", "cli", "integrity"}
+        local = {"core", "adapters", "modules", "doctor", "hook", "hookclient", "cli", "integrity"}
         stdlib = {
             "__future__", "argparse", "ast", "bisect", "codecs", "signal", "winreg", "statistics", "base64", "csv", "zipfile", "collections", "contextlib", "copy", "ctypes", "dataclasses", "datetime", "difflib", "hashlib", "hmac", "html", "http", "importlib", "io", "secrets", "threading", "xml",
             "concurrent", "contextvars", "json", "locale", "math", "msvcrt", "fcntl", "ntpath", "os", "pathlib", "pickle", "posixpath", "pwd", "queue", "random", "re", "select", "shlex", "shutil", "socket", "socketserver", "ssl", "stat", "string", "struct", "subprocess", "sys", "tempfile", "time",

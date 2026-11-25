@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from unittest import mock
 
-from support import HOOK, REPO, HarnessTestCase, make_root, pre_tool
+from support import HOOK, REPO, HarnessTestCase, make_root, payload, post_tool, pre_tool
 
 import hook
 import hookclient
@@ -745,9 +745,26 @@ class IdentityTests(Rig):
         self.plant(real["port"], real["key"], pid=os.getpid(), born=real["born"])
         self.assertEqual(self.call(ALLOWED)[1], "")  # and the right pair is served
 
-    def test_a_system_that_does_not_say_is_a_board_that_is_not_believed(self) -> None:
-        with mock.patch.object(hookclient, "born", return_value=None):
-            self.failed_the_same_way("dead")
+    def test_a_system_that_does_not_say_is_a_board_that_is_not_believed_and_is_not_said_to_be_dead(self) -> None:
+        with mock.patch.object(hookclient, "lookup", return_value=(None, "born")):
+            self.failed_the_same_way("born")  # equivalence N1/red team N7: access denied is not "no such process"
+        with mock.patch.object(hookclient, "lookup", return_value=(None, "dead")):
+            self.failed_the_same_way("dead", refused("really-dead"))
+
+    def test_a_process_that_is_not_there_is_dead_and_one_that_cannot_be_asked_is_born(self) -> None:
+        done = subprocess.Popen([sys.executable, "-c", "pass"])
+        done.wait()
+        self.assertEqual(hookclient.lookup(done.pid), (None, "dead"))
+        self.assertEqual(hookclient.lookup(0), (None, "dead"))
+        self.assertEqual(hookclient.lookup(-5), (None, "dead"))
+        found, problem = hookclient.lookup(os.getpid())
+        self.assertTrue(found)
+        self.assertEqual(problem, "")
+        self.assertEqual(hookclient.lookup("not a pid"), (None, "born"))  # a call that cannot be made at all is not an answer
+        platform = "_born_windows" if os.name == "nt" else "_born_mac" if sys.platform == "darwin" else "_born_linux"
+        with mock.patch.object(hookclient, platform, side_effect=PermissionError("denied")):
+            self.assertEqual(hookclient.lookup(os.getpid()), (None, "born"))
+            self.assertIsNone(hookclient.born(os.getpid()))
 
     def test_a_file_of_an_older_board_or_without_the_time_is_not_a_file(self) -> None:
         real = self.info()
@@ -784,6 +801,7 @@ class IdentityTests(Rig):
         for name in ("OpenProcess", "GetExitCodeProcess", "GetProcessTimes", "CloseHandle"):
             self.assertIn(f"kernel.{name}.argtypes", text)
             self.assertIn(f"kernel.{name}.restype", text)
+        self.assertIn("get_last_error() == 87", text)  # ERROR_INVALID_PARAMETER is "no such process"; any other reason that OpenProcess fails (access denied, 5) is `born`
 
     def test_the_client_does_not_load_tempfile(self) -> None:
         tree = ast_of(REPO / ".harness" / "engine" / "hookclient.py")
@@ -848,12 +866,109 @@ class TraceTests(Rig):
         expected = self.plain(REFUSED)
         self.assertEqual(self.call(REFUSED), (expected, ""))
 
-    def test_a_payload_that_is_not_an_object_or_has_no_session_is_still_traced(self) -> None:
+    def test_only_a_call_whose_record_is_certain_is_traced(self) -> None:
+        """A line for a call that leaves no row in the session log would be a false alarm in doctor (red team N2): the payload that is no object, one without a session, another event than the three, or an event name that is not spelled as the adapter reads it."""
         (self.root / ".harness" / "runtime" / "logs").mkdir(parents=True, exist_ok=True)
-        for number, raw in enumerate(("not json", "[1]", json.dumps({"hook_event_name": 5, "session_id": 7}), json.dumps({"sessionId": "camel", "hook_event_name": "SessionStart"}))):
+        raws = ("not json", "[1]", json.dumps({"hook_event_name": 5, "session_id": 7}), json.dumps({"session_id": "", "hook_event_name": "PreToolUse"}), json.dumps({"hook_event_name": "PostToolUse", "session_id": "p"}),
+                json.dumps({"sessionId": "tr", "transformedPrompt": "x"}), json.dumps({"hookEventName": "PreToolUse", "session_id": "camelname"}), json.dumps({"sessionId": "camel", "hook_event_name": "SessionStart"}),
+                json.dumps({"session_id": "snake", "hook_event_name": "UserPromptSubmit"}), json.dumps({"session_id": "pre", "hook_event_name": "PreToolUse"}))
+        for number, raw in enumerate(raws):
             hookclient.trace(self.root, f"{number}" * 32, raw)
-        got = self.trace()
-        self.assertEqual([(row["session_id"], row["event"]) for row in got], [("", ""), ("", ""), ("", ""), ("camel", "SessionStart")])
+        self.assertEqual([(row["session_id"], row["event"]) for row in self.trace()], [("camel", "SessionStart"), ("snake", "UserPromptSubmit"), ("pre", "PreToolUse")])
+        self.assertEqual(hook.RECORDED, hookclient.TRACED)
+
+    def test_a_trace_is_only_written_for_the_events_of_the_list(self) -> None:
+        self.assertEqual(hookclient.TRACED, ("PreToolUse", "UserPromptSubmit", "SessionStart"))
+        for data in (post_tool(SESSION, "Read", {"path": "a.txt"}), payload("Stop", SESSION, stop_reason="end_turn")):
+            self.assertEqual(self.call(data)[1], "")
+        self.assertEqual(self.trace(), [])
+        self.drain()
+        self.assertTrue(all(row.get("nonce") for row in self.rows()))  # judged by the service: each has its record, with the nonce, all the same
+
+    def test_a_session_of_every_kind_of_call_leaves_a_record_with_the_nonce_for_each_traced_call_and_doctor_finds_no_fault(self) -> None:
+        import datetime
+
+        import doctor
+        from support import load_payload
+
+        def of(name: str, **over: Any) -> Dict[str, Any]:
+            data = load_payload(name)
+            for key in ("session_id", "sessionId"):
+                if key in data:
+                    data[key] = SESSION
+            data.update(over)
+            return data
+
+        session = [of("SessionStart.json"), of("UserPromptSubmit.json"), of("userPromptTransformed.json"), of("PreToolUse.Read.json"), of("PostToolUse.Read.json"), of("PreToolUse.Bash.json"), of("PostToolUse.Bash.json"),
+                   of("PostToolUseFailure.Read.json"), of("SubagentStart.json"), of("SubagentStop.json"), of("Stop.json")]
+        for data in session:
+            self.assertEqual(self.call(data)[1], "", data.get("hook_event_name"))
+        self.drain()
+        trace, rows = self.trace(), self.rows()
+        self.assertEqual(len(rows), len(session))
+        self.assertTrue(all(row.get("nonce") for row in rows))
+        self.assertEqual([row["event"] for row in trace], ["SessionStart", "UserPromptSubmit", "PreToolUse", "PreToolUse"])
+        self.assertTrue({row["nonce"] for row in trace} <= {row["nonce"] for row in rows})
+        report = doctor.Report()
+        later = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=10)
+        doctor.check_hook_client_trace(report, self.root, later)
+        self.assertEqual(report.errors, 0, report.lines)
+        self.assertIn("[OK]", "\n".join(report.lines))
+
+    def test_a_call_that_fails_to_be_judged_or_recorded_still_leaves_its_record_with_the_nonce(self) -> None:
+        """A read that fails has nothing to tell the agent: its record used to be empty, and an empty record is no row (equivalence N3)."""
+        for number, data in enumerate((pre_tool(SESSION, "Read", {"path": "a.txt"}), payload("UserPromptSubmit", SESSION, prompt="hello"), payload("SessionStart", SESSION))):
+            before = self.count()
+            with mock.patch.object(hook, "process", side_effect=RuntimeError("boom")):
+                output, why = self.call(data)
+            self.assertEqual(why, "", number)
+            self.drain()
+            rows = self.rows()
+            self.assertEqual(len(rows) - before, 1, number)
+            self.assertEqual((rows[-1]["session_id"], rows[-1]["event"], rows[-1]["via"]), (SESSION, data["hook_event_name"], "service"))
+            self.assertRegex(rows[-1]["nonce"], r"^[0-9a-f]{32}$")
+            self.assertEqual(self.trace()[-1]["nonce"], rows[-1]["nonce"])
+        with mock.patch.object(hook.callrecord, "build", side_effect=RuntimeError("no record")):  # the record of a call that was judged cannot be made
+            before = self.count()
+            self.call(pre_tool(SESSION, "Read", {"path": "b.txt"}))
+            self.drain()
+            self.assertEqual(self.count() - before, 1)
+        self.assertEqual(hook.leftover(json.dumps({"hook_event_name": "Stop", "session_id": "s"})), {})  # a call that is not traced leaves none that it did not leave before
+        self.assertEqual(hook.leftover("[]"), {})
+
+    def test_a_call_whose_registry_cannot_be_read_still_has_its_record_with_the_nonce(self) -> None:
+        """The observe module is asked through the registry: when that cannot be read the call is refused and the module cannot be asked, and the trace of the hook process would have no record to match (found by the equivalence run)."""
+        self.service.stop()
+        (self.root / ".harness" / "registry.json").write_text("{ not json", encoding="utf-8")
+        self.service = hookserve.HookService(self.root, engine=self.watch)
+        self.assertTrue(self.service.start())
+        self.addCleanup(self.service.stop)
+        output, why = self.call(pre_tool(SESSION, "Read", {"path": "a.txt"}))
+        self.assertEqual(why, "")
+        self.drain()
+        rows = self.rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]["event"], rows[0]["via"], rows[0]["nonce"]), ("PreToolUse", "service", self.trace()[0]["nonce"]))
+        self.assertTrue(rows[0]["error"].startswith("observe: "))
+        self.assertNotIn("target", rows[0])
+
+    def test_an_answer_from_a_program_that_is_not_the_board_has_a_line_and_no_record_and_doctor_says_so(self) -> None:
+        """The program read the key from the file and answers as a service would: the client takes the answer, and the board's log has nothing with that nonce (red team F1)."""
+        import datetime
+
+        import doctor
+
+        fake = Fake(lambda conn, request: (conn.sendall(line(start_of(request, self.info()["key"]))), conn.sendall(line(answer_of(request, {}, self.info()["key"])))), hello=self.info()["key"])
+        self.addCleanup(fake.close)
+        data = pre_tool("forged-session", "Bash", {"command": "rm -rf /"})
+        self.plant(fake.port, key=self.info()["key"])
+        output, why = hookclient.ask(json.dumps(data), self.root)
+        self.assertEqual((output, why), ({}, ""))  # the answer is taken: only the trace can say it was not the board's
+        self.assertEqual(len(self.trace()), 1)
+        report = doctor.Report()
+        doctor.check_hook_client_trace(report, self.root, datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=10))
+        self.assertEqual(report.errors, 1, report.lines)
+        self.assertIn("[ERROR]", "\n".join(report.lines))
 
 
 class RaceTests(Rig):
@@ -914,7 +1029,8 @@ class TimeTests(Rig):
     """What the hook process waits for, and for how long (Windows review F1, F2; red team F5): it must be able to judge the call itself well before Copilot gives up on the hook."""
 
     def test_the_limits(self) -> None:
-        self.assertEqual((hookclient.CONNECT, hookclient.MOST, hookclient.TOTAL), (1.0, 5.0, 60.0))
+        self.assertEqual((hookclient.CONNECT, hookclient.MOST, hookclient.AFTER), (1.0, 5.0, 20.0))  # after the start line: at most 20 s, however long it took to come (a stuck judgement must leave time for the local one before Copilot's 120 s)
+        self.assertFalse(hasattr(hookclient, "TOTAL"))
         seen: List[Any] = []
 
         def refuse(*args: Any, **kwargs: Any) -> Any:
@@ -943,14 +1059,28 @@ class TimeTests(Rig):
             self.failed_the_same_way("wait")
         self.assertLess(time.monotonic() - began, 3.5)
 
-    def test_the_answer_is_waited_for_at_most_the_total(self) -> None:
+    def test_the_answer_is_waited_for_at_most_the_limit_after_the_start_line(self) -> None:
         fake = Fake(lambda conn, request: (conn.sendall(line(start_of(request))), time.sleep(5)))
         self.addCleanup(fake.close)
         self.plant(fake.port)
         began = time.monotonic()
-        with mock.patch.object(hookclient, "TOTAL", 1.5):
+        with mock.patch.object(hookclient, "AFTER", 1.5):
             self.failed_the_same_way("lost-after-start")
         self.assertLess(time.monotonic() - began, 4.5)
+
+    def test_the_limit_counts_from_the_start_line_not_from_the_start_of_the_process(self) -> None:
+        """A start line that took 1.2 s to come still leaves the whole limit after it (red team F5: 60 s from the start plus a slow hello and start could pass Copilot's 120 s)."""
+        def slow_start(conn: socket.socket, request: Dict[str, Any]) -> None:
+            time.sleep(1.2)
+            conn.sendall(line(start_of(request)))
+            time.sleep(1.0)
+            conn.sendall(line(answer_of(request, {"fine": True})))
+
+        fake = Fake(slow_start)
+        self.addCleanup(fake.close)
+        self.plant(fake.port, wait=5)
+        with mock.patch.object(hookclient, "AFTER", 1.8):
+            self.assertEqual(hookclient.ask(json.dumps(ALLOWED), self.root), ({"fine": True}, ""))
 
 
 class FloodTests(Rig):

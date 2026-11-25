@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from unittest import mock
 
-from support import REPO, HarnessTestCase, make_root, pre_tool
+from support import HOOK, REPO, HarnessTestCase, make_root, pre_tool
 
 import hook
 import hookclient
@@ -62,10 +62,13 @@ class Sink:
 
 
 class Fake:
-    """A program that is not the service, on a port: it reads the request line and runs `behave(connection, request)`."""
+    """A program that is not the service, on a port. With `hello` (a key) it answers the hello line as a service that has that key would, then reads the request line and runs `behave(connection, request)`; with
+    `hello=None` it is a program that knows nothing of the protocol: `behave` gets the first line, whatever it is. `seen` is every line it was sent."""
 
-    def __init__(self, behave: Callable[[socket.socket, Dict[str, Any]], None]) -> None:
+    def __init__(self, behave: Callable[[socket.socket, Dict[str, Any]], None], hello: Optional[str] = KEY) -> None:
         self.behave = behave
+        self.hello = hello
+        self.seen: List[Dict[str, Any]] = []
         self.sock = socket.socket()
         self.sock.bind(("127.0.0.1", 0))
         self.sock.listen(8)
@@ -79,13 +82,29 @@ class Fake:
             except OSError:
                 return
             try:
-                line = b""
-                while b"\n" not in line:
-                    chunk = conn.recv(65536)
-                    if not chunk:
-                        break
-                    line += chunk
-                self.behave(conn, json.loads(line) if line.strip() else {})
+                buffer = b""
+
+                def next_line() -> bytes:
+                    nonlocal buffer
+                    while b"\n" not in buffer:
+                        chunk = conn.recv(65536)
+                        if not chunk:
+                            break
+                        buffer += chunk
+                    text, _, buffer = buffer.partition(b"\n")
+                    return text
+
+                first = next_line()
+                request = json.loads(first) if first.strip() else {}
+                self.seen.append(request)
+                if self.hello is not None:
+                    conn.sendall(json.dumps({"hello": hookserve.sign(self.hello, request["nonce"], "hello")}).encode("utf-8") + b"\n")
+                    second = next_line()
+                    if not second.strip():
+                        continue  # the client did not go on: it did not believe the hello
+                    request = json.loads(second)
+                    self.seen.append(request)
+                self.behave(conn, request)
             except Exception:  # noqa: BLE001 - a fake that fails is a connection that ends
                 pass
             finally:
@@ -144,51 +163,80 @@ class Rig(HarnessTestCase):
         path = (root or self.root) / ".harness" / "runtime" / "logs" / "vscode" / f"{session}.jsonl"
         return [json.loads(text) for text in path.read_text(encoding="utf-8").splitlines() if text.strip()]
 
-    def failed_the_same_way(self, why: str, data: Optional[Dict[str, Any]] = None) -> None:
-        """The service did not answer for `why`: the call was judged here, the answer is the plain one, and it is not the empty answer of a call that passes."""
+    def log_exists(self) -> bool:
+        return (self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{SESSION}.jsonl").exists()
+
+    def count(self, session: str = SESSION, root: Optional[Path] = None) -> int:
+        """How many records the session has (0 when it has no log yet)."""
+        try:
+            return len(self.rows(root, session))
+        except OSError:
+            return 0
+
+    def drain(self) -> None:
+        """Wait until the service has nothing more to do with the connections it was given: whatever a late request would still write, it has written."""
+        until = time.monotonic() + 10
+        while self.service.busy and time.monotonic() < until:
+            time.sleep(0.02)
+        self.assertEqual(self.service.busy, 0)
+
+    def failed_the_same_way(self, why: Any, data: Optional[Dict[str, Any]] = None) -> None:
+        """The service did not answer for `why` (a tag, or a tuple of tags that are the same moment seen from two sides): the call was judged here, the answer is the plain one, it is not the empty answer of a call that
+        passes, and it was judged ONCE: one record for one call, none from the service (a call that is begun by the service and again by the hook process counts a refusal twice and may write a card twice)."""
         data = data or REFUSED
+        why = why if isinstance(why, tuple) else (why,)
         expected = self.plain(data)
         self.assertEqual(expected.get("permissionDecision"), "deny")
+        before = self.count(data["session_id"])
         output, got = self.call(data)
-        self.assertEqual(got, why)
+        self.assertIn(got, why)
         self.assertEqual(output, expected)
         self.assertNotEqual(output, {})
-        row = self.rows(session=data["session_id"])[-1]
-        self.assertEqual((row["via"], row["why"]), ("local", why))
+        self.drain()
+        rows = self.rows(session=data["session_id"])
+        self.assertEqual(len(rows) - before, 1, [(row["via"], row["why"]) for row in rows])
+        self.assertEqual((rows[-1]["via"], rows[-1]["why"]), ("local", got))
 
     # --- the service by hand ---------------------------------------------------------------------
 
     def info(self) -> Dict[str, Any]:
         return json.loads(hookserve.file_of(self.root).read_text(encoding="utf-8"))
 
-    def plant(self, port: int, key: str = KEY, pid: Optional[int] = None, wait: float = 1.0) -> None:
-        hookserve.write_file(hookserve.file_of(self.root), {"v": 1, "port": port, "pid": pid or os.getpid(), "key": key, "started": "", "wait": wait})
+    def plant(self, port: int, key: str = KEY, pid: Optional[int] = None, wait: float = 1.0, born: Optional[str] = None) -> None:
+        pid = pid or os.getpid()
+        hookserve.write_file(hookserve.file_of(self.root), {"v": 2, "port": port, "pid": pid, "born": born if born is not None else hookclient.born(pid), "key": key, "started": "", "wait": wait})
 
     def set_wait(self, wait: float) -> None:
         data = self.info()
         data["wait"] = wait
         hookserve.write_file(hookserve.file_of(self.root), data)
 
-    def talk(self, key: Optional[str] = None, sign: bool = True, data: Optional[Dict[str, Any]] = None, **over: Any) -> List[Dict[str, Any]]:
-        """One request to the service, written by hand with `over` changing its fields; the lines it answers with."""
-        found = self.info()
-        request = {"v": 1, "nonce": "n" * 32, "raw": json.dumps(data or ALLOWED), "env": dict(os.environ), "cwd": os.getcwd(), "tmp": tempfile.gettempdir(), "py": [sys.version_info[0], sys.version_info[1]], "pid": os.getpid(), "deadline": time.time() + 20}
+    def request_of(self, key: Optional[str] = None, sign: bool = True, data: Optional[Dict[str, Any]] = None, **over: Any) -> Dict[str, Any]:
+        """A request as a hook process writes it, with `over` changing its fields, signed with the key of the file (or `key`)."""
+        request = {"v": 2, "nonce": "a" * 32, "raw": json.dumps(data or ALLOWED), "env": dict(os.environ), "cwd": os.getcwd(), "py": [sys.version_info[0], sys.version_info[1]], "pid": os.getpid(), "deadline": time.time() + 20}
         request.update(over)
         if sign:
-            request["mac"] = hookserve.sign(key or found["key"], request["nonce"], hashlib.sha256(hookserve.canonical(request).encode("utf-8")).hexdigest())
-        got: List[Dict[str, Any]] = []
+            request["mac"] = hookserve.sign(key or self.info()["key"], request["nonce"], hashlib.sha256(hookserve.canonical(request).encode("utf-8")).hexdigest())
+        return request
+
+    def states(self, root: Path, session: str = SESSION) -> Dict[str, Any]:
+        data = json.loads((root / ".harness" / "runtime" / "state" / "vscode" / f"{session}.json").read_text(encoding="utf-8"))
+        data.pop("created_at", None)
+        data.pop("updated_at", None)
+        return data
+
+    def talk(self, key: Optional[str] = None, sign: bool = True, data: Optional[Dict[str, Any]] = None, hello: bool = True, **over: Any) -> List[Dict[str, Any]]:
+        """One conversation with the service, written by hand with `over` changing the fields of the request: the hello first (its answer is checked), then the request; the lines the service answers the request with."""
+        found = self.info()
+        request = self.request_of(key, sign, data, **over)
         with socket.create_connection(("127.0.0.1", found["port"]), timeout=20) as sock:
+            reader = sock.makefile("rb")
+            if hello:
+                sock.sendall(line({"v": 2, "nonce": request["nonce"]}))
+                said = json.loads(reader.readline())
+                self.assertEqual(said, {"hello": hookserve.sign(found["key"], request["nonce"], "hello")})
             sock.sendall(line(request))
-            buffer = b""
-            while True:
-                chunk = sock.recv(65536)
-                if not chunk:
-                    break
-                buffer += chunk
-            for text in buffer.split(b"\n"):
-                if text.strip():
-                    got.append(json.loads(text))
-        return got
+            return [json.loads(text) for text in reader.read().split(b"\n") if text.strip()]
 
 
 class FailureTests(Rig):
@@ -202,7 +250,7 @@ class FailureTests(Rig):
     def test_a_board_that_ended_without_removing_the_file_is_a_dead_pid(self) -> None:
         done = subprocess.Popen([sys.executable, "-c", "pass"])
         done.wait()
-        self.plant(self.info()["port"], self.info()["key"], pid=done.pid)
+        self.plant(self.info()["port"], self.info()["key"], pid=done.pid, born=self.info()["born"])
         self.failed_the_same_way("dead")
 
     def test_a_file_that_is_not_what_the_service_writes(self) -> None:
@@ -218,16 +266,34 @@ class FailureTests(Rig):
         self.failed_the_same_way("connect")
 
     def test_another_program_on_the_port_that_answers_with_words(self) -> None:
-        fake = Fake(lambda conn, _request: conn.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n<html>nothing here</html>\n"))
+        fake = Fake(lambda conn, _request: conn.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n<html>nothing here</html>\n"), hello=None)
         self.addCleanup(fake.close)
         self.plant(fake.port)
         self.failed_the_same_way("reply")
+        self.assertEqual([sorted(seen) for seen in fake.seen], [["nonce", "v"]])  # all it was given: the hello
 
     def test_another_program_that_says_pass_without_the_key_is_not_believed(self) -> None:
-        fake = Fake(lambda conn, _request: conn.sendall(line({"ok": True, "output": {}, "mac": "0" * 64})))
+        fake = Fake(lambda conn, _request: conn.sendall(line({"ok": True, "output": {}, "mac": "0" * 64})), hello=None)
         self.addCleanup(fake.close)
         self.plant(fake.port)
-        self.failed_the_same_way("reply")  # no start line: an answer is not looked at
+        self.failed_the_same_way("reply")  # no hello: an answer is not looked at
+        self.assertEqual([sorted(seen) for seen in fake.seen], [["nonce", "v"]])
+
+    def test_a_program_that_cannot_sign_the_hello_is_given_nothing_private(self) -> None:
+        for number, said in enumerate((hookserve.sign("w" * 64, "a" * 32, "hello"), "", 5, None)):
+            fake = Fake(lambda conn, request, said=said: conn.sendall(line({"hello": said if said is not None else hookserve.sign(KEY, request["nonce"], "start")})), hello=None)
+            self.addCleanup(fake.close)
+            self.plant(fake.port)
+            self.failed_the_same_way(("mac", "reply"), refused(f"hello-{number}"))
+            self.assertEqual([sorted(seen) for seen in fake.seen], [["nonce", "v"]])  # the environment, the payload and the folder stayed here
+
+    def test_a_program_that_answers_the_hello_of_another_conversation_is_not_believed(self) -> None:
+        fake = Fake(lambda conn, request: None, hello=None)
+        fake.behave = lambda conn, request: conn.sendall(line({"hello": hookserve.sign(KEY, "f" * 32, "hello")}))  # a good signature of a nonce that is not this one
+        self.addCleanup(fake.close)
+        self.plant(fake.port)
+        self.failed_the_same_way("mac")
+        self.assertEqual(len(fake.seen), 1)
 
     def test_a_start_line_with_a_wrong_mac(self) -> None:
         fake = Fake(lambda conn, request: conn.sendall(line(start_of(request, "w" * 64)) + line(answer_of(request, {}, "w" * 64))))
@@ -266,14 +332,17 @@ class FailureTests(Rig):
             self.failed_the_same_way("reply", refused(f"shape-{number}"))
 
     def test_the_wrong_key(self) -> None:
-        self.plant(self.info()["port"], key="0" * 64, wait=5)
-        self.failed_the_same_way("key")
+        real = self.info()
+        self.plant(real["port"], key="0" * 64, wait=5)
+        self.failed_the_same_way("mac")  # the service answers the hello with its own key: the client sees it is not the one in the file, and sends nothing
+        self.plant(real["port"], key=real["key"])
+        self.assertEqual(self.talk(key="0" * 64), [{"ok": False, "why": "key"}])  # and a request signed with another key is not judged
 
     def test_a_service_that_does_not_start_in_time(self) -> None:
         self.set_wait(1.0)
         began = time.monotonic()
-        with self.service.judging:  # the service is judging another call: the start line cannot come
-            self.failed_the_same_way("wait")
+        with self.service.judging:  # the service is judging another call: the start line cannot come (the service gives up at the same moment the client does: `late`)
+            self.failed_the_same_way(("wait", "late"))
         self.assertLess(time.monotonic() - began, 10)
 
     def test_a_program_that_never_answers(self) -> None:
@@ -355,7 +424,12 @@ class FailureTests(Rig):
         self.failed_the_same_way("stale", refused("hook-config"))
 
     def test_another_temp_folder_or_python_is_not_served(self) -> None:
-        self.assertEqual(self.talk(tmp="/not/the/temp/folder of this process"), [{"ok": False, "why": "tmp"}])
+        for name in ("TMPDIR", "TEMP", "TMP"):  # the client sends its environment, and the service compares the variables the temp folder is made from, as the system writes them
+            self.assertEqual(self.talk(env=dict(os.environ, **{name: "/not/the/temp/folder of this process"})), [{"ok": False, "why": "tmp"}], name)
+            without = {key: value for key, value in os.environ.items() if key != name}
+            self.assertEqual(self.talk(env=without)[0].get("why") == "tmp", name in os.environ, name)  # a variable that is not there is not the one that is (and both missing is the same)
+        same = {key: (os.path.normcase(value) if key == "TMPDIR" else value) for key, value in os.environ.items()}
+        self.assertEqual(self.talk(env=same)[0].get("start"), True)
         self.assertEqual(self.talk(py=[2, 7]), [{"ok": False, "why": "python"}])
         self.assertEqual(self.talk(py="3.12"), [{"ok": False, "why": "python"}])
 
@@ -371,15 +445,35 @@ class FailureTests(Rig):
     def test_a_request_that_is_not_signed_or_not_well_formed(self) -> None:
         self.assertEqual(self.talk(sign=False), [{"ok": False, "why": "key"}])
         self.assertEqual(self.talk(key="0" * 64), [{"ok": False, "why": "key"}])
-        self.assertEqual(self.talk(nonce="another one", key=None, raw=json.dumps(ALLOWED), deadline=time.time() + 20)[0].get("start"), True)  # a good one is served
+        self.assertEqual(self.talk(nonce="b" * 32, key=None, raw=json.dumps(ALLOWED), deadline=time.time() + 20)[0].get("start"), True)  # a good one is served
         self.assertEqual(self.talk(raw=5), [{"ok": False, "why": "request"}])
         self.assertEqual(self.talk(env=[1]), [{"ok": False, "why": "request"}])
         self.assertEqual(self.talk(env={"A": 1}), [{"ok": False, "why": "request"}])
-        self.assertEqual(self.talk(v=2), [{"ok": False, "why": "request"}])
+        self.assertEqual(self.talk(v=1), [{"ok": False, "why": "request"}])
+        self.assertEqual(self.talk(nonce="c" * 32, hello=True, raw=json.dumps(ALLOWED))[0].get("start"), True)
         self.assertEqual(self.talk(deadline="soon"), [{"ok": False, "why": "request"}])
         with socket.create_connection(("127.0.0.1", self.info()["port"]), timeout=10) as sock:
             sock.sendall(b"{{{ not json\n")
             self.assertEqual(json.loads(sock.recv(4096).decode("utf-8")), {"ok": False, "why": "request"})
+        self.assertEqual(self.talk(hello=False, env={}), [{"ok": False, "why": "request"}])  # a request with no hello before it is not read as one (a big one is dropped: the hello may be 1 KB)
+
+    def test_a_hello_that_is_not_one_is_refused_and_a_big_or_slow_one_is_dropped(self) -> None:
+        port = self.info()["port"]
+        for text in (b'{"v":2,"nonce":"not hex"}\n', b'{"v":2,"nonce":"' + b"a" * 32 + b'","extra":1}\n', b'{"v":1,"nonce":"' + b"a" * 32 + b'"}\n', b"[]\n", b"\n"):
+            with socket.create_connection(("127.0.0.1", port), timeout=10) as sock:
+                sock.sendall(text)
+                self.assertEqual(sock.makefile("rb").read(), b'{"ok": false, "why": "request"}\n', text)
+        with socket.create_connection(("127.0.0.1", port), timeout=10) as sock:  # a line that does not end, bigger than the hello may be: dropped without a word, and nothing was read of it that is kept
+            sock.sendall(b"x" * 5000)
+            try:
+                self.assertEqual(sock.makefile("rb").read(), b"")
+            except ConnectionResetError:  # it closed with bytes it had not read: the other side may hear that as a reset
+                pass
+        with mock.patch.object(hookserve, "HELLO_SECONDS", 0.3), socket.create_connection(("127.0.0.1", port), timeout=10) as sock:  # a client that says nothing
+            began = time.monotonic()
+            self.assertEqual(sock.makefile("rb").read(), b"")
+            self.assertLess(time.monotonic() - began, 5)
+        self.assertFalse(self.log_exists())
 
     def test_without_procenv_the_service_refuses(self) -> None:
         import core
@@ -393,8 +487,6 @@ class FailureTests(Rig):
             if saved is not None:
                 core.procenv = saved  # type: ignore[attr-defined]
 
-    def log_exists(self) -> bool:
-        return (self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{SESSION}.jsonl").exists()
 
 
 class GuardrailFileTests(Rig):
@@ -442,7 +534,7 @@ class FreshnessTests(Rig):
         lines = self.talk(pid=424242, data=ALLOWED, raw=json.dumps(ALLOWED))
         self.assertEqual(lines[0]["start"], True)
         self.assertEqual(lines[1]["ok"], True)
-        self.assertEqual(lines[1]["mac"], hookserve.sign(self.info()["key"], "n" * 32, hookserve.canonical(lines[1]["output"])))
+        self.assertEqual(lines[1]["mac"], hookserve.sign(self.info()["key"], "a" * 32, hookserve.canonical(lines[1]["output"])))
         row = self.rows()[-1]
         self.assertEqual((row["pid"], row["via"]), (424242, "service"))
 
@@ -519,15 +611,9 @@ class ConcurrencyTests(Rig):
         self.assertEqual({row["via"] for row in mine}, {"service"})
         self.assertEqual(self.states(self.root), self.states(self.ref))
 
-    def states(self, root: Path) -> Dict[str, Any]:
-        data = json.loads((root / ".harness" / "runtime" / "state" / "vscode" / f"{SESSION}.json").read_text(encoding="utf-8"))
-        data.pop("created_at", None)
-        data.pop("updated_at", None)
-        return data
-
 
 class LaunchTests(HarnessTestCase):
-    """`launch.py` as Copilot starts it (`python -I -S`), on a copy of the engine, with the service of a board on that root."""
+    """`launch.py` as Copilot starts it (`python -S`: not `-I`, whose `-E` turns off the system Python's bytecode cache on macOS and ignores PYTHONUTF8), on a copy of the engine, with the service of a board on that root."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -538,7 +624,7 @@ class LaunchTests(HarnessTestCase):
         self.launch = self.root / ".harness" / "engine" / "launch.py"
 
     def run_launch(self, data: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        done = subprocess.run([sys.executable, "-I", "-S", str(self.launch)], input=json.dumps(data), text=True, encoding="utf-8", capture_output=True, check=False, env=self.env)
+        done = subprocess.run([sys.executable, "-S", str(self.launch)], input=json.dumps(data), text=True, encoding="utf-8", capture_output=True, check=False, env=self.env)
         self.assertEqual(done.returncode, 0, done.stderr)
         path = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{SESSION}.jsonl"
         return json.loads(done.stdout), json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
@@ -587,7 +673,8 @@ class ServiceLifeTests(HarnessTestCase):
         self.assertTrue(service.start())
         path = hookserve.file_of(self.root)
         data = json.loads(path.read_text(encoding="utf-8"))
-        self.assertEqual((data["v"], data["pid"], data["port"]), (1, os.getpid(), service.port))
+        self.assertEqual((data["v"], data["pid"], data["port"]), (2, os.getpid(), service.port))
+        self.assertEqual(data["born"], hookclient.born(os.getpid()))
         self.assertEqual(len(data["key"]), 64)
         self.assertGreaterEqual(data["wait"], 3)
         if os.name != "nt":
@@ -639,6 +726,444 @@ class ServiceLifeTests(HarnessTestCase):
         self.assertTrue(boardserve.settings(self.root)["hook_service"])
         (self.root / ".harness" / "policies" / "task.override.json").write_text(json.dumps({"board": {"hook_service": False}}), encoding="utf-8")
         self.assertFalse(boardserve.settings(self.root)["hook_service"])
+
+
+
+class IdentityTests(Rig):
+    """The file names the board by the pid AND by when that process was created: a pid that another program has now is not the board (red team F1)."""
+
+    def test_a_live_pid_that_is_another_process_than_the_board_is_not_believed(self) -> None:
+        other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        self.addCleanup(other.wait)
+        self.addCleanup(other.kill)
+        real = self.info()
+        for number, born in enumerate(("mac:1.000000", "linux:5", "nt:5")):  # what the file says of the board is not what the system says of this pid
+            self.plant(real["port"], real["key"], pid=other.pid, born=born)
+            self.failed_the_same_way("dead", refused(f"pid-{number}"))
+        self.plant(real["port"], real["key"], pid=os.getpid(), born="mac:1.000000")  # this very process, which is alive, with a time that is not its own
+        self.failed_the_same_way("dead", refused("same-pid"))
+        self.plant(real["port"], real["key"], pid=os.getpid(), born=real["born"])
+        self.assertEqual(self.call(ALLOWED)[1], "")  # and the right pair is served
+
+    def test_a_system_that_does_not_say_is_a_board_that_is_not_believed(self) -> None:
+        with mock.patch.object(hookclient, "born", return_value=None):
+            self.failed_the_same_way("dead")
+
+    def test_a_file_of_an_older_board_or_without_the_time_is_not_a_file(self) -> None:
+        real = self.info()
+        for number, change in enumerate(({"v": 1}, {"born": None}, {"born": ""}, {"born": 5}, {"v": "2"})):
+            hookserve.write_file(hookserve.file_of(self.root), dict(real, **change))
+            self.failed_the_same_way("file", refused(f"old-{number}"))
+        hookserve.write_file(hookserve.file_of(self.root), {key: value for key, value in real.items() if key != "born"})
+        self.failed_the_same_way("file", refused("no-born"))
+
+    def test_the_time_of_a_process_is_the_same_each_time_and_not_that_of_another(self) -> None:
+        mine = hookclient.born(os.getpid())
+        self.assertTrue(mine)
+        self.assertEqual(hookclient.born(os.getpid()), mine)
+        other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        self.addCleanup(other.wait)
+        self.addCleanup(other.kill)
+        self.assertNotEqual(hookclient.born(other.pid), mine)
+        other.kill()
+        other.wait()
+        self.assertIsNone(hookclient.born(other.pid))
+        for pid in (0, -1, "x", None, True and 10 ** 12):
+            self.assertIsNone(hookclient.born(pid))
+
+    def test_a_board_that_cannot_tell_when_it_began_does_not_serve(self) -> None:
+        self.service.stop()
+        service = hookserve.HookService(self.root, engine=self.watch)
+        with mock.patch.object(hookclient, "born", return_value=None), contextlib.redirect_stderr(io.StringIO()):
+            self.assertFalse(service.start())
+        self.assertFalse(hookserve.file_of(self.root).exists())
+
+    def test_the_windows_calls_say_what_they_take_and_give(self) -> None:
+        """The Windows branch cannot run here: what can be checked is that every call of it is declared (a pointer-sized handle is cut to an int otherwise, and a 64-bit Windows fails in ways no log shows)."""
+        text = (REPO / ".harness" / "engine" / "hookclient.py").read_text(encoding="utf-8")
+        for name in ("OpenProcess", "GetExitCodeProcess", "GetProcessTimes", "CloseHandle"):
+            self.assertIn(f"kernel.{name}.argtypes", text)
+            self.assertIn(f"kernel.{name}.restype", text)
+
+    def test_the_client_does_not_load_tempfile(self) -> None:
+        tree = ast_of(REPO / ".harness" / "engine" / "hookclient.py")
+        self.assertNotIn("tempfile", tree)
+
+
+def ast_of(path: Path) -> List[str]:
+    """The names a file imports."""
+    import ast
+
+    found: List[str] = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            found += [item.name for item in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            found.append(node.module or "")
+    return found
+
+
+@needs_procenv
+class TraceTests(Rig):
+    """Each time a hook process uses an answer of the service it writes one line, and the service writes the same nonce in the record of the call: the two can be matched (red team F1)."""
+
+    def trace(self) -> List[Dict[str, Any]]:
+        path = self.root / ".harness" / "runtime" / "logs" / "hookclient.jsonl"
+        return [json.loads(text) for text in path.read_text(encoding="utf-8").splitlines() if text.strip()] if path.exists() else []
+
+    def test_a_used_answer_has_a_line_and_the_record_has_the_same_nonce(self) -> None:
+        for data in (REFUSED, ALLOWED):
+            self.assertEqual(self.call(data)[1], "")
+        trace, rows = self.trace(), self.rows()
+        self.assertEqual(len(trace), 2)
+        self.assertEqual(len(rows), 2)
+        for one, row in zip(trace, rows):
+            self.assertEqual(sorted(one), ["at", "event", "nonce", "session_id"])
+            self.assertEqual((one["session_id"], one["event"]), (SESSION, "PreToolUse"))
+            self.assertRegex(one["nonce"], r"^[0-9a-f]{32}$")
+            self.assertEqual(one["nonce"], row["nonce"])
+            self.assertEqual(row["via"], "service")
+        self.assertNotEqual(trace[0]["nonce"], trace[1]["nonce"])
+        import datetime
+
+        moment = datetime.datetime.fromisoformat(trace[0]["at"])
+        self.assertEqual(moment.utcoffset(), datetime.timedelta(0))
+        self.assertLess(abs(time.time() - moment.timestamp()), 60)
+
+    def test_a_call_judged_here_has_no_line_and_no_nonce(self) -> None:
+        self.service.stop()
+        output, why = self.call(REFUSED)
+        self.assertEqual(why, "absent")
+        self.assertEqual(self.trace(), [])
+        self.assertNotIn("nonce", self.rows()[-1])
+
+    def test_a_call_the_service_refused_has_no_line(self) -> None:
+        (self.watch / "a.py").write_text("x = 1  # edited\n", encoding="utf-8")
+        self.failed_the_same_way("stale")
+        self.assertEqual(self.trace(), [])
+
+    def test_a_trace_that_cannot_be_written_changes_nothing(self) -> None:
+        (self.root / ".harness" / "runtime" / "logs").mkdir(parents=True, exist_ok=True)
+        (self.root / ".harness" / "runtime" / "logs" / "hookclient.jsonl").mkdir()  # a folder where the file should be
+        expected = self.plain(REFUSED)
+        self.assertEqual(self.call(REFUSED), (expected, ""))
+
+    def test_a_payload_that_is_not_an_object_or_has_no_session_is_still_traced(self) -> None:
+        (self.root / ".harness" / "runtime" / "logs").mkdir(parents=True, exist_ok=True)
+        for number, raw in enumerate(("not json", "[1]", json.dumps({"hook_event_name": 5, "session_id": 7}), json.dumps({"sessionId": "camel", "hook_event_name": "SessionStart"}))):
+            hookclient.trace(self.root, f"{number}" * 32, raw)
+        got = self.trace()
+        self.assertEqual([(row["session_id"], row["event"]) for row in got], [("", ""), ("", ""), ("", ""), ("camel", "SessionStart")])
+
+
+class RaceTests(Rig):
+    """A call is judged once, by the service or by the hook process, never by both (equivalence F1)."""
+
+    def slow_differs(self, seconds: float) -> Any:
+        real = hookserve.HookService.differs
+
+        def slow(service: Any, request: Dict[str, Any]) -> str:
+            time.sleep(seconds)  # a long walk over the files of the engine on a slow computer
+            return real(service, request)
+
+        return mock.patch.object(hookserve.HookService, "differs", slow)
+
+    @needs_procenv
+    def test_a_service_that_took_too_long_to_begin_does_not_judge_what_the_hook_process_judged(self) -> None:
+        self.set_wait(1.0)
+        with self.slow_differs(1.6):
+            self.failed_the_same_way("wait")  # the hook process gave up after a second and judged (and `failed_the_same_way` counts one record for one call)
+            time.sleep(0.2)
+        self.drain()
+        self.assertEqual(self.count(), 1)
+        self.assertEqual(self.states(self.root), self.states(self.ref))  # one refusal counted, as for one judgment (the plain one was judged once, in `failed_the_same_way`)
+
+    @needs_procenv
+    def test_a_client_that_closed_the_connection_is_not_served(self) -> None:
+        found = self.info()
+        gate = threading.Event()
+        real = hookserve.HookService.differs
+
+        def held(service: Any, request: Dict[str, Any]) -> str:
+            gate.wait(10)
+            return real(service, request)
+
+        with mock.patch.object(hookserve.HookService, "differs", held):
+            with socket.create_connection(("127.0.0.1", found["port"]), timeout=10) as sock:
+                reader = sock.makefile("rb")
+                sock.sendall(line({"v": 2, "nonce": "a" * 32}))
+                reader.readline()
+                sock.sendall(line(self.request_of(data=REFUSED, raw=json.dumps(REFUSED), deadline=time.time() + 30)))
+                time.sleep(0.3)  # the service has the request and waits in `differs`
+                reader.close()  # (the file object keeps the connection open until it is closed)
+            time.sleep(0.2)
+            gate.set()
+            self.drain()
+        self.assertFalse(self.log_exists())
+        self.assertFalse(self.state_file(SESSION).exists())
+
+    @needs_procenv
+    def test_a_request_with_too_little_time_left_is_not_begun(self) -> None:
+        self.assertEqual(self.talk(deadline=time.time() + hookserve.MARGIN / 2, raw=json.dumps(REFUSED)), [{"ok": False, "why": "late"}])
+        self.drain()
+        self.assertFalse(self.log_exists())
+        self.assertEqual(self.talk(deadline=time.time() + 20, raw=json.dumps(REFUSED))[0].get("start"), True)
+
+
+class TimeTests(Rig):
+    """What the hook process waits for, and for how long (Windows review F1, F2; red team F5): it must be able to judge the call itself well before Copilot gives up on the hook."""
+
+    def test_the_limits(self) -> None:
+        self.assertEqual((hookclient.CONNECT, hookclient.MOST, hookclient.TOTAL), (1.0, 5.0, 60.0))
+        seen: List[Any] = []
+
+        def refuse(*args: Any, **kwargs: Any) -> Any:
+            seen.append(kwargs.get("timeout", args[1] if len(args) > 1 else None))
+            raise OSError("no")
+
+        with mock.patch.object(hookclient.socket, "create_connection", refuse):
+            self.assertEqual(hookclient.ask(json.dumps(ALLOWED), self.root), (None, "connect"))
+        self.assertEqual(seen, [1.0])
+
+    def test_the_start_line_is_waited_for_at_most_the_cap_whatever_the_file_says(self) -> None:
+        fake = Fake(lambda conn, _request: time.sleep(4))
+        self.addCleanup(fake.close)
+        self.plant(fake.port, wait=600)
+        began = time.monotonic()
+        with mock.patch.object(hookclient, "MOST", 0.5):
+            self.failed_the_same_way("wait")
+        self.assertLess(time.monotonic() - began, 3.5)
+
+    def test_the_hello_is_waited_for_at_most_the_cap_too(self) -> None:
+        fake = Fake(lambda conn, _request: time.sleep(4), hello=None)
+        self.addCleanup(fake.close)
+        self.plant(fake.port, wait=600)
+        began = time.monotonic()
+        with mock.patch.object(hookclient, "MOST", 0.5):
+            self.failed_the_same_way("wait")
+        self.assertLess(time.monotonic() - began, 3.5)
+
+    def test_the_answer_is_waited_for_at_most_the_total(self) -> None:
+        fake = Fake(lambda conn, request: (conn.sendall(line(start_of(request))), time.sleep(5)))
+        self.addCleanup(fake.close)
+        self.plant(fake.port)
+        began = time.monotonic()
+        with mock.patch.object(hookclient, "TOTAL", 1.5):
+            self.failed_the_same_way("lost-after-start")
+        self.assertLess(time.monotonic() - began, 4.5)
+
+
+class FloodTests(Rig):
+    """A program that opens many connections, or sends big or slow ones, makes the hook processes judge for themselves (slower), never a call pass (red team F4)."""
+
+    def test_connections_over_the_cap_are_closed_at_once(self) -> None:
+        self.service.stop()
+        with mock.patch.object(hookserve, "SLOTS", 2):
+            self.service = hookserve.HookService(self.root, engine=self.watch)
+            self.assertTrue(self.service.start())
+        self.addCleanup(self.service.stop)
+        port = self.info()["port"]
+        idle = [socket.create_connection(("127.0.0.1", port), timeout=10) for _ in range(2)]
+        self.addCleanup(lambda: [sock.close() for sock in idle])
+        time.sleep(0.3)  # both have a place and wait for their hello
+        began = time.monotonic()
+        with socket.create_connection(("127.0.0.1", port), timeout=10) as over:
+            try:
+                self.assertEqual(over.recv(10), b"")
+            except ConnectionResetError:
+                pass
+        self.assertLess(time.monotonic() - began, 1.5)
+        self.failed_the_same_way(("closed", "wait"))
+        for sock in idle:
+            sock.close()
+        self.drain()
+        self.assertEqual(self.call(ALLOWED)[1], "")  # the places are given back
+
+    def test_a_connection_that_never_says_hello_is_let_go(self) -> None:
+        with mock.patch.object(hookserve, "HELLO_SECONDS", 0.3):
+            with socket.create_connection(("127.0.0.1", self.info()["port"]), timeout=10):
+                began = time.monotonic()
+                self.drain()
+                self.assertLess(time.monotonic() - began, 3)
+
+    def test_the_big_request_line_is_read_only_after_the_hello(self) -> None:
+        found = self.info()
+        with socket.create_connection(("127.0.0.1", found["port"]), timeout=10) as sock:
+            reader = sock.makefile("rb")
+            sock.sendall(line({"v": 2, "nonce": "a" * 32}))
+            reader.readline()
+            sock.sendall(line(self.request_of(raw="x" * 3000000, env={"A": "b" * 3000000}, deadline=time.time() + 30)))  # a big one after the hello is read: it is signed and refused as a request that is no good
+            said = json.loads(reader.readline())
+        self.assertEqual(said.get("start"), None)
+        self.assertEqual(self.count(), 0)
+
+    def test_accepted_sockets_do_not_wait_to_fill_a_packet(self) -> None:
+        seen: List[int] = []
+        real = hookserve.HookService.serve
+
+        def look(service: Any, sock: socket.socket) -> None:
+            seen.append(sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY))
+            real(service, sock)
+
+        with mock.patch.object(hookserve.HookService, "serve", look):
+            self.talk(deadline=time.time() - 1)
+        self.assertTrue(seen and seen[0])
+
+
+class FileTests(HarnessTestCase):
+    def test_the_file_is_written_again_when_windows_refuses_the_replace_for_a_moment(self) -> None:
+        real = os.replace
+        calls: List[int] = []
+
+        def refusing(source: Any, target: Any) -> None:
+            calls.append(1)
+            if len(calls) < 3:
+                raise PermissionError(5, "Access is denied")
+            real(source, target)
+
+        path = hookserve.file_of(self.root)
+        with mock.patch.object(os, "replace", refusing):
+            hookserve.write_file(path, {"a": 1})
+        self.assertEqual((len(calls), json.loads(path.read_text(encoding="utf-8"))), (3, {"a": 1}))
+
+    def test_the_start_and_the_pace_measure_do_not_write_the_file_at_the_same_time(self) -> None:
+        service = hookserve.HookService(self.root)
+        self.assertTrue(service.start())
+        self.addCleanup(service.stop)
+        errors: List[BaseException] = []
+        seen: List[Any] = []
+
+        def write_many() -> None:
+            try:
+                for _ in range(40):
+                    service.write()
+                    seen.append(json.loads(hookserve.file_of(self.root).read_text(encoding="utf-8"))["port"])
+            except BaseException as error:  # noqa: BLE001
+                errors.append(error)
+
+        threads = [threading.Thread(target=write_many) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(set(seen), {service.port})
+        self.assertFalse(hookserve.file_of(self.root).with_name("hookserve.json.part").exists())
+
+    def test_the_service_has_the_resolved_root(self) -> None:
+        link = Path(tempfile.mkdtemp()) / "link"
+        self.addCleanup(shutil.rmtree, link.parent, True)
+        try:
+            os.symlink(str(self.root), str(link))
+        except (OSError, NotImplementedError):
+            self.skipTest("no symbolic links here")
+        self.assertEqual(hookserve.HookService(link).root, self.root.resolve())
+
+    @needs_procenv
+    def test_the_list_of_repositories_is_not_kept_for_a_judgment_of_the_service(self) -> None:
+        from core import pinfiles, procenv, targets
+
+        loads: List[int] = []
+        real = targets.load
+
+        def counting(root: Path) -> Any:
+            loads.append(1)
+            return real(root)
+
+        pinfiles._HOMES.clear()
+        with mock.patch.object(targets, "load", counting):
+            pinfiles.repo_homes(self.root)
+            pinfiles.repo_homes(self.root)
+            self.assertEqual(len(loads), 1)  # here it is kept for a few seconds (a card looks at every word of a line)
+            kept = dict(pinfiles._HOMES)
+            with procenv.using(dict(os.environ), os.getcwd()):
+                pinfiles.repo_homes(self.root)
+                pinfiles.repo_homes(self.root)
+            self.assertEqual(len(loads), 3)  # for the service every look is a new one, and it leaves nothing behind
+            self.assertEqual(pinfiles._HOMES, kept)
+        pinfiles._HOMES.clear()
+
+
+@needs_procenv
+class MixedTests(Rig):
+    """Calls through the service and through real hook processes on one session at one moment end as the same calls one after another do (equivalence F4)."""
+
+    def process(self, script: Path, data: Dict[str, Any], origin: str = "") -> Dict[str, Any]:
+        env = dict(self.env, HARNESS_ROOT=str(self.root))
+        if origin:
+            env["HARNESS_HOOK_ORIGIN"] = origin
+        done = subprocess.run([sys.executable, "-S", str(script)], input=json.dumps(data), text=True, encoding="utf-8", capture_output=True, check=False, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def test_the_service_and_hook_processes_on_one_session_at_once(self) -> None:
+        self.call(pre_tool("warm-up", "Read", {"path": "a.txt"}))
+        self.set_wait(60)
+        payloads = [pre_tool(SESSION, "Bash", {"command": f"rm -rf /tmp/mixed-{number}"}) for number in range(12)]
+        launch = REPO / ".harness" / "engine" / "launch.py"
+
+        def one(number: int) -> Tuple[str, Dict[str, Any]]:
+            data = payloads[number]
+            if number % 3 == 0:
+                return "client", self.call(data)[0]
+            if number % 3 == 1:
+                return "launch", self.process(launch, data)
+            return "local", self.process(HOOK, data, "local:test")
+
+        with concurrent.futures.ThreadPoolExecutor(12) as pool:
+            done = list(pool.map(one, range(12)))
+        one_after_another = [hook.answer(json.dumps(data), self.ref) for data in payloads]
+        mine, theirs = self.rows(), self.rows(self.ref)
+        self.assertEqual((len(mine), len(theirs)), (12, 12))
+        self.assertIn("service", {row["via"] for row in mine})  # the launcher and the client were served (or some of them judged here, if the service was busy: both are right, none is missing)
+        self.assertEqual(self.states(self.root), self.states(self.ref))
+        self.assertEqual(sorted(row["decision"] for row in mine), sorted(row["decision"] for row in theirs))
+        words = lambda outputs: sorted(json.dumps(output, sort_keys=True) for output in outputs)  # noqa: E731
+        self.assertEqual(words(output for _how, output in done), words(one_after_another))
+        self.assertTrue(all(output.get("permissionDecision") in ("ask", "deny") for _how, output in done), done)  # none passes, whoever judged it
+
+
+class CrossProcessTests(LaunchTests):
+    """`launch.py` in a process of its own, with another home, language and folder than the board's: the answer is the one a hook process of its own gives (equivalence F4)."""
+
+    def launch_in(self, data: Dict[str, Any], env: Dict[str, str], cwd: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        done = subprocess.run([sys.executable, "-S", str(self.launch)], input=json.dumps(data), text=True, encoding="utf-8", capture_output=True, check=False, env=dict(self.env, **env), cwd=cwd)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        path = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{data['session_id']}.jsonl"
+        return json.loads(done.stdout), json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+
+    @needs_procenv
+    def test_another_home_language_and_folder(self) -> None:
+        self.serving()
+        home, repo = Path(tempfile.mkdtemp()), Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, True)
+        self.addCleanup(shutil.rmtree, repo, True)
+        (repo / "sub").mkdir()
+        (repo / ".git").mkdir()
+        payloads = [
+            ("home-guard", pre_tool("c1", "create_file", {"filePath": str(home / ".copilot-harness" / "integrity" / "x.json"), "content": "x"})),
+            ("tilde", pre_tool("c2", "create_file", {"filePath": "~/.copilot-harness/integrity/x.json", "content": "x"})),
+            ("relative-git", dict(pre_tool("c3", "create_file", {"filePath": ".git/config", "content": "x"}), cwd="")),
+            ("relative-git-dot", dict(pre_tool("c4", "create_file", {"filePath": ".git/config", "content": "x"}), cwd=".")),
+            ("terminal-home", pre_tool("c5", "run_in_terminal", {"command": "echo hi > ~/.copilot-harness/integrity/y"})),
+            ("terminal-variable", pre_tool("c6", "run_in_terminal", {"command": "echo hi > $HOME/.copilot-harness/integrity/y"})),
+            ("terminal-relative", dict(pre_tool("c7", "run_in_terminal", {"command": "rm -rf .git"}), cwd="")),
+            ("a-read", pre_tool("c8", "read_file", {"filePath": "a.txt"})),
+        ]
+        file = hookserve.file_of(self.root)
+        kept = file.read_text(encoding="utf-8")
+        for language in ("en", "zh"):
+            env = {"HOME": str(home), "USERPROFILE": str(home), "HARNESS_LANGUAGE": language}
+            for name, data in payloads:
+                served, row = self.launch_in(dict(data, session_id=data["session_id"] + language), env, str(repo / "sub"))
+                self.assertEqual((name, row["via"], row["why"]), (name, "service", ""))
+                file.unlink()  # no board: the same launcher judges here
+                try:
+                    here, local = self.launch_in(dict(data, session_id=data["session_id"] + language + "-here"), env, str(repo / "sub"))
+                finally:
+                    file.write_text(kept, encoding="utf-8")
+                self.assertEqual((name, local["via"], local["why"]), (name, "local", "absent"))
+                self.assertEqual((name, language, served), (name, language, here))
 
 
 if __name__ == "__main__":

@@ -162,6 +162,11 @@ def _replace(source: str, target: str, seconds: float = REPLACE_RETRY_SECONDS) -
             time.sleep(0.02)
 
 
+def replace_retrying(source: str, target: str) -> None:
+    """`os.replace` for a file another module writes the same careful way (the hook service's file): tried again for a moment when Windows refuses it."""
+    _replace(source, target)
+
+
 def move_aside(source: Path, target: Path) -> None:
     """Rename a file or a folder to a name that is not taken, tried again for MOVE_RETRY_SECONDS while Windows refuses it (WinError 5:
     a terminal or an Explorer window in the folder, a scan, a sync). PermissionError when it is still refused."""

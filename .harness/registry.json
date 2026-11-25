@@ -244,6 +244,7 @@
         ".harness/tests/test_callmatch.py",
         ".harness/tests/test_procenv.py",
         ".harness/tests/test_hookserve.py",
+        ".harness/tests/test_hookequiv.py",
         ".harness/tests/test_taskfiles.py",
         ".harness/tests/test_deskscripts.py",
         ".harness/tests/test_taskinbox.py",

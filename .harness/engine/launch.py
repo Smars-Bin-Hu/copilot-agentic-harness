@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The one file `.github/hooks/harness.json` starts (1.7.38, C13 FR2 4). Standard library only, small on purpose: nobody should have a reason to change it.
+"""The one file `.github/hooks/harness.json` starts (1.7.38, C13 FR2 4) as `python -S` (not `-I`: its `-E` turns off the system Python's bytecode cache on macOS and ignores PYTHONUTF8). Standard library only, small on purpose.
 It asks the judging service in the board first (`hookclient.py`: its answer counts only when it is signed); with no answer, for any reason, it loads `hook.py` and runs it here, telling it why in `HARNESS_HOOK_ORIGIN`.
 When `hook.py` cannot be loaded (a syntax error, a conflict marker, a missing file), it answers in its place the way `hook.py` answers when the engine cannot decide: a command, a file change and any tool it does not know
 are refused, with the file and the fault; reads, asking the user and subagents stay; a prompt or a session start gets the words as context. Nothing is read from the engine here."""

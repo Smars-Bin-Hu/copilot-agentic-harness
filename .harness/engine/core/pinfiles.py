@@ -82,11 +82,12 @@ def repo_homes(root: Path) -> Dict[str, Path]:
     """`{name: folder}` of the target repositories (`core.targets`): where a script of the line may be, besides the task folder. Empty when there are none or the policy cannot be read.
     Kept for a few seconds, and again at once when a target policy file changes."""
     key = str(root) + "\0" + procenv.fingerprint()  # the folders a policy names expand `~` and `$HOME`: a judgment under another environment must not take this one's list
+    use_memory = not procenv.active()  # a judgment for a hook process (the board's service) never reads or writes the list kept here: a hook process has no such memory, and a repository added a moment ago must show
     try:
         stamps = tuple(sorted((item.name, item.stat().st_mtime_ns) for item in (Path(root) / ".harness" / "policies").glob("target*.json")))
     except OSError:
         stamps = ()
-    kept = _HOMES.get(key)
+    kept = _HOMES.get(key) if use_memory else None
     if kept is not None and kept[1] == stamps and time.monotonic() - kept[0] < HOMES_SECONDS:
         return kept[2]
     try:
@@ -95,7 +96,8 @@ def repo_homes(root: Path) -> Dict[str, Path]:
         found = {name: repo.path.resolve() for name, repo in targets.load(Path(root)).repos.items()}
     except Exception:  # noqa: BLE001 - a look at the repositories must not stop a card or a hook
         found = {}
-    _HOMES[key] = (time.monotonic(), stamps, found)
+    if use_memory:
+        _HOMES[key] = (time.monotonic(), stamps, found)
     return found
 
 

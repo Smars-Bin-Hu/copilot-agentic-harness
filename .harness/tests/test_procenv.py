@@ -300,14 +300,15 @@ class OnThePathTests(HarnessTestCase):
         self.assertEqual(gitread.env()["PATH"], os.environ["PATH"])
 
     def test_a_pin_list_of_repositories_is_not_taken_from_another_environment(self) -> None:
-        """`repo_homes` keeps its answer a few seconds, by root: the key holds the environment, as the folders a policy names expand `~` and `$HOME`."""
+        """`repo_homes` keeps its answer a few seconds, by root, for the board's own use; a judgment under another environment (the service for a hook process) neither reads nor writes what is kept (equivalence F3:
+        a hook process has no such memory, so a repository added a moment ago must show at once), and the key holds the environment all the same."""
         from core import pinfiles
 
         pinfiles._HOMES.clear()  # noqa: SLF001
         pinfiles.repo_homes(self.root)
         with procenv.using({"HOME": "/h"}, None):
             pinfiles.repo_homes(self.root)
-        self.assertEqual(len(pinfiles._HOMES), 2)  # noqa: SLF001
+        self.assertEqual(len(pinfiles._HOMES), 1)  # noqa: SLF001
         pinfiles._HOMES.clear()  # noqa: SLF001
 
     def test_a_program_is_looked_for_on_the_hooks_path(self) -> None:

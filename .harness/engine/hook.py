@@ -350,10 +350,11 @@ def refusal_record(raw: str, output: Dict[str, Any], kind: str) -> Dict[str, Any
         return {}
 
 
-def answer(raw: str, root: Path, origin: str = "local", pid: Optional[int] = None) -> Dict[str, Any]:
+def answer(raw: str, root: Path, origin: str = "local", pid: Optional[int] = None, nonce: str = "") -> Dict[str, Any]:
     """The whole judgment of one hook call: payload text in, the output of the runtime out (the log of the call is written here too). The one place that judges: the hook process runs it (`main`), and so does the
     board's judging service for a hook process that asked it (`hookserve.py`, `origin="service"`), so no line of judgment exists twice. Never raises: what cannot be decided is refused as before (`fail_closed`).
 
+    `nonce` is the one the hook process made for its question to the service: it is written in the record, and the hook process writes the same one in its own trace (`hookclient.jsonl`), so a doctor can match the two.
     `origin` goes into the record of the call: `via` is `service` or `local`; `why` is what is after the colon of `local:<why>` (the reason the hook process judged itself: no board, a late answer, ...), empty for a plain
     `local`. `pid` is the hook process that asked, when the service judges for it (the record names that process, not the board)."""
     started = time.monotonic()
@@ -386,6 +387,8 @@ def answer(raw: str, root: Path, origin: str = "local", pid: Optional[int] = Non
     record["pid"] = pid if isinstance(pid, int) and not isinstance(pid, bool) else os.getpid()
     record["via"] = "service" if origin == "service" else "local"
     record["why"] = origin.partition(":")[2] if origin.startswith("local:") else ""
+    if nonce:
+        record["nonce"] = nonce
     if ENGINE_FAULT is None:
         observe(root, record, raw, output)
     return output

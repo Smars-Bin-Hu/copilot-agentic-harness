@@ -825,6 +825,7 @@ class MessageTests(unittest.TestCase):
             "desk.calls.filter.", "desk.calls.why.", "desk.calls.outcome.", "desk.calls.verb.", "desk.scripts.last.",  # callrows.js builds the key from a filter, why no output was kept, how a call ended, its verb
             "waits.what.",  # 1.8.5: common.js startingTip builds the key from what the board sent (`starting.what`)
             "desk.set.open.why.",  # 1.8.51: desk.js builds the key from `systems.may_open`'s word (read-only, locked, no)
+            "desk.outbox.told.", "desk.outbox.tell.why.",  # 1.8.55: desk.js builds the key from how the agent heard an approval (wait, steer, message); boardserve.tell_refusal from why the board could not tell it
             "report.perf.owner.","report.perf.confidence.", "report.perf.metric.", "report.perf.origin.", "report.perf.why.", "report.perf.chain.", "report.perf.priority.", "report.perf.outcome.", "report.perf.fact.",  # 1.7.41: the review page builds the key from an owner, an origin, a fact and so on (perfpage.js)
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')

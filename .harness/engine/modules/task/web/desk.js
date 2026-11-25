@@ -1262,7 +1262,7 @@
 
   function bandCards() {
     if (desk.past) return pastNote();
-    const told = [approvedCard(), openedCard()].filter(Boolean);  // the approved calls, and the calls whose connection was opened: the one step left is to tell the agent
+    const told = [...greenCards("approved"), ...greenCards("opened")];  // the approved calls, and the calls whose connection was opened (1.8.55: the board tells the agent; the card counts down, or asks when it could not)
     const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
     const box = batchBox();  // two held calls or more, the ones the agent went on without too: one box over their cards (F3 AP)
     if (!needsCard()) return told.length || left.length ? [...told, ...(box ? [box] : []), ...left] : null;
@@ -1310,19 +1310,21 @@
   const reasonRows = new Map();  // code -> {kind}: the "Why not?" row of a card is open, and which of the two reasons that take a line is chosen (1.7.38); the line itself is a `data-keep` field
   const reasonLines = new Map();  // code -> the line typed in the reason box, kept when the card is drawn again
   const REASONS = ["command", "connection", "later", "other_way"], LINE_REASONS = ["command", "other_way"];
-  const approvedCalls = new Map();  // code -> {at}: approved on this page and not yet told to the agent; the agent runs an approved call only when it is prompted, so the card offers to tell it
-  const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default): past it, telling is no use
-  // After an approval: a green card with the codes and one button that tells the chat to run them (a send to the chat, as an answer), in place of typing it.
-  const toldCodes = new Set();  // told the agent from this page: the card stays all the same until the command has run (the server says which approvals are left, 1.7.24)
-  const seenCodes = new Set();  // approved codes the server has listed at least once: when one is gone from the list afterwards, the command has run, and its card goes at once (1.7.38, C12 TB-02)
-  // Run (the approval is used up) or run out. Before the server has listed a code once, the page keeps it for 6 seconds (the poll may be a moment behind the click). After that it goes at once:
-  // it used to stay for those 6 seconds with no word from the server and fell back to "Tell the agent to run it" while the agent was already running the command.
-  function pruneApproved(left, now) {
-    if (left) left.forEach((code) => seenCodes.add(code));
-    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000 || (left && !left.has(code) && (seenCodes.has(code) || now - found.at > 6000))) { approvedCalls.delete(code); toldCodes.delete(code); seenCodes.delete(code); }
-    for (const code of [...seenCodes]) if (left && !left.has(code)) seenCodes.delete(code);
-  }
-  // The × of the card (1.7.42): the person will not tell the agent, so the card goes. Only the card: the approval stands until it is used or runs out. Kept in this browser, per task,
+  // After the person's yes (1.8.55): the yellow card turns green where it was, at once (not at the next poll), and the APPROVED stamp pops. The board tells the agent by itself, in the background (its
+  // `harness wait` hears it, a steer goes into its turn while it works, a message wakes it when its chat is idle). Once the agent has it, the card counts COUNT_MS down from that moment (`told_at`: the same on
+  // every page and after a reload), waits while the pointer is on it, and folds away. A card stays, with the button, only when the board could not tell the agent (`failed`, and why) or the agent left the call
+  // when it delivered its work (`left`, 1.8.31). The server lists the calls that ran a moment ago (`desk.ran`): their card says so until its count is over.
+  const approvedCalls = new Map();  // code -> {at, how, title}: approved on this page; its green card is drawn before the server lists it
+  const openedCalls = new Map();  // the same, for a call whose connection was opened from its card: {at, how, title, names}
+  const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default)
+  const COUNT_MS = 15000;
+  const TOLD = ["wait", "message", "steer"];  // the agent has it
+  const LOCAL_MS = 8000;  // a call decided on this page and not listed by the server this long has run, or ran out
+  const stampedCodes = new Set();  // the stamp of a code pops once
+  const pausedMs = new Map();  // card key -> the time the pointer stayed on it: its count waits that long
+  const foldedCodes = new Set();  // codes whose card counted down and folded on this page
+  const tellingNow = new Map();  // code -> when the card's button asked the board to tell the agent, until the server says so
+  // The × of the card (1.7.42): the person does not want it, so the card goes. Only the card: the approval stands until it is used or runs out. Kept in this browser, per task,
   // so a new poll or a reload does not bring it back; a code approved later has a card again.
   const CLOSED_KEY = "tk-approved-closed";
   const closedApproved = () => { try { return new Set((JSON.parse(localStorage.getItem(CLOSED_KEY) || "{}") || {})[desk.name] || []); } catch (error) { return new Set(closedHere.get(desk.name) || []); } };
@@ -1336,60 +1338,129 @@
       localStorage.setItem(CLOSED_KEY, JSON.stringify(all));
     } catch (error) { /* closed until the page is left */ }
   }
-  function approvedCard() {
+  const agentWord = (how) => (["wait", "telling", "left"].includes(how) ? how : "telling");  // what the answer to the click says of the agent
+  const shortTitle = (item) => (item.says || []).join(" · ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "…" : one; })();
+  // The held calls the person just decided on leave the band now, and their green cards take their place: the next poll comes when it comes.
+  function landed(codes) {
+    const gone = new Set(codes.map((code) => String(code).toUpperCase()));
+    desk.outbox = (desk.outbox || []).filter((item) => !gone.has(String(item.code).toUpperCase()));
+    paintLive();
+  }
+  // Every code that has a green card of this kind (approved, or opened) now: what the server lists, the calls of this kind that ran a moment ago, and what was decided on this page and is not listed yet.
+  function greenItems(kind) {
+    const listed = Array.isArray(desk[kind]) ? desk[kind] : null;  // null: a page without the list (a saved copy)
+    const local = kind === "opened" ? openedCalls : approvedCalls;
     const now = Date.now();
-    const left = Array.isArray(desk.approved) ? new Set(desk.approved.map((item) => item.code)) : null;  // null: a page without the list (a saved copy)
-    pruneApproved(left, now);
+    const out = new Map();
+    for (const item of listed || []) out.set(item.code, {...item});
+    for (const item of Array.isArray(desk.ran) ? desk.ran : []) if (Boolean(item.opened) === (kind === "opened") && !out.has(item.code)) out.set(item.code, {...(local.get(item.code) || {}), ...item, ran: true});
+    for (const [code, item] of local) {
+      if (out.has(code)) { if (!out.get(code).title) out.get(code).title = item.title; continue; }
+      if (now - item.at > (listed ? LOCAL_MS : TELL_MINUTES * 60000)) { local.delete(code); continue; }
+      out.set(code, {code, title: item.title, command: item.command, names: item.names, told: item.how, told_at: TOLD.includes(item.how) ? new Date(item.at).toISOString() : "", told_why: ""});
+    }
     const closed = closedApproved();
-    const listed = [...new Set([...(left ? [...left] : []), ...approvedCalls.keys()])];
-    if (left && [...closed].some((code) => !listed.includes(code))) closeApproved([], new Set(listed));  // run or run out: forget it
-    const codes = listed.filter((code) => !closed.has(code));
-    if (!codes.length || desk.past) return null;
-    const titles = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.title]));
-    const heardBy = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.told || ""]));  // "wait": its wait returned; "message": the board woke it (1.7.38)
-    for (const code of codes) if (!heardBy.get(code) && (approvedCalls.get(code) || {}).heard) heardBy.set(code, approvedCalls.get(code).heard);  // the answer to the click said the agent waited: no gap before the next poll says it
-    const all = codes.every((code) => toldCodes.has(code) || heardBy.get(code));
-    const viaWait = codes.every((code) => heardBy.get(code) === "wait");
-    const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: a message from here would answer the wrong thing (1.7.20)
-    const can = served() && canAct() && !asking;
-    const tell = h("button", {type: "button", class: "act" + (all ? "" : " hot big"), disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"));  // 1.8.31: a fallback; once the agent was told (or woken by the board), only a small "again"
-    const said = h("div", {class: "bad"});
-    tell.addEventListener("click", () => {
-      tell.disabled = true; tell.textContent = t("board.serve.working");
-      SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: t("desk.outbox.tell.body", {codes: codes.join(", ")}), step: "act"})
-        .then(() => { codes.forEach((code) => toldCodes.add(code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"); });
-    });
+    if (listed && [...closed].some((code) => !out.has(code))) closeApproved([], new Set(out.keys()));  // run or run out: forget it
+    const items = [];
+    for (const item of out.values()) {
+      const asked = tellingNow.get(item.code);
+      if (asked && now - asked < LOCAL_MS && !TOLD.includes(item.told) && !item.ran) item.told = "telling";
+      const since = item.ran && !TOLD.includes(item.told) ? Date.parse(item.ran_at || "") : TOLD.includes(item.told) ? Date.parse(item.told_at || "") : NaN;
+      item.since = Number.isNaN(since) ? null : Math.min(since, now);  // a clock a little ahead does not shorten the count
+      if (!foldedCodes.has(item.code) && !closed.has(item.code)) items.push(item);
+    }
+    return items;
+  }
+  const greenGroup = (item) => (item.ran || TOLD.includes(item.told) ? "done" : item.told === "telling" ? "telling" : "stuck");
+  const countLeft = (key, since, now) => COUNT_MS - (now - since) + (pausedMs.get(key) || 0);
+  // The green cards of one kind: one for the calls the agent has (it counts down), one for those the board is telling it, one for those it could not tell (with the button).
+  function greenCards(kind) {
+    if (desk.past) return [];
+    const items = greenItems(kind);
+    const now = Date.now();
+    const cards = [];
+    for (const group of ["stuck", "telling", "done"]) {
+      const these = items.filter((item) => greenGroup(item) === group);
+      if (!these.length) continue;
+      const key = kind + ":" + group + ":" + these.map((item) => item.code).join(",");
+      if (group === "done") {
+        const since = Math.max(...these.map((item) => item.since || now));
+        if (countLeft(key, since, now) <= 0) { these.forEach((item) => foldedCodes.add(item.code)); continue; }
+        cards.push(greenCard(kind, group, these, key, since));
+      } else cards.push(greenCard(kind, group, these, key, null));
+    }
+    if (cards.some((card) => card.dataset.countKey)) countStart();
+    return cards;
+  }
+  function greenCard(kind, group, items, key, since) {
+    const codes = items.map((item) => item.code);
+    const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: the board cannot tell it now (1.7.20)
+    const fresh = codes.some((code) => !stampedCodes.has(code));
+    codes.forEach((code) => stampedCodes.add(code));
+    const stamp = h("span", {class: "rb-stamp tk-stamp" + (fresh ? "" : " still")}, t(kind === "opened" ? "desk.outbox.opened" : "desk.outbox.approved"));
     const shut = h("button", {type: "button", class: "act close", title: t("desk.outbox.approved.close"), "aria-label": t("desk.outbox.approved.close")}, "×");
-    const card = h("section", {class: "tk-need strong tk-call done"},
-      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good"), shut),
-      codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, code), title ? h("span", {class: "tk-call-say"}, title) : null); }),  // each code stands in front of its own title (1.7.29)  // which call was approved (1.7.25)
-      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : viaWait ? "desk.outbox.told.wait" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
-      viaWait ? null : h("div", {class: "tk-need-go tk-call-go"}, tell, said));  // the agent's wait returned and it goes on by itself: nothing to press
-    shut.addEventListener("click", () => { closeApproved(codes, left); card.remove(); });
+    const ranAll = items.every((item) => item.ran);
+    const rows = items.map((item) => h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, item.code), item.title ? h("span", {class: "tk-call-say", title: item.command || null}, item.title) : null, item.ran && !ranAll ? h("span", {class: "tk-ran", title: t("desk.outbox.ran")}, "✓") : null));
+    const names = [...new Set(items.flatMap((item) => item.shown || item.names || []))];  // the linked items of ado, not "ado": that is all that was opened
+    const parts = [h("div", {class: "tk-need-h"}, h("span", {class: "tk-need-t"}, stamp, group === "stuck" ? tag(t("desk.outbox.notrun"), "hot") : null), shut), rows, kind === "opened" && names.length ? h("p", {class: "sub"}, t("desk.outbox.opened.line", {names: names.join(", ")})) : null];  // a card left to the person: approved, and the command has not run
+    if (group === "telling") parts.push(h("p", {class: "tk-told"}, h("span", {class: "spin"}), t("desk.outbox.telling")));
+    if (group === "done") {
+      const how = ranAll ? "ran" : (items.find((item) => TOLD.includes(item.told)) || {}).told || "wait";
+      const left = Math.max(0, countLeft(key, since, Date.now()));
+      parts.push(h("p", {class: "tk-told"}, h("span", {class: "ok"}, "✓"), t(how === "ran" ? "desk.outbox.ran" : "desk.outbox.told." + how)),
+        h("div", {class: "tk-count", title: t("desk.outbox.closes.paused")}, h("span", {class: "sub"}, t("desk.outbox.closes", {n: Math.ceil(left / 1000)})), h("i", null, h("b", {style: "transform:scaleX(" + (left / COUNT_MS).toFixed(3) + ")"}))));
+    }
+    if (group === "stuck") {
+      const item = items.find((one) => one.told === "failed") || items[0];
+      const why = asking ? t(kind === "opened" ? "desk.outbox.opened.asking" : "desk.outbox.tell.asking", {minutes: TELL_MINUTES}) : item.told === "left" ? t("desk.outbox.tell.left") : item.told === "failed" ? t("desk.outbox.tell.failed", {why: item.told_why || t("send.refused.timeout")}) : t("desk.outbox.tell.none");
+      const can = served() && canAct() && !asking;
+      const label = t(kind === "opened" ? "desk.outbox.opened.tell" : "desk.outbox.tell");
+      const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, label);
+      const said = h("div", {class: "bad"});
+      tell.addEventListener("click", () => {  // the board tells it the way it can take it now: a steer while it works, a message when its chat is idle (1.8.55)
+        tell.disabled = true; tell.textContent = t("board.serve.working");
+        SERVE.post("/api/tell", {task: desk.name, codes, opened: kind === "opened"})
+          .then(() => { codes.forEach((code) => tellingNow.set(code, Date.now())); paintLive(); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = label; });
+      });
+      parts.push(h("p", {class: "sub"}, why, kind === "approved" && !asking ? " " + t("desk.outbox.tell.lasts", {minutes: TELL_MINUTES}) : ""), h("div", {class: "tk-need-go tk-call-go"}, tell, said));
+    }
+    const card = h("section", {class: "tk-need strong tk-call done" + (group === "stuck" ? " tk-stuck" : ""), "data-action": kind, "data-codes": codes.join(",")}, ...parts);  // a card left to the person keeps the stamp, with the edge of a wait: the button is still to press
+    if (since !== null) { card.dataset.countKey = key; card.dataset.countSince = String(since); }
+    shut.addEventListener("click", () => { closeApproved(codes, null); fold(card); });
     return card;
   }
-  // After "Open <connection> for this task" on a card (1.7.38): the connection is open, the command is not approved. A green card asks the person to tell the agent to run it again; it goes when the agent has.
-  const toldOpened = new Set();
-  function openedCard() {
-    const list = Array.isArray(desk.opened) ? desk.opened : [];
-    if (!list.length || desk.past) return null;
-    const names = [...new Set(list.flatMap((item) => item.shown || item.names))];  // the linked items of ado, not "ado": that is all that was opened
-    const all = list.every((item) => toldOpened.has(item.code) || item.told);
-    const viaWait = list.every((item) => item.told === "wait");
-    const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);
-    const can = served() && canAct() && !asking;
-    const tell = h("button", {type: "button", class: "act" + (all ? "" : " hot") + " big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.opened.tell"));
-    const said = h("div", {class: "bad"});
-    tell.addEventListener("click", () => {
-      tell.disabled = true; tell.textContent = t("board.serve.working");
-      SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: t("desk.outbox.opened.body", {names: names.join(", ")}), step: "act"})
-        .then(() => { list.forEach((item) => toldOpened.add(item.code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t(all ? "desk.outbox.tell.again" : "desk.outbox.opened.tell"); });
-    });
-    return h("section", {class: "tk-need strong tk-call done", "data-action": "opened"},
-      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.opened"), "good")),
-      list.map((item) => h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, item.code), item.title ? h("span", {class: "tk-call-say"}, item.title) : null)),
-      h("p", {class: "sub"}, t(asking ? "desk.outbox.opened.asking" : viaWait ? "desk.outbox.opened.wait" : all ? "desk.outbox.opened.told" : "desk.outbox.opened.hint", {names: names.join(", ")})),
-      viaWait ? null : h("div", {class: "tk-need-go tk-call-go"}, tell, said));  // the agent's wait returned and it goes on by itself: nothing to press
+  // One clock for the cards that count down: it reads the cards on the page each time (a redraw makes new ones), and the pointer on a card holds its count.
+  let countTimer = 0, countLast = 0;
+  function countStart() { if (!countTimer) { countLast = Date.now(); countTimer = setInterval(countTick, 250); } }
+  function countTick() {
+    const now = Date.now(), step = now - countLast;
+    countLast = now;
+    const nodes = [...document.querySelectorAll(".tk-call[data-count-key]")].filter((node) => !node.dataset.folding);
+    for (const node of nodes) {
+      const key = node.dataset.countKey;
+      const held = node.matches(":hover");
+      if (held) pausedMs.set(key, (pausedMs.get(key) || 0) + step);
+      node.classList.toggle("paused", held);
+      const left = Math.max(0, countLeft(key, Number(node.dataset.countSince), now));
+      const n = node.querySelector(".tk-count .sub"), bar = node.querySelector(".tk-count b");
+      if (n) n.textContent = t("desk.outbox.closes", {n: Math.ceil(left / 1000)});
+      if (bar) bar.style.transform = "scaleX(" + (left / COUNT_MS).toFixed(3) + ")";
+      if (left <= 0) {
+        (node.dataset.codes || "").split(",").forEach((code) => foldedCodes.add(code));
+        pausedMs.delete(key);
+        fold(node);
+      }
+    }
+    if (!nodes.length) { clearInterval(countTimer); countTimer = 0; }
+  }
+  // The card folds away: its height and its look go to nothing (a fade alone under Lite or reduced motion), then the band is drawn again without it.
+  function fold(node) {
+    if (node.dataset.folding) return;
+    node.dataset.folding = "1";
+    const height = node.offsetHeight;
+    node.style.overflow = "hidden";
+    const moved = typeof MOTION !== "undefined" ? MOTION.play(node, [{opacity: 1, height: height + "px"}, {opacity: 0, height: "0px", paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px", borderTopWidth: "0px", borderBottomWidth: "0px"}], {ms: 260, ease: "cubic-bezier(.4,0,1,1)", fill: "forwards"}) : Promise.resolve();
+    moved.then(() => { node.remove(); paintLive(); });
   }
   // The window of a held call is the shared one (callview.js): the call counts as seen when it opens (Approve is held to these files), and the page is drawn again when it closes.
   const {callBody, commandNodes, callFacts, sayLine, bodyBlock, rawFold, manyWrites} = CALLVIEW;
@@ -1412,7 +1483,7 @@
       viewed: (code) => viewedCalls.get(code), unview: (code) => { viewedCalls.delete(code); },
       view: (item) => callWindow(item, null), redraw: () => draw(true), done: () => SERVE.done(),
       reasons: REASONS, lineReasons: LINE_REASONS,
-      approved: (codes, result) => { for (const code of codes) { const item = held.find((one) => one.code === code); approvedCalls.set(String(code).toUpperCase(), {at: Date.now(), heard: result && result.agent && result.agent[code] === "wait" ? "wait" : "", title: item ? title(item) : ""}); } },
+      approved: (codes, result) => { for (const code of codes) { const item = held.find((one) => one.code === code); approvedCalls.set(String(code).toUpperCase(), {at: Date.now(), how: agentWord(result && result.agent && result.agent[code]), title: item ? title(item) : "", command: item ? item.command : ""}); } landed(codes); },
     });
   }
 
@@ -1446,13 +1517,17 @@
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })()}); SERVE.done(); }, (error) => { if (error.data && error.data.changed) { viewedCalls.delete(item.code); changedCalls.set(item.code, error.message); } said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });  // a file changed since View: View pulses again
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}}).then((data) => { approvedCalls.set(String(item.code).toUpperCase(), {at: Date.now(), how: agentWord(data && data.result && data.result.agent), title: shortTitle(item), command: item.command}); landed([item.code]); SERVE.done(); }, (error) => { if (error.data && error.data.changed) { viewedCalls.delete(item.code); changedCalls.set(item.code, error.message); } said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });  // a file changed since View: View pulses again
     };
     yes.addEventListener("click", send);
     opens.forEach((open) => open.addEventListener("click", () => {
       if (!ready_()) return;
       opens.forEach((one) => { one.disabled = true; }); yes.disabled = true;
-      SERVE.post("/api/act", {action: "task allow", task: desk.name, step: "act", env: open.dataset.conn, runner: "on", code: input.value.trim()}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); });
+      SERVE.post("/api/act", {action: "task allow", task: desk.name, step: "act", env: open.dataset.conn, runner: "on", code: input.value.trim()}).then((data) => {
+        const agent = (data && data.result && data.result.agent) || {};
+        if (agent[item.code]) { openedCalls.set(String(item.code).toUpperCase(), {at: Date.now(), how: agentWord(agent[item.code]), title: shortTitle(item), command: item.command, names: [open.dataset.conn]}); landed([item.code]); }  // 1.8.55: green where it was, as for Approve
+        SERVE.done();
+      }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); });
     }));
     input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });
     // Dismiss opens a row "Why not?" (1.7.38): one click on a reason dismisses the call with it; the two reasons that take a line open a box first. "No reason" dismisses with none. The agent is told the reason:

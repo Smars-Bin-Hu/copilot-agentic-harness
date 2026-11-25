@@ -50,36 +50,83 @@ def between(source: str, start: str, end: str) -> str:
 
 @unittest.skipUnless(NODE, "node is not installed")
 class ApprovedCardTests(unittest.TestCase):
-    def test_a_command_that_has_run_takes_its_green_card_away_at_once_and_the_card_never_falls_back_to_tell_the_agent(self) -> None:
-        """C12 TB-02: Approve while the agent waits. The agent ran the command in two seconds; the green card then said "Tell the agent to run it" for four more."""
+    def test_the_green_card_follows_how_far_the_board_got_in_telling_the_agent_and_counts_down_from_it(self) -> None:
+        """C12 TB-02, 1.8.55 (work PC, FD5668): the card is green at once after the click, says how the agent heard it, counts 15 s down from that moment and goes; a call that ran says so;
+        only a call the board could not tell, or that the agent left, keeps a card (with the button)."""
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        source = between(desk, "  const toldCodes = new Set();", "  function approvedCard() {")
+        source = between(desk, "  const approvedCalls = new Map();", "  function greenCard(")
         script = r"""
 const assert = require("assert");
-const TELL_MINUTES = 10;
-const approvedCalls = new Map();
+const store = {};
+global.localStorage = {getItem: (key) => (key in store ? store[key] : null), setItem: (key, value) => { store[key] = value; }};
+let now = 1_000_000_000_000;
+Date.now = () => now;
+const desk = {name: "task-a", approved: [], opened: [], ran: []};
+const iso = (ms) => new Date(ms).toISOString();
 """ + source + r"""
-const T0 = 1_000_000;
-approvedCalls.set("AB12CD", {at: T0, heard: "wait", title: "x"});
-pruneApproved(new Set(), T0 + 500);        // the first poll: the entry is not listed yet (it may be a moment behind): the card stays
-assert.strictEqual(approvedCalls.has("AB12CD"), true);
-pruneApproved(new Set(["AB12CD"]), T0 + 1500);  // listed: seen
-assert.strictEqual(approvedCalls.has("AB12CD"), true);
-pruneApproved(new Set(), T0 + 3300);       // the agent ran it: gone from the list: the card goes now, not at 6 s
-assert.strictEqual(approvedCalls.has("AB12CD"), false);
-assert.strictEqual(seenCodes.has("AB12CD"), false);
-// never listed at all (run before the first poll): kept for the 6 seconds, then dropped
-approvedCalls.set("EF34AB", {at: T0, heard: "", title: "y"});
-pruneApproved(new Set(), T0 + 5000);
-assert.strictEqual(approvedCalls.has("EF34AB"), true);
-pruneApproved(new Set(), T0 + 6500);
-assert.strictEqual(approvedCalls.has("EF34AB"), false);
-// a page with no list (a saved copy) drops nothing before the approval runs out
-approvedCalls.set("ZZ99ZZ", {at: T0, heard: "", title: "z"});
-pruneApproved(null, T0 + 60000);
-assert.strictEqual(approvedCalls.has("ZZ99ZZ"), true);
-pruneApproved(null, T0 + TELL_MINUTES * 60000 + 1);
-assert.strictEqual(approvedCalls.has("ZZ99ZZ"), false);
+greenCard = (kind, group, items, key, since) => ({kind, group, codes: items.map((item) => item.code), key, since, dataset: since !== null ? {countKey: key} : {}});
+countStart = () => {};
+const cards = () => greenCards("approved").map((card) => card.group + ":" + card.codes.join(","));
+// clicked: the server has not listed it yet; the answer said the agent waited
+approvedCalls.set("AB12CD", {at: now, how: "wait", title: "x"});
+assert.deepStrictEqual(cards(), ["done:AB12CD"]);
+// the board tells it in the background
+approvedCalls.set("AB12CD", {at: now, how: "telling", title: "x"});
+desk.approved = [{code: "AB12CD", title: "x", told: "telling", told_at: "", told_why: ""}];
+assert.deepStrictEqual(cards(), ["telling:AB12CD"]);
+// steered: the count runs from told_at
+desk.approved = [{code: "AB12CD", title: "x", told: "steer", told_at: iso(now), told_why: ""}];
+now += 5000;
+let card = greenCards("approved")[0];
+assert.strictEqual(card.group, "done");
+assert.strictEqual(countLeft(card.key, card.since, now), 10000);
+pausedMs.set(card.key, 3000);  // the pointer stayed on it
+assert.strictEqual(countLeft(card.key, card.since, now), 13000);
+pausedMs.clear();
+// it ran: the server lists it as ran; the card stays until its count is over, then goes
+desk.approved = [];
+desk.ran = [{code: "AB12CD", ran_at: iso(now), opened: false, told: "steer", told_at: iso(now - 5000), told_why: ""}];
+card = greenCards("approved")[0];
+assert.deepStrictEqual([card.group, card.since], ["done", now - 5000]);
+now += 10001;
+assert.deepStrictEqual(cards(), []);
+assert.ok(foldedCodes.has("AB12CD"));
+// the board could not tell it: the card stays, with no count
+desk.ran = [];
+desk.approved = [{code: "EF34AB", title: "y", told: "failed", told_at: "", told_why: "VS Code is closed."}];
+assert.deepStrictEqual(cards(), ["stuck:EF34AB"]);
+assert.strictEqual(greenCards("approved")[0].since, null);
+now += 600000;
+assert.deepStrictEqual(cards(), ["stuck:EF34AB"]);
+// the button was pressed: telling until the server says how it went
+tellingNow.set("EF34AB", now);
+assert.deepStrictEqual(cards(), ["telling:EF34AB"]);
+now += 9000;
+assert.deepStrictEqual(cards(), ["stuck:EF34AB"]);
+// the agent ran a call the board could not tell it about: it ran; the count runs from then
+desk.approved = [];
+desk.ran = [{code: "EF34AB", ran_at: iso(now), opened: false, told: "failed", told_at: "", told_why: "x"}];
+assert.deepStrictEqual(cards(), ["done:EF34AB"]);
+// a call left at delivery; and an opened call is not an approved one
+desk.ran = [];
+desk.approved = [{code: "GH56IJ", title: "z", told: "left", told_at: "", told_why: ""}];
+desk.opened = [{code: "KL78MN", title: "o", names: ["tickets"], shown: ["tickets"], told: "message", told_at: iso(now), told_why: ""}];
+assert.deepStrictEqual(cards(), ["stuck:GH56IJ"]);
+assert.deepStrictEqual(greenCards("opened").map((one) => one.group + ":" + one.codes.join(",")), ["done:KL78MN"]);
+// × closes the card; the approval stands
+closeApproved(["GH56IJ"], null);
+assert.deepStrictEqual(cards(), []);
+// a click the server never listed: kept a moment, then dropped (it ran or ran out)
+desk.approved = [];
+approvedCalls.set("ZZ99ZZ", {at: now, how: "telling", title: "q"});
+now += 7000;
+assert.deepStrictEqual(cards(), ["telling:ZZ99ZZ"]);
+now += 2000;
+assert.deepStrictEqual(cards(), []);
+// three approved together and told together: one card, counted from the last of them
+desk.approved = ["A1", "B2", "C3"].map((code, i) => ({code, title: code, told: "steer", told_at: iso(now - 3000 + i * 1000), told_why: ""}));
+card = greenCards("approved")[0];
+assert.deepStrictEqual([card.codes, card.since], [["A1", "B2", "C3"], now - 1000]);
 """
         done = run_node(script)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -87,7 +134,7 @@ assert.strictEqual(approvedCalls.has("ZZ99ZZ"), false);
     def test_the_close_button_hides_the_green_card_per_task_and_forgets_a_code_that_is_gone(self) -> None:
         """1.7.42: × on the Approved card. Only the card goes (the approval stands); kept per task in this browser; a code no longer approved is dropped; no storage: kept while the page is open."""
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        source = between(desk, "  const CLOSED_KEY = ", "  function approvedCard() {")
+        source = between(desk, "  const CLOSED_KEY = ", "  const agentWord = ")
         script = r"""
 const assert = require("assert");
 let store = {};
@@ -109,16 +156,15 @@ assert.deepStrictEqual([...closedApproved()], ["GH56IJ"]);
 """
         done = run_node(script)
         self.assertEqual(done.returncode, 0, done.stderr)
-        card = between(desk, "  function approvedCard() {", "  // After \"Open <connection> for this task\"")
-        self.assertIn("const codes = listed.filter((code) => !closed.has(code));", card)  # the card shows only codes not closed, and tells only those
-        self.assertIn('tag(t("desk.outbox.approved"), "good"), shut)', card)
-        self.assertIn("closeApproved(codes, left); card.remove();", card)
+        card = between(desk, "  function greenCard(", "  // One clock for the cards that count down")
+        self.assertIn('shut.addEventListener("click", () => { closeApproved(codes, null); fold(card); });', card)
         self.assertNotIn("/api/", card.split("shut.addEventListener", 1)[1].split("\n", 1)[0])  # the × asks the server nothing: the approval stands
 
     def test_the_answer_to_approve_says_whether_the_agent_waited_and_the_card_uses_it(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('data.result.agent === "wait" ? "wait" : ""', desk)
-        self.assertIn("approvedCalls.get(code).heard", desk)
+        self.assertIn("how: agentWord(data && data.result && data.result.agent)", desk)  # wait, telling or left: the card is green at once, before the next poll
+        self.assertIn("landed([item.code]); SERVE.done();", desk)
+        self.assertIn('SERVE.post("/api/tell", {task: desk.name, codes, opened: kind === "opened"})', desk)  # the button: the board steers or sends, as it can (1.8.55)
 
 
 SYSTEMS: Dict[str, Any] = {

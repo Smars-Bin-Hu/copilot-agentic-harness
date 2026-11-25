@@ -42,6 +42,10 @@ class FakeLink:
     def chat_of(self, task: str) -> Dict[str, Any]:
         return {"bound": False}
 
+    def check(self, task: str, kind: str) -> str:
+        """An idle chat (1.8.55: the board asks before it tells the agent of an approval): a message can go, a steer cannot."""
+        return "not-busy" if kind in ("steer", "queue", "stop") else ""
+
 
 class AcceptCase(TaskCase):
     def stop(self, session: str = SESSION) -> Dict[str, Any]:

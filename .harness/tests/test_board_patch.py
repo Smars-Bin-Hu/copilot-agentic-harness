@@ -655,7 +655,7 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('h("span", {class: "st-ow"}, word)', status)  # the word "open" stays when a long name gives way
         en, zh = messages.table("en"), messages.table("zh")
         for key in ("desk.set.open", "desk.set.open.tip.pick", "desk.set.open.apply", "desk.set.open.account", "desk.set.open.none.listed", "desk.set.open.off", "desk.set.open.cannot", "board.status.open.conns", "board.status.open.word",
-                    "desk.outbox.open", "desk.outbox.open.tip.all", "desk.outbox.open.tip.items", "desk.outbox.opened", "desk.outbox.opened.hint", "desk.outbox.opened.tell", "desk.outbox.opened.body"):
+                    "desk.outbox.open", "desk.outbox.open.tip.all", "desk.outbox.open.tip.items", "desk.outbox.opened", "desk.outbox.opened.line", "desk.outbox.opened.tell", "desk.outbox.opened.body"):
             self.assertIn(key, en, key)
             self.assertIn(key, zh, key)
 

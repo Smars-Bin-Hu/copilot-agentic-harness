@@ -220,6 +220,13 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .tk-need.strong.tk-call.done{background:var(--good-bg);border-color:var(--good-line);border-left-color:var(--good-dot)}  /* an approved call: the whole card is green, not orange with a green edge (1.7.28) */
 .tk-call-row{display:flex;align-items:baseline;gap:10px;margin:4px 0 2px}.tk-call-row .tk-call-say{margin:0;min-width:0}.tk-call-row .code-chip{flex:none}.tk-writes{margin-left:8px;font-size:12px;font-weight:600;color:var(--hot);white-space:nowrap}
 .tk-call.done .code-chip.still{background:var(--good-bg);color:var(--good)}
+.tk-call .tk-stamp{margin:3px 0 1px 2px;font-size:11.5px;padding:1px 9px;text-transform:uppercase}
+.tk-need.strong.tk-call.done.tk-stuck{background:var(--hot-bg);border-color:var(--hot-line);border-left-color:var(--hot-dot)}  /* the board could not tell the agent, or the agent left the call: approved, and still a step for the person */.tk-call .tk-stamp.still,html.lite .tk-call .tk-stamp{animation:none}  /* 1.8.55: the review stamp (page.css .rb-stamp) heads the green card; it pops once, when the card first shows */
+.tk-call-row .tk-call-say{overflow-wrap:anywhere}.tk-call-row .tk-ran{color:var(--good);font-weight:700}
+.tk-told{display:flex;align-items:center;gap:6px;margin:6px 0 0;font-size:13px}.tk-told .ok{color:var(--good);font-weight:700}.tk-told .spin{margin:0;color:var(--good)}
+.tk-count{display:flex;align-items:center;gap:10px;margin-top:8px}.tk-count .sub{white-space:nowrap;font-variant-numeric:tabular-nums}
+.tk-count i{flex:1;height:3px;border-radius:2px;background:var(--good-line);overflow:hidden;position:relative}.tk-count i b{position:absolute;inset:0;background:var(--good-dot);transform-origin:left center;transition:transform .25s linear}
+.tk-call.paused .tk-count i b{background:var(--good-line)}
 
 /* 1.7.38 (C11 T2-13): the question or the command the chat waits on, on the card itself */
 .tk-asked{flex:1 1 100%;margin:6px 0 4px;padding:8px 12px;border-left:3px solid var(--line2);background:var(--card);border-radius:6px;font-size:13px;line-height:1.5;overflow-wrap:anywhere;min-width:0}

@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.54 (1.8.0 – 1.8.54, 2026-11-17 – 2026-11-25)
+## 1.8.55 (1.8.0 – 1.8.55, 2026-11-17 – 2026-11-25)
 
 ### Added
 
@@ -68,6 +68,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- **An approval reached the agent only when it waited** (1.8.55). When the agent had gone on without `harness wait` and was still at work, the board told it nothing, the green card's **Tell the agent to run it** was refused (the chat was busy) and the approval ran out unused. Now the board tells the agent itself, in the background: its wait hears it, a steer goes into its running turn while it works, or a message wakes it once its turn is over. After **Approve** the yellow card turns green at once with an **Approved** stamp (it waited for the next look of the page, seconds on a work computer), says how the agent heard it, counts 15 seconds down (paused while the pointer is on it) and folds away. A card stays, with its button, only when the board could not tell the agent (it says why) or the agent delivered its work without the call. The same for **Open … for this task**.
 - **The open mark in the list cut off "open"** (1.8.53): a long connection name showed as `linked items ..`; now the name gives way and the word stays.
 - **A slow record hook no longer says the agent cannot work** (1.8.52): `harness doctor` counted every hook Copilot stopped waiting for as an error, and the board then showed its red "The agent cannot work right now". Only a timed-out preToolUse hook lets a call run without the gate, so only that one is an error; a record hook (postToolUse, the prompt hooks, Stop) that timed out is a warning that some records may be missing.
 - **`harness as` with a Windows account failed on a long command** (1.8.51). A long query (`harness as <connection> -- sqlcmd -Q "..."`) stopped with `could not start with these credentials: ... CreateProcessWithLogonW failed`, while **Test** on the same connection passed. Windows starts a program with another account only when its command line is under 1024 characters. The command now goes to the shell another way, so its length no longer matters, and a `%` in it (`LIKE '%x%'`) stays as written.

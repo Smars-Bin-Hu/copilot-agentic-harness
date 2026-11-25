@@ -217,6 +217,34 @@ A task is one delivery. When a job is so big that it takes many deliveries and t
 - **A person holds the gate**: only the user starts it, and a step passes only when the user says "passed". The cost is that no code stops an agent that declares a pass itself; text has to hold it.
 - **The gate is not changed**: a session with a task cannot write these files; the flow says "write the pointer before starting, update after the end", and no exception is made for it.
 
+### The task is the memory, the chat is rented, the model is a tier
+
+**Planned, not built yet.** This section says where the design goes and why; the measured numbers behind it are in [06](06-cost-optimization.md#10-what-a-chat-costs-cache-context-and-model).
+
+Until now a task had one chat, and a person decided when to start a new one, when to compact and which model to use. Those three choices set most of what a task costs, and a person makes them by feel. The harness has the numbers to make them: Copilot's record says, for every model call, how many tokens were read from the cache and written to it, at what price, and when the cache runs out.
+
+Three ideas:
+
+- **The task is the memory.** The state of a task is in its files (see "Handover by files" above). A new chat that reads those files can go on with the work. What is in no file does not exist for the next chat.
+- **The chat is a resource.** A task may use several chats in its life. A chat has a cost state: how large its context is, until when its cache lives, which model it runs.
+- **The model is a tier.** `light`, `normal` and `strong` are names in a policy file, each tied to a model the editor offers. A stage of a task asks for a tier: the requirement and the plan for the strong one, mechanical steps for the light one.
+
+**The router is a pure function in code.** Each time the board is about to send a message to an agent, it answers three questions from numbers it can read: keep this chat, compact it, or open a new one; and with which model. It writes one line for each decision: the facts, the choice, the reason and the cost it expects. Afterwards the cost that was really paid is written beside it, so a rule that guesses badly shows.
+
+Why code and not the model:
+
+- The inputs are numbers and the answers are few. Code gives the same answer every time, costs nothing and can be checked.
+- An agent cannot change its own model or open its own chat. Only a person or the board can.
+- A model that thinks about whether to switch spends tokens on the thought.
+
+Where the router ends:
+
+- **It decides only where the harness sends the message**: a wake after your decision, a go-on, a step of an autorun, a one-click action. When you type in the editor's chat yourself, the harness cannot choose for you: the task page then only says what the next message will cost, and offers a new chat.
+- **It never changes a chat or a model in the middle of a turn.**
+- **It does not trade memory for tokens.** A new chat is chosen only when the task's files are up to date with the work. Rework costs more than any cache.
+- **It does not judge how hard a request is.** The stage of the task and the model a plan names for a step say that; a light model that meets something its plan does not cover stops and hands it up.
+- **It is a helper, not a guardrail.** When a number cannot be read, the message goes as it goes today: the same chat, the task's model.
+
 ### What is not done
 
 - No orchestration of several agents, and no limit by count on searches and tool calls. It was measured to be of little use: the model regulates itself, and money is saved by choosing the model.

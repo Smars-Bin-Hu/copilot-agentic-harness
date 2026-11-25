@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 import support  # noqa: F401 - puts the engine on the path
 from test_boardserve import ServeCase, TASK
 
-from modules.task import superview, task as task_ops
+from modules.task import superview, tasklife, task as task_ops
 
 STOP = [{"action": "pause", "command": "harness task pause --task t"}, {"action": "close", "command": ""}]
 
@@ -64,9 +64,17 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([(mate["task"], mate["state"], mate["count"]) for mate in out["mates"]], [("a", "work", 0), ("b", "you", 1), ("c", "idle", 0), ("d", "you", 1)])
         self.assertEqual(out["status"], {"watching": 4, "working": 1, "waiting": 2, "idle": 1, "as_of": "2026-11-17T00:00:00+00:00", "oldest_s": 9, "stuck": 0, "error": 0})
 
-    def test_a_working_task_with_a_plan_waiting_waits_for_the_person(self) -> None:
-        out = superview.build(result(row("a", "plan", 3, state="working")))
-        self.assertEqual((out["mates"][0]["state"], out["mates"][0]["count"], len(out["items"])), ("you", 1, 1))
+    def test_a_working_task_calls_the_person_only_for_what_holds_the_agent(self) -> None:
+        for why, mate, items in (("req", "work", 0), ("plan", "work", 0), ("promote", "work", 0), ("accept", "work", 0), ("confirm", "you", 1), ("question", "you", 1), ("asking", "you", 1), ("outbox", "you", 1)):
+            held = row("a", why, 3, state="working", actions=[{"action": "confirm-req", "command": ""}, {"action": "steer", "command": ""}])
+            tasklife.hold_while_working(held)
+            out = superview.build(result(held))
+            self.assertEqual((why, out["mates"][0]["state"], len(out["items"])), (why, mate, items))
+            if mate == "work":
+                self.assertEqual((held["waiting_why"], held["after_turn"], held["waited_s"], [item["action"] for item in held["actions"]]), ("", why, None, ["steer"]))
+        ended = row("a", "plan", 3, state="waiting")
+        self.assertFalse(tasklife.hold_while_working(ended))
+        self.assertEqual(superview.build(result(ended))["mates"][0]["state"], "you")
 
     def test_the_short_name_not_the_folder_path(self) -> None:
         out = superview.build(result(row(".workspace/sandbox/tasks/fix-a", "plan", 3, name="fix-a")))

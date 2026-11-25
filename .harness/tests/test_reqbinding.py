@@ -75,7 +75,7 @@ class BindingTests(TaskCase):
         self.assertEqual(self.decision(denied), "deny")
         self.assertTrue("requirement" in self.reason(denied) or "需求变了" in self.reason(denied))  # the reason says the requirement changed, not just "not approved"
         self.assertTrue(tasks.plan_req_changed(self.root, TASK))
-        self.assertEqual(taskdesk.desk(self.root, "job1", ())["waiting_why"], "plan")  # it waits for the approval again
+        self.assertEqual(taskdesk.desk(self.root, "job1", ())["waiting_why"], "req")  # 1.8.49: the changed requirement first, then the plan again
         self.approve_plan()
         self.assertTrue(self.approved())
         self.assertEqual(self.decision(self.edit(f"{TASK}/DEV/repo/a.sql")), "")
@@ -88,7 +88,7 @@ class BindingTests(TaskCase):
 
         self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "promote")
         self.req.write_text(self.req.read_text(encoding="utf-8").replace("latest", "oldest"), encoding="utf-8")
-        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "plan")  # the plan first
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "req")  # the changed requirement first, then the plan (1.8.49)
         with self.assertRaises(task_ops.CommandError):
             task_ops.approve_promote(self.root, TASK, reader=lambda _p: "x", interactive=True, out=io.StringIO())
 
@@ -106,10 +106,6 @@ class BindingTests(TaskCase):
         with self.assertRaises(task_ops.CommandError) as caught:  # not confirmed: the plan alone is refused (1.5.30)
             task_ops.approve_plan(self.root, TASK, reader=lambda _p: "00000000", interactive=True, out=io.StringIO())
         self.assertIn(f"{TASK}/REQ.md", str(caught.exception))
-        out = io.StringIO()
-        with self.assertRaises(task_ops.CommandError):
-            task_ops.approve_plan(self.root, TASK, reader=lambda _p: "00000000", interactive=True, out=out, with_req=True)
-        self.assertIn(f"{TASK}/REQ.md", out.getvalue(), "the screen of one code for both names the requirement")
         task_ops.confirm_req(self.root, TASK, reader=lambda _p: hashlib.sha256(self.req.read_bytes()).hexdigest()[:6], interactive=True, out=io.StringIO())
         self.assertNotIn(f"{TASK}/REQ.md", screen())
 
@@ -147,7 +143,7 @@ class BindingTests(TaskCase):
 
 
 class RequirementFirst(TaskCase):
-    """1.5.30: a plan stands on a confirmed requirement. The plan alone is refused; one code confirms the requirement and approves the plan."""
+    """1.5.30: a plan stands on a confirmed requirement. 1.8.49: the requirement is confirmed first, with its own code; there is no code for both."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -160,32 +156,33 @@ class RequirementFirst(TaskCase):
 
     def test_a_requirement_not_written_refuses_the_plan(self) -> None:
         with self.assertRaises(task_ops.CommandError) as caught:
-            self.approve_plan(with_req=True)
+            self.approve_plan(with_req=False)
         self.assertIn("REQ.md", str(caught.exception))
         self.assertFalse(tasks.plan_approved(self.root, TASK))
 
-    def test_one_code_confirms_the_requirement_and_approves_the_plan(self) -> None:
+    def test_the_plan_waits_for_the_requirement_to_be_confirmed_first(self) -> None:
         self.write()
-        with self.assertRaises(task_ops.CommandError):
+        with self.assertRaises(task_ops.CommandError) as caught:
             self.approve_plan(with_req=False)  # the plan alone
-        with self.assertRaises(task_ops.CommandError):
-            self.approve_plan(code=tasks.plan_digest(self.root, TASK)[:6], with_req=True)  # the code of the plan alone is not the code of both
-        self.approve_plan(with_req=True)
+        self.assertIn(messages.text("board.action.confirm-req"), str(caught.exception))
+        self.assertFalse(tasks.plan_approved(self.root, TASK))
+        self.confirm_req()
+        self.approve_plan(with_req=False)
         self.assertTrue(tasks.plan_approved(self.root, TASK))
-        self.assertEqual(task_ops.req_state(self.root, TASK), "confirmed")
         self.assertRegex(self.req.read_text(encoding="utf-8"), r"(confirmed|已确认) \d{4}-\d{2}-\d{2}")
         self.assertEqual([event["what"] for event in self.data()["events"]][-2:], ["confirm-req", "approve-plan"])
 
-    def test_a_requirement_changed_between_the_screen_and_the_code_is_not_confirmed(self) -> None:
+    def test_a_requirement_changed_between_the_screen_and_the_code_refuses_the_plan(self) -> None:
         self.write()
-        code = self.plan_code(with_req=True)
+        self.confirm_req()
+        code = self.plan_code()
 
         def change_then_type(_prompt: str) -> str:
             self.req.write_text(self.req.read_text(encoding="utf-8").replace("Keep the latest row per id.", "Keep the oldest row per id."), encoding="utf-8")
             return code
 
         with self.assertRaises(task_ops.CommandError):
-            task_ops.approve_plan(self.root, TASK, reader=change_then_type, interactive=True, out=io.StringIO(), with_req=True)
+            task_ops.approve_plan(self.root, TASK, reader=change_then_type, interactive=True, out=io.StringIO())
         self.assertFalse(tasks.plan_approved(self.root, TASK))
 
     def test_a_requirement_changed_after_its_confirmation_needs_a_new_look(self) -> None:
@@ -207,9 +204,10 @@ class RequirementFirst(TaskCase):
         data = self.data()
         self.assertEqual(tasklife.waiting(self.root, TASK, data)["why"], "req")
         self.write_plan()
-        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "plan", "a plan waiting comes first; its button asks for both")
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "req", "1.8.49: the requirement comes first, the plan after it")
         step = task_ops.next_step(self.root, TASK, self.data())
-        self.assertIn(messages.text("board.action.approve-plan"), step)  # the button of the page, one code for both (C12 RB-N8: no command to run)
+        self.assertIn(messages.text("board.action.confirm-req"), step)  # the buttons of the page, the requirement first (C12 RB-N8: no command to run)
+        self.assertIn(messages.text("board.action.approve-plan"), step)
         self.assertIn("REQ.md", step)
         self.assertNotIn("task approve-plan", step, "the person is told the button, not a command")
         self.approve_plan(with_req=True)
@@ -223,6 +221,54 @@ class RequirementFirst(TaskCase):
         req = self.root / task / "REQ.md"
         req.write_text(written(req.read_text(encoding="utf-8")), encoding="utf-8")
         self.assertNotEqual(tasklife.waiting(self.root, task, self.data(task))["why"], "req", "a medium task has no plan: nothing waits on its requirement")
+
+
+class PlanOnASettledRequirement(TaskCase):
+    """1.8.49: a full task writes PLAN.md only on a requirement that is settled: confirmed, or finished with no open question under "Not clear yet". A hook refuses it otherwise."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.new(kind="dev")
+        self.req = self.task / "REQ.md"
+
+    def settled(self, questions: str) -> None:
+        text = written(self.req.read_text(encoding="utf-8"))
+        head = "## Not clear yet" if "## Not clear yet" in text else "## 没问清的"
+        before, after = text.split(head, 1)
+        rest = after.split("\n## ", 1)
+        self.req.write_text(before + head + "\n\n" + questions + "\n\n## " + rest[1] if len(rest) > 1 else before + head + "\n\n" + questions + "\n", encoding="utf-8")
+
+    def plan(self) -> str:
+        return self.decision(self.edit(f"{TASK}/PLAN.md"))
+
+    def test_the_template_refuses_the_plan(self) -> None:
+        self.assertEqual(tasks.req_unclear(self.root, TASK, self.data()), "template")
+        denied = self.edit(f"{TASK}/PLAN.md")
+        self.assertEqual(self.decision(denied), "deny")
+        self.assertIn("REQ.md", self.reason(denied))
+        self.assertEqual(self.decision(self.edit(f"{TASK}/LOG.md")), "", "only the plan waits")
+
+    def test_an_open_question_refuses_the_plan_and_none_lets_it(self) -> None:
+        self.settled("- Which table keeps the history?\n- 2. And for how long?")
+        self.assertEqual(tasks.req_open_questions(self.root, TASK), 2)
+        self.assertEqual(self.plan(), "deny")
+        for nothing in ("none", "None.", "无", "- none"):
+            self.settled(nothing)
+            self.assertEqual((nothing, tasks.req_unclear(self.root, TASK, self.data())), (nothing, ""))
+            self.assertEqual(self.plan(), "")
+
+    def test_a_confirmed_requirement_lets_the_plan_even_with_a_question_left(self) -> None:
+        self.settled("- Which table keeps the history?")
+        self.assertEqual(self.plan(), "deny")
+        self.confirm_req()
+        self.assertEqual(self.plan(), "")
+
+    def test_no_req_refuses_and_a_light_task_is_not_held(self) -> None:
+        self.req.unlink()
+        self.assertEqual(tasks.req_unclear(self.root, TASK, self.data()), "missing")
+        self.assertEqual(self.plan(), "deny")
+        self.assertEqual(tasks.req_unclear(self.root, TASK, {**self.data(), "tier": "medium"}), "")
+
 
 if __name__ == "__main__":
     unittest.main()

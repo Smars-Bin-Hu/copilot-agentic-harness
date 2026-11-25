@@ -362,7 +362,7 @@ const SERVE = (function () {
     }).catch((error) => { release(row.name, "accept"); failed(error); });
   }
 
-  function act(button, row, item, withReq) {
+  function act(button, row, item) {
     if (item.action === "send") return CHAT.panel(row, item.action);  // chat.js: the panel that shows the message, then sends it
     if (item.action === "answer" || item.action === "steer") return speak(row);
     if (item.action === "confirm") return CHAT.confirm(row);  // the chat waits for a tool to be allowed (B75)
@@ -371,10 +371,7 @@ const SERVE = (function () {
     if (item.action === "autorun on") return AUTORUN.start(row);  // autorun.js: the Start form (models, spend limit, the code), not the code window of an approval
     if (item.action === "close") return close(row);
     if (item.action === "archive") return archive([row.name], serve.archive_to);
-    // A plan stands on a confirmed requirement: the plan alone is refused, so one code confirms the requirement and approves the plan (1.7.38, C11 T2-11: no window of its own before the code; the window with the code says it).
-    const joint = item.action === "approve-plan" && Boolean(row.req_unconfirmed);
-    withReq = withReq || joint;
-    const body = {action: item.action, task: row.name, ...(withReq ? {with_req: true} : {})};
+    const body = {action: item.action, task: row.name};  // 1.8.49: a plan is approved only on a confirmed requirement; there is no code for both
     if (item.action === "accept") return accept(button, row, body);
     if (free(item.action)) {
       button.textContent = t("board.serve.working");
@@ -386,12 +383,12 @@ const SERVE = (function () {
     hold(row.name, item.action, button);
     post("/api/act", {...body, step: "preview"}).then((data) => {
       release(row.name, item.action);
-      codeWindow(button, row, item, body, joint, data, "", false, "");
+      codeWindow(button, row, item, body, data, "", false, "");
     }).catch((error) => { release(row.name, item.action); failed(error); });  // an error while drawing the dialog is told too, not lost
   }
 
   // The window with what the terminal would show and the code field. `typed`, `nowake` and `why` are what a window that comes back after a late refusal starts with.
-  function codeWindow(button, row, item, body, joint, data, typed, nowake, why) {
+  function codeWindow(button, row, item, body, data, typed, nowake, why) {
     const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("board.serve.code"), value: typed});
     const yes = h("button", {class: "act hot", type: "button"}, t("board.serve.confirm"));
     const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
@@ -400,8 +397,7 @@ const SERVE = (function () {
     if (quiet && nowake) quiet.checked = true;
     const quietRow = quiet ? h("label", {class: "sub", title: t("board.plan.nowake.tip")}, quiet, " " + t("board.plan.nowake")) : null;
     // What the terminal would show can be long (a promote lists every file): it scrolls in its own box, so the code and the buttons stay in view.
-    const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), joint ? h("p", null, t("board.plan.req")) : null,
-      joint && (row.req_sections || []).length ? h("p", {class: "bad"}, t("desk.req.unfinished", {sections: row.req_sections.join(", ")})) : null,  // the card says it; so does the window the code is typed in
+    const view = dialog([h("h2", null, button.dataset.label + " · " + row.name),
       h("div", {class: "screen"}, data.result.screen.map((line) => h("p", {class: "sub"}, line))),
       h("p", null, data.result.ask), input, quietRow, h("div", {class: "row"}, yes, no), said]);
     no.addEventListener("click", view.close);
@@ -414,7 +410,7 @@ const SERVE = (function () {
       // The server may be slow (git): the window stays 700 ms, then the action goes on behind the page. The code goes with the act step as ever.
       settle(view, post("/api/act", {...body, step: "act", code, ...(asleep ? {no_wake: true} : {})}), row.name, item.action, button, {
         stay: (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; no.disabled = false; yes.textContent = t("board.serve.confirm"); },
-        again: (error) => codeWindow(button, row, item, body, joint, data, code, asleep, error.message)});
+        again: (error) => codeWindow(button, row, item, body, data, code, asleep, error.message)});
     };
     yes.addEventListener("click", send);
     input.addEventListener("keydown", (event) => { if (isEnter(event)) send(); });

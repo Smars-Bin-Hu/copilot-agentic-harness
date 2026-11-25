@@ -286,6 +286,12 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         return {"why": "asking", "since": str(asking["since"])}  # the agent waits in the tool that asks the person (1.7.20): this comes first; held calls can still be approved meanwhile
     if state == "partial":
         return {"why": "recover", "since": last_event(data, "promote-partial") or updated}
+    if data.get("kind") != "test" and tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data) and task_ops.req_state(root, task) in ("open", "changed"):
+        try:
+            written = datetime.fromtimestamp((tasks.task_dir(root, task) / tasks.REQ_FILE).stat().st_mtime, timezone.utc).isoformat()
+        except OSError:
+            written = updated
+        return {"why": "req", "since": written}  # 1.8.49: a plan waits for the requirement; the person confirms it first, then the plan
     if data.get("kind") != "test" and tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data):  # a test task writes nothing back: a plan it has is not asked for (B65)
         try:
             changed = datetime.fromtimestamp(tasks.plan_file(root, task).stat().st_mtime, timezone.utc).isoformat()
@@ -726,6 +732,34 @@ def waits_for_person(why: str) -> bool:
     return bool(why) and not str(why).startswith("go-")
 
 
+BLOCKING_WAITS = ("confirm", "question", "auth", "asking", "outbox")  # waits that hold the agent itself: they show while it works
+WAIT_FIELDS = ("waiting", "waiting_why", "waiting_tip", "waiting_since", "waiting_from")
+DECISION_ACTIONS = ("confirm-req", "approve-plan", "approve-promote", "recover", "review extend", "review waive", "accept")
+
+
+def waits_while_working(why: str) -> bool:
+    """Does this wait count while the agent is in a turn? Only one that holds the agent (1.8.49)."""
+    return why in BLOCKING_WAITS
+
+
+def hold_while_working(row: Dict[str, Any]) -> bool:
+    """A row whose agent is in a turn (`state` "working") waits for the person only for what holds the agent (1.8.49, work PC 2026-11-24: the super agent called the person
+    and the task page said "waits for you" while REQ.md was half written, and nothing could be pressed). Any other wait (req, plan, promote, accept, ...) comes when the turn ends:
+    its fields are emptied, the decisions are taken off `actions`, and `after_turn` keeps the reason (Off work still puts such a task aside). Call it once the row's state is final
+    (`boardserve.settle`, the static board, `task list`). True when it held one."""
+    why = str(row.get("waiting_why") or "")
+    if row.get("status") != "open" or row.get("state") != "working" or not why or why.startswith("go-") or waits_while_working(why):
+        return False
+    row["after_turn"] = why
+    for key in WAIT_FIELDS:
+        if key in row:
+            row[key] = ""
+    row["waited_s"] = None
+    if isinstance(row.get("actions"), list):
+        row["actions"] = [item for item in row["actions"] if item.get("action") not in DECISION_ACTIONS]
+    return True
+
+
 WAITING_WHY = waiting  # `offwork` has a parameter of the same name
 
 
@@ -982,13 +1016,16 @@ def row_named(root: Path, name: str) -> Optional[Dict[str, Any]]:
     return next((row for row in list_tasks(root, True)["tasks"] if row["name"] == name), None)
 
 
-def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
-    """Tasks by state (STATES): those that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`; one whose task.json is damaged, as `broken` (its status stays `new`: nothing else of it can be read).
+def list_tasks(root: Path, everything: bool = False, hold: bool = False) -> Dict[str, Any]:
+    """`hold`: the rows are final (`task list`): a working row's wait waits for the turn to end (`hold_while_working`). The served board holds them itself, after the chat's word.
+    Tasks by state (STATES): those that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`; one whose task.json is damaged, as `broken` (its status stays `new`: nothing else of it can be read).
     Every row has `state` (one of STATES), `held` and `active`; a row with no session on it has `unheld_s`."""
     rows = []
     for task in tasks.folders(root):
         row = task_row(root, task, tasks.read(root, task), everything)
         if row is not None:
+            if hold:
+                hold_while_working(row)
             rows.append(row)
     rows.sort(key=lambda row: row["updated_at"], reverse=True)
     rows.sort(key=lambda row: (STATES.index(row["state"]), -(row["waited_s"] or 0)))

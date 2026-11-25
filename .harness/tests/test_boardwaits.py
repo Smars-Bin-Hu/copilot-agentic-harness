@@ -93,6 +93,27 @@ class StartingTests(unittest.TestCase):
         settle(fake, found)
         self.assertEqual(found["waiting_why"], "outbox")
 
+    def test_a_decision_waits_for_the_turn_to_end(self) -> None:
+        """1.8.49: while the agent works, a requirement, a plan or a delivery waits for nobody yet; what holds the agent still does. A chat that runs no turn is not at work."""
+        fake = board()
+        fake.link.chat = {"bound": True, "state": "busy"}
+        for why in ("req", "plan", "promote", "accept", "review"):
+            found = row(fake.link, state="working", active=True, waiting_why=why, actions=[{"action": "confirm-req"}, {"action": "approve-plan"}, {"action": "steer"}])
+            settle(fake, found)
+            self.assertEqual((why, found["state"], found["waiting_why"], found["waiting"], found["waited_s"], found["after_turn"]), (why, "working", "", "", None, why))
+            self.assertEqual([item["action"] for item in found["actions"]], ["steer"])
+            self.assertEqual(superview.build({"rows": [found]})["status"]["waiting"], 0)
+        for why in ("outbox", "confirm", "question"):
+            found = row(fake.link, state="working", active=True, waiting_why=why)
+            settle(fake, found)
+            self.assertEqual((why, found["waiting_why"]), (why, why))
+        fake.link.chat = {"bound": True, "state": "idle"}  # the hook log still says at work; the chat runs no turn: the wait shows
+        found = row(fake.link, state="working", active=True, waiting_why="plan", actions=[{"action": "approve-plan"}])
+        settle(fake, found)
+        self.assertNotEqual(found["state"], "working")
+        self.assertEqual((found["waiting_why"], [item["action"] for item in found["actions"]]), ("plan", ["approve-plan"]))
+        self.assertEqual(superview.build({"rows": [found]})["status"]["waiting"], 1)
+
     def test_an_unknown_chat_state_does_not_end_it(self) -> None:
         fake = board()
         begin(fake, "newchat")

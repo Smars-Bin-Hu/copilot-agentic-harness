@@ -111,7 +111,6 @@ const COMPANION = (function () {
       const what = h("div", {class: "cp-text" + (asks || pop.prose(item) ? " ask" : "") + (pop.prose(item) ? " prose" : ""), title: pop.fullOf(item)}, pop.mainOf(item));
       if (asks || pop.prose(item)) { what.tabIndex = 0; what.addEventListener("click", () => what.classList.toggle("open")); }
       if (pop.hasCalls(item)) what.hidden = true;  // the held calls below show the command with its code
-      const joint = pop.jointNote(item);
       const prev = h("button", {type: "button", class: "cp-cb", title: t("super.pop.prev"), "aria-label": t("super.pop.prev")}, "‹"), next = h("button", {type: "button", class: "cp-cb", title: t("super.pop.next"), "aria-label": t("super.pop.next")}, "›");
       prev.addEventListener("click", () => move(-1)); next.addEventListener("click", () => move(1));
       const open = h("button", {type: "button", class: "cp-b", title: t("super.pop.open.tip"), "aria-label": t("super.pop.open.tip")}, t("super.pop.open.go"));
@@ -121,7 +120,7 @@ const COMPANION = (function () {
       const waited = item.waited_s === null || item.waited_s === undefined ? "" : clock(item.waited_s);
       return h("div", {class: "cp-card"},
         h("div", {class: "cp-head"}, h("b", {class: "cp-task", title: item.task}, item.label || item.task), h("span", {class: "cp-why"}, pop.why(item)), waited ? h("span", {class: "cp-wait", title: t("super.waited", {time: waited})}, waited) : null),
-        what, ...pop.extraFor(item), joint ? h("div", {class: "cp-joint"}, joint) : null, cached(state.replies, item, pop.replyFor), cached(state.previews, item, pop.previewFor), acts);
+        what, ...pop.extraFor(item), cached(state.replies, item, pop.replyFor), cached(state.previews, item, pop.previewFor), acts);
     }
     function drawCard(force) {
       const snap = state.snap, w = snap.items.length, at = current(), item = snap.items[at];

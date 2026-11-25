@@ -1075,6 +1075,7 @@
       askNote(),
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
       desk.req_unconfirmed && desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null,
+      desk.plan_after_req && desk.waiting_why === "req" ? h("p", {class: "hint"}, t("desk.plan.after_req")) : null,
       desk.test && desk.test.reopen ? h("p", {class: "hint bad"}, t("desk.test.reopen", {dev: desk.test.reopen, envs: desk.test.failed.join(", ")})) : null,
       desk.state === "working" && served() ? h("p", {class: "hint"}, t(desk.chat && desk.chat.bound ? "desk.busy.note" : "desk.busy.note.nochat")) : null,
       desk.state === "waiting" && !desk.held && !chatNew(actionRow()) ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,

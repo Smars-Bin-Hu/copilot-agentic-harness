@@ -5,7 +5,7 @@ Order of `items`: three groups, then the longest wait first inside a group (`wai
 2. decisions: `req`, `plan`, `promote`, `review`, `recover`, `accept`;
 3. the rest (hand-offs, `commit`, `stopped`, `cancelled`).
 Aging (1.8.4): `build(result, age_up)` moves an item that has waited `age_up` seconds or more up one group (group 1 joins group 0, group 2 joins group 1), so held calls cannot starve the decisions; the item says `aged: true`. The order inside a group stays the longest wait first. `age_up=None` is no aging (the order above).
-`go-*` marks are left out: the person approved and the board tells the agent; nothing waits for the person. A task that waits for the person is `you` even while its agent works.
+`go-*` marks are left out: the person approved and the board tells the agent; nothing waits for the person. The rows come held (`tasklife.hold_while_working`, 1.8.49): while the agent works, only what holds it (a tool to allow, a question, a held call) is a wait.
 A row has one `waiting_why`, so a task has at most one item. A closed task is left out; a task put aside waits for nothing.
 
 1.8.4: two items that are not waits of the task's own. `error` (group 0): the chat's last turn ended in an error and the row waits as `stopped` or for nothing; it takes the place of that wait; `resumable` says whether Try again can run it. `stuck` (group 0): the chat runs a turn and the session log

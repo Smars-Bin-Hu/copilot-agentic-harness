@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import io
 import re
+import hashlib
 import json
 import os
 import socket
@@ -334,23 +335,23 @@ class ServeTests(ServeCase):
         self.assertIn("1", result["board"]["text"])
         self.assertEqual(board.act("onwork", "", "act")["resumed"], result["paused"])
 
-    def test_an_unconfirmed_requirement_refuses_the_plan_alone_and_one_code_does_both(self) -> None:
-        """1.5.30: the page asks first (a dialog), the server refuses the plan alone, and `with_req` approves both with the code of both files."""
+    def test_an_unconfirmed_requirement_refuses_the_plan_until_it_is_confirmed(self) -> None:
+        """1.5.30, 1.8.49: the server refuses the plan while REQ.md is not confirmed (no code for both; `with_req` is gone); confirmed first, the plan goes with its own code."""
         cookie = self.pair()
         req = self.root / TASK / "REQ.md"
         req.write_text(req.read_text(encoding="utf-8").replace("<一两段", "给 a.sql 加一列。 ").replace("<One or two paragraphs", "Add a column. "), encoding="utf-8")
         body = {"action": "approve-plan", "task": TASK}
-        status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
-        self.assertEqual(status, 409)
-        self.assertIn("--with-req", data["error"])
-        status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview", "with_req": True}, cookie=cookie)
+        for extra in ({}, {"with_req": True}):
+            status, data, _ = self.request("POST", "/api/act", {**body, **extra, "step": "preview"}, cookie=cookie)
+            self.assertEqual(status, 409)
+            self.assertNotIn("--with-req", data["error"])
+        self.assertFalse((self.data().get("plan") or {}).get("approved_sha256"))
+        code = hashlib.sha256(req.read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:6]
+        status, data, _ = self.request("POST", "/api/act", {"action": "confirm-req", "task": TASK, "step": "act", "code": code}, cookie=cookie)
         self.assertEqual(status, 200, data)
-        self.assertTrue(any("REQ.md" in line for line in data["result"]["screen"]))
-        code = task_ops.plan_digest_with(req.read_text(encoding="utf-8"), tasks.plan_digest(self.root, TASK))[:6]
-        status, data, _ = self.request("POST", "/api/act", {**body, "step": "act", "code": code, "with_req": True}, cookie=cookie)
+        status, data, _ = self.request("POST", "/api/act", {**body, "step": "act", "code": tasks.plan_digest(self.root, TASK)[:6]}, cookie=cookie)
         self.assertEqual(status, 200, data)
         self.assertTrue(self.data()["plan"]["approved_sha256"])
-        self.assertIn("confirm-req", [event["what"] for event in self.data()["events"]])
         self.assertTrue(self.data()["req"]["confirmed_sha256"])
 
     def test_an_unpaired_refusal_says_so_for_the_page(self) -> None:

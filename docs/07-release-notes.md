@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.48 (1.8.0 – 1.8.48, 2026-11-17 – 2026-11-24)
+## 1.8.49 (1.8.0 – 1.8.49, 2026-11-17 – 2026-11-24)
 
 ### Added
 
@@ -66,6 +66,8 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- **"Waits for you" while the agent was still writing** (1.8.49). The super agent showed a card and its avatar turned amber while a task's agent was still writing `REQ.md` or `PLAN.md`; the task page said it waited for you, and nothing on it could be pressed. Now a task whose agent is in a turn waits for you only for what holds the agent (a tool to allow, a question, a held call). A requirement, a plan, a write-back or a delivery shows when the turn ends, the same on the board, the task page, the super agent and `harness task list`. **Off work** still puts such a task aside.
+- **A plan beside an open requirement** (1.8.49). In a dev, test or kb task the agent writes `PLAN.md` in the same turn as `REQ.md` only when the requirement has no template text and no question under "Not clear yet"; a hook refuses it otherwise, so the agent asks you first. Once you confirm the requirement, the plan can be written whatever is left.
 - **A call could run without the gate on a slow computer** (1.8.48). Copilot waits for each hook for the time set in `.github/hooks/harness.json`, and when the hook does not answer in time it runs the call anyway. That time was 30 seconds; on a work computer with an antivirus, hooks took 4–8 seconds as a rule and up to 111 seconds, and about 6 in 100 checks before a call ran out of time. The time is now 120 seconds for every hook. `harness doctor` says it is an error when a hook's time is under 120 seconds, and reads Copilot's own record of the last 5 sessions: a hook Copilot stopped waiting for is an error, with the number of calls that ran without the gate. Making the hook itself faster comes next.
 - The super agent's line of a task that delivered again could show the task's previous reply, not the new one (1.8.47; since 1.8.43). The hook marks the wait before Copilot ends the turn, 3–13 seconds earlier on a work computer, and the last ended turn was then the one before. The reply is now taken only once the turn has ended, and a line already shown takes the new words.
 - **Waiting for you** showed a task that stopped some seconds after its task page did (1.8.47): the super agent looked every 5 seconds. It now takes a light look at the chats every 1.5 seconds, from the board's memory with no file read, and when a turn starts or ends it looks at the tasks at once and every 2.5 seconds for 15 seconds.
@@ -112,6 +114,7 @@ To see which version you have: `harness --version`.
 
 ### Retired
 
+- **One code for the requirement and the plan** (1.8.49): you confirm the requirement first (**Confirm requirement**), then approve the plan (**Approve plan**), each with its own code. `harness task approve-plan --with-req` is gone.
 - **The reply box on the super agent's card of a stopped task** (1.8.43): press **Reply in chat** and write in the chat's input; the words go to the task as before.
 - **The Settings gear, the Appearance sliders, the house and the stop button** (1.8.39): Settings, Appearance and Stop board are in the account menu at the top right; the robot and the name at the top left of the board go to the Enter screen. Only **?** and the knowledge base stay at the bottom right.
 - **Network and the third group of Settings** (1.8.34): Settings has two groups, Harness (You, Programs, Copilot) and Company (Knowledge base, Tool packs, Code repositories, Connections), then Advanced, which opens with Network (proxy and certificates). Restart board is at the bottom left.

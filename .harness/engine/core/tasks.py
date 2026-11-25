@@ -121,6 +121,70 @@ _HEADING = re.compile(r"^#{1,6}\s*(.*?)\s*$")
 _CONFIRM_WORDS = re.compile(r"用户确认|user confirmed", re.IGNORECASE)
 
 
+# A line of REQ.md that is still the template's: only `<...>` (after a list mark and an item number, like `- [R1] <ENV>: <...>`). Real text that holds an angle bracket is not the whole line.
+PLACEHOLDER = re.compile(r"^(?:[-*]\s+)?(?:\[[TRA]\d+\]\s+)?<[^<>\n]+>(?::\s*<[^<>\n]+>)?\s*$")
+_OPEN_ASKS = ("not clear yet", "没问清的")  # the section of REQ.md that holds the questions for the person
+_NOTHING = re.compile(r"^(?:none|nothing|n/?a|无|没有|暂无)[.。]?$", re.IGNORECASE)
+
+
+def _req_lines(root: Path, task: str) -> Optional[List[str]]:
+    try:
+        return filecache.read_text(task_dir(root, task) / REQ_FILE, "utf-8-sig", "replace").splitlines()
+    except OSError:
+        return None
+
+
+def req_unfilled_sections(root: Path, task: str) -> List[Any]:
+    """[(section heading, lines still the template's)] of REQ.md, in file order; only the sections that have some. Lines before the first heading count under the title."""
+    found: List[Any] = []
+    heading, count, fence = "", 0, False
+    for line in _req_lines(root, task) or []:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fence = not fence
+        if not fence and re.match(r"^#{1,6}\s+\S", stripped):
+            if count:
+                found.append((heading, count))
+            heading, count = stripped.lstrip("#").strip(), 0
+        elif not fence and PLACEHOLDER.match(stripped):
+            count += 1
+    if count:
+        found.append((heading, count))
+    return found
+
+
+def req_open_questions(root: Path, task: str) -> int:
+    """How many questions for the person REQ.md still lists under "Not clear yet" (1.8.49). A line that is the template's `<...>`, or says "none", is no question."""
+    count, inside, fence = 0, False, False
+    for line in _req_lines(root, task) or []:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fence = not fence
+            continue
+        if not fence and re.match(r"^#{1,6}\s+\S", stripped):
+            inside = stripped.lstrip("#").strip().lower() in _OPEN_ASKS
+            continue
+        words = re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", stripped).strip()
+        if inside and words and not words.startswith(">") and not PLACEHOLDER.match(stripped) and not _NOTHING.match(words):
+            count += 1
+    return count
+
+
+def req_unclear(root: Path, task: str, data: Dict[str, Any]) -> str:
+    """Why a plan may not be written yet (1.8.49): "" when it may. A full task (dev, test, kb) plans on a requirement that is settled: confirmed as it is now, or
+    written with no template text and no open question. `missing` (no REQ.md), `template` (template text left), `questions` (open questions under "Not clear yet")."""
+    if data.get("tier") != "full":
+        return ""
+    if _req_lines(root, task) is None:
+        return "missing"
+    kept = (data.get("req") or {}).get("confirmed_sha256") if isinstance(data.get("req"), dict) else None
+    if kept and kept == req_digest(root, task):
+        return ""
+    if req_unfilled_sections(root, task):
+        return "template"
+    return "questions" if req_open_questions(root, task) else ""
+
+
 def req_digest(root: Path, task: str) -> str:
     """sha256 of what REQ.md asks for: its sections "What to do", "What not to do" and "Done when" (in either language),
     with blanks and line breaks ignored. The confirmation line, the sources, the open questions and the change record do not count: a line

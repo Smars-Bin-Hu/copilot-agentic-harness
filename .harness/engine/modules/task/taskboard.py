@@ -70,7 +70,7 @@ def watch(root: Path, everything: bool, interval: float, out: Optional[TextIO] =
     drawn = 0
     try:
         while rounds is None or drawn < rounds:
-            text = table(tasklife.list_tasks(root, everything))
+            text = table(tasklife.list_tasks(root, everything, hold=True))
             clear(out)
             out.write(text + "\n\n" + say("board.text.watch", seconds=f"{interval:g}") + "\n")
             out.flush()
@@ -239,10 +239,11 @@ def link_marks(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
     return views
 
 
-def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (), rewrite: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
+def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (), rewrite: bool = True, hold: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
     """The rows of the board, each with its numbers, the page of the task (written over the one of before) and its actions.
     A task whose numbers cannot be worked out is listed without them. With `everything`, the newest closed tasks come
     too (`closed_shown`): the page filters and sorts them; `closed_hidden` counts the older ones that are not listed.
+    `hold` False (the served board): a working row keeps its wait here; `Board.settle` holds it once the chat has said whether the agent works (1.8.49).
     `rewrite` False (the served board, 1.6.109): a task's page on disk is written only when it is missing or the task changed. The served board
     draws that page when it is asked for, and writing every page every few seconds cost a slow computer much of its time."""
     result = tasklife.list_tasks(root, everything)
@@ -296,6 +297,9 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
                 _closed[key] = (row["updated_at"], row["brief"], row["report"])
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away
             problems.append({"task": row["task"], "error": f"{type(error).__name__}: {error}"})
+    if hold:
+        for row in result["tasks"]:
+            tasklife.hold_while_working(row)
     for row in result["tasks"]:  # the health rules (1.6, B74): `warn` is empty unless a rule fires; the cost rule compares with the closed tasks of the same kind on the list
         row["warn"] = health.check(root, row, tasks.read(root, row["task"]) or {}, health.peers_of(result["tasks"], row.get("kind") or "") if not row.get("reviews") else []) if row["status"] == "open" else []  # a review is compared with no rca task (1.7.41)
     return result, problems

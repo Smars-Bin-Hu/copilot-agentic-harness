@@ -494,7 +494,8 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.write_plan()
         self.write_req()
         self.stopped()
-        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(with_req=True), with_req=True)
+        self.confirm_req()
+        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code())
         self.assertEqual(done["agent"], "sending")  # 1.7.43: the message goes in the background
         self.board.woken.join(10)
         self.assertEqual([item["text"] for item in self.link.sent], ["Plan approved (PLAN.md). Go on with TODO.md."])
@@ -506,7 +507,8 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.write_plan()
         self.write_req()
         self.stopped()
-        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(with_req=True), with_req=True, no_wake=True)
+        self.confirm_req()
+        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(), no_wake=True)
         self.assertEqual(done["agent"], "none")
         self.assertIsNone(getattr(self.board, "woken", None))
         self.assertEqual(self.link.sent, [])
@@ -530,7 +532,8 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.write_req()
         self.stopped()
         self.link.refuse = True
-        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code(with_req=True), with_req=True)
+        self.confirm_req()
+        done = self.board.act("approve-plan", NAME, "act", code=self.plan_code())
         self.assertEqual(done["agent"], "sending")  # 1.7.43: the message goes in the background
         self.board.woken.join(10)
         self.assertEqual(self.link.sent, [])
@@ -541,7 +544,8 @@ class ApprovalsWakeTheAgentTests(AcceptCase):
         self.write_plan()
         self.write_req()
         self.stopped()
-        self.board.act("approve-plan", NAME, "preview", with_req=True)
+        self.confirm_req()  # 1.8.49: the plan's preview stands on a confirmed requirement
+        self.board.act("approve-plan", NAME, "preview")
         self.assertEqual(self.link.sent, [])
         self.assertEqual(self.waiting_why(), "stopped", "a preview decides nothing")
 

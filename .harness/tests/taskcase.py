@@ -5,6 +5,7 @@ Not a test module itself (no `test_` prefix): the classes here hold no tests.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import unittest
@@ -119,20 +120,25 @@ class TaskCase(TargetCase):
             body = body.replace(mark, text + " ")
         path.write_text(body, encoding="utf-8")
 
-    def plan_code(self, task: str = TASK, with_req: bool = False) -> str:
-        if with_req:
-            text = (self.root / task / "REQ.md").read_text(encoding="utf-8", errors="replace")
-            return task_ops.plan_digest_with(text, tasks.plan_digest(self.root, task))[:6]
+    def plan_code(self, task: str = TASK) -> str:
         return tasks.plan_digest(self.root, task)[:6]
 
+    def confirm_req(self, task: str = TASK) -> Dict[str, Any]:
+        """The person confirms REQ.md as it is now (its own code)."""
+        text = (self.root / task / "REQ.md").read_text(encoding="utf-8", errors="replace")
+        code = hashlib.sha256(text.encode("utf-8")).hexdigest()[:6]
+        return task_ops.confirm_req(self.root, task, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
+
     def approve_plan(self, code: Optional[str] = None, out: Any = None, task: str = TASK, with_req: Optional[bool] = None) -> Dict[str, Any]:
-        """A plan stands on a confirmed requirement (1.5.30): by default the requirement is written and confirmed with the plan, one code."""
-        if with_req is None:
+        """A plan stands on a confirmed requirement (1.5.30; 1.8.49: no code for both). By default (`with_req` None or True) the requirement is written and
+        confirmed first, then the plan is approved; `with_req` False approves the plan as things are."""
+        if with_req is not False:
             if task_ops.req_state(self.root, task) == "unwritten":
                 self.write_req(task)
-            with_req = task_ops.req_state(self.root, task) in ("open", "changed")
-        typed = code if code is not None else self.plan_code(task, with_req)
-        return task_ops.approve_plan(self.root, task, reader=lambda _prompt: typed, interactive=True, out=out or io.StringIO(), with_req=with_req)
+            if task_ops.req_state(self.root, task) in ("open", "changed"):
+                self.confirm_req(task)
+        typed = code if code is not None else self.plan_code(task)
+        return task_ops.approve_plan(self.root, task, reader=lambda _prompt: typed, interactive=True, out=out or io.StringIO())
 
     def ready(self, name: str = NAME) -> None:
         """A task with an approved plan."""

@@ -222,7 +222,7 @@ RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: 
 START_LATE = 120.0  # 1.8.5: seconds after the board sent something before "starting" says the agent was not seen to start
 START_FORGET = 600.0  # and seconds after that before the board lets go of the mark
 TITLE_MAX = 80  # characters of a task's display name (1.8.5)
-WAIT_FIELDS = ("waiting", "waiting_why", "waiting_tip", "waiting_since", "waiting_from")
+WAIT_FIELDS = tasklife.WAIT_FIELDS
 ANSWERED_BY_A_TURN = ("go-req", "go-plan", "go-promote", "go-recover", "go-review", "asking", "stopped", "cancelled")  # marks a running turn has answered; the hooks take them away later (slowly on a busy computer)
 CHAT_STILL = ("idle", "error", "input")  # VS Code says the chat runs no turn: it waits for the person (`input`: a question or a command to allow, 1.7.20), or its last turn failed
 
@@ -518,7 +518,7 @@ class Board:
 
     def _rows(self) -> Dict[str, Any]:
         self.close_promoted()
-        result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served, rewrite=False)
+        result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served, rewrite=False, hold=False)
         self.link.overlay(result["tasks"])
         moved = False
         for row in result["tasks"]:
@@ -553,7 +553,7 @@ class Board:
             if row.get("status") != "open" or row.get("paused_since"):
                 continue
             name = str(row.get("task") or "")
-            if row.get("state") != "working" or (tasklife.waits_for_person(str(row.get("waiting_why") or "")) and not starting_now(row)):  # a task the board just told to go on is at work
+            if row.get("state") != "working" or (tasklife.waits_for_person(str(row.get("waiting_why") or row.get("after_turn") or "")) and not starting_now(row)):  # a task the board just told to go on is at work
                 waits.append(name)
             else:
                 works.append(name)
@@ -965,7 +965,7 @@ class Board:
             result["agent"] = {code: place for code, place in stood}
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False, voids: Any = None, no_wake: bool = False) -> Dict[str, Any]:
+    def act(self, action: str, task: str, step: str, code: str = "", n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None, void: bool = False, voids: Any = None, no_wake: bool = False) -> Dict[str, Any]:
         """Run one action. `no_wake` (approve-plan only, 1.8): the person will switch autorun on next, so the board sends the agent nothing. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`;
         `seen` for `approve-action` only: what the person saw when they pressed View (`outbox.approve_action`)."""
         if action in ALL_AT_ONCE:
@@ -1039,9 +1039,6 @@ class Board:
         if action == "autorun on":  # 1.8, step 9: autorun starts from its own form (`/api/autorun/on`: the models, the spend limit, the Start order), not from the code window of an approval
             raise CommandError(say("serve.autorun.form"))
         call = runner(self.root, action, task)
-        if action == "approve-plan" and with_req:
-            plain = call
-            call = lambda **kw: plain(with_req=True, **kw)  # noqa: E731 - the requirement and the plan, one code
         if action == "approve-action" and isinstance(seen, dict):
             held = call
             call = lambda **kw: held(seen=seen, **kw)  # noqa: E731 - the files of the card, as the person saw them (1.7.38, C12 RB-N5)
@@ -1150,6 +1147,7 @@ class Board:
         if live and state == "error":
             row["state"], row["active"] = "error", False
             row["error"] = chat.get("error") if isinstance(chat.get("error"), dict) else {}
+        tasklife.hold_while_working(row)  # 1.8.49: while the agent is in a turn, only what holds it waits for the person
         return row.get("state") != old
 
     def title(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -2739,7 +2737,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"), bool(data.get("void")), data.get("voids"), bool(data.get("no_wake")))
+                result = board.act(action, task, step, str(data.get("code", "")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"), bool(data.get("void")), data.get("voids"), bool(data.get("no_wake")))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

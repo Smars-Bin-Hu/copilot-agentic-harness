@@ -117,8 +117,6 @@ a.sa-task:hover{text-decoration:underline}
 .sa-what.ask{cursor:pointer;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden;font-family:var(--mono);font-size:12.5px;word-break:break-word}
 .sa-what.sa-sum{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;white-space:normal;cursor:pointer}  /* 1.8.43: two lines of a task's last words; the whole words are its line in the chat */
 .sa-what.ask.open{display:block;max-height:260px;overflow:auto}
-.sa-note{margin-top:5px;font-size:12px;color:var(--soft)}
-.sa-note[hidden]{display:none}
 .sa-next{font-size:12.5px;color:var(--soft)}
 .sa-text{white-space:pre-wrap}
 .sa-more{margin:5px 0 0}

@@ -841,11 +841,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       return nodes;
     }
     function drawActs(entry) {
-      const row = rowFor(entry.item.task);
       const buttons = buttonsFor(entry.item);
-      const joint = entry.item.why === "plan" && Boolean(row.req_unconfirmed);  // one code confirms the requirement and approves the plan (the approve-plan window does it)
-      entry.note.hidden = !joint;
-      entry.note.textContent = joint ? t("super.plan.joint") : "";
       const open = taskLink(entry.item.task, t("super.open") + " ↗", "act sa-open");
       const goes = buttons.filter((node) => node.classList && node.classList.contains("sa-call")).map((node) => node.querySelector(".sa-callgo")).filter(Boolean);
       entry.acts.classList.toggle("sa-calls", goes.length > 0);
@@ -971,14 +967,13 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
         what.addEventListener("click", flip);
         what.addEventListener("keydown", (event) => { if (isEnter(event)) { event.preventDefault(); flip(); } });
       }
-      const note = h("div", {class: "sa-note", hidden: ""});
       const acts = h("div", {class: "sa-acts"});
       const xtra = h("div", {class: "sa-xtra"});
       const more = !asksPerson(item) && !["error", "stuck", "accept"].includes(item.why) && item.detail && item.detail !== item.title ? h("details", {class: "sa-more"}, h("summary", null, t("super.details")), h("pre", null, item.detail)) : null;
       const node = h("div", {class: "sa-row item" + (item.why === "error" ? " err" : ""), "data-task": item.task, "data-id": item.id},
         h("span", {class: "sa-mini hot"}, PET.face("you", (mates.find((mate) => mate.task === item.task) || {}).kind, 0)),
-        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task, undefined, undefined, item), why, waited), what, xtra, note, more, acts));
-      const entry = {item, node, acts, waited, what, note, why, xtra, xsig: "", sig: "", clicked: ""};
+        h("div", {class: "sa-bub fwd"}, h("div", {class: "sa-fw"}, taskLink(item.task, undefined, undefined, item), why, waited), what, xtra, more, acts));
+      const entry = {item, node, acts, waited, what, why, xtra, xsig: "", sig: "", clicked: ""};
       if (SAYS(item)) node.querySelector(".sa-bub").insertBefore(replyBox(entry), acts);
       const preview = previewBox(item);
       if (preview) node.querySelector(".sa-bub").insertBefore(preview, acts);
@@ -1016,7 +1011,6 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
       if (counting) { clearTimeout(counting.timer); COUNT.delete(entry.item.id); }  // a card that left takes its countdown with it
       entry.done = true;
       entry.waited.textContent = "";
-      entry.note.hidden = true;
       // The task has another wait now (a row has one): it is not settled, it moved on. The person's own click is still the better thing to say.
       const said_ = decidedIn(entry) || entry.clicked;
       const line = said_ ? "\u2713 " + said_ : next ? "\u2192 " + t("super.done.next", {kind: whyText(next)}) : "\u2713 " + t("super.done.elsewhere");
@@ -1756,7 +1750,7 @@ const taskLink = (task, text, cls, row) => h("a", {class: cls || "sa-task", href
     // The pop-out's calls (companion.js): the same pieces as the view, never a copy of them.
     const replyFor = (item) => { const entry = item && (item.why === "stopped" || SAYS(item)) ? known.get(item.id) : null; return entry && !entry.done ? replyBox(entry) : null; };
     const previewFor = (item) => previewBox(item);
-    const pop = {replyFor, previewFor, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose, jointNote: (item) => (item.why === "plan" && Boolean(rowFor(item.task).req_unconfirmed) ? t("super.plan.joint") : ""),
+    const pop = {replyFor, previewFor, snapshot, buttonsFor, sigFor, mainOf, fullOf, asksPerson, why: whyText, extraFor: extraNodes, hasCalls: (item) => callsOf(item).length > 0, prose,
       taskLink, chat: chatOf, rich: (text) => rich(text), send: popSend, front: (task) => { if (options.front) options.front(task || ""); }, watch, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }};
     if (popUp) {
       const reason = COMPANION.unsupported();

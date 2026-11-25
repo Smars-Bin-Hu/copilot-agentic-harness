@@ -65,6 +65,11 @@ def task_plan_req(relative: str, task: str) -> str:
     return say("gate.task.plan_req", relative=relative, task=task)
 
 
+def task_req_unclear(relative: str, task: str, why: str) -> str:
+    key = {"missing": "gate.task.req_unclear.missing", "template": "gate.task.req_unclear.template"}.get(why, "gate.task.req_unclear.questions")
+    return say(key, relative=relative, task=task, req=f"{task}/REQ.md")
+
+
 def task_outside(relative: str, task: str) -> str:
     return say("gate.task.outside", relative=relative, task=task)
 

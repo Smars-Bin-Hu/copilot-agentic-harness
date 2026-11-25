@@ -449,7 +449,7 @@ class ListTests(LifeCase):
         self.new("job", "dev", "--tier", "full")
         (self.folder("job") / "PLAN.md").write_text("# Plan\n\n1. x\n", encoding="utf-8")
         row = self.listed()["tasks"][0]
-        self.assertEqual((row["state"], row["waiting_why"]), ("working", "plan"))
+        self.assertEqual((row["state"], row["waiting_why"], row["after_turn"]), ("working", "", "plan"))  # 1.8.49: it waits for nobody while the agent works
         self.stopped()
         row = self.listed()["tasks"][0]
         self.assertEqual((row["state"], row["waiting_why"]), ("waiting", "plan"))
@@ -571,6 +571,7 @@ class ListTests(LifeCase):
 
     def test_a_dry_run_and_a_broken_promote_are_named(self) -> None:
         self.new("job", "dev")
+        self.stopped()  # 1.8.49: a list shows a wait once the agent has stopped
         for state, text in (("dry_run", "等你批准 promote (write-back repo)"), ("partial", "promote 中途出错，等你还原仓库")):
             with task_ops.locked(self.root, f"{BASE}/job") as data:
                 data["promote"] = {"state": state}

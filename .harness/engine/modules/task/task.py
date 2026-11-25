@@ -349,7 +349,7 @@ def _next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     if not tasks.plan_digest(root, task):
         return say("task.step.plan", plan=plan, dev=dev, task=task, finish=finish) + page
     if not tasks.plan_approved(root, task, data):
-        if req_state(root, task) in ("open", "changed"):  # one ask, not two that say different things: both files, one code
+        if req_state(root, task) in ("open", "changed"):  # the requirement first, then the plan (1.8.49: no code for both)
             return say("task.step.approve_req", plan=plan, req=f"{task}/{tasks.REQ_FILE}", dev=dev, task=task, name=name_of(task)) + page
         return say("task.step.approve", plan=plan, dev=dev, task=task) + page
     text = say("task.step.approved", dev=dev, task=task)
@@ -479,17 +479,12 @@ def typed(question: str, digest: str, refusal: str, reader: Optional[Callable[[s
         raise CommandError(str(error)) from error
 
 
-def plan_digest_with(req_text: str, plan_digest: str) -> str:
-    """What the one code of "confirm the requirement and approve the plan" belongs to: both files as they are now."""
-    return hashlib.sha256((hashlib.sha256(req_text.encode("utf-8")).hexdigest() + plan_digest).encode("ascii")).hexdigest()
-
-
 def approve_plan(
-    root: Path, raw_task: str = "", reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None, with_req: bool = False,
+    root: Path, raw_task: str = "", reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None,
 ) -> Dict[str, Any]:
     """The person approves PLAN.md as it is now. The screen names the file; the person reads it in the editor.
-    A plan stands on a confirmed requirement (1.5.30): while REQ.md is written but not confirmed, or changed since, the plan alone is refused.
-    `with_req`: the person confirms REQ.md and approves PLAN.md with one code, the code of both files as they are now."""
+    A plan stands on a confirmed requirement (1.5.30): while REQ.md is written but not confirmed, or changed since, the plan is refused. 1.8.49: there is no code for both at once;
+    the person confirms the requirement first, then approves the plan."""
     person("approve-plan", interactive)
     task = resolve(root, raw_task, lambda item: bool(tasks.plan_digest(root, item["task"])) and not tasks.plan_approved(root, item["task"], item), "plan")
     data = read(root, task)
@@ -499,32 +494,25 @@ def approve_plan(
     if not current or not plan.read_text(encoding="utf-8", errors="replace").strip():
         raise CommandError(say("plan.missing", plan=f"{task}/{tasks.PLAN_NAME}"))
     lines = len(plan.read_text(encoding="utf-8", errors="replace").splitlines())
-    req, req_path = f"{task}/{tasks.REQ_FILE}", tasks.task_dir(root, task) / tasks.REQ_FILE
+    req = f"{task}/{tasks.REQ_FILE}"
     state = req_state(root, task)
     if state == "unwritten":
         raise CommandError(say("plan.req.unwritten", req=req))
-    unconfirmed = state in ("open", "changed")
-    if unconfirmed and not with_req:
+    if state in ("open", "changed"):
         raise CommandError(say("plan.req.unconfirmed", req=req, task=name_of(task)))
-    req_text = req_path.read_text(encoding="utf-8", errors="replace") if unconfirmed else ""
-    code = plan_digest_with(req_text, current) if unconfirmed else current
     approval.say(
         out,
         say("plan.screen.head", task=task, round=data["round"]),
-        *([say("plan.screen.req", lines=len(req_text.splitlines()), req=req)] if unconfirmed else []),
         say("plan.screen.file", lines=lines, plan=f"{task}/{tasks.PLAN_NAME}"),
         say("plan.screen.after", dev=f"{task}/{tasks.DEV_NAME}"),
     )
-    typed(say("plan.question.req" if unconfirmed else "plan.question"), code, say("plan.refused"), reader)
+    typed(say("plan.question"), current, say("plan.refused"), reader)
     with locked(root, task) as again:
         require_open(again)
         if tasks.plan_digest(root, task) != current:
             raise CommandError(say("plan.changed"))
-        if unconfirmed:
-            now = req_path.read_text(encoding="utf-8", errors="replace")
-            if now != req_text:
-                raise CommandError(say("req.changed"))
-            fill_confirmation(root, task, req_path, now, again, hashlib.sha256(now.encode("utf-8")).hexdigest())
+        if req_state(root, task) in ("open", "changed"):
+            raise CommandError(say("plan.req.unconfirmed", req=req, task=name_of(task)))
         again["plan"] = {"approved_sha256": current, "approved_at": utc_now(), "req_sha256": tasks.req_digest(root, task)}  # for this requirement
         note(again, "approve-plan", current[:12])
         again["waiting"] = {"since": utc_now(), "why": "go-plan"}  # nobody told the agent: the board says so until the next prompt
@@ -540,31 +528,12 @@ _CONFIRM_LINE = re.compile(r"^(\s*[-*]\s*\*{0,2}(?:用户确认|user confirmed)\
 _REQ_UNWRITTEN = ("<One or two paragraphs", "<一两段")  # the template's own first words: the agent has not written the requirement yet
 
 
-# A line of REQ.md that is still the template's: only `<...>` (after a list mark and an item number, like `- [R1] <ENV>: <...>`). Real text that holds an angle bracket is not the whole line.
-_PLACEHOLDER = re.compile(r"^(?:[-*]\s+)?(?:\[[TRA]\d+\]\s+)?<[^<>\n]+>(?::\s*<[^<>\n]+>)?\s*$")
+_PLACEHOLDER = tasks.PLACEHOLDER  # moved to core (1.8.49): the gate judges REQ.md too
 
 
 def _req_unfilled(root: Path, task: str) -> List[Tuple[str, int]]:
-    """[(section heading, lines still the template's)] of REQ.md, in file order; only the sections that have some. Lines before the first heading count under the title."""
-    try:
-        text = filecache.read_text(tasks.task_dir(root, task) / tasks.REQ_FILE, "utf-8-sig", "replace")
-    except OSError:
-        return []
-    found: List[Tuple[str, int]] = []
-    heading, count, fence = "", 0, False
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            fence = not fence
-        if not fence and re.match(r"^#{1,6}\s+\S", stripped):
-            if count:
-                found.append((heading, count))
-            heading, count = stripped.lstrip("#").strip(), 0
-        elif not fence and _PLACEHOLDER.match(stripped):
-            count += 1
-    if count:
-        found.append((heading, count))
-    return found
+    """[(section heading, lines still the template's)] of REQ.md (`tasks.req_unfilled_sections`)."""
+    return tasks.req_unfilled_sections(root, task)
 
 
 _FIELD_PLACEHOLDER = re.compile(r"^\s*[-*]\s+\*\*[^*\n]+\*\*\s*[:：]\s*<[^<>\n]+>\s*$")  # `- **Updated**: <yyyy-mm-dd>`

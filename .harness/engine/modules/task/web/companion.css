@@ -35,7 +35,6 @@ html body.cp-doc{margin:0;padding:0;min-height:0;height:100vh;overflow:hidden;ba
 .cp-text.ask.open{display:block;max-height:200px;overflow:auto}
 .cp-text.ask.prose{font-family:inherit;font-size:13.5px;-webkit-line-clamp:4;line-clamp:4}
 .cp-text[hidden]{display:none}
-.cp-joint{font-size:12px;color:var(--soft);margin:0 0 6px}
 .cp-acts{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
 .cp-acts .act{margin:0;text-decoration:none;display:inline-block}
 .cp-acts .sa-call{flex:1 1 100%}

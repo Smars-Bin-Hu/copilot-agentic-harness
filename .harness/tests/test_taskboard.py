@@ -510,7 +510,8 @@ class PauseTests(BoardCase):
         back = tasklife.onwork(self.root, interactive=True)  # as it was: the plan goes on waiting, the night is not counted
         self.assertEqual(back["resumed"], ["plan"])
         self.assertFalse(self.data("plan").get("paused"))
-        self.assertEqual(self.listed()["tasks"][0]["waiting_why"], "plan")
+        first = self.listed()["tasks"][0]
+        self.assertEqual(first["waiting_why"] or first.get("after_turn"), "plan")  # 1.8.49: while the agent works, the plan waits for the turn to end
 
     def test_offwork_pauses_a_task_the_caller_knows_waits_though_the_agent_is_at_work(self) -> None:
         """The chat asks "Allow this command?": only the served board knows (the link to VS Code); it passes the names."""

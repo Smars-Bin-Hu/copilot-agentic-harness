@@ -101,9 +101,10 @@ class PickUpTests(TaskCase):
 class PlanApprovalTests(TaskCase):
     def test_before_the_approval_dev_is_closed_and_the_rest_of_the_task_folder_is_open(self) -> None:
         self.new()
-        for path in (f"{TASK}/PLAN.md", f"{TASK}/RCA.md", f"{TASK}/notes/draft.md", str(self.task.resolve() / "DESIGN.md")):
+        for path in (f"{TASK}/RCA.md", f"{TASK}/notes/draft.md", str(self.task.resolve() / "DESIGN.md")):
             with self.subTest(path):
                 self.assertEqual(self.edit(path), {})  # a result that stays in the task needs no plan (M9-0)
+        self.assertEqual(self.decision(self.edit(f"{TASK}/PLAN.md")), "deny")  # 1.8.49: the plan waits for a settled requirement (REQ.md is the template here)
         for path in (f"{TASK}/DEV/repo_b/src/a.sql", f"{TASK}/DEV/x.sql", f"{TASK}/dev/x.sql"):
             with self.subTest(path):
                 output = self.edit(path)

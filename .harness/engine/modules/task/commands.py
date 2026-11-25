@@ -69,7 +69,7 @@ def cmd_target_show(args: argparse.Namespace) -> Dict[str, Any]:
 def cmd_list(args: argparse.Namespace) -> Dict[str, Any]:
     if args.watch:
         return taskboard.watch(repo_root(), args.all, args.interval)
-    result = tasklife.list_tasks(repo_root(), args.all)
+    result = tasklife.list_tasks(repo_root(), args.all, hold=True)
     return {"_text": taskboard.table(result)} if args.text else result
 
 
@@ -266,9 +266,8 @@ def register_task(subparsers: Any) -> None:
     snapshot_prune.add_argument("--dry-run", action="store_true")
     snapshot_prune.set_defaults(handler=lambda a: {"removed": tasksnap.prune(repo_root(), task.resolve(repo_root(), a.task), a.days if a.days is not None else tasksnap.settings(repo_root())["keep_days"], dry_run=a.dry_run), "dry_run": a.dry_run})
     add("status", "where the task stands and what comes next", lambda a: task.status(repo_root(), a.task))
-    approve = with_force(add("approve-plan", "the person approves PLAN.md (terminal only; refused while the agent is at work)", guarded("task approve-plan", lambda a: task.approve_plan(repo_root(), a.task, with_req=a.with_req))))
+    approve = with_force(add("approve-plan", "the person approves PLAN.md (terminal only; refused while the agent is at work)", guarded("task approve-plan", lambda a: task.approve_plan(repo_root(), a.task))))
     approve.set_defaults(person_only=True)
-    approve.add_argument("--with-req", action="store_true", help="REQ.md is not confirmed yet: confirm it and approve the plan with one code")
     with_force(add("confirm-req", "the person confirms REQ.md says what they meant (terminal only); the harness fills the confirmation line", guarded("task confirm-req", lambda a: task.confirm_req(repo_root(), a.task)))).set_defaults(person_only=True)
     fetch = add("fetch", "copy files of a target repository's base branch into DEV/<repo>/<path> (with --read: READ/<repo>/<path>, to read only); or, with --from, a script run on a server into DEV/_server/<path>", lambda a: task.fetch(repo_root(), a.task, a.paths, a.overwrite, a.rebase, a.source, a.read))
     fetch.add_argument("paths", nargs="+", help="<repo>/<path>: a file or a folder; with --from: one _server/<path>")

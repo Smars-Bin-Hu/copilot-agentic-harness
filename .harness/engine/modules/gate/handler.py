@@ -83,6 +83,10 @@ def check_task_write(event: HookEvent, ctx: Context) -> Optional[Decision]:
                 limited = _autorun_write(relative, task, shown, worker)
                 if limited:
                     return limited
+            if relative.lower() == f"{task}/{tasks.PLAN_NAME}".lower():
+                unclear = tasks.req_unclear(ctx.root, task, data)  # 1.8.49: a plan is written on a settled requirement, never beside an open one
+                if unclear:
+                    return Decision(permission="deny", reason=rules.task_req_unclear(shown, task, unclear), facts={"kind": "task-req-unclear"})
             if _within(relative, dev):
                 if not approved:
                     again = tasks.plan_req_changed(ctx.root, task, data)  # approved before, for a requirement that is another one now

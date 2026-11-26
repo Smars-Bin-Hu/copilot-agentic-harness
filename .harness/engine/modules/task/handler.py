@@ -120,6 +120,8 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
     if taskreview.state_of(data)["n"]:  # the count needs the digest of every result file: only when checks are on
         info = taskreview.summary(ctx.root, name, data)
         lines.append(say("review.inject", n=info["n"], passes=info["passes"], used=info["checks_used"], limit=info["checks_limit"], agent=taskreview.AGENT))
+        if info["changed"]:  # a pass the work changed after: the count alone reads as if it never passed (1.8.59)
+            lines.append(taskreview.changed_text(info["changed"]))
     elif taskreview.state_of(data).get("set"):  # the person set it to 0 on the task page: an agent that was told n before is told it is off
         lines.append(say("review.inject.off"))
     lines.append(say("task.inject.scope", task=name))

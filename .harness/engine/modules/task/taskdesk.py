@@ -67,7 +67,7 @@ def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """The independent checks of the task: the counts `task review status` gives, and every round with the reviewer's answer
     and the package it was given, newest first. `current`: the round looked at the result as it is now.
     `after` (1.8.18): the checks after the close, in the same form, or None; their rounds are not in `rounds`."""
-    empty = {"n": 0, "passes": 0, "used": 0, "limit": 0, "pending": None, "waived": False, "rounds": [], "after": None}
+    empty = {"n": 0, "passes": 0, "used": 0, "limit": 0, "pending": None, "waived": False, "changed": None, "rounds": [], "after": None}
     try:
         info = taskreview.summary(root, task, data, settled=True)
         later = taskreview.after_summary(root, task, data) if taskreview.after_of(data) else None
@@ -86,7 +86,8 @@ def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
         after = None
         if later is not None:
             after = {"n": later["n"], "passes": later["passes"], "used": later["checks_used"], "limit": later["checks_limit"], "pending": later["pending_round"], "rounds": after_rounds}
-        return {"n": info["n"], "passes": info["passes"], "used": info["checks_used"], "limit": info["checks_limit"], "pending": info["pending_round"], "waived": info["waived"], "rounds": rounds, "after": after}
+        return {"n": info["n"], "passes": info["passes"], "used": info["checks_used"], "limit": info["checks_limit"], "pending": info["pending_round"], "waived": info["waived"],
+                "changed": info["changed"], "rounds": rounds, "after": after}
     except Exception:  # noqa: BLE001 - a page must not fail over the checks of one task
         return empty
 

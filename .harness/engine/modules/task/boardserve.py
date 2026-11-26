@@ -598,7 +598,7 @@ class Board:
         try:
             if taskreview.apply_pending(self.root, str(row["task"])):
                 noted(self.root, str(row["task"]), "review set")
-                row["checks"] = tasklife.checks_of(tasks.read(self.root, row["task"]) or {})
+                row["checks"] = tasklife.checks_of(tasks.read(self.root, row["task"]) or {}, self.root, str(row["task"]))
             row.pop("pending_checks", None)
         except Exception:  # noqa: BLE001
             pass

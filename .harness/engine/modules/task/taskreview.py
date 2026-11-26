@@ -24,6 +24,7 @@ digest of the result as it is now, so nobody has to remember to reset them.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -41,6 +42,7 @@ DEFAULTS = {"extra_checks": 2, "max_n": 5, "free_invalid": 2}
 PACKAGE = "package.md"
 VERDICT_FILE = "verdict.md"
 VERDICT_LINES = 3  # the verdict is looked for in this many non-empty lines from the top
+CHANGED_SHOWN = 5  # the files changed after a pass that a message names; the rest are counted
 _MARKER = re.compile(r"\[\s*review\s*\]\s*[=＝]\s*(\d{1,2})", re.IGNORECASE)
 _CONFIRM_LABEL = re.compile(r"用户确认|user confirmed", re.IGNORECASE)
 _CONFIRMED = re.compile(r"已确认|confirmed|\d{4}-\d{2}-\d{2}")
@@ -159,6 +161,56 @@ def passes(data: Dict[str, Any], digest: str, after: bool = False) -> int:
     return count
 
 
+def outdated(root: Path, task: str, data: Dict[str, Any], digest: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """The last check of the task that counts passed, but the result changed after it, so it counts no more (1.8.59). `{round, files, more}`: the
+    result files added, removed or changed since that check, the first CHANGED_SHOWN of them, and how many more. None: no such check, or the task
+    is settled (its checks are history). A run recorded in RUNS/ after the check is a change too: the evidence is part of what is checked."""
+    if is_settled(data):
+        return None
+    done = done_now(data)
+    if not done or done[-1]["verdict"] != "PASS" or not done[-1].get("digest"):
+        return None
+    last = done[-1]
+    now = tasksnap.listing(root, task) if digest is None else None
+    if (digest if now is None else tasksnap.digest_of(now)) == last["digest"]:
+        return None  # the usual case: the files are listed again only when the pass is gone
+    files = changed_since(root, task, last, now if now is not None else tasksnap.listing(root, task))
+    return {"round": int(last.get("number") or 0), "files": files[:CHANGED_SHOWN], "more": max(0, len(files) - CHANGED_SHOWN)}
+
+
+def changed_since(root: Path, task: str, entry: Dict[str, Any], now: List[Dict[str, Any]]) -> List[str]:
+    """The result files that differ from what the check `entry` was given: from its snapshot, else from the file table of its package (the snapshot
+    may be pruned; the table keeps 16 characters of each sha256). Empty when neither can be read."""
+    old: Dict[str, str] = {}
+    try:
+        listed = json.loads((root / str(entry.get("snapshot") or "") / tasksnap.MANIFEST).read_text(encoding="utf-8")).get("files") or []
+        old = {str(item["path"]): str(item["sha256"]) for item in listed if isinstance(item, dict) and item.get("path")}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        old = {}
+    if not old:
+        prefix = f"| {task}/"
+        try:
+            text = (root / round_dir(task, int(entry.get("number") or 0)) / PACKAGE).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return []
+        for line in text.splitlines():
+            cells = [cell.strip() for cell in line.split("|")]
+            if line.startswith(prefix) and len(cells) >= 4:
+                old[cells[1][len(task) + 1:]] = cells[2]
+        if not old:
+            return []
+    current = {item["path"]: item["sha256"] for item in now}
+    return sorted(path for path in set(old) | set(current) if path not in old or path not in current or not current[path].startswith(old[path]))
+
+
+def changed_text(found: Dict[str, Any]) -> str:
+    """The sentence that says which pass no longer counts and what changed after it."""
+    files = ", ".join(f"`{path}`" for path in found["files"]) or say("review.changed.unknown")
+    if found["more"]:
+        files += " " + say("review.changed.more", count=found["more"])
+    return say("review.changed", round=found["round"], files=files)
+
+
 def limit(root: Path, data: Dict[str, Any], after: bool = False) -> int:
     review = state_of(data)
     if after:
@@ -249,17 +301,24 @@ def n_of_round(data: Dict[str, Any], number: int) -> int:
     return found if found is not None else int(state_of(data)["n"] or 0)
 
 
-def dots(data: Dict[str, Any]) -> Dict[str, Any]:
-    """What the board draws for the checks of a task, from its records alone: `n` (the checks wanted), `passes` (in a row, at the end),
+def dots(data: Dict[str, Any], root: Optional[Path] = None, task: str = "") -> Dict[str, Any]:
+    """What the board draws for the checks of a task, from its records: `n` (the checks wanted), `passes` (in a row, at the end),
     `total` (finished checks that count this round), `fails` (of those, not passed), `last` (the last verdict or ""), `pending` (one is running),
-    `waived`. The board shows one dot per wanted check: green for each pass in a row, red when the last one did not pass, hollow for the rest, a turning one while a check runs."""
+    `waived`, `old` and `old_round`. The board shows one dot per wanted check: green for each pass in a row, red when the last one did not pass, hollow for the rest, a turning one while a check runs.
+    With `root` and `task`, an open task's passes are counted on its files as they are now, as the gate counts them (1.8.59): passes the result changed
+    after count no more; `old` says how many there were (a green ring each) and `old_round` the round of the last one. Without them, or for a settled
+    task, the records alone: the passes at the end, on the version the last check looked at."""
     review = state_of(data)
     done = done_now(data)
     waived = bool(review["waived"]) and review["waived"].get("task_round") == data.get("round")
-    return {
+    found = {
         "n": int(review["n"] or 0), "passes": streak(data), "total": len(done), "fails": len([item for item in done if item["verdict"] != "PASS"]),
-        "last": done[-1]["verdict"] if done else "", "pending": pending(data) is not None, "waived": waived,
+        "last": done[-1]["verdict"] if done else "", "pending": pending(data) is not None, "waived": waived, "old": 0, "old_round": 0,
     }
+    if root is not None and task and found["n"] and found["passes"] and not waived and not is_settled(data) and done[-1].get("digest"):
+        if tasksnap.results_digest(root, task) != done[-1]["digest"]:
+            found.update(passes=0, old=min(found["passes"], found["n"]), old_round=int(done[-1].get("number") or 0))
+    return found
 
 
 def summary(root: Path, task: str, data: Dict[str, Any], settled: bool = False) -> Dict[str, Any]:
@@ -270,15 +329,15 @@ def summary(root: Path, task: str, data: Dict[str, Any], settled: bool = False) 
     done = done_now(data)
     if settled and is_settled(data):
         waived = bool(review["waived"]) and review["waived"].get("task_round") == data["round"]
-        found = {"passes": streak(data), "waived": waived, "digest": done[-1].get("digest", "") if done else ""}
+        found = {"passes": streak(data), "waived": waived, "digest": done[-1].get("digest", "") if done else "", "changed": None}
     else:
         digest = tasksnap.results_digest(root, task)
         waived = bool(review["waived"]) and review["waived"].get("digest") == digest and review["waived"].get("task_round") == data["round"]
-        found = {"passes": passes(data, digest), "waived": waived, "digest": digest}
+        found = {"passes": passes(data, digest), "waived": waived, "digest": digest, "changed": None if waived else outdated(root, task, data, digest)}
     return {
         "n": review["n"], "passes": found["passes"], "checks_used": used(data), "checks_limit": limit(root, data),
         "pending_round": (pending(data) or {}).get("number"), "last_verdict": done[-1]["verdict"] if done else "",
-        "waived": found["waived"], "digest": found["digest"],
+        "waived": found["waived"], "digest": found["digest"], "changed": found["changed"],
     }
 
 
@@ -288,7 +347,7 @@ def after_summary(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]
     digest = tasksnap.results_digest(root, task)
     return {
         "n": after_n(data), "passes": passes(data, digest, True), "checks_used": used(data, True), "checks_limit": limit(root, data, True),
-        "pending_round": (pending(data, True) or {}).get("number"), "last_verdict": done[-1]["verdict"] if done else "", "waived": False, "digest": digest,
+        "pending_round": (pending(data, True) or {}).get("number"), "last_verdict": done[-1]["verdict"] if done else "", "waived": False, "digest": digest, "changed": None,
     }
 
 
@@ -429,6 +488,9 @@ def start(root: Path, raw_task: str = "") -> Dict[str, Any]:
             raise CommandError(say("review.after.enough" if after else "review.enough", n=wanted))
         waiting = pending(data, after)
         if waiting is None and used(data, after) >= limit(root, data, after):
+            gone = None if after else outdated(root, task, data, digest)  # the last check passed: say what undid it, not where its problems are (1.8.59)
+            if gone:
+                raise CommandError(say("review.limit.changed", changed=changed_text(gone), used=used(data), limit=limit(root, data)))
             raise CommandError(say("review.after.limit" if after else "review.limit", used=used(data, after), limit=limit(root, data, after), task=task))
         diff_file = ""
         if any(relative.lower().startswith(tasks.DEV_NAME.lower() + "/") for relative, _ in tasksnap.result_files(root, task)) and (data.get("target_files") or data.get("manual_files")):
@@ -532,12 +594,33 @@ def next_text(root: Path, task: str, data: Dict[str, Any]) -> str:
     handed = data.get("handoff")
     if isinstance(handed, dict) and handed.get("what"):
         return say("review.handoff_open", what=handed.get("what", ""), env=handed.get("env", ""), task=task)  # the person's result first, whatever the last verdict said
+    if info["changed"]:
+        return undone_text(info)
     if info["checks_used"] >= info["checks_limit"]:
         return say("review.limit", used=info["checks_used"], limit=info["checks_limit"], task=task)
     left = info["n"] - info["passes"]
     if info["last_verdict"] and info["last_verdict"] != "PASS":
         return say("review.next.fix", left=left, verdict=f"{round_dir(task, done_now(data)[-1]['number'])}/{VERDICT_FILE}")
     return say("review.next.more", left=left, n=info["n"])
+
+
+def undone_text(info: Dict[str, Any]) -> str:
+    """The pass of the last check counts no more (`info` is a `summary` with `changed`): why, and what comes next. Past the limit only the person
+    can go on, and the agent is not sent to a verdict that passed."""
+    reason = changed_text(info["changed"])
+    if info["checks_used"] >= info["checks_limit"]:
+        return say("review.limit.changed", changed=reason, used=info["checks_used"], limit=info["checks_limit"])
+    return say("review.next.changed", changed=reason, left=info["n"] - info["passes"], n=info["n"])
+
+
+def undone(root: Path, task: str, data: Dict[str, Any]) -> str:
+    """For a command that wrote a result file (`task run record`): when the pass of the last check counts no more, say so and what comes next; else ""."""
+    if is_after(data) or not state_of(data)["n"]:
+        return ""
+    info = summary(root, task, data)
+    if info["waived"] or not info["changed"] or info["pending_round"]:
+        return ""
+    return undone_text(info)
 
 
 def person(command: str, interactive: Optional[bool], typed: bool = True) -> None:

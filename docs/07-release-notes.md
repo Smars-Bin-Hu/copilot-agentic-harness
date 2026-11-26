@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.58 (1.8.0 – 1.8.58, 2026-11-17 – 2026-11-25)
+## 1.8.59 (1.8.0 – 1.8.59, 2026-11-17 – 2026-11-25)
 
 ### Added
 
@@ -72,6 +72,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- **A pass that a later change undid was not explained** (1.8.59). A pass counts only on the work as it is now, and a run saved in `RUNS/` after it is part of the work, so a DEV run recorded after the last pass undid it. Nothing said so: `task run record` was silent, the promote and the status said only "0 passes", at the limit the agent was sent to the newest verdict (which had passed), and the board still drew a green dot. Now `task run record`, `task review status`, `task review start` and `task promote --dry-run` name the round and the files that changed after it; the task page's Review tab says the same; on the board a pass that counts no more is a green ring. The counting itself did not change.
 - **A write into the harness's runtime folder through a variable** (1.8.58): `d=.harness; printf x > $d/runtime/x.json` passed the gate, so an agent could forge its admin state or an approval. A write whose target is built at run time (`$x`, `$(...)`, `%X%`, `$env:X`) is now read with the values the line sets, and refused when it can land in a guardrail folder; `.harness/./runtime` and `.harness//runtime` are read as the folder they are.
 - **Some commands took the gate minutes** (1.8.58): a command with long runs of spaces, newlines, `-u-u-u...` or wildcards made several patterns go back and forth, past the 120 s Copilot waits for a hook (and then the call ran ungated). They are linear now; a terminal command over 32 000 characters is refused, because it cannot be judged in time.
 - **The gate did not run on VS Code 1.148** (1.8.56). Its agent host runs the hooks of a repository only in a folder it holds as trusted; the board's own agent host held none, so every hook ended at once without doing anything and no call was judged. The board now declares its workspace trusted each time it connects to its host. `harness doctor` has a new check: when the hooks of the newest session did nothing, it is an error (a warning when that session began before the board's declaration). **Upgrade before VS Code 1.148 reaches your computer.**

@@ -395,12 +395,13 @@ def dismiss_of(data: Dict[str, Any]) -> str:
     return f"round-{int(found['number']):03d}" if found else ""
 
 
-def checks_of(data: Dict[str, Any]) -> Dict[str, Any]:
-    """The independent checks of a task as the board draws them (`taskreview.dots`); empty when they cannot be read."""
+def checks_of(data: Dict[str, Any], root: Optional[Path] = None, task: str = "") -> Dict[str, Any]:
+    """The independent checks of a task as the board draws them (`taskreview.dots`); with `root`, an open task's passes counted on its files as they
+    are now (1.8.59). Empty when they cannot be read."""
     try:
         from . import taskreview  # it needs this module
 
-        return taskreview.dots(data)
+        return taskreview.dots(data, root, task or str(data.get("task") or ""))
     except Exception:  # noqa: BLE001 - a list must not fail over one task's checks
         return {}
 
@@ -1032,7 +1033,7 @@ def task_row(root: Path, task: str, data: Optional[Dict[str, Any]], everything: 
         "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
         "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
         "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
-        "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "", "checks": checks_of(data),
+        "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "", "checks": checks_of(data, root, task),
         "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),
     }
     if row["state"] == "unheld":

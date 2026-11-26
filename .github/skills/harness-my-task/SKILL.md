@@ -116,7 +116,7 @@ A test where the user skipped an environment (for example UAT): the summary says
 - **A task with independent checks on (the rules at the top of the prompt have a line "Independent checks")**:
   - When the work is written, run `harness task review start`, then call the subagent `reviewer`. The call message says only "Check the review package <path>"; do not write your reasoning or your conclusion.
   - Not passed: read `REVIEW/round-NNN/verdict.md`, fix what it lists, then `task review start` again. Passed but more passes are needed: just run `task review start` again; a new reviewer takes it.
-  - Once the work changes, earlier passes no longer count. So finish the changes first, then check.
+  - Once the work changes, earlier passes no longer count. The work includes what a run saved in `RUNS/` (`task run record`, a steps file). So do every change and every run first, then check. A run after the last pass needs a new check: when no check is left, ask the user before you run it.
   - When the checks are used up, stop and tell the user. Only the user can run `task review extend` and `task review waive`, in the terminal.
   - Without enough passes, `task promote --dry-run` is refused.
 - **Checks of a closed task** (the user names a closed task and wrote `[review]=n`, or set the checks on its page): do not `task open` it, which starts a new round and moves `DEV/` aside. Run `harness task review after <task> --session-id <id>` in the same turn, then `task review start --task <task>` and the reviewer, as above. The task stays closed and nothing in it changes. A FAIL is only shown to the user; a fix is a new task (`task fork`).

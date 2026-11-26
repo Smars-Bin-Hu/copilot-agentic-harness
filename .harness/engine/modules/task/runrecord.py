@@ -30,6 +30,17 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 
+def review_undone(root: Path, task: str) -> str:
+    """What `taskreview.undone` says after the run was written; "" when it cannot be read: a note must not fail the record."""
+    try:
+        from . import taskreview
+
+        data = tasks.read(root, task)
+        return taskreview.undone(root, task, data) if data else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: str = "", ran_file: str = "", evidence: Optional[List[str]] = None, follow_up: str = "", steps_file: str = "") -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     data = tasks.read(root, task)
@@ -77,5 +88,6 @@ def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: st
             cleared = True
         task_ops.note(fresh, "run-record", f"{env} run {number} {evidence_id}" + (" by the agent" if by_agent else ""))
     warnings = ([] if ran else [say("task.test.missing_ran")]) + ([] if pictures or by_agent else [say("task.test.missing_screenshot")])  # the agent's run has no screenshot: its output is the record
+    undone = review_undone(root, task)  # the run is evidence the last check did not see: its pass counts no more (1.8.59, a task ran a DEV job after its last pass)
     return {"task": task, "env": env, "run": number, "evidence_id": evidence_id, "run_by": AGENT if by_agent else "person", "file": f"{base}/{RESULTS}", "evidence": [f"{base}/{item['relative']}" for item in pictures], "handoff_cleared": cleared,
-            "warnings": warnings, "next": say("task.run.next", file=f"{base}/{RESULTS}", id=evidence_id)}
+            "warnings": warnings, "review": undone, "next": " ".join(part for part in (say("task.run.next", file=f"{base}/{RESULTS}", id=evidence_id), undone) if part)}  # last: what comes after citing it

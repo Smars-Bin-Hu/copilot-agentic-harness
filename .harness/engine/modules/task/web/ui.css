@@ -93,7 +93,7 @@ tr:has(.tag.hot):hover td{background:var(--hot-row-h)}
 .legend{margin:6px 12px 12px;font-size:12px}.legend i{border-radius:50%;width:7px;height:7px}
 .legend .work{background:var(--soft)}.legend .wait{background:var(--hot-dot)}
 .cdots{gap:4px}.cdot{width:9px;height:9px;border:1.5px solid var(--line2)}
-.cdot.pass{background:var(--good-dot);border-color:var(--good-dot)}.cdot.fail{background:var(--bad);border-color:var(--bad)}
+.cdot.pass{background:var(--good-dot);border-color:var(--good-dot)}.cdot.fail{background:var(--bad);border-color:var(--bad)}.cdot.old{border-color:var(--good-dot)}
 .cdot.run{border-color:var(--soft);border-top-color:transparent}
 footer{color:var(--soft);font-size:12px;margin-top:22px;line-height:1.6}
 .empty{color:var(--soft);padding:18px 6px}

@@ -256,17 +256,18 @@ function kindIcon(kind, text) {
 }
 
 // The independent checks of a row (row.checks, from taskreview.dots) as one dot per wanted check: green for each pass in a row, red where the last one did not pass,
-// turning while a check runs, hollow for the rest. No checks wanted: a dash.
+// turning while a check runs, hollow for the rest. A pass the work changed after counts no more: a green ring (1.8.59). No checks wanted: a dash.
 function checkDots(row) {
   const info = row.checks;
   if (!info || !info.n) return h("span", {class: "dots-none"}, "-");
-  const title = t("board.checks.tip", {n: info.n, passes: info.passes, total: info.total, fails: info.fails});
+  const title = t("board.checks.tip", {n: info.n, passes: info.passes, total: info.total, fails: info.fails}) + (info.old ? " " + t("board.checks.old", {round: info.old_round}) : "");
   const dots = [];
   for (let at = 0; at < info.n; at++) {
     let kind = "";
     if (info.waived || at < info.passes) kind = "pass";
     else if (at === info.passes && info.pending) kind = "run";
     else if (at === info.passes && info.last && info.last !== "PASS") kind = "fail";
+    else if (at < info.passes + (info.old || 0)) kind = "old";
     dots.push(h("i", {class: "cdot" + (kind ? " " + kind : "")}));
   }
   return h("span", {class: "cdots", title, role: "img", "aria-label": title}, dots);

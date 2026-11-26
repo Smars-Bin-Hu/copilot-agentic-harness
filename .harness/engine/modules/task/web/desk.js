@@ -1747,6 +1747,7 @@
         r.n ? t("desk.review.sum", {n: r.n, passes: r.passes, used: r.used, limit: r.limit}) : t("desk.review.off"),
         r.waived ? [" ", tag(t("desk.review.waived"), "hot")] : null,
         r.pending ? [" ", tag(t("desk.review.running", {number: r.pending}), "good run")] : null));
+      if (r.changed) parts.push(changedNote(r.changed));
       if (!r.rounds.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.review.none"))));
       parts.push(...r.rounds.map(roundCard));
     }
@@ -1760,6 +1761,14 @@
       parts.push(...later.rounds.map(roundCard));
     }
     return parts;
+  }
+
+  // A pass the work changed after (1.8.59): which round, and the files that changed since, so "0 passed" does not read as if it never passed.
+  function changedNote(found) {
+    const files = [];
+    (found.files || []).forEach((path) => files.push(h("code", null, path)));  // spaced by the style: a text space would follow a Chinese colon
+    if (found.more) files.push(" ", t("desk.review.changed.more", {count: found.more}));
+    return h("div", {class: "review-changed"}, t(found.files && found.files.length ? "desk.review.changed" : "board.checks.old", {round: found.round}), files);
   }
 
   function roundCard(item) {

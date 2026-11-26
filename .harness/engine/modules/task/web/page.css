@@ -192,7 +192,7 @@ td.tick,th.tick{width:28px;padding-right:0}
 .tag.idle::before{content:"";position:absolute;left:8px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--soft);opacity:.55}
 td.state .tag.hot{animation:beat 2.4s ease-in-out infinite;animation-delay:calc(var(--t,0ms) * -1)}
 tr.touched td{animation:glow 1.8s ease-out}
-.review-sum{margin:6px 0 14px}
+.review-sum{margin:6px 0 14px}.review-changed{margin:-6px 0 14px;padding:6px 10px;border-left:3px solid var(--hot-dot);border-radius:4px;background:var(--hot-bg);font-size:13px;line-height:1.7;overflow-wrap:anywhere}.review-changed code{margin-left:.35em;font-family:var(--mono);font-size:.88em;color:var(--code-ink);background:var(--code-bg);border:1px solid var(--code-line);border-radius:5px;padding:1px 5px}
 .round{border:1px solid var(--line);border-left-width:4px;border-radius:10px;padding:12px 16px;margin:12px 0}
 .round.pass{border-left-color:var(--good)}.round.fail{border-left-color:var(--bad)}
 .round-head{margin-bottom:6px}
@@ -251,7 +251,7 @@ details.tpl-note{margin:.4em 0 .8em;color:var(--soft);font-size:12.5px}details.t
 /* Board list (B70): the task cell (kind icon, name, sub line), the dots of the checks, the actions with their menu. */
 .name-line{display:flex;align-items:center;gap:6px}.kind-icon{flex:none;display:inline-flex;width:16px;height:16px;color:var(--soft)}.kind-icon svg{width:16px;height:16px}
 .cdots{display:inline-flex;gap:4px;align-items:center}.cdot{display:inline-block;width:9px;height:9px;border-radius:50%;box-sizing:border-box;border:1.5px solid var(--soft)}
-.cdot.pass{background:var(--good);border-color:var(--good)}.cdot.fail{background:var(--bad);border-color:var(--bad)}
+.cdot.pass{background:var(--good);border-color:var(--good)}.cdot.fail{background:var(--bad);border-color:var(--bad)}.cdot.old{border-color:var(--good)}
 .cdot.run{border-color:var(--subagent);border-top-color:transparent;animation:cdot-spin 1s linear infinite}@keyframes cdot-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.cdot.run{animation:none}}
 .dots-none{color:var(--soft)}

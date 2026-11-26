@@ -594,6 +594,129 @@ class SnapshotTests(ReviewCase):
         self.assertEqual(taskreview.settings(self.root), taskreview.DEFAULTS)
 
 
+class UndoneTests(ReviewCase):
+    """A pass the work changed after counts no more (1.8.59). A task on the work PC ran a DEV job after its last pass: the run went into RUNS/, the
+    pass was gone, the checks were used up, and every message said only "0 passes", sending the agent to a verdict that had passed."""
+
+    def run_record(self, text: str = "count\n2310\n") -> Dict[str, Any]:
+        given = self.folder() / "INBOX" / "given.txt"
+        given.parent.mkdir(parents=True, exist_ok=True)
+        given.write_text(text, encoding="utf-8")
+        return self.cli_json("task", "run", "record", "--env", "DEV", "--given-file", str(given), "--run-by", "agent")
+
+    def used_up(self) -> None:
+        """n=1: FAIL, PASS, a change, PASS: three checks of three, the last one passed."""
+        self.job()
+        self.check(FAIL)
+        self.result("v2")
+        self.check(PASS)
+        self.result("v3")
+        self.check(PASS)
+        self.assertEqual((self.status()["passes"], self.status()["checks_used"], self.status()["checks_limit"]), (1, 3, 3))
+
+    def test_a_run_after_the_last_pass_is_named_with_its_round_and_files(self) -> None:
+        self.used_up()
+        found = self.run_record()
+        self.assertIn("第 3 轮", found["review"])
+        self.assertIn("`RUNS/DEV/results.md`", found["review"])
+        self.assertIn("检查次数用完了", found["review"])
+        self.assertIn("task review extend --checks 1", found["review"])
+        self.assertTrue(found["next"].endswith(found["review"]))  # the step the agent follows ends with it: cite the run first, then the person decides
+        self.assertIn("先把还要改的都改完", found["review"])
+        self.assertIn("[E1]", found["next"])
+        changed = taskreview.outdated(self.root, JOB, self.data())
+        self.assertEqual((changed["round"], changed["files"], changed["more"]), (3, ["RUNS/DEV/results.md"], 0))  # INBOX/ is the person's, not a result
+
+    def test_at_the_limit_the_agent_is_not_sent_to_a_verdict_that_passed(self) -> None:
+        self.used_up()
+        self.run_record()
+        text = self.status()["next"]
+        self.assertIn("最后一次检查（第 3 轮）通过了", text)
+        self.assertNotIn("verdict.md", text)
+        self.assertIn("你不能运行", text)
+        self.assertIn("RUNS/DEV/results.md", self.refused("task", "review", "start"))  # the refusal names it too
+
+    def test_with_checks_left_it_says_to_check_again(self) -> None:
+        self.job()
+        self.check(PASS)
+        self.result("v2")
+        text = self.status()["next"]
+        self.assertIn("第 1 轮", text)
+        self.assertIn("`RCA.md`", text)
+        self.assertIn("再运行一次", text)
+        self.assertEqual(self.run_record()["review"].count("第 1 轮"), 1)
+        self.assertIn("现在 0 次", self.say("继续")["additionalContext"])
+        self.assertIn("最后一次检查（第 1 轮）通过了", self.say("继续")["additionalContext"])  # every prompt says why the count is 0
+
+    def test_nothing_is_said_when_the_pass_still_counts_or_the_last_check_failed(self) -> None:
+        self.job()
+        self.assertEqual(self.run_record()["review"], "")  # no check yet
+        self.check(PASS)
+        self.assertIsNone(taskreview.outdated(self.root, JOB, self.data()))
+        self.result("progress", "TASK.md")  # not a result
+        self.assertIsNone(taskreview.outdated(self.root, JOB, self.data()))
+        self.result("v2")
+        self.check(FAIL)
+        self.assertIsNone(taskreview.outdated(self.root, JOB, self.data()))
+        self.assertEqual(self.run_record()["review"], "")
+
+    def test_a_settled_task_or_a_waived_version_says_nothing(self) -> None:
+        self.job()
+        self.check(PASS)
+        self.result("v2")
+        data = self.data()
+        data["promote"] = {"state": "done"}
+        self.assertIsNone(taskreview.outdated(self.root, JOB, data))
+        self.person(taskreview.waive)
+        self.assertIsNone(self.status()["changed"])
+
+    def test_files_added_removed_and_many_and_a_pruned_snapshot(self) -> None:
+        self.job()
+        self.result("x", "notes/a.md")
+        self.check(PASS)
+        (self.folder() / "notes" / "a.md").unlink()
+        for number in range(7):
+            self.result("new", f"TEST/q{number}.sql")
+        found = taskreview.outdated(self.root, JOB, self.data())
+        self.assertEqual(found["files"], ["TEST/q0.sql", "TEST/q1.sql", "TEST/q2.sql", "TEST/q3.sql", "TEST/q4.sql"])
+        self.assertEqual(found["more"], 3)  # q5, q6 and the removed notes/a.md
+        self.assertIn("另 3 个", taskreview.changed_text(found))
+        entry = self.review_state()["rounds"][-1]
+        manifest = self.root / entry["snapshot"] / tasksnap.MANIFEST
+        manifest.unlink()  # pruned: the package keeps 16 characters of each sha256
+        again = taskreview.outdated(self.root, JOB, self.data())
+        self.assertEqual((again["files"], again["more"]), (found["files"], found["more"]))
+        (self.root / taskreview.round_dir(JOB, entry["number"]) / taskreview.PACKAGE).unlink()
+        unknown = taskreview.outdated(self.root, JOB, self.data())
+        self.assertEqual((unknown["round"], unknown["files"]), (1, []))
+        self.assertIn("读不到是哪些", taskreview.changed_text(unknown))
+
+    def test_the_board_counts_the_dots_on_the_files_as_they_are_now(self) -> None:
+        self.job(2)
+        self.check(PASS)
+        self.check(PASS)
+        dots = taskreview.dots(self.data(), self.root, JOB)
+        self.assertEqual((dots["passes"], dots["old"]), (2, 0))
+        self.result("v2")
+        self.assertEqual(taskreview.dots(self.data())["passes"], 2)  # the records alone, as before
+        dots = taskreview.dots(self.data(), self.root, JOB)
+        self.assertEqual((dots["passes"], dots["old"], dots["old_round"], dots["last"]), (0, 2, 2, "PASS"))
+        from modules.task import tasklife
+
+        row = tasklife.task_row(self.root, JOB, self.data())
+        self.assertEqual((row["checks"]["passes"], row["checks"]["old"]), (0, 2))
+
+    def test_the_task_page_names_the_round_and_the_files(self) -> None:
+        from modules.task import taskdesk
+
+        self.job()
+        self.check(PASS)
+        self.assertIsNone(taskdesk.reviews(self.root, JOB, self.data())["changed"])
+        self.result("v2")
+        found = taskdesk.reviews(self.root, JOB, self.data())
+        self.assertEqual((found["passes"], found["changed"]["round"], found["changed"]["files"]), (0, 1, ["RCA.md"]))
+
+
 @unittest.skipUnless(GIT, "git is not installed")
 class PromoteGateTests(TaskCase):
     """With target repositories: the plan approval snapshots, and a promote waits for the passes."""
@@ -649,7 +772,9 @@ class PromoteGateTests(TaskCase):
         self.want(1)
         self.check(PASS)
         self.dev("repo_b/src/a.sql", "select 9;\n")
-        self.assertIn("现在是 0 次", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
+        refused = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
+        self.assertIn("现在是 0 次", refused)
+        self.assertIn("最后一次检查（第 1 轮）通过了，但之后这些成果文件改了：`DEV/repo_b/src/a.sql`", refused)  # why, not only the count (1.8.59)
 
     def test_the_person_may_waive_this_version_and_only_this_version(self) -> None:
         self.changed()

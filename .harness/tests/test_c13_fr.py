@@ -1007,6 +1007,17 @@ class OutputFileAndDirectiveTests(ListedCase):
         for card in view:
             self.assertTrue(card["says"] or card.get("say"), ("a title", card["command"]))
 
+    def test_a_cd_into_the_task_folder_first_counts(self) -> None:
+        """1.8.61 (the person, work PC, 2026-11-25): `cd <task folder>; sqlcmd ... -o RUNS/DEV/x.sql` was held as a write. A `cd` to an absolute folder that is there takes the line into it."""
+        task = self.root / self.HERE
+        (task / "RUNS").mkdir(parents=True, exist_ok=True)
+        for line in (f'cd {task}; {SERVER} -o RUNS/DEV/views/x.sql -Q "SET NOCOUNT ON; SELECT 1"', f'cd {task} && {SERVER} -o RUNS/x.txt -Q "SELECT 1"', f'cd {task}; cd RUNS; {SERVER} -o x.txt -Q "SELECT 1"'):
+            self.runs(line)
+        for line in (f'cd {task}/missing; {SERVER} -o x.txt -Q "SELECT 1"', f'cd {self.HERE}; {SERVER} -o RUNS/x.txt -Q "SELECT 1"', f'cd $T; {SERVER} -o RUNS/x.txt -Q "SELECT 1"',
+                     f'cd {task}; {SERVER} -o ../x.txt -Q "SELECT 1"', f'cd {task}; {SERVER} -o .task/x -Q "SELECT 1"', f'cd {self.root}; {SERVER} -o RUNS/x.txt -Q "SELECT 1"'):
+            self.held(line)  # a folder not there now, a relative cd (it may fail: the line may still be where it was), a variable, a file that leaves the task folder or is the harness's
+        self.held(f'cd {task}; {SERVER} -o RUNS/x.txt -Q "UPDATE t SET a = 1 WHERE b = 2"')  # the statements still decide
+
     def test_a_link_inside_the_task_folder_that_leaves_it_is_not_inside(self) -> None:
         outside = self.root / "elsewhere"
         outside.mkdir()

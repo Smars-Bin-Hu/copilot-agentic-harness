@@ -680,15 +680,30 @@ def _in_task_folder(path: str, ctx: "_Ctx") -> bool:
     if ctx.folder is None or not path or _SPECIAL.search(path) or "$" in path:
         return False
     folder = procenv.realpath(str(ctx.folder))
-    base = ctx.cwd or str(ctx.root or ".")
-    full = procenv.realpath(os.path.join(base, procenv.expanduser(path)))
-    try:
-        if os.path.commonpath([full, folder]) != folder or full == folder:
+    for base in _output_bases(ctx):  # every folder the call can run in: the file is inside from each of them
+        full = procenv.realpath(os.path.join(base, procenv.expanduser(path)))
+        try:
+            if os.path.commonpath([full, folder]) != folder or full == folder:
+                return False
+        except ValueError:
             return False
-    except ValueError:
-        return False
-    parts = os.path.relpath(full, folder).replace("\\", "/").split("/")
-    return parts[0] not in RESERVED_IN_TASK and not (len(parts) == 1 and (parts[0].endswith(".diff") or parts[0] in ("TASK.md", "REQ.md")))
+        parts = os.path.relpath(full, folder).replace("\\", "/").split("/")
+        if parts[0] in RESERVED_IN_TASK or (len(parts) == 1 and (parts[0].endswith(".diff") or parts[0] in ("TASK.md", "REQ.md"))):
+            return False
+    return True
+
+
+def _output_bases(ctx: "_Ctx") -> List[str]:
+    """(1.8.61) The folders a call can run in, for its output file: the terminal's folder, moved by each `cd` of the line before the call (`cd <task folder>; sqlcmd ... -o RUNS/DEV/x.txt`). A `cd` to an
+    absolute folder that is there now takes the line into it; any other `cd` may fail, so the folders before it stay too (`_after_cd`). A target made at run time (`cd $X`) moves nothing."""
+    folders = [ctx.cwd or str(ctx.root or ".")]
+    for target in ctx.dirs:
+        full = procenv.expanduser(target)
+        if not _SPECIAL.search(target) and "$" not in target and os.path.isabs(full) and os.path.isdir(procenv.anchored(full)):
+            folders = [full]
+        else:
+            folders = _after_cd(folders, ["cd", target], 0)
+    return folders
 
 
 def _without_task_outputs(system: Dict[str, Any], args: List[str], ctx: "_Ctx") -> List[str]:

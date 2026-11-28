@@ -82,7 +82,7 @@ def _batch(text: str) -> List[Statement]:
 # (1.7.44) A statement that is complete in its own words: `SET <option>[, <option>] ON|OFF`, `USE <database>`, `DECLARE @a <type>[(n)] [= <constant>][, ...]` and `SET @a = <constant>`. The server
 # needs no `;` after one, so `SET NOCOUNT ON SELECT ...` is two statements to it, and is cut so here too: each part is judged by the lists on its own. Only these bounded forms are cut off the front; a cut
 # never joins anything, so a write still meets the lists whole (`SET @a = 1 + (SELECT ...)` leaves `+ (SELECT ...)`, which is on no list).
-_CONSTANT = r"(?:-?\d+(?:\.\d+)?|N?''|NULL|@\w+)"
+_CONSTANT = r"(?:-?\d+(?:\.\d+)?|N?''|NULL|@\w+|\w+ ?\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))"  # (1.8.61) a call (`GETDATE()`, `DATEADD(DAY, -1, GETDATE())`) too: the cut only splits, the lists judge the call (`fold`)
 _DECLARED = r"@\w+ (?:AS )?[A-Za-z_]\w*(?: ?\( ?(?:\d+|MAX)(?: ?, ?\d+)? ?\))?(?: ?= ?" + _CONSTANT + r")?"
 _BOUNDED = r"SET [A-Za-z_]+(?: ?, ?[A-Za-z_]+)* (?:ON|OFF)|DECLARE " + _DECLARED + r"(?: ?, ?" + _DECLARED + r")*|SET @\w+ ?= ?" + _CONSTANT
 _NEXT = r" (?=(?:SELECT|WITH|SET|DECLARE|USE|IF|PRINT|INSERT|UPDATE|DELETE|MERGE|EXEC|EXECUTE|CREATE|ALTER|DROP|TRUNCATE|BEGIN|END|RETURN|GRANT|REVOKE|DENY|WHILE|RAISERROR|THROW|WAITFOR|BACKUP|RESTORE|KILL|DBCC|COMMIT|ROLLBACK|SAVE|GOTO|OPEN|FETCH|CLOSE|DEALLOCATE|BREAK|CONTINUE|BULK|CHECKPOINT|RECONFIGURE|SHUTDOWN|SETUSER|REVERT|ENABLE|DISABLE)\b)"  # a cut only where the next word starts a statement: `DECLARE @x AS INT` is not `DECLARE @x AS` and `INT`
@@ -285,6 +285,26 @@ def refuse_entry(system: Dict[str, Any], text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+_SIZE = r"\( ?(?:\d+|MAX)(?: ?, ?\d+)? ?\)"
+_SIZED = r"(?<![.\w])(?:VARCHAR|NVARCHAR|CHAR|NCHAR|VARBINARY|BINARY|DECIMAL|NUMERIC|FLOAT|DATETIME2|DATETIMEOFFSET|TIME) ?" + _SIZE  # a type with its size, as `CAST` and `CONVERT` name it
+_ARGUMENTS = re.compile(r"(?:[\w@'.,+\-*/%=<>! ]|" + _SIZED + r")*", re.IGNORECASE)  # what a call that only gives a value may hold: words, constants, variables, operators, a sized type; no other bracket
+
+
+def fold(text: str, names: Any) -> str:
+    """(1.8.61) `text` with each call of a function of `names` (the type's `functions`: built-in functions that only give a value) as the constant `0`, innermost first, so the lists judge
+    `DECLARE @d DATE = DATEADD(DAY, -1, GETDATE())` as `DECLARE @d DATE = 0`. Only the read list sees the folded text. A call is folded only when its arguments are plain (`_ARGUMENTS`) once the calls inside were folded: a query or a call of
+    another function in it stays, and the statement is judged with it. A name after a `.` (`dbo.GETDATE()`, a function of the database) is not one of them."""
+    words = [str(one) for one in names or [] if isinstance(one, str) and re.fullmatch(r"\w+", one)]
+    if not words or "(" not in text:
+        return text
+    call = re.compile(r"(?<![.\w@])(?:" + "|".join(words) + r") ?\(((?:[^()]|" + _SIZED + r")*)\)", re.IGNORECASE)
+    while True:
+        folded = call.sub(lambda hit: "0" if _ARGUMENTS.fullmatch(hit.group(1)) else hit.group(0), text)
+        if folded == text:
+            return text
+        text = folded
+
+
 def judge(system: Dict[str, Any], items: List[Statement]) -> Verdict:
     """Which zone these statements are in, by the lists of the type (`refuse`, `reads`, `writes`). Order: any statement or line on the refuse list refuses (not the body of a definition); every statement
     whole on the read list (and no sqlcmd line left) is a read; every statement on the read or write list is what an opened connection passes; else the person is asked. Reads
@@ -309,10 +329,10 @@ def judge(system: Dict[str, Any], items: List[Statement]) -> Verdict:
             if not first_unlisted:
                 first_unlisted, quote = item.text, item.raw or item.text
             continue
-        if any(rule.fullmatch(item.text) for rule in reads):
+        if any(rule.fullmatch(fold(item.text, system.get("functions"))) for rule in reads):
             continue
         all_reads = False
-        if any(rule.fullmatch(item.text) for rule in writes):
+        if any(rule.fullmatch(item.text) for rule in writes):  # not folded: a write's `WHERE LEN(a) = 0` would read as `0 = 0`, a WHERE that holds for every row
             wrote = True
             continue
         all_listed = False

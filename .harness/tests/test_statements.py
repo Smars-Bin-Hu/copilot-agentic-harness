@@ -65,6 +65,7 @@ class CutTests(unittest.TestCase):
         self.assertEqual(texts("SET @n = (SELECT 1) + 2 SELECT 1"), ["SET @n = (SELECT 1) + 2 SELECT 1"])
         self.assertEqual(texts("DECLARE @x INT = 5, @y VARCHAR(10)"), ["DECLARE @x INT = 5, @y VARCHAR(10)"])
         self.assertEqual(texts("SET NOCOUNT ON"), ["SET NOCOUNT ON"])
+        self.assertEqual(texts("DECLARE @d DATE = DATEADD(DAY, -1, GETDATE()) SET @e = dbo.f(1) SELECT @d"), ["DECLARE @d DATE = DATEADD(DAY, -1, GETDATE())", "SET @e = dbo.f(1) SELECT @d"])  # 1.8.61: a call too; one with a schema is not cut, and asks whole
         self.assertEqual(texts("CREATE PROCEDURE p AS SET NOCOUNT ON SELECT 1"), ["CREATE PROCEDURE p AS SET NOCOUNT ON SELECT 1"])  # a definition stays one statement
 
     def test_a_line_of_go_cuts_a_batch_with_or_without_a_count(self) -> None:
@@ -128,6 +129,28 @@ LISTS = {
 
 def judged(text: str, **lists):
     return statements.judge(dict(LISTS, **lists), statements.split(text))
+
+
+class FoldTests(unittest.TestCase):
+    """1.8.61: a call of a function of the type's `functions` is the constant 0 to the read list."""
+
+    def test_a_call_with_plain_arguments_folds_innermost_first(self) -> None:
+        names = ["GETDATE", "DATEADD", "CONVERT"]
+        self.assertEqual(statements.fold("SET @d = DATEADD(DAY, -1, getdate ( ))", names), "SET @d = 0")
+        self.assertEqual(statements.fold("SET @s = CONVERT(NVARCHAR(MAX), @d, 120)", names), "SET @s = 0")
+
+    def test_a_query_another_function_or_a_schema_stays(self) -> None:
+        names = ["ISNULL", "GETDATE"]
+        for text in ("SET @n = ISNULL((SELECT 1), 0)", "SET @n = ISNULL(dbo.f(1), 0)", "SET @n = ISNULL(f(1), 0)", "SET @d = dbo.GETDATE()", "SET @n = ISNULL(@a, 0"):
+            self.assertEqual(statements.fold(text, names), text)
+        self.assertEqual(statements.fold("SET @n = GETDATE()", None), "SET @n = GETDATE()")
+        self.assertEqual(statements.fold("SET @n = GETDATE()", ["GET|DATE()"]), "SET @n = GETDATE()")  # a name that is no word is left out
+
+    def test_a_long_text_folds_in_time(self) -> None:
+        import time
+        start = time.time()
+        statements.fold("SET @a = ISNULL(" * 2000 + "x" + "a, " * 3000, ["ISNULL"])
+        self.assertLess(time.time() - start, 1.0)
 
 
 class JudgeTests(unittest.TestCase):

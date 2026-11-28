@@ -8,7 +8,7 @@ What changed, one section per minor version, newest on top. The heading names th
 
 To see which version you have: `harness --version`.
 
-## 1.8.60 (1.8.0 – 1.8.60, 2026-11-17 – 2026-11-27)
+## 1.8.61 (1.8.0 – 1.8.61, 2026-11-17 – 2026-11-27)
 
 ### Added
 
@@ -72,6 +72,8 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- **A read whose output goes into the task folder no longer waits for you after a `cd`** (1.8.61): `cd <task folder>; sqlcmd ... -o RUNS/DEV/x.sql -Q "SELECT ..."` was held as *Saves its output in a file*, because the gate read `RUNS/...` from the folder the terminal was in, not from the task folder the line had moved to. A `cd` to an absolute folder that exists now counts; a relative `cd`, a `cd $X` or a folder that is not there still holds, as the line may not have moved.
+- **A read that sets a date first no longer waits for you** (1.8.61): `DECLARE @d DATE = GETDATE();` or `SET @d = DATEADD(DAY, -1, GETDATE())` before a `SELECT` was held for approval, because the value was a function call, not a constant. The SQL Server pack (1.3.3) now lists the built-in functions that only give a value (dates, `CAST`, `CONVERT`, `ISNULL`, string and number functions); such a value is a read. A query, a function of the database (`dbo.f()`) or `NEXT VALUE FOR` in the value still asks. A company pack of its own can list its functions under `functions` of its type.
 - **A task made from the board took long to appear** (1.8.60). The agent of the new chat sometimes read the knowledge base and asked its questions first (skill `generic-grill-me`), so the board said *The agent is opening the task* for half an hour while the chat waited for an answer. The first message, `harness-my-task` and `generic-grill-me` now say: open the task first, then read and ask, inside the task.
 - **A pass that a later change undid was not explained** (1.8.59). A pass counts only on the work as it is now, and a run saved in `RUNS/` after it is part of the work, so a DEV run recorded after the last pass undid it. Nothing said so: `task run record` was silent, the promote and the status said only "0 passes", at the limit the agent was sent to the newest verdict (which had passed), and the board still drew a green dot. Now `task run record`, `task review status`, `task review start` and `task promote --dry-run` name the round and the files that changed after it; the task page's Review tab says the same; on the board a pass that counts no more is a green ring. The counting itself did not change.
 - **A write into the harness's runtime folder through a variable** (1.8.58): `d=.harness; printf x > $d/runtime/x.json` passed the gate, so an agent could forge its admin state or an approval. A write whose target is built at run time (`$x`, `$(...)`, `%X%`, `$env:X`) is now read with the values the line sets, and refused when it can land in a guardrail folder; `.harness/./runtime` and `.harness//runtime` are read as the folder they are.

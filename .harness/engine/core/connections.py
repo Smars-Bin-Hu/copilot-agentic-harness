@@ -87,7 +87,7 @@ def _say_text_ok(text: Any) -> bool:
 
 
 TYPE_KEYS = ("type", "label", "description", "via", "env", "fields", "auth", "test", "expect", "denied", "down", "signin_lost", "cli", "match", "command", "commands", "verbs", "target", "rules", "show", "say", "body",
-             "open", "openable", "item", "link", "input", "reads", "writes", "refuse", "directives", "outputs", "pin", "free", "call", "toolpack")  # every top-level key of a type file (the protocol's list; `toolpack` is put in by `types` when it loads one); a key not here is a typo (1.7.38, L8)
+             "open", "openable", "item", "link", "input", "reads", "writes", "refuse", "directives", "functions", "outputs", "pin", "free", "call", "toolpack")  # every top-level key of a type file (the protocol's list; `toolpack` is put in by `types` when it loads one); a key not here is a typo (1.7.38, L8)
 
 
 def type_problems(kind: Dict[str, Any]) -> List[str]:
@@ -166,6 +166,8 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                     re.compile(pattern)
                 except re.error as error:
                     out.append(f"types.{name}.directives[{index}]: bad pattern: {error}")
+    if kind.get("functions") is not None and not (isinstance(kind["functions"], list) and all(isinstance(one, str) and re.fullmatch(r"\w+", one) for one in kind["functions"])):  # 1.8.61
+        out.append(f"types.{name}.functions: a list of function names (letters, digits, _), the built-in functions whose call only gives a value")
     if kind.get("outputs") is not None and not (isinstance(kind["outputs"], dict) and set(kind["outputs"]) <= {"options"} and isinstance(kind["outputs"].get("options", []), list)
                                                 and all(isinstance(one, str) and one for one in kind["outputs"].get("options", []))):  # 1.7.38 (C13 FR 22)
         out.append(f"types.{name}.outputs: {{\"options\": [\"-o\", ...]}}, the options that name the file the program writes its output to")
@@ -458,7 +460,7 @@ def unconnected(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
             words, default = _free_words(kind)
             system: Dict[str, Any] = {"reach": {"cli": programs}, "env": "none", "toolpack": pack,
                                       "noconn": {"type": str(kind.get("type") or path.stem), "free": words, "default": default, "pin": kind["pin"] if isinstance(kind.get("pin"), dict) else None}}
-            for key in ("verbs", "reads", "writes", "refuse", "input", "directives", "outputs"):  # what the refuse list needs to read the statements of the call
+            for key in ("verbs", "reads", "writes", "refuse", "input", "directives", "functions", "outputs"):  # what the refuse list needs to read the statements of the call
                 if kind.get(key) is not None:
                     system[key] = kind[key]
             if pack not in guarded:
@@ -635,7 +637,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
             chosen = (server.get(key) or kind.get(key)) if key == "rules" else kind.get(key)  # the connection's own rules win, else the type's (1.7.21)
             if chosen:
                 system[key] = chosen
-        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse", "directives", "outputs", "pin"):
+        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input", "reads", "writes", "refuse", "directives", "functions", "outputs", "pin"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
         system["open"] = connection_scope(kind, server)

@@ -67,6 +67,12 @@ CASES = [
  ("CREATE OR ALTER PROCEDURE dbo.p AS\nBEGIN\n  UPDATE t SET a = 1;\n  DELETE FROM u;\nEND", "write"), ("ALTER FUNCTION dbo.f() RETURNS int AS BEGIN RETURN 1; END", "write"), ("CREATE VIEW v AS SELECT 1 a;", "write"),
  ("CREATE PROCEDURE dbo.p AS BEGIN TRUNCATE TABLE t; END", "write"), ("CREATE PROCEDURE dbo.p AS BEGIN DROP TABLE t; END", "write"), ("CREATE PROCEDURE dbo.p AS BEGIN EXEC(@s); END", "write"),
  ("CREATE PROCEDURE dbo.p AS SELECT 1;\nGO\nDROP TABLE t", "write"), ("CREATE TRIGGER tr ON t AFTER INSERT AS BEGIN SELECT 1; END", "ask"),
+ # 1.8.61: a variable set from a built-in function that only gives a value (`functions`) is a read; a query, a function of the database or a sequence in it still asks, and a write's WHERE is not folded
+ ("SET NOCOUNT ON;\nDECLARE @d DATE = GETDATE();\nSELECT a FROM t WHERE d = @d", "read"), ("DECLARE @d DATE = DATEADD(DAY, -1, CAST(GETDATE() AS DATE)) SELECT * FROM t WHERE d >= @d", "read"),
+ ("DECLARE @s VARCHAR(10) = CONVERT(VARCHAR(10), GETDATE(), 120); SELECT @s", "read"), ("SET @d = EOMONTH(GETDATE(), -1)", "read"), ("declare @n int = isnull(@a, 0)", "read"),
+ ("DECLARE @n INT = dbo.f(1)", "ask"), ("DECLARE @d DATE = dbo.GETDATE()", "ask"), ("DECLARE @n INT = ISNULL((SELECT 1), 0)", "ask"), ("DECLARE @n INT = ISNULL(@a, dbo.f(1))", "ask"),
+ ("DECLARE @n BIGINT = NEXT VALUE FOR s", "ask"), ("SET @d = DATEADD(DAY, 1, GETDATE()) DELETE FROM t", "ask"), ("DECLARE @x VARCHAR(10) = CAST(@a AS sysname(1))", "ask"),
+ ("DECLARE @d DATE = GETDATE(); DELETE FROM t WHERE d < @d", "write"), ("DELETE FROM t WHERE LEN(a) = 0", "write"), ("DELETE FROM t WHERE LEN(a) = LEN(a)", "write"),
 ]
 
 

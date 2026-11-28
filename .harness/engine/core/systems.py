@@ -105,6 +105,7 @@ SYSTEMS_SCHEMA = {
             "reads": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the pass list of a type whose program takes statements as text: a pattern each statement must match whole (modules/gate/statements.py)
             "writes": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the statements an opened connection passes (the same patterns)
             "directives": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38 (C13 FR 23): patterns of the sqlcmd lines (`:ON ERROR EXIT`) that only change how the program reacts: they are no statement, so they hold nothing and refuse nothing; every other line stays as it was
+            "functions": {"type": "array", "items": {"type": "string", "pattern": "^\\w+$"}},  # 1.8.61: the built-in functions whose call only gives a value: the read list sees such a call as the constant 0 (core/statements.py `fold`)
             "outputs": {"type": "object", "properties": {"options": {"type": "array", "items": {"type": "string", "minLength": 1}}}, "additionalProperties": False},  # 1.7.38 (C13 FR 22): the options that name a file the program writes its output to (`-o file`): inside the task folder it is a local write, and the call is judged by its statements as without it
             "refuse": {  # 1.7.38: what is refused at once, with the reason that tells the agent the right way (a string, or {"en": ..., "zh": ...}); a pattern found anywhere in a statement or a sqlcmd line
                 "type": "array",

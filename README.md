@@ -9,3 +9,5 @@ How to use it:
 3. Take a photo or screenshot of each output and send it back.
 
 When a check is done, its file is deleted from this branch.
+
+`tools/` holds small programs that stay for longer than one check: `tools/harness-watch.py` is the live monitor (how to use it: `checks/2026-11-28-harness-watch.md`).

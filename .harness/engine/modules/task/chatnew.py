@@ -195,15 +195,18 @@ def one_click_model(models: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return ahp.model_choice(found, ahp.FUSION_STANDARD if ahp.FUSION_STANDARD in ((found.get("thinking") or {}).get("levels") or []) else "") if found else None
 
 
+FIRST = "Do it first, before you read, look anything up or ask a question: questions about the work come after, inside the task. "  # 1.8.60: an agent read and asked for 18 minutes before it opened the task (generic-grill-me froze `task new`)
+
+
 def first_message(plan: Dict[str, Any]) -> str:
     """The first message to the new chat: a fixed English head (which skill, the name and the kind, the source of a fork), then what the person asked for, as typed."""
     if plan["source"]:
         head = ("This task is made from the board. Use the skill harness-task-fork to start it from the task below (harness task fork). "
-                "The name, the kind and the source are given: do not ask for them.\n"
+                f"{FIRST}The name, the kind and the source are given: do not ask for them.\n"
                 f"- New task name: {plan['name']}\n- Kind: {plan['kind']}\n- Fork from: {plan['source']}")
     else:
         head = ("This task is made from the board. Use the skill harness-my-task to open it now (harness task new). "
-                "The name and the kind are given: do not ask for them.\n"
+                f"{FIRST}The name and the kind are given: do not ask for them.\n"
                 f"- Task name: {plan['name']}\n- Kind: {plan['kind']}")
     head += domain_line(plan)
     what = plan["text"]

@@ -136,13 +136,13 @@ class MessageTests(TaskCase):
 
     def test_a_new_task_message_is_fixed_english_with_the_name_the_kind_and_the_text_last(self) -> None:
         text = self.made()
-        self.assertEqual(text, "This task is made from the board. Use the skill harness-my-task to open it now (harness task new). The name and the kind are given: do not ask for them.\n"
+        self.assertEqual(text, "This task is made from the board. Use the skill harness-my-task to open it now (harness task new). " + chatnew.FIRST + "The name and the kind are given: do not ask for them.\n"
                                "- Task name: fresh-load\n- Kind: dev\n\nWhat to do:\nAdd a column to the load.")
         self.assertNotIn("fork", text)
 
     def test_a_fork_message_names_the_skill_and_the_source(self) -> None:
         text = self.made(source="job1", kind="test")
-        self.assertEqual(text, "This task is made from the board. Use the skill harness-task-fork to start it from the task below (harness task fork). The name, the kind and the source are given: do not ask for them.\n"
+        self.assertEqual(text, "This task is made from the board. Use the skill harness-task-fork to start it from the task below (harness task fork). " + chatnew.FIRST + "The name, the kind and the source are given: do not ask for them.\n"
                                "- New task name: fresh-load\n- Kind: test\n- Fork from: job1\n\nWhat to do:\nAdd a column to the load.")
 
     def test_the_language_mark_is_added_only_when_chinese_was_chosen_and_no_other_mark_is_there(self) -> None:

@@ -23,7 +23,7 @@ When every dimension of the task is clear and there is only one way to do it, th
 
 ## Workflow
 
-1. **Freeze the work.** From now on change no file, run no command with side effects, and do not start on "the part that is obviously fine". Only read-only actions are allowed: reading files, searching code, reading docs.
+1. **Freeze the work.** From now on change no file, run no command with side effects, and do not start on "the part that is obviously fine". Only read-only actions are allowed: reading files, searching code, reading docs. One exception comes first: when the work needs a task and this session has none, open it (skill `harness-my-task`) before you freeze.
 2. **Look it up before asking.** Facts that can be found in the repository, files, docs or settings you look up yourself; do not ask the user. Ask only what cannot be looked up: the user's intent, preferences, trade-offs, acceptance standard.
 3. **List every blind spot.** Go through the [question dimensions](./references/question_dimensions.md) one by one. For each, ask yourself: "If I guess wrong, will the user have to redo it?" If so, put it on the list.
 4. **Ask in order of dependency.** Upstream decisions first, downstream ones after. Questions that do not depend on each other go in the same round, 5 at most per round.

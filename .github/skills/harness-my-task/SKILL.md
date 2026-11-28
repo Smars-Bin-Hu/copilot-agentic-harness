@@ -21,6 +21,8 @@ Do not use it for a plain question answered from what you know, which touches no
 
 **A look is a Q&A task, with no questions asked.** When the user asks to look at something on a server or in files ("run this query on DEV", "what does IST return"), skip step 2: run `harness task new <name> --kind qa --session-id <session id>` at once, do the look (skill `generic-evidence-run`), write the answer into `TASK.md`, then deliver the task ([how a task ends](#5-end-the-task)). Asking which task or kind, a requirement to confirm and a log are for work, not for a look. It is a new task even when an open task has a like name, or a file attached to the chat is from one: pick an open task up only when the user names it.
 
+**A task made from the board is opened first.** Its first message gives the name and the kind: run `harness task new` (or `harness task fork`) at once, before you read, look anything up or ask. Questions about the work, `generic-grill-me` included, come after, inside the task.
+
 ## Prerequisites
 
 - The session id: the rules at the top of every prompt have a line "Current session id". Use it as written for `--session-id`.
